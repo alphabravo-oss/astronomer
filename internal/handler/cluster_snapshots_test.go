@@ -278,16 +278,6 @@ func (f *fakeSnapshotQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Creat
 	return nil
 }
 
-func (f *fakeSnapshotQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
-	t.Helper()
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if len(f.audits) <= idx {
-		t.Fatalf("audit rows=%d, want index %d", len(f.audits), idx)
-	}
-	return f.audits[idx]
-}
-
 // fakeSnapshotRequester captures every tunnel call made by the handler.
 // Returns a configurable status/body. By default it returns 201 for
 // POSTs so the handler's "Velero accepted the CRD" path is exercised.
@@ -419,10 +409,11 @@ func unwrap(t *testing.T, rr *httptest.ResponseRecorder, out any) {
 // Tests
 // ----------------------------------------------------------------------
 
-func TestSnapshot_CreatesVeleroBackupCRD(t *testing.T) {
+func TestSnapshot_CreatesDurableBackupIntent(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeSnapshotQuerier(clusterID, "prod-cluster")
 	h := NewClusterSnapshotsHandler(q)
+	h.SetRunTx(fakeClusterSnapshotRunTx(q))
 	req := newFakeSnapshotRequester()
 	h.SetRequester(req)
 
@@ -451,47 +442,29 @@ func TestSnapshot_CreatesVeleroBackupCRD(t *testing.T) {
 	if resp.ExpiresAt == nil {
 		t.Fatalf("expected expires_at to be set when ttl='168h'")
 	}
-	createAudit := q.auditRowAt(t, 0)
+	if len(q.auditOutbox) != 1 {
+		t.Fatalf("audit outbox rows=%d, want 1", len(q.auditOutbox))
+	}
+	createAudit := auditLogParamsFromOutbox(q.auditOutbox[0])
 	if createAudit.Action != "cluster.snapshot.created" || createAudit.ResourceType != "cluster_snapshot" || createAudit.ResourceID != resp.ID.String() || createAudit.ResourceName != "prod-cluster" {
 		t.Fatalf("create audit row=%+v, want cluster.snapshot.created on snapshot %s", createAudit, resp.ID)
 	}
 	assertAuditDetail(t, createAudit.Detail, "cluster_id", clusterID.String())
 
 	calls := req.snapshot()
-	if len(calls) != 1 {
-		t.Fatalf("expected exactly 1 tunnel call, got %d", len(calls))
+	if len(calls) != 0 {
+		t.Fatalf("HTTP request must only queue durable backup intent, got %d remote calls", len(calls))
 	}
-	if !strings.Contains(calls[0].Path, "/apis/velero.io/v1/namespaces/velero/backups") {
-		t.Fatalf("expected POST to Velero Backups endpoint, got %q", calls[0].Path)
-	}
-	// Decode the CRD body that was sent on the wire and verify it
-	// mirrors the spec the user supplied.
-	var crd map[string]any
-	if err := json.Unmarshal(calls[0].Body, &crd); err != nil {
-		t.Fatalf("decode crd body: %v", err)
-	}
-	if crd["kind"] != "Backup" {
-		t.Fatalf("expected kind=Backup, got %v", crd["kind"])
-	}
-	spec, _ := crd["spec"].(map[string]any)
-	included, _ := spec["includedNamespaces"].([]any)
-	if len(included) != 1 || included[0] != "observability" {
-		t.Fatalf("includedNamespaces not propagated to CRD: %+v", spec)
-	}
-	if spec["ttl"] != "168h" {
-		t.Fatalf("ttl not propagated to CRD: %+v", spec)
-	}
-	meta, _ := crd["metadata"].(map[string]any)
-	labels, _ := meta["labels"].(map[string]any)
-	if labels["astronomer.io/snapshot-id"] == nil {
-		t.Fatalf("expected astronomer.io/snapshot-id label on CRD")
+	if len(q.taskOutbox) != 1 {
+		t.Fatalf("task outbox rows=%d, want 1", len(q.taskOutbox))
 	}
 }
 
-func TestSnapshot_DeleteRequestEmitted(t *testing.T) {
+func TestSnapshot_DeleteRequestPersisted(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeSnapshotQuerier(clusterID, "prod-cluster")
 	h := NewClusterSnapshotsHandler(q)
+	h.SetRunTx(fakeClusterSnapshotRunTx(q))
 	req := newFakeSnapshotRequester()
 	h.SetRequester(req)
 
@@ -519,24 +492,13 @@ func TestSnapshot_DeleteRequestEmitted(t *testing.T) {
 		t.Fatalf("expected snapshot to be deleted, but it still exists")
 	}
 
-	// Tunnel should have received exactly one DeleteBackupRequest POST.
+	// The HTTP path persists cleanup intent; the worker owns the tunnel call.
 	calls := req.snapshot()
-	if len(calls) != 1 {
-		t.Fatalf("expected exactly 1 tunnel call for DELETE, got %d", len(calls))
+	if len(calls) != 0 {
+		t.Fatalf("HTTP request must only queue durable delete intent, got %d remote calls", len(calls))
 	}
-	if !strings.Contains(calls[0].Path, "/apis/velero.io/v1/namespaces/velero/deletebackuprequests") {
-		t.Fatalf("expected DeleteBackupRequest endpoint, got %q", calls[0].Path)
-	}
-	var crd map[string]any
-	if err := json.Unmarshal(calls[0].Body, &crd); err != nil {
-		t.Fatalf("decode crd: %v", err)
-	}
-	if crd["kind"] != "DeleteBackupRequest" {
-		t.Fatalf("expected kind=DeleteBackupRequest, got %v", crd["kind"])
-	}
-	spec, _ := crd["spec"].(map[string]any)
-	if spec["backupName"] != row.VeleroName {
-		t.Fatalf("DeleteBackupRequest spec.backupName=%v want %q", spec["backupName"], row.VeleroName)
+	if len(q.taskOutbox) != 1 {
+		t.Fatalf("task outbox rows=%d, want 1", len(q.taskOutbox))
 	}
 }
 
@@ -686,6 +648,7 @@ func TestSchedule_CRUD(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeSnapshotQuerier(clusterID, "prod-cluster")
 	h := NewClusterSnapshotsHandler(q)
+	h.SetRunTx(fakeClusterSnapshotRunTx(q))
 
 	// CREATE
 	body := mustSnapshotJSON(t, map[string]any{
@@ -710,7 +673,10 @@ func TestSchedule_CRUD(t *testing.T) {
 	if !created.Enabled {
 		t.Fatalf("expected enabled=true by default")
 	}
-	createAudit := q.auditRowAt(t, 0)
+	if len(q.auditOutbox) != 1 {
+		t.Fatalf("audit outbox rows=%d, want 1", len(q.auditOutbox))
+	}
+	createAudit := auditLogParamsFromOutbox(q.auditOutbox[0])
 	if createAudit.Action != "cluster.snapshot.schedule_created" || createAudit.ResourceType != "cluster_snapshot_schedule" || createAudit.ResourceID != created.ID.String() || createAudit.ResourceName != "prod-cluster" {
 		t.Fatalf("schedule audit row=%+v, want cluster.snapshot.schedule_created on schedule %s", createAudit, created.ID)
 	}

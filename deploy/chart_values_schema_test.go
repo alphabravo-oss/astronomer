@@ -24,7 +24,8 @@ func helmTemplateExpectErrorWithFlags(t *testing.T, valueFiles, flags []string, 
 	}
 	chartDir := filepath.Join(filepath.Dir(here), "chart")
 	valuesFile := filepath.Join(chartDir, "values.yaml")
-	args := []string{"template", "astronomer", chartDir, "-f", valuesFile, "--kube-version", "1.35.0"}
+	devValuesFile := filepath.Join(chartDir, "values-dev.yaml")
+	args := []string{"template", "astronomer", chartDir, "-f", valuesFile, "-f", devValuesFile, "--kube-version", "1.35.0"}
 	args = append(args, flags...)
 	for _, file := range valueFiles {
 		args = append(args, "-f", file)
@@ -47,6 +48,29 @@ func TestValuesSchemaRejectsInvalidTypes(t *testing.T) {
 	if !strings.Contains(errOut, "/server/replicaCount") || !strings.Contains(errOut, "got string, want integer") {
 		t.Fatalf("schema error did not mention invalid server.replicaCount type:\n%s", errOut)
 	}
+}
+
+func TestWorkerConcurrencySchemaAndRuntimeWiring(t *testing.T) {
+	errOut := helmTemplateExpectError(t, nil, "worker.concurrency=0")
+	if !strings.Contains(errOut, "/worker/concurrency") || !strings.Contains(errOut, "minimum") {
+		t.Fatalf("worker concurrency schema error missing bound details:\n%s", errOut)
+	}
+
+	out := helmTemplate(t, "worker.concurrency=48")
+	assertRenderedContains(t, out, `WORKER_CONCURRENCY: "48"`)
+}
+
+func TestInternalPSKRotationRendersVerificationOnlyPredecessor(t *testing.T) {
+	out := helmTemplate(t,
+		"secrets.internalPSK=current-internal-psk-current-internal-psk",
+		"secrets.internalPSKPrevious=previous-internal-psk-previous-internal-psk",
+	)
+	assertRenderedContains(t, out,
+		`"ASTRONOMER_INTERNAL_PSK_PREVIOUS": "previous-internal-psk-previous-internal-psk"`,
+		"- name: ASTRONOMER_INTERNAL_PSK_PREVIOUS",
+		`key: "ASTRONOMER_INTERNAL_PSK_PREVIOUS"`,
+		"optional: true",
+	)
 }
 
 func TestValuesSchemaRequiresProductionWiring(t *testing.T) {

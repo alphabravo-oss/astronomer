@@ -48,6 +48,7 @@ type InstallTemplateData struct {
 	PrivilegeProfile     string
 	ServiceAccountName   string
 	PodLabels            map[string]string
+	AgentOverrides       AgentOverrides
 	SystemArtifactURL    string
 	SystemArtifactDigest string
 	SystemOIDCIssuer     string
@@ -117,6 +118,11 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{SYSTEM_OIDC_IDENTITY}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIdentity)),
 		"{{AGENT_SERVICE_ACCOUNT_NAME}}", serviceAccountName,
 		"{{AGENT_POD_LABELS}}", PodLabelsYAML(data.PodLabels),
+		"{{AGENT_CONFIGURATION_DIGEST}}", mustAgentOverridesDigest(data.AgentOverrides),
+		"{{AGENT_PROXY_ENV}}", data.AgentOverrides.proxyEnvYAML(),
+		"{{AGENT_RESOURCES}}", data.AgentOverrides.resourcesYAML(),
+		"{{AGENT_AFFINITY}}", data.AgentOverrides.affinityYAML(),
+		"{{AGENT_TOLERATIONS}}", data.AgentOverrides.tolerationsYAML(),
 		"{{PRIVILEGE_PROFILE}}", profile,
 		"{{AGENT_RBAC_RULES}}", RBACRulesYAML(profile),
 		"{{AGENT_DELIVERY_CLUSTER_RULES}}", DeliveryClusterRulesYAML(profile),
@@ -127,6 +133,17 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{DIRECT_KUBECONFIG_RBAC_RULES}}", viewerRBACRulesYAML,
 	).Replace(installTemplate)
 	return fluxdistribution.InstallYAML() + "\n" + agentManifest + renderSystemBootstrap(data)
+}
+
+func mustAgentOverridesDigest(overrides AgentOverrides) string {
+	digest, err := overrides.Digest()
+	if err != nil {
+		// InstallTemplateData is an internal typed rendering boundary. Invalid
+		// values are a programming or persisted-data invariant violation; never
+		// emit a partly customized security-sensitive manifest.
+		panic(err)
+	}
+	return digest
 }
 
 func renderSystemBootstrap(data InstallTemplateData) string {
@@ -288,7 +305,7 @@ func SelfManagementNamespacedRulesYAML() string {
 
 // SelfManagementOwnDeploymentRulesYAML returns the rules block letting the agent
 // patch/update its OWN Deployment (resourceName-scoped to "astronomer-agent"),
-// so an Argo-driven version bump can roll the agent. Like the token Role, this
+// so a governed Flux delivery version bump can roll the agent. Like the token Role, this
 // is operational self-management and is granted for EVERY profile. Mirrors the
 // astronomer-agent-token Role's resourceName-scoping so it never widens to
 // other Deployments in the namespace.
@@ -528,7 +545,7 @@ const selfManagementNamespacedRulesYAML = `  # Astronomer manages its own footpr
 
 // selfManagementOwnDeploymentRulesYAML lets the agent manage ONLY its own
 // Deployment (resourceName-scoped), mirroring the astronomer-agent-token Role.
-// This is what lets an Argo-driven version bump roll the agent without granting
+// This lets a governed Flux delivery version bump roll the agent without granting
 // write over other Deployments. Granted for every profile.
 const selfManagementOwnDeploymentRulesYAML = `  - apiGroups: ["apps"]
     resources: ["deployments"]

@@ -1,13 +1,8 @@
-import {
-  useCluster,
-  useClusterMetrics,
-  useClusterMetricsSummary,
-  useClusterNodes,
-  useClusterNamespaces,
-} from "@/lib/hooks";
+import { useCluster, useClusterNodes, useClusterNamespaces } from "@/lib/hooks/clusters";
+import { useClusterMetrics, useClusterMetricsSummary } from "@/lib/hooks/workloads";
 import { useTabParam } from "@/lib/use-tab-param";
 import { useRollingMetrics } from "@/lib/use-rolling-metrics";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { MetricsChart } from "@/components/monitoring/metrics-chart";
@@ -291,7 +286,7 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
         <div className="space-y-4">
           <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-2 text-xs text-muted-foreground">
-              <LineChart className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <LineChart className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <p>
                 Live rolling window from metrics-server (CPU, memory, pods; this
                 session only). Install the per-cluster Prometheus stack to add{" "}
@@ -299,13 +294,13 @@ export function ClusterMetricsPage({ clusterId }: { clusterId: string }) {
                 <strong>long-term history</strong>.
               </p>
             </div>
-            <Link
-              href={`/dashboard/clusters/${clusterId}/monitoring-stack`}
-              className="inline-flex flex-shrink-0 items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium hover:bg-accent transition-colors"
+            <RouterLink
+              to="/dashboard/clusters/$id/monitoring-stack" params={{ id: clusterId }}
+              className="inline-flex shrink-0 items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-medium hover:bg-accent transition-colors"
             >
               Set up monitoring stack
               <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
+            </RouterLink>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <MetricsChart

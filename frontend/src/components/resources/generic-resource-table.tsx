@@ -18,11 +18,15 @@ import {
 import { ActionButton } from "@/components/ui/action-button";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
-import { useGenericResources, useK8sDelete } from "@/lib/hooks";
+import {
+  useGenericResources,
+  useK8sDelete,
+} from "@/lib/hooks/kubernetes-proxy";
 import { k8sResourcePath } from "@/lib/k8s-paths";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import {
   permissionDeniedReason,
   toastPermissionDenied,
@@ -51,7 +55,7 @@ export function GenericResourceTable({
   baseColumns,
 }: GenericResourceTableProps) {
   const query = useGenericResources(clusterId, resourceType);
-  const router = useRouter();
+  const navigate = useNavigate();
   const k8sDeleteMut = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, resourceType);
   const [yamlTarget, setYamlTarget] = useState<{
@@ -169,14 +173,16 @@ export function GenericResourceTable({
           </ActionButton>
         </div>
       )}
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType={resourceType}
         data={query.data || []}
         columns={columns}
         keyExtractor={(row) =>
           row.namespace ? `${row.namespace}/${row.name}` : row.name
         }
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           resourceType,
           permissions.read,
@@ -184,9 +190,27 @@ export function GenericResourceTable({
         searchPlaceholder={`Search ${title.toLowerCase()}...`}
         loading={query.isLoading}
         isError={query.isError}
+          error={query.error}
         errorMessage={`Failed to load ${title.toLowerCase()}`}
         onRetry={() => void query.refetch()}
-        emptyMessage={`No ${title.toLowerCase()} found`}
+        emptyState={{
+          title: `No ${title.toLowerCase()} found`,
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        bulkDelete={
+          isDeletable
+            ? {
+                path: (row) =>
+                  row.namespace
+                    ? k8sResourcePath(resourceType, row.name, row.namespace)
+                    : k8sResourcePath(resourceType, row.name),
+                label: (row) =>
+                  row.namespace ? `${row.namespace}/${row.name}` : row.name,
+                noun: title.replace(/s$/, ""),
+              }
+            : undefined
+        }
       />
       {yamlTarget && (
         <YamlViewDialog

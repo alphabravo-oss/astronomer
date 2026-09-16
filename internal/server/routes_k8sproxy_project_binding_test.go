@@ -68,24 +68,21 @@ func (q projectBindingQuerier) ListProjectNamespaces(_ context.Context, projectI
 // TestNamespaceScopedRBACEnabledDefaultsOn).
 func projectMemberRouter(t *testing.T, jwtMgr *auth.JWTManager, q projectBindingQuerier) http.Handler {
 	t.Helper()
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:                 jwtMgr,
-		RBACEngine:          rbac.NewEngine(),
-		RBACQueries:         appmiddleware.NewSQLCRBACQuerierWithCache(q, nil),
-		Proxy:               tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-		NamespaceScopedRBAC: true,
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: appmiddleware.NewSQLCRBACQuerierWithCache(q, nil)}, ClusterResources: ClusterResourceDependencies{NamespaceScopedRBAC: true}, StreamingInternal:
+
+	// TestK8sProxy_ProjectMemberListsPodsInProjectNamespaces is the parity
+	// acceptance: a caller whose only grant is `project-member` on a project that
+	// owns team-a can list pods on that project's cluster. Before project bindings
+	// expanded unconditionally this was a flat 403 — the binding matched nothing on
+	// a URL that carries no project_id.
+	//
+	// The proxy has no agent connected, so an ADMITTED request lands on the handler
+	// and returns 503 while a DENIED one is stopped at 403 by the middleware. That
+	// pair is how every k8s-proxy route test distinguishes the two.
+	StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())},
 	})
 }
 
-// TestK8sProxy_ProjectMemberListsPodsInProjectNamespaces is the parity
-// acceptance: a caller whose only grant is `project-member` on a project that
-// owns team-a can list pods on that project's cluster. Before project bindings
-// expanded unconditionally this was a flat 403 — the binding matched nothing on
-// a URL that carries no project_id.
-//
-// The proxy has no agent connected, so an ADMITTED request lands on the handler
-// and returns 503 while a DENIED one is stopped at 403 by the middleware. That
-// pair is how every k8s-proxy route test distinguishes the two.
 func TestK8sProxy_ProjectMemberListsPodsInProjectNamespaces(t *testing.T) {
 	const (
 		admitted = http.StatusServiceUnavailable

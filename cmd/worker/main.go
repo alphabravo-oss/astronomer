@@ -12,9 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	allowlistproviders "github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -52,7 +54,7 @@ func (unavailableDeliveryDecryptor) DecryptBytes(string) ([]byte, error) {
 
 func allowPrivateRCWebhooks(cfg *config.Config) bool {
 	return cfg != nil && !strings.EqualFold(strings.TrimSpace(cfg.Env), "production") &&
-		strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS")), "true")
+		cfg.RCAllowPrivateWebhooks
 }
 
 func webhookHTTPClient(cfg *config.Config) *http.Client {
@@ -121,7 +123,12 @@ func main() {
 	// incoming task payloads (planned follow-up in this same sprint),
 	// so when both processes point at the same OTLP endpoint a single
 	// trace can span HTTP → asynq → worker DB queries → tunnel calls.
-	tracingCfg := observability.TracingFromEnv()
+	tracingCfg := observability.TracingConfig{
+		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		ServiceName: cfg.OTELServiceName, ServiceVersion: cfg.OTELServiceVersion,
+		SamplerRatio: cfg.OTELSamplerRatio,
+	}
 	tracingCfg.ServiceName = "astronomer-worker"
 	tracingCfg.ServiceVersion = version.Version
 	otelShutdown, err := observability.InitTracing(context.Background(), log, tracingCfg)
@@ -138,7 +145,7 @@ func main() {
 	}()
 
 	database, err := db.ConnectWithConfig(context.Background(), cfg.DatabaseURL, db.PoolConfig{
-		MaxConns:          cfg.DBMaxConns,
+		MaxConns:          workerDBMaxConns(cfg.DBMaxConns, cfg.WorkerConcurrency),
 		MinConns:          cfg.DBMinConns,
 		MaxConnLifetime:   time.Duration(cfg.DBMaxConnLifetimeMin) * time.Minute,
 		MaxConnIdleTime:   time.Duration(cfg.DBMaxConnIdleMin) * time.Minute,
@@ -149,6 +156,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
+	taskLeader, leaderErr := leader.NewDedicated(context.Background(), database.Pool(), log)
+	if leaderErr != nil {
+		log.Error("failed to initialize leader-election pool", "error", leaderErr)
+		os.Exit(1)
+	}
+	defer taskLeader.Close()
 	// C-01: fail fast on a corrupt schema_migrations row set (dirty=true or
 	// multi-row drift), same guard the server runs in NewApp. A worker that
 	// keeps sweeping against an indeterminate schema hides the .247-class
@@ -199,10 +212,10 @@ func main() {
 	backupQueries := sqlc.New(database.Pool())
 	backupExecutor := handler.NewAdminDrillHandler(backupQueries)
 	backupExecutor.SetEncryptor(platformEncryptor)
-	backupExecutor.SetBackupRuntime(os.Getenv("MANAGEMENT_BACKUP_IMAGE"), os.Getenv("MANAGEMENT_BACKUP_SERVICE_ACCOUNT"))
+	backupExecutor.SetBackupRuntime(cfg.ManagementBackupImage, cfg.ManagementBackupServiceAccount)
 	if restCfg, kErr := rest.InClusterConfig(); kErr == nil {
 		if client, clientErr := kubernetes.NewForConfig(restCfg); clientErr == nil {
-			backupExecutor.SetKubernetes(client, os.Getenv("POD_NAMESPACE"), os.Getenv("RELEASE_NAME"))
+			backupExecutor.SetKubernetes(client, cfg.PodNamespace, cfg.ReleaseName)
 		}
 	}
 	coreRuntime := tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
@@ -215,10 +228,11 @@ func main() {
 		SystemOIDCIssuer:              cfg.DeliveryFluxDistributionOIDCIssuer,
 		SystemOIDCIdentity:            cfg.DeliveryFluxDistributionCertificateIdentity,
 		PlatformName:                  "Astronomer",
+		ChartRecommendationPolicy:     catalog.NewRecommendationPolicy(cfg.ChartRatingBayesianAverage, cfg.ChartRatingBayesianWeight),
 		AuditLogRetentionMonths:       cfg.AuditLogRetentionMonths,
 		ClusterTombstoneRetentionDays: cfg.ClusterTombstoneRetentionDays,
 		RegistrationTokenTTLHours:     cfg.RegistrationTokenTTLHours,
-		Leader:                        leader.New(database.Pool(), log),
+		Leader:                        taskLeader,
 		Enqueuer:                      runtimeEnqueuer,
 		Bus:                           eventBus,
 		CatalogDecryptor:              tasks.CatalogDecryptorFor(platformEncryptor),
@@ -244,10 +258,11 @@ func main() {
 	allowlistRegistry.Register(allowlistproviders.NewDOKSProvider(allowlistMaterializer))
 	allowlistRegistry.Register(allowlistproviders.NewSelfManagedProvider())
 	allowlistRuntime := tasks.ApiserverAllowlistRuntime{Deps: tasks.ApiserverAllowlistReconcileDeps{
-		Queries:       allowlistQueries,
-		Registry:      allowlistRegistry,
-		ClusterShaper: allowlistproviders.ClusterFromSQLC,
-		AuditWriter:   allowlistQueries,
+		Queries:          allowlistQueries,
+		Registry:         allowlistRegistry,
+		ClusterShaper:    allowlistproviders.ClusterFromSQLC,
+		AuditWriter:      allowlistQueries,
+		AstronomerEgress: allowlist.ParseAstronomerEgress(cfg.TunnelEgressCIDRs),
 	}}
 	deliveryQueries := sqlc.New(database.Pool())
 	deliveryVerifier, deliveryVerifierErr := deliveryresolver.NewExecVerifier(cfg.DeliverySourceTrustDirectory)
@@ -390,7 +405,7 @@ func main() {
 		Delivery: deliveryRuntime, Dispatch: dispatchRuntime, Alerts: alertRuntime,
 		Maintenance: maintenanceRuntime, Allowlists: allowlistRuntime, GitOps: gitopsRuntime,
 	}
-	w, werr := worker.NewWorker(cfg.RedisURL, log, standaloneRuntime, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, log))
+	w, werr := worker.NewWorker(cfg.RedisURL, cfg.WorkerConcurrency, log, standaloneRuntime, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, log))
 	if werr != nil {
 		log.Error("failed to start worker", "error", werr)
 		os.Exit(1)
@@ -489,4 +504,23 @@ func main() {
 	auditCancel()
 
 	observability.WithEvent(log, "worker_stopped").Info("astronomer-worker stopped")
+}
+
+// workerDBMaxConns keeps the standalone worker's SQL capacity above its job
+// concurrency. Leader leases use a separate pool, so this headroom is reserved
+// for task queries, dispatch bookkeeping, and metrics rather than pinned locks.
+// An explicit operator value is authoritative.
+func workerDBMaxConns(configured int32, concurrency int) int32 {
+	if configured > 0 {
+		return configured
+	}
+	const (
+		minimum  = int32(25)
+		headroom = int32(8)
+	)
+	derived := int32(concurrency) + headroom
+	if derived < minimum {
+		return minimum
+	}
+	return derived
 }

@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // §BridgeProtocol — Tier-2 scoped-token issuance.
@@ -94,7 +95,7 @@ func (h *ExtensionHandler) IssueTicket(w http.ResponseWriter, r *http.Request) {
 	// a ticket — the iframe relays ext/token.request through the host shell,
 	// which carries the session cookie. The ticket is then the ONLY credential
 	// the iframe sees.
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil || user.ID == "" {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return

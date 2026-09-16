@@ -21,8 +21,6 @@ func TestTaskOutboxUpsertsResetAttemptCount(t *testing.T) {
 		"upsertTaskOutbox": upsertTaskOutbox,
 		"upsertCloudCredentialMaterializationWithTaskOutbox": upsertCloudCredentialMaterializationWithTaskOutbox,
 		"deleteCloudCredentialMaterializationWithTaskOutbox": deleteCloudCredentialMaterializationWithTaskOutbox,
-		"createClusterDecommissionWithTaskOutbox":            createClusterDecommissionWithTaskOutbox,
-		"deleteClusterRegistryConfigByIDWithTaskOutbox":      deleteClusterRegistryConfigByIDWithTaskOutbox,
 		"updateClusterRegistrationStepWithTaskOutbox":        updateClusterRegistrationStepWithTaskOutbox,
 		"upsertClusterTemplateApplicationWithTaskOutbox":     upsertClusterTemplateApplicationWithTaskOutbox,
 	}

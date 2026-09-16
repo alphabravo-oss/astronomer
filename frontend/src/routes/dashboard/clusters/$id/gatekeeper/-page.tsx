@@ -11,8 +11,10 @@
  * server-side enforcement; the server independently fails closed + audits.
  */
 import { useState } from "react";
-import { useParams } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+import { QueryStates } from "@/components/ui/query-states";
+import { Textarea } from "@/components/ui/textarea";
+import { useParams } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Trash2,
@@ -26,7 +28,7 @@ import {
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { useCluster } from "@/lib/hooks";
+import { useCluster } from "@/lib/hooks/clusters";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import { cn } from "@/lib/utils";
 import type { GatekeeperConstraint, ConstraintValidateResult } from "@/types";
@@ -52,11 +54,12 @@ spec:
 `;
 
 export function ClusterGatekeeperPage() {
-  const params = useParams();
+  const params = useParams({ strict: false });
   const clusterId = (params?.id as string) ?? "";
   const { canWrite, reason } = useClustersUpdate(clusterId);
 
-  const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
+  const clusterQuery = useCluster(clusterId);
+  const { data: cluster, isLoading: clusterLoading } = clusterQuery;
   const {
     data: constraints,
     isLoading,
@@ -111,7 +114,7 @@ export function ClusterGatekeeperPage() {
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded capitalize font-medium",
+            "text-xs px-2 py-0.5 rounded-sm capitalize font-medium",
             row.source === "custom"
               ? "bg-status-info/10 text-status-info"
               : "bg-muted text-muted-foreground",
@@ -126,7 +129,7 @@ export function ClusterGatekeeperPage() {
       key: "enforcement",
       header: "Enforcement",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
           {row.enforcementAction || "—"}
         </span>
       ),
@@ -158,7 +161,7 @@ export function ClusterGatekeeperPage() {
           <div className="space-y-0.5">
             <span
               className={cn(
-                "inline-flex rounded px-2 py-0.5 text-xs font-medium capitalize",
+                "inline-flex rounded-sm px-2 py-0.5 text-xs font-medium capitalize",
                 row.syncStatus === "synced"
                   ? "bg-status-success/10 text-status-success"
                   : row.syncStatus === "failed"
@@ -199,7 +202,7 @@ export function ClusterGatekeeperPage() {
             }}
             disabled={!canWrite}
             title={canWrite ? "Delete constraint" : reason}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -207,11 +210,20 @@ export function ClusterGatekeeperPage() {
     },
   ];
 
-  if (clusterLoading) {
+  if (clusterLoading || clusterQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={clusterQuery}
+        permission="clusters:read"
+        notFound={
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <Server className="h-8 w-8 mb-3" />
+            <p>Cluster not found</p>
+          </div>
+        }
+      >
+        {() => null}
+      </QueryStates>
     );
   }
   if (!cluster) {
@@ -227,13 +239,13 @@ export function ClusterGatekeeperPage() {
 
   return (
     <PageShell>
-      <Link
-        href={`/dashboard/clusters/${clusterId}`}
+      <RouterLink
+        to="/dashboard/clusters/$id" params={{ id: clusterId }}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to cluster
-      </Link>
+      </RouterLink>
 
       <PageHeader
         title="Gatekeeper Constraints"
@@ -275,13 +287,13 @@ export function ClusterGatekeeperPage() {
           </div>
         </div>
 
-        <textarea
+        <Textarea
           value={yaml}
           onChange={(e) => setYaml(e.target.value)}
           spellCheck={false}
           rows={16}
           aria-label="Constraint YAML"
-          className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-y"
+          className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
         />
 
         {result && (
@@ -342,7 +354,11 @@ export function ClusterGatekeeperPage() {
           isError={isError}
           onRetry={() => refetch()}
           searchPlaceholder="Search constraints..."
-          emptyMessage="No Gatekeeper constraints found on this cluster"
+          emptyState={{
+            title: "No Gatekeeper constraints found on this cluster",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
         />
       </div>
 

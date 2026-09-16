@@ -12,7 +12,7 @@ import { createFileRoute } from "@tanstack/react-router";
 // row, blowing up page render time for active baselines.
 
 import { useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { useAnomalyBaselines } from "@/lib/hooks/alerting";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
@@ -117,13 +117,13 @@ function AnomalyBaselinesPage() {
     <PageShell>
       <PageHeader
         eyebrow={
-          <Link
-            href="/dashboard/alerting"
+          <RouterLink
+            to="/dashboard/alerting"
             className="inline-flex items-center gap-1.5 hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Alerting
-          </Link>
+          </RouterLink>
         }
         title={
           <span className="inline-flex items-center gap-2">
@@ -163,7 +163,11 @@ function AnomalyBaselinesPage() {
         columns={columns}
         keyExtractor={(b) => b.id}
         loading={isLoading}
-        emptyMessage="No anomaly baselines have been computed yet. The recompute worker provisions rows for each anomaly rule on its next tick."
+        emptyState={{
+          title: "No anomaly baselines have been computed yet",
+          description:
+            "The recompute worker provisions rows for each anomaly rule on its next tick.",
+        }}
       />
 
       <p className="text-xs text-muted-foreground">

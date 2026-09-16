@@ -52,7 +52,11 @@ func (h *ServiceProxyHandler) SetAuditWriter(audit any) {
 }
 
 func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	namespace := chi.URLParam(r, "namespace")
 	servicePort := chi.URLParam(r, "service_port")
 	pathSuffix := chi.URLParam(r, "*")

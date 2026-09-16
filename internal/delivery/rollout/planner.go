@@ -13,19 +13,9 @@ import (
 )
 
 type Planner struct {
-	store        PlanningStore
-	now          func() time.Time
-	newID        IDGenerator
-	requireAudit bool
-}
-
-// RequireTransactionalAudit makes missing audit intent a fail-closed
-// configuration error. Production enables this; narrow domain tests may omit
-// HTTP-originated audit metadata.
-func (p *Planner) RequireTransactionalAudit() {
-	if p != nil {
-		p.requireAudit = true
-	}
+	store PlanningStore
+	now   func() time.Time
+	newID IDGenerator
 }
 
 func NewPlanner(store PlanningStore, now func() time.Time, newID IDGenerator) (*Planner, error) {
@@ -48,7 +38,7 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 	if err := validateCreateRequest(request); err != nil {
 		return FrozenRollout{}, err
 	}
-	if p.requireAudit && request.Audit.IsZero() {
+	if request.Audit.IsZero() {
 		return FrozenRollout{}, audit.ErrOutboxUnavailable
 	}
 	strategyDigest, err := request.Strategy.CanonicalDigest()
@@ -70,9 +60,6 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 	var result FrozenRollout
 	err = p.store.InTransaction(ctx, func(tx PlanningTransaction) error {
 		recordIntent := func() error {
-			if request.Audit.IsZero() {
-				return nil
-			}
 			intent := request.Audit
 			intent.Event.ResourceID = result.ID.String()
 			if intent.Event.Detail == nil {

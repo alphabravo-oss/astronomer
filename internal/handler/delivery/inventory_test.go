@@ -19,7 +19,7 @@ type inventoryQueryFake struct {
 	rolloutsFn func(context.Context) (int64, error)
 }
 
-func (f *inventoryQueryFake) GetDeliveryControllerInventory(context.Context, sqlc.GetDeliveryControllerInventoryParams) (sqlc.DeliveryControllerInventory, error) {
+func (f *inventoryQueryFake) GetDeliveryControllerInventory(context.Context, sqlc.GetDeliveryControllerInventoryParams) (sqlc.GetDeliveryControllerInventoryRow, error) {
 	panic("unexpected GetDeliveryControllerInventory")
 }
 func (f *inventoryQueryFake) ListClusterDeployments(context.Context, sqlc.ListClusterDeploymentsParams) ([]sqlc.ClusterDeployment, error) {
@@ -37,7 +37,7 @@ func (f *inventoryQueryFake) GetCurrentDeliverySystemRollout(context.Context) (s
 func (f *inventoryQueryFake) ListDeliverySystemReleases(context.Context, sqlc.ListDeliverySystemReleasesParams) ([]sqlc.ListDeliverySystemReleasesRow, error) {
 	panic("unexpected ListDeliverySystemReleases")
 }
-func (f *inventoryQueryFake) ListDeliveryEstateClusters(ctx context.Context) ([]sqlc.ListDeliveryEstateClustersRow, error) {
+func (f *inventoryQueryFake) ListDeliveryEstateClusters(ctx context.Context, _ int32) ([]sqlc.ListDeliveryEstateClustersRow, error) {
 	if f.estateFn == nil {
 		panic("unexpected ListDeliveryEstateClusters")
 	}

@@ -9,12 +9,14 @@ export function RepositoriesTab({
   onSync,
   onDelete,
   syncPending,
+  deletePending,
 }: {
   repos: HelmRepository[] | undefined;
   loading: boolean;
   onSync: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
   syncPending: boolean;
+  deletePending?: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -26,6 +28,7 @@ export function RepositoriesTab({
           onSync={onSync}
           onDelete={onDelete}
           syncPending={syncPending}
+          deletePending={deletePending}
         />
       </PageSection>
     </div>

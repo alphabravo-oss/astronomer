@@ -31,53 +31,104 @@ WHERE cluster_id = $1
 ORDER BY created_at DESC
 LIMIT 1;
 
--- name: ListPendingClusterDecommissions :many
--- Used by the periodic sweep to find decommissions that need re-runs (the
--- enqueue-time task may have been lost or the reconciler may have crashed
--- mid-phase).
+-- name: ClaimPendingClusterDecommissions :many
+-- Atomically claims a fair, bounded batch for a periodic sweep. Live leases
+-- are excluded before LIMIT, so an old in-flight prefix cannot starve later
+-- rows. updated_at is advanced on every attempt/completion and is the primary
+-- ordering key, moving repeatedly failing work behind rows not yet attempted.
+WITH candidates AS (
+    SELECT id
+    FROM cluster_decommissions
+    WHERE status IN ('pending', 'failed')
+       OR (
+           status = 'running'
+           AND (
+               decommission_lease_until IS NULL
+               OR decommission_lease_until <= now()
+           )
+       )
+    ORDER BY updated_at ASC, created_at ASC, id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT sqlc.arg(query_limit)
+)
+UPDATE cluster_decommissions AS decommission
+SET status = 'running',
+    attempts = attempts + 1,
+    started_at = COALESCE(started_at, now()),
+    last_error = '',
+    updated_at = now(),
+    decommission_claim_token = sqlc.arg(claim_token),
+    decommission_lease_until = now() + make_interval(secs => sqlc.arg(lease_ttl_seconds)::double precision)
+FROM candidates
+WHERE decommission.id = candidates.id
+RETURNING decommission.*;
+
+-- name: ListPendingClusterDecommissionsForClusters :many
+-- Page enrichment is scoped to the rows already authorized and returned. Keep
+-- tenant filtering in SQL and avoid scanning the estate-wide in-flight set.
 SELECT * FROM cluster_decommissions
 WHERE status IN ('pending', 'running')
-ORDER BY created_at ASC
-LIMIT $1;
+  AND cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+ORDER BY created_at ASC;
 
 -- name: MarkClusterDecommissionRunning :one
--- Lease-CAS claim. Claims the row only when it is pending/failed OR when a
--- prior runner's lease has expired (status='running' but updated_at older than
--- the lease TTL `$2` seconds). The active runner renews its lease implicitly on
--- every UpdateClusterDecommissionPhases (which bumps updated_at), so a healthy
--- in-flight runner is never preempted mid-RPC. When no row matches (a sibling
--- holds a live lease), the query returns no rows and the caller backs off — this
--- is the serialization point that stops the 1-minute periodic sweep from
--- double-running a row concurrently with the enqueued task.
+-- Claims one enqueue-time task. A fresh opaque token fences every subsequent
+-- state write; an expired owner can never overwrite its replacement.
 UPDATE cluster_decommissions
 SET
     status = 'running',
     attempts = attempts + 1,
     started_at = COALESCE(started_at, now()),
     last_error = '',
-    updated_at = now()
-WHERE id = $1
+    updated_at = now(),
+    decommission_claim_token = sqlc.arg(claim_token),
+    decommission_lease_until = now() + make_interval(secs => sqlc.arg(lease_ttl_seconds)::double precision)
+WHERE id = sqlc.arg(id)
   AND (
       status IN ('pending', 'failed')
-      OR (status = 'running' AND updated_at < now() - make_interval(secs => sqlc.arg(lease_ttl_seconds)::double precision))
+      OR (
+          status = 'running'
+          AND (
+              decommission_lease_until IS NULL
+              OR decommission_lease_until <= now()
+          )
+      )
   )
 RETURNING *;
 
--- name: ReleaseClusterDecommissionClaim :exec
+-- name: RenewClusterDecommissionClaim :execrows
+-- Long-running side effects renew ownership in the background. A zero row
+-- count means the lease was superseded and the runner must stop.
+UPDATE cluster_decommissions
+SET decommission_lease_until = now() + make_interval(secs => sqlc.arg(lease_ttl_seconds)::double precision)
+WHERE id = sqlc.arg(id)
+  AND status = 'running'
+  AND decommission_claim_token = sqlc.arg(claim_token);
+
+-- name: ReleaseClusterDecommissionClaim :execrows
 -- Releases the lease so a sibling pod can re-claim. Used by the HA re-queue
 -- path: when the agent's WS is live on a SIBLING pod, the owning pod must be
 -- able to claim the row, so the current (wrong) pod sets status back to
--- 'pending' before returning the task to asynq.
+-- 'pending' before returning the task to asynq. Token fencing prevents an
+-- expired owner from releasing a replacement owner's claim.
 UPDATE cluster_decommissions
-SET status = 'pending', updated_at = now()
-WHERE id = $1;
+SET status = 'pending',
+    updated_at = now(),
+    decommission_claim_token = NULL,
+    decommission_lease_until = NULL
+WHERE id = sqlc.arg(id)
+  AND status = 'running'
+  AND decommission_claim_token = sqlc.arg(claim_token);
 
 -- name: UpdateClusterDecommissionPhases :one
 UPDATE cluster_decommissions
 SET
-    phases = $2,
-    updated_at = now()
-WHERE id = $1
+    phases = sqlc.arg(phases),
+    updated_at = now(),
+    decommission_lease_until = now() + make_interval(secs => sqlc.arg(lease_ttl_seconds)::double precision)
+WHERE id = sqlc.arg(id)
+  AND status = 'running'
+  AND decommission_claim_token = sqlc.arg(claim_token)
 RETURNING *;
 
 -- name: MarkClusterDecommissionSucceeded :one
@@ -87,8 +138,12 @@ SET
     completed_at = now(),
     last_error = '',
     updated_at = now(),
-    phases = $2
-WHERE id = $1
+    phases = sqlc.arg(phases),
+    decommission_claim_token = NULL,
+    decommission_lease_until = NULL
+WHERE id = sqlc.arg(id)
+  AND status = 'running'
+  AND decommission_claim_token = sqlc.arg(claim_token)
 RETURNING *;
 
 -- name: MarkClusterDecommissionFailed :one
@@ -96,10 +151,14 @@ UPDATE cluster_decommissions
 SET
     status = 'failed',
     completed_at = now(),
-    last_error = $2,
-    phases = $3,
-    updated_at = now()
-WHERE id = $1
+    last_error = sqlc.arg(last_error),
+    phases = sqlc.arg(phases),
+    updated_at = now(),
+    decommission_claim_token = NULL,
+    decommission_lease_until = NULL
+WHERE id = sqlc.arg(id)
+  AND status = 'running'
+  AND decommission_claim_token = sqlc.arg(claim_token)
 RETURNING *;
 
 -- Cluster tombstone — the final phase of the reconciler. We never hard-delete

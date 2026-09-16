@@ -15,6 +15,7 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -102,24 +103,115 @@ func NewNames() Names {
 	}
 }
 
-// EffectiveVerbs is the operator's verb set against the target cluster.
-// Coarse on purpose — see docs/kubectl-shell.md. Boolean flags drive
-// the rule set in the in-cluster Role:
-//
-//	clusters:read   ⇒ get, list, watch
-//	clusters:update ⇒ + create, update, patch
-//	clusters:delete ⇒ + delete
-//	superuser       ⇒ cluster-admin binding (ClusterRoleBinding to
-//	                  the built-in cluster-admin ClusterRole)
-//
-// v2 will mirror per-namespace bindings from the operator's project
-// memberships. Keeping the v1 mapping coarse means operators who need
-// finer grants fall back to the kubectl-proxy + kubeconfig flow.
+// EffectiveVerbs bounds the requested shell capabilities. WithPermissions
+// derives the actual resource rules within that envelope. Non-superusers
+// without a derived policy receive no Kubernetes grants.
 type EffectiveVerbs struct {
-	Read      bool
-	Update    bool
-	Delete    bool
-	Superuser bool
+	Read        bool
+	Update      bool
+	Delete      bool
+	ReadSecrets bool
+	ExecPods    bool
+	Superuser   bool
+	policy      *shellPolicy
+}
+
+type shellPolicy struct {
+	rules []map[string]any
+}
+
+// WithPermissions intersects the candidate shell surface with proven caller
+// grants. Each resource/verb is checked independently; granting Secret get
+// never implicitly grants list/watch. A missing predicate yields no rules.
+func (e EffectiveVerbs) WithPermissions(allows func(apiGroup, resource, verb string) bool) EffectiveVerbs {
+	rules := make([]map[string]any, 0)
+	if allows != nil {
+		for _, candidate := range candidateShellRules(e) {
+			for _, group := range candidate["apiGroups"].([]string) {
+				for _, resource := range candidate["resources"].([]string) {
+					verbs := make([]string, 0)
+					for _, verb := range candidate["verbs"].([]string) {
+						if allows(group, resource, verb) {
+							verbs = append(verbs, verb)
+						}
+					}
+					if len(verbs) > 0 {
+						rules = append(rules, map[string]any{"apiGroups": []string{group}, "resources": []string{resource}, "verbs": verbs})
+					}
+				}
+			}
+		}
+	}
+	e.policy = &shellPolicy{rules: rules}
+	return e
+}
+
+func shellRules(e EffectiveVerbs) []map[string]any {
+	if e.policy == nil {
+		return []map[string]any{}
+	}
+	return e.policy.rules
+}
+
+// candidateShellRules enumerates the Kubernetes resources available to a
+// caller-derived non-superuser policy. Kubernetes RBAC has no "all resources except Secrets"
+// expression, so a wildcard resource grant can never be made safe. Keep the
+// broad diagnostic read surface separate from the smaller mutation surface;
+// in particular, mutation access never includes RBAC, ServiceAccounts, CRDs,
+// nodes, namespaces, or storage classes.
+func candidateShellRules(e EffectiveVerbs) []map[string]any {
+	if e.Superuser {
+		return nil
+	}
+	rules := make([]map[string]any, 0, 16)
+	add := func(apiGroups, resources, verbs []string) {
+		if len(verbs) == 0 {
+			return
+		}
+		rules = append(rules, map[string]any{
+			"apiGroups": apiGroups,
+			"resources": resources,
+			"verbs":     verbs,
+		})
+	}
+	readVerbs := []string(nil)
+	if e.Read || e.Update || e.Delete {
+		readVerbs = []string{"get", "list", "watch"}
+	}
+	writeVerbs := []string(nil)
+	if e.Update || e.Delete {
+		writeVerbs = []string{"create", "update", "patch"}
+	}
+	if e.Delete {
+		writeVerbs = append(writeVerbs, "delete")
+	}
+
+	add([]string{""}, []string{"configmaps", "endpoints", "events", "limitranges", "namespaces", "nodes", "persistentvolumeclaims", "persistentvolumes", "pods", "pods/log", "pods/status", "replicationcontrollers", "resourcequotas", "serviceaccounts", "services"}, readVerbs)
+	add([]string{"apps"}, []string{"controllerrevisions", "daemonsets", "deployments", "replicasets", "statefulsets"}, readVerbs)
+	add([]string{"autoscaling"}, []string{"horizontalpodautoscalers"}, readVerbs)
+	add([]string{"batch"}, []string{"cronjobs", "jobs"}, readVerbs)
+	add([]string{"coordination.k8s.io"}, []string{"leases"}, readVerbs)
+	add([]string{"discovery.k8s.io"}, []string{"endpointslices"}, readVerbs)
+	add([]string{"networking.k8s.io"}, []string{"ingressclasses", "ingresses", "networkpolicies"}, readVerbs)
+	add([]string{"policy"}, []string{"poddisruptionbudgets"}, readVerbs)
+	add([]string{"rbac.authorization.k8s.io"}, []string{"clusterrolebindings", "clusterroles", "rolebindings", "roles"}, readVerbs)
+	add([]string{"storage.k8s.io"}, []string{"csidrivers", "csinodes", "csistoragecapacities", "storageclasses", "volumeattachments"}, readVerbs)
+	add([]string{"apiextensions.k8s.io"}, []string{"customresourcedefinitions"}, readVerbs)
+
+	add([]string{""}, []string{"configmaps", "persistentvolumeclaims", "pods", "replicationcontrollers", "services"}, writeVerbs)
+	add([]string{"apps"}, []string{"daemonsets", "deployments", "replicasets", "statefulsets"}, writeVerbs)
+	add([]string{"autoscaling"}, []string{"horizontalpodautoscalers"}, writeVerbs)
+	add([]string{"batch"}, []string{"cronjobs", "jobs"}, writeVerbs)
+	add([]string{"networking.k8s.io"}, []string{"ingresses", "networkpolicies"}, writeVerbs)
+	add([]string{"policy"}, []string{"poddisruptionbudgets"}, writeVerbs)
+
+	if e.ExecPods {
+		add([]string{""}, []string{"pods/attach", "pods/exec", "pods/portforward"}, []string{"create"})
+	}
+	if e.ReadSecrets {
+		add([]string{""}, []string{"secrets"}, []string{"get", "list", "watch"})
+	}
+	return rules
 }
 
 // Verbs returns the K8s verb list this EffectiveVerbs maps to.
@@ -129,16 +221,17 @@ func (e EffectiveVerbs) Verbs() []string {
 		// ClusterRoleBinding to cluster-admin.
 		return []string{"*"}
 	}
-	out := []string{}
-	if e.Read || e.Update || e.Delete {
-		out = append(out, "get", "list", "watch")
+	seen := make(map[string]bool)
+	for _, rule := range shellRules(e) {
+		for _, verb := range rule["verbs"].([]string) {
+			seen[verb] = true
+		}
 	}
-	if e.Update || e.Delete {
-		out = append(out, "create", "update", "patch")
+	out := make([]string, 0, len(seen))
+	for verb := range seen {
+		out = append(out, verb)
 	}
-	if e.Delete {
-		out = append(out, "delete")
-	}
+	sort.Strings(out)
 	return out
 }
 
@@ -161,24 +254,13 @@ func ServiceAccountManifest(n Names) []byte {
 	return b
 }
 
-// ClusterRoleManifest renders the cluster-wide Role that mirrors
-// `verbs` against the wildcard resource set. For v1 we use a single
-// ClusterRole + ClusterRoleBinding so the operator can list resources
-// across namespaces (matching the `kubectl get pods -A` flow most
-// operators expect from a break-glass shell).
+// ClusterRoleManifest renders the caller-derived policy across namespaces.
 //
 // Superuser callers get nil here and fall back to the cluster-admin
 // built-in binding.
 func ClusterRoleManifest(n Names, verbs EffectiveVerbs) []byte {
 	if verbs.Superuser {
 		return nil
-	}
-	rules := []map[string]any{
-		{
-			"apiGroups": []string{"*"},
-			"resources": []string{"*"},
-			"verbs":     verbs.Verbs(),
-		},
 	}
 	m := map[string]any{
 		"apiVersion": "rbac.authorization.k8s.io/v1",
@@ -190,7 +272,7 @@ func ClusterRoleManifest(n Names, verbs EffectiveVerbs) []byte {
 				"astronomer.io/component":      "kubectl-shell",
 			},
 		},
-		"rules": rules,
+		"rules": shellRules(verbs),
 	}
 	b, _ := json.Marshal(m)
 	return b
@@ -209,13 +291,6 @@ func RoleManifest(n Names, namespace string, verbs EffectiveVerbs) []byte {
 	if verbs.Superuser {
 		return nil
 	}
-	rules := []map[string]any{
-		{
-			"apiGroups": []string{"*"},
-			"resources": []string{"*"},
-			"verbs":     verbs.Verbs(),
-		},
-	}
 	m := map[string]any{
 		"apiVersion": "rbac.authorization.k8s.io/v1",
 		"kind":       "Role",
@@ -227,7 +302,7 @@ func RoleManifest(n Names, namespace string, verbs EffectiveVerbs) []byte {
 				"astronomer.io/component":      "kubectl-shell",
 			},
 		},
-		"rules": rules,
+		"rules": shellRules(verbs),
 	}
 	b, _ := json.Marshal(m)
 	return b

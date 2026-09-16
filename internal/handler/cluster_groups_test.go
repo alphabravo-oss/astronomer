@@ -301,6 +301,19 @@ func (f *fakeClusterGroupQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.C
 	return nil
 }
 
+func (f *fakeClusterGroupQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{}, nil
+}
+
+func newClusterGroupHandlerForTest(q *fakeClusterGroupQuerier) *ClusterGroupHandler {
+	h := NewClusterGroupHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(ClusterGroupMutationTx) error) error { return fn(q) })
+	return h
+}
+
 func (f *fakeClusterGroupQuerier) auditRowAt(t *testing.T, idx int) sqlc.CreateAuditLogV1Params {
 	t.Helper()
 	f.mu.Lock()
@@ -353,8 +366,7 @@ func createGroup(t *testing.T, h *ClusterGroupHandler, body map[string]any) Clus
 
 func TestClusterGroupMutationsAreAudited(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
-	h.SetAuditor(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	raw, _ := json.Marshal(map[string]any{"name": "Platform"})
 	rec := httptest.NewRecorder()
@@ -406,7 +418,7 @@ func TestClusterGroupMutationsAreAudited(t *testing.T) {
 // 400 and the "max_depth" error code.
 func TestCreateGroup_EnforcesDepthCap(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	root := createGroup(t, h, map[string]any{"name": "prod"})
 	l1 := createGroup(t, h, map[string]any{"name": "prod-us", "parent_id": root.ID})
@@ -430,7 +442,7 @@ func TestCreateGroup_EnforcesDepthCap(t *testing.T) {
 // 400.
 func TestCreateGroup_RejectsCircularParent(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	root := createGroup(t, h, map[string]any{"name": "root"})
 	child := createGroup(t, h, map[string]any{"name": "child", "parent_id": root.ID})
@@ -462,7 +474,7 @@ func TestCreateGroup_RejectsCircularParent(t *testing.T) {
 // allowed under different parents.
 func TestCreateGroup_DuplicateSlugUnderSameParent_400(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	parentA := createGroup(t, h, map[string]any{"name": "a"})
 	parentB := createGroup(t, h, map[string]any{"name": "b"})
@@ -492,7 +504,7 @@ func TestCreateGroup_DuplicateSlugUnderSameParent_400(t *testing.T) {
 // returns rows with a `depth` field computed by the recursive CTE.
 func TestListGroupsAsTree_ReturnsDepthAnnotated(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	root := createGroup(t, h, map[string]any{"name": "prod"})
 	mid := createGroup(t, h, map[string]any{"name": "prod-us", "parent_id": root.ID})
@@ -527,7 +539,7 @@ func TestListGroupsAsTree_ReturnsDepthAnnotated(t *testing.T) {
 // descendant — not just the direct children of root.
 func TestListClustersInGroupTree_RecursesDescendants(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	root := createGroup(t, h, map[string]any{"name": "prod"})
 	mid := createGroup(t, h, map[string]any{"name": "prod-us", "parent_id": root.ID})
@@ -573,7 +585,7 @@ func TestListClustersInGroupTree_RecursesDescendants(t *testing.T) {
 // (not deleted).
 func TestDeleteGroup_CascadesSubtreeAndUnassignsClusters(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	root := createGroup(t, h, map[string]any{"name": "prod"})
 	mid := createGroup(t, h, map[string]any{"name": "prod-us", "parent_id": root.ID})
@@ -608,7 +620,7 @@ func TestDeleteGroup_CascadesSubtreeAndUnassignsClusters(t *testing.T) {
 // IDs for unknowns.
 func TestMoveClusters_AssignsBatch(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	grp := createGroup(t, h, map[string]any{"name": "staging"})
 	c1 := uuid.New()
@@ -660,7 +672,7 @@ func TestClusterGroupsHandler_RequiresClustersUpdate(t *testing.T) {
 // slug derives one from the name field (kebab-case).
 func TestClusterGroups_SlugAutoDerivation(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 	got := createGroup(t, h, map[string]any{"name": "Prod US East"})
 	if got.Slug != "prod-us-east" {
 		t.Errorf("expected derived slug 'prod-us-east', got %q", got.Slug)

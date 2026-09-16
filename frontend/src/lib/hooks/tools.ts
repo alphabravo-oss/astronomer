@@ -6,6 +6,8 @@ import {
   getTools,
   installTool,
   uninstallTool,
+  rollbackTool,
+  retryToolOperation,
 } from "@/lib/api/tools";
 import { liveFallback } from "@/lib/live/status-store";
 import { queryKeys } from "@/lib/query-keys";
@@ -97,5 +99,32 @@ export function useAdoptTool() {
       toastSuccess("Tool adopted successfully");
     },
     onError: (error: Error) => toastApiError("Failed to adopt tool", error),
+  });
+}
+
+export function useRecoverTool() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      slug,
+      cluster_id,
+      operationId,
+      action,
+    }: {
+      slug: string;
+      cluster_id: string;
+      operationId: string;
+      action: "retry" | "rollback";
+    }) =>
+      action === "retry"
+        ? retryToolOperation(operationId)
+        : rollbackTool(slug, { cluster_id }),
+    onSuccess: (_, { cluster_id }) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.tools.clusterStatus(cluster_id),
+      });
+    },
+    onError: (error: Error) =>
+      toastApiError("Failed to recover tool operation", error),
   });
 }

@@ -72,7 +72,7 @@ type CallerIdentity struct {
 	// client can choose, and a forged correlation is worse than no correlation
 	// (§7 invariant 3 — the envelope is populated from the session only).
 	// internal/callerid therefore fills this from
-	// middleware.GetGeneratedRequestID, which yields a value only when the
+	// reqctx.GeneratedRequestID, which yields a value only when the
 	// server minted the id itself. Consumers must treat "" as "no correlation
 	// available", never as an error.
 	RequestID string `json:"caller_request_id,omitempty"`
@@ -128,6 +128,11 @@ const FeatureImpersonation = "impersonation"
 // not imply that the management server has a workstation-reachable endpoint;
 // that is validated independently before a credential is requested.
 const FeatureDirectKubeconfig = "direct_kubeconfig.v1"
+
+// AgentCapabilityMutate is the CONNECT-time admission capability required for
+// generic Kubernetes create/update/patch/delete requests. Keeping the wire
+// spelling here prevents reconcilers and tunnel admission from drifting.
+const AgentCapabilityMutate = "mutate"
 
 // ImpersonationProbeSubject is the subject the agent's SSAR self-probe asks
 // about. It is the pinned proxy identity from design Option D, and the probe is

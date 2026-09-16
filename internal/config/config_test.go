@@ -130,16 +130,28 @@ func TestNamespaceScopedRBACEnabledDefaultsOn(t *testing.T) {
 	}
 }
 
-// TestGitopsWebhookSecretEnvBinding guards the fix for the finding that
-// GITOPS_WEBHOOK_SECRET was never bound, so the git push-webhook sync endpoint
-// could never be enabled in any deployment (it 503s on an empty secret).
-func TestGitopsWebhookSecretEnvBinding(t *testing.T) {
-	t.Setenv("GITOPS_WEBHOOK_SECRET", "hunter2-webhook")
+func TestLoadCentralizesRuntimeCompositionEnvironment(t *testing.T) {
+	t.Setenv("ASTRONOMER_POD_IP", "10.0.0.7")
+	t.Setenv("POD_NAMESPACE", "platform-system")
+	t.Setenv("RELEASE_NAME", "elite")
+	t.Setenv("HOSTNAME", "server-2")
+	t.Setenv("CRD_WATCH_NAMESPACE", "management")
+	t.Setenv("DEX_BUNDLED_ENABLED", "true")
+	t.Setenv("DEX_BUNDLED_ISSUER_URL", "https://example.test/dex")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.25")
+	t.Setenv("CHART_RATING_BAYESIAN_AVG", "4.2")
+
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.GitopsWebhookSecret != "hunter2-webhook" {
-		t.Fatalf("GITOPS_WEBHOOK_SECRET not resolved into cfg.GitopsWebhookSecret, got %q", cfg.GitopsWebhookSecret)
+	if cfg.PodIP != "10.0.0.7" || cfg.PodNamespace != "platform-system" || cfg.ReleaseName != "elite" || cfg.ProcessHostname != "server-2" {
+		t.Fatalf("process identity was not loaded: %#v", cfg)
+	}
+	if cfg.CRDWatchNamespace != "management" || !cfg.DexBundledEnabled || cfg.DexBundledIssuerURL != "https://example.test/dex" {
+		t.Fatalf("runtime integration config was not loaded: %#v", cfg)
+	}
+	if cfg.OTELSamplerRatio != 0.25 || cfg.ChartRatingBayesianAverage != 4.2 {
+		t.Fatalf("numeric runtime config was not loaded: %#v", cfg)
 	}
 }

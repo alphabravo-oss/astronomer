@@ -37,17 +37,17 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ProjectCatalogQuerier is the database surface the handler needs.
@@ -64,11 +64,6 @@ type ProjectCatalogQuerier interface {
 	GetHelmRepositoryWithOwner(ctx context.Context, id uuid.UUID) (sqlc.HelmRepositoryWithOwner, error)
 	GetProjectCatalogSubscription(ctx context.Context, arg sqlc.GetProjectCatalogSubscriptionParams) (sqlc.ProjectCatalogSubscription, error)
 	GetCatalogVisibilityForProject(ctx context.Context, projectID, catalogID uuid.UUID) (sqlc.CatalogVisibility, error)
-	// Catalog writes.
-	CreateProjectOwnedCatalog(ctx context.Context, arg sqlc.CreateProjectOwnedCatalogParams) (sqlc.HelmRepositoryWithOwner, error)
-	CreateProjectCatalogSubscription(ctx context.Context, arg sqlc.CreateProjectCatalogSubscriptionParams) (sqlc.ProjectCatalogSubscription, error)
-	DeleteProjectCatalogSubscription(ctx context.Context, arg sqlc.DeleteProjectCatalogSubscriptionParams) error
-	DeleteHelmRepository(ctx context.Context, id uuid.UUID) error
 	// Chart browse path.
 	ListChartsByRepository(ctx context.Context, arg sqlc.ListChartsByRepositoryParams) ([]sqlc.HelmChart, error)
 }
@@ -90,7 +85,6 @@ type projectCatalogRunTxFunc func(context.Context, func(ProjectCatalogMutationTx
 // ProjectCatalogHandler owns /api/v1/projects/{project_id}/catalogs/*.
 type ProjectCatalogHandler struct {
 	queries ProjectCatalogQuerier
-	auditor any // recordAudit type-asserts to auditWriterV1 internally
 	// encryptor seals helm_repositories.auth_config (migration 145). This
 	// handler writes the same table as CatalogHandler, so it has to seal the
 	// same way or a project-owned private catalog would be the one row shape
@@ -128,15 +122,6 @@ func (h *ProjectCatalogHandler) sealer() catalog.Encryptor {
 		return nil
 	}
 	return h.encryptor
-}
-
-// SetAuditor wires the compatibility audit writer used by narrow unit-test
-// fakes. Production uses the transaction-bound outbox configured by SetRunTx.
-func (h *ProjectCatalogHandler) SetAuditor(a any) {
-	if h == nil {
-		return
-	}
-	h.auditor = a
 }
 
 // --- Wire shapes -----------------------------------------------------------
@@ -223,7 +208,7 @@ func toCatalogResponse(c sqlc.HelmRepositoryWithOwner, callerProjectID uuid.UUID
 // the caller is unauthenticated or the DB lookup fails — we'd rather
 // reject than accidentally promote.
 func (h *ProjectCatalogHandler) callerIsSuperuser(r *http.Request) bool {
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
 		return false
 	}
@@ -238,17 +223,6 @@ func (h *ProjectCatalogHandler) callerIsSuperuser(r *http.Request) bool {
 	return row.IsSuperuser
 }
 
-func parseProjectID(r *http.Request) (uuid.UUID, error) {
-	// Routes mount under /projects/{project_id}/... so chi exposes the
-	// URL parameter under that key. The cloud_credentials handler uses
-	// the same convention.
-	raw := chi.URLParam(r, "project_id")
-	if raw == "" {
-		raw = chi.URLParam(r, "id")
-	}
-	return uuid.Parse(raw)
-}
-
 // --- Handlers --------------------------------------------------------------
 
 // List handles GET /api/v1/projects/{project_id}/catalogs/.
@@ -257,9 +231,8 @@ func parseProjectID(r *http.Request) (uuid.UUID, error) {
 // catalogs the project has explicitly subscribed to. The Visibility
 // field discriminates the three buckets.
 func (h *ProjectCatalogHandler) List(w http.ResponseWriter, r *http.Request) {
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+	projectID, ok := parseProjectID(w, r)
+	if !ok {
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
@@ -291,7 +264,7 @@ func (h *ProjectCatalogHandler) List(w http.ResponseWriter, r *http.Request) {
 	// SQL limit/offset), so the page is the whole authorized result.
 	// add a counted, paged query if a project's visible catalog count ever
 	// grows unbounded.
-	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
+	paging.Write(w, out, paging.Exact(len(out), len(out), 0, len(out)))
 }
 
 // Create handles POST /api/v1/projects/{project_id}/catalogs/.
@@ -300,9 +273,8 @@ func (h *ProjectCatalogHandler) List(w http.ResponseWriter, r *http.Request) {
 // project so the catalog shows up in subsequent List responses with
 // Visibility="own".
 func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+	projectID, ok := parseProjectID(w, r)
+	if !ok {
 		return
 	}
 	if _, err := h.queries.GetProjectByID(r.Context(), projectID); err != nil {
@@ -322,7 +294,7 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Catalog URL is required")
 		return
 	}
-	cleanURL, urlErr := validateCatalogRepositoryURL(req.URL)
+	cleanURL, urlErr := catalog.ValidateRepositoryURL(req.URL)
 	if urlErr != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, urlErr.Error())
 		return
@@ -373,60 +345,30 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 			Valid: true,
 		},
 	}
-	if h.runTx != nil {
-		var cat sqlc.HelmRepository
-		err := h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
-			var mutationErr error
-			cat, mutationErr = q.CreateProjectOwnedCatalog(r.Context(), params)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			if _, mutationErr = q.CreateProjectCatalogSubscription(r.Context(), sqlc.CreateProjectCatalogSubscriptionParams{
-				ProjectID: projectID, CatalogID: cat.ID, CreatedBy: currentUserUUID(r),
-			}); mutationErr != nil {
-				return mutationErr
-			}
-			return recordAuditOutbox(r, q, "project.catalog.owned_created", "helm_repository", cat.ID.String(), cat.Name, http.StatusCreated, map[string]any{
-				"project_id": projectID.String(), "repo_type": cat.RepoType,
-			})
-		})
-		if err != nil {
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create and subscribe project catalog")
-			return
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "project catalog transaction runner is not configured")
+		return
+	}
+	var cat sqlc.HelmRepository
+	err = h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
+		var mutationErr error
+		cat, mutationErr = q.CreateProjectOwnedCatalog(r.Context(), params)
+		if mutationErr != nil {
+			return mutationErr
 		}
-		w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+cat.ID.String()+"/")
-		RespondJSON(w, http.StatusCreated, toCatalogResponse(cat, projectID, true))
-		return
-	}
-
-	cat, err := h.queries.CreateProjectOwnedCatalog(r.Context(), params)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create catalog")
-		return
-	}
-	// Auto-subscribe so the project sees it in browse + List immediately.
-	// The subscription is what powers the "this catalog is mine" flag in
-	// the audit trail of subsequent installs.
-	if _, err := h.queries.CreateProjectCatalogSubscription(r.Context(), sqlc.CreateProjectCatalogSubscriptionParams{
-		ProjectID: projectID,
-		CatalogID: cat.ID,
-		CreatedBy: currentUserUUID(r),
-	}); err != nil {
-		// Don't unwind the catalog — the failure mode is the next
-		// List skipping it from the subscribed view, which is
-		// recoverable from the UI. Log via audit detail.
-		recordAudit(r, h.auditor, "project.catalog.owned_created", "helm_repository", cat.ID.String(), cat.Name, map[string]any{
-			"project_id":            projectID.String(),
-			"auto_subscribe_failed": true,
+		if _, mutationErr = q.CreateProjectCatalogSubscription(r.Context(), sqlc.CreateProjectCatalogSubscriptionParams{
+			ProjectID: projectID, CatalogID: cat.ID, CreatedBy: currentUserUUID(r),
+		}); mutationErr != nil {
+			return mutationErr
+		}
+		return recordAuditOutbox(r, q, "project.catalog.owned_created", "helm_repository", cat.ID.String(), cat.Name, http.StatusCreated, map[string]any{
+			"project_id": projectID.String(), "repo_type": cat.RepoType,
 		})
-		w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+cat.ID.String()+"/")
-		RespondJSON(w, http.StatusCreated, toCatalogResponse(cat, projectID, false))
+	})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create and subscribe project catalog")
 		return
 	}
-	recordAudit(r, h.auditor, "project.catalog.owned_created", "helm_repository", cat.ID.String(), cat.Name, map[string]any{
-		"project_id": projectID.String(),
-		"repo_type":  cat.RepoType,
-	})
 	w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+cat.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, toCatalogResponse(cat, projectID, true))
 }
@@ -437,9 +379,8 @@ func (h *ProjectCatalogHandler) Create(w http.ResponseWriter, r *http.Request) {
 // project's private catalog only if the caller is a superuser). Idempotent:
 // re-subscribing returns the existing row with 200.
 func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+	projectID, ok := parseProjectID(w, r)
+	if !ok {
 		return
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
@@ -470,60 +411,37 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 	if cat.OwnerProjectID.Valid && uuid.UUID(cat.OwnerProjectID.Bytes) != projectID {
 		auditKey = "project.catalog.subscribed_foreign"
 	}
-	if h.runTx != nil {
-		var row sqlc.ProjectCatalogSubscription
-		err := h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
-			var mutationErr error
-			row, mutationErr = q.CreateProjectCatalogSubscription(r.Context(), sqlc.CreateProjectCatalogSubscriptionParams{
-				ProjectID: projectID, CatalogID: catalogID, CreatedBy: currentUserUUID(r),
-			})
-			if mutationErr != nil {
-				return mutationErr
-			}
-			return recordAuditOutbox(r, q, auditKey, "helm_repository", cat.ID.String(), cat.Name, http.StatusCreated, map[string]any{
-				"project_id": projectID.String(),
-			})
-		})
-		if err != nil {
-			// A duplicate subscription is a genuine no-op and therefore needs no
-			// second audit row. The failed transaction is discarded before this
-			// read, so PostgreSQL's aborted-transaction state cannot leak here.
-			existing, lookupErr := h.queries.GetProjectCatalogSubscription(r.Context(), sqlc.GetProjectCatalogSubscriptionParams{
-				ProjectID: projectID, CatalogID: catalogID,
-			})
-			if lookupErr == nil {
-				RespondJSON(w, http.StatusOK, existing)
-				return
-			}
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SubscribeError, "Failed to subscribe to catalog")
-			return
-		}
-		w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+catalogID.String()+"/")
-		RespondJSON(w, http.StatusCreated, row)
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "project catalog transaction runner is not configured")
 		return
 	}
-	row, err := h.queries.CreateProjectCatalogSubscription(r.Context(), sqlc.CreateProjectCatalogSubscriptionParams{
-		ProjectID: projectID,
-		CatalogID: catalogID,
-		CreatedBy: currentUserUUID(r),
+	var row sqlc.ProjectCatalogSubscription
+	err = h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
+		var mutationErr error
+		row, mutationErr = q.CreateProjectCatalogSubscription(r.Context(), sqlc.CreateProjectCatalogSubscriptionParams{
+			ProjectID: projectID, CatalogID: catalogID, CreatedBy: currentUserUUID(r),
+		})
+		if mutationErr != nil {
+			return mutationErr
+		}
+		return recordAuditOutbox(r, q, auditKey, "helm_repository", cat.ID.String(), cat.Name, http.StatusCreated, map[string]any{
+			"project_id": projectID.String(),
+		})
 	})
 	if err != nil {
-		// Idempotent fallback: if the UNIQUE constraint fired we already
-		// have the row; look it up and return 200.
+		// A duplicate subscription is a genuine no-op and therefore needs no
+		// second audit row. The failed transaction is discarded before this
+		// read, so PostgreSQL's aborted-transaction state cannot leak here.
 		existing, lookupErr := h.queries.GetProjectCatalogSubscription(r.Context(), sqlc.GetProjectCatalogSubscriptionParams{
-			ProjectID: projectID,
-			CatalogID: catalogID,
+			ProjectID: projectID, CatalogID: catalogID,
 		})
 		if lookupErr == nil {
 			RespondJSON(w, http.StatusOK, existing)
 			return
 		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SubscribeError, "Failed to subscribe to catalog")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SubscribeError, "Failed to subscribe to catalog")
 		return
 	}
-	recordAudit(r, h.auditor, auditKey, "helm_repository", cat.ID.String(), cat.Name, map[string]any{
-		"project_id": projectID.String(),
-	})
 	w.Header().Set("Location", "/api/v1/projects/"+projectID.String()+"/catalogs/"+catalogID.String()+"/")
 	RespondJSON(w, http.StatusCreated, row)
 }
@@ -540,9 +458,8 @@ func (h *ProjectCatalogHandler) Subscribe(w http.ResponseWriter, r *http.Request
 // The audit emits two distinct keys so the security feed can tell the
 // "I removed a catalog" case apart from "I unsubscribed from one".
 func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+	projectID, ok := parseProjectID(w, r)
+	if !ok {
 		return
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
@@ -557,63 +474,46 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if cat.OwnerProjectID.Valid && uuid.UUID(cat.OwnerProjectID.Bytes) == projectID {
 		// Owned by caller → drop the row entirely.
-		if h.runTx != nil {
-			err := h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
-				if mutationErr := q.DeleteHelmRepository(r.Context(), catalogID); mutationErr != nil {
-					return mutationErr
-				}
-				return recordAuditOutbox(r, q, "project.catalog.unsubscribed_owned_deleted", "helm_repository", cat.ID.String(), cat.Name, http.StatusNoContent, map[string]any{
-					"project_id": projectID.String(),
-				})
-			})
-			if err != nil {
-				respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete catalog")
-				return
+		if h.runTx == nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "project catalog transaction runner is not configured")
+			return
+		}
+		err := h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
+			if mutationErr := q.DeleteHelmRepository(r.Context(), catalogID); mutationErr != nil {
+				return mutationErr
 			}
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		if err := h.queries.DeleteHelmRepository(r.Context(), catalogID); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete catalog")
-			return
-		}
-		recordAudit(r, h.auditor, "project.catalog.unsubscribed_owned_deleted", "helm_repository", cat.ID.String(), cat.Name, map[string]any{
-			"project_id": projectID.String(),
+			return recordAuditOutbox(r, q, "project.catalog.unsubscribed_owned_deleted", "helm_repository", cat.ID.String(), cat.Name, http.StatusNoContent, map[string]any{
+				"project_id": projectID.String(),
+			})
 		})
+		if err != nil {
+			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete catalog")
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	// Else: unsubscribe only. Foreign-private catalogs without a
 	// subscription have nothing to unsubscribe from; we return 204
 	// regardless so the UI can rely on idempotency.
-	if h.runTx != nil {
-		err := h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
-			if mutationErr := q.DeleteProjectCatalogSubscription(r.Context(), sqlc.DeleteProjectCatalogSubscriptionParams{
-				ProjectID: projectID, CatalogID: catalogID,
-			}); mutationErr != nil {
-				return mutationErr
-			}
-			return recordAuditOutbox(r, q, "project.catalog.unsubscribed_subscription", "helm_repository", cat.ID.String(), cat.Name, http.StatusNoContent, map[string]any{
-				"project_id": projectID.String(),
-			})
-		})
-		if err != nil {
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to unsubscribe from catalog")
-			return
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "project catalog transaction runner is not configured")
+		return
+	}
+	err = h.runTx(r.Context(), func(q ProjectCatalogMutationTx) error {
+		if mutationErr := q.DeleteProjectCatalogSubscription(r.Context(), sqlc.DeleteProjectCatalogSubscriptionParams{
+			ProjectID: projectID, CatalogID: catalogID,
+		}); mutationErr != nil {
+			return mutationErr
 		}
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	if err := h.queries.DeleteProjectCatalogSubscription(r.Context(), sqlc.DeleteProjectCatalogSubscriptionParams{
-		ProjectID: projectID,
-		CatalogID: catalogID,
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to unsubscribe from catalog")
-		return
-	}
-	recordAudit(r, h.auditor, "project.catalog.unsubscribed_subscription", "helm_repository", cat.ID.String(), cat.Name, map[string]any{
-		"project_id": projectID.String(),
+		return recordAuditOutbox(r, q, "project.catalog.unsubscribed_subscription", "helm_repository", cat.ID.String(), cat.Name, http.StatusNoContent, map[string]any{
+			"project_id": projectID.String(),
+		})
 	})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to unsubscribe from catalog")
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -622,9 +522,8 @@ func (h *ProjectCatalogHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // Requires the project to have visibility on the catalog (own, subscribed,
 // or globally public). Foreign-private catalogs return 403.
 func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
-	projectID, err := parseProjectID(r)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
+	projectID, ok := parseProjectID(w, r)
+	if !ok {
 		return
 	}
 	catalogID, err := uuid.Parse(chi.URLParam(r, "catalog_id"))
@@ -648,7 +547,7 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 	charts, err := h.queries.ListChartsByRepository(r.Context(), sqlc.ListChartsByRepositoryParams{
 		RepositoryID: catalogID,
 		Limit:        int32(queryLimit(r, 100)),
-		Offset:       int32(queryInt(r, "offset", 0)),
+		Offset:       int32(queryOffset(r)),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list charts")
@@ -658,6 +557,6 @@ func (h *ProjectCatalogHandler) ListCharts(w http.ResponseWriter, r *http.Reques
 	// exposed for it, so has_more is inferred from a full page.
 	// An exact total is intentionally omitted until a matching count is available.
 	limit := queryLimit(r, 100)
-	offset := queryInt(r, "offset", 0)
-	RespondList(w, charts, NewPaginationFromPage(limit, offset, len(charts)))
+	offset := queryOffset(r)
+	paging.Write(w, charts, paging.FromPage(limit, offset, len(charts)))
 }

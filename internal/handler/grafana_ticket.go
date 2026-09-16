@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
@@ -78,7 +79,7 @@ func (h *MonitoringHandler) MintGrafanaTicket(w http.ResponseWriter, r *http.Req
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Grafana tickets are not configured")
 		return
 	}
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil || user.ID == "" {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -145,7 +146,7 @@ func (h *MonitoringHandler) RedeemGrafanaTicket(w http.ResponseWriter, r *http.R
 	})
 }
 
-func (h *MonitoringHandler) grafanaIdentity(r *http.Request, session *middleware.AuthenticatedUser) (email, role string, explore, admin bool, clusterIDs []string) {
+func (h *MonitoringHandler) grafanaIdentity(r *http.Request, session *reqctx.User) (email, role string, explore, admin bool, clusterIDs []string) {
 	email = strings.TrimSpace(session.Email)
 	isSuperuser := false
 	if h.users != nil {

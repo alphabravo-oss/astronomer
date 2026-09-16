@@ -1,3 +1,7 @@
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FormShell } from "@/components/ui/form-shell";
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +14,7 @@ import {
   DeliveryProjectGate,
   ErrorMessage,
   RedirectDeliveryList,
+  deliveryPageRowCount,
   inputClass,
   primaryButton,
   secondaryButton,
@@ -18,22 +23,28 @@ import {
   useDeliveryWorkspace,
 } from "@/components/delivery/shared";
 import {
-  createDeliveryTarget,
   listComponentBundles,
   listComponentBundleVersions,
+  type DriftPolicy,
+} from "@/lib/api/delivery-bundles";
+import {
+  createDeliveryTarget,
   listDeliveryTargets,
   type DeliveryTarget,
   type DeliveryTargetRequest,
-  type DriftPolicy,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-targets";
 import {
   placementFromForm,
   placementHasSelector,
 } from "@/components/delivery/target-form";
+import {
+  TargetOverridesEditor,
+  targetOverridesFromForm,
+} from "@/components/delivery/target-overrides-editor";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
@@ -50,7 +61,7 @@ export function TargetsPage() {
   const [creating, setCreating] = useState(false);
   const pageSize = 25;
   const params = { limit: pageSize, offset: pageIndex * pageSize };
-  const router = useRouter();
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: queryKeys.delivery.targets(projectId, params),
     queryFn: ({ signal }) => {
@@ -157,12 +168,20 @@ export function TargetsPage() {
             keyExtractor={(row) => row.id}
             loading={query.isLoading}
             isError={query.isError}
+            error={query.error}
+            permission="delivery_targets:list"
             onRetry={() => void query.refetch()}
             searchable={false}
-            emptyMessage="No delivery targets in this project"
-            onRowClick={(row) => router.push(entityHref("targets", row.id))}
+            emptyState={{
+              title: "No delivery targets in this project",
+              description:
+                "Resources will appear here when they are available in this scope.",
+            }}
+            onRowClick={(row) =>
+              void navigate({ to: entityHref("targets", row.id) })
+            }
             serverSide={{
-              rowCount: query.data?.count ?? 0,
+              rowCount: deliveryPageRowCount(query.data),
               pagination: { pageIndex, pageSize },
               onPaginationChange: (next) => setPageIndex(next.pageIndex),
             }}
@@ -187,7 +206,7 @@ function CreateTargetDialog({
   onClose: () => void;
 }) {
   const client = useQueryClient();
-  const router = useRouter();
+  const navigate = useNavigate();
   const { entityHref } = useDeliveryWorkspace();
   const [bundleId, setBundleId] = useState("");
   const [allClusters, setAllClusters] = useState(false);
@@ -215,7 +234,7 @@ function CreateTargetDialog({
       });
       toastSuccess("Delivery target created");
       onClose();
-      router.push(entityHref("targets", data.id));
+      void navigate({ to: entityHref("targets", data.id) });
     },
   });
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -250,6 +269,7 @@ function CreateTargetDialog({
           drift,
         },
         maintenance_window_policy: maintenance,
+        overrides: targetOverridesFromForm(form),
         suspended: form.get("suspended") === "on",
       });
     } catch (error) {
@@ -265,10 +285,10 @@ function CreateTargetDialog({
       onClose={onClose}
       subtitle="Placement is evaluated only by the management plane. Preview and launch remain separate operations."
     >
-      <form className="space-y-5" onSubmit={submit}>
+      <FormShell className="space-y-5" onSubmit={submit}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name">
-            <input
+            <Input
               name="name"
               required
               maxLength={128}
@@ -276,10 +296,10 @@ function CreateTargetDialog({
             />
           </Field>
           <Field label="Description">
-            <input name="description" maxLength={4096} className={inputClass} />
+            <Input name="description" maxLength={4096} className={inputClass} />
           </Field>
           <Field label="Bundle">
-            <select
+            <Select
               value={bundleId}
               onChange={(e) => setBundleId(e.target.value)}
               required
@@ -291,10 +311,10 @@ function CreateTargetDialog({
                   {bundle.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Ready, verified bundle version">
-            <select
+            <Select
               name="bundle_version_id"
               required
               disabled={!bundleId}
@@ -312,7 +332,7 @@ function CreateTargetDialog({
                     {version.version} · {version.resolvedRevision}
                   </option>
                 ))}
-            </select>
+            </Select>
           </Field>
         </div>
         <fieldset className="space-y-4 rounded-md border border-border p-4">
@@ -320,7 +340,7 @@ function CreateTargetDialog({
             Placement selector
           </legend>
           <label className="flex items-center gap-2 text-sm font-medium text-status-warning">
-            <input
+            <Input
               type="checkbox"
               checked={allClusters}
               onChange={(e) => setAllClusters(e.target.checked)}
@@ -330,16 +350,16 @@ function CreateTargetDialog({
           {!allClusters && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Explicit cluster IDs (comma-separated)">
-                <textarea name="cluster_ids" className={textareaClass} />
+                <Textarea name="cluster_ids" className={textareaClass} />
               </Field>
               <Field label="Cluster group IDs (comma-separated)">
-                <textarea name="group_ids" className={textareaClass} />
+                <Textarea name="group_ids" className={textareaClass} />
               </Field>
               <Field label="Match labels (one key=value per line)">
-                <textarea name="labels" className={textareaClass} />
+                <Textarea name="labels" className={textareaClass} />
               </Field>
               <Field label="Expressions (one: key Operator value1,value2)">
-                <textarea
+                <Textarea
                   name="expressions"
                   className={textareaClass}
                   placeholder="environment In production,staging&#10;gpu DoesNotExist"
@@ -348,13 +368,13 @@ function CreateTargetDialog({
             </div>
           )}
           <Field label="Exclude cluster IDs (comma-separated)">
-            <textarea name="exclude_ids" className={textareaClass} />
+            <Textarea name="exclude_ids" className={textareaClass} />
           </Field>
         </fieldset>
         <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-3">
           <legend className="px-1 text-sm font-medium">Reconciliation</legend>
           <Field label="Interval">
-            <input
+            <Input
               name="interval"
               required
               defaultValue="10m"
@@ -362,7 +382,7 @@ function CreateTargetDialog({
             />
           </Field>
           <Field label="Retry interval">
-            <input
+            <Input
               name="retry_interval"
               required
               defaultValue="1m"
@@ -370,7 +390,7 @@ function CreateTargetDialog({
             />
           </Field>
           <Field label="Timeout">
-            <input
+            <Input
               name="timeout"
               required
               defaultValue="10m"
@@ -378,7 +398,7 @@ function CreateTargetDialog({
             />
           </Field>
           <Field label="Drift">
-            <select
+            <Select
               value={drift}
               onChange={(e) => setDrift(e.target.value as DriftPolicy)}
               className={inputClass}
@@ -386,19 +406,20 @@ function CreateTargetDialog({
               <option value="repair">Detect and repair</option>
               <option value="detect">Detect only</option>
               <option value="ignore">Ignore</option>
-            </select>
+            </Select>
           </Field>
           <label className="flex items-center gap-2 text-sm">
-            <input name="prune" type="checkbox" defaultChecked /> Prune removed
+            <Input name="prune" type="checkbox" defaultChecked /> Prune removed
             objects
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input name="wait" type="checkbox" defaultChecked /> Wait for health
+            <Input name="wait" type="checkbox" defaultChecked /> Wait for health
           </label>
         </fieldset>
+        <TargetOverridesEditor />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Maintenance policy (JSON object)">
-            <textarea
+            <Textarea
               name="maintenance"
               className={textareaClass}
               placeholder="{}"
@@ -406,11 +427,11 @@ function CreateTargetDialog({
           </Field>
           <div className="space-y-3 pt-6">
             <label className="flex items-center gap-2 text-sm">
-              <input name="approval_required" type="checkbox" /> Require human
+              <Input name="approval_required" type="checkbox" /> Require human
               rollout approval
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input name="suspended" type="checkbox" /> Create suspended
+              <Input name="suspended" type="checkbox" /> Create suspended
             </label>
           </div>
         </div>
@@ -429,7 +450,7 @@ function CreateTargetDialog({
             {mutation.isPending ? "Creating…" : "Create target"}
           </button>
         </div>
-      </form>
+      </FormShell>
     </ModalShell>
   );
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
 )
 
 // --- rendering tests ------------------------------------------------------
@@ -232,7 +233,9 @@ type fakeProjectQuerier struct {
 	defaultTemplate    sqlc.PodSecurityTemplate
 	defaultTemplateErr error
 	// last captured Mark call (for assertions)
-	lastMark *sqlc.MarkProjectNamespaceReconciledParams
+	lastMark      *sqlc.MarkProjectNamespaceReconciledParams
+	namespaceRows []sqlc.ProjectNamespace
+	claimErr      error
 }
 
 func (f *fakeProjectQuerier) GetProjectByID(_ context.Context, _ uuid.UUID) (sqlc.Project, error) {
@@ -251,7 +254,30 @@ func (f *fakeProjectQuerier) GetDefaultPodSecurityTemplate(_ context.Context) (s
 	return f.defaultTemplate, nil
 }
 func (f *fakeProjectQuerier) ListProjectNamespaces(_ context.Context, _ uuid.UUID) ([]sqlc.ProjectNamespace, error) {
-	return nil, nil
+	return f.namespaceRows, nil
+}
+func (f *fakeProjectQuerier) UpsertProjectResourceQuotaAllocation(_ context.Context, arg sqlc.UpsertProjectResourceQuotaAllocationParams) (sqlc.ProjectResourceQuotaAllocation, error) {
+	return sqlc.ProjectResourceQuotaAllocation{ProjectID: arg.ProjectID, ClusterID: arg.ClusterID, Namespace: arg.Namespace, CpuLimit: arg.CpuLimit, MemoryLimit: arg.MemoryLimit, PodCount: arg.PodCount}, nil
+}
+func (f *fakeProjectQuerier) DeleteProjectResourceQuotaAllocation(context.Context, sqlc.DeleteProjectResourceQuotaAllocationParams) error {
+	return nil
+}
+
+func TestProjectQuotaAllocationSplitsProjectCapAcrossNamespaces(t *testing.T) {
+	projectID, clusterID := uuid.New(), uuid.New()
+	q := &fakeProjectQuerier{namespaceRows: []sqlc.ProjectNamespace{
+		{ProjectID: projectID, ClusterID: clusterID, Namespace: "zeta"},
+		{ProjectID: projectID, ClusterID: clusterID, Namespace: "alpha"},
+		{ProjectID: projectID, ClusterID: clusterID, Namespace: "beta"},
+	}}
+	project := sqlc.Project{ID: projectID, ResourceQuotaCpuLimit: "1", ResourceQuotaMemoryLimit: "10", ResourceQuotaPodCount: 10}
+	allocation, err := projectQuotaAllocation(context.Background(), q, project, clusterID, "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if allocation != (projectquota.Cap{CPU: "334m", Memory: "4", Pods: 4}) {
+		t.Fatalf("allocation = %+v", allocation)
+	}
 }
 func (f *fakeProjectQuerier) ListAllProjectNamespaces(_ context.Context) ([]sqlc.ProjectNamespace, error) {
 	return nil, nil
@@ -263,11 +289,14 @@ func (f *fakeProjectQuerier) DeleteProjectNamespace(_ context.Context, _ sqlc.De
 	return nil
 }
 func (f *fakeProjectQuerier) ClaimProjectNamespaceReconcile(_ context.Context, arg sqlc.ClaimProjectNamespaceReconcileParams) (sqlc.ProjectNamespace, error) {
-	return sqlc.ProjectNamespace{ProjectID: arg.ProjectID, ClusterID: arg.ClusterID, Namespace: arg.Namespace, LockedUntil: arg.LockedUntil}, nil
+	if f.claimErr != nil {
+		return sqlc.ProjectNamespace{}, f.claimErr
+	}
+	return sqlc.ProjectNamespace{ProjectID: arg.ProjectID, ClusterID: arg.ClusterID, Namespace: arg.Namespace, LockedUntil: arg.LockedUntil, ReconcileClaimToken: arg.ClaimToken}, nil
 }
-func (f *fakeProjectQuerier) MarkProjectNamespaceReconciled(_ context.Context, arg sqlc.MarkProjectNamespaceReconciledParams) error {
+func (f *fakeProjectQuerier) MarkProjectNamespaceReconciled(_ context.Context, arg sqlc.MarkProjectNamespaceReconciledParams) (int64, error) {
 	f.lastMark = &arg
-	return nil
+	return 1, nil
 }
 
 // TestReconcileProjectNamespace_AppliesQuotaAndLabelsNamespace runs the full
@@ -304,6 +333,9 @@ func TestReconcileProjectNamespace_AppliesQuotaAndLabelsNamespace(t *testing.T) 
 	}
 	if q.lastMark.LastReconcileError != "" {
 		t.Errorf("expected empty last_reconcile_error, got %q", q.lastMark.LastReconcileError)
+	}
+	if !q.lastMark.ClaimToken.Valid {
+		t.Fatal("expected completion write to carry its ownership token")
 	}
 
 	// Seven calls: label PATCH on ns, SSA legacy quota, DELETE
@@ -510,6 +542,15 @@ func TestHandleProjectReconcileAll_LeasesAndReconcilesOneRow(t *testing.T) {
 	}
 }
 
+func TestReconcileProjectNamespace_PropagatesClaimDatabaseFailure(t *testing.T) {
+	want := errors.New("database unavailable")
+	q := &fakeProjectQuerier{project: sqlc.Project{ID: uuid.New()}, claimErr: want}
+	err := (ProjectRuntime{}).reconcileProjectNamespace(context.Background(), q, &fakeProjectRequester{}, q.project, uuid.New(), "team-a")
+	if !errors.Is(err, want) {
+		t.Fatalf("reconcile error = %v, want %v", err, want)
+	}
+}
+
 // sweepFakeQuerier extends fakeProjectQuerier with a row list for the sweep
 // tests.
 type sweepFakeQuerier struct {
@@ -524,10 +565,11 @@ func (s *sweepFakeQuerier) ListAllProjectNamespaces(_ context.Context) ([]sqlc.P
 func (s *sweepFakeQuerier) ClaimProjectNamespaceReconcile(_ context.Context, arg sqlc.ClaimProjectNamespaceReconcileParams) (sqlc.ProjectNamespace, error) {
 	s.claimed = true
 	return sqlc.ProjectNamespace{
-		ProjectID:   arg.ProjectID,
-		ClusterID:   arg.ClusterID,
-		Namespace:   arg.Namespace,
-		LockedUntil: arg.LockedUntil,
+		ProjectID:           arg.ProjectID,
+		ClusterID:           arg.ClusterID,
+		Namespace:           arg.Namespace,
+		LockedUntil:         arg.LockedUntil,
+		ReconcileClaimToken: arg.ClaimToken,
 	}, nil
 }
 
@@ -595,9 +637,11 @@ func TestReconcileProjectNamespace_PropagatesRegistrySecretAndServiceAccount(t *
 	}
 	if secretCall == nil {
 		t.Fatalf("expected managed registry secret apply call, got %+v", r.calls)
+		return
 	}
 	if saPatch == nil {
 		t.Fatalf("expected default serviceaccount patch, got %+v", r.calls)
+		return
 	}
 	var secretDoc struct {
 		Type string            `json:"type"`
@@ -761,6 +805,7 @@ func TestReconcileProjectNamespace_AppliesResourceQuota(t *testing.T) {
 	}
 	if projectQuotaCall == nil {
 		t.Fatalf("expected SSA apply on %s, got calls: %+v", managedProjectQuotaName, r.calls)
+		return
 	}
 	var manifest map[string]any
 	if err := json.Unmarshal(projectQuotaCall.body, &manifest); err != nil {
@@ -837,7 +882,9 @@ func TestRenderProjectResourceQuota_OnlyIncludesSetFields(t *testing.T) {
 		ResourceQuotaMemoryLimit: "", // intentionally unset
 		ResourceQuotaPodCount:    0,  // intentionally unset
 	}
-	got := renderProjectResourceQuota("team-a", project)
+	got := renderProjectResourceQuota("team-a", project.ID, projectquota.Cap{
+		CPU: project.ResourceQuotaCpuLimit, Memory: project.ResourceQuotaMemoryLimit, Pods: project.ResourceQuotaPodCount,
+	})
 	hard := got["spec"].(map[string]any)["hard"].(map[string]any)
 	if hard["limits.cpu"] != "2" {
 		t.Errorf("expected limits.cpu=2, got %+v", hard)

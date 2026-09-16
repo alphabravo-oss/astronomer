@@ -146,7 +146,7 @@ async function mockApi(page: Page) {
     if (path === `/clusters/${CLUSTER_ID}/pods` && method === "GET") {
       return route.fulfill({ json: apiResponse([podRow]) });
     }
-    // Raw pod list via the k8s proxy — seeds the pods TanStack DB collection
+    // Raw pod list via the k8s proxy — refreshes the pods Query cache
     // behind the Pods table (P4.7). The SSE watch that follows is allowed to
     // fail (the ticket mint below returns no ticket); the table renders from
     // this seed alone.

@@ -97,7 +97,7 @@
         },
         {
           "path": "internal/handler/supportbundle_test.go",
-          "anchor": "func TestSupportBundleDownloadRedactsSensitiveValues"
+          "anchor": "func TestSupportBundleGenerateRedactsSensitiveValues"
         },
         {
           "path": "internal/audit/outbox_test.go",

@@ -34,6 +34,7 @@ import {
   putClusterTemplatesById,
   putProjectsByProjectIdCloudCredentialsById,
 } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { PaginatedResponse, Project } from "@/types";
 
@@ -153,17 +154,32 @@ export interface ProjectQuotaUsageRow {
   memoryLimit: string;
   podsUsed: number;
   podsLimit: number;
+  allocation: ProjectResourceCap;
+}
+
+export interface ProjectResourceCap {
+  cpu: string;
+  memory: string;
+  pods: number;
+}
+
+export interface ProjectResourceQuotaSummary {
+  total: ProjectResourceCap;
+  allocated: ProjectResourceCap;
+  remaining: ProjectResourceCap;
 }
 
 export interface ProjectQuotaUsage {
   rows: ProjectQuotaUsageRow[];
+  summary: ProjectResourceQuotaSummary;
 }
 
 export type { ProjectEffectiveQuotaView as ProjectEffectiveQuota } from "@/lib/api/quotas";
 
 // ----- Cloud credentials -----
 
-export type CloudProvider = "aws" | "gcp" | "azure" | "generic";
+export type CloudProvider =
+  "aws" | "gcp" | "azure" | "digitalocean" | "generic";
 
 export interface CloudCredentialProviderField {
   name: string;
@@ -317,13 +333,25 @@ function mapTargetRef(value: unknown): CloudCredentialTargetRef {
   };
 }
 
+const cloudProviders = new Set<CloudProvider>([
+  "aws",
+  "gcp",
+  "azure",
+  "digitalocean",
+  "generic",
+]);
+
+function cloudProvider(value: unknown): CloudProvider {
+  return typeof value === "string" && cloudProviders.has(value as CloudProvider)
+    ? (value as CloudProvider)
+    : "generic";
+}
+
 function mapCloudCredential(wire: Schemas["CloudCredential"]): CloudCredential {
   return {
     id: wire.id ?? "",
     name: wire.name ?? "",
-    provider: (["aws", "gcp", "azure", "generic"].includes(wire.provider ?? "")
-      ? wire.provider
-      : "generic") as CloudProvider,
+    provider: cloudProvider(wire.provider),
     description: wire.description,
     config: wire.data ?? {},
     targetRefs: (wire.target_refs ?? []).map(mapTargetRef),
@@ -356,7 +384,6 @@ function cloudCredentialBody(
 
 function mapClusterTemplate(value: unknown): ClusterTemplate {
   const wire = asRecord(value);
-  const spec = asRecord(wire.spec) as unknown as ClusterTemplateSpec;
   const name = typeof wire.name === "string" ? wire.name : "";
   return {
     id: typeof wire.id === "string" ? wire.id : "",
@@ -365,13 +392,85 @@ function mapClusterTemplate(value: unknown): ClusterTemplate {
       typeof wire.display_name === "string" ? wire.display_name : name,
     description:
       typeof wire.description === "string" ? wire.description : undefined,
-    spec,
+    spec: mapClusterTemplateSpec(wire.spec),
     clustersBound:
       typeof wire.clusters_bound === "number" ? wire.clusters_bound : 0,
     createdBy:
       typeof wire.created_by === "string" ? wire.created_by : undefined,
     createdAt: typeof wire.created_at === "string" ? wire.created_at : "",
     updatedAt: typeof wire.updated_at === "string" ? wire.updated_at : "",
+  };
+}
+
+function mapClusterTemplateSpec(value: unknown): ClusterTemplateSpec {
+  const wire = asRecord(value);
+  const defaultProject = asRecord(wire.default_project);
+  const registrationPolicy = asRecord(wire.registration_policy);
+  const environment = wire.environment;
+  return {
+    environment:
+      environment === "development" ||
+      environment === "staging" ||
+      environment === "production"
+        ? environment
+        : "other",
+    labels: Object.entries(asRecord(wire.labels)).map(([key, labelValue]) => ({
+      key,
+      value: typeof labelValue === "string" ? labelValue : String(labelValue),
+    })),
+    tools: Array.isArray(wire.tools)
+      ? wire.tools.map((item) => {
+          const tool = asRecord(item);
+          return {
+            slug: typeof tool.slug === "string" ? tool.slug : "",
+            preset: typeof tool.preset === "string" ? tool.preset : undefined,
+            valuesOverride:
+              typeof tool.values === "string"
+                ? tool.values
+                : tool.values === undefined
+                  ? undefined
+                  : JSON.stringify(tool.values, null, 2),
+          };
+        })
+      : [],
+    defaultProject: {
+      name:
+        typeof defaultProject.name === "string"
+          ? defaultProject.name
+          : undefined,
+      podSecurityProfile:
+        defaultProject.pod_security_profile === "privileged" ||
+        defaultProject.pod_security_profile === "restricted"
+          ? defaultProject.pod_security_profile
+          : "baseline",
+      resourceQuotaCpu:
+        typeof defaultProject.resource_quota_cpu_limit === "string"
+          ? defaultProject.resource_quota_cpu_limit || null
+          : null,
+      resourceQuotaMemory:
+        typeof defaultProject.resource_quota_memory_limit === "string"
+          ? defaultProject.resource_quota_memory_limit || null
+          : null,
+      resourceQuotaPods:
+        typeof defaultProject.resource_quota_pod_count === "number"
+          ? defaultProject.resource_quota_pod_count
+          : null,
+      networkPolicyMode:
+        defaultProject.network_policy_mode === "none" ||
+        defaultProject.network_policy_mode === "allow-same-project"
+          ? defaultProject.network_policy_mode
+          : "isolated",
+    },
+    registrationPolicy: {
+      tokenRotationDays:
+        typeof registrationPolicy.token_rotation_days === "number"
+          ? registrationPolicy.token_rotation_days
+          : 0,
+      requireApproval:
+        typeof registrationPolicy.require_approval === "boolean"
+          ? registrationPolicy.require_approval
+          : undefined,
+    },
   };
 }
 
@@ -481,15 +580,21 @@ export async function getProjectQuotaUsage(
         clusterId: row.cluster_id ?? "",
         clusterName: row.cluster_name ?? "",
         namespace: row.namespace ?? "",
-        cpuUsed: typeof used.cpu === "string" ? used.cpu : "0",
-        cpuLimit: typeof hard.cpu === "string" ? hard.cpu : "0",
-        memoryUsed: typeof used.memory === "string" ? used.memory : "0",
-        memoryLimit: typeof hard.memory === "string" ? hard.memory : "0",
+        cpuUsed: quantityString(used, "limits.cpu"),
+        cpuLimit: quantityString(hard, "limits.cpu"),
+        memoryUsed: quantityString(used, "limits.memory"),
+        memoryLimit: quantityString(hard, "limits.memory"),
         podsUsed: Number(used.pods ?? 0),
         podsLimit: Number(hard.pods ?? 0),
+        allocation: row.allocation,
       };
     }),
+    summary: data.project_cap,
   };
+}
+function quantityString(values: Record<string, unknown>, key: string): string {
+  if (typeof values[key] === "string") return values[key];
+  return "0";
 }
 
 // ============================================================
@@ -511,31 +616,46 @@ export async function listCloudCredentialProviders(
   );
   return (data.items ?? []).map((item) => {
     const wire = asRecord(item);
+    const requiredKeys = stringArray(wire.required_keys);
+    const optionalKeys = stringArray(wire.optional_keys);
+    const secretKeys = new Set(stringArray(wire.secret_keys));
     return {
-      provider: (wire.provider ?? "generic") as CloudProvider,
+      provider: cloudProvider(wire.name),
       displayName:
-        typeof wire.display_name === "string" ? wire.display_name : "",
-      description:
-        typeof wire.description === "string" ? wire.description : undefined,
-      fields: Array.isArray(wire.fields)
-        ? wire.fields.map((field) => {
-            const value = asRecord(field);
-            return {
-              name: typeof value.name === "string" ? value.name : "",
-              label: typeof value.label === "string" ? value.label : undefined,
-              helper:
-                typeof value.helper === "string" ? value.helper : undefined,
-              required: Boolean(value.required),
-              secret: Boolean(value.secret),
-              placeholder:
-                typeof value.placeholder === "string"
-                  ? value.placeholder
-                  : undefined,
-            };
-          })
-        : [],
+        typeof wire.display_name === "string"
+          ? wire.display_name
+          : humanizeCredentialKey(String(wire.name ?? "generic")),
+      fields: [...requiredKeys, ...optionalKeys].map((name) => ({
+        name,
+        label: humanizeCredentialKey(name),
+        required: requiredKeys.includes(name),
+        secret: secretKeys.has(name),
+      })),
     };
   });
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+const credentialInitialisms: Record<string, string> = {
+  api: "API",
+  arn: "ARN",
+  id: "ID",
+  json: "JSON",
+  url: "URL",
+};
+
+function humanizeCredentialKey(value: string): string {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((word) => credentialInitialisms[word] ?? word)
+    .join(" ")
+    .replace(/^./, (character) => character.toUpperCase());
 }
 
 export async function listProjectCloudCredentials(
@@ -649,17 +769,10 @@ export async function listClusterTemplates(params?: {
     },
     signal: params?.signal,
   });
-  const data = response.data ?? [];
-  const total = response.count ?? data.length;
-  const pageSize = params?.pageSize ?? data.length;
-  const page = params?.page ?? 1;
-  return {
-    data: data.map(mapClusterTemplate),
-    total,
-    page,
-    pageSize,
-    totalPages: pageSize > 0 ? Math.ceil(total / pageSize) : 1,
-  };
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapClusterTemplate,
+  );
 }
 
 export async function getClusterTemplate(

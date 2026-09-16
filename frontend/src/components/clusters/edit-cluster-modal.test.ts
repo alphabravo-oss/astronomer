@@ -11,6 +11,9 @@ describe("buildClusterEditRequest", () => {
         description: "",
         apiServerUrl: "https://api.example.test:6443",
         caCertificate: "public-ca",
+        badgeText: "Production",
+        badgeColor: "red",
+        agentOverrides: {},
       }),
     ).toEqual({
       display_name: "Production",
@@ -18,6 +21,9 @@ describe("buildClusterEditRequest", () => {
       description: "",
       api_server_url: "https://api.example.test:6443",
       ca_certificate: "public-ca",
+      badge_text: "Production",
+      badge_color: "red",
+      agent_overrides: {},
     });
   });
 });

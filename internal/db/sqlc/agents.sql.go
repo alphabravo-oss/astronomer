@@ -73,11 +73,14 @@ func (q *Queries) DisconnectActiveConnectionsByCluster(ctx context.Context, clus
 }
 
 const listActiveConnections = `-- name: ListActiveConnections :many
-SELECT id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections WHERE status = 'connected' ORDER BY connected_at DESC
+SELECT id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at FROM agent_connections
+WHERE status = 'connected'
+ORDER BY connected_at DESC
+LIMIT $1
 `
 
-func (q *Queries) ListActiveConnections(ctx context.Context) ([]AgentConnection, error) {
-	rows, err := q.db.Query(ctx, listActiveConnections)
+func (q *Queries) ListActiveConnections(ctx context.Context, limit int32) ([]AgentConnection, error) {
+	rows, err := q.db.Query(ctx, listActiveConnections, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +132,14 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) lc ON true
 WHERE c.decommissioned_at IS NULL
+ORDER BY c.id
+LIMIT $2 OFFSET $1
 `
+
+type ListClusterConnectionStatusParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
 
 type ListClusterConnectionStatusRow struct {
 	ClusterID    uuid.UUID `json:"cluster_id"`
@@ -145,8 +155,8 @@ type ListClusterConnectionStatusRow struct {
 // 0-valued sample instead of the series vanishing (which a threshold alert
 // can never fire on). COALESCE keeps the non-timestamp columns non-null so the
 // LEFT JOIN never yields a NULL into a non-nullable scan target.
-func (q *Queries) ListClusterConnectionStatus(ctx context.Context) ([]ListClusterConnectionStatusRow, error) {
-	rows, err := q.db.Query(ctx, listClusterConnectionStatus)
+func (q *Queries) ListClusterConnectionStatus(ctx context.Context, arg ListClusterConnectionStatusParams) ([]ListClusterConnectionStatusRow, error) {
+	rows, err := q.db.Query(ctx, listClusterConnectionStatus, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -255,6 +265,78 @@ func (q *Queries) ListLatestConnectionsByClusters(ctx context.Context, clusterId
 		return nil, err
 	}
 	return items, nil
+}
+
+const pruneAgentConnectionHistoryBefore = `-- name: PruneAgentConnectionHistoryBefore :execrows
+DELETE FROM agent_connections
+WHERE status <> 'connected'
+  AND disconnected_at < $1::timestamptz
+`
+
+// Retain live sessions regardless of age. Terminal connection rows are useful
+// operational history, but must not grow forever on reconnect-heavy estates.
+func (q *Queries) PruneAgentConnectionHistoryBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneAgentConnectionHistoryBefore, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const replaceActiveAgentConnection = `-- name: ReplaceActiveAgentConnection :one
+WITH disconnected AS (
+    UPDATE agent_connections
+    SET status = 'disconnected', disconnected_at = now()
+    WHERE cluster_id = $1 AND status = 'connected'
+)
+INSERT INTO agent_connections (cluster_id, agent_id, session_id, status, channel_name, pod_name, node_name, agent_version)
+VALUES (
+    $1, $2, $3, 'connected',
+    $4, $5, $6, $7
+)
+RETURNING id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at
+`
+
+type ReplaceActiveAgentConnectionParams struct {
+	ClusterID    uuid.UUID `json:"cluster_id"`
+	AgentID      string    `json:"agent_id"`
+	SessionID    string    `json:"session_id"`
+	ChannelName  string    `json:"channel_name"`
+	PodName      string    `json:"pod_name"`
+	NodeName     string    `json:"node_name"`
+	AgentVersion string    `json:"agent_version"`
+}
+
+// Supersede the prior live session and insert its replacement in one statement,
+// preventing cross-replica interleaving from disconnecting the new row.
+func (q *Queries) ReplaceActiveAgentConnection(ctx context.Context, arg ReplaceActiveAgentConnectionParams) (AgentConnection, error) {
+	row := q.db.QueryRow(ctx, replaceActiveAgentConnection,
+		arg.ClusterID,
+		arg.AgentID,
+		arg.SessionID,
+		arg.ChannelName,
+		arg.PodName,
+		arg.NodeName,
+		arg.AgentVersion,
+	)
+	var i AgentConnection
+	err := row.Scan(
+		&i.ID,
+		&i.ClusterID,
+		&i.AgentID,
+		&i.SessionID,
+		&i.ConnectedAt,
+		&i.DisconnectedAt,
+		&i.LastPing,
+		&i.Status,
+		&i.ChannelName,
+		&i.PodName,
+		&i.NodeName,
+		&i.AgentVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateAgentConnectionPing = `-- name: UpdateAgentConnectionPing :exec

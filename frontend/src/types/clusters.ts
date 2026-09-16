@@ -1,4 +1,5 @@
 import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { PaginationMetadata } from "@/types/openapi.generated";
 import type { CamelizeKeys } from "@/types/wire-contract";
 
 // --- Cluster Types ---
@@ -57,6 +58,7 @@ export type Cluster = Omit<
   | "environment"
   | "distribution"
   | "agentPrivilegeProfile"
+  | "agentOverrides"
 > & {
   status: ClusterStatus;
   provider: ClusterProvider;
@@ -70,6 +72,7 @@ export type Cluster = Omit<
     | "custom"
     | "admin"
     | string;
+  agentOverrides: OpenAPIComponents["schemas"]["AgentOverrides"];
   health?: ClusterHealth;
   namespaceCount?: number;
   cpuCapacity?: number;
@@ -156,12 +159,10 @@ export type ClusterAgentItem = Omit<
 
 export type ClusterAgentResponse = Omit<
   CamelizeKeys<OpenAPIComponents["schemas"]["ClusterAgentResponse"]>,
-  "summary" | "items" | "limit" | "offset"
+  "data" | "pagination"
 > & {
-  summary: ClusterAgentSummary;
-  items: ClusterAgentItem[];
-  limit: number;
-  offset: number;
+  data: ClusterAgentItem[];
+  pagination: PaginationMetadata;
 };
 
 export interface AgentConnectionDiagnosticView {
@@ -299,9 +300,8 @@ export interface AgentLifecycleOperation {
 }
 
 export interface AgentLifecycleOperationsResponse {
-  items: AgentLifecycleOperation[];
-  limit: number;
-  offset: number;
+  data: AgentLifecycleOperation[];
+  pagination: PaginationMetadata;
 }
 
 export interface AgentUpgradeOperationResponse {
@@ -481,4 +481,6 @@ export interface ClusterRegistration {
   apiServerUrl?: string;
   /** Optional PEM CA bundle for the direct Kubernetes API origin. */
   caCertificate?: string;
+  /** Validated scheduling, resource, and proxy settings for the agent pod. */
+  agentOverrides?: OpenAPIComponents["schemas"]["AgentOverrides"];
 }

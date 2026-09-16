@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Link } from "@/lib/link";
-import { useParams, useRouter } from "@/lib/navigation";
-import { useClusters } from "@/lib/hooks";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
+import { useClusters } from "@/lib/hooks/clusters";
 import { useCISScan, useCreateCISScan } from "@/components/security/hooks";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { cisScanReportCSVUrl } from "@/lib/api/security-scans";
@@ -43,9 +43,9 @@ import {
  * refetch even between polls.
  */
 function ScanDetailPage() {
-  const params = useParams<{ scanId: string }>();
+  const params = Route.useParams();
   const scanId = params.scanId;
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const { data: scan, isLoading, error } = useCISScan(scanId);
   const { data: clustersPage } = useClusters({ pageSize: 200 });
@@ -71,7 +71,7 @@ function ScanDetailPage() {
   if (isLoading || !scan) {
     return (
       <div className="space-y-4">
-        <div className="h-8 w-48 rounded bg-muted animate-pulse" />
+        <div className="h-8 w-48 rounded-sm bg-muted animate-pulse" />
         <div className="h-32 rounded-lg bg-muted animate-pulse" />
       </div>
     );
@@ -93,19 +93,19 @@ function ScanDetailPage() {
       cluster_id: scan.clusterId,
       profile: scan.scanType,
     });
-    router.push(`/dashboard/security/scans/${newScan.id}`);
+    void navigate({ to: `/dashboard/security/scans/${newScan.id}` });
   }
 
   return (
     <PageShell>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link
-          href="/dashboard/security"
+        <RouterLink
+          to="/dashboard/security"
           className="hover:text-foreground transition-colors"
         >
           Security
-        </Link>
+        </RouterLink>
         <ChevronRight className="h-3.5 w-3.5" />
         <span className="text-foreground font-mono text-xs">
           {scan.clusterScanName ?? scan.id.slice(0, 8)}
@@ -116,7 +116,7 @@ function ScanDetailPage() {
         title={
           <span className="flex items-center gap-3 flex-wrap">
             <button
-              onClick={() => router.push("/dashboard/security")}
+              onClick={() => void navigate({ to: "/dashboard/security" })}
               className="text-muted-foreground hover:text-foreground transition-colors"
               aria-label="Back"
             >
@@ -350,7 +350,7 @@ function FindingsSection({
       accessor: (row) => (
         <span
           className={cn(
-            "inline-flex items-center px-2 py-0.5 rounded text-2xs font-medium uppercase tracking-wide",
+            "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase tracking-wide",
             severityClass(row.severity),
           )}
         >
@@ -366,7 +366,7 @@ function FindingsSection({
       accessor: (row) => (
         <span
           className={cn(
-            "inline-flex items-center px-2 py-0.5 rounded text-2xs font-medium uppercase",
+            "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase",
             findingStatusClass(row.status),
           )}
         >
@@ -431,7 +431,11 @@ function FindingsSection({
         searchPlaceholder="Search test ID or description..."
         pageSize={50}
         virtualized
-        emptyMessage="No findings match the current filters."
+        emptyState={{
+          title: "No findings available",
+          description:
+            "New observations will appear here as they are reported.",
+        }}
         onRowClick={(row) => {
           setExpanded((prev) => {
             const next = new Set(prev);
@@ -462,7 +466,7 @@ function FindingsSection({
                   </span>
                   <span
                     className={cn(
-                      "inline-flex items-center px-2 py-0.5 rounded text-2xs font-medium uppercase",
+                      "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase",
                       severityClass(f.severity),
                     )}
                   >
@@ -470,7 +474,7 @@ function FindingsSection({
                   </span>
                   <span
                     className={cn(
-                      "inline-flex items-center px-2 py-0.5 rounded text-2xs font-medium uppercase",
+                      "inline-flex items-center px-2 py-0.5 rounded-sm text-2xs font-medium uppercase",
                       findingStatusClass(f.status),
                     )}
                   >
@@ -531,7 +535,7 @@ function FilterPills<T extends string>({
           type="button"
           onClick={() => onChange(opt)}
           className={cn(
-            "px-2 py-0.5 rounded text-2xs font-medium uppercase transition-colors",
+            "px-2 py-0.5 rounded-sm text-2xs font-medium uppercase transition-colors",
             value === opt
               ? "bg-foreground text-background"
               : "text-muted-foreground hover:text-foreground",

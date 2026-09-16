@@ -10,7 +10,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -49,8 +50,8 @@ func NewTunnelHelmRequester(hub *tunnel.Hub) *TunnelHelmRequester {
 
 // SetInternalPSK wires the shared-secret PSK used to authenticate to
 // sibling pods' internal helm endpoint. Pass the same value the
-// InternalHelmHandler is configured with (typically
-// tunnel.DerivePSK(cfg.EncryptionKey)). Empty leaves the fallback off.
+// InternalHelmHandler is configured with (cfg.InternalPSK). Empty leaves the
+// fallback off.
 func (r *TunnelHelmRequester) SetInternalPSK(psk string) {
 	if r == nil {
 		return
@@ -122,19 +123,18 @@ func (r *TunnelHelmRequester) forwardToOwner(ctx context.Context, clusterID stri
 		return nil, true, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(tunnel.InternalPSKHeader, r.psk)
-	// Defense-in-depth in-band marker proving sibling-pod origin; the
-	// receiver rejects requests without it even with a valid PSK.
-	req.Header.Set(tunnel.InternalSourceHeader, tunnel.InternalSourceValue)
 	// Thread the originating user so the owner pod emits a user-attributed
 	// cluster.helm_proxy.forwarded audit row for the mutation it performs
 	// on our behalf (see k8s_requester.go for the rationale).
-	if uid := middleware.AuthenticatedUserUUID(ctx); uid.Valid {
+	if uid := reqctx.UserUUID(ctx); uid.Valid {
 		if s, err := uid.Value(); err == nil {
 			if str, ok := s.(string); ok {
 				req.Header.Set(tunnel.InternalForwardedUserHeader, str)
 			}
 		}
+	}
+	if err := tunnel.SignInternalHelmRequest(req, r.psk, clusterID, body); err != nil {
+		return nil, true, err
 	}
 
 	httpResp, err := internalHelmForwardClient.Do(req)

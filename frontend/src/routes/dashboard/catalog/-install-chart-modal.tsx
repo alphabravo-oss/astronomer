@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { HelmValuesForm } from "@/components/catalog/helm-values-form";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -6,9 +6,9 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppForm, useStore } from "@/lib/form";
-import { useClusters } from "@/lib/hooks";
+import { useClusters } from "@/lib/hooks/clusters";
 import { useInstallHelmChart } from "@/lib/hooks/catalog";
-import { useSearchParams } from "@/lib/navigation";
+import { useLocation } from "@tanstack/react-router";
 import {
   dumpHelmValuesYAML,
   hasRenderableSchema,
@@ -22,19 +22,32 @@ import { cn } from "@/lib/utils";
 import type { HelmChart, HelmChartVersion } from "@/types";
 import { AlertTriangle, Braces, FileCode2 } from "lucide-react";
 
-export function InstallChartModal({
-  projectId,
-  allowedClusterIds,
-  chart,
-  version,
-  onClose,
-}: {
+interface InstallChartModalProps {
   projectId: string;
   allowedClusterIds: string[];
   chart: HelmChart;
   version: HelmChartVersion;
   onClose: () => void;
-}) {
+  onOperationStarted: (operationId: string) => void;
+}
+
+export function InstallChartModal(props: InstallChartModalProps) {
+  return (
+    <InstallChartForm
+      key={`${props.projectId}:${props.chart.id}:${props.version.id}`}
+      {...props}
+    />
+  );
+}
+
+function InstallChartForm({
+  projectId,
+  allowedClusterIds,
+  chart,
+  version,
+  onClose,
+  onOperationStarted,
+}: InstallChartModalProps) {
   const installChart = useInstallHelmChart();
   const { data: clustersData } = useClusters({ pageSize: 100 });
   const clusters = (clustersData?.data || []).filter((cluster) =>
@@ -52,7 +65,9 @@ export function InstallChartModal({
   // detail page (e.g. "Install trivy-operator from Image Scans"), the
   // URL carries ?cluster_id=<uuid>. Pre-populate the target dropdown so
   // the operator doesn't have to pick again. Empty when absent.
-  const searchParams = useSearchParams();
+  const searchParams = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
   const presetClusterId = searchParams?.get("cluster_id") ?? "";
 
   const form = useAppForm({
@@ -66,7 +81,7 @@ export function InstallChartModal({
     },
     onSubmit: async ({ value }) => {
       try {
-        await installChart.mutateAsync({
+        const receipt = await installChart.mutateAsync({
           project_id: projectId,
           cluster_id: value.clusterId,
           chart_version_id: version.id,
@@ -74,6 +89,7 @@ export function InstallChartModal({
           namespace: value.namespace,
           values_override: value.valuesOverride || undefined,
         });
+        if (receipt.operation.id) onOperationStarted(receipt.operation.id);
         onClose();
       } catch {
         // Error handled by mutation
@@ -94,19 +110,6 @@ export function InstallChartModal({
   const clusterId = useStore(form.store, (s) => s.values.clusterId);
   const releaseName = useStore(form.store, (s) => s.values.releaseName);
   const namespace = useStore(form.store, (s) => s.values.namespace);
-
-  useEffect(() => {
-    const parsed = parseHelmValuesYAML(version.defaultValues || "") || {};
-    form.setFieldValue("valuesOverride", version.defaultValues || "");
-    setSchemaValues(
-      (schema
-        ? mergeSchemaDefaults(schema, parsed)
-        : parsed) as HelmValuesObject,
-    );
-    setEditorMode(schema ? "form" : "yaml");
-    setYamlError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schema, version.defaultValues]);
 
   const handleSchemaValuesChange = (next: HelmValuesObject) => {
     setSchemaValues(next);
@@ -243,9 +246,9 @@ export function InstallChartModal({
                 type="button"
                 onClick={() => setEditorMode("form")}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
                   editorMode === "form"
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -256,9 +259,9 @@ export function InstallChartModal({
                 type="button"
                 onClick={() => setEditorMode("yaml")}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
                   editorMode === "yaml"
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >

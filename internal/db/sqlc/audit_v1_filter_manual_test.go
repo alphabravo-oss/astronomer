@@ -47,8 +47,8 @@ func TestBuildAuditLogV1FilterWhereComposesFilters(t *testing.T) {
 		"lower(a.resource_name) LIKE $2",
 		auditEffectiveClassSQL + " = $3",
 		"a.status_code >= 400",
-		"a.detail->>'cluster_id' = $4",
-		"a.detail->>'project_id' = $5",
+		"a.detail @> jsonb_build_object('cluster_id', $4::text)",
+		"a.detail @> jsonb_build_object('project_id', $5::text)",
 		"a.created_at >= $6",
 		"a.created_at <= $7",
 	} {
@@ -97,5 +97,20 @@ func TestBuildAuditLogV1FilterWhereEmpty(t *testing.T) {
 	}
 	if len(args) != 0 {
 		t.Fatalf("args = %#v, want none", args)
+	}
+}
+
+func TestBuildAuditLogV1PageQueryUsesBoundedLookaheadWithoutCount(t *testing.T) {
+	query, args, limit := buildAuditLogV1PageQuery(AuditLogFilterParams{Limit: 50, Offset: 25})
+	for _, forbidden := range []string{"MATERIALIZED", "count(*)", "jsonb_agg"} {
+		if strings.Contains(query, forbidden) {
+			t.Fatalf("interactive page query contains %q:\n%s", forbidden, query)
+		}
+	}
+	if !strings.Contains(query, "ORDER BY a.created_at DESC, a.id DESC") || !strings.Contains(query, "LIMIT $1 OFFSET $2") {
+		t.Fatalf("interactive page query is not a stable bounded page:\n%s", query)
+	}
+	if limit != 50 || len(args) != 2 || args[0] != int32(51) || args[1] != int32(25) {
+		t.Fatalf("limit=%d args=%#v, want limit=50 args=[51 25]", limit, args)
 	}
 }

@@ -58,3 +58,21 @@ func TestFeatureGateDefaultOptInAllowsExplicitTrue(t *testing.T) {
 		t.Fatalf("called=%v status=%d, want true/204", called, rr.Code)
 	}
 }
+
+func TestFeatureGateUsesRegisteredDefaultAndUnknownFailsClosed(t *testing.T) {
+	called := false
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })
+
+	recorder := httptest.NewRecorder()
+	FeatureGate("feature.catalog", nil)(next).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	if called || recorder.Code != http.StatusNotFound {
+		t.Fatalf("default-on feature without reader called=%t status=%d, want false/404", called, recorder.Code)
+	}
+
+	called = false
+	recorder = httptest.NewRecorder()
+	FeatureGate("feature.unregistered", nil)(next).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	if called || recorder.Code != http.StatusNotFound {
+		t.Fatalf("unknown feature called=%t status=%d, want false/404", called, recorder.Code)
+	}
+}

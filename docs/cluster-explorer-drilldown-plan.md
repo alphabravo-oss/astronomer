@@ -9,7 +9,7 @@
 > **Sequencing:** implement **after** the agent‑authz security fixes
 > (`docs/archive/pre-v1/plans/agent-authz-security-review.md`) land. WS-E depends on that historical plan's **F2** (CRD RBAC policy).
 >
-> **Status:** DRAFT v1.
+> **Status:** IMPLEMENTED / HISTORICAL. The explorer and detail surfaces described here have shipped; current UX gaps and follow-up work are tracked in advisor review 010.
 
 ---
 

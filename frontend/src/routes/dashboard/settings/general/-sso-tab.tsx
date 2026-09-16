@@ -1,13 +1,13 @@
-import { Chrome, Github, KeyRound, Loader2, Plus, Shield } from "lucide-react";
+import { Globe, GitFork, KeyRound, Loader2, Plus, Shield } from "lucide-react";
 import { useSSOProviders } from "@/lib/hooks/user-settings";
 import { StatusBadge } from "@/components/ui/status-badge";
 
 function providerIcon(type: string) {
   switch (type) {
     case "github":
-      return <Github className="h-5 w-5" />;
+      return <GitFork className="h-5 w-5" />;
     case "google":
-      return <Chrome className="h-5 w-5" />;
+      return <Globe className="h-5 w-5" />;
     case "oidc":
       return <KeyRound className="h-5 w-5" />;
     default:
@@ -34,7 +34,7 @@ export function SSOTab({ onAdd }: { onAdd: () => void }) {
               key={provider.id}
               className="flex items-center gap-4 p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors"
             >
-              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
                 {providerIcon(provider.type)}
               </div>
               <div className="flex-1 min-w-0">

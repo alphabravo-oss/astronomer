@@ -120,37 +120,42 @@ func TestClusterAgentUpgradeCommitsOperationAndAuditBeforePublishing(t *testing.
 }
 
 func TestClusterAgentUpgradeContainsTransactionalAuditBoundary(t *testing.T) {
-	path, err := filepath.Abs("cluster_agents.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	paths, err := filepath.Glob("cluster_agents*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	foundRunTx, foundOutbox := false, false
-	for _, declaration := range file.Decls {
-		fn, ok := declaration.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "Upgrade" || fn.Body == nil {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
+		}
+		for _, declaration := range file.Decls {
+			fn, ok := declaration.(*ast.FuncDecl)
+			if !ok || fn.Name.Name != "Upgrade" || fn.Body == nil {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				switch fun := call.Fun.(type) {
+				case *ast.SelectorExpr:
+					if fun.Sel.Name == "runTx" {
+						foundRunTx = true
+					}
+				case *ast.Ident:
+					if fun.Name == "recordAuditOutbox" {
+						foundOutbox = true
+					}
+				}
 				return true
-			}
-			switch fun := call.Fun.(type) {
-			case *ast.SelectorExpr:
-				if fun.Sel.Name == "runTx" {
-					foundRunTx = true
-				}
-			case *ast.Ident:
-				if fun.Name == "recordAuditOutbox" {
-					foundOutbox = true
-				}
-			}
-			return true
-		})
+			})
+		}
 	}
 	if !foundRunTx || !foundOutbox {
 		t.Fatalf("Upgrade transaction boundary runTx=%v outbox=%v", foundRunTx, foundOutbox)

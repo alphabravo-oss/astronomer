@@ -80,12 +80,12 @@ export function BrowseTab({
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-muted animate-pulse" />
                 <div className="flex-1 space-y-1.5">
-                  <div className="h-4 w-24 rounded bg-muted animate-pulse" />
-                  <div className="h-3 w-16 rounded bg-muted animate-pulse" />
+                  <div className="h-4 w-24 rounded-sm bg-muted animate-pulse" />
+                  <div className="h-3 w-16 rounded-sm bg-muted animate-pulse" />
                 </div>
               </div>
-              <div className="h-3 w-full rounded bg-muted animate-pulse" />
-              <div className="h-3 w-3/4 rounded bg-muted animate-pulse" />
+              <div className="h-3 w-full rounded-sm bg-muted animate-pulse" />
+              <div className="h-3 w-3/4 rounded-sm bg-muted animate-pulse" />
             </div>
           ))}
         </div>
@@ -105,7 +105,7 @@ export function BrowseTab({
                 transition-colors group"
             >
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden">
+                <div className="shrink-0 h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center overflow-hidden">
                   {chart.iconUrl ? (
                     <img
                       src={chart.iconUrl}

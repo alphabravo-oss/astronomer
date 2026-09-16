@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * The in-flight / failed / gave-up surface for one monitoring-stack operation.
@@ -130,7 +129,7 @@ export function StackOperationPanel({
             {tracker.isFailure && !superseded ? " failed" : ""}
           </span>
           {op.attemptCount > 1 && (
-            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
               attempt {op.attemptCount}
             </span>
           )}
@@ -189,7 +188,7 @@ export function StackOperationPanel({
               </div>
               {/* Verbatim: this is the real Helm / readiness / smoke-check text
                   and it is the only thing that tells an operator what to fix. */}
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded border border-border bg-background px-3 py-2 font-mono text-xs text-status-error">
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-sm border border-border bg-background px-3 py-2 font-mono text-xs text-status-error">
                 {tracker.errorMessage}
               </pre>
             </div>

@@ -17,14 +17,39 @@ import (
 
 // fakeClusterQuerier serves a fixed cluster list on the first page.
 type fakeClusterQuerier struct {
-	clusters []sqlc.Cluster
+	clusters []sqlc.ListClusterRuntimeTargetsRow
+	pages    map[int32][]sqlc.ListClusterRuntimeTargetsRow
+	offsets  []int32
 }
 
-func (q *fakeClusterQuerier) ListClusters(_ context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
+func (q *fakeClusterQuerier) ListClusterRuntimeTargets(_ context.Context, arg sqlc.ListClusterRuntimeTargetsParams) ([]sqlc.ListClusterRuntimeTargetsRow, error) {
+	if q.pages != nil {
+		q.offsets = append(q.offsets, arg.Offset)
+		return q.pages[arg.Offset], nil
+	}
 	if arg.Offset > 0 {
 		return nil, nil
 	}
 	return q.clusters, nil
+}
+
+func TestListAllClustersPagesNarrowRuntimeTargets(t *testing.T) {
+	first := make([]sqlc.ListClusterRuntimeTargetsRow, 500)
+	q := &fakeClusterQuerier{pages: map[int32][]sqlc.ListClusterRuntimeTargetsRow{
+		0:   first,
+		500: {{ID: uuid.New(), Status: "active"}},
+	}}
+	p := New(nil, q, nil, nil)
+	got, err := p.listAllClusters(context.Background())
+	if err != nil {
+		t.Fatalf("list all clusters: %v", err)
+	}
+	if len(got) != 501 {
+		t.Fatalf("runtime targets = %d, want 501", len(got))
+	}
+	if len(q.offsets) != 2 || q.offsets[0] != 0 || q.offsets[1] != 500 {
+		t.Fatalf("page offsets = %v, want [0 500]", q.offsets)
+	}
 }
 
 func (q *fakeClusterQuerier) UpdateClusterStatusOnHeartbeat(context.Context, sqlc.UpdateClusterStatusOnHeartbeatParams) (int64, error) {
@@ -62,12 +87,12 @@ func (p *fakeMetricsProvider) Get(_ context.Context, clusterID string, _ bool) c
 	return clustermetrics.Snapshot{CPUPercentage: 1, MemoryPercentage: 2, PodCount: 3}
 }
 
-func activeCluster(fresh bool) sqlc.Cluster {
+func activeCluster(fresh bool) sqlc.ListClusterRuntimeTargetsRow {
 	hb := time.Now()
 	if !fresh {
 		hb = hb.Add(-5 * time.Minute) // well past the 2m staleness threshold
 	}
-	return sqlc.Cluster{
+	return sqlc.ListClusterRuntimeTargetsRow{
 		ID:            uuid.New(),
 		Status:        "active",
 		IsLocal:       false,
@@ -96,7 +121,7 @@ func drainEvents(ch <-chan events.Event) int {
 // cache never stayed warm. Peak concurrent Get calls > 1 proves the fan-out.
 func TestPublishMetrics_FansOutConcurrently(t *testing.T) {
 	const n = 8
-	clusters := make([]sqlc.Cluster, n)
+	clusters := make([]sqlc.ListClusterRuntimeTargetsRow, n)
 	for i := range clusters {
 		clusters[i] = activeCluster(true)
 	}
@@ -104,7 +129,7 @@ func TestPublishMetrics_FansOutConcurrently(t *testing.T) {
 	bus := events.NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := bus.Subscribe(ctx)
+	ch := bus.Subscribe(ctx, events.AcceptAll)
 
 	p := New(bus, &fakeClusterQuerier{clusters: clusters}, prov, nil)
 
@@ -131,13 +156,13 @@ func TestPublishMetrics_SkipsStaleHeartbeatAgents(t *testing.T) {
 	fresh1 := activeCluster(true)
 	fresh2 := activeCluster(true)
 	stale := activeCluster(false)
-	clusters := []sqlc.Cluster{fresh1, stale, fresh2}
+	clusters := []sqlc.ListClusterRuntimeTargetsRow{fresh1, stale, fresh2}
 
 	prov := &fakeMetricsProvider{sleep: 0, calledID: map[string]int{}}
 	bus := events.NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := bus.Subscribe(ctx)
+	ch := bus.Subscribe(ctx, events.AcceptAll)
 
 	p := New(bus, &fakeClusterQuerier{clusters: clusters}, prov, nil)
 	p.publishMetrics(ctx)

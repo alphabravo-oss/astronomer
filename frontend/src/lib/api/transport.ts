@@ -103,12 +103,14 @@ api.interceptors.response.use(
       ) {
         return Promise.reject(error);
       }
+      // Mark queued followers as well as the refresh owner. A second 401 must
+      // surface to the caller instead of re-entering the refresh flow.
+      originalRequest._retry = true;
       if (isRefreshing) {
         return new Promise<void>((resolve, reject) =>
           failedQueue.push({ resolve, reject }),
         ).then(() => api(originalRequest));
       }
-      originalRequest._retry = true;
       isRefreshing = true;
       try {
         const response = await axios.post(
@@ -145,7 +147,11 @@ api.interceptors.response.use(
       code?: string;
       response?: typeof error.response;
     };
-    enriched.status = error.response?.status;
+    // A request that never received an HTTP response is a transport failure,
+    // not an API error with an unknown shape. Preserve that distinction for
+    // query surfaces so they can render an offline/reconnect state while
+    // ordinary application errors remain error states.
+    enriched.status = error.response?.status ?? 0;
     enriched.code =
       error.response?.data?.error?.code ?? error.response?.data?.code;
     enriched.response = error.response;

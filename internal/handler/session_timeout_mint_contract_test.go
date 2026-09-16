@@ -4,12 +4,15 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // TestInteractiveSessionMintPathsUseContextProvider guards the complete
 // interactive mint surface. The runtime TTL lives on JWTManager, so each
-// handler must delegate through GenerateTokenPairContext; a future direct
+// handler must delegate through context-aware token generation or preparation; a future direct
 // GenerateAccessToken/GenerateTokenPair call would silently bypass request
 // cancellation or make one login mode diverge from session.timeout_minutes.
 func TestInteractiveSessionMintPathsUseContextProvider(t *testing.T) {
@@ -20,20 +23,17 @@ func TestInteractiveSessionMintPathsUseContextProvider(t *testing.T) {
 	}{
 		{file: "auth.go", receiver: "AuthHandler", function: "Login"},
 		{file: "auth.go", receiver: "AuthHandler", function: "Refresh"},
-		{file: "sso.go", receiver: "SSOHandler", function: "Callback"},
+		{file: "sso_tx.go", receiver: "SSOHandler", function: "commitSSOCallback"},
 		{file: "totp.go", receiver: "TOTPHandler", function: "EnrollConfirm"},
-		{file: "totp.go", receiver: "TOTPHandler", function: "Verify"},
+		{file: "totp_verify.go", receiver: "TOTPHandler", function: "Verify"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.receiver+"."+tt.function, func(t *testing.T) {
-			file, err := parser.ParseFile(token.NewFileSet(), tt.file, nil, 0)
-			if err != nil {
-				t.Fatalf("parse %s: %v", tt.file, err)
-			}
-			fn := findMethod(file, tt.receiver, tt.function)
+			fn := findSessionMintMethod(t, tt.file, tt.receiver, tt.function)
 			if fn == nil {
 				t.Fatalf("method %s.%s not found in %s", tt.receiver, tt.function, tt.file)
+				return
 			}
 
 			contextCalls := 0
@@ -48,7 +48,7 @@ func TestInteractiveSessionMintPathsUseContextProvider(t *testing.T) {
 					return true
 				}
 				switch sel.Sel.Name {
-				case "GenerateTokenPairContext":
+				case "GenerateTokenPairContext", "PrepareTokenPairContext":
 					contextCalls++
 				case "GenerateTokenPair", "GenerateAccessToken", "GenerateAccessTokenContext":
 					legacyCalls++
@@ -56,13 +56,41 @@ func TestInteractiveSessionMintPathsUseContextProvider(t *testing.T) {
 				return true
 			})
 			if contextCalls == 0 {
-				t.Fatalf("%s.%s does not use GenerateTokenPairContext", tt.receiver, tt.function)
+				t.Fatalf("%s.%s does not use context-aware token generation or preparation", tt.receiver, tt.function)
 			}
 			if legacyCalls != 0 {
 				t.Fatalf("%s.%s has %d direct/legacy access-token mint call(s)", tt.receiver, tt.function, legacyCalls)
 			}
 		})
 	}
+}
+
+func findSessionMintMethod(t *testing.T, fileName, receiver, name string) *ast.FuncDecl {
+	if receiver != "AuthHandler" {
+		file, err := parser.ParseFile(token.NewFileSet(), fileName, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", fileName, err)
+		}
+		return findMethod(file, receiver, name)
+	}
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		candidate := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(candidate, "auth") || !strings.HasSuffix(candidate, ".go") || strings.HasSuffix(candidate, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(".", candidate), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if method := findMethod(file, receiver, name); method != nil {
+			return method
+		}
+	}
+	return nil
 }
 
 func findMethod(file *ast.File, receiver, name string) *ast.FuncDecl {

@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +8,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * /dashboard/settings/gitops/[id] — single-source detail.
  *
@@ -14,9 +16,10 @@ import {
  * "Sync now" + "Dry-run preview" + "Save changes" actions.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+
+import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
+import { FormShell } from "@/components/ui/form-shell";
 import { ArrowLeft, GitBranch, Loader2, Play, RefreshCw } from "lucide-react";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
@@ -189,7 +192,7 @@ function DetailInner({ id }: { id: string }) {
       </div>
 
       {source.last_error ? (
-        <div className="rounded border border-status-error/40 bg-status-error/5 p-3 text-xs">
+        <div className="rounded-sm border border-status-error/40 bg-status-error/5 p-3 text-xs">
           <p className="font-semibold text-status-error mb-1">
             Last sync error
           </p>
@@ -199,7 +202,7 @@ function DetailInner({ id }: { id: string }) {
         </div>
       ) : null}
 
-      <form
+      <FormShell
         onSubmit={(e) => {
           e.preventDefault();
           void form.handleSubmit();
@@ -217,12 +220,12 @@ function DetailInner({ id }: { id: string }) {
             </label>
             <form.Field name="branch">
               {(field) => (
-                <input
+                <Input
                   id="field-6a74d3c2-187"
                   value={field.state.value ?? ""}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
                 />
               )}
             </form.Field>
@@ -236,12 +239,12 @@ function DetailInner({ id }: { id: string }) {
             </label>
             <form.Field name="path_prefix">
               {(field) => (
-                <input
+                <Input
                   id="field-6a74d3c2-200"
                   value={field.state.value ?? ""}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
                 />
               )}
             </form.Field>
@@ -257,7 +260,7 @@ function DetailInner({ id }: { id: string }) {
             </label>
             <form.Field name="auth_mode">
               {(field) => (
-                <select
+                <Select
                   id="field-6a74d3c2-215"
                   value={field.state.value}
                   onChange={(e) =>
@@ -266,12 +269,12 @@ function DetailInner({ id }: { id: string }) {
                     )
                   }
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded border bg-background text-sm"
+                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
                 >
                   <option value="none">None</option>
                   <option value="https_token">HTTPS token</option>
                   <option value="ssh_key">SSH key</option>
-                </select>
+                </Select>
               )}
             </form.Field>
           </div>
@@ -284,14 +287,14 @@ function DetailInner({ id }: { id: string }) {
             </label>
             <form.Field name="auth">
               {(field) => (
-                <input
+                <Input
                   id="field-6a74d3c2-232"
                   type="password"
                   value={field.state.value ?? ""}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   disabled={authMode === "none"}
-                  className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
+                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
                   placeholder={authMode === "none" ? "(not required)" : ""}
                 />
               )}
@@ -312,18 +315,18 @@ function DetailInner({ id }: { id: string }) {
             </label>
             <form.Field name="sync_mode">
               {(field) => (
-                <select
+                <Select
                   id="field-6a74d3c2-254"
                   value={field.state.value}
                   onChange={(e) =>
                     field.handleChange(e.target.value as "manual" | "interval")
                   }
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded border bg-background text-sm"
+                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
                 >
                   <option value="interval">Interval</option>
                   <option value="manual">Manual only</option>
-                </select>
+                </Select>
               )}
             </form.Field>
           </div>
@@ -336,7 +339,7 @@ function DetailInner({ id }: { id: string }) {
             </label>
             <form.Field name="sync_interval_seconds">
               {(field) => (
-                <input
+                <Input
                   id="field-6a74d3c2-270"
                   type="number"
                   min={30}
@@ -344,7 +347,7 @@ function DetailInner({ id }: { id: string }) {
                   onChange={(e) => field.handleChange(Number(e.target.value))}
                   onBlur={field.handleBlur}
                   disabled={syncMode === "manual"}
-                  className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
+                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
                 />
               )}
             </form.Field>
@@ -358,7 +361,7 @@ function DetailInner({ id }: { id: string }) {
             </label>
             <form.Field name="on_delete">
               {(field) => (
-                <select
+                <Select
                   id="gitops-on-delete"
                   aria-label="On delete behavior"
                   value={field.state.value}
@@ -368,12 +371,12 @@ function DetailInner({ id }: { id: string }) {
                     )
                   }
                   onBlur={field.handleBlur}
-                  className="w-full h-9 px-3 rounded border bg-background text-sm"
+                  className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
                 >
                   <option value="log">Log only</option>
                   <option value="tombstone">Tombstone</option>
                   <option value="decommission">Decommission</option>
-                </select>
+                </Select>
               )}
             </form.Field>
           </div>
@@ -381,7 +384,7 @@ function DetailInner({ id }: { id: string }) {
         <div className="flex items-center gap-2">
           <form.Field name="enabled">
             {(field) => (
-              <input
+              <Input
                 id="enabled"
                 type="checkbox"
                 checked={field.state.value ?? true}
@@ -395,11 +398,11 @@ function DetailInner({ id }: { id: string }) {
           </label>
         </div>
         {onDelete === "decommission" ? (
-          <div className="rounded border border-status-warning/40 bg-status-warning/5 p-3 space-y-2">
+          <div className="rounded-sm border border-status-warning/40 bg-status-warning/5 p-3 space-y-2">
             <div className="flex items-center gap-2">
               <form.Field name="allow_mass_decommission">
                 {(field) => (
-                  <input
+                  <Input
                     id="allow-mass-decommission"
                     type="checkbox"
                     checked={field.state.value ?? false}
@@ -416,9 +419,9 @@ function DetailInner({ id }: { id: string }) {
               </label>
             </div>
             <p className="text-xs text-muted-foreground">
-              Allows the next sync to decommission more clusters than the
-              safety threshold. The worker consumes this override once; every
-              arm or disarm is audit logged.
+              Allows the next sync to decommission more clusters than the safety
+              threshold. The worker consumes this override once; every arm or
+              disarm is audit logged.
             </p>
           </div>
         ) : null}
@@ -442,7 +445,7 @@ function DetailInner({ id }: { id: string }) {
             )}
           </form.Subscribe>
         </div>
-      </form>
+      </FormShell>
 
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-foreground">
@@ -489,7 +492,7 @@ function DetailInner({ id }: { id: string }) {
       </div>
 
       {previewResult ? (
-        <div className="rounded border bg-muted/30 p-4 text-xs space-y-2">
+        <div className="rounded-sm border bg-muted/30 p-4 text-xs space-y-2">
           <h3 className="text-sm font-semibold">Dry-run preview</h3>
           <p className="font-mono text-muted-foreground">
             HEAD {previewResult.head_sha.slice(0, 12)} ·{" "}
@@ -507,17 +510,17 @@ function DetailInner({ id }: { id: string }) {
 }
 
 function GitOpsSourceDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = Route.useParams();
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings/gitops"
+        <RouterLink
+          to="/dashboard/settings/gitops"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to GitOps sources
-        </Link>
+        </RouterLink>
         <DetailInner id={id} />
       </PageShell>
     </SettingsAuthGate>

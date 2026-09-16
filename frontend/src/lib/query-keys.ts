@@ -1,4 +1,5 @@
-import type * as apiClient from "./api";
+import type { EffectivePermissionParams } from "@/lib/api/rbac";
+import type { ResourceType } from "@/lib/api/resources";
 
 // ============================================================
 // Query Key Factories
@@ -10,6 +11,12 @@ import type * as apiClient from "./api";
 // arrays at call sites — add a factory entry instead (enforced by lint).
 
 export const queryKeys = {
+  networkPolicyTemplates: ["network-policy-templates"] as const,
+  networkPolicyApplications: (clusterID: string) =>
+    ["clusters", clusterID, "network-policy-applications"] as const,
+  complianceBaselines: ["compliance-baselines"] as const,
+  complianceBaselineDiff: (id: string) =>
+    ["compliance-baseline-diff", id] as const,
   charlie: {
     sessions: ["charlie", "sessions"] as const,
     overview: ["charlie", "overview"] as const,
@@ -45,6 +52,7 @@ export const queryKeys = {
   featureFlags: ["settings", "features"] as const,
   clusters: {
     all: ["clusters"] as const,
+    search: (search: string) => ["clusters", "search", search] as const,
     list: (params?: Record<string, unknown>) =>
       ["clusters", "list", params] as const,
     detail: (id: string) => ["clusters", "detail", id] as const,
@@ -114,6 +122,20 @@ export const queryKeys = {
       ["clusters", id, "apiserver-allowlist"] as const,
     apiserverAllowlistSnapshots: (id: string) =>
       ["clusters", id, "apiserver-allowlist-snapshots"] as const,
+    controlPlaneSnapshots: (id: string) =>
+      ["clusters", id, "control-plane-snapshots"] as const,
+    controlPlaneSnapshotsPage: (
+      id: string,
+      pagination: { pageIndex: number; pageSize: number },
+    ) => ["clusters", id, "control-plane-snapshots", pagination] as const,
+    controlPlaneSnapshotGuidance: (id: string, snapshotId: string) =>
+      [
+        "clusters",
+        id,
+        "control-plane-snapshots",
+        snapshotId,
+        "restore-guidance",
+      ] as const,
     registries: (id: string) => ["clusters", id, "registries"] as const,
     mirroredIngressClasses: (id: string) =>
       ["clusters", id, "mirrored", "ingress-classes"] as const,
@@ -150,14 +172,12 @@ export const queryKeys = {
   },
   workloads: {
     all: ["workloads"] as const,
-    // Per-cluster prefix matching list/detail/pods/metrics at once — the live
+    // Per-cluster prefix matching list/pods/metrics at once — the live
     // routing table uses it for Pod churn (pod payloads don't carry the owner
     // workload's kind/ns/name, so a precise per-workload key can't be built).
     byCluster: (clusterId: string) => ["workloads", clusterId] as const,
     list: (clusterId: string, params?: Record<string, unknown>) =>
       ["workloads", clusterId, "list", params] as const,
-    detail: (clusterId: string, kind: string, ns: string, name: string) =>
-      ["workloads", clusterId, kind, ns, name] as const,
     pods: (clusterId: string, kind: string, ns: string, name: string) =>
       ["workloads", clusterId, kind, ns, name, "pods"] as const,
     metrics: (
@@ -184,6 +204,9 @@ export const queryKeys = {
     [...queryKeys.podLogs(clusterId, ns, pod, container), tail, since] as const,
   rbac: {
     all: ["rbac"] as const,
+    principalsAll: ["rbac", "principals"] as const,
+    principals: (query: string) => ["rbac", "principals", query] as const,
+    templates: ["rbac", "templates"] as const,
     globalRoles: ["rbac", "global-roles"] as const,
     clusterRoles: (clusterId?: string) =>
       ["rbac", "cluster-roles", clusterId] as const,
@@ -194,17 +217,18 @@ export const queryKeys = {
     globalRoleBindings: ["rbac", "global-role-bindings"] as const,
     projectRoleBindings: (params?: Record<string, unknown>) =>
       ["rbac", "project-role-bindings", params] as const,
-    myPermissions: (params?: apiClient.EffectivePermissionParams) =>
+    myPermissions: (params?: EffectivePermissionParams) =>
       ["rbac", "my-permissions", params] as const,
     effectivePermissions: (
       userId: string,
-      params?: apiClient.EffectivePermissionParams,
+      params?: EffectivePermissionParams,
       self?: boolean,
     ) => ["rbac", "effective-permissions", userId, params, { self }] as const,
   },
   users: {
     all: ["users"] as const,
     current: ["users", "current"] as const,
+    preferences: (userId: string) => ["users", "preferences", userId] as const,
     list: (params?: Record<string, unknown>) =>
       ["users", "list", params] as const,
   },
@@ -223,6 +247,8 @@ export const queryKeys = {
     webhookDeliveries: (webhookId: string) =>
       ["settings", "webhooks", webhookId, "deliveries"] as const,
     registrationTls: ["settings", "registration-tls"] as const,
+    supportBundleOperation: (id: string | null) =>
+      ["settings", "support-bundle", id] as const,
   },
   activity: (limit?: number) => ["activity", limit] as const,
   // Prefix matching every `activity(limit)` variant — used by the live
@@ -233,8 +259,7 @@ export const queryKeys = {
     rulesAll: ["alerting", "rules"] as const,
     rules: (clusterId?: string) =>
       ["alerting", "rules", clusterId ?? "all"] as const,
-    events: (params?: object) =>
-      ["alerting", "events", params] as const,
+    events: (params?: object) => ["alerting", "events", params] as const,
     // Prefix matching every `events(params)` variant — used by the live
     // routing table on `alerting.changed` (kind: event).
     eventsAll: ["alerting", "events"] as const,
@@ -436,6 +461,9 @@ export const queryKeys = {
   },
   projects: {
     all: ["projects"] as const,
+    details: ["projects", "detail"] as const,
+    search: (clusterId: string, search: string) =>
+      ["projects", "search", clusterId, search] as const,
     list: (params?: Record<string, unknown>) =>
       ["projects", "list", params] as const,
     detail: (id: string) => ["projects", "detail", id] as const,
@@ -452,6 +480,7 @@ export const queryKeys = {
     // Prefix matching every `installed(params)` variant — used by the live
     // routing table on `catalog_release.changed` + Helm-Secret k8s events.
     installedAll: ["catalog", "installed"] as const,
+    operation: (id: string) => ["catalog", "operations", id] as const,
     // App-install/upgrade modal — distinct endpoints from `chartVersions` above
     // (note the different array shapes), kept verbatim to preserve cache identity.
     installChartVersions: (projectId: string, chartId: string) =>
@@ -495,11 +524,24 @@ export const queryKeys = {
   },
   generic: {
     all: ["generic"] as const,
+    counts: (clusterId: string) => ["generic", clusterId, "counts"] as const,
+    resourceCounts: (
+      clusterId: string,
+      resourceTypes: readonly string[],
+      namespaces: readonly string[] | null,
+    ) =>
+      [
+        "generic",
+        clusterId,
+        "counts",
+        [...resourceTypes].sort(),
+        namespaces === null ? null : [...namespaces].sort(),
+      ] as const,
     resources: (clusterId: string, resourceType: string) =>
       ["generic", clusterId, resourceType] as const,
     discovery: (clusterId: string) =>
       ["generic", clusterId, "discovery"] as const,
-    schema: (clusterId: string, resourceType: apiClient.ResourceType) =>
+    schema: (clusterId: string, resourceType: ResourceType) =>
       ["generic", clusterId, "schema", resourceType] as const,
   },
   k8s: {

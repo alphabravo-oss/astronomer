@@ -9,13 +9,13 @@ import { createFileRoute } from "@tanstack/react-router";
  * (so deep-links don't 404), but the Save button refuses to fire.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { PermissionState } from "@/components/ui/empty-state";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { extractApiErrorMessage } from "@/lib/api/errors";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import {
   useCreateClusterTemplate,
   canWriteClusterTemplates,
@@ -23,7 +23,7 @@ import {
 import { TemplateForm } from "@/components/projects/cluster-templates/template-form";
 
 function NewClusterTemplatePage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const canWrite = canWriteClusterTemplates(user);
   const createMutation = useCreateClusterTemplate();
@@ -31,13 +31,13 @@ function NewClusterTemplatePage() {
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/cluster-templates"
+      <RouterLink
+        to="/dashboard/cluster-templates"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to bundles
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Onboarding Bundles · New"
@@ -62,7 +62,7 @@ function NewClusterTemplatePage() {
       <TemplateForm
         submitting={createMutation.isPending}
         serverError={serverError}
-        onCancel={() => router.push("/dashboard/cluster-templates")}
+        onCancel={() => void navigate({ to: "/dashboard/cluster-templates" })}
         onSubmit={async (body) => {
           if (!canWrite) {
             setServerError(
@@ -73,7 +73,7 @@ function NewClusterTemplatePage() {
           setServerError(null);
           try {
             const created = await createMutation.mutateAsync(body);
-            router.push(`/dashboard/cluster-templates/${created.id}`);
+            void navigate({ to: `/dashboard/cluster-templates/${created.id}` });
           } catch (err) {
             const msg =
               extractApiErrorMessage(err) ?? "Failed to create template.";

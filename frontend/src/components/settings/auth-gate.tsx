@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * Admin gate for the Settings hub. Wraps the page body and shows a 403

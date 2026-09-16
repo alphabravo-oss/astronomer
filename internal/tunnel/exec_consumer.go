@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -14,7 +15,6 @@ import (
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -42,60 +42,50 @@ type ExecConsumer struct {
 	hub         *Hub
 	log         *slog.Logger
 	jwt         *iauth.JWTManager
-	queries     appmiddleware.TokenUserQuerier
+	queries     iauth.TokenUserQuerier
 	tickets     *iauth.StreamTicketStore
 	auditWriter any
 	rbacEngine  *rbac.Engine
-	rbacQuerier appmiddleware.RBACQuerier
+	rbacQuerier rbac.BindingQuerier
 }
 
-// NewExecConsumer creates a new ExecConsumer.
-func NewExecConsumer(hub *Hub, log *slog.Logger) *ExecConsumer {
+// StreamConsumerDependencies is the security boundary shared by browser exec
+// and log streams. Every field is mandatory: a stream may not be constructed
+// first and made safe later by a sequence of setters.
+type StreamConsumerDependencies struct {
+	JWT         *iauth.JWTManager
+	Queries     iauth.TokenUserQuerier
+	Tickets     *iauth.StreamTicketStore
+	AuditWriter auditWriterV1
+	RBACEngine  *rbac.Engine
+	RBACQuerier rbac.BindingQuerier
+}
+
+func (d StreamConsumerDependencies) validate() error {
+	if d.JWT == nil || d.Queries == nil || d.Tickets == nil || d.AuditWriter == nil || d.RBACEngine == nil || d.RBACQuerier == nil {
+		return errors.New("stream consumer security dependencies must all be configured")
+	}
+	return nil
+}
+
+// NewExecConsumer creates a fully secured ExecConsumer.
+func NewExecConsumer(hub *Hub, log *slog.Logger, deps StreamConsumerDependencies) (*ExecConsumer, error) {
+	if err := deps.validate(); err != nil {
+		return nil, err
+	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &ExecConsumer{hub: hub, log: log}
-}
-
-// SetAuth wires the JWT manager + token querier so the handler can validate
-// stream authentication. Browser WebSocket clients cannot set custom
-// Authorization headers, so the preferred browser path is a short-lived
-// ?ticket= query parameter. Both arguments are optional; when nil the handler
-// accepts unauthenticated connections (used by tests / dev runs without auth
-// wired).
-func (ec *ExecConsumer) SetAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier) {
-	if ec == nil {
-		return
-	}
-	ec.jwt = jwt
-	ec.queries = queries
-}
-
-func (ec *ExecConsumer) SetStreamTickets(tickets *iauth.StreamTicketStore) {
-	if ec == nil {
-		return
-	}
-	ec.tickets = tickets
-}
-
-func (ec *ExecConsumer) SetAuditWriter(auditWriter any) {
-	if ec == nil {
-		return
-	}
-	ec.auditWriter = auditWriter
-}
-
-// SetAuthorization wires the RBAC engine + binding querier so HandleExec can
-// enforce per-cluster permissions on the Authorization-header path (the
-// browser ?ticket= path is already RBAC-gated at ticket issuance). Both
-// arguments are optional; when nil the per-cluster check is skipped, matching
-// the optional-auth contract of SetAuth (dev/test runs without RBAC wired).
-func (ec *ExecConsumer) SetAuthorization(engine *rbac.Engine, querier appmiddleware.RBACQuerier) {
-	if ec == nil {
-		return
-	}
-	ec.rbacEngine = engine
-	ec.rbacQuerier = querier
+	return &ExecConsumer{
+		hub:         hub,
+		log:         log,
+		jwt:         deps.JWT,
+		queries:     deps.Queries,
+		tickets:     deps.Tickets,
+		auditWriter: deps.AuditWriter,
+		rbacEngine:  deps.RBACEngine,
+		rbacQuerier: deps.RBACQuerier,
+	}, nil
 }
 
 // authorizeCluster reports whether userID holds pods:exec on clusterID within
@@ -114,16 +104,23 @@ func (ec *ExecConsumer) SetAuthorization(engine *rbac.Engine, querier appmiddlew
 // with it, so a ticket that can be minted stays redeemable. The concrete
 // namespace is threaded through so a namespace-scoped binding grants access in
 // the pod's namespace; cluster-wide bindings still pass for any namespace. When
-// the RBAC engine/querier are not wired the check is skipped.
+// the RBAC engine/querier are not wired the check is denied.
 func (ec *ExecConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID, namespace string) bool {
 	if ec.rbacEngine == nil || ec.rbacQuerier == nil {
-		return true
+		return false
 	}
 	bindings, err := ec.rbacQuerier.GetUserBindings(ctx, userID.String())
 	if err != nil {
 		return false
 	}
 	return ec.rbacEngine.CheckPermission(bindings, rbac.ResourcePods, rbac.VerbExec, clusterID, uuid.Nil, namespace)
+}
+
+// SecurityWiringValid reports whether every dependency needed to authenticate
+// and authorize an exec stream is present. Startup validation uses this to
+// prevent partially wired consumers from becoming routable.
+func (ec *ExecConsumer) SecurityWiringValid() bool {
+	return ec != nil && ec.jwt != nil && ec.queries != nil && ec.tickets != nil && ec.auditWriter != nil && ec.rbacEngine != nil && ec.rbacQuerier != nil
 }
 
 // HandleExec upgrades to WebSocket and relays exec I/O between the frontend

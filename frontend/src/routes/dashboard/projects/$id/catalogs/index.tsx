@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Project · Catalogs tab (migration 061 / sprint 16 — BYO Helm catalogs).
  *
@@ -25,11 +25,13 @@ import {
  * tabs stay visually consistent.
  */
 import { useState } from "react";
-import { useParams } from "@/lib/navigation";
+
 import { Plus, Loader2, Trash2, Link2 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
+import { FormShell } from "@/components/ui/form-shell";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   useProjectCatalogs,
   useCreateProjectCatalog,
@@ -37,14 +39,14 @@ import {
   useDeleteProjectCatalog,
   canEditProject,
 } from "@/components/projects/hooks";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 
 import type { ProjectCatalog } from "@/lib/api/project-detail";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
 function ProjectCatalogsPage() {
-  const params = useParams();
-  const projectId = params.id as string;
+  const params = Route.useParams();
+  const projectId = params.id;
   const { data: user } = useCurrentUser();
   const canEdit = canEditProject(user);
 
@@ -54,6 +56,7 @@ function ProjectCatalogsPage() {
   const deleteMutation = useDeleteProjectCatalog(projectId);
 
   const [showAdd, setShowAdd] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<ProjectCatalog | null>(null);
   const [form, setForm] = useState({ name: "", url: "", description: "" });
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -73,15 +76,6 @@ function ProjectCatalogsPage() {
 
   const handleSubscribe = (cat: ProjectCatalog) => {
     subscribeMutation.mutate(cat.id);
-  };
-
-  const handleUnsubscribe = (cat: ProjectCatalog) => {
-    const isOwned = cat.visibility === "own";
-    const msg = isOwned
-      ? `Delete the project-owned catalog "${cat.name}"? This removes the catalog and all of its charts; no other project can use it.`
-      : `Unsubscribe from catalog "${cat.name}"? The catalog itself stays available to other projects.`;
-    if (!confirm(msg)) return;
-    deleteMutation.mutate(cat.id);
   };
 
   return (
@@ -174,7 +168,7 @@ function ProjectCatalogsPage() {
                     )}
                     {canEdit && cat.visibility !== "public" && (
                       <button
-                        onClick={() => handleUnsubscribe(cat)}
+                        onClick={() => setRemoveTarget(cat)}
                         className="inline-flex items-center gap-1 text-xs text-destructive hover:opacity-80"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -190,7 +184,7 @@ function ProjectCatalogsPage() {
       )}
 
       {showAdd && (
-        <form onSubmit={handleAdd}>
+        <FormShell onSubmit={handleAdd}>
           <ModalShell
             title="Add private catalog"
             subtitle="Subscribes this project to a Helm chart repository. Only this project can see private catalogs."
@@ -266,8 +260,57 @@ function ProjectCatalogsPage() {
               />
             </div>
           </ModalShell>
-        </form>
+        </FormShell>
       )}
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={() => {
+          if (!removeTarget) return;
+          deleteMutation.mutate(removeTarget.id, {
+            onSuccess: () => setRemoveTarget(null),
+          });
+        }}
+        title={
+          removeTarget?.visibility === "own"
+            ? "Delete private catalog"
+            : "Unsubscribe from catalog"
+        }
+        description={
+          removeTarget?.visibility === "own"
+            ? "This permanently removes the project-owned catalog."
+            : "This removes the catalog from this project only."
+        }
+        confirmText={
+          removeTarget?.visibility === "own" ? "Delete" : "Unsubscribe"
+        }
+        confirmValue={
+          removeTarget?.visibility === "own" ? removeTarget.name : undefined
+        }
+        variant="destructive"
+        loading={deleteMutation.isPending}
+        impact={
+          removeTarget
+            ? removeTarget.visibility === "own"
+              ? {
+                  scope: removeTarget.name,
+                  consequences: [
+                    "The catalog and its indexed charts will be removed from this project.",
+                    "No other project will be able to use this private catalog.",
+                  ],
+                  recovery: "Add and sync the private catalog again.",
+                }
+              : {
+                  scope: `${removeTarget.name} subscription for this project`,
+                  consequences: [
+                    "The catalog's charts will no longer be available in this project.",
+                    "The shared catalog remains available to other projects.",
+                  ],
+                  recovery: "Subscribe this project to the catalog again.",
+                }
+            : undefined
+        }
+      />
     </div>
   );
 }

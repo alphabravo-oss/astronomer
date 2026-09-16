@@ -8,13 +8,18 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import * as api from "@/lib/api";
+import {
+  listGatekeeperConstraints,
+  validateGatekeeperConstraint,
+  applyGatekeeperConstraint,
+  deleteGatekeeperConstraint,
+} from "@/lib/api/gatekeeper-constraints";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useGatekeeperConstraints(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.gatekeeperConstraints(clusterId),
-    queryFn: () => api.listGatekeeperConstraints(clusterId),
+    queryFn: () => listGatekeeperConstraints(clusterId),
     enabled: !!clusterId,
     refetchInterval: (query) =>
       query.state.data?.some(
@@ -28,8 +33,7 @@ export function useGatekeeperConstraints(clusterId: string) {
 
 export function useValidateConstraint(clusterId: string) {
   return useMutation({
-    mutationFn: (yaml: string) =>
-      api.validateGatekeeperConstraint(clusterId, yaml),
+    mutationFn: (yaml: string) => validateGatekeeperConstraint(clusterId, yaml),
     onError: (err: Error) => toastApiError("Validation request failed", err),
   });
 }
@@ -37,8 +41,7 @@ export function useValidateConstraint(clusterId: string) {
 export function useApplyConstraint(clusterId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (yaml: string) =>
-      api.applyGatekeeperConstraint(clusterId, yaml),
+    mutationFn: (yaml: string) => applyGatekeeperConstraint(clusterId, yaml),
     onSuccess: (result) => {
       qc.invalidateQueries({
         queryKey: queryKeys.gatekeeperConstraints(clusterId),
@@ -58,8 +61,7 @@ export function useApplyConstraint(clusterId: string) {
 export function useDeleteConstraint(clusterId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) =>
-      api.deleteGatekeeperConstraint(clusterId, name),
+    mutationFn: (name: string) => deleteGatekeeperConstraint(clusterId, name),
     onSuccess: () => {
       qc.invalidateQueries({
         queryKey: queryKeys.gatekeeperConstraints(clusterId),

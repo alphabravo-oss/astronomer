@@ -30,6 +30,7 @@ Run against a real management-plane deployment (not a unit-test fake):
 # from astronomer/ root
 make load-test \
   LOADTEST_SERVER=https://your-server \
+  LOADTEST_METRICS_SERVER=https://your-metrics-service \
   LOADTEST_TOKEN=/path/to/admin.jwt \
   LOADTEST_AUDIT_OBSERVER_DATABASE_URL_FILE=/path/to/read-only-postgres.dsn \
   LOADTEST_CLUSTERS=100 \
@@ -118,6 +119,7 @@ duplicate, failed, or cross-release production rungs.
 
 | Date | Build | Environment | Reason | Evidence |
 |---|---|---|---|---|
+| 2026-09-10 | `32100314+working-tree-2026-09-10` | local shared host; one server, PostgreSQL 16, Redis 7 | Estate-100 sustained 500.20 RPS for 30 minutes, but DB-pool empty-acquire rate was 15.459/s (limit 0.100/s), and the reconnect storm produced 282 transient 503s. The audit page query dominated DB time. The worker was omitted, so mandatory-audit outbox delivery could not converge. | [`scale-evidence/estate-100-2026-09-10-local-fail.md`](scale-evidence/estate-100-2026-09-10-local-fail.md) |
 | 2026-07-09 | `2991f9d` + residual tree | host k3s | Management-plane namespace `astronomer` empty (no server pods); leftover agents in `astronomer-system` unhealthy (`ImagePullBackOff`/`Error`). Cannot dial a live LOADTEST_SERVER. | Goal session residual assessment; harness not started against a reachable control plane. |
 
 ## Engineering guidance (unvalidated)

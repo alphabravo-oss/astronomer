@@ -102,8 +102,13 @@ func testServerRestartPreservesCIS(t *testing.T, ctx context.Context, pool *pgxp
 	queries := sqlc.New(pool)
 	clusterID := uuid.New()
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO clusters (id,name,display_name,status,last_heartbeat)
-		VALUES ($1,$2,$2,'connected',now())`, clusterID, "restart-cis-"+clusterID.String()); err != nil {
+		WITH inserted AS (
+			INSERT INTO clusters (id,name,display_name,status)
+			VALUES ($1,$2,$2,'connected')
+			RETURNING id
+		)
+		INSERT INTO cluster_liveness (cluster_id,last_heartbeat,heartbeat_count)
+		SELECT id,now(),1 FROM inserted`, clusterID, "restart-cis-"+clusterID.String()); err != nil {
 		t.Fatal(err)
 	}
 	scanName := "restart-cis-" + uuid.NewString()[:8]
@@ -423,7 +428,7 @@ func TestProcessRestartQualificationHelper(t *testing.T) {
 		runtime.Core.Deps.HTTPClient = http.DefaultClient
 		runtime.Dispatch.TaskOutbox = tasks.TaskOutboxDispatchDeps{Queries: queries, Enqueuer: client}
 		runtime.Dispatch.AuditOutbox = tasks.AuditOutboxDispatchDeps{Queries: queries}
-		workerProcess, err = NewWorker(redisURL, log, runtime)
+		workerProcess, err = NewWorker(redisURL, 32, log, runtime)
 		if err != nil {
 			t.Fatal(err)
 		}

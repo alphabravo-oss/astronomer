@@ -24,6 +24,7 @@ export const PLATFORM_SETTINGS_DEFAULTS: PlatformSettingsGrouped = {
   },
   tokens: { defaultTtlMinutes: 60, maxTtlMinutes: 525600 },
   session: { timeoutMinutes: 60 },
+  governance: { inactiveRetentionDays: 90, readAuditTier: "standard" },
   telemetry: {
     enabled: false,
     endpoint: "https://telemetry.alphabravo.io/astronomer",
@@ -52,6 +53,8 @@ const PLATFORM_SETTING_KEYS: Record<
   "token.default_ttl_min": (s) => s.tokens.defaultTtlMinutes,
   "token.max_ttl_min": (s) => s.tokens.maxTtlMinutes,
   "session.timeout_minutes": (s) => s.session.timeoutMinutes,
+  "users.inactive_retention_days": (s) => s.governance.inactiveRetentionDays,
+  "audit.read_tier": (s) => s.governance.readAuditTier,
   "telemetry.enabled": (s) => s.telemetry.enabled,
   "telemetry.endpoint": (s) => s.telemetry.endpoint,
   "registration.tls_mode": (s) => s.registration.tlsMode,
@@ -62,7 +65,7 @@ export function hydratePlatformSettings(
   flat: Array<{ key: string; value: unknown }>,
 ): PlatformSettingsGrouped {
   const values = new Map(flat.map((setting) => [setting.key, setting.value]));
-  const get = <T,>(key: string, fallback: T): T => {
+  const get = <T>(key: string, fallback: T): T => {
     const value = values.get(key);
     return value === undefined || value === null ? fallback : (value as T);
   };
@@ -79,7 +82,10 @@ export function hydratePlatformSettings(
       copyright: get("branding.copyright", defaults.branding.copyright),
     },
     banners: {
-      loginBannerText: get("banner.login_text", defaults.banners.loginBannerText),
+      loginBannerText: get(
+        "banner.login_text",
+        defaults.banners.loginBannerText,
+      ),
       globalBannerText: get(
         "banner.global_text",
         defaults.banners.globalBannerText,
@@ -113,6 +119,15 @@ export function hydratePlatformSettings(
     telemetry: {
       enabled: get("telemetry.enabled", defaults.telemetry.enabled),
       endpoint: get("telemetry.endpoint", defaults.telemetry.endpoint),
+    },
+    governance: {
+      inactiveRetentionDays: Number(
+        get(
+          "users.inactive_retention_days",
+          defaults.governance.inactiveRetentionDays,
+        ),
+      ),
+      readAuditTier: get("audit.read_tier", defaults.governance.readAuditTier),
     },
     registration: {
       tlsMode: get(

@@ -125,6 +125,34 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/compliance-baseline-applications"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/compliance-baseline-applications/{id}/revert"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/compliance-baselines"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/compliance-baselines/active"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/compliance-baselines/{id}"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/compliance-baselines/{id}/apply"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/compliance-baselines/{id}/diff"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/compliance/export"
   },
   {
@@ -150,6 +178,14 @@
   {
     "method": "PUT",
     "pattern": "/api/v1/admin/dashboard-widgets/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/deferred-operations"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/deferred-operations/{id}/cancel"
   },
   {
     "method": "GET",
@@ -209,6 +245,30 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/admin/maintenance-windows"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/maintenance-windows"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/maintenance-windows/active"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/maintenance-windows/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/maintenance-windows/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/maintenance-windows/{id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/admin/management-backup"
   },
   {
@@ -258,6 +318,22 @@
   {
     "method": "PUT",
     "pattern": "/api/v1/admin/network-policy-templates/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/platform-settings/default-cluster-template"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/platform-settings/default-cluster-template"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/platform-settings/default-cluster-template/coverage"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/platform-settings/default-cluster-template/reapply/{cluster_id}"
   },
   {
     "method": "GET",
@@ -322,6 +398,26 @@
   {
     "method": "GET",
     "pattern": "/api/v1/admin/quota-usage"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/read-audit-policies"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/admin/read-audit-policies"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/admin/read-audit-policies/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/admin/read-audit-policies/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/admin/read-audit-policies/{id}"
   },
   {
     "method": "GET",
@@ -588,18 +684,6 @@
     "pattern": "/api/v1/alerting/silences/{id}/expire"
   },
   {
-    "method": "POST",
-    "pattern": "/api/v1/alerts/rules/{id}/disable"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/alerts/rules/{id}/enable"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/alerts/silences/{id}/expire"
-  },
-  {
     "method": "GET",
     "pattern": "/api/v1/anomaly-baselines"
   },
@@ -616,8 +700,28 @@
     "pattern": "/api/v1/audit/export"
   },
   {
+    "method": "POST",
+    "pattern": "/api/v1/audit/exports"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/audit/exports/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/audit/exports/{id}/download"
+  },
+  {
     "method": "GET",
     "pattern": "/api/v1/audit/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/callback/{provider}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/callback/{provider}"
   },
   {
     "method": "POST",
@@ -672,6 +776,14 @@
     "pattern": "/api/v1/auth/login"
   },
   {
+    "method": "GET",
+    "pattern": "/api/v1/auth/login/{provider}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/login/{provider}"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/auth/logout"
   },
@@ -686,6 +798,14 @@
   {
     "method": "GET",
     "pattern": "/api/v1/auth/me"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/auth/me/preferences"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/auth/me/preferences"
   },
   {
     "method": "GET",
@@ -761,10 +881,6 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/backups/runs"
-  },
-  {
-    "method": "GET",
     "pattern": "/api/v1/backups/schedules"
   },
   {
@@ -796,30 +912,6 @@
     "pattern": "/api/v1/backups/storage"
   },
   {
-    "method": "GET",
-    "pattern": "/api/v1/backups/storage-configs"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/backups/storage-configs"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/backups/storage-configs/{id}"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/backups/storage-configs/{id}"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/api/v1/backups/storage-configs/{id}"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/backups/storage-configs/{id}/test-connection"
-  },
-  {
     "method": "DELETE",
     "pattern": "/api/v1/backups/storage/{id}"
   },
@@ -830,10 +922,6 @@
   {
     "method": "PUT",
     "pattern": "/api/v1/backups/storage/{id}"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/backups/storage/{id}/test"
   },
   {
     "method": "POST",
@@ -1260,6 +1348,10 @@
     "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
   },
   {
+    "method": "QUERY",
+    "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
+  },
+  {
     "method": "TRACE",
     "pattern": "/api/v1/clusters/{cluster_id}/k8s/*"
   },
@@ -1356,6 +1448,10 @@
     "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
   },
   {
+    "method": "QUERY",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
+  },
+  {
     "method": "TRACE",
     "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}"
   },
@@ -1392,6 +1488,10 @@
     "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
   },
   {
+    "method": "QUERY",
+    "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
+  },
+  {
     "method": "TRACE",
     "pattern": "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*"
   },
@@ -1418,6 +1518,10 @@
   {
     "method": "POST",
     "pattern": "/api/v1/clusters/{cluster_id}/registries/{id}/test"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{cluster_id}/resource-counts"
   },
   {
     "method": "GET",
@@ -1700,16 +1804,8 @@
     "pattern": "/api/v1/clusters/{id}/generate-kubeconfig"
   },
   {
-    "method": "POST",
-    "pattern": "/api/v1/clusters/{id}/generate_kubeconfig"
-  },
-  {
     "method": "GET",
     "pattern": "/api/v1/clusters/{id}/health"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/clusters/{id}/kubeconfig"
   },
   {
     "method": "GET",
@@ -1813,47 +1909,7 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/clusters/{id}/v2/pods"
-  },
-  {
-    "method": "GET",
     "pattern": "/api/v1/compliance/posture"
-  },
-  {
-    "method": "CONNECT",
-    "pattern": "/api/v1/connect/{cluster_id}"
-  },
-  {
-    "method": "DELETE",
-    "pattern": "/api/v1/connect/{cluster_id}"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/connect/{cluster_id}"
-  },
-  {
-    "method": "HEAD",
-    "pattern": "/api/v1/connect/{cluster_id}"
-  },
-  {
-    "method": "OPTIONS",
-    "pattern": "/api/v1/connect/{cluster_id}"
-  },
-  {
-    "method": "PATCH",
-    "pattern": "/api/v1/connect/{cluster_id}"
-  },
-  {
-    "method": "POST",
-    "pattern": "/api/v1/connect/{cluster_id}"
-  },
-  {
-    "method": "PUT",
-    "pattern": "/api/v1/connect/{cluster_id}"
-  },
-  {
-    "method": "TRACE",
-    "pattern": "/api/v1/connect/{cluster_id}"
   },
   {
     "method": "GET",
@@ -1965,10 +2021,6 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/delivery/fleet"
-  },
-  {
-    "method": "GET",
     "pattern": "/api/v1/delivery/rollouts"
   },
   {
@@ -2073,6 +2125,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/events/stream"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/extensions"
   },
   {
@@ -2114,6 +2170,10 @@
   {
     "method": "POST",
     "pattern": "/api/v1/gitops/sources/{id}/webhook"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/license"
   },
   {
     "method": "GET",
@@ -2317,6 +2377,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/platform/health-summary"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/projects"
   },
   {
@@ -2342,6 +2406,10 @@
   {
     "method": "POST",
     "pattern": "/api/v1/projects/{id}/add-namespace"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/projects/{id}/apply-rbac-template"
   },
   {
     "method": "GET",
@@ -2534,6 +2602,14 @@
   {
     "method": "POST",
     "pattern": "/api/v1/rbac/permission-preview"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/rbac/principals"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/rbac/principals/materialize"
   },
   {
     "method": "GET",
@@ -2868,8 +2944,16 @@
     "pattern": "/api/v1/streams/tickets"
   },
   {
+    "method": "POST",
+    "pattern": "/api/v1/support-bundles"
+  },
+  {
     "method": "GET",
-    "pattern": "/api/v1/support-bundle"
+    "pattern": "/api/v1/support-bundles/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/support-bundles/{id}/download"
   },
   {
     "method": "GET",
@@ -2914,6 +2998,10 @@
   {
     "method": "POST",
     "pattern": "/api/v1/tools/{slug}/preview"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/tools/{slug}/rollback"
   },
   {
     "method": "DELETE",
@@ -3002,6 +3090,10 @@
   {
     "method": "POST",
     "pattern": "/internal/tunnel/k8s/{cluster_id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/internal/tunnel/k8s/{cluster_id}/capabilities/{capability}"
   },
   {
     "method": "GET",

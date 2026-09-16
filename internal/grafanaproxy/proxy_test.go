@@ -207,6 +207,7 @@ func TestCallbackCookieSecureFollowsAstronomerScheme(t *testing.T) {
 	}
 	if cookie == nil {
 		t.Fatal("missing cookie")
+		return
 	}
 	if cookie.Secure {
 		t.Fatal("Secure cookie on http Astronomer URL")
@@ -237,6 +238,7 @@ func TestCallbackRedeemsAndSetsHostOnlyCookie(t *testing.T) {
 	}
 	if cookie == nil {
 		t.Fatal("missing grafana_auth cookie")
+		return
 	}
 	if cookie.Domain != "" {
 		t.Fatalf("grafana_auth Domain = %q, want host-only empty", cookie.Domain)
@@ -266,6 +268,7 @@ func TestCallbackPersistsClusterIDs(t *testing.T) {
 	}
 	if cookie == nil {
 		t.Fatal("missing cookie")
+		return
 	}
 	auth, err := verifyGrafanaAuth(key, cookie.Value)
 	if err != nil {
@@ -276,12 +279,8 @@ func TestCallbackPersistsClusterIDs(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnvRejectsMissing(t *testing.T) {
-	t.Setenv("GRAFANA_UPSTREAM", "")
-	t.Setenv("ASTRONOMER_URL", "")
-	t.Setenv("GRAFANA_HOST", "")
-	t.Setenv("GRAFANA_PROXY_KEY", "")
-	if _, err := ConfigFromEnv(); err == nil {
+func TestParseConfigRejectsMissing(t *testing.T) {
+	if _, err := ParseConfig("", "", "", "", ""); err == nil {
 		t.Fatal("expected error")
 	}
 }

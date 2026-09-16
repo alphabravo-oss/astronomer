@@ -1,4 +1,3 @@
-"use client";
 
 import { useId } from "react";
 import type { ReactNode } from "react";
@@ -78,7 +77,7 @@ export function ModalShell({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent"
+            className="p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent"
             aria-label="Close"
           >
             <X className="h-4 w-4" />

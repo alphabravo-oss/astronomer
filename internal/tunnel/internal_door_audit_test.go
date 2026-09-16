@@ -84,10 +84,11 @@ func registerRespondingAgent(t *testing.T, hub *Hub, clusterID string, respJSON 
 func internalK8sForwardRequest(clusterID string, payload protocol.K8sRequestPayload, userID string) *http.Request {
 	body, _ := json.Marshal(payload)
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/k8s/"+clusterID, bytes.NewReader(body))
-	req.Header.Set(InternalSourceHeader, InternalSourceValue)
-	req.Header.Set(InternalPSKHeader, "the-right-psk")
 	if userID != "" {
 		req.Header.Set(InternalForwardedUserHeader, userID)
+	}
+	if err := SignInternalK8sRequest(req, "the-right-psk", clusterID, body); err != nil {
+		panic(err)
 	}
 	return req
 }
@@ -105,7 +106,7 @@ func TestInternalK8sDoor_MutationEmitsUserAttributedAuditRow(t *testing.T) {
 	defer stop()
 
 	audit := &capturingAuditWriter{}
-	h := NewInternalK8sHandler(hub, "the-right-psk", slog.Default())
+	h := NewInternalK8sHandler(hub, InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
 	h.SetAuditWriter(audit)
 
 	router := chi.NewRouter()
@@ -155,7 +156,7 @@ func TestInternalK8sDoor_ReadEmitsNoAuditRow(t *testing.T) {
 	defer stop()
 
 	audit := &capturingAuditWriter{}
-	h := NewInternalK8sHandler(hub, "the-right-psk", slog.Default())
+	h := NewInternalK8sHandler(hub, InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
 	h.SetAuditWriter(audit)
 
 	router := chi.NewRouter()
@@ -188,7 +189,7 @@ func TestInternalHelmDoor_MutationEmitsUserAttributedAuditRow(t *testing.T) {
 	defer stop()
 
 	audit := &capturingAuditWriter{}
-	h := NewInternalHelmHandler(hub, "the-right-psk", slog.Default())
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
 	h.SetAuditWriter(audit)
 
 	router := chi.NewRouter()
@@ -199,9 +200,10 @@ func TestInternalHelmDoor_MutationEmitsUserAttributedAuditRow(t *testing.T) {
 		Payload: protocol.HelmRequestPayload{ReleaseName: "kube-prom-stack", Namespace: "monitoring"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/"+clusterID, bytes.NewReader(body))
-	req.Header.Set(InternalSourceHeader, InternalSourceValue)
-	req.Header.Set(InternalPSKHeader, "the-right-psk")
 	req.Header.Set(InternalForwardedUserHeader, userID.String())
+	if err := SignInternalHelmRequest(req, "the-right-psk", clusterID, body); err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -238,7 +240,7 @@ func TestInternalHelmDoor_StatusEmitsNoAuditRow(t *testing.T) {
 	defer stop()
 
 	audit := &capturingAuditWriter{}
-	h := NewInternalHelmHandler(hub, "the-right-psk", slog.Default())
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
 	h.SetAuditWriter(audit)
 
 	router := chi.NewRouter()
@@ -249,9 +251,10 @@ func TestInternalHelmDoor_StatusEmitsNoAuditRow(t *testing.T) {
 		Payload: protocol.HelmRequestPayload{ReleaseName: "kube-prom-stack", Namespace: "monitoring"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/"+clusterID, bytes.NewReader(body))
-	req.Header.Set(InternalSourceHeader, InternalSourceValue)
-	req.Header.Set(InternalPSKHeader, "the-right-psk")
 	req.Header.Set(InternalForwardedUserHeader, uuid.New().String())
+	if err := SignInternalHelmRequest(req, "the-right-psk", clusterID, body); err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

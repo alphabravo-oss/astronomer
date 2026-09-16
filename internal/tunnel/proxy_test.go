@@ -143,6 +143,37 @@ func TestExtractK8sPath(t *testing.T) {
 	}
 }
 
+func TestCanonicalK8sProxyPathRejectsAlternateEncodingsAndTraversal(t *testing.T) {
+	tests := []string{
+		"/api/v1/clusters/c1/k8s/api/v1/namespaces/default/%73ecrets/db",
+		"/api/v1/clusters/c1/k8s/api/v1/namespaces/default/secrets%2fdb",
+		"/api/v1/clusters/c1/k8s/api/v1/namespaces/default/../secrets/db",
+	}
+	for _, target := range tests {
+		t.Run(target, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			if _, err := CanonicalK8sProxyPath(req); !errors.Is(err, ErrInvalidK8sProxyPath) {
+				t.Fatalf("CanonicalK8sProxyPath error = %v, want %v", err, ErrInvalidK8sProxyPath)
+			}
+			if _, err := buildK8sRequestPayload(req); !errors.Is(err, ErrInvalidK8sProxyPath) {
+				t.Fatalf("buildK8sRequestPayload error = %v, want %v", err, ErrInvalidK8sProxyPath)
+			}
+		})
+	}
+}
+
+func TestCanonicalK8sProxyPathContextIsAuthoritative(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/k8s/api/v1/pods", nil)
+	req = WithCanonicalK8sProxyPath(req, "/api/v1/secrets")
+	payload, err := buildK8sRequestPayload(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.Path != "/api/v1/secrets" {
+		t.Fatalf("forwarded path = %q, want context path", payload.Path)
+	}
+}
+
 func TestHandleK8sProxy_Timeout(t *testing.T) {
 	hub := NewHub(slog.Default())
 

@@ -86,6 +86,36 @@ func TestLoginRateLimitMiddlewareReturnsJSON429(t *testing.T) {
 	}
 }
 
+func TestAuthFailureRateLimitRefundsSuccessfulRequests(t *testing.T) {
+	handler := AuthFailureRateLimit(1, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	for attempt := 0; attempt < 3; attempt++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", nil)
+		req.RemoteAddr = "198.51.100.10:1234"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("successful attempt %d status = %d", attempt+1, rec.Code)
+		}
+	}
+}
+
+func TestAuthFailureRateLimitBlocksAfterFailures(t *testing.T) {
+	handler := AuthFailureRateLimit(2, time.Minute)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	for attempt, want := range []int{http.StatusUnauthorized, http.StatusUnauthorized, http.StatusTooManyRequests} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", nil)
+		req.RemoteAddr = "198.51.100.10:1234"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Fatalf("attempt %d status = %d, want %d", attempt+1, rec.Code, want)
+		}
+	}
+}
+
 func TestClientKeyUsesHostPart(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", nil)
 	req.RemoteAddr = "203.0.113.5:4321"

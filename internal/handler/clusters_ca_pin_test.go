@@ -65,7 +65,7 @@ func TestRenderAgentInstallManifest_CAPinPopulated(t *testing.T) {
 	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")
 
 	cluster := sqlc.Cluster{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), Name: "demo"}
-	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
+	manifest := mustRenderAgentInstallManifest(t, h, cluster, "reg-token", "https://astro.example.com")
 
 	wantB64 := base64.StdEncoding.EncodeToString([]byte(strings.TrimSpace(caPEM)))
 	if !strings.Contains(manifest, "ca.crt: \""+wantB64+"\"") {
@@ -85,7 +85,7 @@ func TestRenderAgentInstallManifest_CAEmptyByDefault(t *testing.T) {
 	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")
 
 	cluster := sqlc.Cluster{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), Name: "demo"}
-	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
+	manifest := mustRenderAgentInstallManifest(t, h, cluster, "reg-token", "https://astro.example.com")
 
 	if !strings.Contains(manifest, `ca.crt: ""`) {
 		t.Fatalf("expected empty ca.crt Secret field for no-CA path:\n%s", manifest)

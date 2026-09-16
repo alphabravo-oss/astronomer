@@ -170,7 +170,7 @@ const secretColumns: Column<GenericK8sResource>[] = [
     key: "type",
     header: "Type",
     accessor: (row) => (
-      <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">
+      <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.type || "Opaque"}
       </span>
     ),
@@ -404,7 +404,7 @@ const crdColumns: Column<GenericK8sResource>[] = [
     key: "scope",
     header: "Scope",
     accessor: (row) => (
-      <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">
+      <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.scope}
       </span>
     ),

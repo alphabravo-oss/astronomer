@@ -8,9 +8,37 @@ package sqlc
 import (
 	"context"
 	"net/netip"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countActiveKubectlSessionsByCluster = `-- name: CountActiveKubectlSessionsByCluster :one
+SELECT count(*)
+FROM kubectl_sessions
+WHERE cluster_id = $1 AND status IN ('starting', 'active')
+`
+
+func (q *Queries) CountActiveKubectlSessionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveKubectlSessionsByCluster, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countAllActiveKubectlSessions = `-- name: CountAllActiveKubectlSessions :one
+SELECT COUNT(*)
+FROM kubectl_sessions
+WHERE status IN ('starting', 'active')
+`
+
+func (q *Queries) CountAllActiveKubectlSessions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllActiveKubectlSessions)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const countKubectlSessionCommands = `-- name: CountKubectlSessionCommands :one
 SELECT COUNT(*)
@@ -25,12 +53,44 @@ func (q *Queries) CountKubectlSessionCommands(ctx context.Context, sessionID uui
 	return count, err
 }
 
+const countKubectlSessionCommandsForSessions = `-- name: CountKubectlSessionCommandsForSessions :many
+SELECT session_id, COUNT(*)::bigint AS command_count
+FROM kubectl_session_commands
+WHERE session_id = ANY($1::uuid[])
+GROUP BY session_id
+`
+
+type CountKubectlSessionCommandsForSessionsRow struct {
+	SessionID    uuid.UUID `json:"session_id"`
+	CommandCount int64     `json:"command_count"`
+}
+
+func (q *Queries) CountKubectlSessionCommandsForSessions(ctx context.Context, sessionIds []uuid.UUID) ([]CountKubectlSessionCommandsForSessionsRow, error) {
+	rows, err := q.db.Query(ctx, countKubectlSessionCommandsForSessions, sessionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountKubectlSessionCommandsForSessionsRow{}
+	for rows.Next() {
+		var i CountKubectlSessionCommandsForSessionsRow
+		if err := rows.Scan(&i.SessionID, &i.CommandCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createKubectlSession = `-- name: CreateKubectlSession :one
 
 INSERT INTO kubectl_sessions (
     user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
-    status, client_ip, user_agent
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    status, client_ip, user_agent, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
           status, started_at, last_input_at, closed_at, expires_at, last_error,
           client_ip, user_agent
@@ -46,6 +106,7 @@ type CreateKubectlSessionParams struct {
 	Status       string      `json:"status"`
 	ClientIp     *netip.Addr `json:"client_ip"`
 	UserAgent    string      `json:"user_agent"`
+	ExpiresAt    time.Time   `json:"expires_at"`
 }
 
 // Kubectl shell session bookkeeping (migration 065).
@@ -66,6 +127,7 @@ func (q *Queries) CreateKubectlSession(ctx context.Context, arg CreateKubectlSes
 		arg.Status,
 		arg.ClientIp,
 		arg.UserAgent,
+		arg.ExpiresAt,
 	)
 	var i KubectlSession
 	err := row.Scan(
@@ -134,17 +196,57 @@ func (q *Queries) InsertKubectlSessionCommand(ctx context.Context, arg InsertKub
 	return err
 }
 
+const listActiveKubectlSessionClusters = `-- name: ListActiveKubectlSessionClusters :many
+SELECT DISTINCT cluster_id
+FROM kubectl_sessions
+WHERE status IN ('starting', 'active')
+ORDER BY cluster_id
+LIMIT $2 OFFSET $1
+`
+
+type ListActiveKubectlSessionClustersParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
+
+func (q *Queries) ListActiveKubectlSessionClusters(ctx context.Context, arg ListActiveKubectlSessionClustersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listActiveKubectlSessionClusters, arg.QueryOffset, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var cluster_id uuid.UUID
+		if err := rows.Scan(&cluster_id); err != nil {
+			return nil, err
+		}
+		items = append(items, cluster_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveKubectlSessionsByCluster = `-- name: ListActiveKubectlSessionsByCluster :many
 SELECT id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
        status, started_at, last_input_at, closed_at, expires_at, last_error,
        client_ip, user_agent
 FROM kubectl_sessions
 WHERE cluster_id = $1 AND status IN ('starting', 'active')
-ORDER BY started_at DESC
+ORDER BY started_at DESC, id DESC
+LIMIT $3 OFFSET $2
 `
 
-func (q *Queries) ListActiveKubectlSessionsByCluster(ctx context.Context, clusterID uuid.UUID) ([]KubectlSession, error) {
-	rows, err := q.db.Query(ctx, listActiveKubectlSessionsByCluster, clusterID)
+type ListActiveKubectlSessionsByClusterParams struct {
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListActiveKubectlSessionsByCluster(ctx context.Context, arg ListActiveKubectlSessionsByClusterParams) ([]KubectlSession, error) {
+	rows, err := q.db.Query(ctx, listActiveKubectlSessionsByCluster, arg.ClusterID, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -179,17 +281,23 @@ func (q *Queries) ListActiveKubectlSessionsByCluster(ctx context.Context, cluste
 	return items, nil
 }
 
-const listAllActiveKubectlSessions = `-- name: ListAllActiveKubectlSessions :many
+const listAllActiveKubectlSessionsPage = `-- name: ListAllActiveKubectlSessionsPage :many
 SELECT id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
        status, started_at, last_input_at, closed_at, expires_at, last_error,
        client_ip, user_agent
 FROM kubectl_sessions
 WHERE status IN ('starting', 'active')
-ORDER BY started_at DESC
+ORDER BY started_at DESC, id DESC
+LIMIT $2 OFFSET $1
 `
 
-func (q *Queries) ListAllActiveKubectlSessions(ctx context.Context) ([]KubectlSession, error) {
-	rows, err := q.db.Query(ctx, listAllActiveKubectlSessions)
+type ListAllActiveKubectlSessionsPageParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
+
+func (q *Queries) ListAllActiveKubectlSessionsPage(ctx context.Context, arg ListAllActiveKubectlSessionsPageParams) ([]KubectlSession, error) {
+	rows, err := q.db.Query(ctx, listAllActiveKubectlSessionsPage, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -230,11 +338,18 @@ SELECT id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
        client_ip, user_agent
 FROM kubectl_sessions
 WHERE status IN ('starting', 'active')
-  AND (expires_at < now() OR last_input_at + interval '30 minutes' < now())
+  AND (expires_at < now() OR last_input_at + $1::interval < now())
+ORDER BY expires_at, id
+LIMIT $2
 `
 
-func (q *Queries) ListExpiredKubectlSessions(ctx context.Context) ([]KubectlSession, error) {
-	rows, err := q.db.Query(ctx, listExpiredKubectlSessions)
+type ListExpiredKubectlSessionsParams struct {
+	IdleTimeout pgtype.Interval `json:"idle_timeout"`
+	QueryLimit  int32           `json:"query_limit"`
+}
+
+func (q *Queries) ListExpiredKubectlSessions(ctx context.Context, arg ListExpiredKubectlSessionsParams) ([]KubectlSession, error) {
+	rows, err := q.db.Query(ctx, listExpiredKubectlSessions, arg.IdleTimeout, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}

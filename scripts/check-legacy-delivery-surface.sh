@@ -41,20 +41,6 @@ PATTERNS = {
     ),
 }
 
-# Exact, sunset-bound v1 route aliases. This is intentionally narrower than a
-# file allowlist: each source file must contain exactly one reviewed marker,
-# and any second legacy match in the same file remains a release failure.
-APPROVED_API_COMPATIBILITY_MARKERS = {
-    "docs/openapi.yaml": b"/api/v1/delivery/fleet/",
-    "frontend/src/lib/api/generated/client.ts": b"/api/v1/delivery/fleet/",
-    "frontend/src/types/openapi.generated.ts": b"/api/v1/delivery/fleet/",
-    "internal/handler/assets/openapi.yaml": b"/api/v1/delivery/fleet/",
-    "internal/server/routes_delivery.go": b'Get("/fleet/"',
-    "internal/server/routes_delivery_control_test.go": b"/api/v1/delivery/fleet/",
-    "pkg/astroclient/astroclient.gen.go": b"/api/v1/delivery/fleet/",
-}
-APPROVED_BUILT_COMPATIBILITY = re.compile(rb"(?:/api/v1)?/delivery/fleet/")
-
 TEXT_SUFFIXES = {
     ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json",
     ".yaml", ".yml", ".md", ".txt", ".tpl", ".html", ".css", ".scss",
@@ -153,19 +139,6 @@ def scan_bytes(data: bytes) -> dict[str, int]:
 
 def add_counts(findings: dict[tuple[str, str, str], int], scope: str, path: str, data: bytes) -> None:
     for signature, count in scan_bytes(data).items():
-        approved = 0
-        if signature == "legacy_fleet_operations":
-            marker = APPROVED_API_COMPATIBILITY_MARKERS.get(path)
-            if marker is not None:
-                approved = data.count(marker)
-                if approved != 1:
-                    raise ScanError(f"compatibility alias marker count for {path} is {approved}, want 1")
-            elif scope in {"built_artifact", "built_image"}:
-                approved = len(APPROVED_BUILT_COMPATIBILITY.findall(data))
-            if approved:
-                key = ("compatibility_alias", signature, path)
-                findings[key] = findings.get(key, 0) + approved
-                count -= approved
         if count:
             findings[(scope, signature, path)] = findings.get((scope, signature, path), 0) + count
 
@@ -182,21 +155,13 @@ def add_stream_counts(
     findings: dict[tuple[str, str, str], int], scope: str, path: str, handle: io.BufferedReader
 ) -> None:
     counts = {name: 0 for name in PATTERNS}
-    approved_compatibility = 0
     tail = b""
     while chunk := handle.read(1024 * 1024):
         data = tail + chunk
         boundary = len(tail)
         for name, regex in PATTERNS.items():
             counts[name] += sum(1 for match in regex.finditer(data) if match.end() > boundary)
-        if scope in {"built_artifact", "built_image"}:
-            approved_compatibility += sum(
-                1 for match in APPROVED_BUILT_COMPATIBILITY.finditer(data) if match.end() > boundary
-            )
         tail = data[-128:]
-    if approved_compatibility:
-        findings[("compatibility_alias", "legacy_fleet_operations", path)] = approved_compatibility
-        counts["legacy_fleet_operations"] -= approved_compatibility
     for signature, count in counts.items():
         if count:
             findings[(scope, signature, path)] = count
@@ -260,12 +225,6 @@ def scan_tree(root: Path, self_path: Path) -> tuple[dict[tuple[str, str, str], i
             scanned += 1
         except OSError as exc:
             raise ScanError(f"cannot scan {repo_path}: {exc}") from exc
-    present_allowance_paths = [path for path in APPROVED_API_COMPATIBILITY_MARKERS if (root / path).is_file()]
-    if present_allowance_paths and len(present_allowance_paths) != len(APPROVED_API_COMPATIBILITY_MARKERS):
-        raise ScanError("reviewed compatibility alias source set is incomplete")
-    for path in present_allowance_paths:
-        if findings.get(("compatibility_alias", "legacy_fleet_operations", path)) != 1:
-            raise ScanError(f"reviewed compatibility alias is missing from {path}")
     return findings, scanned
 
 
@@ -388,7 +347,7 @@ def render_report(
     image_count: int,
 ) -> str:
     scopes = (
-        "active_runtime", "compatibility_alias", "validation_guard", "historical_allowlist", "migration_context", "built_artifact",
+        "active_runtime", "validation_guard", "historical_allowlist", "migration_context", "built_artifact",
         "generated_chart", "generated_cli", "built_image",
     )
     lines = [

@@ -174,12 +174,35 @@ func TestDeliveryStatusValidate(t *testing.T) {
 			ObservedAt: time.Now().UTC(),
 		}},
 	}
+	status.StatusDigest = status.SemanticDigest()
 	if err := status.Validate(); err != nil {
 		t.Fatalf("valid status: %v", err)
 	}
 	status.Deployments[0].Conditions[0].Message = strings.Repeat("x", MaxDeliveryStatusMessageBytes+1)
+	status.StatusDigest = status.SemanticDigest()
 	if err := status.Validate(); err == nil {
 		t.Fatal("expected oversized condition rejection")
+	}
+}
+
+func TestDeliveryStatusSemanticDigestIgnoresTransportAndObservationTime(t *testing.T) {
+	status := DeliveryStatusV2{
+		ProtocolVersion: DeliveryProtocolVersion, ClusterID: "11111111-1111-4111-8111-111111111111",
+		SessionSequence: 1, Deployments: []DeliveryDeploymentStatusV2{{
+			DeploymentID: "22222222-2222-4222-8222-222222222222", Generation: 1,
+			SpecDigest: "sha256:" + strings.Repeat("a", 64), Phase: "ready", ObservedAt: time.Unix(1, 0),
+		}},
+	}
+	first := status.SemanticDigest()
+	status.SessionSequence = 99
+	status.Deployments[0].ObservedAt = time.Unix(999, 0)
+	status.StatusDigest = "sha256:" + strings.Repeat("f", 64)
+	if second := status.SemanticDigest(); second != first {
+		t.Fatalf("volatile envelope fields changed semantic digest: %s != %s", second, first)
+	}
+	status.Deployments[0].Phase = "failed"
+	if changed := status.SemanticDigest(); changed == first {
+		t.Fatal("deployment state change did not change semantic digest")
 	}
 }
 

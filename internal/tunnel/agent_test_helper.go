@@ -10,11 +10,16 @@ import "github.com/alphabravocompany/astronomer-go/pkg/protocol"
 //
 // Exported because cross-package tests in internal/handler need it.
 // Production code paths never invoke this constructor.
-func (h *Hub) RegisterAgentForTest(clusterID string) *StreamManager {
+func (h *Hub) RegisterAgentForTest(clusterID string, capabilities ...string) *StreamManager {
+	var advertised map[string]struct{}
+	if capabilities != nil {
+		advertised = capabilitySet(capabilities)
+	}
 	agent := &AgentConnection{
-		ClusterID: clusterID,
-		Streams:   NewStreamManager(256),
-		sendCh:    make(chan *protocol.Message, sendChannelSize),
+		ClusterID:    clusterID,
+		Capabilities: advertised,
+		Streams:      NewStreamManager(256),
+		sendCh:       make(chan *protocol.Message, sendChannelSize),
 	}
 	h.agents.Set(clusterID, agent)
 	return agent.Streams

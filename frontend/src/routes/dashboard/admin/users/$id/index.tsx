@@ -16,8 +16,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 
 import { useMemo, useState } from "react";
-import { Link } from "@/lib/link";
-import { useParams, useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { PageHeader, PageShell } from "@/components/ui/page";
@@ -27,7 +26,6 @@ import {
   RefreshCcw,
   LogOut,
   AlertTriangle,
-  Loader2,
   ArrowLeft,
   Clock,
   Users,
@@ -42,8 +40,9 @@ import {
   adminResyncUserGroups,
   type AdminUserDetail,
 } from "@/lib/api/account-security";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { QueryStates } from "@/components/ui/query-states";
 
 const userKey = (id: string) => ["admin", "users", id] as const;
 
@@ -107,9 +106,8 @@ const ACTIONS: ActionDef[] = [
 ];
 
 function AdminUserDetailPage() {
-  const params = useParams();
+  const params = Route.useParams();
   const id = String(params?.id ?? "");
-  const router = useRouter();
   const qc = useQueryClient();
 
   const { data: me } = useCurrentUser();
@@ -127,10 +125,11 @@ function AdminUserDetailPage() {
     [me],
   );
 
-  const { data: user, isLoading } = useQuery({
+  const userQuery = useQuery({
     queryKey: userKey(id),
     queryFn: () => getAdminUser(id),
   });
+  const { data: user, isLoading } = userQuery;
 
   const [pending, setPending] = useState<ActionKey | null>(null);
 
@@ -147,37 +146,43 @@ function AdminUserDetailPage() {
     },
   });
 
-  if (isLoading) {
+  const missingUser = (
+    <div className="rounded-lg border border-border bg-card p-6">
+      <p className="text-sm text-muted-foreground">User not found.</p>
+      <button
+        onClick={() => window.history.back()}
+        className="mt-3 inline-flex items-center gap-1 text-sm text-foreground hover:underline"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
+    </div>
+  );
+
+  if (isLoading || userQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={userQuery}
+        permission="users:read"
+        notFound={missingUser}
+      >
+        {() => null}
+      </QueryStates>
     );
   }
   if (!user) {
-    return (
-      <div className="rounded-lg border border-border bg-card p-6">
-        <p className="text-sm text-muted-foreground">User not found.</p>
-        <button
-          onClick={() => router.back()}
-          className="mt-3 inline-flex items-center gap-1 text-sm text-foreground hover:underline"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back
-        </button>
-      </div>
-    );
+    return missingUser;
   }
 
   const activeAction = ACTIONS.find((a) => a.key === pending) || null;
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/rbac"
+      <RouterLink
+        to="/dashboard/rbac"
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3 w-3" /> Back to RBAC
-      </Link>
+      </RouterLink>
       <PageHeader
         title={user.displayName || user.username}
         description={`${user.email} · ${user.provider}`}
@@ -186,7 +191,7 @@ function AdminUserDetailPage() {
       {/* State banners */}
       {user.lockedUntil && (
         <div className="rounded-md border border-status-error/40 bg-status-error/10 p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-status-error flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-5 w-5 text-status-error shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">
               Account locked until {formatDate(user.lockedUntil)}
@@ -198,7 +203,7 @@ function AdminUserDetailPage() {
           {isSuperuser && (
             <button
               onClick={() => setPending("unlock")}
-              className="inline-flex items-center gap-2 h-8 px-3 rounded text-sm font-medium bg-status-error text-background hover:bg-status-error/90 flex-shrink-0"
+              className="inline-flex items-center gap-2 h-8 px-3 rounded-sm text-sm font-medium bg-status-error text-background hover:bg-status-error/90 shrink-0"
             >
               <Unlock className="h-3.5 w-3.5" />
               Unlock now
@@ -209,7 +214,7 @@ function AdminUserDetailPage() {
 
       {user.tokensInvalidatedAt && (
         <div className="rounded-md border border-status-warning/40 bg-status-warning/10 p-4 flex items-start gap-3">
-          <Clock className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
+          <Clock className="h-5 w-5 text-status-warning shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-foreground">
               Tokens invalidated {formatRelativeTime(user.tokensInvalidatedAt)}
@@ -269,7 +274,7 @@ function AdminUserDetailPage() {
                   className="text-left rounded-lg border border-border bg-card hover:bg-accent transition-colors p-4 disabled:opacity-50"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center shrink-0">
                       <Icon className="h-4 w-4 text-foreground" />
                     </div>
                     <div className="min-w-0">

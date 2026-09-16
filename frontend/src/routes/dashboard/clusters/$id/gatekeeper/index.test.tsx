@@ -5,22 +5,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClusterGatekeeperPage } from "./-page";
 import type { GatekeeperConstraint } from "@/types";
 
-// Plain-anchor stand-in: these tests assert link text/href, not routing, and
-// the real Link needs a <RouterProvider>.
-vi.mock("@/lib/link", () => ({
-  Link: ({ href, children, ...rest }: React.ComponentProps<"a">) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
 
-vi.mock("@/lib/navigation", () => ({
-  useParams: () => ({ id: "cl1" }),
-  useRouter: () => ({ push: vi.fn() }),
-}));
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    Link: RouterLinkStub,
+    useNavigate: () => vi.fn(),
+    useParams: () => ({ id: "cl1" }),
+  };
+});
 
-vi.mock("@/lib/hooks", () => ({
+vi.mock("@/lib/hooks/clusters", () => ({
   useCluster: () => ({
     data: { id: "cl1", displayName: "prod-east" },
     isLoading: false,

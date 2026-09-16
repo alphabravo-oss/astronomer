@@ -1,17 +1,18 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "@/lib/navigation";
-import { useClusters, useDeleteCluster, queryKeys } from "@/lib/hooks";
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { registrationSearch } from "@/components/clusters/registration-flow";
+import { useClusters, useDeleteCluster } from "@/lib/hooks/clusters";
+import { queryKeys } from "@/lib/query-keys";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
 import { Select } from "@/components/ui/select";
 import { PageHeader, PageShell } from "@/components/ui/page";
-// RegisterClusterModal removed in sprint 22 — replaced by the
-// /dashboard/clusters/register/* wizard. The "Re-show install command"
-// row action now navigates to the wizard's step 2 for the existing
-// cluster, which is the moral equivalent.
+import { EmptyState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -22,36 +23,21 @@ import {
   distributionDisplayName,
 } from "@/lib/utils";
 import type { Cluster } from "@/types";
-import { Plus, Terminal, Pencil, Trash2 } from "lucide-react";
+import { Plus, SearchX, Server, Terminal, Pencil, Trash2 } from "lucide-react";
 
 function ClustersPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  // Legacy ?register=true query param redirects to the new wizard
-  // entry route. We do the redirect inside useEffect so deep-linked
-  // bookmarks keep working without flashing the cluster list.
-  const legacyRegisterParam = searchParams.get("register") === "true";
-  useEffect(() => {
-    if (legacyRegisterParam) {
-      router.replace("/dashboard/clusters/register");
-    }
-  }, [legacyRegisterParam, router]);
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [providerFilter, setProviderFilter] = useState<string>("");
   const [envFilter, setEnvFilter] = useState<string>("");
 
   // Action menu state
-  // Sprint 22 removed the legacy register-cluster modal; the
-  // "Registration Command" action now navigates to the wizard's
-  // step-2 install page for the cluster. Setter retained as a no-op
-  // ref to keep the column callback site untouched while the
-  // navigation handler does the heavy lift.
   const [editCluster, setEditCluster] = useState<Cluster | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
   const [forceDelete, setForceDelete] = useState(false);
   const deleteMutation = useDeleteCluster();
 
-  const { data: clustersData, isLoading } = useClusters({
+  const clustersQuery = useClusters({
     status: statusFilter || undefined,
     provider: providerFilter || undefined,
     environment: envFilter || undefined,
@@ -75,7 +61,8 @@ function ClustersPage() {
     [queryKeys.clusters.all],
   );
 
-  const clusters = clustersData?.data || [];
+  const clusters = clustersQuery.data?.data || [];
+  const hasServerFilters = Boolean(statusFilter || providerFilter || envFilter);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -129,7 +116,7 @@ function ClustersPage() {
       key: "distribution",
       header: "Distribution",
       accessor: (row) => (
-        <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">
+        <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
           {distributionDisplayName(row.distribution)}
         </span>
       ),
@@ -232,7 +219,10 @@ function ClustersPage() {
               label: "Registration Command",
               icon: <Terminal className="h-3.5 w-3.5" />,
               onClick: () =>
-                router.push(`/dashboard/clusters/register/${row.id}/connect`),
+                void navigate({
+                  to: "/dashboard/clusters/register",
+                  search: registrationSearch(row.id),
+                }),
             },
             {
               label: "Edit",
@@ -262,68 +252,121 @@ function ClustersPage() {
           <ActionButton
             intent="primary"
             icon={<Plus className="h-4 w-4" />}
-            onClick={() => router.push("/dashboard/clusters/register")}
+            onClick={() =>
+              void navigate({ to: "/dashboard/clusters/register" })
+            }
           >
             Register Cluster
           </ActionButton>
         }
       />
 
-      {/* Filters */}
-      <DataTable
-        data={clusters}
-        columns={columns}
-        keyExtractor={(row) => row.id}
-        persistKey="clusters"
-        onRowClick={(row) => router.push(`/dashboard/clusters/${row.id}`)}
-        searchPlaceholder="Search clusters..."
-        loading={isLoading}
-        emptyMessage="No clusters found. Register your first cluster to get started."
-        toolbar={
-          <div className="flex items-center gap-2">
-            <Select
-              aria-label="Filter clusters by status"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-auto"
-            >
-              <option value="">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="warning">Warning</option>
-              <option value="error">Error</option>
-              <option value="disconnected">Disconnected</option>
-              <option value="connecting">Connecting</option>
-            </Select>
-
-            <Select
-              aria-label="Filter clusters by provider"
-              value={providerFilter}
-              onChange={(e) => setProviderFilter(e.target.value)}
-              className="w-auto"
-            >
-              <option value="">All Providers</option>
-              <option value="aws">AWS</option>
-              <option value="gcp">GCP</option>
-              <option value="azure">Azure</option>
-              <option value="on-prem">On-Premise</option>
-              <option value="digitalocean">DigitalOcean</option>
-            </Select>
-
-            <Select
-              aria-label="Filter clusters by environment"
-              value={envFilter}
-              onChange={(e) => setEnvFilter(e.target.value)}
-              className="w-auto"
-            >
-              <option value="">All Environments</option>
-              <option value="production">Production</option>
-              <option value="staging">Staging</option>
-              <option value="development">Development</option>
-              <option value="testing">Testing</option>
-            </Select>
-          </div>
+      <QueryStates
+        query={clustersQuery}
+        loadingTitle="Loading clusters"
+        permission="clusters:read"
+        errorTitle="Failed to load clusters"
+        isEmpty={(response) => response.data.length === 0}
+        empty={
+          <EmptyState
+            icon={hasServerFilters ? SearchX : Server}
+            title={
+              hasServerFilters
+                ? "No clusters match these filters"
+                : "No clusters registered"
+            }
+            description={
+              hasServerFilters
+                ? "Clear the status, provider, and environment filters to see all registered clusters."
+                : "Register an existing Kubernetes cluster to start monitoring and operating it."
+            }
+            actionLabel={
+              hasServerFilters ? "Clear filters" : "Register cluster"
+            }
+            actionIcon={hasServerFilters ? undefined : Plus}
+            onAction={
+              hasServerFilters
+                ? () => {
+                    setStatusFilter("");
+                    setProviderFilter("");
+                    setEnvFilter("");
+                  }
+                : () => void navigate({ to: "/dashboard/clusters/register" })
+            }
+          />
         }
-      />
+      >
+        {/* Filters */}
+        <DataTable
+          data={clusters}
+          columns={columns}
+          keyExtractor={(row) => row.id}
+          persistKey="clusters"
+          onRowClick={(row) =>
+            void navigate({ to: `/dashboard/clusters/${row.id}` })
+          }
+          searchPlaceholder="Search clusters..."
+          filtersActive={hasServerFilters}
+          onClearFilters={() => {
+            setStatusFilter("");
+            setProviderFilter("");
+            setEnvFilter("");
+          }}
+          emptyState={{
+            title: "No clusters registered",
+            description:
+              "Register an existing Kubernetes cluster to start monitoring and operating it.",
+            action: {
+              label: "Register cluster",
+              href: "/dashboard/clusters/register",
+            },
+          }}
+          toolbar={
+            <div className="flex items-center gap-2">
+              <Select
+                aria-label="Filter clusters by status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                containerClassName="w-auto"
+              >
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+                <option value="disconnected">Disconnected</option>
+                <option value="connecting">Connecting</option>
+              </Select>
+
+              <Select
+                aria-label="Filter clusters by provider"
+                value={providerFilter}
+                onChange={(e) => setProviderFilter(e.target.value)}
+                containerClassName="w-auto"
+              >
+                <option value="">All Providers</option>
+                <option value="aws">AWS</option>
+                <option value="gcp">GCP</option>
+                <option value="azure">Azure</option>
+                <option value="on-prem">On-Premise</option>
+                <option value="digitalocean">DigitalOcean</option>
+              </Select>
+
+              <Select
+                aria-label="Filter clusters by environment"
+                value={envFilter}
+                onChange={(e) => setEnvFilter(e.target.value)}
+                containerClassName="w-auto"
+              >
+                <option value="">All Environments</option>
+                <option value="production">Production</option>
+                <option value="staging">Staging</option>
+                <option value="development">Development</option>
+                <option value="testing">Testing</option>
+              </Select>
+            </div>
+          }
+        />
+      </QueryStates>
 
       {/* "Re-show install command" → navigate to wizard step 2 for the
           existing cluster. The wizard's status endpoint handles
@@ -354,11 +397,11 @@ function ClustersPage() {
         loading={deleteMutation.isPending}
       >
         <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
-          <input
+          <Input
             type="checkbox"
             checked={forceDelete}
             onChange={(e) => setForceDelete(e.target.checked)}
-            className="mt-0.5 h-3.5 w-3.5 rounded border-border"
+            className="mt-0.5 h-3.5 w-3.5 rounded-sm border-border"
           />
           <span>
             <span className="font-medium text-foreground">Force delete</span> —

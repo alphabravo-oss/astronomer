@@ -10,14 +10,14 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const maxBundleDependencies = 128
@@ -35,7 +35,6 @@ type BundleQueries interface {
 	GetComponentBundleVersion(context.Context, sqlc.GetComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error)
 	GetDeliverySource(context.Context, sqlc.GetDeliverySourceParams) (sqlc.GetDeliverySourceRow, error)
 	CreateDeliverySourceResolutionAndOutbox(context.Context, sqlc.CreateDeliverySourceResolutionAndOutboxParams) (sqlc.CreateDeliverySourceResolutionAndOutboxRow, error)
-	FailComponentBundleVersion(context.Context, sqlc.FailComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error)
 }
 
 type BundleMutationTx interface {
@@ -64,32 +63,6 @@ func (h *BundleHandler) SetRunTx(runTx bundleRunTxFunc) {
 }
 
 func (h *BundleHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
-
-func executeBundleMutation[T any](r *http.Request, h *BundleHandler, mutate func(BundleMutationTx) (T, error), fallback func() (T, error), describe func(T) deliveryAuditEvent) (T, error) {
-	var zero T
-	if h == nil {
-		return zero, errors.New("delivery bundle handler is nil")
-	}
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q BundleMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			return recordAuditOutbox(r, q, describe(result))
-		})
-		return result, err
-	}
-	result, err := fallback()
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
 
 func NewBundleHandler(queries BundleQueries) *BundleHandler {
 	return &BundleHandler{queries: queries}
@@ -176,7 +149,7 @@ func (h *BundleHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		items = append(items, bundleFromRow(row))
 	}
-	respondPage(w, r, items, total, limit, offset, int64(offset)+int64(len(items)) < total, true)
+	paging.Write(w, items, paging.Exact(total, int(limit), int(offset), len(items)))
 }
 
 // Create adds a stable bundle identity. Versions are created separately and
@@ -204,15 +177,14 @@ func (h *BundleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery bundle persistence is unavailable")
 		return
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	actor := reqctx.UserUUID(r.Context())
 	params := sqlc.CreateComponentBundleParams{
 		ProjectID: projectID, Name: request.Name, Description: request.Description, CreatedBy: actor, UpdatedBy: actor,
 	}
-	row, err := executeBundleMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q BundleMutationTx) (sqlc.ComponentBundle, error) {
 			return q.CreateComponentBundle(r.Context(), params)
 		},
-		func() (sqlc.ComponentBundle, error) { return h.queries.CreateComponentBundle(r.Context(), params) },
 		func(row sqlc.ComponentBundle) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.bundle.created", resourceType: "component_bundle", resourceID: row.ID.String(), resourceName: row.Name,
@@ -285,14 +257,13 @@ func (h *BundleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := sqlc.UpdateComponentBundleParams{
-		Description: description, UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()),
+		Description: description, UpdatedBy: reqctx.UserUUID(r.Context()),
 		ID: bundleID, ProjectID: projectID,
 	}
-	row, err := executeBundleMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q BundleMutationTx) (sqlc.ComponentBundle, error) {
 			return q.UpdateComponentBundle(r.Context(), params)
 		},
-		func() (sqlc.ComponentBundle, error) { return h.queries.UpdateComponentBundle(r.Context(), params) },
 		func(row sqlc.ComponentBundle) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.bundle.updated", resourceType: "component_bundle", resourceID: row.ID.String(), resourceName: row.Name,
@@ -331,9 +302,8 @@ func (h *BundleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 		return deleted, deleteErr
 	}
-	_, err := executeBundleMutation(r, h,
+	_, err := executeMutation(r, h.runTx,
 		func(q BundleMutationTx) (int64, error) { return deleteBundle(q) },
-		func() (int64, error) { return deleteBundle(h.queries) },
 		func(int64) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.bundle.deleted", resourceType: "component_bundle", resourceID: bundleID.String(),
@@ -388,7 +358,7 @@ func (h *BundleHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, converted)
 	}
-	respondPage(w, r, items, int64(len(items)), limit, offset, hasMore, false)
+	paging.Write(w, items, paging.Uncounted(int(limit), int(offset), len(items), hasMore))
 }
 
 // CreateVersion appends a credential-free immutable version snapshot and a
@@ -480,7 +450,7 @@ func (h *BundleHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "validation_error", "delivery bundle version cannot be canonicalized")
 		return
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	actor := reqctx.UserUUID(r.Context())
 	versionParams := sqlc.CreateComponentBundleVersionParams{
 		BundleID: bundleID, SourceID: request.Spec.SourceID, Version: request.Version,
 		Renderer: string(request.Spec.Renderer.Kind), Scope: string(request.Spec.Scope), RequestedRevision: request.Spec.RequestedRevision,
@@ -505,17 +475,8 @@ func (h *BundleHandler) CreateVersion(w http.ResponseWriter, r *http.Request) {
 		resolution, resolutionErr := q.CreateDeliverySourceResolutionAndOutbox(r.Context(), resolutionParams)
 		return bundleVersionMutationResult{version: row, resolution: resolution}, resolutionErr
 	}
-	result, err := executeBundleMutation(r, h,
+	result, err := executeMutation(r, h.runTx,
 		func(q BundleMutationTx) (bundleVersionMutationResult, error) { return createVersion(q) },
-		func() (bundleVersionMutationResult, error) {
-			result, createErr := createVersion(h.queries)
-			if createErr != nil && result.version.ID != uuid.Nil {
-				_, _ = h.queries.FailComponentBundleVersion(r.Context(), sqlc.FailComponentBundleVersionParams{
-					VerificationStatus: "failed", LastErrorCode: "resolution_enqueue_failed", ID: result.version.ID,
-				})
-			}
-			return result, createErr
-		},
 		func(result bundleVersionMutationResult) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.bundle.version_created", resourceType: "component_bundle_version",

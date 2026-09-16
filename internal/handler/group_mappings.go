@@ -25,15 +25,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // GroupMappingsQuerier is the narrow DB surface the admin handler
@@ -58,39 +58,7 @@ type groupMappingsRunTxFunc func(context.Context, func(GroupMappingsMutationTx) 
 
 type groupMappingsMutationResult[T any] struct {
 	value  T
-	events []clusterAuditEvent
-}
-
-func executeGroupMappingsMutation[T any](r *http.Request, h *GroupMappingsHandler, mutate func(GroupMappingsQuerier) (groupMappingsMutationResult[T], error)) (groupMappingsMutationResult[T], error) {
-	var zero groupMappingsMutationResult[T]
-	persist := func(q audit.OutboxQuerier, result groupMappingsMutationResult[T]) error {
-		for _, event := range result.events {
-			if err := recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	if h.runTx != nil {
-		var result groupMappingsMutationResult[T]
-		err := h.runTx(r.Context(), func(q GroupMappingsMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			return persist(q, result)
-		})
-		return result, err
-	}
-	result, err := mutate(h.queries)
-	if err != nil {
-		return zero, err
-	}
-	for _, event := range result.events {
-		recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	}
-	return result, nil
+	events []mutationAuditEvent
 }
 
 // GroupMappingsHandler owns the CRUD + resync endpoints.
@@ -198,7 +166,7 @@ func (h *GroupMappingsHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, toGroupMappingResponse(row))
 	}
-	RespondPaginated(w, r, out, total)
+	paging.Write(w, out, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(out)))
 }
 
 // Get handles GET /api/v1/admin/group-mappings/{id}/.
@@ -302,9 +270,11 @@ func (h *GroupMappingsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := executeGroupMappingsMutation(r, h, func(q GroupMappingsQuerier) (groupMappingsMutationResult[sqlc.IdentityGroupMapping], error) {
+	result, err := executeMutation(r, h.runTx, func(q GroupMappingsMutationTx) (groupMappingsMutationResult[sqlc.IdentityGroupMapping], error) {
 		row, createErr := q.CreateGroupMapping(r.Context(), params)
-		return groupMappingsMutationResult[sqlc.IdentityGroupMapping]{value: row, events: []clusterAuditEvent{groupMappingAuditEvent("admin.group_mapping.created", row, http.StatusCreated)}}, createErr
+		return groupMappingsMutationResult[sqlc.IdentityGroupMapping]{value: row, events: []mutationAuditEvent{groupMappingAuditEvent("admin.group_mapping.created", row, http.StatusCreated)}}, createErr
+	}, func(result groupMappingsMutationResult[sqlc.IdentityGroupMapping]) []mutationAuditEvent {
+		return result.events
 	})
 	if err != nil {
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create group mapping")
@@ -325,13 +295,15 @@ func (h *GroupMappingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid mapping ID")
 		return
 	}
-	_, err = executeGroupMappingsMutation(r, h, func(q GroupMappingsQuerier) (groupMappingsMutationResult[sqlc.IdentityGroupMapping], error) {
+	_, err = executeMutation(r, h.runTx, func(q GroupMappingsMutationTx) (groupMappingsMutationResult[sqlc.IdentityGroupMapping], error) {
 		existing, getErr := q.GetGroupMappingByID(r.Context(), id)
 		if getErr != nil {
 			return groupMappingsMutationResult[sqlc.IdentityGroupMapping]{}, getErr
 		}
 		deleteErr := q.DeleteGroupMapping(r.Context(), id)
-		return groupMappingsMutationResult[sqlc.IdentityGroupMapping]{value: existing, events: []clusterAuditEvent{groupMappingAuditEvent("admin.group_mapping.deleted", existing, http.StatusNoContent)}}, deleteErr
+		return groupMappingsMutationResult[sqlc.IdentityGroupMapping]{value: existing, events: []mutationAuditEvent{groupMappingAuditEvent("admin.group_mapping.deleted", existing, http.StatusNoContent)}}, deleteErr
+	}, func(result groupMappingsMutationResult[sqlc.IdentityGroupMapping]) []mutationAuditEvent {
+		return result.events
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -344,8 +316,8 @@ func (h *GroupMappingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func groupMappingAuditEvent(action string, row sqlc.IdentityGroupMapping, status int) clusterAuditEvent {
-	return clusterAuditEvent{
+func groupMappingAuditEvent(action string, row sqlc.IdentityGroupMapping, status int) mutationAuditEvent {
+	return mutationAuditEvent{
 		action: action, resourceType: "group_mapping", resourceID: row.ID.String(), resourceName: row.GroupName, status: status,
 		detail: map[string]any{
 			"connector_id": uuidPgOrEmpty(row.ConnectorID), "group_name": row.GroupName, "scope": row.Scope,
@@ -369,7 +341,7 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
-	result, err := executeGroupMappingsMutation(r, h, func(q GroupMappingsQuerier) (groupMappingsMutationResult[groupResyncResult], error) {
+	result, err := executeMutation(r, h.runTx, func(q GroupMappingsMutationTx) (groupMappingsMutationResult[groupResyncResult], error) {
 		user, getErr := q.GetUserByID(r.Context(), uid)
 		if getErr != nil {
 			return groupMappingsMutationResult[groupResyncResult]{}, getErr
@@ -395,7 +367,7 @@ func (h *GroupMappingsHandler) ResyncUser(w http.ResponseWriter, r *http.Request
 		return groupMappingsMutationResult[groupResyncResult]{
 			value: groupResyncResult{user: user, groups: groups, sync: syncResult}, events: events,
 		}, nil
-	})
+	}, func(result groupMappingsMutationResult[groupResyncResult]) []mutationAuditEvent { return result.events })
 	if err != nil {
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -440,21 +412,21 @@ var (
 	errGroupSync            = errors.New("group sync failed")
 )
 
-func groupResyncAuditEvents(user sqlc.User, result auth.SyncResult) []clusterAuditEvent {
-	events := make([]clusterAuditEvent, 0, len(result.Added)+len(result.Removed)+1)
+func groupResyncAuditEvents(user sqlc.User, result auth.SyncResult) []mutationAuditEvent {
+	events := make([]mutationAuditEvent, 0, len(result.Added)+len(result.Removed)+1)
 	for _, added := range result.Added {
-		events = append(events, clusterAuditEvent{
+		events = append(events, mutationAuditEvent{
 			action: "auth.group_sync.binding_added", resourceType: "role_binding", resourceID: added.BindingID.String(), status: http.StatusOK,
 			detail: map[string]any{"user_id": user.ID.String(), "group_name": added.GroupName, "role_id": added.RoleID.String(), "scope": added.Scope, "cluster_id": uuidOrEmpty(added.ClusterID), "project_id": uuidOrEmpty(added.ProjectID), "trigger": "admin_resync"},
 		})
 	}
 	for _, removed := range result.Removed {
-		events = append(events, clusterAuditEvent{
+		events = append(events, mutationAuditEvent{
 			action: "auth.group_sync.binding_removed", resourceType: "role_binding", resourceID: removed.BindingID.String(), status: http.StatusOK,
 			detail: map[string]any{"user_id": user.ID.String(), "role_id": removed.RoleID.String(), "scope": removed.Scope, "cluster_id": uuidOrEmpty(removed.ClusterID), "project_id": uuidOrEmpty(removed.ProjectID), "trigger": "admin_resync"},
 		})
 	}
-	events = append(events, clusterAuditEvent{
+	events = append(events, mutationAuditEvent{
 		action: "admin.group_mapping.user_resynced", resourceType: "user", resourceID: user.ID.String(), status: http.StatusOK,
 		detail: map[string]any{"added_count": len(result.Added), "removed_count": len(result.Removed)},
 	})

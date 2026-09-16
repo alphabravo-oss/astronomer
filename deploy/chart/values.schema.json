@@ -31,7 +31,14 @@
     },
     "frontend": { "$ref": "#/definitions/workload" },
     "server": { "$ref": "#/definitions/workload" },
-    "worker": { "$ref": "#/definitions/workload" },
+    "worker": {
+      "allOf": [{ "$ref": "#/definitions/workload" }],
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 256 }
+      }
+    },
     "postgres": {
       "type": "object",
       "additionalProperties": true,
@@ -105,7 +112,7 @@
           "additionalProperties": false,
           "properties": {
             "minimumUpgradeVersion": { "const": 1 },
-            "targetVersion": { "const": 26 }
+            "targetVersion": { "const": 46 }
           },
           "required": ["minimumUpgradeVersion", "targetVersion"]
         }
@@ -158,6 +165,8 @@
         "serverURL": { "type": "string" },
         "corsAllowedOrigins": { "type": "string" },
         "trustedProxyCIDRs": { "type": "array", "items": { "type": "string", "pattern": "^[0-9A-Fa-f:.]+/[0-9]{1,3}$" }, "uniqueItems": true },
+        "apiK8sProxyRateLimitRPS": { "type": "number", "exclusiveMinimum": 0 },
+        "apiK8sProxyRateLimitBurst": { "type": "integer", "minimum": 1 },
         "loginFailureThreshold": { "type": "integer", "minimum": 1 },
         "lockoutDurationMinutes": { "type": "integer", "minimum": 1 },
         "auth": {
@@ -327,9 +336,13 @@
         "existingSecret": { "type": "string" },
         "secretKeyKey": { "type": "string", "minLength": 1 },
         "encryptionKeyKey": { "type": "string", "minLength": 1 },
+        "internalPSKKey": { "type": "string", "minLength": 1 },
+        "internalPSKPreviousKey": { "type": "string", "minLength": 1 },
         "postgresPasswordKey": { "type": "string", "minLength": 1 },
         "secretKey": { "type": "string" },
-        "encryptionKey": { "type": "string" }
+        "encryptionKey": { "type": "string" },
+        "internalPSK": { "type": "string" },
+        "internalPSKPrevious": { "type": "string" }
       }
     },
     "bootstrap": {
@@ -520,7 +533,9 @@
             "properties": {
               "existingSecret": { "type": "string" },
               "secretKey": { "type": "string" },
-              "encryptionKey": { "type": "string" }
+              "encryptionKey": { "type": "string" },
+              "internalPSK": { "type": "string" },
+              "internalPSKPrevious": { "type": "string" }
             },
             "anyOf": [
               { "required": ["existingSecret"], "properties": { "existingSecret": { "type": "string", "minLength": 1 } } },
@@ -578,7 +593,7 @@
               "databaseSchema": {
                 "properties": {
                   "minimumUpgradeVersion": { "const": 1 },
-                  "targetVersion": { "const": 26 }
+                  "targetVersion": { "const": 46 }
                 },
                 "required": ["minimumUpgradeVersion", "targetVersion"]
               }

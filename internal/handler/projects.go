@@ -4,31 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
-	"net/http"
 	"reflect"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
-	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
+	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 )
 
 // projectScopeQuerier is the OPTIONAL scope-filtered list capability, the
@@ -52,7 +42,9 @@ type ProjectQuerier interface {
 	UpdateProjectPolicy(ctx context.Context, arg sqlc.UpdateProjectPolicyParams) (sqlc.Project, error)
 	DeleteProject(ctx context.Context, id uuid.UUID) error
 	CountProjects(ctx context.Context) (int64, error)
+	CountProjectsFiltered(ctx context.Context, filterSearch string) (int64, error)
 	CountProjectsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountProjectsByClusterFiltered(ctx context.Context, arg sqlc.CountProjectsByClusterFilteredParams) (int64, error)
 
 	// Phase B3 additions: per-namespace reconcile state. Kept as the same
 	// interface so a single sqlc.*Queries instance can satisfy everything,
@@ -62,9 +54,11 @@ type ProjectQuerier interface {
 	UpsertProjectNamespace(ctx context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error)
 	DeleteProjectNamespace(ctx context.Context, arg sqlc.DeleteProjectNamespaceParams) error
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error)
+	UpsertProjectResourceQuotaAllocation(ctx context.Context, arg sqlc.UpsertProjectResourceQuotaAllocationParams) (sqlc.ProjectResourceQuotaAllocation, error)
+	DeleteProjectResourceQuotaAllocation(ctx context.Context, arg sqlc.DeleteProjectResourceQuotaAllocationParams) error
 	ListAllProjectNamespaces(ctx context.Context) ([]sqlc.ProjectNamespace, error)
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg sqlc.ClaimProjectNamespaceReconcileParams) (sqlc.ProjectNamespace, error)
-	MarkProjectNamespaceReconciled(ctx context.Context, arg sqlc.MarkProjectNamespaceReconciledParams) error
+	MarkProjectNamespaceReconciled(ctx context.Context, arg sqlc.MarkProjectNamespaceReconciledParams) (int64, error)
 
 	// Quota usage endpoint needs the cluster display name for the response
 	// shape (one row per (cluster, namespace)). The full Cluster row is
@@ -82,22 +76,19 @@ type ProjectQuerier interface {
 
 // ProjectHandler handles project endpoints.
 //
-// Phase B3 wiring: when both `requester` (a tunnel-backed K8sRequester) and
-// `queue` (the asynq client) are non-nil, AddNamespace / RemoveNamespace
-// enqueue real project:reconcile tasks and the periodic sweep is driven by
-// StartReconciler. The handler is intentionally still functional with both
-// set to nil — server boot code wires them in a follow-up; today's existing
-// tests that hand the handler only `queries` continue to pass.
+// Namespace membership writes use a mandatory transaction runner so project
+// state, the sidecar, every affected reconcile intent, and audit evidence share
+// one commit decision. The tunnel requester is consumed only by workers and the
+// periodic recovery sweep, never by request-spawned goroutines.
 type ProjectHandler struct {
 	queries    ProjectQuerier
-	queue      *asynq.Client
+	service    *projectdomain.Service
 	taskOutbox tasks.TaskOutboxWriter
 	requester  K8sRequester
 	log        *slog.Logger
 	encryptor  *auth.Encryptor
 
 	reconcileOnce sync.Once
-	runTask       func(context.Context, *asynq.Task) error
 	runSweep      func(context.Context, *asynq.Task) error
 
 	// maintenanceGate is the migration-057 hook on project.delete.
@@ -108,11 +99,8 @@ type ProjectHandler struct {
 	// (migration 051, max_clusters_per_project). Optional + nil-safe.
 	enforcer *quota.Enforcer
 
-	// runTx wraps the namespaces JSONB update and the project_namespaces
-	// sidecar write in a single pgx transaction (mirrors compliance_baselines'
-	// runTx seam). nil means AddNamespace / RemoveNamespace fall back to the
-	// legacy non-atomic path so existing tests that hand the handler only
-	// `queries` keep working.
+	// runTx wraps namespace state, sidecar, task intents, and audit evidence in a
+	// single pgx transaction. A nil runner fails membership mutations closed.
 	runTx projectRunTxFunc
 
 	// rbacBindings is the cache-fronted RBAC binding querier. project_namespaces
@@ -120,7 +108,7 @@ type ProjectHandler struct {
 	// GetUserBindings caches, so AddNamespace / RemoveNamespace flush the cache
 	// after a membership change — otherwise a removed namespace keeps granting
 	// access for up to the cache TTL. Optional + nil-safe.
-	rbacBindings middleware.RBACQuerier
+	rbacBindings rbac.BindingQuerier
 
 	// authz scope-filters the list page to the projects the caller may see.
 	// See ClusterHandler.authz — mandatory wherever the list route is served.
@@ -129,7 +117,7 @@ type ProjectHandler struct {
 
 // SetAuthorization wires the RBAC engine + binding querier used to scope-filter
 // GET /projects/. See ClusterHandler.SetAuthorization.
-func (h *ProjectHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+func (h *ProjectHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
 	if h == nil {
 		return
 	}
@@ -143,10 +131,7 @@ func (h *ProjectHandler) SetAuthorization(engine *rbac.Engine, querier middlewar
 // the read-modify-write of the JSONB list instead of last-writer-wins.
 type ProjectNamespaceTx interface {
 	audit.OutboxQuerier
-	GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
-	UpdateProject(ctx context.Context, arg sqlc.UpdateProjectParams) (sqlc.Project, error)
-	UpsertProjectNamespace(ctx context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error)
-	DeleteProjectNamespace(ctx context.Context, arg sqlc.DeleteProjectNamespaceParams) error
+	projectdomain.NamespaceTx
 }
 
 // projectRunTxFunc runs fn inside a single pgx transaction, committing on a nil
@@ -154,24 +139,6 @@ type ProjectNamespaceTx interface {
 // sqlc.New(tx); test code models the same atomicity with an in-memory fake.
 type projectRunTxFunc func(ctx context.Context, fn func(q ProjectNamespaceTx) error) error
 
-// Sentinel errors used to steer the tx closures' failure back to the right HTTP
-// status without leaking the (rolled-back) tx across the handler boundary.
-var (
-	errNamespaceAlreadyInProject = errors.New("namespace already in project")
-	errNamespaceNotInProject     = errors.New("namespace not in project")
-	// errNamespaceOwnedByOtherProject signals the DB-level uniqueness guard
-	// (partial UNIQUE index on project_namespaces(cluster_id, namespace),
-	// migration 129) rejected the sidecar insert because another project on
-	// the same cluster already owns the namespace. This is the race-safe
-	// backstop for the pre-tx cross-project check, which is a TOCTOU: two
-	// concurrent AddNamespace calls to DIFFERENT projects lock different
-	// project rows and both sail past the pre-tx read.
-	errNamespaceOwnedByOtherProject = errors.New("namespace owned by another project")
-)
-
-// isUniqueViolation reports whether err is a Postgres unique_violation
-// (SQLSTATE 23505). Used to translate the project_namespaces uniqueness
-// guard into a clean 409 instead of a generic 500.
 type projectOwnershipQuerier interface {
 	GetProjectOwnership(ctx context.Context, id uuid.UUID) (sqlc.FleetOwnership, error)
 }
@@ -183,26 +150,19 @@ type projectOwnershipTransferQuerier interface {
 
 var errProjectOwnershipTransferUnsupported = errors.New("project ownership can only be transferred from crd to api")
 
-// NewProjectHandler creates a new project handler. Phase B3 introduces extra
-// dependencies (queue + K8sRequester) but they are intentionally wired via
-// setters below so the constructor signature stays compatible with all
-// existing call sites (server.go, tests).
 func NewProjectHandler(queries ProjectQuerier) *ProjectHandler {
-	return &ProjectHandler{queries: queries}
+	return &ProjectHandler{queries: queries, service: projectdomain.NewService(queries, nil)}
 }
 
-// SetTaskQueue wires the asynq client used to enqueue project:reconcile and
-// project:reconcile:remove tasks. Optional; without it AddNamespace /
-// RemoveNamespace still update the DB but no enforcement happens.
-func (h *ProjectHandler) SetTaskQueue(queue *asynq.Client) { h.queue = queue }
-
-// SetTaskOutbox wires durable project reconcile delivery for fallback paths
-// that do not have a live tunnel requester.
+// SetTaskOutbox wires durable project reconcile delivery for project mutation
+// paths outside AddNamespace/RemoveNamespace. Namespace membership mutations
+// write through their transaction-bound ProjectNamespaceTx instead.
 func (h *ProjectHandler) SetTaskOutbox(q tasks.TaskOutboxWriter) {
 	if h == nil {
 		return
 	}
 	h.taskOutbox = q
+	h.service = projectdomain.NewService(h.queries, q)
 }
 
 func (h *ProjectHandler) SetEncryptor(e *auth.Encryptor) {
@@ -218,19 +178,14 @@ func (h *ProjectHandler) SetK8sRequester(requester K8sRequester) {
 	h.requester = requester
 }
 
-// WorkerRuntime returns the explicitly composed project reconciliation graph.
-func (h *ProjectHandler) WorkerRuntime() tasks.ProjectRuntime {
+// SetReconcileSweep accepts the domain-composed periodic reconcile operation.
+// Server composition owns this graph so workers never acquire dependencies
+// through an HTTP handler.
+func (h *ProjectHandler) SetReconcileSweep(run func(context.Context, *asynq.Task) error) {
 	if h == nil {
-		return tasks.ProjectRuntime{}
+		return
 	}
-	runtime := tasks.ProjectRuntime{Deps: tasks.ProjectReconcileDeps{
-		Queries:   projectQuerierAdapter{h.queries},
-		Requester: projectRequesterAdapter{h.requester},
-		Encryptor: h.encryptor,
-	}}
-	h.runTask = runtime.HandleProjectReconcile
-	h.runSweep = runtime.HandleProjectReconcileAll
-	return runtime
+	h.runSweep = run
 }
 
 // SetLogger replaces the handler's logger. Optional; defaults to slog.Default.
@@ -256,9 +211,8 @@ func (h *ProjectHandler) SetMaintenanceGate(g *MaintenanceGate) {
 	h.maintenanceGate = g
 }
 
-// SetRunTx wires the pgx-transaction seam used by AddNamespace / RemoveNamespace
-// to write the namespaces JSONB and the project_namespaces sidecar atomically.
-// Optional; nil keeps the legacy non-atomic path.
+// SetRunTx wires the mandatory pgx-transaction seam used by AddNamespace /
+// RemoveNamespace.
 func (h *ProjectHandler) SetRunTx(runTx projectRunTxFunc) {
 	if h == nil {
 		return
@@ -270,7 +224,7 @@ func (h *ProjectHandler) SetRunTx(runTx projectRunTxFunc) {
 // AddNamespace / RemoveNamespace can flush the namespace-scoped authorization
 // cache after a membership change. Nil-safe, but see RBACInvalidatorWired:
 // leaving it unset is a revocation hole, not a feature toggle.
-func (h *ProjectHandler) SetRBACInvalidator(bindings middleware.RBACQuerier) {
+func (h *ProjectHandler) SetRBACInvalidator(bindings rbac.BindingQuerier) {
 	if h == nil {
 		return
 	}
@@ -286,7 +240,7 @@ func (h *ProjectHandler) RBACInvalidatorWired() bool {
 	if h == nil || h.rbacBindings == nil {
 		return false
 	}
-	inv, ok := h.rbacBindings.(middleware.RBACCacheInvalidator)
+	inv, ok := h.rbacBindings.(rbac.CacheInvalidator)
 	if !ok {
 		return false
 	}
@@ -300,8 +254,9 @@ func (h *ProjectHandler) RBACInvalidatorWired() bool {
 		return false
 	}
 	// A cacheless querier cannot flush either — Invalidate/InvalidateAll both
-	// return at their `q.cache == nil` guard.
-	if c, ok := inv.(interface{ Cache() *middleware.RBACCache }); ok && c.Cache() == nil {
+	// return at their cache guard. The domain-owned status contract avoids
+	// coupling this handler to the middleware cache implementation.
+	if status, ok := inv.(rbac.CacheStatus); ok && !status.RBACCacheEnabled() {
 		return false
 	}
 	return true
@@ -315,7 +270,7 @@ func (h *ProjectHandler) invalidateRBACCache() {
 	if h == nil || h.rbacBindings == nil {
 		return
 	}
-	if inv, ok := h.rbacBindings.(middleware.RBACCacheInvalidator); ok {
+	if inv, ok := h.rbacBindings.(rbac.CacheInvalidator); ok {
 		inv.InvalidateAll()
 	}
 }
@@ -363,26 +318,6 @@ func (h *ProjectHandler) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// Default Pod Security profile for net-new projects created through the API.
-// Existing rows keep the migration-time default ('privileged') to avoid
-// unexpectedly tightening running workloads; new projects opt into baseline
-// because that's the K8s-recommended posture and the spec called it out as
-// the default for new resources.
-const defaultPodSecurityProfile = "baseline"
-
-// validPodSecurityProfiles is the closed enum enforced both at the DB layer
-// (via the CHECK constraint in migration 040) and by the policy PATCH handler.
-var validPodSecurityProfiles = map[string]struct{}{
-	"privileged": {},
-	"baseline":   {},
-	"restricted": {},
-}
-
-func isValidPodSecurityProfile(profile string) bool {
-	_, ok := validPodSecurityProfiles[strings.ToLower(strings.TrimSpace(profile))]
-	return ok
-}
-
 // ProjectResponse represents a project in API responses. The B3 fields
 // (limit_range, network_policy_mode) are surfaced so the UI can show
 // enforcement settings; legacy fields stay where they were so existing
@@ -408,6 +343,28 @@ type ProjectResponse struct {
 	CreatedByID              *string         `json:"created_by_id"`
 	CreatedAt                string          `json:"created_at"`
 	UpdatedAt                string          `json:"updated_at"`
+}
+
+// ProjectResourceCapResponse is the public, typed representation of a
+// project-wide Kubernetes resource cap. Empty strings / zero remain unlimited
+// for that one dimension.
+type ProjectResourceCapResponse struct {
+	CPU    string `json:"cpu"`
+	Memory string `json:"memory"`
+	Pods   int32  `json:"pods"`
+}
+
+// ProjectResourceQuotaSummaryResponse distinguishes the configured project
+// total from the namespace allocations. Remaining is unallocated capacity,
+// not live usage; live used values remain in each quota-usage result.
+type ProjectResourceQuotaSummaryResponse struct {
+	Total     ProjectResourceCapResponse `json:"total"`
+	Allocated ProjectResourceCapResponse `json:"allocated"`
+	Remaining ProjectResourceCapResponse `json:"remaining"`
+}
+
+func projectResourceCapResponse(cap projectquota.Cap) ProjectResourceCapResponse {
+	return ProjectResourceCapResponse{CPU: cap.CPU, Memory: cap.Memory, Pods: cap.Pods}
 }
 
 func projectToResponse(p sqlc.Project) ProjectResponse {
@@ -531,1570 +488,3 @@ func (r *UpdateProjectPolicyRequest) normalizeLegacyQuotaFields() {
 }
 
 // List handles GET /api/v1/projects/.
-func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryInt(r, "offset", 0))
-
-	// Scope filter — mirrors ClusterHandler.List. The collection gate admits
-	// callers bound only to a cluster or a project; the page is narrowed to the
-	// projects they own directly plus every project on a cluster they hold
-	// projects:list over. all==true keeps the original unfiltered path.
-	//
-	// NarrowedClustersExcluded, unlike ClusterHandler.List: a namespace-narrowed
-	// cluster binding must NOT widen to every project on that cluster. Projects
-	// live inside a cluster, so widening would list a neighbouring tenant's
-	// projects to a namespace-confined caller whose GET /projects/{id}/ 403s on
-	// every one of those rows. That shape is not exotic — expandProjectBindings
-	// emits it for every project binding when namespace-scoped RBAC is on.
-	all, clusterIDs, projectIDs, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceProjects, rbac.VerbList, rbac.NarrowedClustersExcluded)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
-		return
-	}
-
-	var projects []sqlc.Project
-	var total int64
-	if all {
-		projects, err = h.queries.ListProjects(r.Context(), sqlc.ListProjectsParams{
-			Limit:  limit,
-			Offset: offset,
-		})
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
-			return
-		}
-		total, err = h.queries.CountProjects(r.Context())
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
-			return
-		}
-	} else {
-		scoped, ok := h.queries.(projectScopeQuerier)
-		if !ok {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Scoped project listing is not available")
-			return
-		}
-		projects, err = scoped.ListProjectsForScopes(r.Context(), sqlc.ListProjectsForScopesParams{
-			ProjectIds:  projectIDs,
-			ClusterIds:  clusterIDs,
-			QueryLimit:  limit,
-			QueryOffset: offset,
-		})
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
-			return
-		}
-		// Same predicate as the page — see CountClustersForScopes.
-		total, err = scoped.CountProjectsForScopes(r.Context(), sqlc.CountProjectsForScopesParams{
-			ProjectIds: projectIDs,
-			ClusterIds: clusterIDs,
-		})
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
-			return
-		}
-	}
-
-	items := make([]ProjectResponse, 0, len(projects))
-	for _, p := range projects {
-		items = append(items, projectToResponse(p))
-	}
-
-	RespondPaginated(w, r, items, total)
-}
-
-// Create handles POST /api/v1/projects/.
-func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
-		return
-	}
-
-	var req CreateProjectRequest
-	if !decodeAndValidate(w, r, &req) {
-		return
-	}
-
-	clusterID, err := uuid.Parse(req.ClusterID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid cluster_id")
-		return
-	}
-
-	var createdByID pgtype.UUID
-	if uid, err := uuid.Parse(user.ID); err == nil {
-		createdByID = pgtype.UUID{Bytes: uid, Valid: true}
-	}
-
-	if req.Namespaces == nil {
-		req.Namespaces = json.RawMessage(`[]`)
-	}
-	// Create seeds project_namespaces from this list (below), so it is a
-	// namespace-claim path exactly like AddNamespace and gets the same two
-	// guards. The cluster-authority check only fires when the body actually
-	// names namespaces: creating an empty project stays a projects:create act.
-	if seeded := decodeNamespaceList(req.Namespaces); len(seeded) > 0 {
-		if !h.rejectReservedNamespaces(w, r, seeded...) {
-			return
-		}
-		if !h.authorizeNamespaceAssignment(w, r, clusterID) {
-			return
-		}
-	}
-	if req.ResourceQuota == nil {
-		req.ResourceQuota = json.RawMessage(`{}`)
-	}
-	if req.LimitRange == nil {
-		req.LimitRange = json.RawMessage(`{}`)
-	}
-	if req.NetworkPolicyMode == "" {
-		req.NetworkPolicyMode = "none"
-	}
-
-	// Per-project policy defaults (migration 040). New projects default to
-	// the recommended PSS baseline; quota fields default to unbounded.
-	pssProfile := defaultPodSecurityProfile
-	if req.PodSecurityProfile != nil {
-		pssProfile = strings.TrimSpace(*req.PodSecurityProfile)
-		if pssProfile == "" {
-			pssProfile = defaultPodSecurityProfile
-		}
-		if !isValidPodSecurityProfile(pssProfile) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod_security_profile (must be privileged | baseline | restricted)")
-			return
-		}
-	}
-	cpuLimit := ""
-	if req.ResourceQuotaCpuLimit != nil {
-		cpuLimit = strings.TrimSpace(*req.ResourceQuotaCpuLimit)
-	}
-	memLimit := ""
-	if req.ResourceQuotaMemoryLimit != nil {
-		memLimit = strings.TrimSpace(*req.ResourceQuotaMemoryLimit)
-	}
-	var podCount int32
-	if req.ResourceQuotaPodCount != nil && *req.ResourceQuotaPodCount > 0 {
-		podCount = *req.ResourceQuotaPodCount
-	}
-
-	project, err := h.queries.CreateProject(r.Context(), sqlc.CreateProjectParams{
-		Name:                     req.Name,
-		DisplayName:              req.DisplayName,
-		Description:              req.Description,
-		ClusterID:                clusterID,
-		Namespaces:               req.Namespaces,
-		ResourceQuota:            req.ResourceQuota,
-		LimitRange:               req.LimitRange,
-		NetworkPolicyMode:        req.NetworkPolicyMode,
-		CreatedByID:              createdByID,
-		PodSecurityProfile:       pssProfile,
-		ResourceQuotaCpuLimit:    cpuLimit,
-		ResourceQuotaMemoryLimit: memLimit,
-		ResourceQuotaPodCount:    podCount,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create project")
-		return
-	}
-
-	// Per-project cluster-density cap (migration 051, max_clusters_per_project).
-	// CheckProjectClusterAdd resolves the project's cluster + effective plan
-	// from the row, so it can only run once the project exists; on a breach we
-	// roll the insert back before it grows a namespace/reconcile footprint.
-	if h.enforcer != nil {
-		if qerr := h.enforcer.CheckProjectClusterAdd(r.Context(), project.ID); qerr != nil {
-			if derr := h.queries.DeleteProject(r.Context(), project.ID); derr != nil {
-				h.logger().Warn("failed to roll back over-quota project", "project_id", project.ID.String(), "error", derr)
-			}
-			if qe, ok := quota.IsQuotaExceeded(qerr); ok {
-				WriteQuotaExceeded(w, qe)
-				return
-			}
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.QuotaCheckError, "Failed to evaluate project cluster quota")
-			return
-		}
-	}
-
-	h.recordProjectAudit(r, "project.create", project, map[string]any{"clusterId": req.ClusterID, "namespaces": decodeJSONArray(req.Namespaces)})
-
-	// Seed the project_namespaces sidecar from any namespaces specified at
-	// create time. A reconcile is enqueued for each so enforcement lands
-	// without an extra round-trip.
-	for _, ns := range decodeNamespaceList(project.Namespaces) {
-		h.upsertAndEnqueue(r.Context(), project.ID, project.ClusterID, ns)
-	}
-
-	w.Header().Set("Location", "/api/v1/projects/"+project.ID.String()+"/")
-	RespondJSON(w, http.StatusCreated, projectToResponse(project))
-}
-
-// Get handles GET /api/v1/projects/{id}/.
-func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-
-	project, err := h.queries.GetProjectByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-	RespondJSON(w, http.StatusOK, projectToResponse(project))
-}
-
-// Update handles PUT /api/v1/projects/{id}/.
-func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-
-	var req UpdateProjectRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	req.normalizeLegacyQuotaFields()
-
-	// req.Namespaces is deliberately NOT defaulted to `[]` here: the field is
-	// absent on every policy-only PATCH, and treating absent as "clear" would
-	// silently unassign the project's whole namespace set. It is filled from
-	// the existing row below once that row is loaded.
-	if req.ResourceQuota == nil {
-		req.ResourceQuota = json.RawMessage(`{}`)
-	}
-	if req.LimitRange == nil {
-		req.LimitRange = json.RawMessage(`{}`)
-	}
-	if req.NetworkPolicyMode == "" {
-		req.NetworkPolicyMode = "none"
-	}
-
-	// Preserve existing policy fields when the client omits them. An old
-	// client (pre-040) doesn't send these columns; without this load it would
-	// reset them to "" on every PUT.
-	existing, err := h.queries.GetProjectByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-
-	// Namespace membership diff. Update is the SECOND door onto the same
-	// escalation and revocation surfaces as AddNamespace/RemoveNamespace:
-	//   - additions expand every member's synthetic namespace-scoped cluster
-	//     bindings, so they need the same cluster authority and the same
-	//     reserved-namespace denylist;
-	//   - removals used to drop the namespace from the JSONB while leaving the
-	//     project_namespaces sidecar row in place. That sidecar is what
-	//     expandProjectBindings reads, and the reconciler re-applies rows rather
-	//     than pruning them, so the revoked namespace kept minting bindings
-	//     forever — a permanent revocation hole, not a TTL one.
-	// Both are reconciled here, and the RBAC cache is flushed after the write
-	// exactly as AddNamespace/RemoveNamespace do.
-	previousNamespaces := decodeNamespaceList(existing.Namespaces)
-	if req.Namespaces == nil {
-		encoded, merr := json.Marshal(previousNamespaces)
-		if merr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
-			return
-		}
-		req.Namespaces = encoded
-	}
-	nextNamespaces := decodeNamespaceList(req.Namespaces)
-	added, removed := diffNamespaceLists(previousNamespaces, nextNamespaces)
-	if len(added) > 0 {
-		// Only ADDITIONS need cluster authority, mirroring
-		// AddNamespace/RemoveNamespace: shedding a namespace narrows the
-		// project's grants and stays a project-owner action.
-		if !h.rejectReservedNamespaces(w, r, added...) {
-			return
-		}
-		if !h.authorizeNamespaceAssignment(w, r, existing.ClusterID) {
-			return
-		}
-	}
-	if blocked, err := projectUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check project ownership")
-		return
-	} else if blocked != "" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
-		return
-	}
-	pssProfile := existing.PodSecurityProfile
-	if req.PodSecurityProfile != nil {
-		candidate := strings.TrimSpace(*req.PodSecurityProfile)
-		if candidate == "" {
-			candidate = defaultPodSecurityProfile
-		}
-		if !isValidPodSecurityProfile(candidate) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod_security_profile (must be privileged | baseline | restricted)")
-			return
-		}
-		pssProfile = candidate
-	}
-	if pssProfile == "" {
-		// Existing rows that pre-date migration 040 still have whatever the
-		// CHECK constraint defaulted ('privileged'); guard against the empty
-		// case anyway so a misconfigured client can't bypass the constraint.
-		pssProfile = "privileged"
-	}
-	cpuLimit := existing.ResourceQuotaCpuLimit
-	if req.ResourceQuotaCpuLimit != nil {
-		cpuLimit = strings.TrimSpace(*req.ResourceQuotaCpuLimit)
-	}
-	memLimit := existing.ResourceQuotaMemoryLimit
-	if req.ResourceQuotaMemoryLimit != nil {
-		memLimit = strings.TrimSpace(*req.ResourceQuotaMemoryLimit)
-	}
-	podCount := existing.ResourceQuotaPodCount
-	if req.ResourceQuotaPodCount != nil {
-		if *req.ResourceQuotaPodCount < 0 {
-			podCount = 0
-		} else {
-			podCount = *req.ResourceQuotaPodCount
-		}
-	}
-	project, err := h.queries.UpdateProject(r.Context(), sqlc.UpdateProjectParams{
-		ID:                       id,
-		DisplayName:              req.DisplayName,
-		Description:              req.Description,
-		Namespaces:               req.Namespaces,
-		ResourceQuota:            req.ResourceQuota,
-		LimitRange:               req.LimitRange,
-		NetworkPolicyMode:        req.NetworkPolicyMode,
-		PodSecurityProfile:       pssProfile,
-		ResourceQuotaCpuLimit:    cpuLimit,
-		ResourceQuotaMemoryLimit: memLimit,
-		ResourceQuotaPodCount:    podCount,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-	h.recordProjectAudit(r, "project.update", project, map[string]any{"namespaces": decodeJSONArray(req.Namespaces)})
-
-	// Re-enqueue every namespace currently on the project so any quota /
-	// limit / network-policy changes from this Update propagate. Cheap:
-	// asynq dedupes by payload; the periodic sweep also re-converges.
-	for _, ns := range decodeNamespaceList(project.Namespaces) {
-		h.upsertAndEnqueue(r.Context(), project.ID, project.ClusterID, ns)
-	}
-	// Prune the sidecar rows for namespaces this Update dropped. Without this
-	// the row survives and expandProjectBindings keeps minting a synthetic
-	// namespace-scoped cluster binding for it forever — nothing converges it,
-	// because the reconciler re-applies project_namespaces rows and never
-	// deletes them.
-	for _, ns := range removed {
-		h.enqueueCleanup(r.Context(), project.ID, project.ClusterID, ns)
-		if h.queries != nil {
-			if derr := h.queries.DeleteProjectNamespace(r.Context(), sqlc.DeleteProjectNamespaceParams{
-				ProjectID: project.ID,
-				ClusterID: project.ClusterID,
-				Namespace: ns,
-			}); derr != nil {
-				h.logger().Warn("failed to prune project namespace on update",
-					"project_id", project.ID.String(), "namespace", ns, "error", derr)
-			}
-		}
-	}
-	if len(added) > 0 || len(removed) > 0 {
-		// Membership changed: flush the RBAC binding cache so the grant or the
-		// revocation takes effect on the next request, not after the TTL.
-		h.invalidateRBACCache()
-	}
-
-	RespondJSON(w, http.StatusOK, projectToResponse(project))
-}
-
-// diffNamespaceLists returns the namespaces present only in next (added) and
-// only in previous (removed), preserving input order and de-duplicating.
-func diffNamespaceLists(previous, next []string) (added, removed []string) {
-	prevSet := make(map[string]struct{}, len(previous))
-	for _, ns := range previous {
-		prevSet[ns] = struct{}{}
-	}
-	nextSet := make(map[string]struct{}, len(next))
-	for _, ns := range next {
-		nextSet[ns] = struct{}{}
-	}
-	seen := make(map[string]struct{}, len(next))
-	for _, ns := range next {
-		if _, dup := seen[ns]; dup {
-			continue
-		}
-		seen[ns] = struct{}{}
-		if _, ok := prevSet[ns]; !ok {
-			added = append(added, ns)
-		}
-	}
-	seen = make(map[string]struct{}, len(previous))
-	for _, ns := range previous {
-		if _, dup := seen[ns]; dup {
-			continue
-		}
-		seen[ns] = struct{}{}
-		if _, ok := nextSet[ns]; !ok {
-			removed = append(removed, ns)
-		}
-	}
-	return added, removed
-}
-
-func projectUpdateBlockedByOwnership(ctx context.Context, q any, id uuid.UUID) (string, error) {
-	ownershipQ, ok := q.(projectOwnershipQuerier)
-	if !ok {
-		return "", nil
-	}
-	ownership, err := ownershipQ.GetProjectOwnership(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	if ownership.ManagedBy != "crd" {
-		return "", nil
-	}
-	return fmt.Sprintf("Project is managed by CRD %s/%s %s/%s; edit the Kubernetes resource or transfer ownership before using this API.",
-		ownership.ExternalRefApiVersion,
-		ownership.ExternalRefKind,
-		ownership.ExternalRefNamespace,
-		ownership.ExternalRefName,
-	), nil
-}
-
-// TakeoverOwnership handles POST /api/v1/projects/{id}/ownership/takeover/.
-//
-// This is the explicit UI/API ownership transfer path for CRD-owned projects.
-// Ordinary updates remain blocked until the operator chooses this endpoint.
-func (h *ProjectHandler) TakeoverOwnership(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-	project, err := h.queries.GetProjectByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-	previous, updated, transferred, err := transferProjectOwnershipToAPI(r.Context(), h.queries, id)
-	if err != nil {
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		case errors.Is(err, errProjectOwnershipTransferUnsupported):
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Only CRD-owned projects can be transferred through this endpoint")
-		default:
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to transfer project ownership")
-		}
-		return
-	}
-	h.recordProjectAudit(r, "project.ownership.takeover", project, map[string]any{
-		"previous_managed_by": previous.ManagedBy,
-		"previous_ref": map[string]string{
-			"api_version": previous.ExternalRefApiVersion,
-			"kind":        previous.ExternalRefKind,
-			"namespace":   previous.ExternalRefNamespace,
-			"name":        previous.ExternalRefName,
-		},
-		"transferred": transferred,
-	})
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"id":          updated.ID.String(),
-		"managed_by":  updated.ManagedBy,
-		"transferred": transferred,
-	})
-}
-
-func transferProjectOwnershipToAPI(ctx context.Context, q any, id uuid.UUID) (sqlc.FleetOwnership, sqlc.FleetOwnership, bool, error) {
-	ownershipQ, ok := q.(projectOwnershipTransferQuerier)
-	if !ok {
-		return sqlc.FleetOwnership{}, sqlc.FleetOwnership{}, false, fmt.Errorf("project ownership transfer query support is not configured")
-	}
-	previous, err := ownershipQ.GetProjectOwnership(ctx, id)
-	if err != nil {
-		return sqlc.FleetOwnership{}, sqlc.FleetOwnership{}, false, err
-	}
-	switch previous.ManagedBy {
-	case "crd":
-		updated, err := ownershipQ.SetProjectOwnership(ctx, sqlc.SetProjectOwnershipParams{
-			ID:        id,
-			ManagedBy: "api",
-		})
-		return previous, updated, true, err
-	case "api", "ui":
-		return previous, previous, false, nil
-	default:
-		return previous, sqlc.FleetOwnership{}, false, errProjectOwnershipTransferUnsupported
-	}
-}
-
-// UpdatePolicy handles PATCH /api/v1/projects/{id}/policy/.
-//
-// Updates only the per-project policy fields (pod_security_profile, the three
-// resource_quota_* limits). The next reconciler tick picks up the new policy
-// — we don't re-enqueue every namespace here because the periodic sweep is
-// cheap and policy changes are idempotent at apply-time.
-//
-// All four fields are optional. Missing fields keep their current value, so
-// a caller can change just the PSS profile without resending quota numbers.
-func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-
-	var req UpdateProjectPolicyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	req.normalizeLegacyQuotaFields()
-
-	existing, err := h.queries.GetProjectByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-	if blocked, err := projectUpdateBlockedByOwnership(r.Context(), h.queries, id); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to check project ownership")
-		return
-	} else if blocked != "" {
-		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, blocked)
-		return
-	}
-
-	pssProfile := existing.PodSecurityProfile
-	if req.PodSecurityProfile != nil {
-		candidate := strings.TrimSpace(*req.PodSecurityProfile)
-		if !isValidPodSecurityProfile(candidate) {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod_security_profile (must be privileged | baseline | restricted)")
-			return
-		}
-		pssProfile = strings.ToLower(candidate)
-	}
-	cpuLimit := existing.ResourceQuotaCpuLimit
-	if req.ResourceQuotaCpuLimit != nil {
-		cpuLimit = strings.TrimSpace(*req.ResourceQuotaCpuLimit)
-	}
-	memLimit := existing.ResourceQuotaMemoryLimit
-	if req.ResourceQuotaMemoryLimit != nil {
-		memLimit = strings.TrimSpace(*req.ResourceQuotaMemoryLimit)
-	}
-	podCount := existing.ResourceQuotaPodCount
-	if req.ResourceQuotaPodCount != nil {
-		if *req.ResourceQuotaPodCount < 0 {
-			podCount = 0
-		} else {
-			podCount = *req.ResourceQuotaPodCount
-		}
-	}
-	networkPolicyMode := existing.NetworkPolicyMode
-	if req.NetworkPolicyMode != nil {
-		candidate := strings.TrimSpace(*req.NetworkPolicyMode)
-		switch candidate {
-		case "isolated", "allow-same-project", "none":
-			networkPolicyMode = candidate
-		default:
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid network_policy_mode (must be isolated | allow-same-project | none)")
-			return
-		}
-	}
-
-	updated, err := h.queries.UpdateProjectPolicy(r.Context(), sqlc.UpdateProjectPolicyParams{
-		ID:                       id,
-		PodSecurityProfile:       pssProfile,
-		ResourceQuotaCpuLimit:    cpuLimit,
-		ResourceQuotaMemoryLimit: memLimit,
-		ResourceQuotaPodCount:    podCount,
-		NetworkPolicyMode:        networkPolicyMode,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project policy")
-		return
-	}
-	h.recordProjectAudit(r, "project.update_policy", updated, map[string]any{
-		"pod_security_profile":        updated.PodSecurityProfile,
-		"resource_quota_cpu_limit":    updated.ResourceQuotaCpuLimit,
-		"resource_quota_memory_limit": updated.ResourceQuotaMemoryLimit,
-		"resource_quota_pod_count":    updated.ResourceQuotaPodCount,
-		"network_policy_mode":         updated.NetworkPolicyMode,
-	})
-	RespondJSON(w, http.StatusOK, projectToResponse(updated))
-}
-
-// QuotaUsage handles GET /api/v1/projects/{id}/quota-usage/.
-//
-// For each (cluster, namespace) pair owned by the project, fan out to the
-// agent and fetch the live ResourceQuota.status.used + spec.hard for the
-// managed astronomer-project-quota object. Errors are surfaced per-cluster
-// in the same shape resources_search.go uses so a single broken tunnel
-// doesn't kill the whole response.
-func (h *ProjectHandler) QuotaUsage(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-	if h.requester == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnavailable, "Cluster tunnel is not configured")
-		return
-	}
-
-	project, err := h.queries.GetProjectByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-
-	rows, err := h.queries.ListProjectNamespaces(r.Context(), project.ID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project namespaces")
-		return
-	}
-
-	type quotaItem struct {
-		ClusterID   string         `json:"cluster_id"`
-		ClusterName string         `json:"cluster_name"`
-		Namespace   string         `json:"namespace"`
-		Used        map[string]any `json:"used"`
-		Hard        map[string]any `json:"hard"`
-	}
-	type quotaErr struct {
-		ClusterID   string `json:"cluster_id"`
-		ClusterName string `json:"cluster_name"`
-		Namespace   string `json:"namespace"`
-		Error       string `json:"error"`
-	}
-
-	items := make([]quotaItem, 0, len(rows))
-	errs := make([]quotaErr, 0)
-	clusterNameCache := map[uuid.UUID]string{}
-	for _, row := range rows {
-		clusterName, ok := clusterNameCache[row.ClusterID]
-		if !ok {
-			cluster, cerr := h.queries.GetClusterByID(r.Context(), row.ClusterID)
-			if cerr == nil {
-				clusterName = clusterDisplayName(cluster)
-			} else {
-				clusterName = row.ClusterID.String()
-			}
-			clusterNameCache[row.ClusterID] = clusterName
-		}
-
-		path := "/api/v1/namespaces/" + row.Namespace + "/resourcequotas/astronomer-project-quota"
-		resp, derr := h.requester.Do(r.Context(), row.ClusterID.String(), http.MethodGet, path, nil, requestHeaders(""))
-		if derr != nil {
-			errs = append(errs, quotaErr{
-				ClusterID:   row.ClusterID.String(),
-				ClusterName: clusterName,
-				Namespace:   row.Namespace,
-				Error:       derr.Error(),
-			})
-			continue
-		}
-		// 404 = no quota object yet. Surface it as an empty result rather
-		// than as a hard error — the project may simply have unbounded
-		// policy in this namespace.
-		if resp.StatusCode == http.StatusNotFound {
-			items = append(items, quotaItem{
-				ClusterID:   row.ClusterID.String(),
-				ClusterName: clusterName,
-				Namespace:   row.Namespace,
-				Used:        map[string]any{},
-				Hard:        map[string]any{},
-			})
-			continue
-		}
-		if resp.StatusCode >= http.StatusBadRequest {
-			errs = append(errs, quotaErr{
-				ClusterID:   row.ClusterID.String(),
-				ClusterName: clusterName,
-				Namespace:   row.Namespace,
-				Error:       fmt.Sprintf("agent returned %d", resp.StatusCode),
-			})
-			continue
-		}
-		body, derr := decodeResponseBody(resp)
-		if derr != nil {
-			errs = append(errs, quotaErr{
-				ClusterID:   row.ClusterID.String(),
-				ClusterName: clusterName,
-				Namespace:   row.Namespace,
-				Error:       "decode body: " + derr.Error(),
-			})
-			continue
-		}
-		var doc struct {
-			Spec struct {
-				Hard map[string]any `json:"hard"`
-			} `json:"spec"`
-			Status struct {
-				Used map[string]any `json:"used"`
-				Hard map[string]any `json:"hard"`
-			} `json:"status"`
-		}
-		if len(body) > 0 {
-			if uerr := json.Unmarshal(body, &doc); uerr != nil {
-				errs = append(errs, quotaErr{
-					ClusterID:   row.ClusterID.String(),
-					ClusterName: clusterName,
-					Namespace:   row.Namespace,
-					Error:       "unmarshal quota: " + uerr.Error(),
-				})
-				continue
-			}
-		}
-		hard := doc.Status.Hard
-		if hard == nil {
-			hard = doc.Spec.Hard
-		}
-		if hard == nil {
-			hard = map[string]any{}
-		}
-		used := doc.Status.Used
-		if used == nil {
-			used = map[string]any{}
-		}
-		items = append(items, quotaItem{
-			ClusterID:   row.ClusterID.String(),
-			ClusterName: clusterName,
-			Namespace:   row.Namespace,
-			Used:        used,
-			Hard:        hard,
-		})
-	}
-
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"results": items,
-		"errors":  errs,
-	})
-}
-
-// Delete handles DELETE /api/v1/projects/{id}/.
-func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-
-	project, err := h.queries.GetProjectByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-
-	// Migration 057: refuse / defer project.delete during an active
-	// maintenance window. The cluster-scope check uses the parent
-	// cluster's labels so a tier=prod cluster's projects inherit that
-	// scope without an extra label set on the project itself.
-	labels := map[string]string{}
-	if cluster, cerr := h.queries.GetClusterByID(r.Context(), project.ClusterID); cerr == nil {
-		labels = MaintenanceGateClusterLabels(cluster)
-	}
-	if EnforceMaintenanceWindow(w, r, h.maintenanceGate, "project.delete",
-		labels,
-		pgtype.UUID{Bytes: project.ClusterID, Valid: true},
-		pgtype.UUID{Bytes: id, Valid: true}) {
-		return
-	}
-
-	// Enqueue cleanup for every namespace before removing the project so the
-	// managed CRs don't outlive their owner.
-	for _, ns := range decodeNamespaceList(project.Namespaces) {
-		h.enqueueCleanup(r.Context(), project.ID, project.ClusterID, ns)
-	}
-
-	if err := h.queries.DeleteProject(r.Context(), id); err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-	// The FK cascade (migration 021) drops this project's project_namespaces
-	// and project_role_bindings rows, so the DB converges — but the RBAC
-	// binding cache does not, and every member would keep the project's
-	// synthetic namespace-scoped cluster bindings (read/exec on the namespaces
-	// this handler just enqueued for cleanup) until their entry expires.
-	// Same flush AddNamespace/RemoveNamespace do.
-	h.invalidateRBACCache()
-	h.recordProjectAudit(r, "project.delete", project, map[string]any{"clusterId": project.ClusterID.String()})
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// ListByCluster handles GET /api/v1/clusters/{cluster_id}/projects/.
-// ListClusters handles GET /api/v1/projects/{id}/clusters/.
-//
-// T4.3 — the multi-cluster project view. Returns the distinct
-// clusters the project is materialised on, derived from the
-// project_namespaces rows. Each entry includes the cluster's display
-// name and a count of namespaces the project has on that cluster, so
-// the frontend can render a "this project lives on 3 clusters"
-// breakdown without N+1 lookups.
-func (h *ProjectHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
-	projectIDStr := chi.URLParam(r, "id")
-	projectID, err := uuid.Parse(projectIDStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-	rows, err := h.queries.ListProjectNamespaces(r.Context(), projectID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list project namespaces")
-		return
-	}
-	// Aggregate distinct cluster_ids with namespace counts.
-	type clusterEntry struct {
-		ClusterID      uuid.UUID `json:"cluster_id"`
-		ClusterName    string    `json:"cluster_name"`
-		NamespaceCount int       `json:"namespace_count"`
-	}
-	counts := map[uuid.UUID]int{}
-	for _, row := range rows {
-		counts[row.ClusterID]++
-	}
-	out := make([]clusterEntry, 0, len(counts))
-	for cid, n := range counts {
-		name := ""
-		if c, gerr := h.queries.GetClusterByID(r.Context(), cid); gerr == nil {
-			name = firstNonEmptyStr(c.DisplayName, c.Name)
-		}
-		out = append(out, clusterEntry{ClusterID: cid, ClusterName: name, NamespaceCount: n})
-	}
-	// Stable: alpha by name, falling back to id ordering when names tie.
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].ClusterName != out[j].ClusterName {
-			return out[i].ClusterName < out[j].ClusterName
-		}
-		return out[i].ClusterID.String() < out[j].ClusterID.String()
-	})
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"project_id": projectID.String(),
-		"clusters":   out,
-		"count":      len(out),
-	})
-}
-
-// firstNonEmptyStr is a small helper for picking display fallback
-// strings.
-func firstNonEmptyStr(vs ...string) string {
-	for _, v := range vs {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-func (h *ProjectHandler) ListByCluster(w http.ResponseWriter, r *http.Request) {
-	clusterIDStr := chi.URLParam(r, "cluster_id")
-	clusterID, err := uuid.Parse(clusterIDStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
-		return
-	}
-
-	limit := int32(queryLimit(r, 20))
-	offset := int32(queryInt(r, "offset", 0))
-
-	projects, err := h.queries.ListProjectsByCluster(r.Context(), sqlc.ListProjectsByClusterParams{
-		ClusterID: clusterID,
-		Limit:     limit,
-		Offset:    offset,
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list projects")
-		return
-	}
-
-	total, err := h.queries.CountProjectsByCluster(r.Context(), clusterID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count projects")
-		return
-	}
-
-	items := make([]ProjectResponse, 0, len(projects))
-	for _, p := range projects {
-		items = append(items, projectToResponse(p))
-	}
-
-	RespondPaginated(w, r, items, total)
-}
-
-// ProjectNamespaceRequest represents the request body for add/remove namespace.
-// openapi:request ProjectNamespaceRequest
-type ProjectNamespaceRequest struct {
-	Namespace string `json:"namespace"`
-}
-
-// reservedProjectNamespaces are namespaces no project may ever claim.
-//
-// SECURITY — this is the second half of the namespace-claim guard, and it is
-// deliberately independent of RBAC. A project's namespaces are expanded into
-// synthetic namespace-scoped CLUSTER bindings for every member of that project
-// (see expandProjectBindings in internal/server/middleware), so claiming a
-// namespace hands the project's ENTIRE rule set to its members inside it. The
-// shipped project templates include pods:[exec, proxy] (project-owner,
-// project-member) and secrets:[create, read, update, delete, list]
-// (secret-manager). A project that could claim kube-system would therefore
-// convert "member of a project" into "exec into any control-plane pod and read
-// its ServiceAccount token" — i.e. cluster-admin. The astronomer-owned
-// namespaces are listed for the same reason: they hold the agent's own
-// credentials.
-//
-// Enforced on BOTH write paths (AddNamespace and the Update namespace diff) so
-// a mis-granted verb still cannot reach the escalation.
-var reservedProjectNamespaces = func() map[string]struct{} {
-	set := map[string]struct{}{
-		"kube-system":     {},
-		"kube-public":     {},
-		"kube-node-lease": {},
-		"default":         {},
-	}
-	for _, ns := range agenttemplate.AstronomerOwnedNamespaces {
-		set[ns] = struct{}{}
-	}
-	return set
-}()
-
-// isReservedProjectNamespace reports whether ns is on the hard denylist above.
-func isReservedProjectNamespace(ns string) bool {
-	_, ok := reservedProjectNamespaces[strings.ToLower(strings.TrimSpace(ns))]
-	return ok
-}
-
-// rejectReservedNamespaces writes a 403 and returns false when any candidate is
-// reserved. Callers pass only namespaces they are about to ADD.
-func (h *ProjectHandler) rejectReservedNamespaces(w http.ResponseWriter, r *http.Request, candidates ...string) bool {
-	for _, ns := range candidates {
-		if isReservedProjectNamespace(ns) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
-				"Namespace '"+ns+"' is reserved by the platform and cannot be assigned to a project.")
-			return false
-		}
-	}
-	return true
-}
-
-// authorizeNamespaceAssignment gates project→namespace membership on authority
-// over the CLUSTER, not over the project.
-//
-// SECURITY: the route gate for add-namespace / PUT-project is projects:update,
-// which the shipped project-owner and namespace-operator templates both grant
-// at PROJECT scope. Assigning a namespace is not a project-scoped act, though —
-// it moves a cluster resource under a grant the caller already holds, so
-// gating it on the project is self-service privilege expansion: the caller
-// picks the namespace their own bindings will expand into. Requiring
-// clusters:update at the project's cluster means only a cluster- or
-// platform-scoped principal (cluster-owner, cluster-operator, platform-admin,
-// superuser) can widen a project's footprint.
-//
-// RemoveNamespace deliberately does NOT go through here: shedding a namespace
-// only narrows the project's grants, and forcing a cluster admin into that loop
-// would leave project owners unable to de-escalate their own project.
-func (h *ProjectHandler) authorizeNamespaceAssignment(w http.ResponseWriter, r *http.Request, clusterID uuid.UUID) bool {
-	return h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceClusters, rbac.VerbUpdate)
-}
-
-// AddNamespace handles POST /api/v1/projects/{id}/add-namespace/.
-//
-// On success this writes the namespace into both the legacy projects.namespaces
-// JSONB column AND the project_namespaces sidecar (used by the reconcile
-// task to track per-namespace enforcement state). A project:reconcile task
-// is enqueued so the agent applies the ResourceQuota / LimitRange /
-// NetworkPolicy without waiting for the periodic sweep.
-func (h *ProjectHandler) AddNamespace(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-	var req ProjectNamespaceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	req.Namespace = strings.TrimSpace(req.Namespace)
-	if req.Namespace == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace is required")
-		return
-	}
-	if !h.rejectReservedNamespaces(w, r, req.Namespace) {
-		return
-	}
-
-	project, err := h.queries.GetProjectByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-	// Authority over the NAMESPACE (via its cluster), not over the project —
-	// see authorizeNamespaceAssignment.
-	if !h.authorizeNamespaceAssignment(w, r, project.ClusterID) {
-		return
-	}
-
-	namespaces := decodeNamespaceList(project.Namespaces)
-	for _, ns := range namespaces {
-		if ns == req.Namespace {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
-			return
-		}
-	}
-
-	// Check for conflict with other projects in the same cluster.
-	otherProjects, err := h.queries.ListProjectsByCluster(r.Context(), sqlc.ListProjectsByClusterParams{
-		ClusterID: project.ClusterID,
-		Limit:     1000,
-		Offset:    0,
-	})
-	if err == nil {
-		for _, other := range otherProjects {
-			if other.ID == project.ID {
-				continue
-			}
-			for _, ns := range decodeNamespaceList(other.Namespaces) {
-				if ns == req.Namespace {
-					RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already assigned to project '"+other.Name+"'.")
-					return
-				}
-			}
-		}
-	}
-
-	var updated sqlc.Project
-	auditCommitted := false
-	if h.runTx != nil {
-		// Atomic path: row-lock the project, re-read the namespaces JSONB under
-		// the lock, and write both the JSONB list and the project_namespaces
-		// sidecar in one transaction. Either both land or neither does — no
-		// silent half-write, and concurrent AddNamespace calls serialize on the
-		// lock instead of last-writer-wins clobbering the JSONB.
-		txErr := h.runTx(r.Context(), func(q ProjectNamespaceTx) error {
-			locked, lerr := q.GetProjectByIDForUpdate(r.Context(), id)
-			if lerr != nil {
-				return lerr
-			}
-			nsList := decodeNamespaceList(locked.Namespaces)
-			for _, ns := range nsList {
-				if ns == req.Namespace {
-					return errNamespaceAlreadyInProject
-				}
-			}
-			encoded, merr := json.Marshal(append(nsList, req.Namespace))
-			if merr != nil {
-				return merr
-			}
-			u, uerr := q.UpdateProject(r.Context(), projectUpdateParams(locked, encoded))
-			if uerr != nil {
-				return uerr
-			}
-			if _, uerr := q.UpsertProjectNamespace(r.Context(), sqlc.UpsertProjectNamespaceParams{
-				ProjectID: locked.ID,
-				ClusterID: locked.ClusterID,
-				Namespace: req.Namespace,
-			}); uerr != nil {
-				// A unique_violation here is the (cluster_id, namespace)
-				// guard firing: another project on this cluster already
-				// owns the namespace. The ON CONFLICT in UpsertProjectNamespace
-				// only absorbs the PK (project_id, cluster_id, namespace)
-				// conflict — same-project re-adds — so 23505 always means a
-				// cross-project claim (and same-project is already caught
-				// above by the in-lock nsList scan).
-				if isUniqueViolation(uerr) {
-					return errNamespaceOwnedByOtherProject
-				}
-				return uerr
-			}
-			if aerr := recordProjectAuditOutbox(r, q, "project.add_namespace", u, map[string]any{"namespace": req.Namespace}); aerr != nil {
-				return aerr
-			}
-			updated = u
-			return nil
-		})
-		if txErr != nil {
-			switch {
-			case errors.Is(txErr, audit.ErrOutboxUnavailable):
-				respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
-			case errors.Is(txErr, errNamespaceAlreadyInProject):
-				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already in this project.")
-			case errors.Is(txErr, errNamespaceOwnedByOtherProject):
-				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Namespace '"+req.Namespace+"' is already assigned to another project on this cluster.")
-			case errors.Is(txErr, pgx.ErrNoRows):
-				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-			default:
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
-			}
-			return
-		}
-		auditCommitted = true
-		// The sidecar row is committed; schedule enforcement out-of-band.
-		h.dispatchProjectReconcile(r.Context(), project.ID, project.ClusterID, req.Namespace, "apply")
-	} else {
-		encoded, merr := json.Marshal(append(namespaces, req.Namespace))
-		if merr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
-			return
-		}
-		var uerr error
-		updated, uerr = h.queries.UpdateProject(r.Context(), projectUpdateParams(project, encoded))
-		if uerr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
-			return
-		}
-		h.upsertAndEnqueue(r.Context(), project.ID, project.ClusterID, req.Namespace)
-	}
-	// Membership changed: flush the namespace-scoped RBAC cache so the new grant
-	// is visible immediately instead of after the cache TTL.
-	h.invalidateRBACCache()
-	if !auditCommitted {
-		h.recordProjectAudit(r, "project.add_namespace", updated, map[string]any{"namespace": req.Namespace})
-	}
-	RespondJSON(w, http.StatusOK, projectToResponse(updated))
-}
-
-// RemoveNamespace handles POST /api/v1/projects/{id}/remove-namespace/.
-//
-// The reconcile cleanup task is enqueued before the namespace is removed
-// from the project's JSONB list so it can rely on the project_namespaces
-// row still existing while it deletes managed CRs from the cluster.
-func (h *ProjectHandler) RemoveNamespace(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
-		return
-	}
-	var req ProjectNamespaceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-		return
-	}
-	req.Namespace = strings.TrimSpace(req.Namespace)
-	if req.Namespace == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "namespace is required")
-		return
-	}
-
-	project, err := h.queries.GetProjectByID(r.Context(), id)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-		return
-	}
-
-	namespaces := decodeNamespaceList(project.Namespaces)
-	filtered := make([]string, 0, len(namespaces))
-	found := false
-	for _, ns := range namespaces {
-		if ns == req.Namespace {
-			found = true
-			continue
-		}
-		filtered = append(filtered, ns)
-	}
-	if !found {
-		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
-		return
-	}
-
-	var updated sqlc.Project
-	auditCommitted := false
-	if h.runTx != nil {
-		// Atomic path: row-lock the project, re-filter the namespaces JSONB under
-		// the lock, and delete the project_namespaces sidecar row in the same
-		// transaction so the two sources of truth can never diverge on a partial
-		// failure. In-cluster cleanup is dispatched only after the tx commits.
-		txErr := h.runTx(r.Context(), func(q ProjectNamespaceTx) error {
-			locked, lerr := q.GetProjectByIDForUpdate(r.Context(), id)
-			if lerr != nil {
-				return lerr
-			}
-			nsList := decodeNamespaceList(locked.Namespaces)
-			kept := make([]string, 0, len(nsList))
-			present := false
-			for _, ns := range nsList {
-				if ns == req.Namespace {
-					present = true
-					continue
-				}
-				kept = append(kept, ns)
-			}
-			if !present {
-				return errNamespaceNotInProject
-			}
-			encoded, merr := json.Marshal(kept)
-			if merr != nil {
-				return merr
-			}
-			u, uerr := q.UpdateProject(r.Context(), projectUpdateParams(locked, encoded))
-			if uerr != nil {
-				return uerr
-			}
-			if derr := q.DeleteProjectNamespace(r.Context(), sqlc.DeleteProjectNamespaceParams{
-				ProjectID: locked.ID,
-				ClusterID: locked.ClusterID,
-				Namespace: req.Namespace,
-			}); derr != nil {
-				return derr
-			}
-			if aerr := recordProjectAuditOutbox(r, q, "project.remove_namespace", u, map[string]any{"namespace": req.Namespace}); aerr != nil {
-				return aerr
-			}
-			updated = u
-			return nil
-		})
-		if txErr != nil {
-			switch {
-			case errors.Is(txErr, audit.ErrOutboxUnavailable):
-				respondTransactionalMutationError(w, r, txErr, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
-			case errors.Is(txErr, errNamespaceNotInProject):
-				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Namespace '"+req.Namespace+"' is not in this project.")
-			case errors.Is(txErr, pgx.ErrNoRows):
-				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Project not found")
-			default:
-				RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
-			}
-			return
-		}
-		auditCommitted = true
-		// Sidecar row is gone; schedule the in-cluster managed-CR cleanup. The
-		// remove task's own DeleteProjectNamespace is an idempotent no-op now.
-		h.dispatchProjectReconcile(r.Context(), project.ID, project.ClusterID, req.Namespace, "remove")
-	} else {
-		encoded, merr := json.Marshal(filtered)
-		if merr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.MarshalError, "Failed to encode namespaces")
-			return
-		}
-
-		// Enqueue cleanup BEFORE the DB update so the task still has the row to
-		// reference; the cleanup task itself deletes the project_namespaces row.
-		h.enqueueCleanup(r.Context(), project.ID, project.ClusterID, req.Namespace)
-
-		var uerr error
-		updated, uerr = h.queries.UpdateProject(r.Context(), projectUpdateParams(project, encoded))
-		if uerr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update project")
-			return
-		}
-	}
-	// Membership changed: flush the namespace-scoped RBAC cache so the revoked
-	// grant stops authorizing immediately instead of after the cache TTL.
-	h.invalidateRBACCache()
-	if !auditCommitted {
-		h.recordProjectAudit(r, "project.remove_namespace", updated, map[string]any{"namespace": req.Namespace})
-	}
-	RespondJSON(w, http.StatusOK, projectToResponse(updated))
-}
-
-// upsertAndEnqueue persists the project_namespaces row and schedules an apply
-// task. When the server has a live tunnel requester, we execute the task
-// in-process so enforcement does not depend on the Redis worker, which has no
-// cluster access. Queue enqueue remains as a fallback for contexts that do not
-// have a requester wired.
-func (h *ProjectHandler) upsertAndEnqueue(ctx context.Context, projectID, clusterID uuid.UUID, namespace string) {
-	if h.queries == nil {
-		return
-	}
-	if _, err := h.queries.UpsertProjectNamespace(ctx, sqlc.UpsertProjectNamespaceParams{
-		ProjectID: projectID,
-		ClusterID: clusterID,
-		Namespace: namespace,
-	}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		h.logger().Warn("upsert project_namespace", "project_id", projectID.String(), "namespace", namespace, "error", err)
-	}
-	task, err := tasks.NewProjectReconcileTask(tasks.ProjectReconcilePayload{
-		ProjectID: projectID.String(),
-		ClusterID: clusterID.String(),
-		Namespace: namespace,
-		Op:        "apply",
-	})
-	if err != nil {
-		h.logger().Warn("build project reconcile task", "error", err)
-		return
-	}
-	if h.requester != nil {
-		h.dispatchProjectTask(ctx, task)
-		return
-	}
-	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
-	task = asynq.NewTask(task.Type(), payload)
-	if h.enqueueProjectTaskOutbox(ctx, task, projectID, clusterID, namespace, "apply") {
-		return
-	}
-	if h.queue == nil {
-		return
-	}
-	if _, err := h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName)); err != nil {
-		h.logger().Warn("enqueue project reconcile task", "error", err)
-	}
-}
-
-// enqueueCleanup is the RemoveNamespace counterpart. The task itself deletes
-// the project_namespaces row and the in-cluster managed CRs. As with apply,
-// a live requester means we should execute locally instead of depending on the
-// external worker.
-func (h *ProjectHandler) enqueueCleanup(ctx context.Context, projectID, clusterID uuid.UUID, namespace string) {
-	task, err := tasks.NewProjectReconcileTask(tasks.ProjectReconcilePayload{
-		ProjectID: projectID.String(),
-		ClusterID: clusterID.String(),
-		Namespace: namespace,
-		Op:        "remove",
-	})
-	if err != nil {
-		h.logger().Warn("build project cleanup task", "error", err)
-		return
-	}
-	if h.requester != nil {
-		h.dispatchProjectTask(ctx, task)
-		return
-	}
-	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
-	task = asynq.NewTask(task.Type(), payload)
-	if h.enqueueProjectTaskOutbox(ctx, task, projectID, clusterID, namespace, "remove") {
-		return
-	}
-	if h.queue == nil {
-		// Without an asynq client wired we still attempt the synchronous DB
-		// half so the row goes away and the UI reflects the removal. The
-		// in-cluster cleanup will only happen once a worker is wired up.
-		_ = h.queries.DeleteProjectNamespace(context.Background(), sqlc.DeleteProjectNamespaceParams{
-			ProjectID: projectID,
-			ClusterID: clusterID,
-			Namespace: namespace,
-		})
-		return
-	}
-	if _, err := h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName)); err != nil {
-		h.logger().Warn("enqueue project cleanup task", "error", err)
-	}
-}
-
-func (h *ProjectHandler) enqueueProjectTaskOutbox(ctx context.Context, task *asynq.Task, projectID, clusterID uuid.UUID, namespace, op string) bool {
-	if h == nil || h.taskOutbox == nil || task == nil {
-		return false
-	}
-	dedupe := fmt.Sprintf("project_reconcile:%s:%s:%s:%s", op, projectID.String(), clusterID.String(), namespace)
-	_, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{
-		DedupeKey:           dedupe,
-		QueueName:           tasks.ClusterTemplateApplyQueueName,
-		MaxDeliveryAttempts: 20,
-	})
-	if err != nil {
-		h.logger().Warn("enqueue project reconcile task_outbox", "op", op, "error", err)
-		return false
-	}
-	return true
-}
-
-func (h *ProjectHandler) dispatchProjectTask(ctx context.Context, task *asynq.Task) {
-	if h == nil || task == nil {
-		return
-	}
-	runTask := h.runTask
-	if runTask == nil {
-		h.logger().Error("project reconcile runtime is not configured", "type", task.Type())
-		return
-	}
-	go func() {
-		runCtx := context.Background()
-		if ctx != nil {
-			runCtx = context.WithoutCancel(ctx)
-		}
-		if err := runTask(runCtx, task); err != nil {
-			h.logger().Warn("run project reconcile task locally", "type", task.Type(), "error", err)
-		}
-	}()
-}
-
-func decodeNamespaceList(raw json.RawMessage) []string {
-	if len(raw) == 0 {
-		return []string{}
-	}
-	var items []string
-	if err := json.Unmarshal(raw, &items); err == nil {
-		return items
-	}
-	// Fall back to []any decode.
-	var anyItems []any
-	if err := json.Unmarshal(raw, &anyItems); err == nil {
-		out := make([]string, 0, len(anyItems))
-		for _, item := range anyItems {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	}
-	return []string{}
-}
-
-func defaultIfEmpty(raw json.RawMessage, fallback string) json.RawMessage {
-	if len(raw) == 0 {
-		return json.RawMessage(fallback)
-	}
-	return raw
-}
-
-func defaultMode(mode string) string {
-	switch mode {
-	case "isolated", "allow-same-project", "none":
-		return mode
-	default:
-		return "none"
-	}
-}
-
-// projectUpdateParams builds the UpdateProject params that carry every existing
-// policy/metadata field through unchanged while swapping in a new namespaces
-// list. Shared by AddNamespace / RemoveNamespace so the JSONB write is identical
-// on the legacy and transactional paths.
-func projectUpdateParams(p sqlc.Project, namespaces json.RawMessage) sqlc.UpdateProjectParams {
-	return sqlc.UpdateProjectParams{
-		ID:                       p.ID,
-		DisplayName:              p.DisplayName,
-		Description:              p.Description,
-		Namespaces:               namespaces,
-		ResourceQuota:            defaultIfEmpty(p.ResourceQuota, `{}`),
-		LimitRange:               defaultIfEmpty(p.LimitRange, `{}`),
-		NetworkPolicyMode:        defaultMode(p.NetworkPolicyMode),
-		PodSecurityProfile:       p.PodSecurityProfile,
-		ResourceQuotaCpuLimit:    p.ResourceQuotaCpuLimit,
-		ResourceQuotaMemoryLimit: p.ResourceQuotaMemoryLimit,
-		ResourceQuotaPodCount:    p.ResourceQuotaPodCount,
-	}
-}
-
-// dispatchProjectReconcile builds and dispatches a project reconcile task
-// (op="apply" or "remove") WITHOUT touching the project_namespaces sidecar —
-// the transactional Add/Remove paths already write the sidecar row inside their
-// tx, so this only schedules the in-cluster enforcement/cleanup apply.
-func (h *ProjectHandler) dispatchProjectReconcile(ctx context.Context, projectID, clusterID uuid.UUID, namespace, op string) {
-	if h == nil {
-		return
-	}
-	task, err := tasks.NewProjectReconcileTask(tasks.ProjectReconcilePayload{
-		ProjectID: projectID.String(),
-		ClusterID: clusterID.String(),
-		Namespace: namespace,
-		Op:        op,
-	})
-	if err != nil {
-		h.logger().Warn("build project reconcile task", "op", op, "error", err)
-		return
-	}
-	if h.requester != nil {
-		h.dispatchProjectTask(ctx, task)
-		return
-	}
-	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
-	task = asynq.NewTask(task.Type(), payload)
-	if h.enqueueProjectTaskOutbox(ctx, task, projectID, clusterID, namespace, op) {
-		return
-	}
-	if h.queue == nil {
-		return
-	}
-	if _, err := h.queue.Enqueue(task, asynq.Queue(tasks.ClusterTemplateApplyQueueName)); err != nil {
-		h.logger().Warn("enqueue project reconcile task", "op", op, "error", err)
-	}
-}
-
-func (h *ProjectHandler) recordProjectAudit(r *http.Request, action string, project sqlc.Project, detail map[string]any) {
-	if h == nil || h.queries == nil {
-		return
-	}
-	recordAudit(r, h.queries, action, "project", project.ID.String(), project.Name, detail)
-}
-
-func recordProjectAuditOutbox(r *http.Request, q audit.OutboxQuerier, action string, project sqlc.Project, detail map[string]any) error {
-	return recordAuditOutbox(r, q, action, "project", project.ID.String(), project.Name, http.StatusOK, detail)
-}
-
-func decodeJSONArray(raw json.RawMessage) []any {
-	if len(raw) == 0 {
-		return []any{}
-	}
-	var items []any
-	if json.Unmarshal(raw, &items) != nil {
-		return []any{}
-	}
-	return items
-}
-
-// --- adapters: bridge handler-package types into the worker/tasks package ---
-//
-// The worker/tasks package defines its own minimal interfaces (so it has no
-// import dependency on internal/handler). These adapters wrap our concrete
-// types into the immutable tasks.ProjectRuntime interfaces.
-
-type projectQuerierAdapter struct{ q ProjectQuerier }
-
-func (a projectQuerierAdapter) GetProjectByID(ctx context.Context, id uuid.UUID) (sqlc.Project, error) {
-	return a.q.GetProjectByID(ctx, id)
-}
-
-func (a projectQuerierAdapter) GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error) {
-	return a.q.GetClusterRegistryConfig(ctx, clusterID)
-}
-
-func (a projectQuerierAdapter) GetDefaultPodSecurityTemplate(ctx context.Context) (sqlc.PodSecurityTemplate, error) {
-	return a.q.GetDefaultPodSecurityTemplate(ctx)
-}
-
-func (a projectQuerierAdapter) ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error) {
-	return a.q.ListProjectNamespaces(ctx, projectID)
-}
-
-func (a projectQuerierAdapter) ListAllProjectNamespaces(ctx context.Context) ([]sqlc.ProjectNamespace, error) {
-	return a.q.ListAllProjectNamespaces(ctx)
-}
-
-func (a projectQuerierAdapter) UpsertProjectNamespace(ctx context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error) {
-	return a.q.UpsertProjectNamespace(ctx, arg)
-}
-
-func (a projectQuerierAdapter) DeleteProjectNamespace(ctx context.Context, arg sqlc.DeleteProjectNamespaceParams) error {
-	return a.q.DeleteProjectNamespace(ctx, arg)
-}
-
-func (a projectQuerierAdapter) ClaimProjectNamespaceReconcile(ctx context.Context, arg sqlc.ClaimProjectNamespaceReconcileParams) (sqlc.ProjectNamespace, error) {
-	return a.q.ClaimProjectNamespaceReconcile(ctx, arg)
-}
-
-func (a projectQuerierAdapter) MarkProjectNamespaceReconciled(ctx context.Context, arg sqlc.MarkProjectNamespaceReconciledParams) error {
-	return a.q.MarkProjectNamespaceReconciled(ctx, arg)
-}
-
-type projectRequesterAdapter struct{ r K8sRequester }
-
-func (a projectRequesterAdapter) Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (*tasks.ProjectK8sResponse, error) {
-	resp, err := a.r.Do(ctx, clusterID, method, path, body, headers)
-	if err != nil {
-		return nil, err
-	}
-	bodyBytes, _ := decodeResponseBody(resp)
-	return &tasks.ProjectK8sResponse{StatusCode: resp.StatusCode, Body: bodyBytes}, nil
-}
-
-// ProjectK8sRequesterFromHandlerRequester wraps a handler-side
-// K8sRequester in the adapter that tasks expect (tasks.ProjectK8sRequester).
-// Used by cross-task wiring such as the cloud-credentials materialization
-// worker so a single handler.K8sRequester is shared across every
-// reconciler that drives K8s SSA through the tunnel.
-func ProjectK8sRequesterFromHandlerRequester(r K8sRequester) tasks.ProjectK8sRequester {
-	if r == nil {
-		return nil
-	}
-	return projectRequesterAdapter{r: r}
-}

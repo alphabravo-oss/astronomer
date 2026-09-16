@@ -25,17 +25,17 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // NoteMaxLen is the character cap on user-submitted notes. Matches the
@@ -108,13 +108,20 @@ type ChartRatingsHandler struct {
 	log     *slog.Logger
 	authz   authorizationSupport
 	runTx   chartRatingRunTxFunc
+	policy  catalog.RecommendationPolicy
 }
 
 // NewChartRatingsHandler returns a handler bound to the given querier.
 // A nil log is filled with slog.Default() at request time so the
 // caller doesn't have to supply one.
 func NewChartRatingsHandler(queries ChartRatingsQuerier) *ChartRatingsHandler {
-	return &ChartRatingsHandler{queries: queries, log: slog.Default()}
+	return &ChartRatingsHandler{queries: queries, log: slog.Default(), policy: catalog.NewRecommendationPolicy(4, 10)}
+}
+
+func (h *ChartRatingsHandler) SetRecommendationPolicy(policy catalog.RecommendationPolicy) {
+	if h != nil {
+		h.policy = policy
+	}
 }
 
 // SetLogger swaps the per-handler logger. Used by routes.go to inject
@@ -126,7 +133,7 @@ func (h *ChartRatingsHandler) SetLogger(log *slog.Logger) {
 	}
 }
 
-func (h *ChartRatingsHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+func (h *ChartRatingsHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
 	h.authz.SetAuthorization(engine, querier)
 }
 
@@ -148,25 +155,18 @@ func executeChartRatingMutation(
 	h *ChartRatingsHandler,
 	mutate func(ChartRatingMutationTx) (chartRatingMutationResult, error),
 ) (chartRatingMutationResult, error) {
-	var result chartRatingMutationResult
-	if h == nil || h.runTx == nil {
-		return result, audit.ErrOutboxUnavailable
-	}
-	err := h.runTx(r.Context(), func(q ChartRatingMutationTx) error {
-		var mutationErr error
-		result, mutationErr = mutate(q)
-		if mutationErr != nil {
-			return mutationErr
+	return executeMutation(r, h.runTx, func(q ChartRatingMutationTx) (chartRatingMutationResult, error) {
+		result, err := mutate(q)
+		if err == nil {
+			err = catalog.RecomputeAggregate(r.Context(), q, result.rating.ChartID, h.policy)
 		}
-		if err := catalog.RecomputeAggregate(r.Context(), q, result.rating.ChartID); err != nil {
-			return err
-		}
-		return recordAuditOutbox(r, q, result.action, "chart_rating", result.rating.ID.String(), "", result.status, map[string]any{
+		return result, err
+	}, func(result chartRatingMutationResult) mutationAuditEvent {
+		return mutationAuditEvent{action: result.action, resourceType: "chart_rating", resourceID: result.rating.ID.String(), status: result.status, detail: map[string]any{
 			"chart_id": result.rating.ChartID.String(),
 			"stars":    result.rating.Stars,
-		})
+		}}
 	})
-	return result, err
 }
 
 func respondChartRatingMutationError(w http.ResponseWriter, r *http.Request, err error, forbiddenMessage, fallbackCode, fallbackMessage string) {
@@ -286,7 +286,7 @@ func parseInstallationID(s *string) (pgtype.UUID, bool) {
 // installation is omitted), the request is treated as an update — the
 // spec's "handle the 409 from the DB by issuing a PUT instead" rule.
 func (h *ChartRatingsHandler) CreateRating(w http.ResponseWriter, r *http.Request) {
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -405,7 +405,7 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 		return
 	}
 	limit := int32(queryLimit(r, 20))
-	offset := int32(queryInt(r, "offset", 0))
+	offset := int32(queryOffset(r))
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
@@ -425,7 +425,7 @@ func (h *ChartRatingsHandler) ListRatings(w http.ResponseWriter, r *http.Request
 	for _, row := range rows {
 		out = append(out, toRatingResponse(row))
 	}
-	RespondPaginated(w, r, out, total)
+	paging.Write(w, out, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(out)))
 }
 
 // GetAggregate handles GET /charts/{chart_id}/ratings/aggregate/.
@@ -456,7 +456,7 @@ func (h *ChartRatingsHandler) GetAggregate(w http.ResponseWriter, r *http.Reques
 
 // GetMyRating handles GET /charts/{chart_id}/ratings/mine/.
 func (h *ChartRatingsHandler) GetMyRating(w http.ResponseWriter, r *http.Request) {
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -624,7 +624,7 @@ func (h *ChartRatingsHandler) PopularRecommendations(w http.ResponseWriter, r *h
 	}
 	// TopCharts is limit-capped; omit an inexact total.
 	results = h.filterVisibleRecommendations(r.Context(), results, projectID, projectScoped, limit)
-	RespondList(w, results, NewPaginationFromPage(limit, 0, len(results)))
+	paging.Write(w, results, paging.FromPage(limit, 0, len(results)))
 }
 
 // SimilarRecommendations handles GET /catalog/recommendations/similar/{chart_id}/.
@@ -649,7 +649,7 @@ func (h *ChartRatingsHandler) SimilarRecommendations(w http.ResponseWriter, r *h
 	}
 	// SimilarCharts is limit-capped; omit an inexact total.
 	results = h.filterVisibleRecommendations(r.Context(), results, projectID, projectScoped, limit)
-	RespondList(w, results, NewPaginationFromPage(limit, 0, len(results)))
+	paging.Write(w, results, paging.FromPage(limit, 0, len(results)))
 }
 
 func (h *ChartRatingsHandler) authorizeRecommendationChart(w http.ResponseWriter, r *http.Request, chartID, projectID uuid.UUID, projectScoped bool) bool {
@@ -701,7 +701,7 @@ func (h *ChartRatingsHandler) recommendationChartVisible(ctx context.Context, ch
 // and writes the appropriate error if anything is missing. Returns the
 // full user row, the parsed UUID, and a continue-flag.
 func requireChartRatingUserID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	auth, ok := middleware.GetAuthenticatedUser(r.Context())
+	auth, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return uuid.Nil, false

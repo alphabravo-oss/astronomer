@@ -44,7 +44,7 @@ func assertAccessTTL(t *testing.T, manager *auth.JWTManager, token string, want 
 func TestConfigureSessionTimeoutPolicyMissingRowIndependentOfEncryptedFeatures(t *testing.T) {
 	// The two cases represent deployments with and without encryption/TOTP.
 	// configureSessionTimeoutPolicy has no encrypted-feature dependency and is
-	// invoked before that conditional in NewApp, so both receive the same 60m
+	// invoked before that conditional in NewApp, so both receive the same 15m
 	// provider on a fresh database.
 	for _, mode := range []string{"no encryptor", "encryptor configured"} {
 		t.Run(mode, func(t *testing.T) {
@@ -57,7 +57,7 @@ func TestConfigureSessionTimeoutPolicyMissingRowIndependentOfEncryptedFeatures(t
 			if err != nil {
 				t.Fatalf("GenerateTokenPairContext() error = %v", err)
 			}
-			assertAccessTTL(t, manager, access, time.Hour)
+			assertAccessTTL(t, manager, access, 15*time.Minute)
 		})
 	}
 }
@@ -66,7 +66,7 @@ func TestConfigureSessionTimeoutPolicyExplicitValueAppliesToEveryMintContract(t 
 	manager := auth.MustNewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
 	authHandler := handler.NewAuthHandler(nil, manager)
 	settings := &fakeSessionTimeoutSettings{
-		row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("120")},
+		row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("10")},
 	}
 	configureSessionTimeoutPolicy(authHandler, manager, settings, slog.Default())
 
@@ -79,7 +79,7 @@ func TestConfigureSessionTimeoutPolicyExplicitValueAppliesToEveryMintContract(t 
 			if err != nil {
 				t.Fatalf("GenerateTokenPairContext() error = %v", err)
 			}
-			assertAccessTTL(t, manager, access, 120*time.Minute)
+			assertAccessTTL(t, manager, access, 10*time.Minute)
 		})
 	}
 }
@@ -88,7 +88,7 @@ func TestAuthHandlerMintContextReadsSessionSettingOnce(t *testing.T) {
 	manager := auth.MustNewJWTManager("test-secret", sessionpolicy.DefaultMinutes)
 	authHandler := handler.NewAuthHandler(nil, manager)
 	settings := &fakeSessionTimeoutSettings{
-		row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("120")},
+		row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("10")},
 	}
 	configureSessionTimeoutPolicy(authHandler, manager, settings, slog.Default())
 
@@ -98,7 +98,7 @@ func TestAuthHandlerMintContextReadsSessionSettingOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateTokenPairContext() error = %v", err)
 	}
-	assertAccessTTL(t, manager, access, 120*time.Minute)
+	assertAccessTTL(t, manager, access, 10*time.Minute)
 	if settings.reads != 1 {
 		t.Fatalf("settings reads = %d, want exactly 1 per password/refresh mint", settings.reads)
 	}
@@ -112,7 +112,7 @@ func TestSessionTimeoutResolverInvalidDataUsesSafeDefaultAndLogs(t *testing.T) {
 	}{
 		{name: "malformed", row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte(`"bad"`)}},
 		{name: "below minimum", row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("4")}},
-		{name: "above maximum", row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("10081")}},
+		{name: "above maximum", row: sqlc.PlatformSetting{Key: sessionpolicy.SettingKey, Value: []byte("16")}},
 		{name: "read failure", err: errors.New("database unavailable")},
 	}
 
@@ -125,7 +125,7 @@ func TestSessionTimeoutResolverInvalidDataUsesSafeDefaultAndLogs(t *testing.T) {
 				t.Fatalf("resolver = %d, want safe default %d", got, sessionpolicy.DefaultMinutes)
 			}
 			logLine := logs.String()
-			for _, want := range []string{sessionpolicy.SettingKey, "default_minutes=60"} {
+			for _, want := range []string{sessionpolicy.SettingKey, "default_minutes=15"} {
 				if !strings.Contains(logLine, want) {
 					t.Fatalf("log %q missing actionable field %q", logLine, want)
 				}

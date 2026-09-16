@@ -429,6 +429,17 @@ func (f *fakeRBACAuditQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Crea
 	return nil
 }
 
+func (f *fakeRBACAuditQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.auditRows = append(f.auditRows, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{}, nil
+}
+
+func (f *fakeRBACAuditQuerier) ApplyProjectRoleTemplate(_ context.Context, _ sqlc.ApplyProjectRoleTemplateParams) (sqlc.ApplyProjectRoleTemplateRow, error) {
+	return sqlc.ApplyProjectRoleTemplateRow{}, nil
+}
+
 func (f *fakeRBACAuditQuerier) lastAuditRow() sqlc.CreateAuditLogV1Params {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -442,6 +453,7 @@ func TestRBACGlobalRoleMutationsAreAudited(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeRBACAuditQuerier()
 	h := NewRBACHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(RBACMutationTx) error) error { return fn(q) })
 
 	createBody := []byte(`{"name":"platform-admin","display_name":"Platform Admin","rules":[]}`)
 	createReq := authedRequest(http.MethodPost, "/api/v1/rbac/global-roles/", callerID, createBody)
@@ -496,6 +508,7 @@ func TestRBACRoleBindingMutationsAreAudited(t *testing.T) {
 	projectID := uuid.New()
 	q := newFakeRBACAuditQuerier()
 	h := NewRBACHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(RBACMutationTx) error) error { return fn(q) })
 
 	globalBody := []byte(fmt.Sprintf(`{"user_id":"%s","role_id":"%s"}`, userID, roleID))
 	globalCreateReq := authedRequest(http.MethodPost, "/api/v1/rbac/global-bindings/", callerID, globalBody)

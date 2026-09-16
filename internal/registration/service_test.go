@@ -28,6 +28,12 @@ func newFakeQuerier() *fakeQuerier {
 	return &fakeQuerier{clusters: map[uuid.UUID]*sqlc.ClusterRegistrationRecord{}}
 }
 
+func newTestService(q Querier, pub Publisher) *Service {
+	service := New(q, pub)
+	service.SetRunTx(func(_ context.Context, work func(Querier) error) error { return work(q) })
+	return service
+}
+
 func (f *fakeQuerier) seed(id uuid.UUID, phase Phase, baseline *bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -234,7 +240,7 @@ func TestRegistrationWizard_OptionsRoundtrip(t *testing.T) {
 	q := newFakeQuerier()
 	id := uuid.New()
 	q.seed(id, PhaseCreated, nil)
-	svc := New(q, nil)
+	svc := newTestService(q, nil)
 
 	rec, err := svc.SetInstallBaseline(context.Background(), id, true)
 	if err != nil {
@@ -267,7 +273,7 @@ func TestRegistrationWizard_ConfirmAdvancesPhase(t *testing.T) {
 	q := newFakeQuerier()
 	id := uuid.New()
 	q.seed(id, PhaseCreated, nil)
-	svc := New(q, nil)
+	svc := newTestService(q, nil)
 
 	rec, err := svc.Advance(context.Background(), id, EventConfirm)
 	if err != nil {
@@ -295,7 +301,7 @@ func TestRegistrationWizard_AgentConnectAdvancesPhase(t *testing.T) {
 	id := uuid.New()
 	q.seed(id, PhaseAwaitingAgent, nil)
 	pub := &capturingPublisher{}
-	svc := New(q, pub)
+	svc := newTestService(q, pub)
 
 	if err := svc.OnAgentConnected(context.Background(), id, "v1.2.3"); err != nil {
 		t.Fatalf("OnAgentConnected: %v", err)
@@ -326,7 +332,7 @@ func TestRegistrationWizard_NoBaselineSkipsProvisioning(t *testing.T) {
 	id := uuid.New()
 	optedOut := false
 	q.seed(id, PhaseAwaitingAgent, &optedOut)
-	svc := New(q, nil)
+	svc := newTestService(q, nil)
 
 	if err := svc.OnAgentConnected(context.Background(), id, "v8844890"); err != nil {
 		t.Fatalf("OnAgentConnected: %v", err)
@@ -345,7 +351,7 @@ func TestRegistrationWizard_TemplateApplyAdvancesPhase(t *testing.T) {
 	id := uuid.New()
 	yes := true
 	q.seed(id, PhaseConnected, &yes)
-	svc := New(q, nil)
+	svc := newTestService(q, nil)
 
 	if err := svc.OnDeliveryApplyStart(context.Background(), id); err != nil {
 		t.Fatalf("apply-start: %v", err)
@@ -386,7 +392,7 @@ func TestRegistrationWizard_TemplateApplyFailureAdvancesToFailed(t *testing.T) {
 	id := uuid.New()
 	yes := true
 	q.seed(id, PhaseConnected, &yes)
-	svc := New(q, nil)
+	svc := newTestService(q, nil)
 
 	if err := svc.OnDeliveryApplyStart(context.Background(), id); err != nil {
 		t.Fatalf("apply-start: %v", err)
@@ -419,7 +425,7 @@ func TestRegistrationWizard_SSEStreamEmitsStepEvents(t *testing.T) {
 	id := uuid.New()
 	q.seed(id, PhaseAwaitingAgent, nil)
 	pub := &capturingPublisher{}
-	svc := New(q, pub)
+	svc := newTestService(q, pub)
 
 	if err := svc.OnAgentConnected(context.Background(), id, "v1"); err != nil {
 		t.Fatalf("OnAgentConnected: %v", err)
@@ -464,7 +470,7 @@ func TestOnAgentConnected_NullInstallBaselineReachesReady(t *testing.T) {
 			q := newFakeQuerier()
 			id := uuid.New()
 			q.seed(id, PhaseAwaitingAgent, tc.baseline)
-			svc := New(q, nil)
+			svc := newTestService(q, nil)
 
 			if err := svc.OnAgentConnected(context.Background(), id, "v1.2.3"); err != nil {
 				t.Fatalf("OnAgentConnected: %v", err)

@@ -64,6 +64,7 @@ func TestRevokeAgentTokenSetsRevokedAndAudits(t *testing.T) {
 	id := uuid.New()
 	q := &clusterRegistryTestQuerier{agentTokenRevokeRows: 1}
 	h := NewClusterHandler(q)
+	setClusterTestRunTx(h, q)
 
 	rec := serveClusterAction(h.RevokeAgentToken, id.String())
 	if rec.Code != http.StatusOK {
@@ -94,6 +95,7 @@ func TestRevokeAgentTokenSeversLiveSession(t *testing.T) {
 	d := &fakeDisconnector{}
 	h := NewClusterHandler(q)
 	h.SetAgentDisconnector(d)
+	setClusterTestRunTx(h, q)
 
 	rec := serveClusterAction(h.RevokeAgentToken, id.String())
 	if rec.Code != http.StatusOK {
@@ -109,6 +111,7 @@ func TestRevokeAgentTokenNoTokenIs404(t *testing.T) {
 	id := uuid.New()
 	q := &clusterRegistryTestQuerier{agentTokenRevokeRows: 0}
 	h := NewClusterHandler(q)
+	setClusterTestRunTx(h, q)
 
 	rec := serveClusterAction(h.RevokeAgentToken, id.String())
 	if rec.Code != http.StatusNotFound {

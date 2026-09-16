@@ -7,15 +7,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -43,6 +45,8 @@ func (h *toolHelmStub) History(ctx context.Context, clusterID, releaseName, name
 }
 
 type toolQueryRecorder struct {
+	checkpointMu    sync.Mutex
+	checkpoints     map[uuid.UUID]json.RawMessage
 	clusterID       uuid.UUID
 	installedBySlug map[string]sqlc.InstalledChart
 	installedByRef  map[string]sqlc.InstalledChart
@@ -53,6 +57,22 @@ type toolQueryRecorder struct {
 	idemOperations  []sqlc.CreateToolOperationIdempotentParams
 	idemByKey       map[string]sqlc.ToolOperation
 	valuesUpdates   []sqlc.UpdateInstalledChartValuesParams
+}
+
+func (q *toolQueryRecorder) RenewToolOperationLease(_ context.Context, arg sqlc.RenewToolOperationLeaseParams) (sqlc.ToolOperation, error) {
+	return sqlc.ToolOperation{ID: arg.ID, AttemptCount: arg.AttemptCount}, nil
+}
+func (q *toolQueryRecorder) CheckpointToolOperation(_ context.Context, arg sqlc.CheckpointToolOperationParams) (sqlc.CheckpointToolOperationRow, error) {
+	q.checkpointMu.Lock()
+	defer q.checkpointMu.Unlock()
+	if q.checkpoints == nil {
+		q.checkpoints = map[uuid.UUID]json.RawMessage{}
+	}
+	q.checkpoints[arg.ID] = append(json.RawMessage(nil), arg.Payload...)
+	return sqlc.CheckpointToolOperationRow{ID: arg.ID, Payload: arg.Payload}, nil
+}
+func (q *toolQueryRecorder) FinishToolOperation(_ context.Context, arg sqlc.FinishToolOperationParams) (sqlc.ToolOperation, error) {
+	return sqlc.ToolOperation{ID: arg.ID, Status: arg.FinalStatus}, nil
 }
 
 func newToolQueryRecorder(clusterID uuid.UUID) *toolQueryRecorder {
@@ -215,12 +235,6 @@ func (q *toolQueryRecorder) GetLatestToolOperationForTarget(context.Context, sql
 func (q *toolQueryRecorder) MarkToolOperationRunning(context.Context, uuid.UUID) (sqlc.ToolOperation, error) {
 	return sqlc.ToolOperation{}, nil
 }
-func (q *toolQueryRecorder) MarkToolOperationCompleted(context.Context, uuid.UUID) (sqlc.ToolOperation, error) {
-	return sqlc.ToolOperation{}, nil
-}
-func (q *toolQueryRecorder) MarkToolOperationFailed(context.Context, sqlc.MarkToolOperationFailedParams) (sqlc.ToolOperation, error) {
-	return sqlc.ToolOperation{}, nil
-}
 func (q *toolQueryRecorder) MarkToolOperationSuperseded(context.Context, sqlc.MarkToolOperationSupersededParams) (sqlc.ToolOperation, error) {
 	return sqlc.ToolOperation{}, nil
 }
@@ -269,11 +283,10 @@ func TestExecuteOperationInstallAdoptsExistingHelmRelease(t *testing.T) {
 	h := &ToolHandler{queries: queries, helm: helm}
 
 	env := toolOperationEnvelope{
-		ClusterID:   clusterID.String(),
-		ToolSlug:    "cert-manager",
-		ReleaseName: "cert-manager",
-		Namespace:   "cert-manager",
-		Preset:      "default",
+		ClusterID: clusterID.String(),
+		ToolSlug:  "cert-manager",
+		Preset:    "default",
+		Releases:  []toolRelease{{ReleaseName: "cert-manager", Namespace: "cert-manager", State: "pending"}},
 	}
 	payload, err := json.Marshal(env)
 	if err != nil {
@@ -333,14 +346,13 @@ func TestAdoptExistingToolReleaseUpdatesExistingRow(t *testing.T) {
 		Revision:    1,
 	}
 
-	err := adoptExistingToolRelease(context.Background(), queries, clusterID, toolOperationEnvelope{
-		ClusterID:      clusterID.String(),
-		ToolSlug:       "cert-manager",
-		ReleaseName:    "cert-manager",
-		Namespace:      "cert-manager",
-		ValuesYAML:     "server:\n  insecure: true\n",
-		Preset:         "default",
-		InstalledChart: nil,
+	err := adoptExistingToolRelease(context.Background(), queries, clusterID, toolReleaseExecution{
+		ClusterID:   clusterID.String(),
+		ToolSlug:    "cert-manager",
+		ReleaseName: "cert-manager",
+		Namespace:   "cert-manager",
+		ValuesYAML:  "server:\n  insecure: true\n",
+		Preset:      "default",
 	}, &protocol.HelmResultPayload{
 		Status:   "deployed",
 		Revision: 3,
@@ -370,8 +382,8 @@ func TestExecuteOperationUpgradePersistsHelmRevision(t *testing.T) {
 	t.Parallel()
 
 	clusterID := uuid.New()
-	chartID := uuid.New()
 	queries := newToolQueryRecorder(clusterID)
+	queries.installedByRef[installedRefKey(clusterID, "cert-manager", "cert-manager")] = sqlc.InstalledChart{ID: uuid.New(), ClusterID: clusterID, ReleaseName: "cert-manager", Namespace: "cert-manager", ToolSlug: pgtype.Text{String: "cert-manager", Valid: true}, ValuesOverride: "replicaCount: 1\n", PresetUsed: pgtype.Text{String: "development", Valid: true}}
 	helm := &toolHelmStub{
 		// Helm returns the real post-upgrade revision (e.g. after an
 		// out-of-band rollback the next upgrade jumps to 9, not prev+1).
@@ -381,12 +393,9 @@ func TestExecuteOperationUpgradePersistsHelmRevision(t *testing.T) {
 	h := &ToolHandler{queries: queries, helm: helm}
 
 	env := toolOperationEnvelope{
-		ClusterID:      clusterID.String(),
-		ToolSlug:       "cert-manager",
-		ReleaseName:    "cert-manager",
-		Namespace:      "cert-manager",
-		ValuesYAML:     "server:\n  insecure: true\n",
-		InstalledChart: &chartID,
+		ClusterID: clusterID.String(),
+		ToolSlug:  "cert-manager",
+		Releases:  []toolRelease{{ReleaseName: "cert-manager", Namespace: "cert-manager", ValuesYAML: "server:\n  insecure: true\n", State: "pending"}},
 	}
 	payload, err := json.Marshal(env)
 	if err != nil {
@@ -403,14 +412,18 @@ func TestExecuteOperationUpgradePersistsHelmRevision(t *testing.T) {
 	if err := h.executeOperation(context.Background(), op); err != nil {
 		t.Fatalf("executeOperation() error = %v", err)
 	}
-	if len(queries.valuesUpdates) != 1 {
-		t.Fatalf("values updates = %d, want 1", len(queries.valuesUpdates))
+	if len(queries.adopted) != 1 {
+		t.Fatalf("updated rows = %d, want 1", len(queries.adopted))
 	}
-	if got := queries.valuesUpdates[0].Revision; got != 9 {
+	if got := queries.adopted[0].Revision; got != 9 {
 		t.Fatalf("persisted revision = %d, want 9 (the real Helm revision)", got)
 	}
-	if queries.valuesUpdates[0].ID != chartID {
-		t.Fatalf("updated chart id = %s, want %s", queries.valuesUpdates[0].ID, chartID)
+	var checkpoint toolOperationEnvelope
+	if err := json.Unmarshal(queries.checkpoints[op.ID], &checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	if checkpoint.Releases[0].PreviousValuesYAML != "replicaCount: 1\n" || checkpoint.Releases[0].PreviousPreset != "development" {
+		t.Fatalf("rollback lost previous desired-state metadata: %+v", checkpoint.Releases[0])
 	}
 }
 
@@ -420,7 +433,7 @@ func TestCheckToolReleaseReadyReflectsReadiness(t *testing.T) {
 	t.Cleanup(restore)
 
 	clusterID := uuid.New()
-	env := toolOperationEnvelope{
+	env := toolReleaseExecution{
 		ClusterID:   clusterID.String(),
 		ToolSlug:    "cert-manager",
 		ReleaseName: "cert-manager",
@@ -470,18 +483,17 @@ func TestToolEnqueueOperationUsesIdempotencyKey(t *testing.T) {
 
 	userID := uuid.New()
 	q := newToolQueryRecorder(uuid.New())
-	h := NewToolHandler(q)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/tools/install", nil)
 	req.Header.Set("Idempotency-Key", "retry-1")
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID.String()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID.String()}))
 	ctx := withOperationIdempotency(req, "tools")
 	env := toolOperationEnvelope{ClusterID: q.clusterID.String(), ToolSlug: "prometheus"}
 
-	first, err := h.enqueueOperation(ctx, "tool_installation", "cluster/prometheus", "install", env, currentUserUUID(req))
+	first, err := createToolOperation(ctx, q, "tool_installation", "cluster/prometheus", "install", env, currentUserUUID(req))
 	if err != nil {
 		t.Fatalf("first enqueue: %v", err)
 	}
-	second, err := h.enqueueOperation(ctx, "tool_installation", "cluster/prometheus", "install", env, currentUserUUID(req))
+	second, err := createToolOperation(ctx, q, "tool_installation", "cluster/prometheus", "install", env, currentUserUUID(req))
 	if err != nil {
 		t.Fatalf("second enqueue: %v", err)
 	}

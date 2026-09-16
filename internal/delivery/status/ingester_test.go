@@ -73,6 +73,7 @@ type fakeTransaction struct {
 	compat       string
 	code         string
 	finalized    uuid.UUID
+	unchanged    bool
 }
 
 func (f *fakeTransaction) FenceDeliveryAgentSession(context.Context, sqlc.FenceDeliveryAgentSessionParams) (uuid.UUID, error) {
@@ -114,10 +115,10 @@ func (f *fakeTransaction) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTas
 	return sqlc.TaskOutbox{}, nil
 }
 
-func (f *fakeTransaction) UpsertDeliveryControllerInventory(_ context.Context, arg sqlc.UpsertDeliveryControllerInventoryParams) (sqlc.DeliveryControllerInventory, error) {
+func (f *fakeTransaction) AcceptDeliveryStatusInventory(_ context.Context, arg sqlc.AcceptDeliveryStatusInventoryParams) (sqlc.AcceptDeliveryStatusInventoryRow, error) {
 	f.compat = arg.CompatibilityStatus
 	f.code = arg.ErrorCode
-	return sqlc.DeliveryControllerInventory{}, nil
+	return sqlc.AcceptDeliveryStatusInventoryRow{StatusChanged: !f.unchanged}, nil
 }
 
 func (f *fakeTransaction) FinalizeDeliveryTargetDeletionIfComplete(_ context.Context, targetID uuid.UUID) (sqlc.DeliveryTarget, error) {
@@ -140,6 +141,7 @@ func TestIngestPersistsFencedSanitizedStatusAtomically(t *testing.T) {
 	payload := validStatus()
 	payload.Deployments[0].Message = "authorization=top-secret"
 	payload.Deployments[0].Conditions[0].Message = "bearer abc123"
+	payload.StatusDigest = payload.SemanticDigest()
 
 	if err := ingester.Ingest(context.Background(), clusterID, connectionID, "session-new", payload); err != nil {
 		t.Fatal(err)
@@ -181,6 +183,7 @@ func TestIngestRejectsPayloadIdentityBeforeTransaction(t *testing.T) {
 	runner := &fakeRunner{tx: &fakeTransaction{}}
 	payload := validStatus()
 	payload.ClusterID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	payload.StatusDigest = payload.SemanticDigest()
 	err := NewIngester(runner).Ingest(context.Background(), clusterID, connectionID, "session", payload)
 	if !errors.Is(err, ErrClusterIdentityMismatch) || runner.called {
 		t.Fatalf("got err=%v called=%v", err, runner.called)
@@ -216,6 +219,28 @@ func TestIngestRejectsSupersededDatabaseSession(t *testing.T) {
 	err := NewIngester(runner).Ingest(context.Background(), clusterID, connectionID, "old", validStatus())
 	if !errors.Is(err, ErrSessionSuperseded) {
 		t.Fatalf("got %v, want superseded", err)
+	}
+}
+
+func TestIngestShortCircuitsUnchangedSemanticStatusAfterLivenessWrite(t *testing.T) {
+	tx := &fakeTransaction{unchanged: true, current: sqlc.ClusterDeployment{
+		ID: deploymentID, ClusterID: clusterID, DesiredGeneration: 7,
+		DesiredSpecDigest: "sha256:" + strings.Repeat("a", 64), Phase: "applying",
+	}}
+	ready := &fakeReadyReconciler{}
+	ingester := NewIngester(&fakeRunner{tx: tx})
+	ingester.SetReadyReconciler(ready)
+	if err := ingester.Ingest(context.Background(), clusterID, connectionID, "session", validStatus()); err != nil {
+		t.Fatal(err)
+	}
+	if tx.updated != nil || tx.advance != nil || tx.ack != nil {
+		t.Fatalf("unchanged status performed semantic writes: update=%v advance=%v ack=%v", tx.updated, tx.advance, tx.ack)
+	}
+	if tx.compat != string(compatibility.Compatible) {
+		t.Fatal("liveness inventory envelope was not accepted before short-circuit")
+	}
+	if ready.clusterID != clusterID {
+		t.Fatal("unchanged heartbeat skipped readiness retry")
 	}
 }
 
@@ -257,7 +282,7 @@ func TestIngestIgnoresStaleGenerationButAcknowledgesSnapshot(t *testing.T) {
 func validStatus() protocol.DeliveryStatusV2 {
 	digest := "sha256:" + strings.Repeat("a", 64)
 	distributionDigest, _ := fluxdistribution.ControllerSetDigest()
-	return protocol.DeliveryStatusV2{
+	status := protocol.DeliveryStatusV2{
 		ProtocolVersion: protocol.DeliveryProtocolVersion, ClusterID: clusterID.String(),
 		SessionSequence: 9, SnapshotGeneration: 4, SnapshotETag: "sha256:" + strings.Repeat("c", 64),
 		ControllerInventory: protocol.DeliveryControllerInventory{
@@ -275,4 +300,6 @@ func validStatus() protocol.DeliveryStatusV2 {
 			Inventory:  protocol.DeliveryInventory{Entries: 2, Ready: 2}, ObservedAt: time.Now().UTC(),
 		}},
 	}
+	status.StatusDigest = status.SemanticDigest()
+	return status
 }

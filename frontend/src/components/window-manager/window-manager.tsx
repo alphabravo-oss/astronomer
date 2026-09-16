@@ -1,6 +1,11 @@
-"use client";
-
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   useWindowManagerStore,
   type WindowTab,
@@ -14,8 +19,18 @@ import {
   Terminal as TerminalIcon,
   X,
 } from "lucide-react";
-import { LogsTab } from "./logs-tab";
-import { ExecTab } from "./exec-tab";
+// Console transports and the terminal runtime are loaded only when a tab opens.
+const LogsTab = lazy(() =>
+  import("./logs-tab").then((module) => ({ default: module.LogsTab })),
+);
+const ExecTab = lazy(() =>
+  import("./exec-tab").then((module) => ({ default: module.ExecTab })),
+);
+const ClusterShell = lazy(() =>
+  import("@/components/clusters/cluster-shell").then((module) => ({
+    default: module.ClusterShell,
+  })),
+);
 
 // Per-tab connection state, mirrored from each tab body via the
 // `onStatusChange` callback. Kept here in component-local state so the
@@ -24,7 +39,7 @@ type ChipStatus = "streaming" | "connecting" | "disconnected" | "idle";
 
 function normalizeStatus(s: string | undefined): ChipStatus {
   if (s === "streaming" || s === "connected") return "streaming";
-  if (s === "connecting") return "connecting";
+  if (s === "opening" || s === "connecting") return "connecting";
   if (s === "disconnected" || s === "error") return "disconnected";
   return "idle";
 }
@@ -75,6 +90,7 @@ export function WindowManager() {
     function onMove(e: MouseEvent) {
       if (!dragRef.current) return;
       const delta = dragRef.current.startY - e.clientY;
+      if (Math.abs(delta) > 4) setMaximized(false);
       setHeight(dragRef.current.startHeight + delta);
     }
     function onUp() {
@@ -106,17 +122,6 @@ export function WindowManager() {
     }
   }, [maximized, height, setHeight]);
 
-  // Reset maximize tracking if user manually drag-resizes away from the
-  // maximized state.
-  useEffect(() => {
-    if (maximized && typeof window !== "undefined") {
-      const target = window.innerHeight - 80;
-      if (Math.abs(height - target) > 4) {
-        setMaximized(false);
-      }
-    }
-  }, [height, maximized]);
-
   if (!open || tabs.length === 0) return null;
 
   // Minimized — render only a thin strip at the bottom of the viewport.
@@ -124,11 +129,11 @@ export function WindowManager() {
     return (
       <div
         className="fixed left-0 right-0 bottom-0 z-40 flex items-center gap-1 px-2 py-1
-          border-t border-border bg-card/95 backdrop-blur-sm"
+          border-t border-border bg-card/95 backdrop-blur-xs"
       >
         <button
           onClick={() => toggleMinimize()}
-          className="inline-flex items-center gap-1 h-6 px-2 rounded text-2xs
+          className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-2xs
             text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Restore"
         >
@@ -143,7 +148,7 @@ export function WindowManager() {
                 setActive(t.id);
               }}
               className={cn(
-                "inline-flex items-center gap-1.5 h-6 px-2 rounded text-2xs whitespace-nowrap transition-colors",
+                "inline-flex items-center gap-1.5 h-6 px-2 rounded-sm text-2xs whitespace-nowrap transition-colors",
                 t.id === activeTabId
                   ? "bg-accent text-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
@@ -153,7 +158,7 @@ export function WindowManager() {
               <TabIcon kind={t.kind} />
               <span
                 className="font-mono truncate max-w-[160px]"
-                title={`${t.pod}/${t.container ?? ""}`}
+                title={tabDescription(t)}
               >
                 {shortLabel(t)}
               </span>
@@ -163,7 +168,7 @@ export function WindowManager() {
         <div className="ml-auto" />
         <button
           onClick={() => closeAll()}
-          className="inline-flex items-center justify-center h-6 w-6 rounded
+          className="inline-flex items-center justify-center h-6 w-6 rounded-sm
             text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           title="Close all"
         >
@@ -189,7 +194,7 @@ export function WindowManager() {
           event.preventDefault();
           setHeight(height + (event.key === "ArrowUp" ? 24 : -24));
         }}
-        className="h-1 w-full border-0 p-0 -mt-px cursor-row-resize hover:bg-primary/40 transition-colors shrink-0 focus:bg-primary/40 focus:outline-none"
+        className="h-1 w-full border-0 p-0 -mt-px cursor-row-resize hover:bg-primary/40 transition-colors shrink-0 focus:bg-primary/40 focus:outline-hidden"
         style={{ marginBottom: "-1px" }}
       />
 
@@ -208,31 +213,23 @@ export function WindowManager() {
                     ? "bg-background text-foreground"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
                 )}
-                title={`${t.namespace}/${t.pod}${t.container ? "/" + t.container : ""}`}
+                title={tabDescription(t)}
               >
                 <button
                   type="button"
                   onClick={() => setActive(t.id)}
                   aria-pressed={isActive}
-                  className="inline-flex min-w-0 items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="inline-flex min-w-0 items-center gap-1.5 focus:outline-hidden focus:ring-2 focus:ring-ring"
                 >
                   <StatusDot status={tabStatuses[t.id] ?? "idle"} />
                   <TabIcon kind={t.kind} />
-                  <span className="font-mono">
-                    {t.pod}
-                    {t.container ? (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        · {t.container}
-                      </span>
-                    ) : null}
-                  </span>
+                  <span className="font-mono">{tabLabel(t)}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => closeTab(t.id)}
-                  aria-label={`Close ${t.pod}${t.container ? ` ${t.container}` : ""} tab`}
-                  className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded
+                  aria-label={`Close ${tabLabel(t)} tab`}
+                  className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-sm
                     text-muted-foreground/70 hover:text-foreground hover:bg-accent/80"
                 >
                   <X className="h-3 w-3" />
@@ -246,7 +243,7 @@ export function WindowManager() {
         <div className="flex items-center gap-0.5 px-2 border-l border-border">
           <button
             onClick={handleMaximizeToggle}
-            className="inline-flex items-center justify-center h-6 w-6 rounded
+            className="inline-flex items-center justify-center h-6 w-6 rounded-sm
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title={maximized ? "Restore size" : "Maximize"}
           >
@@ -258,7 +255,7 @@ export function WindowManager() {
           </button>
           <button
             onClick={() => toggleMinimize()}
-            className="inline-flex items-center justify-center h-6 w-6 rounded
+            className="inline-flex items-center justify-center h-6 w-6 rounded-sm
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Minimize"
           >
@@ -266,7 +263,7 @@ export function WindowManager() {
           </button>
           <button
             onClick={() => closeAll()}
-            className="inline-flex items-center justify-center h-6 w-6 rounded
+            className="inline-flex items-center justify-center h-6 w-6 rounded-sm
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Close all"
           >
@@ -285,25 +282,39 @@ export function WindowManager() {
             // xterm buffer that must survive tab switches.
             style={{ display: t.id === activeTabId ? "block" : "none" }}
           >
-            {t.kind === "logs" ? (
-              <LogsTab
-                clusterId={t.clusterId}
-                namespace={t.namespace}
-                pod={t.pod}
-                container={t.container}
-                visible={t.id === activeTabId}
-                onStatusChange={(s) => handleStatusChange(t.id, s)}
-              />
-            ) : (
-              <ExecTab
-                clusterId={t.clusterId}
-                namespace={t.namespace}
-                pod={t.pod}
-                container={t.container}
-                visible={t.id === activeTabId}
-                onStatusChange={(s) => handleStatusChange(t.id, s)}
-              />
-            )}
+            <Suspense
+              fallback={
+                <p role="status" className="p-4 text-sm text-muted-foreground">
+                  Loading console…
+                </p>
+              }
+            >
+              {t.kind === "logs" ? (
+                <LogsTab
+                  clusterId={t.clusterId}
+                  namespace={t.namespace}
+                  pod={t.pod}
+                  container={t.container}
+                  visible={t.id === activeTabId}
+                  onStatusChange={(s) => handleStatusChange(t.id, s)}
+                />
+              ) : t.kind === "exec" ? (
+                <ExecTab
+                  clusterId={t.clusterId}
+                  namespace={t.namespace}
+                  pod={t.pod}
+                  container={t.container}
+                  visible={t.id === activeTabId}
+                  onStatusChange={(s) => handleStatusChange(t.id, s)}
+                />
+              ) : (
+                <ClusterShell
+                  clusterId={t.clusterId}
+                  visible={t.id === activeTabId}
+                  onStatusChange={(s) => handleStatusChange(t.id, s)}
+                />
+              )}
+            </Suspense>
           </div>
         ))}
       </div>
@@ -332,6 +343,21 @@ function StatusDot({ status }: { status: ChipStatus }) {
 }
 
 function shortLabel(t: WindowTab): string {
+  if (t.kind === "shell") return t.clusterName || t.clusterId;
   const podShort = t.pod.length > 18 ? t.pod.slice(0, 15) + "..." : t.pod;
   return t.container ? `${podShort}·${t.container}` : podShort;
+}
+
+function tabLabel(t: WindowTab): string {
+  if (t.kind === "shell") {
+    return `Shell · ${t.clusterName || t.clusterId}`;
+  }
+  return t.container ? `${t.pod} · ${t.container}` : t.pod;
+}
+
+function tabDescription(t: WindowTab): string {
+  if (t.kind === "shell") {
+    return `Audited kubectl shell for ${t.clusterName || t.clusterId}`;
+  }
+  return `${t.namespace}/${t.pod}${t.container ? `/${t.container}` : ""}`;
 }

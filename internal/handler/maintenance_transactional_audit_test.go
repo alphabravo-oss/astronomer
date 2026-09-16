@@ -12,12 +12,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 func fakeMaintenanceRunTx(q *fakeMaintenanceQuerier) maintenanceRunTxFunc {
@@ -164,7 +165,7 @@ func TestEveryMaintenanceMutationUsesTransactionalExecutor(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMaintenanceMutation" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 				want[fn.Name.Name] = true
 			}
 			return true
@@ -172,7 +173,7 @@ func TestEveryMaintenanceMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeMaintenanceMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }
@@ -221,7 +222,7 @@ func TestDeferredGateCommitsOperationAndAuditTogether(t *testing.T) {
 			gate.SetRunTx(fakeMaintenanceGateRunTx(q))
 			req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/target/", nil)
 			req.Header.Set("Idempotency-Key", "defer-transaction-proof")
-			req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+			req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 				ID: callerID.String(), AuthMethod: "jwt",
 			}))
 			w := httptest.NewRecorder()

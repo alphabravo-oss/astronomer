@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 
 type OpenAPIDocument = {
   paths?: Record<string, Record<string, unknown>>;
@@ -18,7 +18,7 @@ const contractPaths: Array<{ method: string; path: string }> = [
   { method: "post", path: "/api/v1/clusters/" },
   { method: "get", path: "/api/v1/clusters/{id}/" },
   { method: "put", path: "/api/v1/clusters/{id}/registration/options/" },
-  { method: "get", path: "/api/v1/activity/" },
+  { method: "get", path: "/api/v1/activity" },
   { method: "get", path: "/api/v1/alerting/events/" },
   { method: "get", path: "/api/v1/tools/" },
   { method: "get", path: "/api/v1/admin/backup-drill/" },

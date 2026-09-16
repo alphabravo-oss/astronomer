@@ -278,11 +278,11 @@ WHERE r.id = sqlc.arg(id) AND r.status = 'running'
 -- name: CreateDeliveryTarget :one
 INSERT INTO delivery_targets (
     project_id, name, description, bundle_version_id, placement, rollout_policy,
-    reconciliation_policy, maintenance_window_policy, suspended, created_by, updated_by
+    reconciliation_policy, maintenance_window_policy, overrides, suspended, created_by, updated_by
 ) VALUES (
     sqlc.arg(project_id), sqlc.arg(name), sqlc.arg(description),
     sqlc.arg(bundle_version_id), sqlc.arg(placement), sqlc.arg(rollout_policy),
-    sqlc.arg(reconciliation_policy), sqlc.arg(maintenance_window_policy),
+    sqlc.arg(reconciliation_policy), sqlc.arg(maintenance_window_policy), sqlc.arg(overrides),
     sqlc.arg(suspended), sqlc.narg(created_by), sqlc.narg(updated_by)
 )
 RETURNING *;
@@ -314,6 +314,7 @@ SET description = sqlc.arg(description),
     rollout_policy = sqlc.arg(rollout_policy),
     reconciliation_policy = sqlc.arg(reconciliation_policy),
     maintenance_window_policy = sqlc.arg(maintenance_window_policy),
+    overrides = sqlc.arg(overrides),
     suspended = sqlc.arg(suspended),
     generation = generation + 1,
     resource_version = resource_version + 1,
@@ -394,7 +395,7 @@ WHERE target_id = sqlc.arg(target_id) AND idempotency_key = sqlc.arg(idempotency
 
 -- name: GetDeliveryPlanningSnapshot :one
 SELECT t.id AS target_id, t.project_id, t.bundle_version_id, t.placement,
-       t.rollout_policy, t.maintenance_window_policy, t.generation,
+       t.rollout_policy, t.maintenance_window_policy, t.overrides, t.generation,
        t.suspended, t.deletion_state, p.cluster_id AS owner_cluster_id,
        bv.spec_digest, bv.source_spec, bv.requirements, bv.state AS bundle_state
 FROM delivery_targets t
@@ -418,8 +419,9 @@ SELECT DISTINCT ON (c.id)
        COALESCE(i.components, '{}')::jsonb AS components,
        d.desired_bundle_version_id AS previous_bundle_version_id,
        d.desired_generation AS previous_generation,
-       previous.spec_digest AS previous_spec_digest,
-       previous.source_spec AS previous_source_spec
+       d.desired_spec_digest AS previous_spec_digest,
+       previous.source_spec AS previous_source_spec,
+       d.desired_overrides AS previous_overrides
 FROM projects p
 JOIN clusters c ON c.id = p.cluster_id
 LEFT JOIN delivery_controller_inventory i ON i.cluster_id = c.id
@@ -428,7 +430,8 @@ LEFT JOIN cluster_deployments d
       AND d.phase = 'ready'
 LEFT JOIN component_bundle_versions previous ON previous.id = d.desired_bundle_version_id
 WHERE p.id = ANY(sqlc.arg(project_ids)::uuid[])
-ORDER BY c.id, (p.id = sqlc.arg(owner_project_id)) DESC, p.id;
+ORDER BY c.id, (p.id = sqlc.arg(owner_project_id)) DESC, p.id
+LIMIT sqlc.arg(query_limit);
 
 -- name: GetDeliveryRollout :one
 SELECT r.*
@@ -557,11 +560,12 @@ RETURNING r.*;
 SELECT * FROM delivery_rollouts
 WHERE id = sqlc.arg(id) AND lease_owner = sqlc.arg(lease_owner)
   AND fencing_generation = sqlc.arg(expected_fence)
+  AND runtime_generation = sqlc.arg(expected_runtime_generation)
   AND lease_expires_at > now()
 FOR UPDATE;
 
 -- name: ListDeliveryRolloutRuntime :many
-SELECT rc.*, c.labels,
+SELECT rc.*, c.labels, r.runtime_generation,
        EXISTS (
            SELECT 1 FROM agent_connections ac
            WHERE ac.cluster_id = rc.cluster_id AND ac.status = 'connected'
@@ -570,12 +574,14 @@ SELECT rc.*, c.labels,
        d.id AS deployment_id, d.desired_generation, d.observed_generation,
        d.phase AS deployment_phase
 FROM delivery_rollout_clusters rc
+JOIN delivery_rollouts r ON r.id = rc.rollout_id
 JOIN clusters c ON c.id = rc.cluster_id
 LEFT JOIN cluster_deployments d
-       ON d.target_id = (SELECT target_id FROM delivery_rollouts WHERE id = rc.rollout_id)
+       ON d.target_id = r.target_id
       AND d.cluster_id = rc.cluster_id
 WHERE rc.rollout_id = sqlc.arg(rollout_id)
-ORDER BY rc.release_order, rc.cluster_id;
+ORDER BY rc.release_order, rc.cluster_id
+LIMIT sqlc.arg(query_limit);
 
 -- name: ListDeliveryRolloutApprovals :many
 SELECT * FROM delivery_rollout_approvals
@@ -675,20 +681,22 @@ RETURNING r.*;
 -- name: UpsertClusterDeploymentDesired :one
 INSERT INTO cluster_deployments (
     target_id, cluster_id, current_rollout_id, desired_bundle_version_id,
-    previous_bundle_version_id, desired_generation, desired_spec_digest,
+    previous_bundle_version_id, desired_generation, desired_spec_digest, desired_overrides,
     desired_revision, action, phase
 ) VALUES (
     sqlc.arg(target_id), sqlc.arg(cluster_id), sqlc.arg(current_rollout_id),
     sqlc.arg(desired_bundle_version_id), sqlc.narg(previous_bundle_version_id),
-    sqlc.arg(desired_generation), sqlc.arg(desired_spec_digest),
+    sqlc.arg(desired_generation), sqlc.arg(desired_spec_digest), sqlc.arg(desired_overrides),
     sqlc.arg(desired_revision), sqlc.arg(action), sqlc.arg(phase)
 )
 ON CONFLICT (target_id, cluster_id) DO UPDATE
 SET current_rollout_id = EXCLUDED.current_rollout_id,
     previous_bundle_version_id = cluster_deployments.desired_bundle_version_id,
+    previous_overrides = cluster_deployments.desired_overrides,
     desired_bundle_version_id = EXCLUDED.desired_bundle_version_id,
     desired_generation = EXCLUDED.desired_generation,
     desired_spec_digest = EXCLUDED.desired_spec_digest,
+    desired_overrides = EXCLUDED.desired_overrides,
     desired_revision = EXCLUDED.desired_revision,
     action = EXCLUDED.action,
     phase = EXCLUDED.phase,
@@ -709,7 +717,8 @@ JOIN component_bundle_versions bv ON bv.id = d.desired_bundle_version_id
 JOIN delivery_sources s ON s.id = bv.source_id
 WHERE d.cluster_id = sqlc.arg(cluster_id)
   AND d.phase <> 'removed'
-ORDER BY d.id;
+ORDER BY d.id
+LIMIT sqlc.arg(query_limit);
 
 -- name: GetClusterDeployment :one
 SELECT d.*
@@ -907,26 +916,42 @@ WHERE cluster_id = sqlc.arg(cluster_id)
        OR delivery_assignment_receipts.agent_sequence < sqlc.arg(agent_sequence))
 RETURNING *;
 
--- name: UpsertDeliveryControllerInventory :one
+-- name: AcceptDeliveryStatusInventory :one
 INSERT INTO delivery_controller_inventory (
     cluster_id, agent_version, flux_version, components, api_versions, distribution_digest,
-    kubernetes_version, ready, compatibility_status, error_code, observed_at
+    kubernetes_version, ready, compatibility_status, error_code, observed_at,
+    status_digest, agent_session_id, agent_sequence, semantic_sequence
 ) VALUES (
     sqlc.arg(cluster_id), sqlc.arg(agent_version), sqlc.arg(flux_version), sqlc.arg(components),
     sqlc.arg(api_versions), sqlc.arg(distribution_digest),
     sqlc.arg(kubernetes_version), sqlc.arg(ready),
-    sqlc.arg(compatibility_status), sqlc.arg(error_code), sqlc.narg(observed_at)
+    sqlc.arg(compatibility_status), sqlc.arg(error_code), sqlc.narg(observed_at),
+    sqlc.arg(status_digest), sqlc.arg(agent_session_id), sqlc.arg(agent_sequence), sqlc.arg(agent_sequence)
 )
 ON CONFLICT (cluster_id) DO UPDATE
 SET agent_version = EXCLUDED.agent_version, flux_version = EXCLUDED.flux_version, components = EXCLUDED.components,
     api_versions = EXCLUDED.api_versions, distribution_digest = EXCLUDED.distribution_digest,
     kubernetes_version = EXCLUDED.kubernetes_version, ready = EXCLUDED.ready,
     compatibility_status = EXCLUDED.compatibility_status,
-    error_code = EXCLUDED.error_code, observed_at = EXCLUDED.observed_at
-RETURNING *;
+    error_code = EXCLUDED.error_code, observed_at = EXCLUDED.observed_at,
+    semantic_sequence = CASE
+        WHEN delivery_controller_inventory.status_digest IS DISTINCT FROM EXCLUDED.status_digest
+          OR delivery_controller_inventory.agent_session_id IS DISTINCT FROM EXCLUDED.agent_session_id
+        THEN EXCLUDED.agent_sequence
+        ELSE delivery_controller_inventory.semantic_sequence
+    END,
+    status_digest = EXCLUDED.status_digest,
+    agent_session_id = EXCLUDED.agent_session_id,
+    agent_sequence = EXCLUDED.agent_sequence
+WHERE delivery_controller_inventory.agent_session_id IS DISTINCT FROM EXCLUDED.agent_session_id
+   OR delivery_controller_inventory.agent_sequence < EXCLUDED.agent_sequence
+RETURNING delivery_controller_inventory.*,
+          delivery_controller_inventory.semantic_sequence = delivery_controller_inventory.agent_sequence AS status_changed;
 
 -- name: GetDeliveryControllerInventory :one
-SELECT i.*
+SELECT i.cluster_id, i.agent_version, i.flux_version, i.components, i.api_versions,
+       i.distribution_digest, i.kubernetes_version, i.ready,
+       i.compatibility_status, i.error_code, i.observed_at, i.updated_at
 FROM delivery_controller_inventory i
 JOIN projects p ON p.cluster_id = i.cluster_id
 WHERE i.cluster_id = sqlc.arg(cluster_id) AND p.id = sqlc.arg(project_id);
@@ -950,7 +975,7 @@ SELECT
     c.status,
     c.kubernetes_version,
     c.agent_version,
-    c.last_heartbeat,
+    l.last_heartbeat,
     c.annotations,
     EXISTS (
         SELECT 1 FROM agent_connections ac
@@ -975,6 +1000,7 @@ SELECT
     COALESCE(d.drifted_count, 0)::bigint AS drifted_count,
     d.last_observed_at
 FROM clusters c
+LEFT JOIN cluster_liveness l ON l.cluster_id = c.id
 LEFT JOIN delivery_controller_inventory i ON i.cluster_id = c.id
 LEFT JOIN LATERAL (
     SELECT
@@ -995,7 +1021,8 @@ LEFT JOIN LATERAL (
       AND phase <> 'removed'
 ) d ON true
 WHERE c.decommissioned_at IS NULL
-ORDER BY c.is_local ASC, c.display_name ASC, c.name ASC, c.id ASC;
+ORDER BY c.is_local ASC, c.display_name ASC, c.name ASC, c.id ASC
+LIMIT $1;
 
 -- name: CountActiveDeliveryRollouts :one
 SELECT count(*)

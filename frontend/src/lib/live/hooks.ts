@@ -8,7 +8,7 @@
  * pacer so ALL live invalidations are throttled in one place.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useEffectEvent, useMemo } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import type { LiveEvent, LiveEventType, Unsubscribe } from "./envelope";
 import { pacedInvalidate } from "./paced-invalidate";
@@ -101,17 +101,20 @@ export function useLiveSubscribe<T = unknown>(
   types: LiveEventType | LiveEventType[] | "*",
   handler: (ev: LiveEvent<T>) => void,
 ): void {
-  const handlerRef = useRef(handler);
-  handlerRef.current = handler;
+  const onEvent = useEffectEvent(handler);
   // Stable hash so an inline array literal doesn't churn the effect.
   const typesKey = JSON.stringify(types);
 
   useEffect(() => {
     acquireLiveStream();
     const target = liveTarget();
-    const list: string[] = Array.isArray(types) ? types : [types];
+    const parsedTypes: LiveEventType | LiveEventType[] | "*" =
+      JSON.parse(typesKey);
+    const list: string[] = Array.isArray(parsedTypes)
+      ? parsedTypes
+      : [parsedTypes];
     const wrap = (e: Event) => {
-      handlerRef.current((e as CustomEvent<LiveEvent<T>>).detail);
+      onEvent((e as CustomEvent<LiveEvent<T>>).detail);
     };
     for (const t of list) {
       target.addEventListener(t, wrap as EventListener);
@@ -122,7 +125,6 @@ export function useLiveSubscribe<T = unknown>(
       }
       releaseLiveStream();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typesKey]);
 }
 
@@ -152,10 +154,12 @@ export function useLiveQueryInvalidation(
     acquireLiveStream();
     const target = liveTarget();
 
-    const types = Array.isArray(eventTypes) ? eventTypes : [eventTypes];
-    const allKeys: QueryKey[] = isQueryKeyArray(queryKeys)
-      ? (queryKeys as QueryKey[])
-      : [queryKeys as QueryKey];
+    const parsedTypes: LiveEventType | LiveEventType[] = JSON.parse(typesKey);
+    const types = Array.isArray(parsedTypes) ? parsedTypes : [parsedTypes];
+    const parsedKeys: QueryKey | QueryKey[] = JSON.parse(keysKey);
+    const allKeys: QueryKey[] = isQueryKeyArray(parsedKeys)
+      ? parsedKeys
+      : [parsedKeys];
 
     const handler = () => {
       for (const key of allKeys) {
@@ -176,16 +180,15 @@ export function useLiveQueryInvalidation(
       }
       releaseLiveStream();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typesKey, keysKey, queryClient]);
 }
 
 /** Accept either a single QueryKey or an array of them. */
-function isQueryKeyArray(v: QueryKey | QueryKey[]): boolean {
+function isQueryKeyArray(value: QueryKey | QueryKey[]): value is QueryKey[] {
   // A QueryKey is itself a readonly array; distinguish "array of keys" from
   // "a single key" by checking that the first element is itself array-like.
-  if (!Array.isArray(v)) return false;
-  if (v.length === 0) return false;
-  const first = v[0];
+  if (!Array.isArray(value)) return false;
+  if (value.length === 0) return false;
+  const first = value[0];
   return Array.isArray(first);
 }

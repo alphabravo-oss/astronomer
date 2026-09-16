@@ -7,7 +7,7 @@ export const button =
   "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors motion-reduce:transition-none hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50";
 export const primary = `${button} border-primary bg-primary text-primary-foreground hover:bg-primary/90`;
 export const field =
-  "h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
+  "h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";
 
 export function Section({
   title,
@@ -146,7 +146,7 @@ export function GrantList({
         items.map((g, i) => (
           <div
             key={`${g.permission}:${g.scope}:${i}`}
-            className="flex items-start gap-3 rounded border p-3"
+            className="flex items-start gap-3 rounded-sm border p-3"
           >
             <KeyRound className="mt-0.5 h-4 w-4 text-muted-foreground" />
             <div>

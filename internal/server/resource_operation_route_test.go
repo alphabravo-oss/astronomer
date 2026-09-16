@@ -38,10 +38,7 @@ func TestResourceOperationReceiptRechecksClusterAccessAndRejectsCrossClusterPath
 
 	request := func(bindings []rbac.RoleBinding, pathCluster uuid.UUID) *httptest.ResponseRecorder {
 		resourceHandler.SetAuthorization(rbac.NewEngine(), routeSecurityRBACQuerier{bindings: bindings})
-		router := NewRouter(&config.Config{}, RouterDependencies{
-			JWT: jwt, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: bindings},
-			Resources: resourceHandler,
-		})
+		router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwt, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: bindings}}, ClusterResources: ClusterResourceDependencies{Resources: resourceHandler}})
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+pathCluster.String()+"/resources/operations/"+operationID.String()+"/", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		recorder := httptest.NewRecorder()
@@ -66,9 +63,7 @@ func TestResourceOperationReceiptRechecksClusterAccessAndRejectsCrossClusterPath
 	}
 
 	resourceHandler.SetAuthorization(rbac.NewEngine(), routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)})
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT: jwt, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{}, Resources: resourceHandler,
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwt, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{}}, ClusterResources: ClusterResourceDependencies{Resources: resourceHandler}})
 	unauthenticated := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/resources/operations/"+operationID.String()+"/", nil)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, unauthenticated)

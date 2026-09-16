@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -135,111 +136,61 @@ func TestRespondRequestErrorRedactsInternalDetails(t *testing.T) {
 	}
 }
 
-func TestRespondPaginated(t *testing.T) {
-	t.Run("middle page has next and previous", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/api/items?limit=10&offset=20", nil)
+func TestPageResponseUsesAppliedWindow(t *testing.T) {
+	for _, tc := range []struct {
+		name, query   string
+		total         int64
+		items         []string
+		limit, offset int
+		next          *int
+	}{
+		{name: "middle", query: "?limit=10&offset=20", total: 100, items: []string{"a", "b", "c"}, limit: 10, offset: 20, next: intPointer(23)},
+		{name: "last", query: "?limit=10&offset=20", total: 21, items: []string{"a"}, limit: 10, offset: 20},
+		{name: "past end", query: "?limit=10&offset=100", total: 21, limit: 10, offset: 100},
+		{name: "default", total: 50, items: []string{"a"}, limit: 20, next: intPointer(1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/api/items"+tc.query, nil)
+			limit, offset := queryLimitOffset(r, 20)
+			w := httptest.NewRecorder()
+			paging.Write(w, tc.items, paging.Exact(tc.total, limit, offset, len(tc.items)))
+			var response paging.Response[string]
+			if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			p := response.Pagination
+			if w.Code != http.StatusOK || response.Data == nil || p.Total == nil || *p.Total != tc.total || p.Limit != tc.limit || p.Offset != tc.offset {
+				t.Fatalf("response = %+v, metadata = %+v", response, p)
+			}
+			if (p.NextOffset == nil) != (tc.next == nil) || (tc.next != nil && *tc.next != *p.NextOffset) {
+				t.Fatalf("next = %v, want %v", p.NextOffset, tc.next)
+			}
+		})
+	}
+}
 
-		items := []string{"a", "b", "c"}
-		RespondPaginated(w, r, items, 100)
+func intPointer(value int) *int { return &value }
 
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected status 200, got %d", w.Code)
-		}
-
-		var body struct {
-			Data     []string `json:"data"`
-			Count    int64    `json:"count"`
-			Next     *string  `json:"next"`
-			Previous *string  `json:"previous"`
-		}
-		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-			t.Fatalf("failed to decode body: %v", err)
-		}
-
-		if len(body.Data) != 3 {
-			t.Fatalf("expected 3 items, got %d", len(body.Data))
-		}
-		if body.Count != 100 {
-			t.Fatalf("expected count=100, got %d", body.Count)
-		}
-		if body.Next == nil {
-			t.Fatal("expected next to be non-nil")
-		}
-		if *body.Next != "/api/items?limit=10&offset=30" {
-			t.Fatalf("expected next=/api/items?limit=10&offset=30, got %s", *body.Next)
-		}
-		if body.Previous == nil {
-			t.Fatal("expected previous to be non-nil")
-		}
-		if *body.Previous != "/api/items?limit=10&offset=10" {
-			t.Fatalf("expected previous=/api/items?limit=10&offset=10, got %s", *body.Previous)
-		}
-	})
-
-	t.Run("first page has no previous", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/api/items?limit=10&offset=0", nil)
-
-		RespondPaginated(w, r, []string{"a"}, 50)
-
-		var body struct {
-			Next     *string `json:"next"`
-			Previous *string `json:"previous"`
-		}
-		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-			t.Fatalf("failed to decode body: %v", err)
-		}
-		if body.Next == nil {
-			t.Fatal("expected next to be non-nil")
-		}
-		if body.Previous != nil {
-			t.Fatalf("expected previous to be nil, got %v", *body.Previous)
-		}
-	})
-
-	t.Run("last page has no next", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/api/items?limit=10&offset=20", nil)
-
-		RespondPaginated(w, r, []string{"a"}, 25)
-
-		var body struct {
-			Next     *string `json:"next"`
-			Previous *string `json:"previous"`
-		}
-		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-			t.Fatalf("failed to decode body: %v", err)
-		}
-		if body.Next != nil {
-			t.Fatalf("expected next to be nil, got %v", *body.Next)
-		}
-		if body.Previous == nil {
-			t.Fatal("expected previous to be non-nil")
-		}
-	})
-
-	t.Run("defaults to limit=20 offset=0 when no query params", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/api/items", nil)
-
-		RespondPaginated(w, r, []string{"a"}, 50)
-
-		var body struct {
-			Next     *string `json:"next"`
-			Previous *string `json:"previous"`
-		}
-		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-			t.Fatalf("failed to decode body: %v", err)
-		}
-		if body.Next == nil {
-			t.Fatal("expected next to be non-nil")
-		}
-		if *body.Next != "/api/items?limit=20&offset=20" {
-			t.Fatalf("expected next=/api/items?limit=20&offset=20, got %s", *body.Next)
-		}
-		if body.Previous != nil {
-			t.Fatalf("expected previous to be nil, got %v", *body.Previous)
-		}
-	})
+func TestQueryOffset(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		want  int
+	}{
+		{name: "missing", want: 0},
+		{name: "valid", query: "?offset=42", want: 42},
+		{name: "negative", query: "?offset=-1", want: 0},
+		{name: "invalid", query: "?offset=nope", want: 0},
+		{name: "int32 max", query: "?offset=2147483647", want: 2147483647},
+		{name: "oversized", query: "?offset=9223372036854775807", want: 2147483647},
+		{name: "beyond uint64", query: "?offset=999999999999999999999999999", want: 2147483647},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/api/items"+tt.query, nil)
+			if got := queryOffset(r); got != tt.want {
+				t.Fatalf("queryOffset() = %d, want %d", got, tt.want)
+			}
+		})
+	}
 }

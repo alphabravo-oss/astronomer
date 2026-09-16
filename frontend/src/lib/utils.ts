@@ -1,6 +1,13 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
+import type { TimeFormatPreference } from "@/lib/api/user-preferences";
+
+let activeTimeFormat: TimeFormatPreference = "locale";
+
+export function setTimeFormatPreference(preference: TimeFormatPreference) {
+  activeTimeFormat = preference;
+}
 
 /**
  * Merge Tailwind CSS classes with proper precedence
@@ -14,10 +21,18 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function formatDate(
   dateStr: string,
-  fmt: string = "MMM d, yyyy HH:mm",
+  fmt?: string,
 ): string {
   try {
-    return format(parseISO(dateStr), fmt);
+    const date = parseISO(dateStr);
+    if (fmt) return format(date, fmt);
+    if (activeTimeFormat === "12h") {
+      return format(date, "MMM d, yyyy h:mm a");
+    }
+    if (activeTimeFormat === "24h") {
+      return format(date, "MMM d, yyyy HH:mm");
+    }
+    return date.toLocaleString();
   } catch {
     return dateStr;
   }
@@ -26,9 +41,15 @@ export function formatDate(
 /**
  * Format a date string to a relative time (e.g., "2 hours ago")
  */
-export function formatRelativeTime(dateStr: string): string {
+export function formatRelativeTime(
+  dateStr: string | null | undefined,
+): string {
+  if (!dateStr) return "Never";
   try {
-    return formatDistanceToNow(parseISO(dateStr), { addSuffix: true });
+    const date = parseISO(dateStr);
+    // Go and SQL zero timestamps are absence sentinels, not historical events.
+    if (date.getUTCFullYear() <= 1 || date.getTime() === 0) return "Never";
+    return formatDistanceToNow(date, { addSuffix: true });
   } catch {
     return dateStr;
   }
@@ -37,11 +58,18 @@ export function formatRelativeTime(dateStr: string): string {
 /**
  * Format bytes to human-readable format (e.g., "1.5 GiB")
  */
-export function formatBytes(bytes: number, decimals: number = 1): string {
+export function formatBytes(
+  bytes: number | null | undefined,
+  decimals: number = 1,
+): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes === 0) return "0 B";
   const k = 1024;
-  const sizes = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(k)),
+    sizes.length - 1,
+  );
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
 }
 

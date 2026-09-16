@@ -26,10 +26,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
-	"net"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -41,6 +42,7 @@ import (
 	"github.com/coder/websocket/wsjson"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
@@ -49,7 +51,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/downstreamboundary"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel/connectauth"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -65,6 +67,10 @@ const (
 	// sendChannelSize is the buffer size for the per-agent send channel.
 	sendChannelSize = 256
 
+	// agentPersistenceTimeout bounds best-effort connection bookkeeping after a
+	// tunnel context has ended. These writes must never outlive shutdown.
+	agentPersistenceTimeout = 5 * time.Second
+
 	// A4 audit actions. Both satisfy the audit-action contract regex
 	// (^[a-z]+(\.[a-z0-9_]+)+$); the contract test scans internal/handler/*.go
 	// only, so — like the existing agent.token.* tunnel actions — there is
@@ -72,6 +78,13 @@ const (
 	actionAgentConnected  = "agent.connected"
 	actionAgentAuthFailed = "agent.auth_failed"
 )
+
+// ErrAgentCapabilityUnsupported identifies a request rejected before it was
+// placed on the agent connection because the CONNECT-time capability set does
+// not authorize that operation. Callers must treat this as a deterministic
+// admission result, not as a transport failure (in particular it must not trip
+// a tunnel circuit breaker).
+var ErrAgentCapabilityUnsupported = errors.New("agent capability unsupported")
 
 // AgentConnection represents a connected agent.
 type AgentConnection struct {
@@ -139,8 +152,6 @@ type Hub struct {
 	deliveryStatus DeliveryStatusSink
 	// connLimiter throttles tunnel CONNECT attempts by SOURCE IP after repeated
 	// auth FAILURES (A4 / M5). Optional; nil-safe so test hubs stay unthrottled.
-	// Shared with the tunnel2 /connect path so both connect surfaces present one
-	// cross-path per-IP view.
 	connLimiter *ConnectFailureLimiter
 	// clockSkew bounds the allowed drift between the CONNECT envelope timestamp
 	// and the server clock (A4 / L13). <=0 disables the replay check.
@@ -185,21 +196,12 @@ func connectTimestampOutsideSkew(now, ts time.Time, skew time.Duration) bool {
 	return d > skew || d < -skew
 }
 
-// ConnectClientIP derives the canonical client IP for the tunnel upgrade. It
-// reuses middleware.RemoteIPAddr (XFF-first / X-Real-IP / host-of-RemoteAddr —
-// the same trust policy every audited HTTP request uses) so the limiter key and
-// the audited Event.IPAddress agree. Returns a non-empty key always ("unknown"
-// when nothing parses) so the limiter never collapses distinct clients.
+// ConnectClientIP derives the canonical client IP established by the trusted
+// proxy middleware so limiter and audit identities always agree.
 func ConnectClientIP(r *http.Request) (string, *netip.Addr) {
-	addr := middleware.RemoteIPAddr(r)
+	addr := reqctx.ClientIP(r)
 	if addr != nil {
 		return addr.String(), addr
-	}
-	if r != nil && r.RemoteAddr != "" {
-		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host != "" {
-			return host, nil
-		}
-		return r.RemoteAddr, nil
 	}
 	return "unknown", nil
 }
@@ -371,14 +373,13 @@ type AgentTokenValidator interface {
 	// the agent reconnects with the new token.
 	RotateClusterAgentToken(ctx context.Context, arg sqlc.RotateClusterAgentTokenParams) (sqlc.ClusterAgentToken, error)
 	ClearPreviousClusterAgentTokenHash(ctx context.Context, id uuid.UUID) error
-	UpdateClusterHeartbeat(ctx context.Context, arg sqlc.UpdateClusterHeartbeatParams) error
+	RecordAgentHeartbeat(ctx context.Context, arg sqlc.RecordAgentHeartbeatParams) (bool, error)
 	UpsertClusterHealthStatus(ctx context.Context, arg sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error)
 	// TouchClusterMetricsSample (C3 / M13) stamps last_metrics_at when a
 	// non-empty metrics SAMPLE arrives. Called only from handleMetrics, so
 	// last_metrics_at tracks real metrics frames separately from last_check.
 	TouchClusterMetricsSample(ctx context.Context, clusterID uuid.UUID) error
-	CreateAgentConnection(ctx context.Context, arg sqlc.CreateAgentConnectionParams) (sqlc.AgentConnection, error)
-	DisconnectActiveConnectionsByCluster(ctx context.Context, clusterID uuid.UUID) error
+	ReplaceActiveAgentConnection(ctx context.Context, arg sqlc.ReplaceActiveAgentConnectionParams) (sqlc.AgentConnection, error)
 	UpdateAgentConnectionStatus(ctx context.Context, arg sqlc.UpdateAgentConnectionStatusParams) error
 	UpdateAgentConnectionPing(ctx context.Context, id uuid.UUID) error
 	ClaimPendingAgentLifecycleOperation(ctx context.Context, clusterID uuid.UUID) (sqlc.AgentLifecycleOperation, error)
@@ -403,9 +404,19 @@ func NewHubWithValidator(log *slog.Logger, validator AgentTokenValidator) *Hub {
 	}
 }
 
+// AgentTokenValidatorWired reports whether CONNECT credentials can be checked
+// against durable registration and agent-token state.
+func (h *Hub) AgentTokenValidatorWired() bool {
+	return h != nil && h.validator != nil
+}
+
 // HandleWebSocket is the HTTP handler for WebSocket upgrade.
 // Route: /api/v1/ws/agent/tunnel/{cluster_id}/
 func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.validator == nil {
+		http.Error(w, `{"error":"agent token validation unavailable"}`, http.StatusServiceUnavailable)
+		return
+	}
 	// A4 / M5: throttle by SOURCE IP BEFORE the WS upgrade so an IP that has
 	// blown past the auth-failure threshold gets a clean 429 — no upgrade, no
 	// DB token lookup, no goroutines. Per-IP only: other IPs are unaffected,
@@ -513,7 +524,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// tokenKind ("registration"/"agent") is threaded out of the validator block
 	// so the success-audit site below can record which credential authenticated.
 	var connectTokenKind string
-	if h.validator != nil {
+	{
 		clusterID, err := uuid.Parse(payload.ClusterID)
 		if err != nil {
 			// Malformed cluster UUID is a cheap PRE-DB rejection, not a
@@ -703,7 +714,9 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		slog.String("cluster_id", agent.ClusterID),
 		slog.String("session_id", agent.SessionID),
 	)
-	h.persistDisconnect(context.Background(), agent)
+	persistCtx, persistCancel := context.WithTimeout(context.Background(), agentPersistenceTimeout)
+	h.persistDisconnect(persistCtx, agent)
+	persistCancel()
 	h.publish("cluster.disconnected", agent.ClusterID, agent.SessionID, agent.AgentVersion)
 
 	// Clear the locator entry so siblings stop forwarding to us — but ONLY
@@ -721,7 +734,9 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		h.mu.RLock()
 		disconnectLoc := h.locator
 		h.mu.RUnlock()
-		disconnectLoc.Delete(context.Background(), agent.ClusterID)
+		locatorCtx, locatorCancel := context.WithTimeout(context.Background(), agentPersistenceTimeout)
+		disconnectLoc.Delete(locatorCtx, agent.ClusterID)
+		locatorCancel()
 	}
 }
 
@@ -733,6 +748,14 @@ func (h *Hub) readPump(ctx context.Context, agent *AgentConnection) {
 			if ctx.Err() != nil {
 				return
 			}
+			if expectedAgentDisconnect(err) {
+				h.log.Debug("agent websocket closed",
+					slog.String("cluster_id", agent.ClusterID),
+					slog.String("error", err.Error()),
+				)
+				agent.cancel()
+				return
+			}
 			h.log.Error("read error",
 				slog.String("cluster_id", agent.ClusterID),
 				slog.String("error", err.Error()),
@@ -742,6 +765,18 @@ func (h *Hub) readPump(ctx context.Context, agent *AgentConnection) {
 		}
 		recordAgentMessage(agent.ClusterID, "inbound")
 		h.handleMessage(agent, &msg)
+	}
+}
+
+func expectedAgentDisconnect(err error) bool {
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	switch websocket.CloseStatus(err) {
+	case websocket.StatusNormalClosure, websocket.StatusGoingAway:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -805,6 +840,19 @@ func (h *Hub) GetAgent(clusterID string) *AgentConnection {
 	return h.agents.Get(clusterID)
 }
 
+// SupportsAgentCapability returns the immutable CONNECT-time capability result
+// for the locally-owned agent. connected=false means this pod does not own the
+// connection; supported is deliberately false for nil capability sets so new
+// admission decisions always fail closed.
+func (h *Hub) SupportsAgentCapability(clusterID, capability string) (supported, connected bool) {
+	agent := h.agents.Get(clusterID)
+	if agent == nil {
+		return false, false
+	}
+	_, supported = agent.Capabilities[capability]
+	return supported, true
+}
+
 // SendToAgent sends a message to a specific agent.
 // Returns an error if the agent is not connected or the send buffer is full.
 func (h *Hub) SendToAgent(clusterID string, msg *protocol.Message) error {
@@ -817,7 +865,7 @@ func (h *Hub) SendToAgent(clusterID string, msg *protocol.Message) error {
 	}
 	if capability := requiredCapabilityForMessage(msg); capability != "" && agent.Capabilities != nil {
 		if _, supported := agent.Capabilities[capability]; !supported {
-			return fmt.Errorf("agent for cluster %q does not advertise required capability %q", clusterID, capability)
+			return fmt.Errorf("%w: agent for cluster %q does not advertise required capability %q", ErrAgentCapabilityUnsupported, clusterID, capability)
 		}
 	}
 
@@ -875,7 +923,7 @@ func requiredCapabilityForMessage(message *protocol.Message) string {
 	case protocol.MsgK8sRequest:
 		var request protocol.K8sRequestPayload
 		if json.Unmarshal(message.Payload, &request) != nil {
-			return "mutate"
+			return protocol.AgentCapabilityMutate
 		}
 		method := strings.ToUpper(strings.TrimSpace(request.Method))
 		if method == http.MethodPost && request.Path == "/api/v1/namespaces/astronomer-system/serviceaccounts/astronomer-direct-reader/token" {
@@ -884,7 +932,7 @@ func requiredCapabilityForMessage(message *protocol.Message) string {
 		if method == http.MethodGet || method == http.MethodHead {
 			return "watch"
 		}
-		return "mutate"
+		return protocol.AgentCapabilityMutate
 	default:
 		return ""
 	}
@@ -971,7 +1019,9 @@ func (h *Hub) disconnectImpl(clusterID string) bool {
 	loc := h.locator
 	h.mu.RUnlock()
 	if loc != nil {
-		loc.Delete(context.Background(), clusterID)
+		ctx, cancel := context.WithTimeout(context.Background(), agentPersistenceTimeout)
+		loc.Delete(ctx, clusterID)
+		cancel()
 	}
 	return true
 }
@@ -1106,22 +1156,22 @@ func (h *Hub) persistConnect(ctx context.Context, agent *AgentConnection) {
 		)
 		return
 	}
-	if err := h.validator.DisconnectActiveConnectionsByCluster(ctx, clusterID); err != nil {
-		h.log.Warn("failed to disconnect existing agent sessions",
-			slog.String("cluster_id", agent.ClusterID),
-			slog.String("error", err.Error()),
-		)
-	}
-	row, err := h.validator.CreateAgentConnection(ctx, sqlc.CreateAgentConnectionParams{
+	params := sqlc.ReplaceActiveAgentConnectionParams{
 		ClusterID:    clusterID,
 		AgentID:      agent.AgentID,
 		SessionID:    agent.SessionID,
-		Status:       "connected",
 		ChannelName:  "",
 		PodName:      "",
 		NodeName:     "",
 		AgentVersion: agent.AgentVersion,
-	})
+	}
+	var row sqlc.AgentConnection
+	for attempt := 0; attempt < 3; attempt++ {
+		row, err = h.validator.ReplaceActiveAgentConnection(ctx, params)
+		if err == nil || !isAgentConnectionConflict(err) {
+			break
+		}
+	}
 	if err != nil {
 		h.log.Warn("failed to persist agent connection",
 			slog.String("cluster_id", agent.ClusterID),
@@ -1131,6 +1181,12 @@ func (h *Hub) persistConnect(ctx context.Context, agent *AgentConnection) {
 		return
 	}
 	agent.DBID = row.ID
+}
+
+func isAgentConnectionConflict(err error) bool {
+	var databaseErr *pgconn.PgError
+	return errors.As(err, &databaseErr) && databaseErr.Code == "23505" &&
+		databaseErr.ConstraintName == "agent_connections_one_active_per_cluster"
 }
 
 func (h *Hub) persistDisconnect(ctx context.Context, agent *AgentConnection) {
@@ -1155,7 +1211,9 @@ func (h *Hub) persistPing(agent *AgentConnection) {
 	if h.validator == nil || agent.DBID == uuid.Nil {
 		return
 	}
-	if err := h.validator.UpdateAgentConnectionPing(context.Background(), agent.DBID); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), agentPersistenceTimeout)
+	defer cancel()
+	if err := h.validator.UpdateAgentConnectionPing(ctx, agent.DBID); err != nil {
 		h.log.Warn("failed to persist agent ping",
 			slog.String("cluster_id", agent.ClusterID),
 			slog.String("session_id", agent.SessionID),
@@ -1165,7 +1223,7 @@ func (h *Hub) persistPing(agent *AgentConnection) {
 }
 
 func (h *Hub) validateAndMaybeRotateToken(ctx context.Context, clusterID uuid.UUID, payload protocol.ConnectPayload) (string, string, error) {
-	// SEC-R01: shared A3 gate with tunnel2 (adoption + durable hash + cluster match).
+	// SEC-R01: centralized adoption + durable hash + cluster-match gate.
 	res, err := connectauth.Validate(ctx, h.validator, clusterID, payload.Token)
 	if err != nil {
 		return "", "", err

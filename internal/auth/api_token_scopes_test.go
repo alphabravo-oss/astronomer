@@ -3,8 +3,6 @@ package auth
 import (
 	"encoding/json"
 	"net"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 )
 
@@ -187,33 +185,5 @@ func TestIPAllowed_NilRemoteFailsClosed(t *testing.T) {
 	nets, _ := ParseAllowedCIDRs("10.0.0.0/8")
 	if IPAllowed(nets, nil) {
 		t.Fatal("nil remote IP must fail closed")
-	}
-}
-
-func TestRemoteIPForRequest_RealIPInRemoteAddr(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/t", nil)
-	// Simulate chimiddleware.RealIP behaviour — XFF promoted into RemoteAddr.
-	r.RemoteAddr = "203.0.113.7:54321"
-	got := RemoteIPForRequest(r)
-	if got == nil || got.String() != "203.0.113.7" {
-		t.Fatalf("got %v, want 203.0.113.7", got)
-	}
-}
-
-func TestRemoteIPForRequest_DoesNotTrustForwardedHeader(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/t", nil)
-	r.RemoteAddr = "" // simulate the case where the test setup never wired RealIP
-	r.Header.Set("X-Forwarded-For", "198.51.100.5, 10.0.0.1")
-	if got := RemoteIPForRequest(r); got != nil {
-		t.Fatalf("spoofed X-Forwarded-For produced %v", got)
-	}
-}
-
-func TestRemoteIPForRequest_IPv6(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/t", nil)
-	r.RemoteAddr = "[2001:db8::1]:443"
-	got := RemoteIPForRequest(r)
-	if got == nil || got.String() != "2001:db8::1" {
-		t.Fatalf("got %v, want 2001:db8::1", got)
 	}
 }

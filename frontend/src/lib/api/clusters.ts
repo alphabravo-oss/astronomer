@@ -5,6 +5,7 @@ import {
   patchClustersById as updateClusterOperation,
   postClusters as createClusterOperation,
 } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { Cluster, ClusterRegistration, PaginatedResponse } from "@/types";
 
@@ -23,6 +24,10 @@ export function mapCluster(wire: ClusterWire): Cluster {
     id: wire.id,
     name: wire.name,
     displayName: wire.display_name,
+    badgeText: wire.badge_text,
+    badgeColor: wire.badge_color,
+    agentOverrides: wire.agent_overrides,
+    agentOverridesDigest: wire.agent_overrides_digest,
     description: wire.description,
     status: wire.status,
     apiServerUrl: wire.api_server_url,
@@ -79,6 +84,7 @@ function createBody(
     annotations: input.annotations,
     api_server_url: input.apiServerUrl,
     ca_certificate: input.caCertificate,
+    agent_overrides: input.agentOverrides,
   };
 }
 
@@ -93,10 +99,12 @@ export interface ClusterListParameters {
 
 export async function getClusters(
   params?: ClusterListParameters,
+  signal?: AbortSignal,
 ): Promise<PaginatedResponse<Cluster>> {
   const pageSize = Math.max(1, Math.min(200, params?.pageSize ?? 20));
   const page = Math.max(1, params?.page ?? 1);
   const response = await listClustersOperation({
+    signal,
     query: {
       status: params?.status,
       provider: params?.provider,
@@ -106,17 +114,7 @@ export async function getClusters(
       offset: (page - 1) * pageSize,
     },
   });
-  const count = response.count;
-  return {
-    data: response.data.map(mapCluster),
-    total: count,
-    count,
-    next: response.next,
-    previous: response.previous,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(count / pageSize)),
-  };
+  return mapPage(response, mapCluster);
 }
 
 export async function getCluster(id: string): Promise<Cluster> {

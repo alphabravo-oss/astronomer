@@ -71,7 +71,6 @@ function classify(routePath) {
   if (routePath.includes('/ws/') || /\/(watch|stream|connect|events\/stream)(\/|$)/.test(routePath)) return 'stream';
   if (isPassthroughRoute(routePath) || routePath.endsWith('/*')) return 'proxy';
   if (/(export|\.csv|kubeconfig|support-bundle|diagnostics\/bundle)/.test(routePath)) return 'download';
-  if (routePath.startsWith('/api/v1/alerts/')) return 'compatibility-alias';
   return 'public-api';
 }
 
@@ -273,7 +272,10 @@ function generate(source) {
   const risks = riskByRoute();
   const uniqueRoutes = new Map();
   for (const route of JSON.parse(fs.readFileSync(routesPath, 'utf8'))) {
-    if (route.method.toUpperCase() === 'CONNECT') continue;
+    // OpenAPI 3 has no operation object for CONNECT or HTTP QUERY. Preserve
+    // both in the mounted-route inventory, but do not synthesize invalid path
+    // operations into the API document.
+    if (['CONNECT', 'QUERY'].includes(route.method.toUpperCase())) continue;
     uniqueRoutes.set(routeKey(route.method, route.pattern), route);
   }
   const routes = [...uniqueRoutes.values()]

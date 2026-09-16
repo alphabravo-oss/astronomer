@@ -36,9 +36,12 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	clusterID := uuid.UUID(output.ClusterID.Bytes)
-	if raw := clusterIDParamForRotate(r); raw != "" {
-		want, parseErr := uuid.Parse(raw)
-		if parseErr != nil || want != clusterID {
+	if chi.URLParam(r, "output_id") != "" {
+		want, ok := parseClusterIDParam(w, r, "id")
+		if !ok {
+			return
+		}
+		if want != clusterID {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Output does not belong to this cluster")
 			return
 		}
@@ -75,7 +78,7 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 		CreatedByID:    currentUserUUID(r),
 	}
 	mutationContext := withOperationIdempotency(r, "logging")
-	result, err := executeLoggingMutation(r, h,
+	result, err := executeMutation(r, h.runTx,
 		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LokiIngestToken], error) {
 			row, storeErr := q.UpsertLokiIngestToken(r.Context(), params)
 			if storeErr != nil {
@@ -84,16 +87,8 @@ func (h *LoggingHandler) RotateOutputToken(w http.ResponseWriter, r *http.Reques
 			op, opErr := createLoggingOutputApplyOperation(mutationContext, q, output, currentUserUUID(r))
 			return loggingMutationResult[sqlc.LokiIngestToken]{row: row, op: op}, opErr
 		},
-		func() (loggingMutationResult[sqlc.LokiIngestToken], error) {
-			row, storeErr := h.queries.UpsertLokiIngestToken(r.Context(), params)
-			if storeErr != nil {
-				return loggingMutationResult[sqlc.LokiIngestToken]{}, storeErr
-			}
-			op, opErr := createLoggingOutputApplyOperation(mutationContext, h.queries, output, currentUserUUID(r))
-			return loggingMutationResult[sqlc.LokiIngestToken]{row: row, op: op}, opErr
-		},
-		func(result loggingMutationResult[sqlc.LokiIngestToken]) clusterAuditEvent {
-			return clusterAuditEvent{action: "logging.loki_token.rotate", resourceType: "loki_ingest_token", resourceID: result.row.ID.String(), resourceName: output.Name, status: http.StatusAccepted, detail: map[string]any{
+		func(result loggingMutationResult[sqlc.LokiIngestToken]) mutationAuditEvent {
+			return mutationAuditEvent{action: "logging.loki_token.rotate", resourceType: "loki_ingest_token", resourceID: result.row.ID.String(), resourceName: output.Name, status: http.StatusAccepted, detail: map[string]any{
 				"cluster_id": clusterID.String(), "output_id": output.ID.String(), "operation_id": operationIDOrEmpty(result.op),
 			}}
 		})
@@ -121,16 +116,6 @@ type loggingTokenRotationReceipt struct {
 	Token     string         `json:"token"`
 	RotatedAt string         `json:"rotatedAt"`
 	Operation map[string]any `json:"operation"`
-}
-
-func clusterIDParamForRotate(r *http.Request) string {
-	if raw := chi.URLParam(r, "cluster_id"); raw != "" {
-		return raw
-	}
-	if chi.URLParam(r, "output_id") != "" {
-		return chi.URLParam(r, "id")
-	}
-	return ""
 }
 
 func parseOutputIDParam(r *http.Request) (uuid.UUID, error) {

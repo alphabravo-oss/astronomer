@@ -1,3 +1,4 @@
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Cluster Image Scans tab — sprint 062.
  *
@@ -24,9 +25,11 @@ import {
  * rescan nudge (which the backend gates as cluster:read by design).
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "@/lib/navigation";
+import { useMemo, useState } from "react";
+import { useClock } from "@/lib/hooks/use-clock";
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { QueryStates } from "@/components/ui/query-states";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import {
   AlertTriangle,
@@ -36,7 +39,8 @@ import {
   X,
 } from "lucide-react";
 
-import { queryKeys, useCluster } from "@/lib/hooks";
+import { queryKeys } from "@/lib/query-keys";
+import { useCluster } from "@/lib/hooks/clusters";
 import { liveFallback } from "@/lib/live/status-store";
 import {
   getImageVulnReport,
@@ -52,7 +56,7 @@ import {
   type CVESeverity,
   type ImageVulnReport,
   type ImageVulnSummary,
-} from "@/lib/api/cluster-detail";
+} from "@/lib/api/cluster-vulnerabilities";
 import { useOperationMutation } from "@/lib/hooks/operation-mutation";
 import { Download, TrendingDown, TrendingUp, Minus } from "lucide-react";
 
@@ -79,7 +83,7 @@ const SEVERITIES: {
   {
     key: "low",
     label: "Low",
-    tone: "bg-sky-500/10 text-sky-500 border-sky-500/30",
+    tone: "bg-sky-500/10 text-sky-800 border-sky-500/30 dark:text-sky-300",
   },
 ];
 
@@ -92,15 +96,16 @@ function cveToneFor(severity: CVESeverity): string {
     case "MEDIUM":
       return "bg-status-warning/10 text-status-warning border-status-warning/30";
     case "LOW":
-      return "bg-sky-500/10 text-sky-500 border-sky-500/30";
+      return "bg-sky-500/10 text-sky-800 border-sky-500/30 dark:text-sky-300";
     default:
       return "bg-muted text-muted-foreground border-border";
   }
 }
 
 function ClusterImageScansPage() {
-  const params = useParams();
-  const clusterId = params.id as string;
+  const now = useClock(1000);
+  const params = Route.useParams();
+  const clusterId = params.id;
   const queryClient = useQueryClient();
   const { data: cluster } = useCluster(clusterId);
 
@@ -241,16 +246,18 @@ function ClusterImageScansPage() {
   // Distinct namespace pick list, derived from the loaded reports.
   const namespaces = useMemo(() => {
     const set = new Set<string>();
-    images.data?.items.forEach((r) => r.namespace && set.add(r.namespace));
+    images.data?.data.forEach((r) => r.namespace && set.add(r.namespace));
     return Array.from(set).sort();
   }, [images.data]);
 
-  // Auto-close drawer when its underlying row vanishes.
-  useEffect(() => {
-    if (!openReport) return;
-    const stillThere = images.data?.items.some((r) => r.id === openReport.id);
-    if (stillThere === false) setOpenReport(null);
-  }, [images.data, openReport]);
+  // Selection belongs to the current result set, not an asynchronous effect.
+  if (
+    openReport &&
+    images.data &&
+    !images.data.data.some((r) => r.id === openReport.id)
+  ) {
+    setOpenReport(null);
+  }
 
   if (cluster?.isLocal) {
     return (
@@ -268,6 +275,19 @@ function ClusterImageScansPage() {
       </div>
     );
   }
+
+  if (scansEnabled && summary.isError)
+    return (
+      <QueryStates query={summary} permission="image_scans:read">
+        {() => null}
+      </QueryStates>
+    );
+  if (scansEnabled && images.isError)
+    return (
+      <QueryStates query={images} permission="image_scans:read">
+        {() => null}
+      </QueryStates>
+    );
 
   return (
     <div className="space-y-6 p-4">
@@ -322,9 +342,7 @@ function ClusterImageScansPage() {
       <ScanProgressBanner
         clusterId={clusterId}
         progress={progress.data}
-        dispatchedRecently={
-          !!lastRescanAt && Date.now() - lastRescanAt < 30_000
-        }
+        dispatchedRecently={!!lastRescanAt && now - lastRescanAt < 30_000}
       />
 
       {/* Severity tiles */}
@@ -383,7 +401,7 @@ function ClusterImageScansPage() {
                       : "text-muted-foreground border-border";
                 const Icon = d > 0 ? TrendingUp : d < 0 ? TrendingDown : Minus;
                 return (
-                  <div key={sev} className={`border rounded p-2 ${tone}`}>
+                  <div key={sev} className={`border rounded-sm p-2 ${tone}`}>
                     <div className="text-[10px] uppercase tracking-wide opacity-80">
                       {sev}
                     </div>
@@ -468,7 +486,7 @@ function ClusterImageScansPage() {
         >
           Namespace
         </label>
-        <select
+        <Select
           id="field-1a64459b-394"
           className="border border-border bg-background rounded-md px-2 py-1 text-sm"
           value={namespace}
@@ -480,14 +498,14 @@ function ClusterImageScansPage() {
               {n}
             </option>
           ))}
-        </select>
+        </Select>
         <label
           className="text-sm text-muted-foreground ml-4"
           htmlFor="field-1a64459b-407"
         >
           CVE severity
         </label>
-        <select
+        <Select
           id="field-1a64459b-407"
           className="border border-border bg-background rounded-md px-2 py-1 text-sm"
           value={severityFilter}
@@ -500,7 +518,7 @@ function ClusterImageScansPage() {
           <option value="HIGH">High only</option>
           <option value="MEDIUM">Medium only</option>
           <option value="LOW">Low only</option>
-        </select>
+        </Select>
       </section>
 
       {/* Top images */}
@@ -529,7 +547,7 @@ function ClusterImageScansPage() {
                 </TableCell>
               </TableRow>
             )}
-            {!images.isLoading && (images.data?.items.length ?? 0) === 0 && (
+            {!images.isLoading && (images.data?.data.length ?? 0) === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="px-3 py-8 text-center">
                   <div className="inline-flex flex-col items-center gap-2 text-muted-foreground">
@@ -560,7 +578,7 @@ function ClusterImageScansPage() {
                 </TableCell>
               </TableRow>
             )}
-            {images.data?.items.map((r) => {
+            {images.data?.data.map((r) => {
               const total =
                 r.criticalCount +
                 r.highCount +
@@ -616,7 +634,7 @@ function ClusterImageScansPage() {
               </p>
             </div>
             <button
-              className="p-1 rounded hover:bg-muted"
+              className="p-1 rounded-sm hover:bg-muted"
               onClick={() => setOpenReport(null)}
               aria-label="Close"
             >
@@ -856,7 +874,7 @@ function ScanProgressBanner({
   dispatchedRecently,
 }: {
   clusterId: string;
-  progress?: import("@/lib/api/cluster-detail").ImageVulnProgress;
+  progress?: import("@/lib/api/cluster-vulnerabilities").ImageVulnProgress;
   dispatchedRecently?: boolean;
 }) {
   if (!progress) {
@@ -874,7 +892,7 @@ function ScanProgressBanner({
   if (dispatchedRecently && !progress.scanning) {
     return (
       <div className="rounded-lg border border-sky-500/40 bg-sky-500/5 px-4 py-3 text-sm flex items-center gap-3">
-        <Loader2 className="h-4 w-4 animate-spin text-sky-500 flex-shrink-0" />
+        <Loader2 className="h-4 w-4 animate-spin text-sky-500 shrink-0" />
         <span className="text-foreground">
           Rescan dispatched — waiting for trivy-operator to spawn new scan jobs…
         </span>
@@ -887,7 +905,7 @@ function ScanProgressBanner({
     // actionable notice rather than an error — and point straight to Tools.
     return (
       <div className="rounded-lg border border-sky-500/40 bg-sky-500/5 px-4 py-3 text-sm flex items-start gap-3">
-        <ShieldAlert className="h-4 w-4 text-sky-500 flex-shrink-0 mt-0.5" />
+        <ShieldAlert className="h-4 w-4 text-sky-500 shrink-0 mt-0.5" />
         <div className="flex-1">
           <div className="font-medium text-foreground">
             Image scanning isn&apos;t enabled on this cluster
@@ -952,7 +970,7 @@ function ScanProgressBanner({
   }
   return (
     <div className="rounded-lg border border-status-success/40 bg-status-success/5 px-4 py-2.5 text-sm flex items-center gap-2">
-      <ShieldAlert className="h-4 w-4 text-status-success flex-shrink-0" />
+      <ShieldAlert className="h-4 w-4 text-status-success shrink-0" />
       <span className="text-foreground">
         All scans current — {progress.reportsCount} workload
         {progress.reportsCount === 1 ? "" : "s"} indexed, last scan {ageStr}.

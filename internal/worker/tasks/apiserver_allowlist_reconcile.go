@@ -92,7 +92,7 @@ type ApiserverAllowlistReconcileDeps struct {
 	Registry      *providers.Registry
 	ClusterShaper ApiserverAllowlistClusterShaper
 	// AstronomerEgress is the runtime-known tunnel egress CIDR list.
-	// Defaults to allowlist.AstronomerEgressFromEnv() when nil.
+	// It is resolved once by internal/config before runtime composition.
 	AstronomerEgress []string
 	// EmergencyAccess is the global emergency-access CIDR list (optional).
 	EmergencyAccess []string
@@ -218,13 +218,13 @@ func (runtime ApiserverAllowlistRuntime) ReconcileApiserverAllowlistOnce(ctx con
 	if driver == nil {
 		// Detected as unknown; record state, no patch.
 		operatorCIDRs := decodeCIDRsRow(row.Cidrs)
-		desired := allowlist.Render(operatorCIDRs, egressOrEnv(deps.AstronomerEgress), deps.EmergencyAccess)
+		desired := allowlist.Render(operatorCIDRs, deps.AstronomerEgress, deps.EmergencyAccess)
 		return stampReconcileOutcome(ctx, deps, row, providers.ProviderUnknown, "failed", "no provider driver detected", desired, []string{})
 	}
 	capability := deps.Registry.CapabilityFor(ctx, pc)
 	if row.Mode == "enforce" && !capability.CanEnforce {
 		operatorCIDRs := decodeCIDRsRow(row.Cidrs)
-		desired := allowlist.Render(operatorCIDRs, egressOrEnv(deps.AstronomerEgress), deps.EmergencyAccess)
+		desired := allowlist.Render(operatorCIDRs, deps.AstronomerEgress, deps.EmergencyAccess)
 		unsupported := &providers.UnsupportedEnforcementError{Provider: detectedID, Reason: capability.Reason}
 		_ = stampReconcileOutcome(ctx, deps, row, detectedID, "failed", unsupported.Error(), desired, []string{})
 		return unsupported
@@ -246,7 +246,7 @@ func (runtime ApiserverAllowlistRuntime) ReconcileApiserverAllowlistOnce(ctx con
 
 	// Step 3: Render desired.
 	operatorCIDRs := decodeCIDRsRow(row.Cidrs)
-	desired := allowlist.Render(operatorCIDRs, egressOrEnv(deps.AstronomerEgress), deps.EmergencyAccess)
+	desired := allowlist.Render(operatorCIDRs, deps.AstronomerEgress, deps.EmergencyAccess)
 	drift := !allowlist.SameSet(effective, desired)
 
 	// Always snapshot — both monitor + enforce.
@@ -330,13 +330,4 @@ func decodeCIDRsRow(raw []byte) []string {
 		return nil
 	}
 	return out
-}
-
-// egressOrEnv returns the configured AstronomerEgress slice; falls back
-// to the env-derived list when the deps slot is empty.
-func egressOrEnv(configured []string) []string {
-	if len(configured) > 0 {
-		return configured
-	}
-	return allowlist.AstronomerEgressFromEnv()
 }

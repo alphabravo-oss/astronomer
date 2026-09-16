@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Cluster "Network & access" tab (migration 070).
  *
@@ -26,9 +27,10 @@ import {
  * sweep is the eventual-consistency safety net.
  */
 
-import { useMemo, useState } from "react";
-import { useParams } from "@/lib/navigation";
+import { useState } from "react";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { QueryStates } from "@/components/ui/query-states";
 import { toastError, toastInfo, toastSuccess, toastWarning } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import type { AxiosError } from "axios";
@@ -37,7 +39,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Loader2,
   Lock,
   RefreshCw,
   ShieldAlert,
@@ -50,8 +51,8 @@ import {
   reconcileApiserverAllowlist,
   updateApiserverAllowlist,
   type ApiserverAllowlistMode,
-} from "@/lib/api/cluster-detail";
-import { queryKeys } from "@/lib/hooks";
+} from "@/lib/api/cluster-apiserver-allowlist";
+import { queryKeys } from "@/lib/query-keys";
 import { liveFallback } from "@/lib/live/status-store";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -66,7 +67,7 @@ function ModeBadge({
 }) {
   if (mode === "disabled") {
     return (
-      <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-gray-100 text-gray-700">
+      <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-gray-100 text-gray-700">
         Apiserver: open
       </span>
     );
@@ -76,8 +77,8 @@ function ModeBadge({
       <span
         className={
           drift
-            ? "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning"
-            : "inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-success/10 text-status-success"
+            ? "inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning"
+            : "inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-success/10 text-status-success"
         }
       >
         <Lock className="h-3 w-3" /> Apiserver: locked
@@ -85,7 +86,7 @@ function ModeBadge({
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-info/10 text-status-info">
+    <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-info/10 text-status-info">
       Apiserver: monitoring
     </span>
   );
@@ -120,12 +121,12 @@ function CIDRPill({
 
 // ─── Main page ──────────────────────────────────────────────────────────────
 function ClusterNetworkAccessPage() {
-  const params = useParams<{ id: string }>();
+  const params = Route.useParams();
   const clusterId = params.id;
   const queryClient = useQueryClient();
   const { canWrite, reason } = useClustersUpdate(clusterId);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const query = useQuery({
     queryKey: queryKeys.clusterPages.apiserverAllowlist(clusterId),
     queryFn: () => getApiserverAllowlist(clusterId),
     // `network_access.changed` covers allow-list writes while the stream is
@@ -143,13 +144,13 @@ function ClusterNetworkAccessPage() {
   const [confirmEnforce, setConfirmEnforce] = useState<boolean>(false);
   const [requireForce, setRequireForce] = useState<boolean>(false);
 
-  // Sync editor state with the latest server payload when not editing.
-  useMemo(() => {
-    if (data && !editing) {
-      setEditedCIDRs(data.operatorCidrs ?? []);
-      setEditedMode(data.mode ?? "monitor");
-    }
-  }, [data, editing]);
+  const beginEditing = () => {
+    if (!query.data) return;
+    setEditedCIDRs(query.data.operatorCidrs ?? []);
+    setEditedMode(query.data.mode ?? "monitor");
+    setEditing(true);
+  };
+  const data = query.data;
 
   const updateMut = useMutation({
     mutationFn: (body: {
@@ -198,11 +199,12 @@ function ClusterNetworkAccessPage() {
     },
   });
 
-  const { data: snapshots = [] } = useQuery({
+  const { data: snapshotPage } = useQuery({
     queryKey: queryKeys.clusterPages.apiserverAllowlistSnapshots(clusterId),
     queryFn: () => listApiserverAllowlistSnapshots(clusterId, { limit: 20 }),
     enabled: showSnapshots,
   });
+  const snapshots = snapshotPage?.data ?? [];
 
   function handleSave() {
     if (
@@ -241,22 +243,16 @@ function ClusterNetworkAccessPage() {
     setNewCIDR("");
   }
 
-  if (isLoading) {
+  if (query.isLoading || query.isError || !data)
     return (
-      <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading network access…
-      </div>
+      <QueryStates query={query} permission="clusters:read">
+        {() => null}
+      </QueryStates>
     );
-  }
 
-  if (isError || !data) {
-    return (
-      <div className="p-6 text-sm text-status-error">
-        Failed to load network access.{" "}
-        <button onClick={() => refetch()}>Retry</button>
-      </div>
-    );
-  }
+  const canMonitor = data.capability.canMonitor;
+  const canEnforce = data.capability.canEnforce;
+  const canReconcile = canWrite && canMonitor;
 
   return (
     <div className="space-y-6 p-6">
@@ -276,21 +272,28 @@ function ClusterNetworkAccessPage() {
         </div>
         <div className="flex items-center gap-2">
           {data.drift && (
-            <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning">
+            <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning">
               <ShieldAlert className="h-3 w-3" /> Drift detected
             </span>
           )}
           {data.syncStatus === "synced" && (
-            <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-status-success/10 text-status-success">
+            <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-success/10 text-status-success">
               <ShieldCheck className="h-3 w-3" /> Synced
             </span>
           )}
           <button
             type="button"
             onClick={() => reconcileMut.mutate()}
-            disabled={!canWrite || reconcileMut.isPending}
-            title={canWrite ? "Run reconcile now" : reason}
-            className="inline-flex items-center gap-1 rounded border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50"
+            disabled={!canReconcile || reconcileMut.isPending}
+            title={
+              !canWrite
+                ? reason
+                : canMonitor
+                  ? "Run reconcile now"
+                  : (data.capability.reason ??
+                    "This provider cannot be monitored")
+            }
+            className="inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50"
           >
             <RefreshCw
               className={
@@ -302,8 +305,28 @@ function ClusterNetworkAccessPage() {
         </div>
       </div>
 
+      {!canEnforce && (
+        <div className="flex items-start gap-2 rounded-sm border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <div className="font-medium">Provider enforcement unavailable</div>
+            <div className="text-xs">
+              {data.capability.reason ??
+                "Astronomer cannot enforce API-server access for this provider."}
+              {data.capability.requiredMetadata.length > 0 && (
+                <>
+                  {" "}
+                  Required metadata:{" "}
+                  {data.capability.requiredMetadata.join(", ")}.
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Detected provider + status row */}
-      <div className="grid grid-cols-3 gap-4 rounded border bg-muted/30 p-4 text-sm">
+      <div className="grid grid-cols-3 gap-4 rounded-sm border bg-muted/30 p-4 text-sm">
         <div>
           <div className="text-muted-foreground">Detected provider</div>
           <div className="font-mono">{data.detectedProvider}</div>
@@ -317,7 +340,7 @@ function ClusterNetworkAccessPage() {
           <div className="font-mono">{data.lastReconciledAt ?? "—"}</div>
         </div>
         {data.lastError && (
-          <div className="col-span-3 flex items-start gap-2 rounded bg-status-warning/10 p-2 text-xs text-status-warning">
+          <div className="col-span-3 flex items-start gap-2 rounded-sm bg-status-warning/10 p-2 text-xs text-status-warning">
             <AlertTriangle className="mt-0.5 h-3 w-3" />
             <span>{data.lastError}</span>
           </div>
@@ -326,15 +349,21 @@ function ClusterNetworkAccessPage() {
 
       {/* CIDR lists side-by-side */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded border p-4">
+        <div className="rounded-sm border p-4">
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-medium">Operator CIDRs</h2>
             {!editing ? (
               <button
                 type="button"
-                onClick={() => setEditing(true)}
-                disabled={!canWrite}
-                title={canWrite ? "Edit" : reason}
+                onClick={beginEditing}
+                disabled={!canWrite || !canMonitor}
+                title={
+                  !canWrite
+                    ? reason
+                    : canMonitor
+                      ? "Edit"
+                      : data.capability.reason
+                }
                 className="text-xs underline disabled:opacity-50"
               >
                 Edit
@@ -383,17 +412,17 @@ function ClusterNetworkAccessPage() {
           </div>
           {editing && (
             <div className="mt-3 flex gap-2">
-              <input
+              <Input
                 type="text"
                 value={newCIDR}
                 onChange={(e) => setNewCIDR(e.target.value)}
                 placeholder="e.g. 10.0.0.0/8"
-                className="flex-1 rounded border px-2 py-1 text-sm font-mono"
+                className="flex-1 rounded-sm border px-2 py-1 text-sm font-mono"
               />
               <button
                 type="button"
                 onClick={handleAddCIDR}
-                className="rounded border px-3 py-1 text-sm hover:bg-muted/30"
+                className="rounded-sm border px-3 py-1 text-sm hover:bg-muted/30"
               >
                 Add
               </button>
@@ -401,7 +430,7 @@ function ClusterNetworkAccessPage() {
           )}
         </div>
 
-        <div className="rounded border bg-muted/30 p-4">
+        <div className="rounded-sm border bg-muted/30 p-4">
           <h2 className="font-medium mb-2 flex items-center gap-1">
             Astronomer egress
             <span
@@ -424,18 +453,23 @@ function ClusterNetworkAccessPage() {
       </div>
 
       {/* Mode toggle */}
-      <div className="rounded border p-4">
+      <div className="rounded-sm border p-4">
         <h2 className="font-medium mb-2">Mode</h2>
         <div className="flex gap-3 text-sm">
           {(["monitor", "enforce", "disabled"] as const).map((m) => (
             <label key={m} className="flex items-center gap-1">
-              <input
+              <Input
                 type="radio"
                 name="mode"
                 value={m}
                 checked={(editing ? editedMode : data.mode) === m}
                 onChange={() => setEditedMode(m)}
-                disabled={!editing || !canWrite}
+                disabled={
+                  !editing ||
+                  !canWrite ||
+                  (m === "monitor" && !canMonitor) ||
+                  (m === "enforce" && !canEnforce)
+                }
               />
               <span className="capitalize">{m}</span>
             </label>
@@ -449,7 +483,7 @@ function ClusterNetworkAccessPage() {
       </div>
 
       {/* Effective list */}
-      <div className="rounded border p-4">
+      <div className="rounded-sm border p-4">
         <h2 className="font-medium mb-2">Effective (last reconcile)</h2>
         <div className="flex flex-wrap gap-1 min-h-[2rem]">
           {data.effective.length === 0 ? (
@@ -463,7 +497,7 @@ function ClusterNetworkAccessPage() {
       </div>
 
       {/* Desired (preview) */}
-      <div className="rounded border p-4">
+      <div className="rounded-sm border p-4">
         <h2 className="font-medium mb-2 flex items-center gap-1">
           Desired
           <CheckCircle2 className="h-3 w-3 text-status-success" />
@@ -476,7 +510,7 @@ function ClusterNetworkAccessPage() {
       </div>
 
       {/* Snapshot history */}
-      <div className="rounded border">
+      <div className="rounded-sm border">
         <button
           type="button"
           onClick={() => setShowSnapshots(!showSnapshots)}

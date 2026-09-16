@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -31,11 +32,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
+	"github.com/alphabravocompany/astronomer-go/internal/projectquota"
 )
 
 // Task type names. Exported so worker.go (and any tests) can register them
@@ -86,11 +89,14 @@ const (
 	PodSecurityProfileRestricted = "restricted"
 )
 
-// reconcileLeaseTTL is how long a worker holds the lease for a single
-// (project, cluster, namespace) before another worker is free to re-claim
-// the row. Longer than the typical apply (which is sub-second) but short
-// enough that a crashed worker doesn't strand the row for long.
-const reconcileLeaseTTL = 30 * time.Second
+// Bound the complete reconcile inside its durable lease. All Kubernetes calls
+// receive the shorter context, so a worker cannot keep mutating a namespace
+// after ownership can be reacquired. The claim token fences every terminal DB
+// write as a second line of defence.
+const (
+	reconcileLeaseTTL = 10 * time.Minute
+	reconcileTimeout  = 5 * time.Minute
+)
 
 // projectReconcileSweepMaxRows bounds how many project_namespaces rows a single
 // periodic sweep processes. Each reconcile fans out ~8 tunnel RPCs, so an
@@ -107,11 +113,13 @@ type ProjectReconcileQuerier interface {
 	GetClusterRegistryConfig(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterRegistryConfig, error)
 	GetDefaultPodSecurityTemplate(ctx context.Context) (sqlc.PodSecurityTemplate, error)
 	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error)
+	UpsertProjectResourceQuotaAllocation(ctx context.Context, arg sqlc.UpsertProjectResourceQuotaAllocationParams) (sqlc.ProjectResourceQuotaAllocation, error)
+	DeleteProjectResourceQuotaAllocation(ctx context.Context, arg sqlc.DeleteProjectResourceQuotaAllocationParams) error
 	ListAllProjectNamespaces(ctx context.Context) ([]sqlc.ProjectNamespace, error)
 	UpsertProjectNamespace(ctx context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error)
 	DeleteProjectNamespace(ctx context.Context, arg sqlc.DeleteProjectNamespaceParams) error
 	ClaimProjectNamespaceReconcile(ctx context.Context, arg sqlc.ClaimProjectNamespaceReconcileParams) (sqlc.ProjectNamespace, error)
-	MarkProjectNamespaceReconciled(ctx context.Context, arg sqlc.MarkProjectNamespaceReconciledParams) error
+	MarkProjectNamespaceReconciled(ctx context.Context, arg sqlc.MarkProjectNamespaceReconciledParams) (int64, error)
 }
 
 // ProjectK8sRequester is the same shape as handler.K8sRequester, redeclared
@@ -192,6 +200,11 @@ func (runtime ProjectRuntime) HandleProjectReconcile(ctx context.Context, t *asy
 		// the user already removed the namespace from the project, so leaving
 		// a row dangling here would just be confusing.
 		_ = removeProjectEnforcement(ctx, runtime.Deps.Requester, p.ClusterID, p.Namespace, projectID)
+		if err := runtime.Deps.Queries.DeleteProjectResourceQuotaAllocation(ctx, sqlc.DeleteProjectResourceQuotaAllocationParams{
+			ProjectID: projectID, ClusterID: clusterID, Namespace: p.Namespace,
+		}); err != nil {
+			return fmt.Errorf("delete project resourcequota allocation: %w", err)
+		}
 		return runtime.Deps.Queries.DeleteProjectNamespace(ctx, sqlc.DeleteProjectNamespaceParams{
 			ProjectID: projectID,
 			ClusterID: clusterID,
@@ -206,12 +219,12 @@ func (runtime ProjectRuntime) HandleProjectReconcile(ctx context.Context, t *asy
 	return runtime.reconcileProjectNamespace(ctx, runtime.Deps.Queries, runtime.Deps.Requester, project, clusterID, p.Namespace)
 }
 
-// HandleProjectReconcileAll is the asynq handler for the periodic sweep.
-// It walks every project_namespaces row, attempts to claim the lease, and
-// reconciles only the ones it claims. Other workers running concurrently
-// pick up disjoint rows.
+// HandleProjectReconcileAll is the horizontally distributable periodic sweep.
+// Every scheduler replica may deliver it; the durable per-namespace lease is
+// the sole ownership primitive, so workers pick up disjoint rows instead of
+// funneling all namespace reconciliation through one global leader.
 func (runtime ProjectRuntime) HandleProjectReconcileAll(ctx context.Context, _ *asynq.Task) error {
-	return runPeriodicTaskWithLeader(ctx, ProjectReconcileAllType, func() error {
+	return runPeriodicTaskWithRowLeases(ctx, ProjectReconcileAllType, func() error {
 		if runtime.Deps.Queries == nil || runtime.Deps.Requester == nil {
 			return fmt.Errorf("project reconcile runtime is not configured")
 		}
@@ -236,31 +249,48 @@ func (runtime ProjectRuntime) HandleProjectReconcileAll(ctx context.Context, _ *
 			ProjectReconcileQuerier: runtime.Deps.Queries,
 			cache:                   map[uuid.UUID]cachedRegistryConfig{},
 		}
+		var failures []error
 		for _, row := range rows {
-			lease := pgtype.Timestamptz{Time: time.Now().UTC().Add(reconcileLeaseTTL), Valid: true}
-			claimed, err := runtime.Deps.Queries.ClaimProjectNamespaceReconcile(ctx, sqlc.ClaimProjectNamespaceReconcileParams{
-				ProjectID:   row.ProjectID,
-				ClusterID:   row.ClusterID,
-				Namespace:   row.Namespace,
-				LockedUntil: lease,
-			})
+			claimed, claimToken, acquired, err := claimProjectNamespaceReconcile(ctx, runtime.Deps.Queries, row.ProjectID, row.ClusterID, row.Namespace)
 			if err != nil {
-				// pgx returns ErrNoRows when the lease is held by someone else.
-				// That's the normal cooperative path — skip silently.
+				failures = append(failures, err)
+				continue
+			}
+			if !acquired {
 				continue
 			}
 			project, err := runtime.Deps.Queries.GetProjectByID(ctx, claimed.ProjectID)
 			if err != nil {
 				runtimeLogger(ctx).WarnContext(ctx, "project lookup failed during sweep", "project_id", claimed.ProjectID.String(), "error", err)
-				_ = markReconciled(ctx, runtime.Deps.Queries, claimed.ProjectID, claimed.ClusterID, claimed.Namespace, "project lookup failed: "+err.Error())
+				failures = append(failures, markReconciled(ctx, runtime.Deps.Queries, claimToken, claimed.ProjectID, claimed.ClusterID, claimed.Namespace, "project lookup failed: "+err.Error()))
 				continue
 			}
-			if err := runtime.reconcileProjectNamespace(ctx, q, runtime.Deps.Requester, project, claimed.ClusterID, claimed.Namespace); err != nil {
+			reconcileCtx, cancel := context.WithTimeout(ctx, reconcileTimeout)
+			err = runtime.reconcileClaimedProjectNamespace(reconcileCtx, q, runtime.Deps.Requester, claimToken, project, claimed.ClusterID, claimed.Namespace)
+			cancel()
+			if err != nil {
 				runtimeLogger(ctx).WarnContext(ctx, "project reconcile failed", "project_id", claimed.ProjectID.String(), "namespace", claimed.Namespace, "error", err)
+				failures = append(failures, err)
 			}
 		}
-		return nil
+		return errors.Join(failures...)
 	})
+}
+
+func claimProjectNamespaceReconcile(ctx context.Context, q ProjectReconcileQuerier, projectID, clusterID uuid.UUID, namespace string) (sqlc.ProjectNamespace, pgtype.UUID, bool, error) {
+	claimToken := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	claimed, err := q.ClaimProjectNamespaceReconcile(ctx, sqlc.ClaimProjectNamespaceReconcileParams{
+		ProjectID: projectID, ClusterID: clusterID, Namespace: namespace,
+		LockedUntil: pgtype.Timestamptz{Time: time.Now().UTC().Add(reconcileLeaseTTL), Valid: true},
+		ClaimToken:  claimToken,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.ProjectNamespace{}, pgtype.UUID{}, false, nil
+	}
+	if err != nil {
+		return sqlc.ProjectNamespace{}, pgtype.UUID{}, false, fmt.Errorf("claim project namespace reconcile: %w", err)
+	}
+	return claimed, claimToken, true, nil
 }
 
 // projectNamespaceReconcileOrder returns the sort key used to process the
@@ -306,10 +336,20 @@ func (c *perTickRegistryCachingQuerier) GetClusterRegistryConfig(ctx context.Con
 // reconcileProjectNamespace renders and applies the three managed objects
 // for a single (project, cluster, namespace) and records the outcome.
 func (runtime ProjectRuntime) reconcileProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, requester ProjectK8sRequester, project sqlc.Project, clusterID uuid.UUID, namespace string) error {
+	_, claimToken, acquired, err := claimProjectNamespaceReconcile(ctx, q, project.ID, clusterID, namespace)
+	if err != nil || !acquired {
+		return err
+	}
+	reconcileCtx, cancel := context.WithTimeout(ctx, reconcileTimeout)
+	defer cancel()
+	return runtime.reconcileClaimedProjectNamespace(reconcileCtx, q, requester, claimToken, project, clusterID, namespace)
+}
+
+func (runtime ProjectRuntime) reconcileClaimedProjectNamespace(ctx context.Context, q ProjectReconcileQuerier, requester ProjectK8sRequester, claimToken pgtype.UUID, project sqlc.Project, clusterID uuid.UUID, namespace string) error {
 	clusterIDStr := clusterID.String()
 	labels, err := projectNamespaceLabels(ctx, q, namespace, project.ID.String())
 	if err != nil {
-		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("resolve psa labels: %v", err))
+		return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("resolve psa labels: %v", err))
 	}
 	// Per-project PSS overrides the cluster-wide template's enforce/audit/warn
 	// levels (the project owner has explicit authority over their namespaces'
@@ -320,31 +360,47 @@ func (runtime ProjectRuntime) reconcileProjectNamespace(ctx context.Context, q P
 		mergePodSecurityProfile(labels, project.PodSecurityProfile)
 	}
 	if err := labelNamespace(ctx, requester, clusterIDStr, namespace, labels); err != nil {
-		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("label namespace: %v", err))
+		return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("label namespace: %v", err))
 	}
 
 	quota := renderResourceQuota(namespace, project.ResourceQuota)
 	if err := serverSideApply(ctx, requester, clusterIDStr, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedQuotaName), quota); err != nil {
-		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("apply resourcequota: %v", err))
+		return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("apply resourcequota: %v", err))
 	}
 
-	// Per-project explicit quota (cpu/memory/pods) → astronomer-project-quota.
+	// Project-wide explicit cap (cpu/memory/pods) → per-namespace allocations
+	// of astronomer-project-quota. Kubernetes cannot enforce a quota across
+	// namespaces, so divide the single project cap deterministically rather
+	// than multiplying it into every namespace.
 	// Empty fields mean "unbounded" — applying an empty ResourceQuota would
 	// flip the namespace from unbounded to ban-everything, so we DELETE in
 	// that case to keep the steady state consistent.
 	if hasProjectQuotaPolicy(project) {
-		projectQuota := renderProjectResourceQuota(namespace, project)
+		allocation, allocationErr := projectQuotaAllocation(ctx, q, project, clusterID, namespace)
+		if allocationErr != nil {
+			return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("allocate project resourcequota: %v", allocationErr))
+		}
+		projectQuota := renderProjectResourceQuota(namespace, project.ID, allocation)
 		if err := serverSideApply(ctx, requester, clusterIDStr, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedProjectQuotaName), projectQuota); err != nil {
-			return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("apply project resourcequota: %v", err))
+			return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("apply project resourcequota: %v", err))
+		}
+		if _, err := q.UpsertProjectResourceQuotaAllocation(ctx, sqlc.UpsertProjectResourceQuotaAllocationParams{
+			ProjectID: project.ID, ClusterID: clusterID, Namespace: namespace,
+			CpuLimit: allocation.CPU, MemoryLimit: allocation.Memory, PodCount: allocation.Pods,
+		}); err != nil {
+			return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("persist project resourcequota allocation: %v", err))
 		}
 	} else {
 		_ = deleteIfExists(ctx, requester, clusterIDStr, fmt.Sprintf("/api/v1/namespaces/%s/resourcequotas/%s", namespace, managedProjectQuotaName))
+		if err := q.DeleteProjectResourceQuotaAllocation(ctx, sqlc.DeleteProjectResourceQuotaAllocationParams{ProjectID: project.ID, ClusterID: clusterID, Namespace: namespace}); err != nil {
+			return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("delete project resourcequota allocation: %v", err))
+		}
 	}
 
 	if hasLimitRangeFields(project.LimitRange) {
 		lr := renderLimitRange(namespace, project.LimitRange)
 		if err := serverSideApply(ctx, requester, clusterIDStr, fmt.Sprintf("/api/v1/namespaces/%s/limitranges/%s", namespace, managedLimitRangeName), lr); err != nil {
-			return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("apply limitrange: %v", err))
+			return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("apply limitrange: %v", err))
 		}
 	} else {
 		// User cleared the spec — make sure any prior LimitRange is gone.
@@ -357,15 +413,49 @@ func (runtime ProjectRuntime) reconcileProjectNamespace(ctx context.Context, q P
 	} else {
 		np := renderNetworkPolicy(namespace, project.ID.String(), mode)
 		if err := serverSideApply(ctx, requester, clusterIDStr, fmt.Sprintf("/apis/networking.k8s.io/v1/namespaces/%s/networkpolicies/%s", namespace, managedNetworkPolicyName), np); err != nil {
-			return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("apply networkpolicy: %v", err))
+			return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("apply networkpolicy: %v", err))
 		}
 	}
 
 	if err := runtime.reconcileProjectRegistryAccess(ctx, q, requester, clusterID, namespace); err != nil {
-		return markReconciled(ctx, q, project.ID, clusterID, namespace, fmt.Sprintf("reconcile image pull secret: %v", err))
+		return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, fmt.Sprintf("reconcile image pull secret: %v", err))
 	}
 
-	return markReconciled(ctx, q, project.ID, clusterID, namespace, "")
+	return markReconciled(ctx, q, claimToken, project.ID, clusterID, namespace, "")
+}
+
+// projectQuotaAllocation derives one namespace's share from the complete
+// current project membership. It deliberately reads the sidecar table rather
+// than projects.namespaces: the sidecar is transactional, canonical for
+// reconciliation, and cannot retain duplicate JSON list entries.
+func projectQuotaAllocation(ctx context.Context, q ProjectReconcileQuerier, project sqlc.Project, clusterID uuid.UUID, namespace string) (projectquota.Cap, error) {
+	rows, err := q.ListProjectNamespaces(ctx, project.ID)
+	if err != nil {
+		return projectquota.Cap{}, err
+	}
+	namespaces := make([]string, 0, len(rows)+1)
+	for _, row := range rows {
+		if row.ClusterID == clusterID {
+			namespaces = append(namespaces, row.Namespace)
+		}
+	}
+	// A direct reconcile can arrive immediately after a project create before
+	// its sidecar row is visible to another transaction. Include the target so
+	// the cap is never silently skipped in that short window.
+	namespaces = append(namespaces, namespace)
+	allocations, err := projectquota.Allocate(projectQuotaCap(project), namespaces)
+	if err != nil {
+		return projectquota.Cap{}, err
+	}
+	return allocations[namespace], nil
+}
+
+func projectQuotaCap(project sqlc.Project) projectquota.Cap {
+	return projectquota.Cap{
+		CPU:    strings.TrimSpace(project.ResourceQuotaCpuLimit),
+		Memory: strings.TrimSpace(project.ResourceQuotaMemoryLimit),
+		Pods:   project.ResourceQuotaPodCount,
+	}
 }
 
 // removeProjectEnforcement deletes our three managed CRs from the namespace
@@ -721,14 +811,19 @@ func deleteIfExists(ctx context.Context, requester ProjectK8sRequester, clusterI
 // on success. Returning the error from the caller is fine because asynq's
 // retry policy applies — but we still record the latest error on the row so
 // the UI can surface it in steady state.
-func markReconciled(ctx context.Context, q ProjectReconcileQuerier, projectID, clusterID uuid.UUID, namespace, errMsg string) error {
-	if err := q.MarkProjectNamespaceReconciled(ctx, sqlc.MarkProjectNamespaceReconciledParams{
+func markReconciled(ctx context.Context, q ProjectReconcileQuerier, claimToken pgtype.UUID, projectID, clusterID uuid.UUID, namespace, errMsg string) error {
+	rows, err := q.MarkProjectNamespaceReconciled(ctx, sqlc.MarkProjectNamespaceReconciledParams{
 		ProjectID:          projectID,
 		ClusterID:          clusterID,
 		Namespace:          namespace,
 		LastReconcileError: errMsg,
-	}); err != nil {
+		ClaimToken:         claimToken,
+	})
+	if err != nil {
 		return fmt.Errorf("update project_namespace: %w", err)
+	}
+	if rows != 1 {
+		return fmt.Errorf("update project_namespace: claim ownership lost")
 	}
 	if errMsg != "" {
 		return fmt.Errorf("%s", errMsg)
@@ -804,18 +899,18 @@ func hasProjectQuotaPolicy(project sqlc.Project) bool {
 // (cpu/memory/pods) into a ResourceQuota named astronomer-project-quota. Only
 // fields that the project owner actually set land on spec.hard — leaving the
 // rest unbounded.
-func renderProjectResourceQuota(namespace string, project sqlc.Project) map[string]any {
+func renderProjectResourceQuota(namespace string, projectID uuid.UUID, allocation projectquota.Cap) map[string]any {
 	hard := map[string]any{}
-	if v := strings.TrimSpace(project.ResourceQuotaCpuLimit); v != "" {
+	if v := strings.TrimSpace(allocation.CPU); v != "" {
 		hard["limits.cpu"] = v
 	}
-	if v := strings.TrimSpace(project.ResourceQuotaMemoryLimit); v != "" {
+	if v := strings.TrimSpace(allocation.Memory); v != "" {
 		hard["limits.memory"] = v
 	}
-	if project.ResourceQuotaPodCount > 0 {
+	if allocation.Pods > 0 {
 		// ResourceQuota.spec.hard values are quantities; stringifying the int
 		// is the canonical form K8s accepts for count-style resources.
-		hard["pods"] = strconv.Itoa(int(project.ResourceQuotaPodCount))
+		hard["pods"] = strconv.Itoa(int(allocation.Pods))
 	}
 	return map[string]any{
 		"apiVersion": "v1",
@@ -825,7 +920,7 @@ func renderProjectResourceQuota(namespace string, project sqlc.Project) map[stri
 			"namespace": namespace,
 			"labels": map[string]any{
 				"app.kubernetes.io/managed-by": "astronomer",
-				projectPolicyLabelKey:          project.ID.String(),
+				projectPolicyLabelKey:          projectID.String(),
 			},
 		},
 		"spec": map[string]any{

@@ -2,13 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { ElementType } from "react";
 import { useState } from "react";
 import { AlertTriangle, Plus, Shield } from "lucide-react";
-import { useParams } from "@/lib/navigation";
+
 import { useTabParam } from "@/lib/use-tab-param";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { TabStrip, TabsContent } from "@/components/ui/tabs";
-import { useCluster } from "@/lib/hooks";
+import { useCluster } from "@/lib/hooks/clusters";
 import type { AlertRule } from "@/types";
 import { RulesTab } from "@/routes/dashboard/alerting/-rules-tab";
 import { EventsTab } from "@/routes/dashboard/alerting/-events-tab";
@@ -24,8 +24,8 @@ const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
 ];
 
 function ClusterAlertingPage() {
-  const params = useParams();
-  const clusterId = params.id as string;
+  const params = Route.useParams();
+  const clusterId = params.id;
   const { data: cluster } = useCluster(clusterId);
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "rules");
   const [showRuleModal, setShowRuleModal] = useState(false);
@@ -38,12 +38,12 @@ function ClusterAlertingPage() {
         description={`Rules and firing alerts for ${cluster?.displayName || cluster?.name || "this cluster"}`}
         actions={
           <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/alerting"
+            <RouterLink
+              to="/dashboard/alerting"
               className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
             >
               Estate inbox
-            </Link>
+            </RouterLink>
             {activeTab === "rules" ? (
               <ActionButton
                 intent="primary"

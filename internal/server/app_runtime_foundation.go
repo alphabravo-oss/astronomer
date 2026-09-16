@@ -8,7 +8,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
+	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 )
 
 type runtimeFoundation struct {
@@ -21,6 +21,7 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 	s := &Server{
 		handler: routed.router, logger: logger, db: c.database, queue: c.queue, hub: c.hub,
 		Encryptor: c.encryptor, SSO: c.ssoManager, charlieRuntime: lifecycles, charlieBridge: c.managedCharlieBridge,
+		taskLeader: c.taskLeader,
 	}
 	s.httpServer = &http.Server{
 		Handler: wrapWithTracing(routed.router), ReadHeaderTimeout: 15 * time.Second, IdleTimeout: 120 * time.Second,
@@ -47,10 +48,11 @@ func (c *productionComposition) startRuntimeFoundation(cfg *config.Config, logge
 		c.loggingHandler.StartReconciler(ctx)
 		c.controlPlaneHandler.StartEvaluator(ctx)
 		c.workloadHandler.StartReconciler(ctx)
+		livemetrics.New(c.bus, c.queries, c.clusterHandler.MetricsProvider(), logger).Start(ctx)
+		startClusterProbeReconciler(ctx, logger, c.queries, c.requester)
 	}
 	if cfg.ServerReplicas > 1 && c.database != nil {
-		elector := leader.New(c.database.Pool(), logger)
-		go runServerReconcilerLeader(reconcileCtx, elector, logger, startReconcilers)
+		go runServerReconcilerLeader(reconcileCtx, c.taskLeader, logger, startReconcilers)
 	} else {
 		startReconcilers(reconcileCtx)
 	}

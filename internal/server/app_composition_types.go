@@ -18,7 +18,6 @@ import (
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
-	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
 	"github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
@@ -45,7 +44,6 @@ type productionComposition struct {
 	deliveryStatusIngester       *deliverystatus.Ingester
 	locatorReadinessErr          string
 	connLimiter                  *tunnel.ConnectFailureLimiter
-	remoteServer                 *tunnel2.RemoteServer
 	requester                    *handler.TunnelK8sRequester
 	helmRequester                *handler.TunnelHelmRequester
 	monitoringHandler            *handler.MonitoringHandler

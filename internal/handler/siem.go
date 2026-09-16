@@ -142,33 +142,6 @@ func (h *SIEMHandler) SetRunTx(runTx siemRunTxFunc) {
 
 func (h *SIEMHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-func executeSIEMMutation[T any](r *http.Request, h *SIEMHandler, mutate func(SIEMMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
-	var zero T
-	if h == nil {
-		return zero, errors.New("SIEM handler is nil")
-	}
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q SIEMMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(result)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return result, err
-	}
-	result, err := fallback()
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.audit, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
-
 // SetTap wires the bus-tap cache invalidator.
 func (h *SIEMHandler) SetTap(t SIEMTapInvalidator) { h.tap = t }
 
@@ -298,11 +271,10 @@ func (h *SIEMHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Enabled:         merged.Enabled,
 		CreatedBy:       currentUserUUID(r),
 	}
-	saved, err := executeSIEMMutation(r, h,
+	saved, err := executeMutation(r, h.runTx,
 		func(q SIEMMutationTx) (sqlc.SiemForwarder, error) { return q.CreateSIEMForwarder(r.Context(), params) },
-		func() (sqlc.SiemForwarder, error) { return h.queries.CreateSIEMForwarder(r.Context(), params) },
-		func(saved sqlc.SiemForwarder) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(saved sqlc.SiemForwarder) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.siem_forwarder.created", resourceType: "siem_forwarder", resourceID: saved.ID.String(), resourceName: saved.Name,
 				status: http.StatusCreated,
 				detail: map[string]any{"transport": saved.Transport, "endpoint": saved.Endpoint, "event_filters": merged.EventFilters, "enabled": saved.Enabled},
@@ -413,11 +385,10 @@ func (h *SIEMHandler) Update(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds:  int32(merged.TimeoutSeconds),
 		Enabled:         merged.Enabled,
 	}
-	saved, err := executeSIEMMutation(r, h,
+	saved, err := executeMutation(r, h.runTx,
 		func(q SIEMMutationTx) (sqlc.SiemForwarder, error) { return q.UpdateSIEMForwarder(r.Context(), params) },
-		func() (sqlc.SiemForwarder, error) { return h.queries.UpdateSIEMForwarder(r.Context(), params) },
-		func(saved sqlc.SiemForwarder) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(saved sqlc.SiemForwarder) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.siem_forwarder.updated", resourceType: "siem_forwarder", resourceID: saved.ID.String(), resourceName: saved.Name,
 				status: http.StatusOK,
 				detail: map[string]any{"transport": saved.Transport, "endpoint": saved.Endpoint, "event_filters": merged.EventFilters, "enabled": saved.Enabled},
@@ -460,13 +431,12 @@ func (h *SIEMHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read SIEM forwarder")
 		return
 	}
-	_, err = executeSIEMMutation(r, h,
+	_, err = executeMutation(r, h.runTx,
 		func(q SIEMMutationTx) (sqlc.SiemForwarder, error) {
 			return existing, q.DeleteSIEMForwarder(r.Context(), id)
 		},
-		func() (sqlc.SiemForwarder, error) { return existing, h.queries.DeleteSIEMForwarder(r.Context(), id) },
-		func(existing sqlc.SiemForwarder) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(existing sqlc.SiemForwarder) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.siem_forwarder.deleted", resourceType: "siem_forwarder", resourceID: id.String(), resourceName: existing.Name,
 				status: http.StatusNoContent,
 			}

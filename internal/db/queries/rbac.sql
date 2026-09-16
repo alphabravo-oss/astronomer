@@ -104,6 +104,43 @@ INSERT INTO project_roles (name, display_name, description, permissions, rules, 
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
+-- name: ApplyProjectRoleTemplate :one
+-- Materialize an immutable catalog template and bind it to a user in one
+-- statement. The template+digest identity makes retries and concurrent calls
+-- converge on the same role and binding without mutating older grants.
+WITH materialized_role AS (
+    INSERT INTO project_roles (
+        name, display_name, description, permissions, rules, is_builtin,
+        source_template, source_digest
+    )
+    VALUES (
+        sqlc.arg(role_name), sqlc.arg(display_name), sqlc.arg(description),
+        '{}'::jsonb, sqlc.arg(rules), true,
+        sqlc.arg(template_name), sqlc.arg(template_digest)
+    )
+    ON CONFLICT (source_template, source_digest)
+        WHERE source_template IS NOT NULL AND source_digest IS NOT NULL
+    DO UPDATE SET source_template = EXCLUDED.source_template
+    RETURNING id
+), materialized_binding AS (
+    INSERT INTO project_role_bindings (user_id, "group", role_id, project_id)
+    SELECT sqlc.arg(user_id), '', id, sqlc.arg(project_id)
+    FROM materialized_role
+    ON CONFLICT (user_id, role_id, project_id)
+    DO UPDATE SET updated_at = project_role_bindings.updated_at
+    RETURNING *
+)
+SELECT * FROM materialized_binding;
+
+-- name: GetAppliedProjectRoleTemplateBinding :one
+SELECT b.*
+FROM project_role_bindings b
+JOIN project_roles r ON r.id = b.role_id
+WHERE b.user_id = sqlc.arg(user_id)
+  AND b.project_id = sqlc.arg(project_id)
+  AND r.source_template = sqlc.arg(template_name)
+  AND r.source_digest = sqlc.arg(template_digest);
+
 -- name: UpdateProjectRole :one
 UPDATE project_roles SET
     name = $2,

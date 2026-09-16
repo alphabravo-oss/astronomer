@@ -9,8 +9,8 @@
 -- name: CreateKubectlSession :one
 INSERT INTO kubectl_sessions (
     user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
-    status, client_ip, user_agent
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    status, client_ip, user_agent, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
           status, started_at, last_input_at, closed_at, expires_at, last_error,
           client_ip, user_agent;
@@ -27,16 +27,35 @@ SELECT id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
        status, started_at, last_input_at, closed_at, expires_at, last_error,
        client_ip, user_agent
 FROM kubectl_sessions
-WHERE cluster_id = $1 AND status IN ('starting', 'active')
-ORDER BY started_at DESC;
+WHERE cluster_id = sqlc.arg(cluster_id) AND status IN ('starting', 'active')
+ORDER BY started_at DESC, id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
--- name: ListAllActiveKubectlSessions :many
+-- name: CountActiveKubectlSessionsByCluster :one
+SELECT count(*)
+FROM kubectl_sessions
+WHERE cluster_id = $1 AND status IN ('starting', 'active');
+
+-- name: ListActiveKubectlSessionClusters :many
+SELECT DISTINCT cluster_id
+FROM kubectl_sessions
+WHERE status IN ('starting', 'active')
+ORDER BY cluster_id
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: ListAllActiveKubectlSessionsPage :many
 SELECT id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
        status, started_at, last_input_at, closed_at, expires_at, last_error,
        client_ip, user_agent
 FROM kubectl_sessions
 WHERE status IN ('starting', 'active')
-ORDER BY started_at DESC;
+ORDER BY started_at DESC, id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountAllActiveKubectlSessions :one
+SELECT COUNT(*)
+FROM kubectl_sessions
+WHERE status IN ('starting', 'active');
 
 -- name: ListExpiredKubectlSessions :many
 SELECT id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
@@ -44,7 +63,9 @@ SELECT id, user_id, cluster_id, sa_namespace, sa_name, pod_namespace, pod_name,
        client_ip, user_agent
 FROM kubectl_sessions
 WHERE status IN ('starting', 'active')
-  AND (expires_at < now() OR last_input_at + interval '30 minutes' < now());
+  AND (expires_at < now() OR last_input_at + sqlc.arg(idle_timeout)::interval < now())
+ORDER BY expires_at, id
+LIMIT sqlc.arg(query_limit);
 
 -- name: SetKubectlSessionStatus :exec
 -- Explicit ::text casts on status keep pgx happy. Without them pgx infers
@@ -77,3 +98,9 @@ LIMIT $2 OFFSET $3;
 SELECT COUNT(*)
 FROM kubectl_session_commands
 WHERE session_id = $1;
+
+-- name: CountKubectlSessionCommandsForSessions :many
+SELECT session_id, COUNT(*)::bigint AS command_count
+FROM kubectl_session_commands
+WHERE session_id = ANY(sqlc.arg(session_ids)::uuid[])
+GROUP BY session_id;

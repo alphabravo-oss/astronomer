@@ -7,20 +7,19 @@ import {
   DeliveryProjectGate,
   Detail,
   DetailGrid,
-  ErrorMessage,
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
-import { getClusterDeliveryInventory } from "@/lib/api/delivery";
+import { getClusterDeliveryInventory } from "@/lib/api/delivery-system";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
-import { useParams } from "@/lib/navigation";
+
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
-import { LoadingState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 
 function ClusterDeliveryPage() {
-  const { id: clusterId } = useParams<{ id: string }>();
+  const { id: clusterId } = Route.useParams();
   const { projectId, projects, projectQuery } = useDeliveryProjectScope({
     clusterId,
   });
@@ -57,60 +56,78 @@ function ClusterDeliveryPage() {
         allowed={allowed}
         onRetry={() => void projectQuery.refetch()}
       >
-        {query.isError && <ErrorMessage error={query.error} />}
-        {query.isLoading && <LoadingState title="Loading Flux inventory" />}
-        {inventory && (
-          <>
-            <DetailGrid>
-              <Detail
-                label="Compatibility"
-                value={
-                  <DeliveryPhaseBadge value={inventory.compatibilityStatus} />
-                }
-              />
-              <Detail
-                label="Controllers ready"
-                value={inventory.ready ? "Yes" : "No"}
-              />
-              <Detail label="Agent version" value={inventory.agentVersion} />
-              <Detail label="Flux version" value={inventory.fluxVersion} />
-              <Detail label="Kubernetes" value={inventory.kubernetesVersion} />
-              <Detail
-                label="Distribution digest"
-                value={inventory.distributionDigest}
-                mono
-              />
-              <Detail
-                label="Observed"
-                value={
-                  inventory.observedAt
-                    ? new Date(inventory.observedAt).toLocaleString()
-                    : "Never"
-                }
-              />
-              <Detail label="Error" value={inventory.errorCode || "None"} />
-            </DetailGrid>
-            <PageSection
-              title="Controller set"
-              description="Only the pinned source, Kustomize, and Helm controllers are part of the distribution."
-            >
-              <div className="grid gap-2 sm:grid-cols-3">
-                {Object.entries(inventory.components).map(([name, version]) => (
-                  <div
-                    key={name}
-                    className="flex items-center gap-2 rounded-md border border-border bg-card p-3"
-                  >
-                    <Radio className="h-4 w-4 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">{name}</p>
-                      <p className="text-xs text-muted-foreground">{version}</p>
-                    </div>
+        <QueryStates
+          query={query}
+          permission="delivery_inventory:read"
+          loadingTitle="Loading Flux inventory"
+        >
+          {() =>
+            inventory ? (
+              <>
+                <DetailGrid>
+                  <Detail
+                    label="Compatibility"
+                    value={
+                      <DeliveryPhaseBadge
+                        value={inventory.compatibilityStatus}
+                      />
+                    }
+                  />
+                  <Detail
+                    label="Controllers ready"
+                    value={inventory.ready ? "Yes" : "No"}
+                  />
+                  <Detail
+                    label="Agent version"
+                    value={inventory.agentVersion}
+                  />
+                  <Detail label="Flux version" value={inventory.fluxVersion} />
+                  <Detail
+                    label="Kubernetes"
+                    value={inventory.kubernetesVersion}
+                  />
+                  <Detail
+                    label="Distribution digest"
+                    value={inventory.distributionDigest}
+                    mono
+                  />
+                  <Detail
+                    label="Observed"
+                    value={
+                      inventory.observedAt
+                        ? new Date(inventory.observedAt).toLocaleString()
+                        : "Never"
+                    }
+                  />
+                  <Detail label="Error" value={inventory.errorCode || "None"} />
+                </DetailGrid>
+                <PageSection
+                  title="Controller set"
+                  description="Only the pinned source, Kustomize, and Helm controllers are part of the distribution."
+                >
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {Object.entries(inventory.components).map(
+                      ([name, version]) => (
+                        <div
+                          key={name}
+                          className="flex items-center gap-2 rounded-md border border-border bg-card p-3"
+                        >
+                          <Radio className="h-4 w-4 text-primary" />
+                          <div>
+                            <p className="text-sm font-medium">{name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {version}
+                            </p>
+                          </div>
+                        </div>
+                      ),
+                    )}
                   </div>
-                ))}
-              </div>
-            </PageSection>
-          </>
-        )}
+                </PageSection>
+              </>
+            ) : null
+          }
+        </QueryStates>
       </DeliveryProjectGate>
     </PageShell>
   );

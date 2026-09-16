@@ -1,3 +1,7 @@
+import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FormShell } from "@/components/ui/form-shell";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +15,7 @@ import {
   DeliveryProjectGate,
   ErrorMessage,
   RedirectDeliveryList,
+  deliveryPageRowCount,
   inputClass,
   primaryButton,
   secondaryButton,
@@ -28,17 +33,17 @@ import {
   type DeliveryAuthMode,
   type DeliverySource,
   type DeliverySourceType,
-  type SignatureProvider,
   type SourceCredentialInput,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-sources";
+import type { SignatureProvider } from "@/lib/api/delivery-common";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 import { formatRelativeTime } from "@/lib/utils";
 import { toastSuccess } from "@/lib/toast";
-import { useRouter, useSearchParams } from "@/lib/navigation";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 
 const sourceStatuses = ["pending", "ready", "degraded", "revoked"] as const;
 
@@ -51,8 +56,10 @@ export function SourcesPage() {
   const canCreate = can(user, "delivery_sources", "create", scope);
   const canUpdate = can(user, "delivery_sources", "update", scope);
   const canDelete = can(user, "delivery_sources", "delete", scope);
-  const search = useSearchParams();
-  const router = useRouter();
+  const search = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
+  const navigate = useNavigate();
   const requestedStatus = search.get("status") ?? "";
   const status = sourceStatuses.includes(
     requestedStatus as (typeof sourceStatuses)[number],
@@ -75,9 +82,10 @@ export function SourcesPage() {
     if (nextStatus) next.set("status", nextStatus);
     else next.delete("status");
     next.delete("page");
-    router.replace(
-      `${listHref("sources")}${next.size ? `?${next.toString()}` : ""}`,
-    );
+    void navigate({
+      to: `${listHref("sources")}${next.size ? `?${next.toString()}` : ""}`,
+      replace: true,
+    });
   };
   const query = useQuery({
     queryKey: queryKeys.delivery.sources(projectId, params),
@@ -223,11 +231,20 @@ export function SourcesPage() {
             keyExtractor={(row) => row.id}
             loading={query.isLoading}
             isError={query.isError}
+            error={query.error}
+            permission="delivery_sources:list"
             onRetry={() => void query.refetch()}
             searchable={false}
-            emptyMessage="No delivery sources in this project"
+            emptyState={{
+              title: "No delivery sources in this project",
+              description:
+                "Connect a Git or OCI source for your application's manifests.",
+              action: canCreate
+                ? { label: "Add source", onClick: () => setCreateOpen(true) }
+                : undefined,
+            }}
             toolbar={
-              <select
+              <Select
                 aria-label="Source status"
                 value={status ?? ""}
                 onChange={(event) => setStatus(event.target.value)}
@@ -239,10 +256,10 @@ export function SourcesPage() {
                     {value.replaceAll("_", " ")}
                   </option>
                 ))}
-              </select>
+              </Select>
             }
             serverSide={{
-              rowCount: query.data?.count ?? 0,
+              rowCount: deliveryPageRowCount(query.data),
               pagination: { pageIndex, pageSize },
               onPaginationChange: (next) => setPageIndex(next.pageIndex),
             }}
@@ -334,12 +351,12 @@ function SourceCreateDialog({
       onClose={onClose}
       subtitle="Secret fields are encrypted on submit and are never returned to this browser."
     >
-      <form className="space-y-4" onSubmit={submit}>
+      <FormShell className="space-y-4" onSubmit={submit}>
         <Field label="Name">
-          <input name="name" required maxLength={128} className={inputClass} />
+          <Input name="name" required maxLength={128} className={inputClass} />
         </Field>
         <Field label="Description">
-          <textarea
+          <Textarea
             name="description"
             maxLength={4096}
             className={textareaClass}
@@ -347,7 +364,7 @@ function SourceCreateDialog({
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Source kind">
-            <select
+            <Select
               value={kind}
               onChange={(e) => {
                 const next = e.target.value as DeliverySourceType;
@@ -362,10 +379,10 @@ function SourceCreateDialog({
                   {label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Authentication">
-            <select
+            <Select
               value={authMode}
               onChange={(e) => setAuthMode(e.target.value as DeliveryAuthMode)}
               className={inputClass}
@@ -375,11 +392,11 @@ function SourceCreateDialog({
                   {label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         <Field label="URL">
-          <input
+          <Input
             name="url"
             required
             type="url"
@@ -396,14 +413,14 @@ function SourceCreateDialog({
         <CredentialFields mode={authMode} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Enterprise CA bundle (optional)">
-            <textarea
+            <Textarea
               name="ca_bundle"
               className={textareaClass}
               placeholder="PEM certificate chain"
             />
           </Field>
           <Field label="Registered proxy reference (optional)">
-            <input name="proxy_ref" className={inputClass} />
+            <Input name="proxy_ref" className={inputClass} />
           </Field>
         </div>
         <fieldset className="space-y-3 rounded-md border border-border p-4">
@@ -411,7 +428,7 @@ function SourceCreateDialog({
             Supply-chain trust
           </legend>
           <label className="flex items-center gap-2 text-sm">
-            <input
+            <Input
               type="checkbox"
               checked={allowUnsigned}
               onChange={(e) => setAllowUnsigned(e.target.checked)}
@@ -421,7 +438,7 @@ function SourceCreateDialog({
           {!allowUnsigned && (
             <>
               <Field label="Verification provider">
-                <select
+                <Select
                   value={provider}
                   onChange={(e) =>
                     setProvider(e.target.value as SignatureProvider)
@@ -431,22 +448,22 @@ function SourceCreateDialog({
                   <option value="git">Git signature</option>
                   <option value="cosign_key">Cosign public key</option>
                   <option value="cosign_keyless">Cosign keyless</option>
-                </select>
+                </Select>
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 {provider === "git" && (
                   <Field label="Trusted identity (optional)">
-                    <input name="identity" className={inputClass} />
+                    <Input name="identity" className={inputClass} />
                   </Field>
                 )}
                 {provider === "cosign_keyless" && (
                   <Field label="Trusted identity">
-                    <input name="identity" required className={inputClass} />
+                    <Input name="identity" required className={inputClass} />
                   </Field>
                 )}
                 {provider === "cosign_keyless" && (
                   <Field label="OIDC issuer">
-                    <input
+                    <Input
                       name="issuer"
                       required
                       type="url"
@@ -456,7 +473,7 @@ function SourceCreateDialog({
                 )}
                 {(provider === "git" || provider === "cosign_key") && (
                   <Field label="Registered public key reference">
-                    <input
+                    <Input
                       name="key_ref"
                       required
                       className={inputClass}
@@ -481,7 +498,7 @@ function SourceCreateDialog({
             {mutation.isPending ? "Creating…" : "Create source"}
           </button>
         </div>
-      </form>
+      </FormShell>
     </ModalShell>
   );
 }
@@ -517,7 +534,7 @@ function SourceVerifyDialog({
   });
   return (
     <ModalShell title={`Verify ${source.name}`} onClose={onClose}>
-      <form
+      <FormShell
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
@@ -529,7 +546,7 @@ function SourceVerifyDialog({
         }}
       >
         <Field label="Revision to resolve">
-          <input
+          <Input
             name="revision"
             required
             className={inputClass}
@@ -538,7 +555,7 @@ function SourceVerifyDialog({
         </Field>
         {(source.type === "helm_http" || source.type === "helm_oci") && (
           <Field label="Chart">
-            <input name="chart" required className={inputClass} />
+            <Input name="chart" required className={inputClass} />
           </Field>
         )}
         {mutation.isError && <ErrorMessage error={mutation.error} />}
@@ -554,7 +571,7 @@ function SourceVerifyDialog({
             {mutation.isPending ? "Queuing…" : "Verify immutable revision"}
           </button>
         </div>
-      </form>
+      </FormShell>
     </ModalShell>
   );
 }
@@ -590,7 +607,7 @@ function CredentialDialog({
       onClose={onClose}
       subtitle="Old material is retained downstream until the new credential resolves the approved revision."
     >
-      <form
+      <FormShell
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
@@ -616,7 +633,7 @@ function CredentialDialog({
             Rotate credential
           </button>
         </div>
-      </form>
+      </FormShell>
     </ModalShell>
   );
 }
@@ -671,7 +688,7 @@ function CredentialFields({ mode }: { mode: DeliveryAuthMode }) {
     return (
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Username">
-          <input
+          <Input
             name="username"
             required
             autoComplete="off"
@@ -679,7 +696,7 @@ function CredentialFields({ mode }: { mode: DeliveryAuthMode }) {
           />
         </Field>
         <Field label="Password">
-          <input
+          <Input
             name="password"
             required
             type="password"
@@ -692,7 +709,7 @@ function CredentialFields({ mode }: { mode: DeliveryAuthMode }) {
   if (mode === "bearer")
     return (
       <Field label="Bearer token">
-        <input
+        <Input
           name="token"
           required
           type="password"
@@ -704,13 +721,13 @@ function CredentialFields({ mode }: { mode: DeliveryAuthMode }) {
   return (
     <>
       <Field label="SSH private key">
-        <textarea name="private_key" required className={textareaClass} />
+        <Textarea name="private_key" required className={textareaClass} />
       </Field>
       <Field label="Known hosts">
-        <textarea name="known_hosts" required className={textareaClass} />
+        <Textarea name="known_hosts" required className={textareaClass} />
       </Field>
       <Field label="Key passphrase (optional)">
-        <input
+        <Input
           name="passphrase"
           type="password"
           autoComplete="new-password"
@@ -773,6 +790,14 @@ function authModesFor(
 }
 
 export const Route = createFileRoute("/dashboard/delivery/sources/")({
+  validateSearch: (search: Record<string, unknown>) => {
+    const project = typeof search.project === "string" ? search.project : null;
+    const status = typeof search.status === "string" ? search.status : null;
+    return {
+      ...(project ? { project } : {}),
+      ...(status ? { status } : {}),
+    };
+  },
   component: function DeliverySourcesRedirect() {
     return <RedirectDeliveryList tab="sources" />;
   },

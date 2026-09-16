@@ -6,41 +6,47 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 import { useState } from "react";
-import { useParams, useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import {
   useCluster,
   useClusterConditions,
   useClusterConditionRemediation,
-  useClusterMetricsSummary,
   useClusterEvents,
+  useDeleteCluster,
+} from "@/lib/hooks/clusters";
+import { useClusterMetricsSummary } from "@/lib/hooks/workloads";
+import {
   useDownloadProxyKubeconfig,
   useDownloadDirectKubeconfig,
-  useDeleteCluster,
-  queryKeys,
-} from "@/lib/hooks";
+} from "@/lib/hooks/kubernetes-proxy";
+import { queryKeys } from "@/lib/query-keys";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import { useAnomalyBaselines } from "@/lib/hooks/alerting";
 import { useClusterToolsStatus } from "@/lib/hooks/tools";
 import { liveFallback } from "@/lib/live/status-store";
-import { getRegistrationStatus, type RegistrationStatusView } from "@/lib/api";
-import { getImageVulnSummary } from "@/lib/api/cluster-detail";
+import { getRegistrationStatus } from "@/lib/api/cluster-registration";
+import type { RegistrationStatusView } from "@/lib/api/cluster-registration";
+import { getImageVulnSummary } from "@/lib/api/cluster-vulnerabilities";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   getServiceMeshDetection,
   type ServiceMeshKind,
-} from "@/lib/api/cluster-detail";
+} from "@/lib/api/cluster-service-mesh";
 import { ActionMenu } from "@/components/ui/action-menu";
+import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-// RegisterClusterModal removed in sprint 22 — the "show install command"
-// action now opens wizard step 2 for this cluster.
+import { PageHeader } from "@/components/ui/page";
+import { registrationSearch } from "@/components/clusters/registration-flow";
 import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
+import { ClusterBadge } from "@/components/clusters/cluster-badge";
 import {
   formatBytes,
   formatCPU,
@@ -56,7 +62,6 @@ import {
   Server,
   Activity,
   AlertTriangle,
-  Loader2,
   Download,
   Terminal,
   Pencil,
@@ -73,11 +78,12 @@ import { ExtensionSlot } from "@/components/extensions/ExtensionSlot";
 import { renderForCluster } from "@/lib/api/dashboards";
 
 function ClusterDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const clusterId = params.id as string;
+  const params = Route.useParams();
+  const navigate = useNavigate();
+  const clusterId = params.id;
 
-  const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
+  const clusterQuery = useCluster(clusterId);
+  const { data: cluster, isLoading: clusterLoading } = clusterQuery;
   const { data: conditions } = useClusterConditions(clusterId);
   const { data: metricsSummary, isError: metricsError } =
     useClusterMetricsSummary(clusterId);
@@ -106,10 +112,7 @@ function ClusterDetailPage() {
     queryKey: queryKeys.clusterPages.serviceMeshHeader(clusterId),
     queryFn: () => getServiceMeshDetection(clusterId),
     enabled: !!clusterId,
-    // KEEP (P4.9): mesh state is cluster-side truth read through the agent
-    // at request time (no server write to publish on) — deliberately NOT
-    // converted to liveFallback.
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: liveFallback(5 * 60 * 1000),
     refetchIntervalInBackground: false,
   });
 
@@ -185,17 +188,29 @@ function ClusterDetailPage() {
     try {
       await deleteMutation.mutateAsync(clusterId);
       setShowDelete(false);
-      router.push("/dashboard/clusters");
+      void navigate({ to: "/dashboard/clusters" });
     } catch {
       // Error handled by mutation
     }
   };
 
-  if (clusterLoading) {
+  if (clusterLoading || clusterQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={clusterQuery}
+        permission="clusters:read"
+        notFound={
+          <EmptyState
+            icon={Server}
+            title="Cluster not found"
+            description="The cluster may have been deleted or is outside your access scope."
+            actionLabel="Back to clusters"
+            actionHref="/dashboard/clusters"
+          />
+        }
+      >
+        {() => null}
+      </QueryStates>
     );
   }
 
@@ -213,110 +228,102 @@ function ClusterDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-              {cluster.displayName}
-            </h1>
-            <StatusBadge status={cluster.status} size="lg" />
-            <RegistrationPhaseHeaderBadge clusterId={clusterId} />
-            {meshDetection && (
-              <MeshHeaderBadge
-                clusterId={clusterId}
-                mesh={meshDetection.detectedMesh}
+      <div className="space-y-2">
+        <PageHeader
+          title={
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate">
+                {cluster.displayName || cluster.name || cluster.id}
+              </span>
+              <ClusterBadge
+                text={cluster.badgeText}
+                color={cluster.badgeColor}
+                className="shrink-0"
               />
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-3">
-              <span>{distributionDisplayName(cluster.distribution)}</span>
-              <span className="text-border">|</span>
-              <span>{formatK8sVersion(cluster.kubernetesVersion)}</span>
-              <span className="text-border">|</span>
-              <span className="capitalize">{cluster.environment}</span>
             </span>
-            {conditions && conditions.length > 0 && (
-              <ClusterConditionsBar conditions={conditions} />
-            )}
-            <AgentAccessChip cluster={cluster} />
-          </div>
-          <ClusterRemediationFooter clusterId={clusterId} />
+          }
+          actions={
+            <>
+              <ActionButton
+                onClick={downloadProxyKubeconfigFile}
+                loading={downloadProxyKubeconfig.isPending}
+                icon={<Download className="h-4 w-4" />}
+                title="Download a one-hour, read-only kubeconfig routed and audited through Astronomer"
+              >
+                Proxy kubeconfig
+              </ActionButton>
+              <ActionButton
+                onClick={downloadDirectKubeconfigFile}
+                loading={downloadDirectKubeconfig.isPending}
+                disabled={
+                  !directPermission.canWrite ||
+                  !cluster.apiServerUrl ||
+                  cluster.isLocal
+                }
+                disabledReason={
+                  cluster.isLocal
+                    ? "Direct access is for adopted clusters"
+                    : !directPermission.canWrite
+                      ? directPermission.reason
+                      : !cluster.apiServerUrl
+                        ? "Configure an external Kubernetes API endpoint in Edit cluster"
+                        : undefined
+                }
+                icon={<Download className="h-4 w-4" />}
+                title="Download a separately scoped, read-only direct kubeconfig valid for 15 minutes"
+              >
+                Direct kubeconfig
+              </ActionButton>
+              <ActionMenu
+                items={[
+                  {
+                    label: "Registration Command",
+                    icon: <Terminal className="h-3.5 w-3.5" />,
+                    onClick: () =>
+                      void navigate({
+                        to: "/dashboard/clusters/register",
+                        search: registrationSearch(cluster.id),
+                      }),
+                  },
+                  {
+                    label: "Edit",
+                    icon: <Pencil className="h-3.5 w-3.5" />,
+                    onClick: () => setShowEdit(true),
+                  },
+                  {
+                    label: "Delete",
+                    icon: <Trash2 className="h-3.5 w-3.5" />,
+                    onClick: () => setShowDelete(true),
+                    variant: "destructive",
+                    separator: true,
+                  },
+                ]}
+              />
+            </>
+          }
+        />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
+          <StatusBadge status={cluster.status} size="lg" />
+          <RegistrationPhaseHeaderBadge clusterId={clusterId} />
+          {meshDetection && (
+            <MeshHeaderBadge
+              clusterId={clusterId}
+              mesh={meshDetection.detectedMesh}
+            />
+          )}
+          <span className="inline-flex items-center gap-3">
+            <span>{distributionDisplayName(cluster.distribution)}</span>
+            <span className="text-border">|</span>
+            <span>{formatK8sVersion(cluster.kubernetesVersion)}</span>
+            <span className="text-border">|</span>
+            <span className="capitalize">{cluster.environment}</span>
+          </span>
+          {conditions && conditions.length > 0 && (
+            <ClusterConditionsBar conditions={conditions} />
+          )}
+          <AgentAccessChip cluster={cluster} />
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative inline-flex">
-            <button
-              onClick={downloadProxyKubeconfigFile}
-              disabled={downloadProxyKubeconfig.isPending}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border
-                text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent
-                transition-colors disabled:opacity-50"
-              title="Download a one-hour, read-only kubeconfig routed and audited through Astronomer"
-            >
-              {downloadProxyKubeconfig.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              Proxy kubeconfig
-            </button>
-          </div>
-          <div className="relative inline-flex">
-            <button
-              onClick={downloadDirectKubeconfigFile}
-              disabled={
-                downloadDirectKubeconfig.isPending ||
-                !directPermission.canWrite ||
-                !cluster.apiServerUrl ||
-                cluster.isLocal
-              }
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border
-                text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent
-                transition-colors disabled:opacity-50"
-              title={
-                cluster.isLocal
-                  ? "Direct access is for adopted clusters"
-                  : !directPermission.canWrite
-                    ? directPermission.reason
-                    : !cluster.apiServerUrl
-                      ? "Configure an external Kubernetes API endpoint in Edit cluster"
-                      : "Download a separately scoped, read-only direct kubeconfig valid for 15 minutes"
-              }
-            >
-              {downloadDirectKubeconfig.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
-              Direct kubeconfig
-            </button>
-          </div>
-          <ActionMenu
-            items={[
-              {
-                label: "Registration Command",
-                icon: <Terminal className="h-3.5 w-3.5" />,
-                onClick: () =>
-                  router.push(
-                    `/dashboard/clusters/register/${cluster.id}/connect`,
-                  ),
-              },
-              {
-                label: "Edit",
-                icon: <Pencil className="h-3.5 w-3.5" />,
-                onClick: () => setShowEdit(true),
-              },
-              {
-                label: "Delete",
-                icon: <Trash2 className="h-3.5 w-3.5" />,
-                onClick: () => setShowDelete(true),
-                variant: "destructive",
-                separator: true,
-              },
-            ]}
-          />
-        </div>
+        <ClusterRemediationFooter clusterId={clusterId} />
       </div>
 
       {/* Health Components */}
@@ -424,7 +431,7 @@ function ClusterDetailPage() {
                 title="Pods"
                 value={metricsSummary?.podCount ?? cluster.podCount ?? 0}
                 subtitle={
-                  metricsSummary
+                  metricsSummary && Number.isFinite(metricsSummary.podCapacity)
                     ? `of ${metricsSummary.podCapacity} capacity`
                     : undefined
                 }
@@ -442,8 +449,9 @@ function ClusterDetailPage() {
           read as a single-pane-of-glass instead of a starting point
           for navigation. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link
-          href={`/dashboard/clusters/${clusterId}/image-scans`}
+        <RouterLink
+          to="/dashboard/clusters/$id/image-scans"
+          params={{ id: clusterId }}
           className="contents"
         >
           <MetricCard
@@ -463,9 +471,10 @@ function ClusterDetailPage() {
                 : "cursor-pointer hover:border-muted-foreground/50 transition-colors"
             }
           />
-        </Link>
-        <Link
-          href={`/dashboard/clusters/${clusterId}/image-scans`}
+        </RouterLink>
+        <RouterLink
+          to="/dashboard/clusters/$id/image-scans"
+          params={{ id: clusterId }}
           className="contents"
         >
           <MetricCard
@@ -479,9 +488,10 @@ function ClusterDetailPage() {
             icon={<ShieldAlert className="h-4 w-4" />}
             className="cursor-pointer hover:border-muted-foreground/50 transition-colors"
           />
-        </Link>
-        <Link
-          href={`/dashboard/clusters/${clusterId}/tools`}
+        </RouterLink>
+        <RouterLink
+          to="/dashboard/clusters/$id/tools"
+          params={{ id: clusterId }}
           className="contents"
         >
           <MetricCard
@@ -505,7 +515,7 @@ function ClusterDetailPage() {
             icon={<Package className="h-4 w-4" />}
             className="cursor-pointer hover:border-muted-foreground/50 transition-colors"
           />
-        </Link>
+        </RouterLink>
         <MetricCard
           title="Agent"
           value={cluster.agentVersion || "—"}
@@ -534,14 +544,14 @@ function ClusterDetailPage() {
                   className="flex items-center gap-3 px-4 py-2.5"
                 >
                   {event.type === "Warning" ? (
-                    <AlertTriangle className="h-3.5 w-3.5 text-status-warning flex-shrink-0" />
+                    <AlertTriangle className="h-3.5 w-3.5 text-status-warning shrink-0" />
                   ) : (
-                    <Activity className="h-3.5 w-3.5 text-status-info flex-shrink-0" />
+                    <Activity className="h-3.5 w-3.5 text-status-info shrink-0" />
                   )}
                   <span className="text-sm text-foreground flex-1 truncate">
                     {event.message}
                   </span>
-                  <span className="text-xs text-muted-foreground flex-shrink-0">
+                  <span className="text-xs text-muted-foreground shrink-0">
                     {formatRelativeTime(event.lastTimestamp)}
                   </span>
                 </div>
@@ -633,7 +643,7 @@ function AgentAccessChip({ cluster }: { cluster: Cluster }) {
   return (
     <span
       title={detail}
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border ${tone}`}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs border ${tone}`}
     >
       <ShieldAlert className="h-3 w-3" />
       Access: {label}
@@ -669,7 +679,7 @@ function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
                 Agent access profile
               </h3>
               <span
-                className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${tone}`}
+                className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-xs font-medium ${tone}`}
               >
                 {label}
               </span>
@@ -691,15 +701,15 @@ function AgentPrivilegePanel({ cluster }: { cluster: Cluster }) {
             )}
           </div>
         </div>
-        <Link
+        <a
           href="/docs/agent-privilege-profiles.md"
           target="_blank"
           rel="noreferrer"
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-sm border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <CircleHelp className="h-3.5 w-3.5" />
           Profile matrix
-        </Link>
+        </a>
       </div>
     </div>
   );
@@ -781,7 +791,7 @@ function ClusterConditionsBar({
           <span
             key={c.type}
             title={tooltip}
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border ${tone}`}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs border ${tone}`}
           >
             <Icon className="h-3 w-3" />
             {label}
@@ -851,13 +861,14 @@ function MeshHeaderBadge({
         ? "border-status-success/30 text-status-success bg-status-success/10"
         : "border-border text-muted-foreground bg-muted/30";
   return (
-    <Link
-      href={`/dashboard/clusters/${clusterId}/service-mesh/`}
+    <RouterLink
+      to="/dashboard/clusters/$id/service-mesh"
+      params={{ id: clusterId }}
       title="Service mesh detection"
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
     >
       mesh: {label}
-    </Link>
+    </RouterLink>
   );
 }
 
@@ -900,14 +911,15 @@ function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
             ? "failed"
             : phase;
   return (
-    <Link
-      href={`/dashboard/clusters/${clusterId}/adoption`}
+    <RouterLink
+      to="/dashboard/clusters/$id/adoption"
+      params={{ id: clusterId }}
       title="Adoption phase - click for step timeline"
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-xs font-medium border ${tone} hover:opacity-80 transition-opacity`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />
       {label}
-    </Link>
+    </RouterLink>
   );
 }
 

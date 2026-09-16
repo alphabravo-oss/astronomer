@@ -9,9 +9,9 @@ import { createFileRoute } from "@tanstack/react-router";
  *      the detail page.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Hash, Send, Settings2, Webhook } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -106,7 +106,7 @@ const AVAILABLE_EVENTS = [
 ];
 
 function NewWebhookWizard() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const createMutation = useCreateWebhook();
 
   const [step, setStep] = useState<Step>("pick");
@@ -141,7 +141,7 @@ function NewWebhookWizard() {
           enabled: true,
           filters,
         });
-        router.push(`/dashboard/settings/webhooks/${created.id}`);
+        void navigate({ to: `/dashboard/settings/webhooks/${created.id}` });
       } catch {
         // mutation toasts on error
       }
@@ -161,13 +161,13 @@ function NewWebhookWizard() {
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/settings/webhooks"
+      <RouterLink
+        to="/dashboard/settings/webhooks"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to webhooks
-      </Link>
+      </RouterLink>
       <PageHeader eyebrow="Webhooks · New" title={title} />
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -204,7 +204,7 @@ function NewWebhookWizard() {
                 className="flex flex-col gap-2 p-4 rounded-lg border border-border bg-card text-left hover:bg-card/80 hover:border-foreground/20 transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                  <div className="shrink-0 w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
                     <Icon className="h-4 w-4 text-foreground" />
                   </div>
                   <p className="text-sm font-medium text-foreground">

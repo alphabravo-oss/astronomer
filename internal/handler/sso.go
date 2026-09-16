@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -33,21 +33,13 @@ type SSOQuerier interface {
 	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error)
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
 	GetDexConnectorByName(ctx context.Context, name string) (sqlc.DexConnector, error)
+	ClaimExternalPrincipal(ctx context.Context, arg sqlc.ClaimExternalPrincipalParams) (sqlc.User, error)
 	auth.GroupSyncQuerier
-}
-
-// SSOSessionWriter is the narrow surface the SSO callback uses to persist
-// the upstream id_token + end_session_endpoint for the single sign-out
-// flow (migration 054). Optional: when nil (e.g. tests / pre-DB
-// bootstrap), the callback skips the persistence and Logout degrades to
-// "local JWT revoked, no upstream redirect".
-type SSOSessionWriter interface {
-	InsertSSOSession(ctx context.Context, arg sqlc.InsertSSOSessionParams) error
 }
 
 // SSORBACInvalidator narrows the RBAC cache hook the SSO callback uses to
 // dump a user's cached bindings after a group-sync run mutated them.
-// Optional: tests + degenerate installs pass nil and the call is a no-op.
+// Required so committed claim revocations take effect immediately.
 type SSORBACInvalidator interface {
 	Invalidate(userID string)
 }
@@ -63,7 +55,6 @@ type ssoFlowManager interface {
 // loaded into the SSOManager at boot from sso_configurations.
 type SSOHandler struct {
 	manager   ssoFlowManager
-	queries   SSOQuerier
 	jwt       *auth.JWTManager
 	frontend  string
 	rbacCache SSORBACInvalidator
@@ -74,16 +65,7 @@ type SSOHandler struct {
 	mu     sync.Mutex
 	states map[string]ssoState
 
-	// sessionWriter persists the upstream id_token + end_session_endpoint
-	// to the sso_sessions table so the Logout endpoint can drive
-	// RP-initiated logout against the IdP (migration 054). Optional —
-	// when nil, SLO is unavailable and Logout falls back to "local JWT
-	// revoked only".
-	sessionWriter SSOSessionWriter
-
-	// encryptor wraps the upstream id_token at rest. Required by the
-	// session writer path; the writer is silently skipped when this is
-	// nil so dev / test stacks without an encryption key still boot.
+	runTx     ssoRunTxFunc
 	encryptor *auth.Encryptor
 }
 
@@ -100,7 +82,7 @@ type signedSSOStateCookie struct {
 
 // NewSSOHandler constructs an SSO handler. frontendURL is used as the
 // post-callback redirect target; an empty value falls back to "/".
-func NewSSOHandler(manager *auth.SSOManager, queries SSOQuerier, jwt *auth.JWTManager, frontendURL string) *SSOHandler {
+func NewSSOHandler(manager *auth.SSOManager, jwt *auth.JWTManager, frontendURL string) *SSOHandler {
 	if frontendURL == "" {
 		frontendURL = "/"
 	}
@@ -110,7 +92,6 @@ func NewSSOHandler(manager *auth.SSOManager, queries SSOQuerier, jwt *auth.JWTMa
 	}
 	return &SSOHandler{
 		manager:  flow,
-		queries:  queries,
 		jwt:      jwt,
 		frontend: frontendURL,
 		now:      time.Now,
@@ -121,7 +102,7 @@ func NewSSOHandler(manager *auth.SSOManager, queries SSOQuerier, jwt *auth.JWTMa
 // SetRBACCacheInvalidator wires the user-scoped RBAC cache hook so a
 // group-sync run that adds or removes bindings is observable on the
 // very next authenticated request, instead of after the cache TTL.
-// Idempotent; passing nil disables invalidation.
+// Passing nil makes callbacks fail closed.
 func (h *SSOHandler) SetRBACCacheInvalidator(inv SSORBACInvalidator) {
 	if h == nil {
 		return
@@ -129,27 +110,11 @@ func (h *SSOHandler) SetRBACCacheInvalidator(inv SSORBACInvalidator) {
 	h.rbacCache = inv
 }
 
-// SetSSOSessionWriter wires the sso_sessions writer used by Callback to
-// persist the upstream id_token + end_session_endpoint for the SLO
-// flow. Idempotent; passing nil disables SLO and the Logout endpoint
-// falls back to "JWT revoked locally only".
-func (h *SSOHandler) SetSSOSessionWriter(w SSOSessionWriter) {
-	if h == nil {
-		return
-	}
-	h.sessionWriter = w
-}
-
-// SetEncryptor wires the Fernet encryptor used to wrap the upstream
-// id_token before it lands in sso_sessions. Idempotent; passing nil
-// disables SLO persistence (the upstream id_token would otherwise be
-// stored plaintext, which is bearer-equivalent — strictly worse than
-// just degrading to local-only logout).
+// SetEncryptor wires the required upstream-token encryption dependency.
 func (h *SSOHandler) SetEncryptor(e *auth.Encryptor) {
-	if h == nil {
-		return
+	if h != nil {
+		h.encryptor = e
 	}
-	h.encryptor = e
 }
 
 // Login redirects the user to the provider's authorization URL after stashing
@@ -180,20 +145,13 @@ func (h *SSOHandler) Login(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOError, "Failed to persist SSO state")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     "astro_sso_state",
-		Value:    cookieValue,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  h.now().Add(10 * time.Minute),
-	})
+	http.SetCookie(w, ssoStateCookie(provider, cookieValue, 10*time.Minute, h.now()))
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
 // Callback handles the OAuth provider redirect, exchanges the code for tokens,
 // fetches user info, provisions/looks-up a user, and finally redirects the
-// browser back to the frontend with JWT tokens in the query string.
+// browser back to the frontend with secure session cookies.
 func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if h.manager == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSONotConfigured, "Single sign-on is not configured")
@@ -237,7 +195,7 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.SSOInvalidState, "OAuth state cookie mismatch")
 		return
 	}
-	defer http.SetCookie(w, &http.Cookie{Name: "astro_sso_state", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	defer http.SetCookie(w, ssoStateCookie(provider, "", -1, h.now()))
 
 	info, err := h.manager.HandleCallback(r.Context(), provider, code, state)
 	if err != nil {
@@ -249,53 +207,20 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, provisioned, err := h.findOrCreateUser(r.Context(), info)
+	user, pair, err := h.commitSSOCallback(r, provider, info)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOUserError, err.Error())
+		if errors.Is(err, errSSOAccountDisabled) {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.AccountDisabled, "Account is disabled")
+		} else {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SSOUserError, "Single sign-on persistence is unavailable")
+		}
 		return
 	}
-	if !user.IsActive {
-		RespondRequestError(w, r, http.StatusForbidden, apierror.AccountDisabled, "Account is disabled")
-		return
-	}
-
-	access, refresh, err := h.jwt.GenerateTokenPairContext(r.Context(), user.ID)
+	access, refresh, err := h.jwt.SignPreparedTokenPair(user.ID, pair)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate token")
 		return
 	}
-	if h.queries != nil {
-		_ = h.queries.UpdateUserLastLogin(r.Context(), user.ID)
-	}
-
-	// Persist the upstream SSO session so Logout can drive RP-initiated
-	// logout against the IdP (migration 054 / NIST 800-53 AC-12). Best-
-	// effort: any persistence failure logs through the audit row but
-	// must NOT block the login response — the user is already
-	// authenticated. The Logout fallback ("JWT revoked locally only")
-	// covers the degraded path.
-	h.persistSSOSession(r, user.ID, provider, access, info, refresh)
-
-	if provisioned {
-		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: user.ID, Valid: true},
-			"sso.user_provisioned", "user", user.ID.String(), user.Username, map[string]any{
-				"provider": provider,
-				"email":    user.Email,
-			},
-		)
-	}
-	recordAuditAs(r, h.queries, pgtype.UUID{Bytes: user.ID, Valid: true},
-		"sso.callback", "user", user.ID.String(), user.Username, map[string]any{
-			"provider": provider,
-		},
-	)
-
-	// Group-claim sync (migration 042). Runs unconditionally on every
-	// SSO callback so a re-login picks up freshly-revoked claims.
-	// "info" came from a successful OIDC/SAML/LDAP handshake, so
-	// claims are available even when the slice is empty (zero groups
-	// is a valid signal, not "we didn't ask").
-	h.syncGroupsFromClaims(r, user.ID, info)
 
 	setBrowserSessionCookies(w, r, access, refresh)
 	target, err := url.Parse(h.frontend)
@@ -308,182 +233,24 @@ func (h *SSOHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, target.String(), http.StatusFound)
 }
 
-// persistSSOSession stores the upstream id_token + cached end_session
-// endpoint into sso_sessions, keyed by the access JWT's JTI. Best-
-// effort: every failure short-circuits to an audit row + no-op so the
-// login response is unaffected. SLO is degraded ("JWT revoked locally
-// only") whenever:
-//
-//   - sessionWriter or encryptor isn't wired (dev / pre-DB bootstrap);
-//   - the upstream id_token is empty (non-OIDC providers — GitHub /
-//     Google's userinfo path);
-//   - Fernet encryption fails (cipher misconfigured);
-//   - the access token can't be re-parsed for its JTI (this should be
-//     impossible because we just minted it, but we never trust
-//     "shouldn't happen" — we fall through to local-only logout).
-//
-// Encrypted at rest because the id_token is bearer-equivalent while
-// it's valid. Never logged.
-// refreshToken is variadic (optional) so existing callers that only have
-// the access token continue to compile; when supplied it anchors the row's
-// expires_at to the session (refresh) lifetime instead of the access
-// token's — see the ExpiresAt comment below.
-func (h *SSOHandler) persistSSOSession(r *http.Request, userID uuid.UUID, provider, accessToken string, info *auth.SSOUserInfo, refreshToken ...string) {
-	if h == nil {
-		return
+func ssoStateCookie(provider, value string, lifetime time.Duration, now time.Time) *http.Cookie {
+	path := "/api/v1/auth/login/" + strings.ToLower(strings.TrimSpace(provider)) + "/callback"
+	cookie := &http.Cookie{
+		Name:     "astro_sso_state",
+		Value:    value,
+		Path:     path,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
 	}
-	if h.sessionWriter == nil || h.encryptor == nil {
-		return
+	if lifetime < 0 {
+		cookie.MaxAge = -1
+		cookie.Expires = time.Unix(1, 0).UTC()
+		return cookie
 	}
-	if info == nil || info.UpstreamIDToken == "" {
-		// Non-OIDC provider (GitHub orgs / Google userinfo): no
-		// id_token to hint with, so SLO is structurally unavailable.
-		// Surface it once so an operator wondering why "logout doesn't
-		// kick me out of GitHub" can find the answer in the audit
-		// stream.
-		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
-			"sso.session_skipped", "user", userID.String(), "", map[string]any{
-				"provider": provider,
-				"reason":   "no_upstream_id_token",
-			})
-		return
-	}
-	// Re-parse the access JWT to recover its JTI + exp. The token is
-	// freshly minted by us and just round-tripped through string
-	// formatting, so this is guaranteed to validate — but we still
-	// degrade gracefully because the alternative is panicking on an
-	// "impossible" condition that mutates if the JWT layer ever
-	// changes.
-	claims, err := h.jwt.ValidateToken(accessToken)
-	if err != nil {
-		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
-			"sso.session_skipped", "user", userID.String(), "", map[string]any{
-				"provider": provider,
-				"reason":   "jwt_parse_failed",
-			})
-		return
-	}
-	if claims.ID == "" || claims.ExpiresAt == nil {
-		return
-	}
-	// The row's lifetime must track the SESSION (refresh-token) lifetime,
-	// not the access token's (default: minutes). The upstream id_token is
-	// captured only once, at login — the silent access-token refresh the
-	// SPA performs never re-fetches it — so if this row is purged when the
-	// first access token expires, single sign-out is dead for any session
-	// older than one access lifetime (the row is gone before Logout can
-	// find it). Anchor expires_at to the refresh token's exp so the row
-	// survives the whole session and a user-scoped Logout lookup can still
-	// resolve it after the access JTI has rotated.
-	expiresAt := claims.ExpiresAt.Time
-	if len(refreshToken) > 0 && refreshToken[0] != "" {
-		if refreshClaims, rerr := h.jwt.ValidateToken(refreshToken[0]); rerr == nil && refreshClaims.ExpiresAt != nil {
-			expiresAt = refreshClaims.ExpiresAt.Time
-		}
-	}
-	cipher, err := h.encryptor.Encrypt(info.UpstreamIDToken)
-	if err != nil {
-		// Same audit + degrade. The user has a valid JWT; SLO just
-		// won't be available for this session.
-		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
-			"sso.session_skipped", "user", userID.String(), "", map[string]any{
-				"provider": provider,
-				"reason":   "encrypt_failed",
-			})
-		return
-	}
-	if err := h.sessionWriter.InsertSSOSession(r.Context(), sqlc.InsertSSOSessionParams{
-		Jti:                      claims.ID,
-		UserID:                   userID,
-		ProviderName:             provider,
-		UpstreamIDTokenEncrypted: cipher,
-		EndSessionEndpoint:       info.EndSessionEndpoint,
-		ExpiresAt:                expiresAt,
-	}); err != nil {
-		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
-			"sso.session_skipped", "user", userID.String(), "", map[string]any{
-				"provider": provider,
-				"reason":   "db_write_failed",
-			})
-	}
-}
-
-// syncGroupsFromClaims fires the migration-042 reconciliation against
-// the operator-configured identity_group_mappings table. It MUST NOT
-// fail the HTTP response — every error path logs an audit row and
-// returns; the user is still authenticated and lands on the frontend.
-//
-// connector_id is left Invalid (NULL) here because the SSOManager
-// indexes providers by name (e.g. "google", "okta") rather than by
-// the dex_connectors PK; wildcard mappings still apply. A future
-// patch can extend SSOUserInfo with a resolved connector_id once Dex
-// is fully replacing direct OIDC providers.
-func (h *SSOHandler) syncGroupsFromClaims(r *http.Request, userID uuid.UUID, info *auth.SSOUserInfo) {
-	if h == nil || h.queries == nil || info == nil {
-		return
-	}
-	// Resolve a dex_connector row for the SSO provider so
-	// connector-scoped group mappings match. Look up by name first
-	// (operators usually name their dex_connectors row after the
-	// provider type), then fall back to wildcard. A non-existent
-	// connector for an enabled SSO path is normal in dev — wildcard
-	// mappings still apply.
-	connectorID := pgtype.UUID{}
-	if info.Provider != "" {
-		if c, err := h.queries.GetDexConnectorByName(r.Context(), info.Provider); err == nil {
-			connectorID = pgtype.UUID{Bytes: c.ID, Valid: true}
-		}
-	}
-	result, err := auth.SyncUserGroups(
-		r.Context(),
-		h.queries,
-		userID,
-		connectorID,
-		info.Groups,
-		true, // claims are fresh on every SSO callback
-	)
-	if err != nil {
-		recordAuditAs(r, h.queries, pgtype.UUID{Bytes: userID, Valid: true},
-			"auth.group_sync.error", "user", userID.String(), "", map[string]any{
-				"provider": info.Provider,
-				"error":    err.Error(),
-			},
-		)
-		return
-	}
-	if result.Skipped {
-		return
-	}
-	for _, added := range result.Added {
-		recordAuditAs(r, h.queries, pgtype.UUID{}, // system actor
-			"auth.group_sync.binding_added", "role_binding", added.BindingID.String(), "",
-			map[string]any{
-				"user_id":    userID.String(),
-				"group_name": added.GroupName,
-				"role_id":    added.RoleID.String(),
-				"scope":      added.Scope,
-				"cluster_id": uuidOrEmpty(added.ClusterID),
-				"project_id": uuidOrEmpty(added.ProjectID),
-			},
-		)
-	}
-	for _, removed := range result.Removed {
-		recordAuditAs(r, h.queries, pgtype.UUID{}, // system actor
-			"auth.group_sync.binding_removed", "role_binding", removed.BindingID.String(), "",
-			map[string]any{
-				"user_id":    userID.String(),
-				"role_id":    removed.RoleID.String(),
-				"scope":      removed.Scope,
-				"cluster_id": uuidOrEmpty(removed.ClusterID),
-				"project_id": uuidOrEmpty(removed.ProjectID),
-			},
-		)
-	}
-	// Invalidate any cached binding set for this user so the very
-	// next authenticated request reflects the post-sync state.
-	if (len(result.Added) > 0 || len(result.Removed) > 0) && h.rbacCache != nil {
-		h.rbacCache.Invalidate(userID.String())
-	}
+	cookie.MaxAge = int(lifetime / time.Second)
+	cookie.Expires = now.Add(lifetime)
+	return cookie
 }
 
 // uuidOrEmpty stringifies a uuid for audit JSON, rendering the zero
@@ -495,28 +262,50 @@ func uuidOrEmpty(id uuid.UUID) string {
 	return id.String()
 }
 
-// findOrCreateUser returns (user, provisioned, error). provisioned is true
+// findOrCreateSSOUser returns (user, provisioned, linked, error). provisioned is true
 // only when this call inserted a fresh row (so the caller can audit a
-// distinct sso.user_provisioned event in addition to sso.callback).
-func (h *SSOHandler) findOrCreateUser(ctx context.Context, info *auth.SSOUserInfo) (sqlc.User, bool, error) {
-	if h.queries == nil {
-		return sqlc.User{}, false, errors.New("user persistence is not configured")
+// distinct sso.user_provisioned event in addition to sso.callback). linked is
+// true when a pre-materialized external principal was claimed atomically.
+func findOrCreateSSOUser(ctx context.Context, q SSOQuerier, info *auth.SSOUserInfo) (sqlc.User, bool, bool, error) {
+	if q == nil {
+		return sqlc.User{}, false, false, errors.New("user persistence is not configured")
 	}
-	if user, err := h.queries.GetUserByEmail(ctx, info.Email); err == nil {
-		return user, false, nil
-	}
-	username := info.Username
+	email := strings.ToLower(strings.TrimSpace(info.Email))
+	username := strings.TrimSpace(info.Username)
 	if username == "" {
-		username = info.Email
+		username = email
 	}
-	if user, err := h.queries.GetUserByUsername(ctx, username); err == nil {
-		return user, false, nil
+	if info.ConnectorID != "" && info.Subject != "" {
+		displayName := strings.TrimSpace(info.FirstName + " " + info.LastName)
+		user, err := q.ClaimExternalPrincipal(ctx, sqlc.ClaimExternalPrincipalParams{
+			PrincipalEmail:       email,
+			PrincipalUsername:    username,
+			PrincipalDisplayName: displayName,
+			TargetConnectorName:  info.ConnectorID,
+			TargetSubject:        info.Subject,
+		})
+		if err == nil {
+			return user, false, true, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return sqlc.User{}, false, false, fmt.Errorf("claiming external principal: %w", err)
+		}
+	}
+	if user, err := q.GetUserByEmail(ctx, email); err == nil {
+		return user, false, false, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.User{}, false, false, fmt.Errorf("looking up sso user by email: %w", err)
+	}
+	if user, err := q.GetUserByUsername(ctx, username); err == nil {
+		return user, false, false, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.User{}, false, false, fmt.Errorf("looking up sso user by username: %w", err)
 	}
 	// Auto-provision: create a disabled-password user record. The password
 	// column is non-null in the schema so we store an empty string with the
 	// "!" sentinel — this can never match bcrypt or PBKDF2 verification.
-	user, err := h.queries.CreateUser(ctx, sqlc.CreateUserParams{
-		Email:       info.Email,
+	user, err := q.CreateUser(ctx, sqlc.CreateUserParams{
+		Email:       email,
 		Username:    username,
 		FirstName:   info.FirstName,
 		LastName:    info.LastName,
@@ -526,9 +315,9 @@ func (h *SSOHandler) findOrCreateUser(ctx context.Context, info *auth.SSOUserInf
 		IsSuperuser: false,
 	})
 	if err != nil {
-		return sqlc.User{}, false, fmt.Errorf("provisioning sso user: %w", err)
+		return sqlc.User{}, false, false, fmt.Errorf("provisioning sso user: %w", err)
 	}
-	return user, true, nil
+	return user, true, false, nil
 }
 
 func (h *SSOHandler) rememberState(state, provider string) {

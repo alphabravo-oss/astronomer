@@ -5,12 +5,12 @@ import { createFileRoute } from "@tanstack/react-router";
 // that matches Astronomer's scope: adopting existing clusters and applying
 // optional baselines, not provisioning infrastructure.
 
-import { useParams } from "@/lib/navigation";
+
 import { Activity } from "lucide-react";
 import { RegistrationTimeline } from "@/components/clusters/registration-timeline";
 
 function ClusterAdoptionPage() {
-  const params = useParams();
+  const params = Route.useParams();
   const clusterId = String(params?.id ?? "");
 
   return (

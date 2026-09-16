@@ -134,6 +134,18 @@ if (!schemas || typeof schemas !== 'object' || Array.isArray(schemas)) {
   process.exit(2);
 }
 
+function resolveLocalObject(value) {
+  if (!value || typeof value !== 'object' || typeof value.$ref !== 'string' || !value.$ref.startsWith('#/')) {
+    return value;
+  }
+  const target = value.$ref
+    .slice(2)
+    .split('/')
+    .map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))
+    .reduce((node, part) => node?.[part], spec);
+  return resolveLocalObject(target);
+}
+
 const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'patch', 'head', 'options', 'trace']);
 const JSON_MEDIA_TYPES = ['application/json', 'application/merge-patch+json', 'application/scim+json'];
 
@@ -160,7 +172,7 @@ for (const [pattern, item] of Object.entries(spec?.paths ?? {})) {
   if (!item || typeof item !== 'object') continue;
   for (const [method, op] of Object.entries(item)) {
     if (!HTTP_METHODS.has(method.toLowerCase())) continue;
-    const body = op?.requestBody;
+    const body = resolveLocalObject(op?.requestBody);
     if (!body || typeof body !== 'object') continue;
     const content = body.content ?? {};
     const mediaType = JSON_MEDIA_TYPES.find((m) => content[m]);

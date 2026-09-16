@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
 import type { OperationSnapshot } from "@/lib/api/operation-polling";
+import { mapPage } from "@/lib/api/pagination";
 import type { PaginatedResponse } from "@/types";
 import type {
   BackupDrillLatestResponse,
@@ -265,16 +266,10 @@ export async function listBackupDrillHistory(
     query: { limit: pageSize, offset: (page - 1) * pageSize },
     signal: options.signal,
   });
-  return {
-    data: (response.data ?? []).map(mapDrillResult),
-    total: response.count,
-    count: response.count,
-    next: response.next,
-    previous: response.previous,
-    page,
-    pageSize,
-    totalPages: pageSize > 0 ? Math.ceil(response.count / pageSize) : 0,
-  };
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapDrillResult,
+  );
 }
 
 export async function getManagementBackupStatus(

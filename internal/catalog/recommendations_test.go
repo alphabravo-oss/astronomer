@@ -144,7 +144,7 @@ func (f *fakeQuerier) ListDistinctRatedChartIDs(_ context.Context) ([]uuid.UUID,
 func TestRecomputeAggregate_NoRatingsZeroes(t *testing.T) {
 	q := newFakeQuerier()
 	chartID := uuid.New()
-	if err := RecomputeAggregate(context.Background(), q, chartID); err != nil {
+	if err := RecomputeAggregate(context.Background(), q, chartID, NewRecommendationPolicy(4, 10)); err != nil {
 		t.Fatalf("RecomputeAggregate: %v", err)
 	}
 	a, ok := q.aggregates[chartID]
@@ -178,7 +178,7 @@ func TestRecomputeAggregate_BayesianPushesLowSampleTowardGlobal(t *testing.T) {
 			Stars:   5,
 		})
 	}
-	if err := RecomputeAggregate(context.Background(), q, chartID); err != nil {
+	if err := RecomputeAggregate(context.Background(), q, chartID, NewRecommendationPolicy(4, 10)); err != nil {
 		t.Fatalf("RecomputeAggregate: %v", err)
 	}
 	a := q.aggregates[chartID]
@@ -212,7 +212,7 @@ func TestRecomputeAggregate_HighSampleDoesntDrift(t *testing.T) {
 			Stars:   4,
 		})
 	}
-	if err := RecomputeAggregate(context.Background(), q, chartID); err != nil {
+	if err := RecomputeAggregate(context.Background(), q, chartID, NewRecommendationPolicy(4, 10)); err != nil {
 		t.Fatalf("RecomputeAggregate: %v", err)
 	}
 	a := q.aggregates[chartID]

@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * App install / upgrade modal — sprint 082+.
  *
@@ -30,7 +28,7 @@
  * surfaces through the Installed view's polling.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
@@ -42,7 +40,7 @@ import {
   getChartDefaultValues,
   installChartOnCluster,
   type ChartVersionRow,
-} from "@/lib/api/cluster-detail";
+} from "@/lib/api/cluster-apps";
 import { upgradeInstalledChart } from "@/lib/api/catalog";
 import { queryKeys } from "@/lib/query-keys";
 import { permissionDeniedReason } from "@/lib/permission-hooks";
@@ -129,7 +127,7 @@ export function AppInstallModal({
   // version — used so that switching versions in install mode
   // refreshes the YAML, but typing into the editor doesn't get
   // clobbered by a re-render of the same version.
-  const [hydratedForVersion, setHydratedForVersion] = useState<string>("");
+  const hydratedForVersion = useRef("");
 
   // Versions
   const versions = useQuery({
@@ -172,11 +170,10 @@ export function AppInstallModal({
     if (isUpgrade) return; // don't auto-clobber on upgrade
     if (!defaultValues.data) return;
     const key = selectedVersionId;
-    if (hydratedForVersion === key) return;
+    if (hydratedForVersion.current === key) return;
     form.setFieldValue("valuesYaml", defaultValues.data.defaultValues);
-    setHydratedForVersion(key);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultValues.data, hydratedForVersion, selectedVersionId, isUpgrade]);
+    hydratedForVersion.current = key;
+  }, [defaultValues.data, form, selectedVersionId, isUpgrade]);
 
   const install = useMutation({
     mutationFn: async () => {
@@ -243,7 +240,7 @@ export function AppInstallModal({
       size="xl"
       panelClassName="max-w-3xl bg-popover flex flex-col overflow-hidden"
       bodyClassName="p-0"
-      footerClassName="bg-muted/30 flex-shrink-0"
+      footerClassName="bg-muted/30 shrink-0"
       footer={
         <div className="flex items-center justify-end gap-2">
           <button
@@ -274,7 +271,7 @@ export function AppInstallModal({
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {(slowInstall || hasCRDs) && (
           <div className="rounded-md border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
-            <Info className="h-4 w-4 text-status-warning mt-0.5 flex-shrink-0" />
+            <Info className="h-4 w-4 text-status-warning mt-0.5 shrink-0" />
             <div className="space-y-0.5 text-foreground">
               {slowInstall && (
                 <div>
@@ -316,7 +313,7 @@ export function AppInstallModal({
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
-                    className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full h-9 px-2 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
                   >
                     {(versions.data ?? []).map((v) => (
                       <option key={v.id} value={v.id}>
@@ -346,7 +343,7 @@ export function AppInstallModal({
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   disabled={isUpgrade}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
                 />
               )}
             </form.Field>
@@ -368,7 +365,7 @@ export function AppInstallModal({
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
                   disabled={isUpgrade}
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono disabled:opacity-50 focus:outline-hidden focus:ring-1 focus:ring-ring"
                 />
               )}
             </form.Field>
@@ -409,7 +406,7 @@ export function AppInstallModal({
                 onBlur={field.handleBlur}
                 rows={16}
                 spellCheck={false}
-                className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono focus:outline-none focus:ring-1 focus:ring-ring resize-y"
+                className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
                 placeholder="# values.yaml — overrides applied on top of chart defaults"
               />
             )}
@@ -526,7 +523,7 @@ export function AppUninstallModal({
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-muted-foreground">
           Type{" "}
-          <code className="font-mono text-xs bg-muted px-1 rounded">
+          <code className="font-mono text-xs bg-muted px-1 rounded-sm">
             {releaseName}
           </code>{" "}
           to confirm
@@ -535,7 +532,7 @@ export function AppUninstallModal({
           type="text"
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+          className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono focus:outline-hidden focus:ring-1 focus:ring-ring"
           data-initial-focus
         />
       </div>

@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Inline provider badge for cloud-credential rows / cards. Lucide doesn't
  * ship cloud-vendor brand marks so we use a neutral icon + a coloured
@@ -16,7 +14,7 @@ const providerMeta: Record<
 > = {
   aws: {
     label: "AWS",
-    tint: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    tint: "bg-orange-500/10 text-orange-800 dark:text-orange-400",
     icon: Cloud,
   },
   gcp: {
@@ -27,6 +25,11 @@ const providerMeta: Record<
   azure: {
     label: "Azure",
     tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+    icon: Cloud,
+  },
+  digitalocean: {
+    label: "DigitalOcean",
+    tint: "bg-blue-600/10 text-blue-700 dark:text-blue-300",
     icon: Cloud,
   },
   generic: {
@@ -42,7 +45,7 @@ export function ProviderBadge({ provider }: { provider: CloudProvider }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium",
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-medium",
         meta.tint,
       )}
     >

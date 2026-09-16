@@ -211,10 +211,36 @@ type DeliveryStatusV2 struct {
 	ProtocolVersion     string                       `json:"protocol_version"`
 	ClusterID           string                       `json:"cluster_id"`
 	SessionSequence     int64                        `json:"session_sequence"`
+	StatusDigest        string                       `json:"status_digest"`
 	SnapshotGeneration  int64                        `json:"snapshot_generation"`
 	SnapshotETag        string                       `json:"snapshot_etag,omitempty"`
 	Deployments         []DeliveryDeploymentStatusV2 `json:"deployments"`
 	ControllerInventory DeliveryControllerInventory  `json:"controller_inventory"`
+}
+
+// SemanticDigest identifies the complete delivery state carried by a status
+// envelope while deliberately excluding transport sequence numbers and the
+// per-sample observation timestamp. It is stable for unchanged Flux state,
+// allowing agents and the management plane to suppress redundant work without
+// weakening session or desired-generation fences.
+func (s DeliveryStatusV2) SemanticDigest() string {
+	canonical := s
+	canonical.SessionSequence = 0
+	canonical.StatusDigest = ""
+	canonical.Deployments = append([]DeliveryDeploymentStatusV2(nil), s.Deployments...)
+	sort.Slice(canonical.Deployments, func(i, j int) bool {
+		return canonical.Deployments[i].DeploymentID < canonical.Deployments[j].DeploymentID
+	})
+	for index := range canonical.Deployments {
+		canonical.Deployments[index].ObservedAt = time.Time{}
+		canonical.Deployments[index].WarningCodes = append([]string(nil), canonical.Deployments[index].WarningCodes...)
+		sort.Strings(canonical.Deployments[index].WarningCodes)
+	}
+	canonical.ControllerInventory.APIVersions = append([]string(nil), s.ControllerInventory.APIVersions...)
+	sort.Strings(canonical.ControllerInventory.APIVersions)
+	body, _ := json.Marshal(canonical)
+	digest := sha256.Sum256(body)
+	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
 type DeliveryDeploymentStatusV2 struct {
@@ -306,6 +332,9 @@ func (s DeliveryStatusV2) Validate() error {
 	}
 	if !validUUID(s.ClusterID) || s.SessionSequence < 1 || s.SnapshotGeneration < 0 {
 		return errors.New("delivery status has invalid identity or sequence")
+	}
+	if !validDigest(s.StatusDigest) || s.StatusDigest != s.SemanticDigest() {
+		return errors.New("delivery status digest is missing or does not match its semantic state")
 	}
 	if (s.SnapshotGeneration == 0 && s.SnapshotETag != "") || (s.SnapshotGeneration > 0 && !validDigest(s.SnapshotETag)) {
 		return errors.New("delivery status snapshot generation and ETag must be supplied together")

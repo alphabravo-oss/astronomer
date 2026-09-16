@@ -1,8 +1,5 @@
 import { useAppForm, useStore } from "@/lib/form";
-import {
-  useCreateAlertRule,
-  useUpdateAlertRule,
-} from "@/lib/hooks/alerting";
+import { useCreateAlertRule, useUpdateAlertRule } from "@/lib/hooks/alerting";
 import type { AlertRuleWrite } from "@/lib/api/alerting";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -409,12 +406,12 @@ export function AlertRuleModal({
       <label className="flex items-center gap-2 cursor-pointer">
         <form.Field name="enabled">
           {(field) => (
-            <input
+            <Input
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}
               onBlur={field.handleBlur}
-              className="rounded border-border text-primary focus:ring-ring"
+              className="rounded-sm border-border text-primary focus:ring-ring"
             />
           )}
         </form.Field>

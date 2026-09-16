@@ -3,6 +3,9 @@ package tunnel
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/google/uuid"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -26,6 +30,7 @@ func TestNewHub(t *testing.T) {
 	h := NewHub(slog.Default())
 	if h == nil {
 		t.Fatal("NewHub returned nil")
+		return
 	}
 	if n := h.agents.Len(); n != 0 {
 		t.Fatalf("expected 0 agents, got %d", n)
@@ -36,6 +41,7 @@ func TestNewHubNilLogger(t *testing.T) {
 	h := NewHub(nil)
 	if h == nil {
 		t.Fatal("NewHub with nil logger returned nil")
+		return
 	}
 	if h.log == nil {
 		t.Fatal("expected non-nil logger")
@@ -83,13 +89,34 @@ func testServerAndClient(t *testing.T, h *Hub) (*httptest.Server, *websocket.Con
 	return srv, conn, ctx
 }
 
+// acceptingConnectValidator is explicit test wiring for websocket fixtures.
+// The token is the cluster UUID, so one validator safely supports multiple
+// connections without reintroducing the production nil-validator bypass.
+type acceptingConnectValidator struct{ *recordingValidator }
+
+func newAcceptingConnectValidator() *acceptingConnectValidator {
+	return &acceptingConnectValidator{recordingValidator: &recordingValidator{}}
+}
+
+func (v *acceptingConnectValidator) GetRegistrationTokenByToken(_ context.Context, token string) (sqlc.ClusterRegistrationToken, error) {
+	clusterID, err := uuid.Parse(token)
+	if err != nil {
+		return sqlc.ClusterRegistrationToken{}, err
+	}
+	return sqlc.ClusterRegistrationToken{ID: uuid.New(), ClusterID: clusterID}, nil
+}
+
+func newConnectTestHub(log *slog.Logger) *Hub {
+	return NewHubWithValidator(log, newAcceptingConnectValidator())
+}
+
 // connectAgent sends a CONNECT message and reads the CONNECT_ACK.
 func connectAgent(t *testing.T, conn *websocket.Conn, ctx context.Context, clusterID, agentID string) protocol.ConnectAckPayload {
 	t.Helper()
 	connectPayload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID: clusterID, AgentID: agentID, AgentVersion: "1.0.0",
 		TunnelProtocolVersion: protocol.TunnelProtocolVersion, HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion,
-		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: protocol.RequiredConnectCapabilities(), Token: "test-token",
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: protocol.RequiredConnectCapabilities(), Token: clusterID,
 	})
 	connectMsg := protocol.Message{
 		Type:    protocol.MsgConnect,
@@ -121,36 +148,38 @@ func TestAgentConnectAndDisconnect(t *testing.T) {
 	// The hub writes log lines from its goroutine while the test reads
 	// the buffer at the end — guard the buffer to avoid a -race fail.
 	buf := newSyncBuffer()
-	h := NewHub(slog.New(slog.NewJSONHandler(buf, nil)))
+	h := newConnectTestHub(slog.New(slog.NewJSONHandler(buf, nil)))
 	_, conn, ctx := testServerAndClient(t, h)
 
-	connectAgent(t, conn, ctx, "cluster-1", "agent-1")
+	const clusterID = "11111111-1111-4111-8111-111111111111"
+	connectAgent(t, conn, ctx, clusterID, "agent-1")
 
 	// Give the hub time to register the agent.
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify agent is registered.
-	agent := h.GetAgent("cluster-1")
+	agent := h.GetAgent(clusterID)
 	if agent == nil {
 		t.Fatal("expected agent to be registered")
+		return
 	}
-	if agent.ClusterID != "cluster-1" {
-		t.Fatalf("expected cluster-1, got %s", agent.ClusterID)
+	if agent.ClusterID != clusterID {
+		t.Fatalf("expected %s, got %s", clusterID, agent.ClusterID)
 	}
 	if agent.AgentID != "agent-1" {
 		t.Fatalf("expected agent-1, got %s", agent.AgentID)
 	}
 
 	clusters := h.ConnectedClusters()
-	if len(clusters) != 1 || clusters[0] != "cluster-1" {
-		t.Fatalf("expected [cluster-1], got %v", clusters)
+	if len(clusters) != 1 || clusters[0] != clusterID {
+		t.Fatalf("expected [%s], got %v", clusterID, clusters)
 	}
 
 	// Close the connection and verify deregistration.
 	_ = conn.Close(websocket.StatusNormalClosure, "done")
 	time.Sleep(100 * time.Millisecond)
 
-	if a := h.GetAgent("cluster-1"); a != nil {
+	if a := h.GetAgent(clusterID); a != nil {
 		t.Fatal("expected agent to be deregistered after disconnect")
 	}
 	if len(h.ConnectedClusters()) != 0 {
@@ -166,7 +195,7 @@ func TestAgentConnectAndDisconnect(t *testing.T) {
 }
 
 func TestAgentConnectInvalidFirstMessage(t *testing.T) {
-	h := NewHub(slog.Default())
+	h := newConnectTestHub(slog.Default())
 	_, conn, ctx := testServerAndClient(t, h)
 
 	// Send a non-CONNECT message (use PONG since MsgPing was removed).
@@ -183,15 +212,16 @@ func TestAgentConnectInvalidFirstMessage(t *testing.T) {
 }
 
 func TestSendToConnectedAgent(t *testing.T) {
-	h := NewHub(slog.Default())
+	h := newConnectTestHub(slog.Default())
 	_, conn, ctx := testServerAndClient(t, h)
 
-	connectAgent(t, conn, ctx, "cluster-2", "agent-2")
+	const clusterID = "22222222-2222-4222-8222-222222222222"
+	connectAgent(t, conn, ctx, clusterID, "agent-2")
 	time.Sleep(50 * time.Millisecond)
 
 	// Send a message to the agent via the hub.
 	healthCheckMsg := &protocol.Message{Type: protocol.MsgHealthCheck, RequestID: "hc-1"}
-	if err := h.SendToAgent("cluster-2", healthCheckMsg); err != nil {
+	if err := h.SendToAgent(clusterID, healthCheckMsg); err != nil {
 		t.Fatalf("SendToAgent: %v", err)
 	}
 
@@ -235,11 +265,14 @@ func TestSendToAgentRequiresAdvertisedOperationCapability(t *testing.T) {
 }
 
 func TestBroadcastToAll(t *testing.T) {
-	h := NewHub(slog.Default())
+	h := newConnectTestHub(slog.Default())
 
 	// Connect two agents.
 	conns := make([]*websocket.Conn, 2)
-	clusterIDs := []string{"cluster-a", "cluster-b"}
+	clusterIDs := []string{
+		"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+		"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+	}
 
 	for i, cid := range clusterIDs {
 		_, conn, ctx := testServerAndClient(t, h)
@@ -310,8 +343,8 @@ func TestAgentConnectionPersistenceLifecycle(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	if got := len(validator.SnapshotPings()); got == 0 {
-		t.Fatal("expected persisted ping update after heartbeat")
+	if got := len(validator.SnapshotHeartbeatArgs()); got != 1 {
+		t.Fatalf("expected one atomic heartbeat write, got %d", got)
 	}
 
 	_ = conn.Close(websocket.StatusNormalClosure, "done")
@@ -331,7 +364,7 @@ func TestAgentConnectionPersistenceLifecycle(t *testing.T) {
 
 func TestConnectBlocksIncompatibleAgentVersion(t *testing.T) {
 	clusterID := "945db76b-d7f3-4e6c-8c70-6ca50ca514f4"
-	h := NewHub(slog.Default())
+	h := newConnectTestHub(slog.Default())
 	pub := &recordingPublisher{}
 	h.SetPublisher(pub)
 	_, conn, ctx := testServerAndClient(t, h)
@@ -369,8 +402,29 @@ func TestConnectBlocksIncompatibleAgentVersion(t *testing.T) {
 	}
 }
 
+func TestExpectedAgentDisconnect(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "normal closure", err: websocket.CloseError{Code: websocket.StatusNormalClosure}, want: true},
+		{name: "going away", err: websocket.CloseError{Code: websocket.StatusGoingAway}, want: true},
+		{name: "peer eof", err: fmt.Errorf("read frame: %w", io.EOF), want: true},
+		{name: "policy violation", err: websocket.CloseError{Code: websocket.StatusPolicyViolation}},
+		{name: "transport error", err: errors.New("connection reset")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := expectedAgentDisconnect(test.err); got != test.want {
+				t.Fatalf("expectedAgentDisconnect(%v) = %t, want %t", test.err, got, test.want)
+			}
+		})
+	}
+}
+
 func TestConnectRejectsPreV2AgentWithStableReenrollmentReason(t *testing.T) {
-	h := NewHub(slog.Default())
+	h := newConnectTestHub(slog.Default())
 	_, conn, ctx := testServerAndClient(t, h)
 	payload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID: "945db76b-d7f3-4e6c-8c70-6ca50ca514f4", AgentID: "old-agent",
@@ -433,6 +487,7 @@ func TestConnectAckRotatesToDurableAgentToken(t *testing.T) {
 	}
 	if rotated == nil {
 		t.Fatalf("expected an agent.token.rotated audit row, got %d rows", len(auditRows))
+		return
 	}
 	if rotated.ResourceType != "cluster" || rotated.ResourceID != clusterID {
 		t.Fatalf("audit resource = %s/%s, want cluster/%s", rotated.ResourceType, rotated.ResourceID, clusterID)

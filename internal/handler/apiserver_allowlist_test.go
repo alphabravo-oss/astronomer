@@ -14,21 +14,22 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // fakeAllowlistQuerier captures every interaction, including audit rows
 // emitted through the handler's optional auditor surface.
 type fakeAllowlistQuerier struct {
 	fakeOperationIdempotencyStore
-	clusterErr  error
-	cluster     sqlc.Cluster
-	row         *sqlc.ApiserverAllowlist
-	rowGetErr   error
-	upserted    *sqlc.UpsertApiserverAllowlistParams
-	upsertErr   error
-	snapshots   []sqlc.ApiserverAllowlistSnapshot
-	snapshotErr error
-	audits      []sqlc.CreateAuditLogV1Params
+	clusterErr   error
+	cluster      sqlc.Cluster
+	row          *sqlc.ApiserverAllowlist
+	rowGetErr    error
+	upserted     *sqlc.UpsertApiserverAllowlistParams
+	upsertErr    error
+	snapshots    []sqlc.ApiserverAllowlistSnapshot
+	snapshotErr  error
+	snapshotPage sqlc.ListApiserverAllowlistSnapshotsParams
 }
 
 func (f *fakeAllowlistQuerier) GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error) {
@@ -70,15 +71,13 @@ func (f *fakeAllowlistQuerier) UpsertApiserverAllowlist(ctx context.Context, arg
 }
 
 func (f *fakeAllowlistQuerier) ListApiserverAllowlistSnapshots(ctx context.Context, arg sqlc.ListApiserverAllowlistSnapshotsParams) ([]sqlc.ApiserverAllowlistSnapshot, error) {
+	f.snapshotPage = arg
 	if f.snapshotErr != nil {
 		return nil, f.snapshotErr
 	}
-	return f.snapshots, nil
-}
-
-func (f *fakeAllowlistQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
-	f.audits = append(f.audits, arg)
-	return nil
+	start := min(int(arg.Offset), len(f.snapshots))
+	end := min(start+int(arg.Limit), len(f.snapshots))
+	return f.snapshots[start:end], nil
 }
 
 func newRouterWithHandler(h *ApiserverAllowlistHandler) chi.Router {
@@ -93,8 +92,8 @@ func newRouterWithHandler(h *ApiserverAllowlistHandler) chi.Router {
 
 func TestApiserverAllowlistHandler_GetReturnsEmptyDefaultWhenNoRow(t *testing.T) {
 	clusterID := uuid.New()
-	q := &fakeAllowlistQuerier{}
-	h := NewApiserverAllowlistHandler(q)
+	q := &transactionalAllowlistQ{fakeAllowlistQuerier: &fakeAllowlistQuerier{}}
+	h := transactionalAllowlistHandler(q)
 	h.SetAstronomerEgress([]string{"54.10.0.0/16"})
 	router := newRouterWithHandler(h)
 
@@ -126,9 +125,8 @@ func TestApiserverAllowlistHandler_GetReturnsEmptyDefaultWhenNoRow(t *testing.T)
 
 func TestApiserverAllowlistHandler_PUTHappyPath(t *testing.T) {
 	clusterID := uuid.New()
-	q := &fakeAllowlistQuerier{}
-	h := NewApiserverAllowlistHandler(q)
-	h.SetAuditor(q)
+	q := &transactionalAllowlistQ{fakeAllowlistQuerier: &fakeAllowlistQuerier{}}
+	h := transactionalAllowlistHandler(q)
 	router := newRouterWithHandler(h)
 
 	body, _ := json.Marshal(AllowlistUpdateRequest{
@@ -148,10 +146,10 @@ func TestApiserverAllowlistHandler_PUTHappyPath(t *testing.T) {
 	if q.upserted.Mode != "monitor" {
 		t.Fatalf("expected mode=monitor; got %q", q.upserted.Mode)
 	}
-	if len(q.audits) != 1 {
-		t.Fatalf("audit rows=%d want 1", len(q.audits))
+	if len(q.auditRows) != 1 {
+		t.Fatalf("audit rows=%d want 1", len(q.auditRows))
 	}
-	row := q.audits[0]
+	row := q.auditRows[0]
 	if row.Action != "cluster.apiserver_allowlist.updated" || row.ResourceType != "cluster" || row.ResourceID != clusterID.String() {
 		t.Fatalf("audit row=%+v, want cluster.apiserver_allowlist.updated on cluster %s", row, clusterID)
 	}
@@ -234,7 +232,7 @@ func TestApiserverAllowlistHandler_PUT_RejectsBadMode(t *testing.T) {
 func TestApiserverAllowlistHandler_PUT_RequiresForceApplyOnEnforceUpgradeWithDrift(t *testing.T) {
 	clusterID := uuid.New()
 	cidrsJSON, _ := json.Marshal([]string{"10.0.0.0/8"})
-	q := &fakeAllowlistQuerier{
+	q := &transactionalAllowlistQ{fakeAllowlistQuerier: &fakeAllowlistQuerier{
 		cluster: sqlc.Cluster{ID: clusterID, Provider: "eks"},
 		row: &sqlc.ApiserverAllowlist{
 			ClusterID:  clusterID,
@@ -242,8 +240,8 @@ func TestApiserverAllowlistHandler_PUT_RequiresForceApplyOnEnforceUpgradeWithDri
 			SyncStatus: "drifting",
 			Cidrs:      cidrsJSON,
 		},
-	}
-	h := NewApiserverAllowlistHandler(q)
+	}}
+	h := transactionalAllowlistHandler(q)
 	router := newRouterWithHandler(h)
 
 	// PUT mode=enforce without force_apply — must 409.
@@ -309,14 +307,6 @@ func TestApiserverAllowlistHandler_Reconcile_FailsClosedWithoutTransaction(t *te
 		},
 	}
 	h := NewApiserverAllowlistHandler(q)
-	called := false
-	h.SetReconciler(func(ctx context.Context, id uuid.UUID) error {
-		called = true
-		if id != clusterID {
-			t.Fatalf("wrong clusterID in hook: %s vs %s", id, clusterID)
-		}
-		return nil
-	})
 	router := newRouterWithHandler(h)
 
 	req := httptest.NewRequest(http.MethodPost, "/clusters/"+clusterID.String()+"/apiserver-allowlist/reconcile/", nil)
@@ -325,9 +315,6 @@ func TestApiserverAllowlistHandler_Reconcile_FailsClosedWithoutTransaction(t *te
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503; got %d", rec.Code)
-	}
-	if called {
-		t.Fatalf("reconciler hook must not fire outside the durable transaction")
 	}
 }
 
@@ -341,8 +328,8 @@ func TestApiserverAllowlistHandler_RequiresClusterUpdate(t *testing.T) {
 	// a future refactor doesn't accidentally promote a read-only
 	// endpoint to a write-only one.
 	clusterID := uuid.New()
-	q := &fakeAllowlistQuerier{}
-	h := NewApiserverAllowlistHandler(q)
+	q := &transactionalAllowlistQ{fakeAllowlistQuerier: &fakeAllowlistQuerier{}}
+	h := transactionalAllowlistHandler(q)
 	router := newRouterWithHandler(h)
 
 	// GET — no middleware → handler returns 200 with the empty default.
@@ -385,6 +372,76 @@ func TestApiserverAllowlistHandler_Snapshots(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"drift":true`) {
 		t.Fatalf("expected drift=true in body; got %s", rec.Body.String())
+	}
+}
+
+func TestAllowlistSnapshotPaginationContract(t *testing.T) {
+	clusterID := uuid.New()
+	for _, tc := range []struct {
+		name, query   string
+		limit, offset int
+		wantIDs       []int64
+		hasMore       bool
+	}{
+		{"first", "?limit=2", 2, 0, []int64{1, 2}, true},
+		{"middle", "?limit=2&offset=2", 2, 2, []int64{3, 4}, true},
+		{"last", "?limit=2&offset=4", 2, 4, []int64{5}, false},
+		{"empty", "?limit=2&offset=5", 2, 5, []int64{}, false},
+		{"clamped", "?limit=999999&offset=-1", 200, 0, []int64{1, 2, 3, 4, 5}, false},
+		{"overflow", "?offset=9223372036854775807", 20, int(maxPaginationOffset), []int64{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &fakeAllowlistQuerier{}
+			for id := int64(1); id <= 5; id++ {
+				q.snapshots = append(q.snapshots, sqlc.ApiserverAllowlistSnapshot{ID: id, ClusterID: clusterID})
+			}
+			rec := httptest.NewRecorder()
+			newRouterWithHandler(NewApiserverAllowlistHandler(q)).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/clusters/"+clusterID.String()+"/apiserver-allowlist/snapshots/"+tc.query, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if q.snapshotPage.ClusterID != clusterID || q.snapshotPage.Limit != int32(tc.limit+1) || q.snapshotPage.Offset != int32(tc.offset) {
+				t.Fatalf("query=%+v", q.snapshotPage)
+			}
+			var page paging.Response[SnapshotResponseEntry]
+			if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+				t.Fatal(err)
+			}
+			if page.Data == nil || len(page.Data) != len(tc.wantIDs) {
+				t.Fatalf("rows=%+v want IDs=%v", page.Data, tc.wantIDs)
+			}
+			for i, id := range tc.wantIDs {
+				if page.Data[i].ID != id {
+					t.Fatalf("row %d ID=%d want %d", i, page.Data[i].ID, id)
+				}
+			}
+			if page.Pagination.Total != nil || page.Pagination.Limit != tc.limit || page.Pagination.Offset != tc.offset || page.Pagination.HasMore != tc.hasMore {
+				t.Fatalf("metadata=%+v", page.Pagination)
+			}
+			if tc.hasMore {
+				if page.Pagination.NextOffset == nil || *page.Pagination.NextOffset != tc.offset+len(tc.wantIDs) {
+					t.Fatalf("continuation=%+v", page.Pagination)
+				}
+			} else if page.Pagination.NextOffset != nil {
+				t.Fatalf("unexpected continuation=%+v", page.Pagination)
+			}
+			var shape map[string]json.RawMessage
+			if err := json.Unmarshal(rec.Body.Bytes(), &shape); err != nil {
+				t.Fatal(err)
+			}
+			if len(shape) != 2 || shape["data"] == nil || shape["pagination"] == nil {
+				t.Fatalf("noncanonical response=%s", rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestAllowlistSnapshotQueryFailureDoesNotReturnEmptyPage(t *testing.T) {
+	q := &fakeAllowlistQuerier{snapshotErr: errors.New("database unavailable")}
+	rec := httptest.NewRecorder()
+	newRouterWithHandler(NewApiserverAllowlistHandler(q)).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/clusters/"+uuid.NewString()+"/apiserver-allowlist/snapshots/", nil))
+	if rec.Code != http.StatusInternalServerError || strings.Contains(rec.Body.String(), `"pagination"`) {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

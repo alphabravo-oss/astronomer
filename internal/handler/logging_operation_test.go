@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,7 +22,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -63,6 +64,28 @@ func newLoggingFakeQuerier() *loggingFakeQuerier {
 		installed:       map[string]sqlc.InstalledChart{},
 		tools:           map[string]sqlc.ClusterTool{},
 	}
+}
+
+func (q *loggingFakeQuerier) UpsertAuditOutbox(_ context.Context, _ sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{}, nil
+}
+
+func (q *loggingFakeQuerier) CreateLoggingOperationIdempotent(ctx context.Context, arg sqlc.CreateLoggingOperationIdempotentParams) (sqlc.LoggingOperation, error) {
+	return q.CreateLoggingOperation(ctx, sqlc.CreateLoggingOperationParams{
+		TargetType: arg.TargetType, TargetKey: arg.TargetKey, OperationType: arg.OperationType,
+		Payload: arg.Payload, Status: arg.Status, CreatedByID: arg.CreatedByID,
+	})
+}
+
+func (q *loggingFakeQuerier) CreateLoggingOperationIdempotentWithDisposition(ctx context.Context, arg sqlc.CreateLoggingOperationIdempotentWithDispositionParams) (sqlc.CreateLoggingOperationIdempotentWithDispositionRow, error) {
+	op, err := q.CreateLoggingOperationIdempotent(ctx, sqlc.CreateLoggingOperationIdempotentParams(arg))
+	return sqlc.CreateLoggingOperationIdempotentWithDispositionRow{LoggingOperation: op, Inserted: err == nil}, err
+}
+
+func newLoggingHandlerForTest(q *loggingFakeQuerier) *LoggingHandler {
+	h := NewLoggingHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(LoggingMutationTx) error) error { return fn(q) })
+	return h
 }
 
 func (q *loggingFakeQuerier) ListLoggingSavedSearches(_ context.Context, arg sqlc.ListLoggingSavedSearchesParams) ([]sqlc.LoggingSavedSearch, error) {
@@ -584,7 +607,7 @@ func (r *loggingFakeRequester) Do(_ context.Context, _, method, path string, bod
 
 func TestCreateOutputEnqueuesPendingApplyOperation(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 
 	clusterID := uuid.New()
 	body := map[string]any{
@@ -641,7 +664,7 @@ func TestCreateOutputRequiresIdempotencyKeyBeforeMutation(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/logging/outputs/", bytes.NewReader(raw))
 	rec := httptest.NewRecorder()
-	NewLoggingHandler(q).CreateOutput(rec, req)
+	newLoggingHandlerForTest(q).CreateOutput(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -688,7 +711,7 @@ func TestOutputReconciliationMutationsReturnAcceptedReceipts(t *testing.T) {
 			routeContext.URLParams.Add("id", output.ID.String())
 			req = req.WithContext(addRouteCtx(req.Context(), routeContext))
 			rec := httptest.NewRecorder()
-			tt.invoke(NewLoggingHandler(q), rec, req)
+			tt.invoke(newLoggingHandlerForTest(q), rec, req)
 			if rec.Code != http.StatusAccepted {
 				t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 			}
@@ -711,7 +734,7 @@ func TestOutputReconciliationMutationsReturnAcceptedReceipts(t *testing.T) {
 
 func TestDeleteOutputEnqueuesDeleteBeforeRowGone(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	clusterID := uuid.New()
 	outputID := uuid.New()
 	q.outputs[outputID] = sqlc.LoggingOutput{
@@ -749,7 +772,7 @@ func TestDeleteOutputEnqueuesDeleteBeforeRowGone(t *testing.T) {
 
 func TestReconcilerAppliesPendingApplyOperationViaConfigMap(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	requester := &loggingFakeRequester{respMap: map[string]*protocol.K8sResponsePayload{}}
 	h.SetK8sRequester(requester)
 
@@ -825,7 +848,7 @@ func TestReconcilerAppliesPendingApplyOperationViaConfigMap(t *testing.T) {
 
 func TestReconcilerFailsOperationWhenRequesterUnconfigured(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	// Deliberately do NOT call SetK8sRequester.
 
 	clusterID := uuid.New()
@@ -901,7 +924,7 @@ func seedLoggingOperation(t *testing.T, q *loggingFakeQuerier, clusterID uuid.UU
 // filtering test: silently exclude, never 403.
 func TestListLoggingOperationsFiltersByPerClusterRBAC(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 
 	clusterA := uuid.New()
 	clusterB := uuid.New()
@@ -927,7 +950,7 @@ func TestListLoggingOperationsFiltersByPerClusterRBAC(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logging/operations/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	rec := httptest.NewRecorder()
 
 	h.ListOperations(rec, req)
@@ -954,7 +977,7 @@ func TestListLoggingOperationsFiltersByPerClusterRBAC(t *testing.T) {
 // (not a requeue). Sanity-check the "update" verb path for RetryOperation.
 func TestRetryLoggingOperationDeniedWithoutClusterUpdate(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 
 	clusterID := uuid.New()
 	op := seedLoggingOperation(t, q, clusterID)
@@ -974,7 +997,7 @@ func TestRetryLoggingOperationDeniedWithoutClusterUpdate(t *testing.T) {
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", op.ID.String())
 	ctx := addRouteCtx(req.Context(), rc)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: uuid.NewString()})
+	ctx = reqctx.WithUser(ctx, &reqctx.User{ID: uuid.NewString()})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 

@@ -1,74 +1,19 @@
 package handler
 
-import "net/http"
+import (
+	"net/http"
 
-// Pagination describes the page of a list response emitted by RespondList.
-//
-// It is a forward-looking, self-describing alternative to the DRF-style
-// {"data","count","next","previous"} envelope produced by RespondPaginated.
-// The "data" key still carries the array verbatim, so consumers that only read
-// data[] remain backward compatible; "pagination" is purely additive metadata.
-type Pagination struct {
-	// Total is present only when it is the exact count of the full authorized,
-	// filtered result. Omitting an unknown total prevents page length from being
-	// mistaken for fleet cardinality by clients or operators.
-	Total *int `json:"total,omitempty"`
-	// Limit is the page size that was applied.
-	Limit int `json:"limit"`
-	// Offset is the zero-based index of the first item on this page.
-	Offset int `json:"offset"`
-	// HasMore is true when more items exist beyond this page.
-	HasMore bool `json:"has_more"`
-	// NextOffset is the offset to request for the next page, or nil when this
-	// is the last page.
-	NextOffset *int `json:"next_offset"`
-}
+	"github.com/alphabravocompany/astronomer-go/internal/pagination"
+)
 
-// NewPagination builds a Pagination from the page parameters and total count,
-// computing HasMore and NextOffset. pageLen is the number of items actually
-// returned on this page.
-func NewPagination(total, limit, offset, pageLen int) Pagination {
-	p := Pagination{
-		Total:  &total,
-		Limit:  limit,
-		Offset: offset,
-	}
-	if offset+pageLen < total {
-		p.HasMore = true
-		next := offset + pageLen
-		p.NextOffset = &next
-	}
-	return p
-}
-
-// NewPaginationFromPage builds a Pagination for endpoints that run a real
-// LIMIT/OFFSET query but have no COUNT available for the total. Total is
-// omitted, and HasMore is inferred
-// from the page being full: when the DB returns exactly `limit` rows, more rows
-// may exist beyond this page, so NextOffset advances by the page length. This
-// avoids the always-false HasMore that results from passing pageLen as Total.
-func NewPaginationFromPage(limit, offset, pageLen int) Pagination {
-	p := Pagination{
-		Limit:  limit,
-		Offset: offset,
-	}
-	if limit > 0 && pageLen >= limit {
-		p.HasMore = true
-		next := offset + pageLen
-		p.NextOffset = &next
-	}
-	return p
-}
-
-// RespondList writes a list response of the shape:
-//
-//	{"data": [...], "pagination": {...}}
-//
-// The "data" key holds the items array unchanged, preserving backward
-// compatibility with the bare {"data": [...]} shape. Always responds 200.
-func RespondList(w http.ResponseWriter, items any, pagination Pagination) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data":       items,
-		"pagination": pagination,
-	})
+// pageWindow applies the repository's single limit/offset policy to an
+// in-memory result set. Callers that cannot push pagination into their
+// upstream (for example Kubernetes list responses) use this instead of
+// reimplementing bounds checks and pagination metadata.
+func pageWindow[T any](r *http.Request, items []T) ([]T, pagination.Metadata) {
+	limit, offset := queryLimitOffset(r, 20)
+	total := len(items)
+	start := min(offset, total)
+	end := min(start+limit, total)
+	return items[start:end], pagination.Exact(total, limit, offset, end-start)
 }

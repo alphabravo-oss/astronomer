@@ -99,7 +99,7 @@ func loadScaleProfile(path string) (*scaleProfile, error) {
 	if (profile.MandatoryAudit.RatePerSecond == 0) != (profile.MandatoryAudit.MaxOperations == 0) {
 		return nil, fmt.Errorf("mandatoryAudit ratePerSecond and maxOperations must both be zero or both be positive")
 	}
-	minimumAuditOperations := int(math.Ceil(duration.Seconds() * float64(profile.MandatoryAudit.RatePerSecond)))
+	minimumAuditOperations := mandatoryAuditTargetOperations(duration, profile.MandatoryAudit.RatePerSecond)
 	if profile.MandatoryAudit.MaxOperations > 0 && profile.MandatoryAudit.MaxOperations < minimumAuditOperations {
 		return nil, fmt.Errorf(
 			"mandatoryAudit.maxOperations must be at least %d to sustain %d operations/second for %s",
@@ -122,6 +122,13 @@ func loadScaleProfile(path string) (*scaleProfile, error) {
 		}
 	}
 	return &profile, nil
+}
+
+func mandatoryAuditTargetOperations(duration time.Duration, ratePerSecond int) int {
+	if duration <= 0 || ratePerSecond <= 0 {
+		return 0
+	}
+	return int(math.Ceil(duration.Seconds() * float64(ratePerSecond)))
 }
 
 func (p *scaleProfile) apply(cfg *config) error {

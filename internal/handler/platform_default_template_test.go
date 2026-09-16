@@ -203,7 +203,8 @@ func TestPlatformDefaultTemplate_PUTSetsAndUnsets(t *testing.T) {
 	q.templates[templateID] = sqlc.ClusterTemplate{ID: templateID, Name: "Platform baseline"}
 	q.config = sqlc.PlatformConfiguration{ID: 1}
 
-	h := NewPlatformDefaultTemplateHandler(q)
+	txq := &transactionalPlatformDefaultQ{fakePlatformDefaultTemplateQuerier: q}
+	h := transactionalPlatformDefaultHandler(txq)
 
 	// Set.
 	body, _ := json.Marshal(map[string]any{"template_id": templateID.String()})
@@ -230,12 +231,12 @@ func TestPlatformDefaultTemplate_PUTSetsAndUnsets(t *testing.T) {
 	}
 
 	// Audit: one set + one unset.
-	if len(q.auditOps) != 2 {
-		t.Errorf("audit ops = %v, want 2", q.auditOps)
+	if len(txq.audits) != 2 {
+		t.Errorf("audit ops = %v, want 2", txq.audits)
 	}
-	for _, a := range q.auditOps {
-		if a != "admin.platform_default_template.updated" {
-			t.Errorf("audit op = %q, want admin.platform_default_template.updated", a)
+	for _, a := range txq.audits {
+		if a.Action != "admin.platform_default_template.updated" {
+			t.Errorf("audit op = %q, want admin.platform_default_template.updated", a.Action)
 		}
 	}
 }
@@ -246,7 +247,7 @@ func TestPlatformDefaultTemplate_PUTRejectsBadTemplateID(t *testing.T) {
 	// templates map is empty — every UUID is "not found".
 	q.config = sqlc.PlatformConfiguration{ID: 1}
 
-	h := NewPlatformDefaultTemplateHandler(q)
+	h := transactionalPlatformDefaultHandler(&transactionalPlatformDefaultQ{fakePlatformDefaultTemplateQuerier: q})
 
 	// Garbage string → 400.
 	body, _ := json.Marshal(map[string]any{"template_id": "not-a-uuid"})
@@ -293,7 +294,7 @@ func TestPlatformDefaultTemplate_ReapplyCreatesApplication(t *testing.T) {
 		DefaultClusterTemplateID: pgtype.UUID{Bytes: templateID, Valid: true},
 	}
 
-	h := NewPlatformDefaultTemplateHandler(q)
+	h := transactionalPlatformDefaultHandler(&transactionalPlatformDefaultQ{fakePlatformDefaultTemplateQuerier: q})
 	w := httptest.NewRecorder()
 	req := withURLParam(
 		authedRequest(http.MethodPost,
@@ -325,7 +326,7 @@ func TestPlatformDefaultTemplate_ReapplyReturns409WhenNoDefaultSet(t *testing.T)
 	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "prod-1"}
 	q.config = sqlc.PlatformConfiguration{ID: 1} // no default
 
-	h := NewPlatformDefaultTemplateHandler(q)
+	h := transactionalPlatformDefaultHandler(&transactionalPlatformDefaultQ{fakePlatformDefaultTemplateQuerier: q})
 	w := httptest.NewRecorder()
 	req := withURLParam(
 		authedRequest(http.MethodPost,

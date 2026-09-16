@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type fakePodWatcher struct {
@@ -28,6 +29,7 @@ func (f *fakePodWatcher) WatchPods(ctx context.Context, clusterID, namespace str
 }
 
 func TestWatchPodsStreamsSSEEvents(t *testing.T) {
+	clusterID := uuid.NewString()
 	h := NewWorkloadHandler()
 	h.SetPodWatcher(&fakePodWatcher{
 		events: []PodWatchEvent{
@@ -36,9 +38,9 @@ func TestWatchPodsStreamsSSEEvents(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest("GET", "/api/v1/clusters/c1/pods/watch/?namespace=prod", nil)
+	req := httptest.NewRequest("GET", "/api/v1/clusters/"+clusterID+"/pods/watch/?namespace=prod", nil)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("cluster_id", "c1")
+	rctx.URLParams.Add("cluster_id", clusterID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
@@ -57,10 +59,11 @@ func TestWatchPodsStreamsSSEEvents(t *testing.T) {
 }
 
 func TestWatchPodsNotConfigured(t *testing.T) {
+	clusterID := uuid.NewString()
 	h := NewWorkloadHandler()
-	req := httptest.NewRequest("GET", "/api/v1/clusters/c1/pods/watch/", nil)
+	req := httptest.NewRequest("GET", "/api/v1/clusters/"+clusterID+"/pods/watch/", nil)
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("cluster_id", "c1")
+	rctx.URLParams.Add("cluster_id", clusterID)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()

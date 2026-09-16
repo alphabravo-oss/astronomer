@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/mesh"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -55,6 +56,7 @@ type MeshDetectQuerier interface {
 type MeshDetectDeps struct {
 	Queries   MeshDetectQuerier
 	Requester K8sRequester
+	Bus       *events.Bus
 	// MirroredQuerier is the optional sprint-069 CRD mirror surface.
 	// nil falls back to direct tunnel probes inside the detector.
 	MirroredQuerier mesh.Querier
@@ -192,6 +194,9 @@ func (runtime MeshRuntime) DetectAndUpsert(ctx context.Context, clusterID uuid.U
 		astronomerClusterMesh.WithLabelValues(observability.MetricValues(clusterID.String(), priorMesh)...).Set(0)
 	}
 	astronomerClusterMesh.WithLabelValues(observability.MetricValues(clusterID.String(), row.DetectedMesh)...).Set(1)
+	events.PublishChanged(runtime.Deps.Bus, "service_mesh", clusterID.String(), clusterID.String(), map[string]any{
+		"mesh": row.DetectedMesh,
+	})
 	return nil
 }
 

@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -50,7 +52,7 @@ type securityCacheTarget struct {
 
 type charlieLiveBindings struct {
 	queries  *sqlc.Queries
-	bindings appmiddleware.RBACQuerier
+	bindings rbac.BindingQuerier
 }
 
 type charlieLiveFeatures struct{ queries *sqlc.Queries }
@@ -271,36 +273,109 @@ func reportInsecureDevKeys(cfg *config.Config, logger *slog.Logger) {
 }
 
 func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencies) error {
-	if !isProductionConfig(cfg) {
-		return nil
-	}
+	_ = cfg // Security wiring is mandatory in every environment.
 	var errs []string
-	if deps.JWT == nil {
+	if deps.CoreAuth.JWT == nil {
 		errs = append(errs, "JWT manager is not wired")
+	} else if !deps.CoreAuth.JWT.HasRevocationChecker() {
+		errs = append(errs, "JWT revocation checker is not wired")
 	}
-	if deps.AuthQueries == nil {
+	if dependencyMissing(deps.CoreAuth.AuthQueries) {
 		errs = append(errs, "auth queries are not wired")
 	}
-	if deps.RBACEngine == nil {
+	if deps.CoreAuth.RBACEngine == nil {
 		errs = append(errs, "RBAC engine is not wired")
 	}
-	if deps.RBACQueries == nil {
+	if dependencyMissing(deps.CoreAuth.RBACQueries) {
 		errs = append(errs, "RBAC queries are not wired")
 	}
-	if deps.Encryptor == nil {
+	if deps.CoreAuth.Encryptor == nil {
 		errs = append(errs, "encryptor is not wired")
+	}
+	if deps.CoreAuth.SettingsCache == nil {
+		errs = append(errs, "platform settings cache is not wired")
+	}
+	if deps.CoreAuth.Queries == nil {
+		errs = append(errs, "shared queries are not wired")
+	}
+	if dependencyMissing(deps.CoreAuth.AuditWriter) {
+		errs = append(errs, "security audit writer is not wired")
+	}
+	if deps.StreamingInternal.Hub != nil && !deps.StreamingInternal.Hub.AgentTokenValidatorWired() {
+		errs = append(errs, "hub agent-token validator is not wired")
+	}
+	if deps.StreamingInternal.Exec != nil && !deps.StreamingInternal.Exec.SecurityWiringValid() {
+		errs = append(errs, "exec stream security is not fully wired")
+	}
+	if deps.StreamingInternal.Logs != nil && !deps.StreamingInternal.Logs.SecurityWiringValid() {
+		errs = append(errs, "logs stream security is not fully wired")
+	}
+	if (deps.StreamingInternal.Exec != nil || deps.StreamingInternal.Logs != nil || deps.StreamingInternal.EventStream != nil) && deps.StreamingInternal.StreamTicketStore == nil {
+		errs = append(errs, "stream ticket store is not wired")
 	}
 	// project_namespaces feeds the synthetic namespace-scoped bindings, so a
 	// project handler with no RBAC cache invalidator turns every
 	// remove-namespace into a revoke that does not take effect until the cache
 	// entry expires. Fail the boot instead.
-	if deps.Projects != nil && !deps.Projects.RBACInvalidatorWired() {
+	if deps.ClusterResources.Projects != nil && !deps.ClusterResources.Projects.RBACInvalidatorWired() {
 		errs = append(errs, "project handler RBAC cache invalidator is not wired")
 	}
+	if deps.CoreAuth.SCIM != nil && !deps.CoreAuth.SCIM.TransactionalAuditWired() {
+		errs = append(errs, "SCIM transactional audit is not wired")
+	}
+	if deps.CoreAuth.SSO != nil && !deps.CoreAuth.SSO.TransactionalAuditWired() {
+		errs = append(errs, "SSO callback transactional audit, encryption, or RBAC invalidation is not wired")
+	}
+	if deps.CoreAuth.TOTP != nil && !deps.CoreAuth.TOTP.TransactionalAuditWired() {
+		errs = append(errs, "TOTP transactional audit is not wired")
+	}
+	if deps.AdminPlatform.SMTP != nil && !deps.AdminPlatform.SMTP.TransactionalAuditWired() {
+		errs = append(errs, "SMTP transactional audit is not wired")
+	}
+	if deps.AdminPlatform.Security != nil && !deps.AdminPlatform.Security.TransactionalAuditWired() {
+		errs = append(errs, "security transactional audit is not wired")
+	}
+	if deps.AdminPlatform.Extensions != nil && !deps.AdminPlatform.Extensions.TransactionalAuditWired() {
+		errs = append(errs, "extension transactional audit is not wired")
+	}
+	if deps.AdminPlatform.PlatformDefaultTemplate != nil && !deps.AdminPlatform.PlatformDefaultTemplate.TransactionalAuditWired() {
+		errs = append(errs, "platform default template transactional audit is not wired")
+	}
+	if deps.ClusterResources.ControlPlaneSnapshots != nil && !deps.ClusterResources.ControlPlaneSnapshots.TransactionalAuditWired() {
+		errs = append(errs, "control-plane snapshot transactional audit is not wired")
+	}
+	if deps.ClusterResources.Resources != nil && !deps.ClusterResources.Resources.TransactionalSettingsSSOAuditWired() {
+		errs = append(errs, "settings and SSO transactional audit is not wired")
+	}
+	if deps.ClusterResources.Resources != nil && !deps.ClusterResources.Resources.TransactionalUserAuditWired() {
+		errs = append(errs, "user administration transactional audit is not wired")
+	}
+	if deps.ClusterResources.ProjectCatalogs != nil && !deps.ClusterResources.ProjectCatalogs.TransactionalAuditWired() {
+		errs = append(errs, "project catalog transactional audit is not wired")
+	}
+	if deps.AdminPlatform.SupportBundle != nil && !deps.AdminPlatform.SupportBundle.TransactionalMutationWired() {
+		errs = append(errs, "support bundle durable operation store is not wired")
+	}
+	if deps.AdminPlatform.Audit != nil && !deps.AdminPlatform.Audit.DurableExportWired() {
+		errs = append(errs, "audit durable export operation store is not wired")
+	}
 	if len(errs) > 0 {
-		return fmt.Errorf("production security wiring invalid: %s", strings.Join(errs, "; "))
+		return fmt.Errorf("security wiring invalid: %s", strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func dependencyMissing(dependency any) bool {
+	if dependency == nil {
+		return true
+	}
+	value := reflect.ValueOf(dependency)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // resolveCallbackBaseURL builds the API base URL used when registering SSO
@@ -349,10 +424,14 @@ type Server struct {
 	// product operation.
 	charlieRuntime *charlieLifecycleGroup
 	charlieBridge  *charlie.ManagedBridge
+	// taskLeader owns the small Postgres pool reserved for advisory-lock
+	// sessions. It is closed after reconcilers stop and before the main pool.
+	taskLeader *leader.Elector
 	// shutdownHooks drain durable buffers and telemetry before the resource
 	// pools they depend on are closed. Hooks are registered during startup and
 	// run in registration order after ingress has stopped.
 	shutdownHooks []shutdownHook
+	stopping      atomic.Bool
 }
 
 type shutdownHook struct {
@@ -485,7 +564,7 @@ func (s *Server) Start(addr string) error {
 	s.logger.Info("server listening", "addr", addr)
 	go func() { errCh <- s.httpServer.Serve(ln) }()
 	err = <-errCh
-	if errors.Is(err, http.ErrServerClosed) {
+	if errors.Is(err, http.ErrServerClosed) || (err == nil && s.stopping.Load()) {
 		return nil
 	}
 	return err
@@ -505,9 +584,10 @@ func (s *Server) Start(addr string) error {
 //     New connections are rejected immediately; long-running requests
 //     get the deadline.
 //  3. cancel the reconcile context (in-process workers, publishers).
-//  4. drain registered buffers and telemetry.
-//  5. close DB pool + asynq client.
+//  4. close DB pool + asynq client. Project mutations are delivered through
+//     the durable task outbox; there are no request-spawned project goroutines.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.stopping.Store(true)
 	var shutdownErrs []error
 	if s.hub != nil {
 		drained := s.hub.Drain()
@@ -536,6 +616,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			shutdownErrs = append(shutdownErrs, fmt.Errorf("%s: %w", hook.name, err))
 		}
 	}
+	if s.taskLeader != nil {
+		s.taskLeader.Close()
+	}
 	if s.db != nil {
 		s.db.Close()
 	}
@@ -559,7 +642,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // process gets the same deps via the shared queue wiring).
 func kubectlShellComponents(
 	queries *sqlc.Queries,
-	rbacQuerier appmiddleware.RBACQuerier,
+	rbacQuerier rbac.BindingQuerier,
 	rbacEngine *rbac.Engine,
 	requester handler.K8sRequester,
 	cfg *config.Config,
@@ -594,8 +677,8 @@ func kubectlShellComponents(
 // Downward API when configured) then falls back to the standard
 // serviceaccount mount. Returns "astronomer" if both fail, since that's
 // the chart's default namespace.
-func detectReleaseNamespace() string {
-	if v := strings.TrimSpace(os.Getenv("POD_NAMESPACE")); v != "" {
+func detectReleaseNamespace(configured string) string {
+	if v := strings.TrimSpace(configured); v != "" {
 		return v
 	}
 	if b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {

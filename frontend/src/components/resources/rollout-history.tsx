@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { Link } from "@/lib/link";
-import { useK8sResource } from "@/lib/hooks";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import { detailHref, k8sListPath } from "@/lib/k8s-paths";
 import { formatRelativeTime } from "@/lib/utils";
 import {
@@ -222,15 +222,15 @@ export function RolloutHistory({
               <TableCell className="text-xs tabular-nums">
                 {entry.revision ?? "-"}
                 {index === 0 && (
-                  <span className="ml-2 rounded bg-status-info/10 px-1.5 py-0.5 text-[10px] font-medium text-status-info">
+                  <span className="ml-2 rounded-sm bg-status-info/10 px-1.5 py-0.5 text-[10px] font-medium text-status-info">
                     Latest
                   </span>
                 )}
               </TableCell>
               <TableCell className="font-mono text-xs">
                 {entry.resourceType ? (
-                  <Link
-                    href={detailHref(
+                  <RouterLink
+                    to={detailHref(
                       clusterId,
                       entry.resourceType,
                       namespace,
@@ -239,7 +239,7 @@ export function RolloutHistory({
                     className="text-foreground hover:underline"
                   >
                     {entry.name}
-                  </Link>
+                  </RouterLink>
                 ) : (
                   entry.name
                 )}

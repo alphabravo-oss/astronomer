@@ -6,9 +6,9 @@ import { createFileRoute } from "@tanstack/react-router";
  *   - Test: synthesise a payload and surface the response.
  */
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Loader2,
@@ -20,6 +20,7 @@ import {
 import { toastSuccess } from "@/lib/toast";
 import { useAppForm } from "@/lib/form";
 import { cn, formatRelativeTime } from "@/lib/utils";
+import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { ActionButton } from "@/components/ui/action-button";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -260,6 +261,8 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
     page_size: 25,
   });
   const retry = useRetryWebhookDelivery(webhookId);
+  const currentPage = data ? pageNumber(data.pagination) : page;
+  const totalPages = data ? pageCount(data.pagination) : undefined;
 
   const columns: Column<WebhookDeliveryView>[] = [
     {
@@ -275,7 +278,7 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
       key: "eventType",
       header: "Event",
       accessor: (row) => (
-        <span className="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
+        <span className="text-xs font-mono px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.eventType}
         </span>
       ),
@@ -326,7 +329,7 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
             retry.mutate(row.id);
           }}
           disabled={retry.isPending || row.status === "delivered"}
-          className="inline-flex items-center gap-1 h-7 px-2 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 transition-colors"
+          className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-30 transition-colors"
           title="Retry delivery"
         >
           <RotateCcw className="h-3 w-3" />
@@ -343,10 +346,14 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
         columns={columns}
         keyExtractor={(row) => row.id}
         loading={isLoading}
-        emptyMessage="No deliveries yet"
+        emptyState={{
+          title: "No deliveries yet",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
         pageSize={25}
       />
-      {data && data.totalPages > 1 && (
+      {data && (data.pagination.offset > 0 || data.pagination.has_more) && (
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
@@ -357,12 +364,13 @@ function DeliveriesTab({ webhookId }: { webhookId: string }) {
             Previous
           </button>
           <p className="text-xs text-muted-foreground">
-            Page {data.page} of {data.totalPages}
+            Page {currentPage}
+            {totalPages === undefined ? "" : ` of ${totalPages}`}
           </p>
           <button
             type="button"
             onClick={() => setPage((p) => p + 1)}
-            disabled={page >= data.totalPages}
+            disabled={!data.pagination.has_more}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Next
@@ -424,8 +432,8 @@ function TestTab({ webhookId }: { webhookId: string }) {
 }
 
 function WebhookDetail() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
+  const params = Route.useParams();
+  const navigate = useNavigate();
   const id = params?.id ?? "";
   const { data, isLoading, error } = useWebhook(id);
   const del = useDeleteWebhook();
@@ -449,13 +457,13 @@ function WebhookDetail() {
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/settings/webhooks"
+      <RouterLink
+        to="/dashboard/settings/webhooks"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to webhooks
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow={`Webhooks · ${data.template}`}
@@ -493,7 +501,7 @@ function WebhookDetail() {
         onClose={() => setConfirmDelete(false)}
         onConfirm={async () => {
           await del.mutateAsync(id);
-          router.push("/dashboard/settings/webhooks");
+          void navigate({ to: "/dashboard/settings/webhooks" });
         }}
         title="Delete webhook?"
         description={`This will remove "${data.name}" and stop further deliveries.`}

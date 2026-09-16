@@ -146,7 +146,7 @@ func TestEveryNativeRBACMutationUsesTransactionalExecutor(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeNativeRBACMutation" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 				want[fn.Name.Name] = true
 			}
 			return true
@@ -154,7 +154,7 @@ func TestEveryNativeRBACMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeNativeRBACMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

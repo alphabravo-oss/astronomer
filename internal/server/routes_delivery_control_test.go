@@ -16,13 +16,7 @@ import (
 func TestDeliveryControlRoutesRequireAuthentication(t *testing.T) {
 	projectID := uuid.New()
 	resourceID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:                 auth.MustNewJWTManager("delivery-control-route-test-secret", 60),
-		DeliveryTargets:     deliveryhandler.NewTargetHandler(nil, nil, nil),
-		DeliveryRollouts:    deliveryhandler.NewRolloutHandler(nil, nil, nil, nil),
-		DeliveryDeployments: deliveryhandler.NewDeploymentHandler(nil, nil, nil),
-		DeliveryInventory:   deliveryhandler.NewInventoryHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: auth.MustNewJWTManager("delivery-control-route-test-secret", 60)}, Delivery: DeliveryDependencies{Targets: deliveryhandler.NewTargetHandler(nil, nil, nil), Rollouts: deliveryhandler.NewRolloutHandler(nil, nil, nil, nil), Deployments: deliveryhandler.NewDeploymentHandler(nil, nil, nil), Inventory: deliveryhandler.NewInventoryHandler(nil)}})
 	paths := []struct {
 		method string
 		path   string
@@ -38,7 +32,6 @@ func TestDeliveryControlRoutesRequireAuthentication(t *testing.T) {
 		{http.MethodPost, "/api/v1/delivery/deployments/" + resourceID.String() + "/resume/?project_id=" + projectID.String()},
 		{http.MethodGet, "/api/v1/delivery/clusters/" + resourceID.String() + "/inventory/?project_id=" + projectID.String()},
 		{http.MethodGet, "/api/v1/delivery/estate/"},
-		{http.MethodGet, "/api/v1/delivery/fleet/"},
 		{http.MethodGet, "/api/v1/delivery/system/compatibility/"},
 	}
 	for _, test := range paths {
@@ -64,13 +57,7 @@ func TestDeliveryControlRoutesSeparateOrdinaryApprovalRollbackAndPlatformAuthori
 			{Resource: string(rbac.ResourceDeliveryRollouts), Verbs: []string{string(rbac.VerbUpdate)}},
 		},
 	}}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT: jwt, RBACEngine: rbac.NewEngine(), RBACQueries: deliveryRouteRBACQuerier{bindings: bindings},
-		DeliveryTargets:     deliveryhandler.NewTargetHandler(nil, nil, nil),
-		DeliveryRollouts:    deliveryhandler.NewRolloutHandler(nil, nil, nil, nil),
-		DeliveryDeployments: deliveryhandler.NewDeploymentHandler(nil, nil, nil),
-		DeliveryInventory:   deliveryhandler.NewInventoryHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwt, RBACEngine: rbac.NewEngine(), RBACQueries: deliveryRouteRBACQuerier{bindings: bindings}}, Delivery: DeliveryDependencies{Targets: deliveryhandler.NewTargetHandler(nil, nil, nil), Rollouts: deliveryhandler.NewRolloutHandler(nil, nil, nil, nil), Deployments: deliveryhandler.NewDeploymentHandler(nil, nil, nil), Inventory: deliveryhandler.NewInventoryHandler(nil)}})
 
 	request := func(method, path string) int {
 		req := httptest.NewRequest(method, path, nil)

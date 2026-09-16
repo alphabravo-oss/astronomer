@@ -570,7 +570,6 @@ function triggerRuleWire(rule: CharlieTriggerRule) {
     flap_window_seconds: rule.flapWindowSeconds,
     flap_count: rule.flapCount,
     estate_threshold_percent: rule.estateThresholdPercent,
-    fleet_threshold_percent: rule.estateThresholdPercent,
     minimum_agent_version: rule.minimumAgentVersion,
     suppressed: rule.suppressed,
     maximum_attempts: rule.maximumAttempts,

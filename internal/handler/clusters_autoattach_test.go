@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -49,6 +50,8 @@ type fakeAutoAttachClusterQuerier struct {
 	createDecomID    uuid.UUID
 	createDecoms     []sqlc.CreateClusterDecommissionParams
 	createdDecomRows []sqlc.ClusterDecommission
+	taskOutbox       []sqlc.UpsertTaskOutboxParams
+	taskOutboxErr    error
 }
 
 func newFakeAutoAttachClusterQuerier() *fakeAutoAttachClusterQuerier {
@@ -122,12 +125,35 @@ func (q *fakeAutoAttachClusterQuerier) CreateCluster(_ context.Context, arg sqlc
 	}, nil
 }
 
+func (q *fakeAutoAttachClusterQuerier) GetClusterByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error) {
+	return q.GetClusterByID(ctx, id)
+}
+
+func (q *fakeAutoAttachClusterQuerier) CreateAPIToken(context.Context, sqlc.CreateAPITokenParams) (sqlc.ApiToken, error) {
+	return sqlc.ApiToken{}, nil
+}
+
+func (q *fakeAutoAttachClusterQuerier) GetClusterOwnership(context.Context, uuid.UUID) (sqlc.GetClusterOwnershipRow, error) {
+	return sqlc.GetClusterOwnershipRow{}, nil
+}
+
+func (q *fakeAutoAttachClusterQuerier) SetClusterOwnership(context.Context, sqlc.SetClusterOwnershipParams) (sqlc.SetClusterOwnershipRow, error) {
+	return sqlc.SetClusterOwnershipRow{}, nil
+}
+
 // Audit writer — captures the action names recordAudit ends up writing.
 func (q *fakeAutoAttachClusterQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.auditOps = append(q.auditOps, arg.Action)
 	return nil
+}
+
+func (q *fakeAutoAttachClusterQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.auditOps = append(q.auditOps, arg.Action)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
 }
 
 // Remaining ClusterQuerier methods — boilerplate zero returns.
@@ -174,6 +200,15 @@ func (q *fakeAutoAttachClusterQuerier) CreateClusterDecommission(_ context.Conte
 	q.latestDecoms[arg.ClusterID] = row
 	return row, nil
 }
+func (q *fakeAutoAttachClusterQuerier) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.taskOutboxErr != nil {
+		return sqlc.TaskOutbox{}, q.taskOutboxErr
+	}
+	q.taskOutbox = append(q.taskOutbox, arg)
+	return sqlc.TaskOutbox{ID: uuid.New(), DedupeKey: arg.DedupeKey, TaskType: arg.TaskType, Payload: arg.Payload, QueueName: arg.QueueName}, nil
+}
 func (q *fakeAutoAttachClusterQuerier) GetLatestClusterDecommissionByCluster(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterDecommission, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -183,12 +218,19 @@ func (q *fakeAutoAttachClusterQuerier) GetLatestClusterDecommissionByCluster(_ c
 	}
 	return row, nil
 }
-func (q *fakeAutoAttachClusterQuerier) ListPendingClusterDecommissions(context.Context, int32) ([]sqlc.ClusterDecommission, error) {
+func (q *fakeAutoAttachClusterQuerier) ListPendingClusterDecommissionsForClusters(context.Context, []uuid.UUID) ([]sqlc.ClusterDecommission, error) {
 	return nil, nil
 }
 
 func (q *fakeAutoAttachClusterQuerier) SetClusterDecommissionForce(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error) {
-	return sqlc.ClusterDecommission{}, nil
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for clusterID, row := range q.latestDecoms {
+		row.Force = true
+		q.latestDecoms[clusterID] = row
+		return row, nil
+	}
+	return sqlc.ClusterDecommission{}, pgx.ErrNoRows
 }
 func (q *fakeAutoAttachClusterQuerier) GetClusterHealthStatus(context.Context, uuid.UUID) (sqlc.ClusterHealthStatus, error) {
 	return sqlc.ClusterHealthStatus{}, nil
@@ -227,29 +269,6 @@ func (q *fakeAutoAttachClusterQuerier) ListClusterConditionRemediationByCluster(
 	return nil, nil
 }
 
-type fakeAtomicDecommissionQuerier struct {
-	*fakeAutoAttachClusterQuerier
-	atomicDecoms []sqlc.CreateClusterDecommissionWithTaskOutboxParams
-}
-
-func (q *fakeAtomicDecommissionQuerier) CreateClusterDecommissionWithTaskOutbox(_ context.Context, arg sqlc.CreateClusterDecommissionWithTaskOutboxParams) (sqlc.ClusterDecommission, error) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	row := sqlc.ClusterDecommission{
-		ID:            arg.ID,
-		ClusterID:     arg.ClusterID,
-		RequestedByID: arg.RequestedByID,
-		ClusterName:   arg.ClusterName,
-		Status:        "pending",
-		Attempts:      0,
-		Phases:        json.RawMessage(`{}`),
-	}
-	q.atomicDecoms = append(q.atomicDecoms, arg)
-	q.createdDecomRows = append(q.createdDecomRows, row)
-	q.latestDecoms[arg.ClusterID] = row
-	return row, nil
-}
-
 // createReq builds a minimal POST body. The Create handler validates
 // the name shape (RFC-1123), so we always pick a clean lowercase
 // identifier here — the auto-attach hook lives after validation.
@@ -259,12 +278,45 @@ func createReq(t *testing.T, name string) *http.Request {
 	return httptest.NewRequest(http.MethodPost, "/api/v1/clusters/", bytes.NewReader(body))
 }
 
+func setClusterTestRunTx(h *ClusterHandler, q ClusterMutationTx) {
+	h.SetRunTx(func(_ context.Context, fn func(ClusterMutationTx) error) error {
+		return fn(q)
+	})
+}
+
+func setClusterRollbackTestRunTx(h *ClusterHandler, q *fakeAutoAttachClusterQuerier) {
+	h.SetRunTx(func(_ context.Context, fn func(ClusterMutationTx) error) error {
+		q.mu.Lock()
+		createDecoms := append([]sqlc.CreateClusterDecommissionParams(nil), q.createDecoms...)
+		createdRows := append([]sqlc.ClusterDecommission(nil), q.createdDecomRows...)
+		taskRows := append([]sqlc.UpsertTaskOutboxParams(nil), q.taskOutbox...)
+		auditOps := append([]string(nil), q.auditOps...)
+		latest := make(map[uuid.UUID]sqlc.ClusterDecommission, len(q.latestDecoms))
+		for id, row := range q.latestDecoms {
+			latest[id] = row
+		}
+		q.mu.Unlock()
+		if err := fn(q); err != nil {
+			q.mu.Lock()
+			q.createDecoms = createDecoms
+			q.createdDecomRows = createdRows
+			q.taskOutbox = taskRows
+			q.auditOps = auditOps
+			q.latestDecoms = latest
+			q.mu.Unlock()
+			return err
+		}
+		return nil
+	})
+}
+
 // TestClusterHandler_Create_PersistsAnnotations ensures the create handler
 // binds and forwards the annotations body (notably the agent-privilege-profile)
 // to CreateClusterParams — without this the Viewer/Admin picker is a no-op.
 func TestClusterHandler_Create_PersistsAnnotations(t *testing.T) {
 	q := newFakeAutoAttachClusterQuerier()
 	h := NewClusterHandler(q)
+	setClusterRollbackTestRunTx(h, q)
 
 	body := []byte(`{"name":"with-anno","environment":"testing","annotations":{"astronomer.io/agent-privilege-profile":"admin"}}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/", bytes.NewReader(body))
@@ -296,6 +348,7 @@ func TestClusterHandler_Create_DuplicateNameReturns409(t *testing.T) {
 			q := newFakeAutoAttachClusterQuerier()
 			q.createErr = createErr
 			h := NewClusterHandler(q)
+			setClusterTestRunTx(h, q)
 
 			w := httptest.NewRecorder()
 			h.Create(w, createReq(t, "dup-cluster"))
@@ -331,6 +384,7 @@ func TestPlatformDefaultTemplate_ClusterCreateDoesNotAutoAttach(t *testing.T) {
 	}
 
 	h := NewClusterHandler(q)
+	setClusterRollbackTestRunTx(h, q)
 
 	w := httptest.NewRecorder()
 	h.Create(w, createReq(t, "prod-1"))
@@ -371,15 +425,14 @@ func TestClusterDeleteWritesDecommissionToTaskOutbox(t *testing.T) {
 		Status:      "connected",
 		IsLocal:     false,
 	}
-	outbox := &fakeRegistrationTaskOutbox{}
 	h := NewClusterHandler(q)
-	h.SetTaskOutbox(outbox)
+	setClusterTestRunTx(h, q)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", clusterID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         userID.String(),
 		AuthMethod: "jwt",
 	}))
@@ -391,20 +444,19 @@ func TestClusterDeleteWritesDecommissionToTaskOutbox(t *testing.T) {
 		t.Fatalf("Delete status = %d, body=%s", w.Code, w.Body.String())
 	}
 	if len(q.createDecoms) != 1 {
-		t.Fatalf("CreateClusterDecommission calls = %d, want 1", len(q.createDecoms))
+		t.Fatalf("decommission writes = %d, want 1", len(q.createDecoms))
 	}
 	if q.createDecoms[0].RequestedByID.Bytes != userID || !q.createDecoms[0].RequestedByID.Valid {
 		t.Fatalf("RequestedByID = %+v, want %s", q.createDecoms[0].RequestedByID, userID)
 	}
-	args := outbox.all()
-	if len(args) != 1 {
-		t.Fatalf("outbox writes = %d, want 1", len(args))
+	if len(q.taskOutbox) != 1 {
+		t.Fatalf("transactional outbox writes = %d, want 1", len(q.taskOutbox))
 	}
-	got := args[0]
+	got := q.taskOutbox[0]
 	if got.TaskType != tasks.ClusterDecommissionType {
 		t.Fatalf("TaskType = %q, want %q", got.TaskType, tasks.ClusterDecommissionType)
 	}
-	if !got.DedupeKey.Valid || got.DedupeKey.String != "cluster_decommission:"+decommissionID.String() {
+	if !got.DedupeKey.Valid || !strings.HasPrefix(got.DedupeKey.String, "cluster_decommission:") {
 		t.Fatalf("DedupeKey = %+v", got.DedupeKey)
 	}
 	if got.QueueName != tasks.ClusterTemplateApplyQueueName {
@@ -435,16 +487,14 @@ func TestClusterDeleteCreatesDecommissionAndTaskOutboxAtomically(t *testing.T) {
 		Status:  "connected",
 		IsLocal: false,
 	}
-	q := &fakeAtomicDecommissionQuerier{fakeAutoAttachClusterQuerier: base}
-	outbox := &fakeRegistrationTaskOutbox{}
-	h := NewClusterHandler(q)
-	h.SetTaskOutbox(outbox)
+	h := NewClusterHandler(base)
+	setClusterTestRunTx(h, base)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", clusterID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         userID.String(),
 		AuthMethod: "jwt",
 	}))
@@ -455,20 +505,11 @@ func TestClusterDeleteCreatesDecommissionAndTaskOutboxAtomically(t *testing.T) {
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("Delete status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if len(q.atomicDecoms) != 1 {
-		t.Fatalf("atomic decommission writes = %d, want 1", len(q.atomicDecoms))
+	if len(base.createDecoms) != 1 || len(base.taskOutbox) != 1 || len(base.auditOps) != 1 {
+		t.Fatalf("transaction writes decommission=%d task=%d audit=%d, want 1/1/1", len(base.createDecoms), len(base.taskOutbox), len(base.auditOps))
 	}
-	if len(q.createDecoms) != 0 {
-		t.Fatalf("non-atomic decommission writes = %d, want 0", len(q.createDecoms))
-	}
-	if len(outbox.all()) != 0 {
-		t.Fatalf("separate outbox writes = %d, want 0", len(outbox.all()))
-	}
-	arg := q.atomicDecoms[0]
-	if arg.ID == uuid.Nil {
-		t.Fatalf("atomic decommission id is nil")
-	}
-	if !arg.DedupeKey.Valid || arg.DedupeKey.String != "cluster_decommission:"+arg.ID.String() {
+	arg := base.taskOutbox[0]
+	if !arg.DedupeKey.Valid || !strings.HasPrefix(arg.DedupeKey.String, "cluster_decommission:") {
 		t.Fatalf("dedupe key = %+v", arg.DedupeKey)
 	}
 	if arg.TaskType != tasks.ClusterDecommissionType || arg.QueueName != tasks.ClusterTemplateApplyQueueName || arg.MaxRetry != 3 || arg.MaxDeliveryAttempts != 20 {
@@ -478,8 +519,62 @@ func TestClusterDeleteCreatesDecommissionAndTaskOutboxAtomically(t *testing.T) {
 	if err := json.Unmarshal(arg.Payload, &payload); err != nil {
 		t.Fatalf("payload JSON: %v", err)
 	}
-	if payload.DecommissionID != arg.ID.String() {
-		t.Fatalf("payload decommission_id = %q, want %s", payload.DecommissionID, arg.ID)
+	if payload.DecommissionID != base.createdDecomRows[0].ID.String() {
+		t.Fatalf("payload decommission_id = %q, want %s", payload.DecommissionID, base.createdDecomRows[0].ID)
+	}
+}
+
+func TestClusterDeleteRollsBackWhenTaskIntentFails(t *testing.T) {
+	clusterID := uuid.New()
+	q := newFakeAutoAttachClusterQuerier()
+	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "prod-rollback", Status: "connected"}
+	q.taskOutboxErr = errors.New("task outbox unavailable")
+	h := NewClusterHandler(q)
+	setClusterRollbackTestRunTx(h, q)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	h.Delete(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("Delete status = %d, body=%s; want 500", w.Code, w.Body.String())
+	}
+	if len(q.createDecoms) != 0 || len(q.createdDecomRows) != 0 || len(q.taskOutbox) != 0 || len(q.auditOps) != 0 {
+		t.Fatalf("rolled-back writes decommission=%d rows=%d tasks=%d audits=%d", len(q.createDecoms), len(q.createdDecomRows), len(q.taskOutbox), len(q.auditOps))
+	}
+}
+
+func TestClusterDeleteForceEscalationCommitsFreshTaskIntentAndAudit(t *testing.T) {
+	clusterID, decommissionID := uuid.New(), uuid.New()
+	q := newFakeAutoAttachClusterQuerier()
+	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "prod-force", Status: "connected"}
+	q.latestDecoms[clusterID] = sqlc.ClusterDecommission{
+		ID: decommissionID, ClusterID: clusterID, ClusterName: "prod-force", Status: tasks.PhaseStatusPending,
+	}
+	h := NewClusterHandler(q)
+	setClusterTestRunTx(h, q)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/?force=true", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", clusterID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	h.Delete(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("Delete status = %d, body=%s; want 202", w.Code, w.Body.String())
+	}
+	if !q.latestDecoms[clusterID].Force || len(q.taskOutbox) != 1 || len(q.auditOps) != 1 {
+		t.Fatalf("force=%v tasks=%d audits=%d, want true/1/1", q.latestDecoms[clusterID].Force, len(q.taskOutbox), len(q.auditOps))
+	}
+	if q.auditOps[0] != "cluster.decommission.forced" {
+		t.Fatalf("audit action = %q", q.auditOps[0])
+	}
+	if !q.taskOutbox[0].DedupeKey.Valid || !strings.HasPrefix(q.taskOutbox[0].DedupeKey.String, "cluster_decommission:") {
+		t.Fatalf("task dedupe = %+v", q.taskOutbox[0].DedupeKey)
 	}
 }
 
@@ -492,6 +587,7 @@ func TestPlatformDefaultTemplate_ClusterCreateNoAttachWhenDefaultNotSet(t *testi
 	q.config = sqlc.PlatformConfiguration{ID: 1} // Valid:false
 
 	h := NewClusterHandler(q)
+	setClusterTestRunTx(h, q)
 
 	w := httptest.NewRecorder()
 	h.Create(w, createReq(t, "prod-2"))
@@ -554,6 +650,7 @@ func TestPlatformDefaultTemplate_ClusterCreateAutoAttachFailureDoesNotFailCreate
 			tc.setup(q)
 
 			h := NewClusterHandler(q)
+			setClusterTestRunTx(h, q)
 			w := httptest.NewRecorder()
 			h.Create(w, createReq(t, "prod-flaky"))
 

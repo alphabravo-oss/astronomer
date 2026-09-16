@@ -159,16 +159,17 @@ func Apply(ctx context.Context, q ApplyQuerier, in ApplyInput) (Result, error) {
 		// labels["region"] when present so the spec.labels carry over to
 		// the columns the rest of the platform reads.
 		cluster, err = q.CreateCluster(ctx, sqlc.CreateClusterParams{
-			Name:         in.Doc.Metadata.Name,
-			DisplayName:  in.Doc.Metadata.Name,
-			Description:  "",
-			Environment:  pickLabel(in.Doc.Spec.Labels, "env", "environment", "tier"),
-			Region:       pickLabel(in.Doc.Spec.Labels, "region"),
-			Provider:     pickLabel(in.Doc.Spec.Labels, "provider"),
-			Distribution: pickLabel(in.Doc.Spec.Labels, "distribution"),
-			Labels:       labelsJSON,
-			Annotations:  json.RawMessage(`{}`),
-			CreatedByID:  in.ActorID,
+			Name:           in.Doc.Metadata.Name,
+			DisplayName:    in.Doc.Metadata.Name,
+			Description:    "",
+			Environment:    pickLabel(in.Doc.Spec.Labels, "env", "environment", "tier"),
+			Region:         pickLabel(in.Doc.Spec.Labels, "region"),
+			Provider:       pickLabel(in.Doc.Spec.Labels, "provider"),
+			Distribution:   pickLabel(in.Doc.Spec.Labels, "distribution"),
+			Labels:         labelsJSON,
+			Annotations:    json.RawMessage(`{}`),
+			AgentOverrides: json.RawMessage(`{}`),
+			CreatedByID:    in.ActorID,
 		})
 		if err != nil {
 			return Result{}, fmt.Errorf("create cluster %q: %w", in.Doc.Metadata.Name, err)
@@ -176,13 +177,14 @@ func Apply(ctx context.Context, q ApplyQuerier, in ApplyInput) (Result, error) {
 		// Stamp labels onto the row via UpdateCluster — CreateCluster
 		// doesn't take a labels arg.
 		cluster, err = q.UpdateCluster(ctx, sqlc.UpdateClusterParams{
-			ID:          cluster.ID,
-			DisplayName: cluster.DisplayName,
-			Description: cluster.Description,
-			Environment: cluster.Environment,
-			Region:      cluster.Region,
-			Labels:      labelsJSON,
-			Annotations: json.RawMessage(`{}`),
+			ID:             cluster.ID,
+			DisplayName:    cluster.DisplayName,
+			Description:    cluster.Description,
+			Environment:    cluster.Environment,
+			Region:         cluster.Region,
+			Labels:         labelsJSON,
+			Annotations:    json.RawMessage(`{}`),
+			AgentOverrides: cluster.AgentOverrides,
 		})
 		if err != nil {
 			return Result{}, fmt.Errorf("stamp labels on cluster %q: %w", in.Doc.Metadata.Name, err)
@@ -196,13 +198,14 @@ func Apply(ctx context.Context, q ApplyQuerier, in ApplyInput) (Result, error) {
 
 	case !clusterMissing && !in.Dry:
 		cluster, err = q.UpdateCluster(ctx, sqlc.UpdateClusterParams{
-			ID:          existing.ID,
-			DisplayName: existing.DisplayName,
-			Description: existing.Description,
-			Environment: pickLabelOr(in.Doc.Spec.Labels, existing.Environment, "env", "environment", "tier"),
-			Region:      pickLabelOr(in.Doc.Spec.Labels, existing.Region, "region"),
-			Labels:      labelsJSON,
-			Annotations: orRaw(existing.Annotations, json.RawMessage(`{}`)),
+			ID:             existing.ID,
+			DisplayName:    existing.DisplayName,
+			Description:    existing.Description,
+			Environment:    pickLabelOr(in.Doc.Spec.Labels, existing.Environment, "env", "environment", "tier"),
+			Region:         pickLabelOr(in.Doc.Spec.Labels, existing.Region, "region"),
+			Labels:         labelsJSON,
+			Annotations:    orRaw(existing.Annotations, json.RawMessage(`{}`)),
+			AgentOverrides: orRaw(existing.AgentOverrides, json.RawMessage(`{}`)),
 		})
 		if err != nil {
 			return Result{}, fmt.Errorf("update cluster %q: %w", in.Doc.Metadata.Name, err)

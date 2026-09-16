@@ -84,7 +84,7 @@ initialize_evidence() {
   : >"$TOOLS_FILE"
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   local tree_json
-  tree_json="$(python3 scripts/hash-source-tree.py --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
+  tree_json="$(python3 "$ROOT_DIR/scripts/hash-source-tree.py" --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
   read -r SOURCE_TREE_SHA256 SOURCE_FILE_COUNT < <(
     python3 -c 'import json,sys; value=json.load(sys.stdin); print(value["source_tree_sha256"], value["source_file_count"])' <<<"$tree_json"
   )
@@ -149,7 +149,7 @@ finalize_evidence() {
   local status="passed"
   (( exit_code == 0 )) || status="failed"
   local finished_tree_json finished_tree_sha256 finished_file_count tree_stable="true"
-  finished_tree_json="$(python3 scripts/hash-source-tree.py --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
+  finished_tree_json="$(python3 "$ROOT_DIR/scripts/hash-source-tree.py" --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
   read -r finished_tree_sha256 finished_file_count < <(
     python3 -c 'import json,sys; value=json.load(sys.stdin); print(value["source_tree_sha256"], value["source_file_count"])' <<<"$finished_tree_json"
   )
@@ -252,8 +252,10 @@ require_frontend_dependencies() {
 verify_contract_artifacts() {
   step "Documentation links, lifecycle classification, and terminology"
   run_logged documentation-contract node scripts/check-docs.mjs
+  run_logged configuration-reference node scripts/generate-config-docs.mjs
+  run_logged configuration-generator-tests node --test scripts/generate-config-docs.test.mjs
 
-  step "Changed-code and legacy-hotspot complexity budgets"
+  step "Repository-wide file and function complexity budgets"
   run_logged complexity-budget node scripts/check-complexity-budget.mjs
 
   step "Go and frontend dependency-direction boundaries"
@@ -297,6 +299,9 @@ verify_contract_artifacts() {
 
   step "Error-code documentation"
   run_logged error-code-docs node scripts/error-code-docs.mjs --check
+
+  step "astro CLI documentation"
+  run_logged cli-docs node scripts/generate-cli-docs.mjs
 
   step "Route metadata JSON"
   run_logged route-metadata-json python3 -c \
@@ -366,6 +371,9 @@ verify_backend() {
   step "Go vet"
   run_logged go-vet go vet ./...
 
+  step "Reachable Go vulnerability scan"
+  run_logged go-vulnerability-scan make vulncheck
+
   step "Go lint (pinned golangci-lint against .golangci.yml)"
   run_logged go-lint ./scripts/check-go-lint.sh
 
@@ -413,6 +421,7 @@ verify_frontend() {
   run_logged frontend-type-check npm run type-check
 
   step "Frontend unit tests"
+  run_logged frontend-formatter-tests npm run format:test
   run_logged frontend-unit-tests npm test
 
   step "Frontend production build"
@@ -461,7 +470,13 @@ verify_helm() {
   )
 
   step "Helm lint"
-  run_logged helm-lint helm lint deploy/chart "${render_keys[@]}"
+  # Base values are deliberately production-safe and incomplete until an
+  # operator supplies external infrastructure. Lint the explicit disposable
+  # profile here; the fully wired production render below validates the
+  # production branch of the schema with concrete inputs.
+  run_logged helm-lint helm lint deploy/chart \
+    -f deploy/chart/values-dev.yaml \
+    "${render_keys[@]}"
 
   step "Development Helm render"
   render_helm helm-development helm template astronomer deploy/chart \

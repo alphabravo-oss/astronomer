@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -54,7 +55,7 @@ func TestForwardToOwnerPreservesCallerIdentity(t *testing.T) {
 	r := NewTunnelK8sRequester(hub)
 	r.SetInternalPSK("test-psk")
 
-	ctx := middleware.SetAuthenticatedUserForTest(t.Context(), &middleware.AuthenticatedUser{ID: userID.String()})
+	ctx := reqctx.WithUser(t.Context(), &reqctx.User{ID: userID.String()})
 	if _, err := r.Do(ctx, "cluster-1", http.MethodGet, "/api/v1/pods", nil, nil); err != nil {
 		t.Fatalf("Do: %v", err)
 	}

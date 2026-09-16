@@ -14,6 +14,8 @@ import (
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
+	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/storage/driver"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -209,6 +211,7 @@ func (h *HelmHandler) HandleInstall(ctx context.Context, msg *protocol.Message) 
 	}
 
 	install := action.NewInstall(cfg)
+	install.Description = req.Description
 	install.ReleaseName = req.ReleaseName
 	install.Namespace = req.Namespace
 	install.CreateNamespace = true
@@ -257,6 +260,7 @@ func (h *HelmHandler) HandleUpgrade(ctx context.Context, msg *protocol.Message) 
 	}
 
 	upgrade := action.NewUpgrade(cfg)
+	upgrade.Description = req.Description
 	upgrade.Namespace = req.Namespace
 	upgrade.ReuseValues = req.ReuseValues
 	if req.Version != "" {
@@ -326,18 +330,39 @@ func (h *HelmHandler) HandleRollback(_ context.Context, msg *protocol.Message) (
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
 	}
 
+	// Tag the revision at its first durable write, before Kubernetes changes.
+	// This closes the crash window between a successful rollback and the
+	// management plane recording its checkpoint.
+	if req.Description != "" {
+		cfg.Releases.Driver = &helmOperationDriver{Driver: cfg.Releases.Driver, description: req.Description}
+	}
 	rollback := action.NewRollback(cfg)
 	rollback.Version = req.Revision
-	if req.Timeout > 0 {
-		rollback.Timeout = time.Duration(req.Timeout) * time.Second
-	}
+	rollback.Wait = true
+	rollback.Timeout = helmReadyTimeout(req.Timeout)
 
 	err = rollback.Run(req.ReleaseName)
 	if err != nil {
 		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", req.Revision, err), nil
 	}
 
-	return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "rolled-back", req.Revision, nil), nil
+	current, err := cfg.Releases.Last(req.ReleaseName)
+	if err != nil {
+		return helmResult(msg.StreamID, req.ReleaseName, req.Namespace, "", 0, err), nil
+	}
+	return helmResult(msg.StreamID, current.Name, current.Namespace, current.Info.Status.String(), current.Version, nil), nil
+}
+
+type helmOperationDriver struct {
+	driver.Driver
+	description string
+}
+
+func (d *helmOperationDriver) Create(key string, rel *release.Release) error {
+	if rel.Info != nil {
+		rel.Info.Description = d.description
+	}
+	return d.Driver.Create(key, rel)
 }
 
 // HandleStatus processes HELM_STATUS messages.

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -77,16 +78,12 @@ func TestGitOpsSyncTaskAndAuditCommitTogether(t *testing.T) {
 			sourceID := uuid.New()
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/admin/gitops-sources/"+sourceID.String()+"/sync/", nil)
 
-			_, err := executeGitOpsMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q GitOpsMutationTx) (gitOpsSyncMutationResult, error) {
 					return enqueueGitOpsSourceSync(r, q, q, sourceID)
 				},
-				func() (gitOpsSyncMutationResult, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return gitOpsSyncMutationResult{}, nil
-				},
-				func(result gitOpsSyncMutationResult) clusterAuditEvent {
-					return clusterAuditEvent{
+				func(result gitOpsSyncMutationResult) mutationAuditEvent {
+					return mutationAuditEvent{
 						action: "admin.gitops_source.sync_requested", resourceType: "gitops_source",
 						resourceID: result.row.ID.String(), resourceName: result.row.Name,
 						status: http.StatusAccepted, detail: map[string]any{"task_type": tasks.GitOpsSyncType},
@@ -171,37 +168,42 @@ func TestGitOpsSyncKeyRejectsChangedTarget(t *testing.T) {
 }
 
 func TestEveryGitOpsMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("gitops.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	paths, err := filepath.Glob("gitops*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]bool{"Create": false, "Update": false, "Delete": false, "Webhook": false}
-	for _, declaration := range file.Decls {
-		fn, ok := declaration.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
 		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
+		for _, declaration := range file.Decls {
+			fn, ok := declaration.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if _, tracked := want[fn.Name.Name]; !tracked {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
+					want[fn.Name.Name] = true
+				}
 				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeGitOpsMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
+			})
+		}
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeGitOpsMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

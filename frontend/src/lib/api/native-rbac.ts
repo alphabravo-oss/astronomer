@@ -73,11 +73,24 @@ export async function listNativeRules(
   userId?: string,
   signal?: AbortSignal,
 ): Promise<NativeRule[]> {
-  const response = await getNativeRbacRules({
-    query: userId ? { userId } : undefined,
-    signal,
-  });
-  return response.data ?? [];
+  const rules: NativeRule[] = [];
+  const limit = 500;
+  let offset = 0;
+
+  for (;;) {
+    const response = await getNativeRbacRules({
+      query: { userId, limit, offset },
+      signal,
+    });
+    rules.push(...response.data);
+
+    const nextOffset = response.pagination.next_offset;
+    if (!response.pagination.has_more) return rules;
+    if (nextOffset === null || nextOffset <= offset) {
+      throw new Error("Native RBAC pagination did not advance");
+    }
+    offset = nextOffset;
+  }
 }
 
 export async function createNativeRule(
@@ -88,6 +101,9 @@ export async function createNativeRule(
   return response.data;
 }
 
-export async function deleteNativeRule(id: string, signal?: AbortSignal): Promise<void> {
+export async function deleteNativeRule(
+  id: string,
+  signal?: AbortSignal,
+): Promise<void> {
   await deleteNativeRbacRulesById({ path: { id }, signal });
 }

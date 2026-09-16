@@ -48,6 +48,7 @@ func TestRegistrationTokenTTLConvergence(t *testing.T) {
 	t.Run("default-1h-generate", func(t *testing.T) {
 		q := &ttlCaptureQuerier{}
 		h := NewClusterHandler(q)
+		setClusterTestRunTx(h, q)
 		r := chi.NewRouter()
 		r.Post("/api/v1/clusters/{id}/register/", h.GenerateRegistrationToken)
 		rec := httptest.NewRecorder()
@@ -61,6 +62,7 @@ func TestRegistrationTokenTTLConvergence(t *testing.T) {
 	t.Run("default-1h-manifest", func(t *testing.T) {
 		q := &ttlCaptureQuerier{}
 		h := NewClusterHandler(q)
+		setClusterTestRunTx(h, q)
 		r := chi.NewRouter()
 		r.Get("/api/v1/clusters/{id}/manifest/", h.GetManifest)
 		rec := httptest.NewRecorder()
@@ -75,6 +77,7 @@ func TestRegistrationTokenTTLConvergence(t *testing.T) {
 	t.Run("override-3h-generate", func(t *testing.T) {
 		q := &ttlCaptureQuerier{}
 		h := NewClusterHandler(q)
+		setClusterTestRunTx(h, q)
 		h.SetRegistrationTokenTTL(3 * time.Hour)
 		r := chi.NewRouter()
 		r.Post("/api/v1/clusters/{id}/register/", h.GenerateRegistrationToken)
@@ -89,6 +92,7 @@ func TestRegistrationTokenTTLConvergence(t *testing.T) {
 	t.Run("signed-manifest-caps-at-window-under-ttl", func(t *testing.T) {
 		q := &ttlCaptureQuerier{}
 		h := NewClusterHandler(q)
+		setClusterTestRunTx(h, q)
 		h.SetRegistrationTokenTTL(3 * time.Hour)
 		h.SetManifestSigningSecret("test-secret")
 		signed := h.SignManifestURL(id, 15*time.Minute)
@@ -109,6 +113,7 @@ func TestRegistrationTokenTTLConvergence(t *testing.T) {
 	t.Run("signed-manifest-capped-by-ttl", func(t *testing.T) {
 		q := &ttlCaptureQuerier{}
 		h := NewClusterHandler(q)
+		setClusterTestRunTx(h, q)
 		h.SetRegistrationTokenTTL(10 * time.Minute)
 		h.SetManifestSigningSecret("test-secret")
 		signed := h.SignManifestURL(id, 25*time.Minute)
@@ -128,6 +133,7 @@ func TestRegistrationTokenTTLConvergence(t *testing.T) {
 	t.Run("clamp-nonpositive", func(t *testing.T) {
 		q := &ttlCaptureQuerier{}
 		h := NewClusterHandler(q)
+		setClusterTestRunTx(h, q)
 		h.SetRegistrationTokenTTL(0)
 		r := chi.NewRouter()
 		r.Post("/api/v1/clusters/{id}/register/", h.GenerateRegistrationToken)

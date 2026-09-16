@@ -1,6 +1,6 @@
 # 008 — Fleet Operations UI (DIR-01)
 
-**Status:** Spike / design plan (no code written yet)
+**Status:** Historical design — superseded by the current fleet and Flux-native delivery workflows (2026-09-10). Route names and implementation claims below describe the original proposal, not the current API. Use `docs/routes.json`, `docs/openapi.yaml`, and advisor plan 010 for current scope; do not implement this obsolete route contract.
 **Author:** senior-eng handoff
 **Finding:** DIR-01 — the bulk fleet-operations backend is complete and has **zero** frontend consumers.
 

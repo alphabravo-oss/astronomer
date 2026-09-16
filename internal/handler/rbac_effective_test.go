@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type fakeEffectiveBindingQuerier struct {
@@ -41,7 +42,7 @@ func TestMyEffectivePermissionsReturnsSources(t *testing.T) {
 	}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/rbac/my-permissions/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID}))
 	rr := httptest.NewRecorder()
 	h.MyEffectivePermissions(rr, req)
 	if rr.Code != http.StatusOK {
@@ -109,7 +110,7 @@ func TestMyEffectivePermissionsReturnsSelectedNamespaceContext(t *testing.T) {
 	}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/rbac/my-permissions/?project_id="+projectID+"&namespace=payments", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID}))
 	rr := httptest.NewRecorder()
 	h.MyEffectivePermissions(rr, req)
 	if rr.Code != http.StatusOK {
@@ -149,7 +150,7 @@ func TestMyEffectivePermissionsReturnsSelectedNamespaceContext(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/rbac/my-permissions/?project_id="+otherProjectID, nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID}))
 	rr = httptest.NewRecorder()
 	h.MyEffectivePermissions(rr, req)
 	if rr.Code != http.StatusOK {
@@ -163,7 +164,7 @@ func TestMyEffectivePermissionsReturnsSelectedNamespaceContext(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/rbac/my-permissions/?project_id="+projectID+"&namespace=default", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID}))
 	rr = httptest.NewRecorder()
 	h.MyEffectivePermissions(rr, req)
 	if rr.Code != http.StatusOK {
@@ -185,7 +186,7 @@ func TestMyEffectivePermissionsSuperuser(t *testing.T) {
 	}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/rbac/my-permissions/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID}))
 	rr := httptest.NewRecorder()
 	h.MyEffectivePermissions(rr, req)
 	if rr.Code != http.StatusOK {
@@ -218,7 +219,7 @@ func TestMyEffectivePermissionsRejectsInvalidContext(t *testing.T) {
 	h := &RBACHandler{}
 	h.SetAuthorization(rbac.NewEngine(), fakeEffectiveBindingQuerier{bindings: map[string][]rbac.RoleBinding{userID: nil}})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/rbac/my-permissions/?namespace=bad_namespace", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID}))
 	rr := httptest.NewRecorder()
 	h.MyEffectivePermissions(rr, req)
 	if rr.Code != http.StatusBadRequest {

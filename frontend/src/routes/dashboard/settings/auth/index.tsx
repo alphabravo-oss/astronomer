@@ -12,8 +12,8 @@ import { createFileRoute } from "@tanstack/react-router";
  *      because there's no point flipping the SSO row on without an upstream.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Plus,
   ShieldCheck,
@@ -40,7 +40,7 @@ import { getConnectorMeta } from "@/components/auth/connector-meta";
 import type { DexConnector } from "@/types";
 
 function AuthOverviewPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data: connectors = [], isLoading: connectorsLoading } =
     useDexConnectors();
   const { data: settings } = useDexSettings();
@@ -74,7 +74,7 @@ function AuthOverviewPage() {
         const Icon = meta.icon;
         return (
           <div className="flex items-center gap-2">
-            <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
             <span className="text-sm text-foreground">
               {meta.label || row.type}
             </span>
@@ -127,7 +127,9 @@ function AuthOverviewPage() {
               label: "Edit",
               icon: <Pencil className="h-3.5 w-3.5" />,
               onClick: () =>
-                router.push(`/dashboard/settings/auth/connectors/${row.id}`),
+                void navigate({
+                  to: `/dashboard/settings/auth/connectors/${row.id}`,
+                }),
             },
             {
               label: "Delete",
@@ -161,7 +163,7 @@ function AuthOverviewPage() {
               intent="primary"
               icon={<ShieldCheck className="h-4 w-4" />}
               onClick={() =>
-                router.push("/dashboard/settings/auth/register-sso")
+                void navigate({ to: "/dashboard/settings/auth/register-sso" })
               }
             >
               Register Dex as SSO
@@ -203,7 +205,7 @@ function AuthOverviewPage() {
               intent="primary"
               icon={<Plus className="h-4 w-4" />}
               onClick={() =>
-                router.push("/dashboard/settings/auth/connectors/new")
+                void navigate({ to: "/dashboard/settings/auth/connectors/new" })
               }
             >
               Add Connector
@@ -217,17 +219,25 @@ function AuthOverviewPage() {
           keyExtractor={(row) => row.id}
           searchPlaceholder="Search connectors..."
           loading={connectorsLoading}
-          emptyMessage="No connectors configured. Add one to broker an upstream IdP."
+          emptyState={{
+            title: "No identity connectors configured",
+            description:
+              "Connect your identity provider to enable single sign-on.",
+            action: {
+              label: "Add connector",
+              href: "/dashboard/settings/auth/connectors/new",
+            },
+          }}
         />
       </div>
 
       {/* Quick links */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <Link
-          href="/dashboard/settings/auth/settings"
+        <RouterLink
+          to="/dashboard/settings/auth/settings"
           className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors"
         >
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+          <div className="shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
             <KeyRound className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
@@ -237,12 +247,12 @@ function AuthOverviewPage() {
             </p>
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        </Link>
-        <Link
-          href="/dashboard/settings/auth/register-sso"
+        </RouterLink>
+        <RouterLink
+          to="/dashboard/settings/auth/register-sso"
           className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors"
         >
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+          <div className="shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
             <ShieldCheck className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
@@ -254,12 +264,12 @@ function AuthOverviewPage() {
             </p>
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        </Link>
-        <Link
-          href="/dashboard/settings/auth/scim-tokens"
+        </RouterLink>
+        <RouterLink
+          to="/dashboard/settings/auth/scim-tokens"
           className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card hover:bg-card/80 transition-colors"
         >
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
+          <div className="shrink-0 w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
             <KeyRound className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="flex-1 min-w-0">
@@ -271,7 +281,7 @@ function AuthOverviewPage() {
             </p>
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
-        </Link>
+        </RouterLink>
       </div>
 
       <ConfirmDialog
@@ -300,12 +310,12 @@ function DexInstallCard({
   loading: boolean;
   issuerUrl?: string;
 }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   return (
     <div className="rounded-xl border border-border bg-card p-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+          <div className="shrink-0 w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
             <Wrench className="h-5 w-5 text-muted-foreground" />
           </div>
           <div className="min-w-0">
@@ -337,11 +347,13 @@ function DexInstallCard({
             )}
           </div>
         </div>
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           {installed ? (
             <ActionButton
               size="sm"
-              onClick={() => router.push("/dashboard/settings/auth/settings")}
+              onClick={() =>
+                void navigate({ to: "/dashboard/settings/auth/settings" })
+              }
             >
               Configure
             </ActionButton>
@@ -349,7 +361,9 @@ function DexInstallCard({
             <ActionButton
               size="sm"
               intent="primary"
-              onClick={() => router.push("/dashboard/settings/auth/install")}
+              onClick={() =>
+                void navigate({ to: "/dashboard/settings/auth/install" })
+              }
             >
               Configure bundled Dex
             </ActionButton>

@@ -1,5 +1,7 @@
 # Astronomer-go Rancher-parity Plan
 
+> **Status: superseded.** This historical plan predates the Flux-native delivery decision. Use `docs/rancher-astronomer-comparison.md`, `docs/architecture/decisions/flux-native-delivery.md`, and advisor review 010 for current scope.
+
 **Date:** 2026-05-08
 **Status:** Approved by user 2026-05-08
 **Scope:** What we build next to close the Rancher gap on day-2 operations, while declining to compete on day-0 cluster provisioning.

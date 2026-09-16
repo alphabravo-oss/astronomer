@@ -12,17 +12,21 @@ add a row to the doc.
 ## Quick start
 
 ```bash
-# 1. Have a running server (local dev: `make dev` + `make run` in one terminal).
+# 1. Have the complete management plane running: server and worker. `make dev`
+#    exposes the API on 8001 and metrics on 9090. A server-only run cannot
+#    drain the transactional audit/task outboxes and is never qualification.
 # 2. Get an admin JWT and put it in a file:
-curl -s -X POST http://localhost:8080/api/v1/auth/login/ \
+curl -s -X POST http://localhost:8001/api/v1/auth/login/ \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@example.com","password":"..."}' | jq -r .access_token > /tmp/jwt
+  -d '{"email":"admin@example.com","password":"..."}' | jq -r .data.token > /tmp/jwt
 # 3. Run the harness:
-make load-test LOADTEST_TOKEN=/tmp/jwt LOADTEST_CLUSTERS=100 LOADTEST_RPS=200 LOADTEST_DURATION=10m
+make load-test LOADTEST_SERVER=http://localhost:8001 LOADTEST_METRICS_SERVER=http://localhost:9090 \
+  LOADTEST_TOKEN=/tmp/jwt LOADTEST_CLUSTERS=100 LOADTEST_RPS=200 LOADTEST_DURATION=10m
 
 # Or run a named enterprise fleet profile:
 go run ./scripts/loadtest \
-  -server http://localhost:8080 \
+  -server http://localhost:8001 \
+  -metrics-server http://localhost:9090 \
   -token /tmp/jwt \
   -profile scripts/loadtest/profiles/small.yaml \
   -out loadtest-small.md
@@ -34,7 +38,8 @@ Output is `loadtest-report.md` (override with `LOADTEST_OUT=...`).
 
 | Flag | Env var | Default | Purpose |
 |---|---|---|---|
-| `-server` | `LOADTEST_SERVER` | `http://localhost:8080` | Management-plane base URL |
+| `-server` | `LOADTEST_SERVER` | `http://localhost:8001` | Management-plane base URL |
+| `-metrics-server` | `LOADTEST_METRICS_SERVER` | value of `-server` | Prometheus metrics base URL when metrics use a separate listener or Service |
 | `-clusters` | `LOADTEST_CLUSTERS` | `50` | Synthetic agent count |
 | `-rps` | `LOADTEST_RPS` | `100` | Aggregate HTTP request rate (token bucket) |
 | `-duration` | `LOADTEST_DURATION` | `5m` | How long to drive load |
@@ -85,9 +90,16 @@ must populate `LOADTEST_COMMIT`, `LOADTEST_IMAGES`, `LOADTEST_CHART_VALUES`,
 `LOADTEST_COMPONENT_REPLICAS` must be a JSON object with positive `server`,
 `worker`, `tunnel`, and `audit` replica counts; the report binds these counts
 to the component rate samples used by the offline sizing reducer.
+The target deployment's per-caller API rate limits must be sized for the
+profile's declared RPS. Keep production defaults in ordinary environments;
+capacity jobs should raise `config.apiK8sProxyRateLimitRPS` and
+`config.apiK8sProxyRateLimitBurst` explicitly in their retained values file.
 Certification also requires the profile's bounded `mandatoryAudit` workload to
 remain active for at least 98% of the certified window. `maxOperations` must be
-large enough to sustain the declared rate for the full duration. Every accepted
+large enough to sustain the declared rate for the full duration; it is a safety
+cap, not the expected attempt count. The expected count is `ratePerSecond ×
+duration`, with the first operation issued when the workload window opens.
+Every accepted
 mutation is independently observed through a separate read-only PostgreSQL
 connection against `audit_outbox`, then reconciled through the public audit API
 by correlation ID, exact action, and resource type. An HTTP 2xx is not counted
@@ -159,10 +171,10 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
    | cluster_events | 5% | `/api/v1/clusters/{real_fixture_id}/k8s/api/v1/events` |
    | auth_me | 20% | `/api/v1/auth/me/` |
    | project_list | 10% | `/api/v1/projects/` |
-   | audit_logs | 10% | `/api/v1/audit-logs/` |
+   | audit_logs | 10% | `/api/v1/audit/` |
    | admin_queues | 5% | `/api/v1/admin/queues/` |
 
-5. **Scrape**: every 15 seconds, `GET /metrics` and pluck the metrics listed
+5. **Scrape**: every 15 seconds, `GET /metrics` from `-metrics-server` and pluck the metrics listed
    in `metrics.go::scrapedMetrics`. The driver also snapshots its own
    `runtime.NumGoroutine` and `HeapAlloc` so the report has a baseline for
    the harness itself. Certification requires at least eight server samples

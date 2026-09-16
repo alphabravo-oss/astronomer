@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -62,35 +61,10 @@ type TracingConfig struct {
 	SamplerRatio float64
 }
 
-// TracingFromEnv resolves a TracingConfig from the standard OTel env
-// vars so operators don't need a chart change for every adjustment.
-// Knobs honored:
-//   - OTEL_EXPORTER_OTLP_ENDPOINT   (REQUIRED to enable)
-//   - OTEL_EXPORTER_OTLP_INSECURE   ("true"/"1" forces plain HTTP)
-//   - OTEL_EXPORTER_OTLP_HEADERS    ("k1=v1,k2=v2")
-//   - OTEL_SERVICE_NAME             (defaults to astronomer-go)
-//   - OTEL_TRACES_SAMPLER_ARG       (sampler ratio, "1.0" = always-on)
-func TracingFromEnv() TracingConfig {
-	cfg := TracingConfig{
-		Endpoint:       os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		ServiceName:    os.Getenv("OTEL_SERVICE_NAME"),
-		ServiceVersion: os.Getenv("OTEL_SERVICE_VERSION"),
-	}
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_INSECURE"))); v == "true" || v == "1" {
-		cfg.Insecure = true
-	}
-	if h := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")); h != "" {
-		cfg.Headers = parseOTLPHeaders(h)
-	}
-	if ratio := strings.TrimSpace(os.Getenv("OTEL_TRACES_SAMPLER_ARG")); ratio != "" {
-		var f float64
-		_, _ = fmt.Sscanf(ratio, "%f", &f)
-		cfg.SamplerRatio = f
-	}
-	return cfg
-}
-
-func parseOTLPHeaders(raw string) map[string]string {
+// ParseOTLPHeaders parses the standard comma-separated OTLP header syntax.
+// Environment resolution happens in internal/config; observability receives
+// an explicit typed configuration.
+func ParseOTLPHeaders(raw string) map[string]string {
 	out := map[string]string{}
 	for _, pair := range strings.Split(raw, ",") {
 		pair = strings.TrimSpace(pair)

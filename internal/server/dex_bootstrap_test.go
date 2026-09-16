@@ -70,13 +70,13 @@ func (e envMap) lookup(key string) (string, bool) {
 func TestDexBootstrap_SeedsSettingsWhenBundled(t *testing.T) {
 	q := &fakeDexBootstrapQuerier{}
 	env := envMap{
-		"DEX_BUNDLED_ENABLED":         "true",
-		"DEX_BUNDLED_NAMESPACE":       "astronomer",
-		"DEX_BUNDLED_RELEASE_NAME":    "astronomer",
-		"DEX_BUNDLED_DEPLOYMENT_NAME": "astronomer-dex",
-		"DEX_BUNDLED_SERVICE_NAME":    "astronomer-dex",
-		"DEX_BUNDLED_CONFIGMAP_NAME":  "astronomer-dex-config",
-		"DEX_BUNDLED_ISSUER_URL":      "https://astronomer.example.com/dex",
+		"DEX_BUNDLED_ENABLED":             "true",
+		"DEX_BUNDLED_NAMESPACE":           "astronomer",
+		"DEX_BUNDLED_RELEASE_NAME":        "astronomer",
+		"DEX_BUNDLED_DEPLOYMENT_NAME":     "astronomer-dex",
+		"DEX_BUNDLED_SERVICE_NAME":        "astronomer-dex",
+		"DEX_BUNDLED_RUNTIME_SECRET_NAME": "astronomer-dex-runtime",
+		"DEX_BUNDLED_ISSUER_URL":          "https://astronomer.example.com/dex",
 	}
 	seeded, err := seedBundledDexSettings(context.Background(), q, slog.Default(), env.lookup)
 	if err != nil {
@@ -97,7 +97,7 @@ func TestDexBootstrap_SeedsSettingsWhenBundled(t *testing.T) {
 	if got := q.upsertLastParam.ReleaseName; got != "astronomer-dex" {
 		t.Errorf("release_name mismatch: got %q", got)
 	}
-	if got := q.upsertLastParam.ConfigmapName; got != "astronomer-dex-config" {
+	if got := q.upsertLastParam.ConfigmapName; got != "astronomer-dex-runtime" {
 		t.Errorf("configmap_name mismatch: got %q", got)
 	}
 	if q.upsertLastParam.ID != dexBootstrapSingletonID {

@@ -2,21 +2,15 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	imonitoring "github.com/alphabravocompany/astronomer-go/internal/monitoring"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
@@ -343,12 +337,10 @@ func (l sharedStackLifecycle[Req]) persistFailure() string {
 }
 
 // stageMutation is the commit boundary for every shared-stack lifecycle
-// mutation. Production supplies runTx; the fallback keeps lightweight handler
-// tests and development embeddings functional while preserving the legacy
-// direct audit path.
+// mutation. Missing transaction wiring fails closed before any state changes.
 func (l sharedStackLifecycle[Req]) stageMutation(r *http.Request, backend sqlc.MonitoringBackend, persistReq, operationReq Req, desiredStatus, verb string, values map[string]any, secretSpec *objectStoreSecretSpec, clusterID, namespace, releaseName string) (sqlc.MonitoringOperation, error) {
 	ctx := withOperationIdempotency(r, "monitoring")
-	mutate := func(q monitoringSharedMutationWriter) (sqlc.MonitoringOperation, error) {
+	mutate := func(q MonitoringMutationTx) (sqlc.MonitoringOperation, error) {
 		if err := l.persistWith(r.Context(), q, backend, persistReq, desiredStatus); err != nil {
 			return sqlc.MonitoringOperation{}, fmt.Errorf("%w: %w", errSharedStackMetadataPersistence, err)
 		}
@@ -359,31 +351,16 @@ func (l sharedStackLifecycle[Req]) stageMutation(r *http.Request, backend sqlc.M
 		return op, nil
 	}
 
-	var op sqlc.MonitoringOperation
-	if l.h.runTx != nil {
-		err := l.h.runTx(r.Context(), func(q MonitoringMutationTx) error {
-			var err error
-			op, err = mutate(q)
-			if err != nil {
-				return err
-			}
-			return recordAuditOutbox(r, q, l.auditPrefix+"."+verb, "monitoring_backend", backend.ID.String(), backend.BackendType, http.StatusAccepted, map[string]any{
-				"managementClusterId": clusterID,
-				"namespace":           namespace,
-				"releaseName":         releaseName,
-				"operationId":         op.ID.String(),
-			})
-		})
-		if err != nil {
-			return sqlc.MonitoringOperation{}, err
-		}
-	} else {
-		var err error
-		op, err = mutate(l.h.queries)
-		if err != nil {
-			return sqlc.MonitoringOperation{}, err
-		}
-		l.recordLifecycleAudit(r, verb, backend, clusterID, namespace, releaseName, op)
+	op, err := executeMutation(r, l.h.runTx, mutate, func(op sqlc.MonitoringOperation) mutationAuditEvent {
+		return mutationAuditEvent{action: l.auditPrefix + "." + verb, resourceType: "monitoring_backend", resourceID: backend.ID.String(), resourceName: backend.BackendType, status: http.StatusAccepted, detail: map[string]any{
+			"managementClusterId": clusterID,
+			"namespace":           namespace,
+			"releaseName":         releaseName,
+			"operationId":         op.ID.String(),
+		}}
+	})
+	if err != nil {
+		return sqlc.MonitoringOperation{}, err
 	}
 
 	l.h.TriggerReconcile()
@@ -417,19 +394,6 @@ func (l sharedStackLifecycle[Req]) runPrecheck(w http.ResponseWriter, r *http.Re
 	}
 	RespondRequestError(w, r, status, code, msg)
 	return false
-}
-
-// recordLifecycleAudit emits the family's audit row. Action name and detail
-// keys are a wire contract (internal/audit pins the vocabulary, and the
-// coverage contract requires every mutating handler in this file to reach
-// here) — the only thing this collapse changed is where the call is written.
-func (l sharedStackLifecycle[Req]) recordLifecycleAudit(r *http.Request, verb string, backend sqlc.MonitoringBackend, clusterID, namespace, releaseName string, op sqlc.MonitoringOperation) {
-	recordAudit(r, l.h.queries, l.auditPrefix+"."+verb, "monitoring_backend", backend.ID.String(), backend.BackendType, map[string]any{
-		"managementClusterId": clusterID,
-		"namespace":           namespace,
-		"releaseName":         releaseName,
-		"operationId":         op.ID.String(),
-	})
 }
 
 func (h *MonitoringHandler) sharedThanosLifecycle() sharedStackLifecycle[SharedThanosStackRequest] {
@@ -768,460 +732,4 @@ func (h *MonitoringHandler) UninstallSharedLokiStack(w http.ResponseWriter, r *h
 
 func (h *MonitoringHandler) GetSharedLokiStatus(w http.ResponseWriter, r *http.Request) {
 	h.sharedLokiLifecycle().status(w, r)
-}
-
-func (h *MonitoringHandler) sharedThanosPayload(ctx context.Context, r *http.Request) (SharedThanosStackRequest, map[string]any, objectStoreSecretSpec, sqlc.MonitoringBackend, error) {
-	if h.queries == nil {
-		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, fmt.Errorf("monitoring store not configured")
-	}
-	if h.helm == nil {
-		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, fmt.Errorf("helm requester not configured")
-	}
-
-	var req SharedThanosStackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
-		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, fmt.Errorf("invalid JSON body")
-	}
-	if req.ManagementClusterID == "" {
-		req.ManagementClusterID = r.URL.Query().Get("clusterId")
-	}
-	if req.ManagementClusterID == "" {
-		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, fmt.Errorf("managementClusterId is required")
-	}
-	if req.Namespace == "" {
-		req.Namespace = "monitoring"
-	}
-	if req.ReleaseName == "" {
-		req.ReleaseName = "thanos"
-	}
-	if req.ChartVersion == "" {
-		req.ChartVersion = "1.23.0"
-	}
-	if req.QueryReplicas <= 0 {
-		req.QueryReplicas = 2
-	}
-	if req.StoreGatewayReplicas <= 0 {
-		req.StoreGatewayReplicas = 1
-	}
-	if req.CompactorReplicas <= 0 {
-		req.CompactorReplicas = 1
-	}
-	if req.StorageConfigID == "" {
-		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, fmt.Errorf("storageConfigId is required")
-	}
-
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
-	if err != nil {
-		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, fmt.Errorf("default monitoring backend is not configured")
-	}
-	// nil authorizer, deliberately: sharedStackLifecycle's preamble has already
-	// required a FLEET-WIDE monitoring grant (authorizeGlobalAction against
-	// uuid.Nil) to reach this payload builder, which is a strictly higher bar
-	// than clusterStorageConfigAuthorizer's most permissive clause, and the
-	// secret lands on the management cluster rather than a tenant's.
-	secretSpec, err := h.objectStoreSecretSpec(ctx, req.StorageConfigID, req.ObjectStorageSecretName, req.ReleaseName+"-objstore", nil)
-	if err != nil {
-		return SharedThanosStackRequest{}, nil, objectStoreSecretSpec{}, sqlc.MonitoringBackend{}, err
-	}
-	req.ObjectStorageSecretName = secretSpec.Name
-
-	values := map[string]any{
-		"objstoreConfig": map[string]any{
-			"create": false,
-			"name":   secretSpec.Name,
-			"key":    secretSpec.Key,
-		},
-		"query": map[string]any{
-			"enabled":            true,
-			"replicas":           req.QueryReplicas,
-			"enableDnsDiscovery": false,
-		},
-		"queryFrontend": map[string]any{
-			"enabled": true,
-		},
-		"bucketWeb": map[string]any{
-			"enabled": true,
-		},
-		"compact": map[string]any{
-			"enabled": true,
-			"persistence": map[string]any{
-				"enabled": true,
-				"size":    "20Gi",
-			},
-		},
-		"storeGateway": map[string]any{
-			"enabled":  true,
-			"replicas": req.StoreGatewayReplicas,
-			"persistence": map[string]any{
-				"enabled": true,
-				"size":    "20Gi",
-			},
-		},
-		"rule": map[string]any{
-			"enabled":  true,
-			"replicas": 1,
-			"rules": map[string]any{
-				"create": false,
-				"name":   "astronomer-ruler-rules",
-			},
-		},
-		"receive": map[string]any{
-			"enabled": false,
-		},
-		"metrics": map[string]any{
-			"enabled": true,
-		},
-	}
-	if backend.AlertmanagerUrl != "" {
-		values["rule"].(map[string]any)["alertmanagersConfig"] = map[string]any{
-			"create": false,
-			"name":   "astronomer-thanos-rule-alertmanagers",
-			"key":    "config",
-		}
-	}
-	return req, values, secretSpec, backend, nil
-}
-
-// sharedStackMetadata reads one family's deployment metadata out of the shared
-// monitoring_backends.auth_config bag. A missing or malformed entry is an empty
-// map, never nil-panicking downstream.
-func sharedStackMetadata(backend sqlc.MonitoringBackend, key string) map[string]any {
-	authCfg := decodeJSONMap(backend.AuthConfig)
-	raw, ok := authCfg[key]
-	if !ok {
-		return map[string]any{}
-	}
-	metadata, ok := raw.(map[string]any)
-	if !ok {
-		return map[string]any{}
-	}
-	return metadata
-}
-
-// sharedThanosMetadata is sharedStackMetadata bound to the Thanos family, kept
-// for the one caller outside this file (alerting.go, resolving the ruler's
-// target cluster). The lifecycle driver reads the key off its own config.
-func sharedThanosMetadata(backend sqlc.MonitoringBackend) map[string]any {
-	return sharedStackMetadata(backend, "sharedThanos")
-}
-
-func (h *MonitoringHandler) updateSharedThanosMetadata(ctx context.Context, backend sqlc.MonitoringBackend, req SharedThanosStackRequest, status string) error {
-	if h.queries == nil {
-		return nil
-	}
-	return h.updateSharedThanosMetadataWith(ctx, h.queries, backend, req, status)
-}
-
-func (h *MonitoringHandler) updateSharedThanosMetadataWith(ctx context.Context, q monitoringSharedMutationWriter, backend sqlc.MonitoringBackend, req SharedThanosStackRequest, status string) error {
-	appliedSpecHash := specHash(map[string]any{
-		"managementClusterId":     req.ManagementClusterID,
-		"namespace":               defaultString(req.Namespace, "monitoring"),
-		"releaseName":             defaultString(req.ReleaseName, "thanos"),
-		"storageConfigId":         req.StorageConfigID,
-		"objectStorageSecretName": req.ObjectStorageSecretName,
-		"chartVersion":            req.ChartVersion,
-		"queryReplicas":           req.QueryReplicas,
-		"storeGatewayReplicas":    req.StoreGatewayReplicas,
-		"compactorReplicas":       req.CompactorReplicas,
-		"autoRollbackOnFailure":   boolPtrValue(req.AutoRollbackOnFailure),
-	})
-	// RMW site (migration 146): this mutates a NON-secret key
-	// (sharedThanos deployment metadata) and must not lose the credential
-	// stored alongside it. Resolve first; a failure aborts the write.
-	authCfg, err := resolveMonitoringBackendAuthConfig(backend, h.monitoringDecryptor())
-	if err != nil {
-		return fmt.Errorf("resolve monitoring backend auth_config: %w", err)
-	}
-	authCfg["sharedThanos"] = map[string]any{
-		"managementClusterId":     req.ManagementClusterID,
-		"namespace":               defaultString(req.Namespace, "monitoring"),
-		"releaseName":             defaultString(req.ReleaseName, "thanos"),
-		"storageConfigId":         req.StorageConfigID,
-		"objectStorageSecretName": req.ObjectStorageSecretName,
-		"status":                  status,
-		"chartVersion":            req.ChartVersion,
-		"queryReplicas":           req.QueryReplicas,
-		"storeGatewayReplicas":    req.StoreGatewayReplicas,
-		"compactorReplicas":       req.CompactorReplicas,
-		"lastAppliedSpecHash":     appliedSpecHash,
-		"managedAssetHashes": map[string]any{
-			"objstoreSecret": specHash(map[string]any{
-				"name": req.ObjectStorageSecretName,
-				"id":   req.StorageConfigID,
-			}),
-		},
-		"updatedAt": time.Now().UTC().Format(time.RFC3339),
-	}
-	params := sqlc.UpsertDefaultMonitoringBackendParams{
-		BackendType:        backend.BackendType,
-		QueryUrl:           defaultSharedThanosQueryURL(backend.QueryUrl, req),
-		AlertmanagerUrl:    backend.AlertmanagerUrl,
-		TenantID:           backend.TenantID,
-		AuthType:           backend.AuthType,
-		DefaultStepSeconds: backend.DefaultStepSeconds,
-		TimeoutSeconds:     backend.TimeoutSeconds,
-		CreatedByID:        backend.CreatedByID,
-	}
-	if err := imonitoring.SealInto(&params, authCfg, h.monitoringSealer()); err != nil {
-		return err
-	}
-	_, err = q.UpsertDefaultMonitoringBackend(ctx, params)
-	return err
-}
-
-func (h *MonitoringHandler) updateSharedAlertmanagerMetadata(ctx context.Context, backend sqlc.MonitoringBackend, req SharedAlertmanagerRequest, status string) error {
-	if h.queries == nil {
-		return nil
-	}
-	return h.updateSharedAlertmanagerMetadataWith(ctx, h.queries, backend, req, status)
-}
-
-func (h *MonitoringHandler) updateSharedAlertmanagerMetadataWith(ctx context.Context, q monitoringSharedMutationWriter, backend sqlc.MonitoringBackend, req SharedAlertmanagerRequest, status string) error {
-	appliedSpecHash := specHash(map[string]any{
-		"managementClusterId":   req.ManagementClusterID,
-		"namespace":             defaultString(req.Namespace, "monitoring"),
-		"releaseName":           defaultString(req.ReleaseName, "astronomer-alertmanager"),
-		"chartVersion":          req.ChartVersion,
-		"replicas":              req.Replicas,
-		"storageClass":          req.StorageClass,
-		"storageSize":           req.StorageSize,
-		"autoRollbackOnFailure": boolPtrValue(req.AutoRollbackOnFailure),
-	})
-	// RMW site (migration 146): same rule as updateSharedThanosMetadata — a
-	// non-secret metadata stamp must not be able to delete the credential.
-	authCfg, err := resolveMonitoringBackendAuthConfig(backend, h.monitoringDecryptor())
-	if err != nil {
-		return fmt.Errorf("resolve monitoring backend auth_config: %w", err)
-	}
-	authCfg["sharedAlertmanager"] = map[string]any{
-		"managementClusterId": req.ManagementClusterID,
-		"namespace":           defaultString(req.Namespace, "monitoring"),
-		"releaseName":         defaultString(req.ReleaseName, "astronomer-alertmanager"),
-		"status":              status,
-		"chartVersion":        req.ChartVersion,
-		"replicas":            req.Replicas,
-		"storageClass":        req.StorageClass,
-		"storageSize":         req.StorageSize,
-		"lastAppliedSpecHash": appliedSpecHash,
-		"updatedAt":           time.Now().UTC().Format(time.RFC3339),
-	}
-	params := sqlc.UpsertDefaultMonitoringBackendParams{
-		BackendType:        backend.BackendType,
-		QueryUrl:           backend.QueryUrl,
-		AlertmanagerUrl:    defaultSharedAlertmanagerURL(backend.AlertmanagerUrl, req),
-		TenantID:           backend.TenantID,
-		AuthType:           backend.AuthType,
-		DefaultStepSeconds: backend.DefaultStepSeconds,
-		TimeoutSeconds:     backend.TimeoutSeconds,
-		CreatedByID:        backend.CreatedByID,
-	}
-	if err := imonitoring.SealInto(&params, authCfg, h.monitoringSealer()); err != nil {
-		return err
-	}
-	_, err = q.UpsertDefaultMonitoringBackend(ctx, params)
-	return err
-}
-
-func (h *MonitoringHandler) sharedAlertmanagerPayload(ctx context.Context, r *http.Request) (SharedAlertmanagerRequest, map[string]any, sqlc.MonitoringBackend, error) {
-	if h.queries == nil {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("monitoring store not configured")
-	}
-	if h.helm == nil {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("helm requester not configured")
-	}
-
-	var req SharedAlertmanagerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("invalid JSON body")
-	}
-	if req.ManagementClusterID == "" {
-		req.ManagementClusterID = r.URL.Query().Get("clusterId")
-	}
-	if req.ManagementClusterID == "" {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("managementClusterId is required")
-	}
-	if req.Namespace == "" {
-		req.Namespace = "monitoring"
-	}
-	if req.ReleaseName == "" {
-		req.ReleaseName = "astronomer-alertmanager"
-	}
-	if req.ChartVersion == "" {
-		req.ChartVersion = "1.18.0"
-	}
-	if req.Replicas <= 0 {
-		req.Replicas = 1
-	}
-	if req.StorageSize == "" {
-		req.StorageSize = "2Gi"
-	}
-
-	backend, err := h.queries.GetDefaultMonitoringBackend(ctx)
-	if err != nil {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("default monitoring backend is not configured")
-	}
-	channels, err := h.queries.ListNotificationChannels(ctx, sqlc.ListNotificationChannelsParams{Limit: 1000, Offset: 0})
-	if err != nil {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, err
-	}
-	rules, err := h.queries.ListAlertRules(ctx, sqlc.ListAlertRulesParams{Limit: 1000, Offset: 0})
-	if err != nil {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, err
-	}
-	routing, err := h.renderSharedAlertmanagerConfig(ctx, channels, rules)
-	if err != nil {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, err
-	}
-	var config map[string]any
-	if err := yaml.Unmarshal([]byte(routing), &config); err != nil {
-		return SharedAlertmanagerRequest{}, nil, sqlc.MonitoringBackend{}, fmt.Errorf("failed to parse alertmanager config")
-	}
-
-	persistence := map[string]any{"enabled": true, "size": req.StorageSize}
-	if req.StorageClass != "" {
-		persistence["storageClass"] = req.StorageClass
-	}
-	values := map[string]any{
-		"replicaCount": req.Replicas,
-		"persistence":  persistence,
-		"config":       config,
-		"configmapReload": map[string]any{
-			"enabled": true,
-		},
-	}
-	return req, values, backend, nil
-}
-
-func (h *MonitoringHandler) renderSharedAlertmanagerConfig(ctx context.Context, channels []sqlc.NotificationChannel, rules []sqlc.AlertRule) (string, error) {
-	// Load every rule<->channel link for the rule set in ONE query and build a
-	// channel_id -> set(rule_id) map, instead of the old N+1 that ran
-	// ListChannelsForAlertRule for every rule on every shared Alertmanager
-	// Preview/Install/Upgrade/Replace (O(channels x rules) round-trips). Mirrors
-	// AlertingHandler.renderAlertmanagerConfig.
-	channelRuleSet := map[uuid.UUID]map[uuid.UUID]bool{}
-	if len(rules) > 0 {
-		ruleIDs := make([]uuid.UUID, 0, len(rules))
-		for _, rule := range rules {
-			ruleIDs = append(ruleIDs, rule.ID)
-		}
-		links, err := h.queries.ListAlertRuleChannelsByRules(ctx, ruleIDs)
-		if err != nil {
-			return "", err
-		}
-		for _, link := range links {
-			set := channelRuleSet[link.NotificationChannelID]
-			if set == nil {
-				set = map[uuid.UUID]bool{}
-				channelRuleSet[link.NotificationChannelID] = set
-			}
-			set[link.AlertRuleID] = true
-		}
-	}
-
-	receivers := []map[string]any{{"name": "null"}}
-	routes := []map[string]any{}
-	for _, channel := range channels {
-		if !channel.Enabled {
-			continue
-		}
-		receiverName := "channel-" + channel.ID.String()
-		receiver := map[string]any{"name": receiverName}
-		cfg := decodeJSONMap(channel.Configuration)
-		switch strings.ToLower(channel.ChannelType) {
-		case "slack", "webhook":
-			if webhook, ok := firstConfigString(cfg, "url", "webhook_url"); ok {
-				receiver["webhook_configs"] = []map[string]any{{"url": webhook, "send_resolved": true}}
-			}
-		case "email":
-			if email, ok := firstConfigString(cfg, "email", "address"); ok {
-				receiver["email_configs"] = []map[string]any{{"to": email, "send_resolved": true}}
-			}
-		default:
-			continue
-		}
-		receivers = append(receivers, receiver)
-		for _, rule := range rulesForChannel(rules, channelRuleSet[channel.ID]) {
-			routes = append(routes, map[string]any{
-				"receiver": receiverName,
-				"matchers": []string{fmt.Sprintf(`astronomer_rule_id="%s"`, rule.ID.String())},
-				"continue": true,
-			})
-		}
-	}
-	payload := map[string]any{
-		"global": map[string]any{
-			"resolve_timeout": "5m",
-		},
-		"route": map[string]any{
-			"receiver": "null",
-			"group_by": []string{"alertname", "astronomer_rule_id", "cluster"},
-			// Defaults match platform_settings alertmanager.* (DIR-08); monitoring
-			// stack render does not currently thread SettingsCache, so keep the
-			// same registry defaults here for parity with AlertingHandler.
-			"group_wait":      "30s",
-			"group_interval":  "5m",
-			"repeat_interval": "3h",
-			"routes":          routes,
-		},
-		"receivers": receivers,
-	}
-	raw, err := yaml.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-func defaultSharedThanosQueryURL(current string, req SharedThanosStackRequest) string {
-	if strings.TrimSpace(current) != "" {
-		return current
-	}
-	return fmt.Sprintf("http://%s-query-frontend.%s.svc.cluster.local:9090", defaultString(req.ReleaseName, "thanos"), defaultString(req.Namespace, "monitoring"))
-}
-
-func defaultSharedAlertmanagerURL(current string, req SharedAlertmanagerRequest) string {
-	if strings.TrimSpace(current) != "" {
-		return current
-	}
-	return fmt.Sprintf("http://%s.%s.svc.cluster.local:9093", defaultString(req.ReleaseName, "astronomer-alertmanager"), defaultString(req.Namespace, "monitoring"))
-}
-
-func sharedAlertmanagerReplaceRequired(metadata map[string]any, req SharedAlertmanagerRequest) (bool, []string) {
-	if len(metadata) == 0 || stringFromMap(metadata, "status") == "not_configured" || stringFromMap(metadata, "status") == "uninstalled" {
-		return false, nil
-	}
-	reasons := []string{}
-	if current := stringFromMap(metadata, "namespace"); current != "" && current != req.Namespace {
-		reasons = append(reasons, "namespace change")
-	}
-	if current := stringFromMap(metadata, "releaseName"); current != "" && current != req.ReleaseName {
-		reasons = append(reasons, "release name change")
-	}
-	if current := stringFromMap(metadata, "storageClass"); current != req.StorageClass {
-		reasons = append(reasons, "storage class change")
-	}
-	if current := stringFromMap(metadata, "storageSize"); current != "" && current != req.StorageSize {
-		reasons = append(reasons, "storage size change")
-	}
-	return len(reasons) > 0, reasons
-}
-
-func sharedThanosReplaceRequired(metadata map[string]any, req SharedThanosStackRequest) (bool, []string) {
-	if len(metadata) == 0 || stringFromMap(metadata, "status") == "not_configured" || stringFromMap(metadata, "status") == "uninstalled" {
-		return false, nil
-	}
-	reasons := []string{}
-	if current := stringFromMap(metadata, "namespace"); current != "" && current != req.Namespace {
-		reasons = append(reasons, "namespace change")
-	}
-	if current := stringFromMap(metadata, "releaseName"); current != "" && current != req.ReleaseName {
-		reasons = append(reasons, "release name change")
-	}
-	if current := stringFromMap(metadata, "storageConfigId"); current != req.StorageConfigID {
-		reasons = append(reasons, "object storage configuration change")
-	}
-	if current := stringFromMap(metadata, "objectStorageSecretName"); current != "" && current != req.ObjectStorageSecretName {
-		reasons = append(reasons, "object storage secret change")
-	}
-	return len(reasons) > 0, reasons
 }

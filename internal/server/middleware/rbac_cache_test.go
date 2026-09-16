@@ -387,6 +387,7 @@ func TestRBACCache_ClusterBindingNamespaceMapped(t *testing.T) {
 	}
 	if cluster == nil || global == nil {
 		t.Fatalf("expected one cluster and one global binding, got %+v", bindings)
+		return
 	}
 	if cluster.Namespace != "team-a" {
 		t.Fatalf("cluster binding namespace = %q, want %q", cluster.Namespace, "team-a")

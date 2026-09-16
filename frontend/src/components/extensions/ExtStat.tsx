@@ -1,4 +1,3 @@
-"use client";
 
 // §Schema Tier-1 — stat renderer. A single proxied object -> one labelled value
 // plus an optional delta. Text-only: value and delta go through closed-enum

@@ -92,15 +92,15 @@ spec:
                 WHERE n.nspname = 'public'
                   AND c.relkind IN ('r', 'p')
                   AND c.relname IN (
-                    'argo' || 'cd_baseline_ownership_decisions',
-                    'argo' || 'cd_cluster_proxy_tokens',
-                    'argo' || 'cd_managed_clusters',
-                    'argo' || 'cd_operation_events',
-                    'argo' || 'cd_operations',
-                    'argo' || 'cd_applications',
-                    'argo' || 'cd_instances',
-                    'fl' || 'eet_operation_targets',
-                    'fl' || 'eet_operations'
+                    'argocd_baseline_ownership_decisions',
+                    'argocd_cluster_proxy_tokens',
+                    'argocd_managed_clusters',
+                    'argocd_operation_events',
+                    'argocd_operations',
+                    'argocd_applications',
+                    'argocd_instances',
+                    'fleet_operation_targets',
+                    'fleet_operations'
                   );") || {
                 echo "Refusing release: PostgreSQL catalog inspection failed."
                 exit 1

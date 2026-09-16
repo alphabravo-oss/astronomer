@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * push keys that actually changed.
  */
 import { useMemo, useEffect, useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Pencil, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
@@ -18,6 +18,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { Textarea } from "@/components/ui/textarea";
 import { KeyStatusPanel } from "@/components/settings/key-status-panel";
+import { GovernanceFields } from "@/components/settings/governance-fields";
 import { toastInfo } from "@/lib/toast";
 import { useAppForm } from "@/lib/form";
 import {
@@ -132,7 +133,10 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
+      <form.AppForm>
+        <form.FormErrorSummary serverError={save.error?.message} />
+      </form.AppForm>
       <Section
         title="Branding"
         description="Logo, product name, colors. Applied across the dashboard chrome."
@@ -156,6 +160,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             {(field) => (
               <div className="flex items-center gap-3">
                 <Input
+                  name={field.name}
                   id="field-5257f27b-245"
                   type="text"
                   value={field.state.value}
@@ -351,6 +356,8 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
         </form.AppField>
       </Section>
 
+      <GovernanceFields form={form} />
+
       <Section
         title="Cluster registration TLS"
         description="Controls which curl variant the cluster-registration wizard shows by default and whether the public /api/v1/register/ca.crt endpoint serves a CA bundle."
@@ -452,7 +459,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
           const dirty = diffPlatformSettings(initial, values);
           const hasChanges = Object.keys(dirty).length > 0;
           return (
-            <div className="flex items-center justify-between sticky bottom-4 z-10 rounded-xl border border-border bg-popover/80 backdrop-blur p-3 shadow-sm">
+            <div className="flex items-center justify-between sticky bottom-4 z-10 rounded-xl border border-border bg-popover/80 backdrop-blur-sm p-3 shadow-xs">
               <p className="text-xs text-muted-foreground">
                 {hasChanges
                   ? `${Object.keys(dirty).length} unsaved change${Object.keys(dirty).length === 1 ? "" : "s"}`
@@ -522,7 +529,7 @@ function PlatformSummary({ onEdit }: { onEdit: () => void }) {
           <span className="text-xs text-muted-foreground">Product name</span>
           <span className="inline-flex items-center gap-2 text-sm text-foreground">
             <span
-              className="h-3.5 w-3.5 rounded border border-border"
+              className="h-3.5 w-3.5 rounded-sm border border-border"
               style={{ backgroundColor: g.branding.primaryColor }}
             />
             {g.branding.productName}
@@ -575,13 +582,13 @@ function PlatformSettingsPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Platform"
           title="Platform settings"

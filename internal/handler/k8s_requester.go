@@ -5,10 +5,14 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -16,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -48,8 +51,7 @@ func NewTunnelK8sRequester(hub *tunnel.Hub) *TunnelK8sRequester {
 // SetInternalPSK wires the shared-secret PSK that this requester uses
 // to authenticate to sibling pods' internal K8sRequest endpoint. Pass
 // the same value the InternalK8sHandler is configured with (typically
-// tunnel.DerivePSK(cfg.EncryptionKey)). Empty psk leaves the fallback
-// disabled.
+// cfg.InternalPSK). Empty psk leaves the fallback disabled.
 func (r *TunnelK8sRequester) SetInternalPSK(psk string) {
 	if r == nil {
 		return
@@ -103,7 +105,17 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		if !proceed {
 			return nil, fmt.Errorf("%w for cluster %q", ErrCircuitOpen, clusterID)
 		}
-		defer func() { finalize(retErr) }()
+		defer func() {
+			// CONNECT-time capability rejection is deterministic admission,
+			// not evidence that the tunnel is unhealthy. Treat it as healthy
+			// for breaker accounting so one read-only reconciler cannot poison
+			// unrelated reads for the same cluster.
+			if errors.Is(retErr, tunnel.ErrAgentCapabilityUnsupported) {
+				finalize(nil)
+				return
+			}
+			finalize(retErr)
+		}()
 	}
 
 	// Resolve the typed caller identity ONCE, here, so the direct path and the
@@ -175,6 +187,60 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		return nil, err
 	}
 	return &parsed, nil
+}
+
+// SupportsCapability returns the authoritative CONNECT-time capability for
+// the cluster's current agent without sending anything to that agent. It works
+// for both locally-owned WebSockets and cross-pod ownership through the same
+// authenticated internal channel used by Do. Unknown/disconnected ownership is
+// an error, allowing reconcilers to fail closed instead of assuming mutation
+// authority.
+func (r *TunnelK8sRequester) SupportsCapability(ctx context.Context, clusterID, capability string) (bool, error) {
+	if r == nil || r.hub == nil {
+		return false, fmt.Errorf("tunnel requester not configured")
+	}
+	if capability == "" {
+		return false, fmt.Errorf("capability is required")
+	}
+	if supported, connected := r.hub.SupportsAgentCapability(clusterID, capability); connected {
+		return supported, nil
+	}
+	if r.psk == "" {
+		return false, fmt.Errorf("cluster agent not connected")
+	}
+	loc := r.hub.Locator()
+	if loc == nil {
+		return false, fmt.Errorf("cluster agent not connected")
+	}
+	addr, err := loc.Lookup(ctx, clusterID)
+	if err != nil {
+		return false, fmt.Errorf("look up cluster agent owner: %w", err)
+	}
+	if addr == "" || addr == loc.Address() {
+		return false, fmt.Errorf("cluster agent not connected")
+	}
+	target := "http://" + addr + "/internal/tunnel/k8s/" + clusterID + "/capabilities/" + url.PathEscape(capability)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return false, fmt.Errorf("build sibling capability request: %w", err)
+	}
+	if err := tunnel.SignInternalK8sRequest(req, r.psk, clusterID, nil); err != nil {
+		return false, err
+	}
+	httpResp, err := internalK8sForwardClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("query sibling agent capability: %w", err)
+	}
+	defer func() { _ = httpResp.Body.Close() }()
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(httpResp.Body, 4<<10))
+		return false, fmt.Errorf("sibling capability endpoint %d: %s", httpResp.StatusCode, string(body))
+	}
+	var response tunnel.InternalAgentCapabilityResponse
+	if err := json.NewDecoder(io.LimitReader(httpResp.Body, 4<<10)).Decode(&response); err != nil {
+		return false, fmt.Errorf("decode sibling capability response: %w", err)
+	}
+	return response.Supported, nil
 }
 
 // readStreamFrame waits for one frame on the agent stream. Channels are
@@ -349,22 +415,21 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 		return nil, true, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(tunnel.InternalPSKHeader, r.psk)
-	// Defense-in-depth in-band marker proving sibling-pod origin; the
-	// receiver rejects requests without it even with a valid PSK.
-	req.Header.Set(tunnel.InternalSourceHeader, tunnel.InternalSourceValue)
 	// Thread the originating user's identity so the owner pod can emit a
 	// user-attributed cluster.k8s_proxy.forwarded audit row for the
 	// mutation it performs on our behalf. The calling pod ran the auth
 	// middleware, so ctx carries the authenticated user; unauthenticated
 	// internal callers (server reconcilers) leave it empty and the row is
 	// recorded with a NULL actor rather than being dropped.
-	if uid := middleware.AuthenticatedUserUUID(ctx); uid.Valid {
+	if uid := reqctx.UserUUID(ctx); uid.Valid {
 		if s, err := uid.Value(); err == nil {
 			if str, ok := s.(string); ok {
 				req.Header.Set(tunnel.InternalForwardedUserHeader, str)
 			}
 		}
+	}
+	if err := tunnel.SignInternalK8sRequest(req, r.psk, clusterID, payloadBytes); err != nil {
+		return nil, true, err
 	}
 
 	httpResp, err := internalK8sForwardClient.Do(req)
@@ -379,6 +444,9 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 		return nil, true, err
 	}
 	if httpResp.StatusCode >= 400 {
+		if httpResp.StatusCode == http.StatusPreconditionFailed {
+			return nil, true, fmt.Errorf("%w: sibling rejected operation", tunnel.ErrAgentCapabilityUnsupported)
+		}
 		return nil, true, fmt.Errorf("sibling internal k8s endpoint %d: %s", httpResp.StatusCode, string(respBytes))
 	}
 	var out protocol.K8sResponsePayload

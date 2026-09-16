@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
@@ -45,7 +47,7 @@ func TestRequirePermission_IgnoresQueryNamespace(t *testing.T) {
 		r.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				next.ServeHTTP(w, req.WithContext(
-					SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: "u"})))
+					reqctx.WithUser(req.Context(), &reqctx.User{ID: "u"})))
 			})
 		})
 		r.With(mw).Get(pattern, func(w http.ResponseWriter, _ *http.Request) {
@@ -110,7 +112,7 @@ func TestRequirePermission_ClusterWideGrantUnaffectedByQueryNamespace(t *testing
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			next.ServeHTTP(w, req.WithContext(
-				SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: "u"})))
+				reqctx.WithUser(req.Context(), &reqctx.User{ID: "u"})))
 		})
 	})
 	r.With(RequirePermission(engine, querier, rbac.ResourceServices, rbac.VerbList)).

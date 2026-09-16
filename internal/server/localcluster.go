@@ -111,7 +111,6 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 		Annotations:       row.Annotations,
 		Distribution:      row.Distribution,
 		AgentVersion:      row.AgentVersion,
-		LastHeartbeat:     row.LastHeartbeat,
 		KubernetesVersion: row.KubernetesVersion,
 		NodeCount:         row.NodeCount,
 		CreatedByID:       row.CreatedByID,

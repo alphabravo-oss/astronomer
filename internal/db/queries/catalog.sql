@@ -270,21 +270,42 @@ RETURNING *;
 -- name: UpdateInstalledChartStatus :exec
 UPDATE installed_charts SET status = $2, revision = $3 WHERE id = $1;
 
--- name: ListInstalledChartsForDriftSweep :many
--- Active installed charts the tool-drift sweep probes against their live
--- helm release. Only rows that are supposed to be deployed (not mid-install
--- or already removed) are worth comparing.
-SELECT * FROM installed_charts
-WHERE status IN ('installed', 'deployed', 'upgraded')
-ORDER BY drift_checked_at ASC NULLS FIRST, updated_at ASC
-LIMIT $1;
+-- name: ClaimInstalledChartsForDriftSweep :many
+-- Claim a fair bounded batch so periodic deliveries can run on every worker
+-- replica without probing the same Helm release twice.
+WITH candidates AS (
+    SELECT id
+    FROM installed_charts
+    WHERE status IN ('installed', 'deployed', 'upgraded')
+      AND (drift_locked_until IS NULL OR drift_locked_until < now())
+    ORDER BY drift_checked_at ASC NULLS FIRST, updated_at ASC, id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT sqlc.arg(query_limit)
+)
+UPDATE installed_charts AS chart
+SET drift_locked_until = sqlc.arg(locked_until),
+    drift_claim_token = sqlc.arg(claim_token)
+FROM candidates
+WHERE chart.id = candidates.id
+RETURNING chart.*;
 
--- name: MarkInstalledChartDrift :exec
+-- name: MarkInstalledChartDrift :execrows
 UPDATE installed_charts SET
     drift_detected = $2,
     drift_detail = $3,
-    drift_checked_at = now()
-WHERE id = $1;
+    drift_checked_at = now(),
+    drift_locked_until = NULL,
+    drift_claim_token = NULL
+WHERE id = $1
+  AND drift_claim_token = sqlc.arg(claim_token);
+
+-- name: ReleaseInstalledChartDriftClaim :execrows
+UPDATE installed_charts
+SET drift_checked_at = now(),
+    drift_locked_until = NULL,
+    drift_claim_token = NULL
+WHERE id = sqlc.arg(id)
+  AND drift_claim_token = sqlc.arg(claim_token);
 
 -- name: AdoptInstalledChartByRelease :one
 UPDATE installed_charts SET

@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 )
@@ -19,7 +20,7 @@ import (
 func grafanaAuthed(method, target, body string) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	req.Header.Set("Idempotency-Key", "grafana-lifecycle-test")
-	return req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	return req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.NewString(), AuthMethod: "jwt",
 	}))
 }
@@ -107,7 +108,7 @@ func TestSharedGrafanaPreviewIsClusterIPOnly(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", strings.NewReader(sharedGrafanaBody))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.NewString(), AuthMethod: "jwt",
 	}))
 	h.PreviewSharedGrafanaStack(rec, req)
@@ -227,7 +228,7 @@ func TestSharedGrafanaStatusProjectsRequiredFields(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/monitoring/grafana/status/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.NewString(), AuthMethod: "jwt",
 	}))
 	h.GetSharedGrafanaStatus(rec, req)
@@ -374,7 +375,7 @@ func TestSharedGrafanaThanosDatasourceOmittedWhenMissing(t *testing.T) {
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings/monitoring/grafana/preview/", strings.NewReader(sharedGrafanaBody))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.NewString(), AuthMethod: "jwt",
 	}))
 	h.PreviewSharedGrafanaStack(rec, req)
@@ -506,6 +507,26 @@ func TestSharedGrafanaDatasourceYAMLQuotesURL(t *testing.T) {
 	}
 	if !strings.Contains(got, "evil.example") {
 		t.Fatalf("quoted URL missing from:\n%s", got)
+	}
+}
+
+func TestSharedGrafanaProjectsDedicatedLokiQueryKey(t *testing.T) {
+	h := &MonitoringHandler{proxyImage: "example/server:latest"}
+	values := h.sharedGrafanaHelmValues(SharedGrafanaRequest{
+		Namespace: "monitoring", ReleaseName: sharedGrafanaDefaultRelease, Replicas: 1,
+	}, sqlc.MonitoringBackend{})
+	raw, err := json.Marshal(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(raw)
+	for _, required := range []string{
+		`"LOKI_QUERY_KEY"`, `"astronomer-loki-query-key"`,
+		`"kind":"Secret"`, `randAlphaNum 48`,
+	} {
+		if !strings.Contains(rendered, required) {
+			t.Fatalf("Grafana values missing %s: %s", required, rendered)
+		}
 	}
 }
 

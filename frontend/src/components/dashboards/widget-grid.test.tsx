@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { WidgetGrid } from "./widget-grid";
 import type { RenderedWidget } from "@/lib/api/dashboards";
 
@@ -31,5 +31,25 @@ describe("WidgetGrid — stable fetch scheduling", () => {
 
     // Still exactly one fetch across all the parent re-renders.
     expect(firstFetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses non-HTTPS iframe URLs from a render payload", async () => {
+    const fetcher = vi.fn<() => Promise<RenderedWidget[]>>().mockResolvedValue([
+      {
+        id: "unsafe-widget",
+        name: "Unsafe widget",
+        widgetType: "url_iframe",
+        specResolved: { url: "javascript:alert(document.domain)" },
+        grid: { x: 0, y: 0, w: 4, h: 2 },
+        refreshSeconds: 60,
+      },
+    ]);
+
+    const { container } = render(<WidgetGrid fetcher={fetcher} />);
+
+    expect(
+      await screen.findByText("Missing or unsafe HTTPS URL"),
+    ).toBeInTheDocument();
+    expect(container.querySelector("iframe")).toBeNull();
   });
 });

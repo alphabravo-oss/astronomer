@@ -38,12 +38,8 @@ func newProxyRouterWithNative(t *testing.T, rows []sqlc.NativeRbacRule) (http.Ha
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: nil}, // coarse denies all
-		NativeAuthz: newNativeRBACAuthorizer(fakeNativeRuleQuerier{rows: rows}),
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: nil}}, ClusterResources: // coarse denies all
+	ClusterResourceDependencies{NativeAuthz: newNativeRBACAuthorizer(fakeNativeRuleQuerier{rows: rows})}, StreamingInternal:                                                                                    StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())},
 	})
 	return router, token
 }

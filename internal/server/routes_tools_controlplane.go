@@ -17,7 +17,7 @@ import (
 func requireSuperuser(deps RouterDependencies) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, ok := handler.RequireSuperuser(w, r, deps.AuthQueries, handler.SuperuserGateConfig{
+			if _, ok := handler.RequireSuperuser(w, r, deps.CoreAuth.AuthQueries, handler.SuperuserGateConfig{
 				ForbiddenMessage: "This action requires superuser privileges",
 			}); !ok {
 				return
@@ -34,132 +34,121 @@ func requireSuperuser(deps RouterDependencies) func(http.Handler) http.Handler {
 func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 	mutationWriteScope := appmiddleware.RequireWriteScopeForMutations(iauth.ScopeWriteClusters)
 
-	if deps.Tools != nil {
+	if deps.ClusterResources.Tools != nil {
 		r.Route("/tools", func(r chi.Router) {
-			r.Get("/controller/status/", deps.Tools.ControllerStatus)
-			r.Get("/operations/", deps.Tools.ListOperations)
-			r.Get("/operations/{id}/", deps.Tools.GetOperation)
-			r.With(mutationWriteScope).Post("/operations/{id}/retry/", deps.Tools.RetryOperation)
-			r.Get("/", deps.Tools.List)
-			r.Get("/{id}/", deps.Tools.Get)
-			r.Get("/slug/{slug}/", deps.Tools.GetBySlug)
-			r.Get("/{slug:[^/]+}/", deps.Tools.GetBySlug)
-			r.Post("/{slug}/preview/", deps.Tools.Preview)
-			r.With(mutationWriteScope).Post("/{slug}/install/", deps.Tools.Install)
-			r.With(mutationWriteScope).Put("/{slug}/upgrade/", deps.Tools.Upgrade)
-			r.With(mutationWriteScope).Delete("/{slug}/uninstall/", deps.Tools.Uninstall)
-			r.With(mutationWriteScope).Post("/{slug}/adopt/", deps.Tools.Adopt)
+			r.Get("/controller/status/", deps.ClusterResources.Tools.ControllerStatus)
+			r.Get("/operations/", deps.ClusterResources.Tools.ListOperations)
+			r.Get("/operations/{id}/", deps.ClusterResources.Tools.GetOperation)
+			r.With(mutationWriteScope).Post("/operations/{id}/retry/", deps.ClusterResources.Tools.RetryOperation)
+			r.Get("/", deps.ClusterResources.Tools.List)
+			r.Get("/{id}/", deps.ClusterResources.Tools.Get)
+			r.Get("/slug/{slug}/", deps.ClusterResources.Tools.GetBySlug)
+			r.Get("/{slug:[^/]+}/", deps.ClusterResources.Tools.GetBySlug)
+			r.Post("/{slug}/preview/", deps.ClusterResources.Tools.Preview)
+			r.With(mutationWriteScope).Post("/{slug}/install/", deps.ClusterResources.Tools.Install)
+			r.With(mutationWriteScope).Put("/{slug}/upgrade/", deps.ClusterResources.Tools.Upgrade)
+			r.With(mutationWriteScope).Delete("/{slug}/uninstall/", deps.ClusterResources.Tools.Uninstall)
+			r.With(mutationWriteScope).Post("/{slug}/rollback/", deps.ClusterResources.Tools.Rollback)
+			r.With(mutationWriteScope).Post("/{slug}/adopt/", deps.ClusterResources.Tools.Adopt)
 		})
-		r.Get("/clusters/{cluster_id}/tools/status/", deps.Tools.ClusterStatus)
+		r.Get("/clusters/{cluster_id}/tools/status/", deps.ClusterResources.Tools.ClusterStatus)
 	}
 
-	if deps.ControlPlane != nil {
+	if deps.ClusterResources.ControlPlane != nil {
 		// The controllers surface is platform-admin: policy, alert
 		// acknowledgement, and alertmanager silences are fleet-wide.
 		// Mutations stay superuser-only; GETs require alerts:read/list so any
 		// authenticated principal cannot enumerate fleet policy (SEC-05).
 		superuserOnly := requireSuperuser(deps)
-		alertsRead := requireAnyPermission(deps.RBACEngine, deps.RBACQueries,
+		alertsRead := requireAnyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries,
 			permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbRead},
 			permissionRequirement{resource: rbac.ResourceAlerts, verb: rbac.VerbList},
 		)
-		r.With(alertsRead).Get("/controllers/status/", deps.ControlPlane.Status)
-		r.With(alertsRead).Get("/controllers/policy/", deps.ControlPlane.GetPolicy)
-		r.With(superuserOnly).Put("/controllers/policy/", deps.ControlPlane.UpdatePolicy)
-		r.With(alertsRead).Get("/controllers/alerts/", deps.ControlPlane.ListAlerts)
-		r.With(superuserOnly).Post("/controllers/alerts/{id}/acknowledge/", deps.ControlPlane.AcknowledgeAlert)
-		r.With(alertsRead).Get("/controllers/silences/", deps.ControlPlane.ListSilences)
-		r.With(superuserOnly).Post("/controllers/silences/", deps.ControlPlane.CreateSilence)
-		r.With(superuserOnly).Delete("/controllers/silences/{id}/", deps.ControlPlane.DeleteSilence)
+		r.With(alertsRead).Get("/controllers/status/", deps.ClusterResources.ControlPlane.Status)
+		r.With(alertsRead).Get("/controllers/policy/", deps.ClusterResources.ControlPlane.GetPolicy)
+		r.With(superuserOnly).Put("/controllers/policy/", deps.ClusterResources.ControlPlane.UpdatePolicy)
+		r.With(alertsRead).Get("/controllers/alerts/", deps.ClusterResources.ControlPlane.ListAlerts)
+		r.With(superuserOnly).Post("/controllers/alerts/{id}/acknowledge/", deps.ClusterResources.ControlPlane.AcknowledgeAlert)
+		r.With(alertsRead).Get("/controllers/silences/", deps.ClusterResources.ControlPlane.ListSilences)
+		r.With(superuserOnly).Post("/controllers/silences/", deps.ClusterResources.ControlPlane.CreateSilence)
+		r.With(superuserOnly).Delete("/controllers/silences/{id}/", deps.ClusterResources.ControlPlane.DeleteSilence)
 	}
 
 	// Sprint 072 — read-only anomaly baseline inspection.
-	if deps.Anomaly != nil {
+	if deps.AdminPlatform.Anomaly != nil {
 		r.Route("/anomaly-baselines", func(r chi.Router) {
-			r.Get("/", deps.Anomaly.List)
-			r.Get("/{id}/", deps.Anomaly.Get)
+			r.Get("/", deps.AdminPlatform.Anomaly.List)
+			r.Get("/{id}/", deps.AdminPlatform.Anomaly.Get)
 		})
 	}
 
-	if deps.Backups != nil {
-		r.With(featureGate("feature.backups", deps.SettingsCache)).Route("/backups", func(r chi.Router) {
-			r.Get("/controller/status/", deps.Backups.ControllerStatus)
-			r.Get("/", deps.Backups.ListBackups)
+	if deps.ClusterResources.Backups != nil {
+		r.With(featureGate("feature.backups", deps.CoreAuth.SettingsCache)).Route("/backups", func(r chi.Router) {
+			r.Get("/controller/status/", deps.ClusterResources.Backups.ControllerStatus)
+			r.Get("/", deps.ClusterResources.Backups.ListBackups)
 			// Backup/restore mutations run destructive Velero operations against a
 			// managed cluster, so they carry the write-scope backstop (same
 			// contract as the catalog/workload subtrees: reads + JWT sessions +
 			// legacy empty-scope tokens pass; RBAC stays primary in-handler).
-			r.With(mutationWriteScope).Post("/", deps.Backups.CreateBackup)
-			// Alias for the frontend: GET /backups/runs/ lists backup runs in
-			// the same shape as GET /backups/. The frontend's "runs" tab calls
-			// this URL; without the alias the chi router 404s the path.
-			r.Get("/runs/", deps.Backups.ListBackups)
-			r.Get("/{id}/", deps.Backups.GetBackup)
-			r.With(mutationWriteScope).Delete("/{id}/", deps.Backups.DeleteBackup)
-			r.With(mutationWriteScope).Post("/{id}/restore/", deps.Backups.CreateRestoreByBackup)
-			r.Get("/restores/", deps.Backups.ListRestores)
-			r.Get("/restores/{id}/", deps.Backups.GetRestore)
-			r.Get("/storage/", deps.Backups.ListStorageConfigs)
-			r.With(mutationWriteScope).Post("/storage/", deps.Backups.CreateStorageConfig)
-			r.Get("/storage/{id}/", deps.Backups.GetStorageConfig)
-			r.With(mutationWriteScope).Put("/storage/{id}/", deps.Backups.UpdateStorageConfig)
-			r.With(mutationWriteScope).Delete("/storage/{id}/", deps.Backups.DeleteStorageConfig)
-			r.With(mutationWriteScope).Post("/storage/{id}/test/", deps.Backups.TestStorageConfig)
-			r.With(mutationWriteScope).Post("/storage/{id}/test-connection/", deps.Backups.TestStorageConfig)
-			// Python-named alias paths (storage-configs/) so both clients work.
-			r.Get("/storage-configs/", deps.Backups.ListStorageConfigs)
-			r.With(mutationWriteScope).Post("/storage-configs/", deps.Backups.CreateStorageConfig)
-			r.Get("/storage-configs/{id}/", deps.Backups.GetStorageConfig)
-			r.With(mutationWriteScope).Put("/storage-configs/{id}/", deps.Backups.UpdateStorageConfig)
-			r.With(mutationWriteScope).Delete("/storage-configs/{id}/", deps.Backups.DeleteStorageConfig)
-			r.With(mutationWriteScope).Post("/storage-configs/{id}/test-connection/", deps.Backups.TestStorageConfig)
-			r.Get("/schedules/", deps.Backups.ListSchedules)
-			r.With(mutationWriteScope).Post("/schedules/", deps.Backups.CreateSchedule)
-			r.Get("/schedules/{id}/", deps.Backups.GetSchedule)
-			r.With(mutationWriteScope).Put("/schedules/{id}/", deps.Backups.UpdateSchedule)
-			r.With(mutationWriteScope).Delete("/schedules/{id}/", deps.Backups.DeleteSchedule)
-			r.With(mutationWriteScope).Post("/schedules/{id}/trigger-now/", deps.Backups.TriggerSchedule)
+			r.With(mutationWriteScope).Post("/", deps.ClusterResources.Backups.CreateBackup)
+			r.Get("/{id}/", deps.ClusterResources.Backups.GetBackup)
+			r.With(mutationWriteScope).Delete("/{id}/", deps.ClusterResources.Backups.DeleteBackup)
+			r.With(mutationWriteScope).Post("/{id}/restore/", deps.ClusterResources.Backups.CreateRestoreByBackup)
+			r.Get("/restores/", deps.ClusterResources.Backups.ListRestores)
+			r.Get("/restores/{id}/", deps.ClusterResources.Backups.GetRestore)
+			r.Get("/storage/", deps.ClusterResources.Backups.ListStorageConfigs)
+			r.With(mutationWriteScope).Post("/storage/", deps.ClusterResources.Backups.CreateStorageConfig)
+			r.Get("/storage/{id}/", deps.ClusterResources.Backups.GetStorageConfig)
+			r.With(mutationWriteScope).Put("/storage/{id}/", deps.ClusterResources.Backups.UpdateStorageConfig)
+			r.With(mutationWriteScope).Delete("/storage/{id}/", deps.ClusterResources.Backups.DeleteStorageConfig)
+			r.With(mutationWriteScope).Post("/storage/{id}/test-connection/", deps.ClusterResources.Backups.TestStorageConfig)
+			r.Get("/schedules/", deps.ClusterResources.Backups.ListSchedules)
+			r.With(mutationWriteScope).Post("/schedules/", deps.ClusterResources.Backups.CreateSchedule)
+			r.Get("/schedules/{id}/", deps.ClusterResources.Backups.GetSchedule)
+			r.With(mutationWriteScope).Put("/schedules/{id}/", deps.ClusterResources.Backups.UpdateSchedule)
+			r.With(mutationWriteScope).Delete("/schedules/{id}/", deps.ClusterResources.Backups.DeleteSchedule)
+			r.With(mutationWriteScope).Post("/schedules/{id}/trigger-now/", deps.ClusterResources.Backups.TriggerSchedule)
 		})
 	}
 
-	if deps.Catalog != nil {
+	if deps.AdminPlatform.Catalog != nil {
 		// Per-route authorization for repository CRUD. These routes previously
 		// sat behind ONLY the feature-flag gate, so a zero-grant viewer could
 		// add/mutate/sync repositories. docs/security-sensitive-routes.json
 		// already declares the catalog:create/update/delete requirement; these
 		// gates make the code honor the doc. sync + test-connection are
 		// classified as catalog:update (they mutate/probe an existing repo).
-		catalogCreate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbCreate)
-		catalogUpdate := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbUpdate)
-		catalogDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
+		catalogCreate := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbCreate)
+		catalogUpdate := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbUpdate)
+		catalogDelete := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
 		// SEC-01: list/get carry live auth_config (redacted) and must not be
 		// world-readable to every authenticated principal.
-		catalogRead := requireAnyPermission(deps.RBACEngine, deps.RBACQueries,
+		catalogRead := requireAnyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries,
 			permissionRequirement{resource: rbac.ResourceCatalog, verb: rbac.VerbRead},
 			permissionRequirement{resource: rbac.ResourceCatalog, verb: rbac.VerbList},
 		)
-		r.With(featureGate("feature.catalog", deps.SettingsCache)).Route("/catalog", func(r chi.Router) {
-			r.Get("/controller/status/", deps.Catalog.ControllerStatus)
-			r.Get("/operations/", deps.Catalog.ListOperations)
-			r.Get("/operations/{id}/", deps.Catalog.GetOperation)
-			r.With(mutationWriteScope).Post("/operations/{id}/retry/", deps.Catalog.RetryOperation)
-			r.With(catalogRead).Get("/repositories/", deps.Catalog.ListRepos)
-			r.With(mutationWriteScope, catalogCreate).Post("/repositories/", deps.Catalog.CreateRepo)
-			r.With(catalogRead).Get("/repositories/{id}/", deps.Catalog.GetRepo)
-			r.With(mutationWriteScope, catalogUpdate).Put("/repositories/{id}/", deps.Catalog.UpdateRepo)
-			r.With(mutationWriteScope, catalogDelete).Delete("/repositories/{id}/", deps.Catalog.DeleteRepo)
-			r.With(mutationWriteScope, catalogUpdate).Post("/repositories/{id}/sync/", deps.Catalog.SyncRepo)
-			r.With(mutationWriteScope, catalogUpdate).Post("/repositories/{id}/test-connection/", deps.Catalog.TestRepoConnection)
+		r.With(featureGate("feature.catalog", deps.CoreAuth.SettingsCache)).Route("/catalog", func(r chi.Router) {
+			r.Get("/controller/status/", deps.AdminPlatform.Catalog.ControllerStatus)
+			r.Get("/operations/", deps.AdminPlatform.Catalog.ListOperations)
+			r.Get("/operations/{id}/", deps.AdminPlatform.Catalog.GetOperation)
+			r.With(mutationWriteScope).Post("/operations/{id}/retry/", deps.AdminPlatform.Catalog.RetryOperation)
+			r.With(catalogRead).Get("/repositories/", deps.AdminPlatform.Catalog.ListRepos)
+			r.With(mutationWriteScope, catalogCreate).Post("/repositories/", deps.AdminPlatform.Catalog.CreateRepo)
+			r.With(catalogRead).Get("/repositories/{id}/", deps.AdminPlatform.Catalog.GetRepo)
+			r.With(mutationWriteScope, catalogUpdate).Put("/repositories/{id}/", deps.AdminPlatform.Catalog.UpdateRepo)
+			r.With(mutationWriteScope, catalogDelete).Delete("/repositories/{id}/", deps.AdminPlatform.Catalog.DeleteRepo)
+			r.With(mutationWriteScope, catalogUpdate).Post("/repositories/{id}/sync/", deps.AdminPlatform.Catalog.SyncRepo)
+			r.With(mutationWriteScope, catalogUpdate).Post("/repositories/{id}/test-connection/", deps.AdminPlatform.Catalog.TestRepoConnection)
 			// Chart handlers perform object-level repository visibility checks.
 			// The collection gate admits project-scoped catalog readers so the
 			// handler can bind ?project_id to the exact tenant before returning.
-			catalogBrowse := requireCollectionPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
-			r.With(catalogBrowse).Get("/charts/", deps.Catalog.ListCharts)
-			r.With(catalogBrowse).Get("/charts/{id}/", deps.Catalog.GetChart)
-			r.With(catalogBrowse).Get("/charts/{id}/versions/", deps.Catalog.ListChartVersions)
-			r.With(catalogBrowse).Get("/charts/{id}/readme/", deps.Catalog.GetChartReadme)
-			r.With(catalogBrowse).Get("/charts/{id}/values/", deps.Catalog.GetChartValues)
-			r.Get("/installed/", deps.Catalog.ListInstalledCharts)
+			catalogBrowse := requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
+			r.With(catalogBrowse).Get("/charts/", deps.AdminPlatform.Catalog.ListCharts)
+			r.With(catalogBrowse).Get("/charts/{id}/", deps.AdminPlatform.Catalog.GetChart)
+			r.With(catalogBrowse).Get("/charts/{id}/versions/", deps.AdminPlatform.Catalog.ListChartVersions)
+			r.With(catalogBrowse).Get("/charts/{id}/readme/", deps.AdminPlatform.Catalog.GetChartReadme)
+			r.With(catalogBrowse).Get("/charts/{id}/values/", deps.AdminPlatform.Catalog.GetChartValues)
+			r.Get("/installed/", deps.AdminPlatform.Catalog.ListInstalledCharts)
 			// NEW-1: helm install/upgrade/uninstall are cluster-mutating (they
 			// run helm against a managed cluster), but this Catalog subtree was
 			// never wired through the GATE-0 write-scope backstop. A read-scoped
@@ -167,12 +156,12 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			// helm lifecycle routes carry mutationWriteScope (same contract as
 			// the workload/node/resource subtrees: reads + JWT + legacy
 			// empty-scope tokens pass through; RBAC stays primary underneath).
-			r.With(mutationWriteScope).Post("/installed/", deps.Catalog.CreateInstalledChart)
-			r.With(mutationWriteScope).Put("/installed/{id}/upgrade/", deps.Catalog.UpgradeInstalledChart)
-			r.With(mutationWriteScope).Post("/installed/{id}/rollback/", deps.Catalog.RollbackInstalledChart)
-			r.With(mutationWriteScope).Delete("/installed/{id}/", deps.Catalog.DeleteInstalledChart)
-			r.Get("/installed/{id}/values/", deps.Catalog.GetInstalledChartValues)
-			r.Get("/installed/{id}/revisions/", deps.Catalog.ListInstalledChartRevisions)
+			r.With(mutationWriteScope).Post("/installed/", deps.AdminPlatform.Catalog.CreateInstalledChart)
+			r.With(mutationWriteScope).Put("/installed/{id}/upgrade/", deps.AdminPlatform.Catalog.UpgradeInstalledChart)
+			r.With(mutationWriteScope).Post("/installed/{id}/rollback/", deps.AdminPlatform.Catalog.RollbackInstalledChart)
+			r.With(mutationWriteScope).Delete("/installed/{id}/", deps.AdminPlatform.Catalog.DeleteInstalledChart)
+			r.Get("/installed/{id}/values/", deps.AdminPlatform.Catalog.GetInstalledChartValues)
+			r.Get("/installed/{id}/revisions/", deps.AdminPlatform.Catalog.ListInstalledChartRevisions)
 		})
 
 		// Sprint 082 — per-cluster Apps tab. Lives outside the
@@ -183,18 +172,18 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 		// the admin /catalog/installed/ endpoint, but the response
 		// shape is enriched with joined chart metadata so the UI
 		// can render the list with a single fetch.
-		appsClusterRead := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
-		r.With(appsClusterRead).Get("/clusters/{cluster_id}/apps/", deps.Catalog.ListClusterApps)
+		appsClusterRead := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)
+		r.With(appsClusterRead).Get("/clusters/{cluster_id}/apps/", deps.AdminPlatform.Catalog.ListClusterApps)
 		// Rancher-style bulk "Delete failed installs". Permission is
 		// catalog:delete (the per-row uninstall affordance) rather
 		// than clusters:update — the action only touches the
 		// installed_charts namespace for this cluster.
-		appsCatalogDelete := requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
-		r.With(appsCatalogDelete).Delete("/clusters/{cluster_id}/apps/failed/", deps.Catalog.DeleteFailedClusterApps)
+		appsCatalogDelete := requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbDelete)
+		r.With(appsCatalogDelete).Delete("/clusters/{cluster_id}/apps/failed/", deps.AdminPlatform.Catalog.DeleteFailedClusterApps)
 	}
 
-	if deps.ChartRatings != nil {
-		catalogBrowse := requireCollectionPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
+	if deps.AdminPlatform.ChartRatings != nil {
+		catalogBrowse := requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
 		// Per-chart rating CRUD lives under /charts/{chart_id}/ratings/
 		// rather than nested inside the catalog block above. Reason:
 		// the catalog block is feature-gated behind feature.catalog;
@@ -202,45 +191,45 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 		// has hidden the catalog UX, so they can't be lost on a feature
 		// flag toggle.
 		r.Route("/charts/{chart_id}/ratings", func(r chi.Router) {
-			r.Post("/", deps.ChartRatings.CreateRating)
-			r.Get("/", deps.ChartRatings.ListRatings)
-			r.Get("/aggregate/", deps.ChartRatings.GetAggregate)
-			r.Get("/mine/", deps.ChartRatings.GetMyRating)
-			r.Put("/{rating_id}/", deps.ChartRatings.UpdateRating)
-			r.Delete("/{rating_id}/", deps.ChartRatings.DeleteRating)
+			r.Post("/", deps.AdminPlatform.ChartRatings.CreateRating)
+			r.Get("/", deps.AdminPlatform.ChartRatings.ListRatings)
+			r.Get("/aggregate/", deps.AdminPlatform.ChartRatings.GetAggregate)
+			r.Get("/mine/", deps.AdminPlatform.ChartRatings.GetMyRating)
+			r.Put("/{rating_id}/", deps.AdminPlatform.ChartRatings.UpdateRating)
+			r.Delete("/{rating_id}/", deps.AdminPlatform.ChartRatings.DeleteRating)
 		})
 		r.Route("/catalog/recommendations", func(r chi.Router) {
-			r.With(catalogBrowse).Get("/popular/", deps.ChartRatings.PopularRecommendations)
-			r.With(catalogBrowse).Get("/similar/{chart_id}/", deps.ChartRatings.SimilarRecommendations)
+			r.With(catalogBrowse).Get("/popular/", deps.AdminPlatform.ChartRatings.PopularRecommendations)
+			r.With(catalogBrowse).Get("/similar/{chart_id}/", deps.AdminPlatform.ChartRatings.SimilarRecommendations)
 		})
 	}
 
-	if deps.Logging != nil {
+	if deps.ClusterResources.Logging != nil {
 		r.Route("/logging", func(r chi.Router) {
-			r.Get("/controller/status/", deps.Logging.ControllerStatus)
-			r.Get("/operations/", deps.Logging.ListOperations)
-			r.Get("/operations/{id}/", deps.Logging.GetOperation)
-			r.With(mutationWriteScope).Post("/operations/{id}/retry/", deps.Logging.RetryOperation)
-			r.Get("/outputs/", deps.Logging.ListOutputs)
-			r.With(mutationWriteScope).Post("/outputs/", deps.Logging.CreateOutput)
-			r.With(mutationWriteScope).Put("/outputs/{id}/", deps.Logging.UpdateOutput)
-			r.With(mutationWriteScope).Delete("/outputs/{id}/", deps.Logging.DeleteOutput)
-			r.With(mutationWriteScope).Post("/outputs/{id}/test/", deps.Logging.TestOutput)
-			r.With(mutationWriteScope).Post("/outputs/{id}/enable/", deps.Logging.EnableOutput)
-			r.With(mutationWriteScope).Post("/outputs/{id}/disable/", deps.Logging.DisableOutput)
-			r.Post("/outputs/{id}/query/", deps.Logging.QueryOutput)
-			r.With(mutationWriteScope).Post("/outputs/{id}/rotate-token/", deps.Logging.RotateOutputToken)
-			r.Get("/saved-searches/", deps.Logging.ListSavedSearches)
-			r.With(mutationWriteScope).Post("/saved-searches/", deps.Logging.CreateSavedSearch)
-			r.With(mutationWriteScope).Put("/saved-searches/{id}/", deps.Logging.UpdateSavedSearch)
-			r.With(mutationWriteScope).Delete("/saved-searches/{id}/", deps.Logging.DeleteSavedSearch)
-			r.Get("/pipelines/", deps.Logging.ListPipelines)
-			r.With(mutationWriteScope).Post("/pipelines/", deps.Logging.CreatePipeline)
-			r.With(mutationWriteScope).Put("/pipelines/{id}/", deps.Logging.UpdatePipeline)
-			r.With(mutationWriteScope).Delete("/pipelines/{id}/", deps.Logging.DeletePipeline)
-			r.With(mutationWriteScope).Post("/pipelines/{id}/enable/", deps.Logging.EnablePipeline)
-			r.With(mutationWriteScope).Post("/pipelines/{id}/disable/", deps.Logging.DisablePipeline)
-			r.Get("/pipelines/{id}/fluentbit-config/", deps.Logging.FluentbitConfig)
+			r.Get("/controller/status/", deps.ClusterResources.Logging.ControllerStatus)
+			r.Get("/operations/", deps.ClusterResources.Logging.ListOperations)
+			r.Get("/operations/{id}/", deps.ClusterResources.Logging.GetOperation)
+			r.With(mutationWriteScope).Post("/operations/{id}/retry/", deps.ClusterResources.Logging.RetryOperation)
+			r.Get("/outputs/", deps.ClusterResources.Logging.ListOutputs)
+			r.With(mutationWriteScope).Post("/outputs/", deps.ClusterResources.Logging.CreateOutput)
+			r.With(mutationWriteScope).Put("/outputs/{id}/", deps.ClusterResources.Logging.UpdateOutput)
+			r.With(mutationWriteScope).Delete("/outputs/{id}/", deps.ClusterResources.Logging.DeleteOutput)
+			r.With(mutationWriteScope).Post("/outputs/{id}/test/", deps.ClusterResources.Logging.TestOutput)
+			r.With(mutationWriteScope).Post("/outputs/{id}/enable/", deps.ClusterResources.Logging.EnableOutput)
+			r.With(mutationWriteScope).Post("/outputs/{id}/disable/", deps.ClusterResources.Logging.DisableOutput)
+			r.Post("/outputs/{id}/query/", deps.ClusterResources.Logging.QueryOutput)
+			r.With(mutationWriteScope).Post("/outputs/{id}/rotate-token/", deps.ClusterResources.Logging.RotateOutputToken)
+			r.Get("/saved-searches/", deps.ClusterResources.Logging.ListSavedSearches)
+			r.With(mutationWriteScope).Post("/saved-searches/", deps.ClusterResources.Logging.CreateSavedSearch)
+			r.With(mutationWriteScope).Put("/saved-searches/{id}/", deps.ClusterResources.Logging.UpdateSavedSearch)
+			r.With(mutationWriteScope).Delete("/saved-searches/{id}/", deps.ClusterResources.Logging.DeleteSavedSearch)
+			r.Get("/pipelines/", deps.ClusterResources.Logging.ListPipelines)
+			r.With(mutationWriteScope).Post("/pipelines/", deps.ClusterResources.Logging.CreatePipeline)
+			r.With(mutationWriteScope).Put("/pipelines/{id}/", deps.ClusterResources.Logging.UpdatePipeline)
+			r.With(mutationWriteScope).Delete("/pipelines/{id}/", deps.ClusterResources.Logging.DeletePipeline)
+			r.With(mutationWriteScope).Post("/pipelines/{id}/enable/", deps.ClusterResources.Logging.EnablePipeline)
+			r.With(mutationWriteScope).Post("/pipelines/{id}/disable/", deps.ClusterResources.Logging.DisablePipeline)
+			r.Get("/pipelines/{id}/fluentbit-config/", deps.ClusterResources.Logging.FluentbitConfig)
 		})
 	}
 

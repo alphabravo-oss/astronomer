@@ -1,4 +1,4 @@
-import type { AuditLogQueryParams } from "@/lib/api";
+import type { AuditLogQueryParams } from "@/lib/api/audit";
 
 export const PAGE_SIZE = 50;
 

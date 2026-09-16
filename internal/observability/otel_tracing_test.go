@@ -2,7 +2,6 @@ package observability
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"go.opentelemetry.io/otel"
@@ -15,15 +14,7 @@ import (
 func TestInitTracing_DisabledByDefault(t *testing.T) {
 	t.Parallel()
 
-	// Cache + clear the env so a host that has the var set doesn't
-	// accidentally turn this into the enabled-path test.
-	prev := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-	t.Cleanup(func() {
-		_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", prev)
-	})
-
-	cfg := TracingFromEnv()
+	cfg := TracingConfig{}
 	if cfg.Endpoint != "" {
 		t.Fatalf("expected empty Endpoint when env unset, got %q", cfg.Endpoint)
 	}
@@ -64,7 +55,7 @@ func TestParseOTLPHeaders(t *testing.T) {
 		{"malformed_skipped", "good=1,broken,also=2", map[string]string{"good": "1", "also": "2"}, 2},
 	}
 	for _, c := range cases {
-		got := parseOTLPHeaders(c.in)
+		got := ParseOTLPHeaders(c.in)
 		if len(got) != c.count {
 			t.Errorf("%s: count=%d, want %d (got %v)", c.name, len(got), c.count, got)
 			continue

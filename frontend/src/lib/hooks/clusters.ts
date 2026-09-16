@@ -1,6 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import * as apiClient from "@/lib/api";
+import { getFeatureFlags } from "@/lib/api/feature-flags";
+import {
+  getClusters,
+  getCluster,
+  createCluster,
+  updateCluster,
+  deleteCluster,
+} from "@/lib/api/clusters";
+import {
+  getClusterNodes,
+  getClusterConditions,
+  getClusterConditionRemediation,
+  getNodeDetail,
+  takeoverClusterOwnership,
+  submitNodeOperation,
+  getNodeOperationStatus,
+} from "@/lib/api/nodes";
+import {
+  getClusterNamespaces,
+  getClusterEvents,
+  getClusterPods,
+  deletePod,
+  getWorkloadOperation,
+} from "@/lib/api/workloads";
 import { getCharlieActivation } from "@/lib/api/charlie-admin";
 import { liveFallback } from "@/lib/live/status-store";
 import { queryKeys } from "@/lib/query-keys";
@@ -12,7 +35,7 @@ import { useOperationMutation } from "@/lib/hooks/operation-mutation";
 export function useFeatureFlags() {
   return useQuery({
     queryKey: queryKeys.featureFlags,
-    queryFn: () => apiClient.getFeatureFlags(),
+    queryFn: ({ signal }) => getFeatureFlags(signal),
     staleTime: 30_000,
   });
 }
@@ -50,7 +73,7 @@ export function useClusters(params?: {
 }) {
   return useQuery({
     queryKey: queryKeys.clusters.list(params),
-    queryFn: () => apiClient.getClusters(params),
+    queryFn: () => getClusters(params),
     // Poll only while the live bus is down; events drive freshness when open.
     refetchInterval: liveFallback(30000),
   });
@@ -59,7 +82,7 @@ export function useClusters(params?: {
 export function useCluster(id: string) {
   return useQuery({
     queryKey: queryKeys.clusters.detail(id),
-    queryFn: () => apiClient.getCluster(id),
+    queryFn: () => getCluster(id),
     enabled: !!id,
     refetchInterval: liveFallback(15000),
   });
@@ -68,7 +91,7 @@ export function useCluster(id: string) {
 export function useClusterNodes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.clusters.nodes(clusterId),
-    queryFn: ({ signal }) => apiClient.getClusterNodes(clusterId, { signal }),
+    queryFn: ({ signal }) => getClusterNodes(clusterId, { signal }),
     enabled: !!clusterId,
     refetchInterval: liveFallback(30000),
   });
@@ -80,8 +103,7 @@ export function useClusterNodes(clusterId: string) {
 export function useClusterConditions(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.clusters.conditions(clusterId),
-    queryFn: ({ signal }) =>
-      apiClient.getClusterConditions(clusterId, { signal }),
+    queryFn: ({ signal }) => getClusterConditions(clusterId, { signal }),
     enabled: !!clusterId,
     refetchInterval: liveFallback(60000),
   });
@@ -94,7 +116,7 @@ export function useClusterConditionRemediation(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.clusters.conditionRemediation(clusterId),
     queryFn: ({ signal }) =>
-      apiClient.getClusterConditionRemediation(clusterId, { signal }),
+      getClusterConditionRemediation(clusterId, { signal }),
     enabled: !!clusterId,
     refetchInterval: liveFallback(30000),
   });
@@ -103,8 +125,7 @@ export function useClusterConditionRemediation(clusterId: string) {
 export function useNodeDetail(clusterId: string, nodeName: string) {
   return useQuery({
     queryKey: queryKeys.clusters.nodeDetail(clusterId, nodeName),
-    queryFn: ({ signal }) =>
-      apiClient.getNodeDetail(clusterId, nodeName, { signal }),
+    queryFn: ({ signal }) => getNodeDetail(clusterId, nodeName, { signal }),
     enabled: !!clusterId && !!nodeName,
     refetchInterval: liveFallback(30000),
   });
@@ -113,7 +134,7 @@ export function useNodeDetail(clusterId: string, nodeName: string) {
 export function useClusterNamespaces(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.clusters.namespaces(clusterId),
-    queryFn: ({ signal }) => apiClient.getClusterNamespaces(clusterId, signal),
+    queryFn: ({ signal }) => getClusterNamespaces(clusterId, signal),
     enabled: !!clusterId,
   });
 }
@@ -127,8 +148,7 @@ export function useClusterEvents(
       clusterId,
       params as Record<string, unknown> | undefined,
     ),
-    queryFn: ({ signal }) =>
-      apiClient.getClusterEvents(clusterId, { ...params, signal }),
+    queryFn: ({ signal }) => getClusterEvents(clusterId, { ...params, signal }),
     enabled: !!clusterId,
     refetchInterval: liveFallback(15000),
   });
@@ -140,8 +160,7 @@ export function useClusterPods(
 ) {
   return useQuery({
     queryKey: queryKeys.clusters.pods(clusterId, params),
-    queryFn: ({ signal }) =>
-      apiClient.getClusterPods(clusterId, { ...params, signal }),
+    queryFn: ({ signal }) => getClusterPods(clusterId, { ...params, signal }),
     enabled: !!clusterId,
     refetchInterval: liveFallback(15000),
   });
@@ -150,7 +169,7 @@ export function useClusterPods(
 export function useCreateCluster() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: ClusterRegistration) => apiClient.createCluster(data),
+    mutationFn: (data: ClusterRegistration) => createCluster(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
       toastSuccess("Cluster registration initiated");
@@ -165,7 +184,7 @@ export function useUpdateCluster() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateClusterInput }) =>
-      apiClient.updateCluster(id, data),
+      updateCluster(id, data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
       queryClient.invalidateQueries({
@@ -182,7 +201,7 @@ export function useUpdateCluster() {
 export function useTakeoverClusterOwnership() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.takeoverClusterOwnership(id),
+    mutationFn: (id: string) => takeoverClusterOwnership(id),
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
       queryClient.invalidateQueries({
@@ -202,7 +221,7 @@ export function useDeleteCluster() {
     mutationFn: (arg: string | { id: string; force?: boolean }) => {
       const { id, force } =
         typeof arg === "string" ? { id: arg, force: false } : arg;
-      return apiClient.deleteCluster(id, { force });
+      return deleteCluster(id, { force });
     },
     onSuccess: () => {
       // Decommission is async: DELETE returns 202 and the worker tombstones the
@@ -237,8 +256,8 @@ export function useDeletePod() {
         name: string;
       },
       context,
-    ) => apiClient.deletePod(clusterId, namespace, name, context),
-    read: apiClient.getPodDeleteOperation,
+    ) => deletePod(clusterId, namespace, name, context),
+    read: getWorkloadOperation,
     mutation: {
       onSuccess: (_data, variables) => {
         queryClient.invalidateQueries({
@@ -257,8 +276,8 @@ export function useNodeOperation() {
   const queryClient = useQueryClient();
   return useOperationMutation({
     keyPrefix: "node-operation",
-    submit: apiClient.submitNodeOperation,
-    read: apiClient.getNodeOperationStatus,
+    submit: submitNodeOperation,
+    read: getNodeOperationStatus,
     mutation: {
       onSuccess: (operation) => {
         queryClient.invalidateQueries({

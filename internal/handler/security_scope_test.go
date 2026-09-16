@@ -7,13 +7,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type securityScopeBindings struct{ bindings []rbac.RoleBinding }
@@ -96,7 +96,7 @@ func (q *securityScopeQuerier) CountSecurityScanResultsByCluster(_ context.Conte
 
 func authenticatedSecurityRequest(method, target string, userID uuid.UUID) *http.Request {
 	request := httptest.NewRequest(method, target, nil)
-	ctx := middleware.SetAuthenticatedUserForTest(request.Context(), &middleware.AuthenticatedUser{ID: userID.String(), AuthMethod: "jwt"})
+	ctx := reqctx.WithUser(request.Context(), &reqctx.User{ID: userID.String(), AuthMethod: "jwt"})
 	return request.WithContext(ctx)
 }
 
@@ -122,8 +122,8 @@ func TestSecurityEstatePaginationFiltersBeforeLimitAndCount(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
 	var envelope struct {
-		Data  []sqlc.SecurityScanResult `json:"data"`
-		Count int64                     `json:"count"`
+		Data       []sqlc.SecurityScanResult `json:"data"`
+		Pagination paging.Metadata           `json:"pagination"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -131,8 +131,8 @@ func TestSecurityEstatePaginationFiltersBeforeLimitAndCount(t *testing.T) {
 	if len(envelope.Data) != 1 || envelope.Data[0].ClusterID != clusterA {
 		t.Fatalf("page = %+v, want first authorized row on %s", envelope.Data, clusterA)
 	}
-	if envelope.Count != 2 {
-		t.Fatalf("count = %d, want authorized total 2", envelope.Count)
+	if exactPageTotal(t, envelope.Pagination) != 2 {
+		t.Fatalf("count = %d, want authorized total 2", exactPageTotal(t, envelope.Pagination))
 	}
 	if queries.listScopeCalls != 1 || len(queries.lastClusterIDs) != 1 || queries.lastClusterIDs[0] != clusterA {
 		t.Fatalf("scoped query calls/ids = %d/%v", queries.listScopeCalls, queries.lastClusterIDs)

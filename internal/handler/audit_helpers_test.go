@@ -7,10 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type fakeHandlerAuditWriterV1Only struct {
@@ -27,7 +28,7 @@ func TestRecordAuditAs_V1OnlyWriter(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/", nil)
 	req.Header.Set("User-Agent", "handler-audit-test")
 	req.RemoteAddr = "198.51.100.7:1234"
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         "550e8400-e29b-41d4-a716-446655440000",
 		AuthMethod: "jwt",
 	})

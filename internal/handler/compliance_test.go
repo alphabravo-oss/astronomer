@@ -19,21 +19,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // ── helpers ────────────────────────────────────────────────────────────
 
 // makeComplianceRequest builds a GET request with an authenticated
-// user injected via SetAuthenticatedUserForTest. The caller's ID is
+// user injected via reqctx.WithUser. The caller's ID is
 // stamped onto context as the "current user" the gate() helper reads.
 func makeComplianceRequest(target string, callerID uuid.UUID) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, target, nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         callerID.String(),
 		AuthMethod: "jwt",
 	})
@@ -511,6 +512,9 @@ func (f *fakeComplianceQuerier) ListAllRoleBindingsWithRoleNames(_ context.Conte
 }
 func (f *fakeComplianceQuerier) ListClusters(_ context.Context, _ sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
 	return f.clusters, nil
+}
+func (f *fakeComplianceQuerier) ListClusterLivenessForClusters(_ context.Context, _ []uuid.UUID) ([]sqlc.ClusterLiveness, error) {
+	return nil, nil
 }
 func (f *fakeComplianceQuerier) GetClusterAgentTokenByClusterID(_ context.Context, _ uuid.UUID) (sqlc.ClusterAgentToken, error) {
 	return sqlc.ClusterAgentToken{}, errPgxNoRowsForTest

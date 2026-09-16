@@ -433,7 +433,7 @@ func TestIngest_PublishesImageScanChanged(t *testing.T) {
 	bus := events.NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := bus.Subscribe(ctx)
+	ch := bus.Subscribe(ctx, events.AcceptAll)
 	ing.SetEventBus(bus)
 
 	clusterID := uuid.New()

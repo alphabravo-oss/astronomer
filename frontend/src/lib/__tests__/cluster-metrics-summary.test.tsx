@@ -2,13 +2,13 @@ import type { MockedFunction } from "vitest";
 import { ReactNode } from "react";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useClusterMetricsSummary } from "@/lib/hooks";
-import * as api from "@/lib/api";
+import { useClusterMetricsSummary } from "@/lib/hooks/workloads";
+import { getClusterMetricsSummary } from "@/lib/api/metrics";
 
-vi.mock("@/lib/api");
+vi.mock("@/lib/api/metrics");
 
-const mockedGet = api.getClusterMetricsSummary as MockedFunction<
-  typeof api.getClusterMetricsSummary
+const mockedGet = getClusterMetricsSummary as MockedFunction<
+  typeof getClusterMetricsSummary
 >;
 
 function wrapper({ children }: { children: ReactNode }) {

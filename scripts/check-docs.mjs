@@ -12,12 +12,13 @@ const excludedPrefixes = [
   "docs/assurance/",
 ];
 const legacyContextAllowlist = new Set([
+  "docs/architecture/README.md",
   "docs/architecture/decisions/flux-native-delivery.md",
   "docs/control-plane-state-contract.md",
   "docs/rancher-astronomer-comparison.md",
 ]);
 const legacyTerms = [
-  { name: "Argo CD runtime", pattern: /\b(?:Argo\s*CD|ArgoCD|argocd)\b/i },
+  { name: "Argo CD runtime", pattern: /\bArgo(?:\s*CD)?\b/i },
   { name: "ApplicationSet runtime", pattern: /\bApplicationSet\b/i },
   { name: "legacy fleet operation", pattern: /\b(?:fleet_operations?|agent fleet)\b/i },
 ];
@@ -86,14 +87,13 @@ for (const file of walk(docsRoot).sort()) {
   }
 
   if (!legacyContextAllowlist.has(repoFile)) {
-    const lines = source.split(/\r?\n/);
-    lines.forEach((line, index) => {
-      for (const term of legacyTerms) {
-        if (term.pattern.test(line)) {
-          failures.push(`${repoFile}:${index + 1}: stale ${term.name} terminology`);
-        }
+    for (const term of legacyTerms) {
+      const match = term.pattern.exec(source);
+      if (match) {
+        const line = source.slice(0, match.index).split(/\r?\n/).length;
+        failures.push(`${repoFile}:${line}: stale ${term.name} terminology`);
       }
-    });
+    }
   }
 
   for (const match of source.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {

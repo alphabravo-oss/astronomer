@@ -1,4 +1,3 @@
-"use client";
 
 // §HostMounts — DeclarativeWidget: the Tier-1 entry point ExtensionSlot mounts.
 //

@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestScrapeOnceCapturesProcessLeakMetrics(t *testing.T) {
@@ -31,6 +35,38 @@ process_open_fds 19
 		if got := lastValue(recorder.scrapeSeries[metric]); got != want {
 			t.Fatalf("%s = %v, want %v", metric, got, want)
 		}
+	}
+}
+
+func TestScrapeMetricsLoopDoesNotWarnWhenWindowCancellationEndsScrape(t *testing.T) {
+	requestStarted := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(requestStarted)
+		<-request.Context().Done()
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var logs bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		scrapeMetricsLoop(ctx, server.URL, "", newRecorder(), slog.New(slog.NewTextHandler(&logs, nil)))
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("initial metrics scrape did not start")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("metrics scrape loop did not stop after workload cancellation")
+	}
+	if strings.Contains(logs.String(), "scrape failed") {
+		t.Fatalf("normal workload cancellation was logged as a scrape failure: %s", logs.String())
 	}
 }
 

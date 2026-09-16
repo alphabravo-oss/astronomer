@@ -1,4 +1,3 @@
-"use client";
 
 // §HostMounts mount point 1 — sidebar nav items.
 //
@@ -9,7 +8,7 @@
 // allowlist. Render-only: a label + a Link, no third-party JS, no error surface
 // large enough to crash the nav (a missing label degrades to the name).
 
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { Puzzle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useExtensionMounts } from "./ExtensionProvider";
@@ -46,9 +45,9 @@ export function ExtensionNavItems({
           const label = mount.label || mount.displayName || mount.extension;
           if (collapsed) {
             return (
-              <Link
+              <RouterLink
                 key={mount.extension}
-                href={href}
+                to={href}
                 className={cn(
                   "nav-item group justify-center px-0",
                   active && "active",
@@ -57,19 +56,19 @@ export function ExtensionNavItems({
               >
                 <Puzzle
                   className={cn(
-                    "h-4 w-4 flex-shrink-0",
+                    "h-4 w-4 shrink-0",
                     active
                       ? "text-foreground"
                       : "text-muted-foreground group-hover:text-foreground",
                   )}
                 />
-              </Link>
+              </RouterLink>
             );
           }
           return (
-            <Link
+            <RouterLink
               key={mount.extension}
-              href={href}
+              to={href}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 mx-1 rounded-md text-sm transition-colors",
                 active
@@ -79,12 +78,12 @@ export function ExtensionNavItems({
             >
               <Puzzle
                 className={cn(
-                  "h-4 w-4 flex-shrink-0",
+                  "h-4 w-4 shrink-0",
                   active ? "text-foreground" : "text-muted-foreground",
                 )}
               />
               <span className="truncate flex-1">{label}</span>
-            </Link>
+            </RouterLink>
           );
         })}
       </div>

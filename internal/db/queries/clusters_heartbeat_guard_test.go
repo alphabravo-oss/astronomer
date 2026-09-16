@@ -38,6 +38,9 @@ func TestUpdateClusterStatusOnHeartbeat_GuardsHeartbeatWindow(t *testing.T) {
 	if !strings.Contains(rest, "decommissioned_at IS NULL") {
 		t.Errorf("must keep the decommissioned_at IS NULL guard; body:\n%s", rest)
 	}
+	if !strings.Contains(rest, "FROM cluster_liveness") {
+		t.Errorf("status CAS must read the authoritative narrow liveness row; body:\n%s", rest)
+	}
 	// 'active' requires a fresh heartbeat.
 	if !strings.Contains(rest, "'active'") ||
 		!strings.Contains(rest, "last_heartbeat >= now() - interval '2 minutes'") {
@@ -45,8 +48,7 @@ func TestUpdateClusterStatusOnHeartbeat_GuardsHeartbeatWindow(t *testing.T) {
 	}
 	// 'disconnected' requires a stale/absent heartbeat.
 	if !strings.Contains(rest, "'disconnected'") ||
-		!strings.Contains(rest, "last_heartbeat < now() - interval '2 minutes'") ||
-		!strings.Contains(rest, "last_heartbeat IS NULL") {
+		!strings.Contains(rest, "NOT EXISTS") {
 		t.Errorf("'disconnected' branch must require a stale/absent heartbeat; body:\n%s", rest)
 	}
 }

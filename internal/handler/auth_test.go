@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -19,7 +22,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type recordingAuthAuditWriter struct {
@@ -29,6 +31,122 @@ type recordingAuthAuditWriter struct {
 func (w *recordingAuthAuditWriter) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
 	w.rows = append(w.rows, arg)
 	return nil
+}
+
+// authTestMutationTx is the transaction-bound credential store used by the
+// auth HTTP tests. Keeping state and audit delegates on one object mirrors the
+// production transaction contract without weakening the fail-closed handler.
+type authTestMutationTx struct {
+	users          UserQuerier
+	tokens         TokenQuerier
+	revocations    RevocationQuerier
+	passwordResets PasswordResetStore
+	audit          *recordingAuthAuditWriter
+	audits         []sqlc.UpsertAuditOutboxParams
+}
+
+func (tx *authTestMutationTx) GetUserByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.User, error) {
+	if tx.users == nil {
+		return sqlc.User{}, fmt.Errorf("auth test transaction: user store is not configured")
+	}
+	return tx.users.GetUserByID(ctx, id)
+}
+
+func (tx *authTestMutationTx) RecordFailedLoginAttempt(ctx context.Context, arg sqlc.RecordFailedLoginAttemptParams) (sqlc.User, error) {
+	if recorder, ok := tx.users.(interface {
+		RecordFailedLoginAttempt(context.Context, sqlc.RecordFailedLoginAttemptParams) (sqlc.User, error)
+	}); ok {
+		return recorder.RecordFailedLoginAttempt(ctx, arg)
+	}
+	if tx.users == nil {
+		return sqlc.User{}, fmt.Errorf("auth test transaction: failed-login store is not configured")
+	}
+	user, err := tx.users.GetUserByID(ctx, arg.ID)
+	if err != nil {
+		return sqlc.User{}, err
+	}
+	user.FailedLoginCount++
+	user.FailedLoginAt = arg.FailedLoginAt
+	if user.FailedLoginCount >= arg.LockoutThreshold {
+		user.LockedUntil = arg.LockedUntil
+		user.LockedReason = arg.LockedReason
+	}
+	return user, nil
+}
+
+func (tx *authTestMutationTx) UpdateUserPasswordHash(context.Context, sqlc.UpdateUserPasswordHashParams) error {
+	return fmt.Errorf("auth test transaction: password store is not configured")
+}
+
+func (tx *authTestMutationTx) ClearMustChangePassword(context.Context, uuid.UUID) error {
+	return fmt.Errorf("auth test transaction: password store is not configured")
+}
+
+func (tx *authTestMutationTx) RevokeJWT(ctx context.Context, arg sqlc.RevokeJWTParams) error {
+	if tx.revocations == nil {
+		return fmt.Errorf("auth test transaction: revocation store is not configured")
+	}
+	return tx.revocations.RevokeJWT(ctx, arg)
+}
+
+func (tx *authTestMutationTx) InvalidateAllTokens(ctx context.Context, arg sqlc.InvalidateAllTokensParams) error {
+	if tx.revocations == nil {
+		return fmt.Errorf("auth test transaction: revocation store is not configured")
+	}
+	return tx.revocations.InvalidateAllTokens(ctx, arg)
+}
+
+func (tx *authTestMutationTx) ConsumePasswordResetToken(ctx context.Context, arg sqlc.ConsumePasswordResetTokenParams) (int64, error) {
+	if tx.passwordResets == nil {
+		return 0, fmt.Errorf("auth test transaction: password reset store is not configured")
+	}
+	return tx.passwordResets.ConsumePasswordResetToken(ctx, arg)
+}
+
+func (tx *authTestMutationTx) DeletePasswordResetTokensForUser(ctx context.Context, userID uuid.UUID) error {
+	if tx.passwordResets == nil {
+		return fmt.Errorf("auth test transaction: password reset store is not configured")
+	}
+	return tx.passwordResets.DeletePasswordResetTokensForUser(ctx, userID)
+}
+
+func (tx *authTestMutationTx) UpdateUserPassword(ctx context.Context, arg sqlc.UpdateUserPasswordParams) error {
+	if tx.passwordResets == nil {
+		return fmt.Errorf("auth test transaction: password reset store is not configured")
+	}
+	return tx.passwordResets.UpdateUserPassword(ctx, arg)
+}
+
+func (tx *authTestMutationTx) CreateAPIToken(ctx context.Context, arg sqlc.CreateAPITokenParams) (sqlc.ApiToken, error) {
+	if tx.tokens == nil {
+		return sqlc.ApiToken{}, fmt.Errorf("auth test transaction: token store is not configured")
+	}
+	return tx.tokens.CreateAPIToken(ctx, arg)
+}
+
+func (tx *authTestMutationTx) RevokeAPIToken(ctx context.Context, id uuid.UUID) error {
+	if tx.tokens == nil {
+		return fmt.Errorf("auth test transaction: token store is not configured")
+	}
+	return tx.tokens.RevokeAPIToken(ctx, id)
+}
+
+func (tx *authTestMutationTx) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	tx.audits = append(tx.audits, arg)
+	if tx.audit != nil {
+		tx.audit.rows = append(tx.audit.rows, auditLogParamsFromOutbox(arg))
+	}
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
+}
+
+func wireAuthTestMutationTx(h *AuthHandler, tx *authTestMutationTx) {
+	if tx.audit == nil {
+		tx.audit = &recordingAuthAuditWriter{}
+	}
+	h.SetAuditWriter(tx.audit)
+	h.SetRunTx(func(_ context.Context, fn func(AuthMutationTx) error) error {
+		return fn(tx)
+	})
 }
 
 // mockUserQuerier implements UserQuerier for testing.
@@ -97,6 +215,46 @@ func makeTestUser(t *testing.T, active bool) sqlc.User {
 		IsSuperuser: false,
 		LastLogin:   pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true},
 		DateJoined:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+}
+
+type recordingCurrentUserRoles struct{ calls int }
+
+func (r *recordingCurrentUserRoles) ListUserBindingsWithRoles(context.Context, pgtype.UUID) ([]sqlc.ListUserBindingsWithRolesRow, error) {
+	r.calls++
+	return nil, nil
+}
+
+func TestCurrentUserUsesResolvedSuperuserIdentityWithoutDatabaseReads(t *testing.T) {
+	joined := time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
+	lastLogin := joined.Add(time.Hour)
+	userID := uuid.New()
+	roles := &recordingCurrentUserRoles{}
+	handler := NewAuthHandler(nil, auth.MustNewJWTManager("current-user-cache-test-secret", 60))
+	handler.SetRoleBindings(roles)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me/", nil)
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
+		ID: userID.String(), Email: "admin@example.com", Username: "admin", AuthMethod: "jwt",
+		FirstName: "Ada", LastName: "Lovelace", IsActive: true, IsStaff: true, IsSuperuser: true,
+		MustChangePassword: false, DateJoined: joined, LastLogin: lastLogin, HasLastLogin: true, Resolved: true,
+	}))
+	recorder := httptest.NewRecorder()
+
+	handler.CurrentUser(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if roles.calls != 0 {
+		t.Fatalf("superuser role queries = %d, want 0", roles.calls)
+	}
+	var response map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, ok := response["data"].(map[string]any)
+	if !ok || data["email"] != "admin@example.com" || data["is_superuser"] != true {
+		t.Fatalf("resolved response = %#v", response)
 	}
 }
 
@@ -177,6 +335,7 @@ func TestLogin(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mock := newMockQuerier(tc.users...)
 			handler := NewAuthHandler(mock, jwtMgr)
+			wireAuthTestMutationTx(handler, &authTestMutationTx{users: mock})
 
 			var bodyBytes []byte
 			switch v := tc.body.(type) {
@@ -232,14 +391,14 @@ func TestLogin(t *testing.T) {
 			if data["refresh"] == nil || data["refresh"] == "" {
 				t.Fatal("expected non-empty refresh token")
 			}
-			if !responseHasCookie(w.Result(), middleware.SessionCookieName, true) {
-				t.Fatalf("expected HttpOnly %s cookie", middleware.SessionCookieName)
+			if !responseHasCookie(w.Result(), auth.SessionCookieName, true) {
+				t.Fatalf("expected HttpOnly %s cookie", auth.SessionCookieName)
 			}
-			if !responseHasCookie(w.Result(), middleware.RefreshCookieName, true) {
-				t.Fatalf("expected HttpOnly %s cookie", middleware.RefreshCookieName)
+			if !responseHasCookie(w.Result(), auth.RefreshCookieName, true) {
+				t.Fatalf("expected HttpOnly %s cookie", auth.RefreshCookieName)
 			}
-			if !responseHasCookie(w.Result(), middleware.CSRFCookieName, false) {
-				t.Fatalf("expected readable %s cookie", middleware.CSRFCookieName)
+			if !responseHasCookie(w.Result(), auth.CSRFCookieName, false) {
+				t.Fatalf("expected readable %s cookie", auth.CSRFCookieName)
 			}
 
 			user, ok := data["user"].(map[string]any)
@@ -298,11 +457,11 @@ func TestRefresh(t *testing.T) {
 		if auditWriter.rows[0].ResourceID != user.ID.String() {
 			t.Fatalf("resource_id = %q, want %q", auditWriter.rows[0].ResourceID, user.ID.String())
 		}
-		if !responseHasCookie(w.Result(), middleware.SessionCookieName, true) {
-			t.Fatalf("expected refreshed %s cookie", middleware.SessionCookieName)
+		if !responseHasCookie(w.Result(), auth.SessionCookieName, true) {
+			t.Fatalf("expected refreshed %s cookie", auth.SessionCookieName)
 		}
-		if !responseHasCookie(w.Result(), middleware.RefreshCookieName, true) {
-			t.Fatalf("expected refreshed %s cookie", middleware.RefreshCookieName)
+		if !responseHasCookie(w.Result(), auth.RefreshCookieName, true) {
+			t.Fatalf("expected refreshed %s cookie", auth.RefreshCookieName)
 		}
 	})
 
@@ -313,9 +472,10 @@ func TestRefresh(t *testing.T) {
 		}
 
 		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
+		handler.SetAuditWriter(&recordingAuthAuditWriter{})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
-		req.AddCookie(&http.Cookie{Name: middleware.RefreshCookieName, Value: refreshToken})
-		req.AddCookie(&http.Cookie{Name: middleware.CSRFCookieName, Value: "csrf-token"})
+		req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refreshToken})
+		req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
 		req.Header.Set("X-CSRF-Token", "csrf-token")
 
 		w := httptest.NewRecorder()
@@ -324,8 +484,8 @@ func TestRefresh(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("expected status 200, got %d; body: %s", w.Code, w.Body.String())
 		}
-		if !responseHasCookie(w.Result(), middleware.SessionCookieName, true) {
-			t.Fatalf("expected refreshed %s cookie", middleware.SessionCookieName)
+		if !responseHasCookie(w.Result(), auth.SessionCookieName, true) {
+			t.Fatalf("expected refreshed %s cookie", auth.SessionCookieName)
 		}
 	})
 
@@ -337,7 +497,7 @@ func TestRefresh(t *testing.T) {
 
 		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
-		req.AddCookie(&http.Cookie{Name: middleware.RefreshCookieName, Value: refreshToken})
+		req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refreshToken})
 
 		w := httptest.NewRecorder()
 		handler.Refresh(w, req)
@@ -376,20 +536,20 @@ func TestBrowserSessionCookieAttributes(t *testing.T) {
 		https bool
 	}{
 		{name: "plain http", https: false},
-		{name: "forwarded https", https: true},
+		{name: "https", https: true},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", nil)
 			if tc.https {
-				req.Header.Set("X-Forwarded-Proto", "https")
+				req.TLS = &tls.ConnectionState{}
 			}
 			rec := httptest.NewRecorder()
 			setBrowserSessionCookies(rec, req, "access-token", "refresh-token")
 			resp := rec.Result()
 
-			session := cookieByName(t, resp, middleware.SessionCookieName)
+			session := cookieByName(t, resp, auth.SessionCookieName)
 			assertCookieSecurity(t, session, cookieSecurityWant{
 				value:    "access-token",
 				path:     "/",
@@ -404,7 +564,7 @@ func TestBrowserSessionCookieAttributes(t *testing.T) {
 				t.Fatalf("astronomer_session Domain = %q, want empty (host-only; do not widen to grafana.*)", session.Domain)
 			}
 
-			refresh := cookieByName(t, resp, middleware.RefreshCookieName)
+			refresh := cookieByName(t, resp, auth.RefreshCookieName)
 			assertCookieSecurity(t, refresh, cookieSecurityWant{
 				value:    "refresh-token",
 				path:     "/",
@@ -414,7 +574,7 @@ func TestBrowserSessionCookieAttributes(t *testing.T) {
 				maxAge:   browserRefreshCookieMaxAge,
 			})
 
-			csrf := cookieByName(t, resp, middleware.CSRFCookieName)
+			csrf := cookieByName(t, resp, auth.CSRFCookieName)
 			assertCookieSecurity(t, csrf, cookieSecurityWant{
 				value:    csrf.Value,
 				path:     "/",
@@ -431,12 +591,12 @@ func TestBrowserSessionCookieAttributes(t *testing.T) {
 
 func TestClearBrowserSessionCookiesClearsAllSessionCookies(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", nil)
-	req.Header.Set("X-Forwarded-Proto", "https")
+	req.TLS = &tls.ConnectionState{}
 	rec := httptest.NewRecorder()
 	clearBrowserSessionCookies(rec, req)
 	resp := rec.Result()
 
-	for _, name := range []string{middleware.SessionCookieName, middleware.RefreshCookieName, middleware.CSRFCookieName} {
+	for _, name := range []string{auth.SessionCookieName, auth.RefreshCookieName, auth.CSRFCookieName} {
 		cookie := cookieByName(t, resp, name)
 		assertCookieSecurity(t, cookie, cookieSecurityWant{
 			value:    "",
@@ -589,13 +749,13 @@ func (m *mockTokenQuerier) RevokeAPIToken(_ context.Context, id uuid.UUID) error
 	return nil
 }
 
-// setAuthUser returns a request with middleware.AuthenticatedUser in context.
+// setAuthUser returns a request with reqctx.User in context.
 func setAuthUser(r *http.Request, userID string) *http.Request {
-	user := &middleware.AuthenticatedUser{
+	user := &reqctx.User{
 		ID:         userID,
 		AuthMethod: "jwt",
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(r.Context(), user)
+	ctx := reqctx.WithUser(r.Context(), user)
 	return r.WithContext(ctx)
 }
 
@@ -608,6 +768,7 @@ func TestCreateToken(t *testing.T) {
 		handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
 		auditWriter := &recordingAuthAuditWriter{}
 		handler.SetAuditWriter(auditWriter)
+		wireAuthTestMutationTx(handler, &authTestMutationTx{tokens: tokenQ, audit: auditWriter})
 
 		body := `{"name": "My Token", "expires_in_days": 90, "scopes": ["read"]}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/tokens/", strings.NewReader(body))
@@ -750,9 +911,13 @@ func TestListTokens(t *testing.T) {
 			t.Fatal("plaintext token should not be in list response")
 		}
 
-		count, ok := resp["count"].(float64)
+		metadata, ok := resp["pagination"].(map[string]any)
+		if !ok {
+			t.Fatalf("missing pagination: %v", resp)
+		}
+		count, ok := metadata["total"].(float64)
 		if !ok || count != 1 {
-			t.Fatalf("expected count=1, got %v", resp["count"])
+			t.Fatalf("expected pagination.total=1, got %v", metadata["total"])
 		}
 	})
 }
@@ -776,6 +941,7 @@ func TestRevokeToken(t *testing.T) {
 		handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
 		auditWriter := &recordingAuthAuditWriter{}
 		handler.SetAuditWriter(auditWriter)
+		wireAuthTestMutationTx(handler, &authTestMutationTx{tokens: tokenQ, audit: auditWriter})
 
 		// Use chi router to inject URL params.
 		r := chi.NewRouter()
@@ -892,6 +1058,7 @@ func TestCreateToken_PersistsScopesAndCidrs(t *testing.T) {
 
 	tokenQ := newMockTokenQuerier()
 	handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
+	wireAuthTestMutationTx(handler, &authTestMutationTx{tokens: tokenQ})
 
 	body := `{
 		"name": "ci-deployer",

@@ -16,6 +16,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/gatekeeperpolicy"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 const (
@@ -110,6 +111,20 @@ func reconcileGatekeeperConstraint(ctx context.Context, clusterID uuid.UUID, nam
 		return fmt.Errorf("load Gatekeeper constraint intent: %w", err)
 	}
 	if row.Generation != generation {
+		return nil
+	}
+	capabilities, ok := deps.K8s.(K8sCapabilityChecker)
+	if !ok {
+		return errors.New("Gatekeeper constraint tunnel requester does not expose agent capabilities")
+	}
+	supported, err := capabilities.SupportsCapability(ctx, clusterID.String(), protocol.AgentCapabilityMutate)
+	if err != nil {
+		return fmt.Errorf("resolve Gatekeeper constraint mutation capability: %w", err)
+	}
+	if !supported {
+		if err := markGatekeeperConstraintResult(ctx, q, row, "failed", "agent does not advertise mutation capability"); err != nil {
+			return err
+		}
 		return nil
 	}
 	manifest, err := gatekeeperpolicy.ParseManifest([]byte(row.Yaml))

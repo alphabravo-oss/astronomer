@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,7 +23,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeTOTPStore is a minimal in-memory TOTPQuerier for the handler
@@ -30,10 +31,15 @@ type fakeTOTPStore struct {
 	mu          sync.Mutex
 	enrollments map[uuid.UUID]sqlc.UserTotpEnrollment
 	codes       []sqlc.UserTotpRecoveryCode
+	failed      map[uuid.UUID]int32
+	challenges  map[string]struct{}
 }
 
 func newFakeTOTPStore() *fakeTOTPStore {
-	return &fakeTOTPStore{enrollments: map[uuid.UUID]sqlc.UserTotpEnrollment{}}
+	return &fakeTOTPStore{
+		enrollments: map[uuid.UUID]sqlc.UserTotpEnrollment{},
+		failed:      map[uuid.UUID]int32{}, challenges: map[string]struct{}{},
+	}
 }
 
 func (s *fakeTOTPStore) GetUserTOTPEnrollment(_ context.Context, userID uuid.UUID) (sqlc.UserTotpEnrollment, error) {
@@ -41,7 +47,7 @@ func (s *fakeTOTPStore) GetUserTOTPEnrollment(_ context.Context, userID uuid.UUI
 	defer s.mu.Unlock()
 	e, ok := s.enrollments[userID]
 	if !ok {
-		return sqlc.UserTotpEnrollment{}, fmt.Errorf("no rows in result set")
+		return sqlc.UserTotpEnrollment{}, pgx.ErrNoRows
 	}
 	return e, nil
 }
@@ -141,17 +147,46 @@ func (s *fakeTOTPStore) DeleteRecoveryCodesByUser(_ context.Context, userID uuid
 	return nil
 }
 
+func (s *fakeTOTPStore) RecordFailedLoginAttempt(_ context.Context, arg sqlc.RecordFailedLoginAttemptParams) (sqlc.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failed[arg.ID]++
+	row := sqlc.User{ID: arg.ID, FailedLoginCount: s.failed[arg.ID]}
+	if s.failed[arg.ID] >= arg.LockoutThreshold {
+		row.LockedUntil = arg.LockedUntil
+		row.LockedReason = arg.LockedReason
+	}
+	return row, nil
+}
+
+func (s *fakeTOTPStore) ResetFailedLoginCount(_ context.Context, id uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failed[id] = 0
+	return nil
+}
+
+func (s *fakeTOTPStore) ConsumeJWTChallenge(_ context.Context, arg sqlc.ConsumeJWTChallengeParams) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, used := s.challenges[arg.Jti]; used {
+		return 0, nil
+	}
+	s.challenges[arg.Jti] = struct{}{}
+	return 1, nil
+}
+
 // setAuthUserFull returns a request with a fully-populated
 // AuthenticatedUser so the TOTP handlers can derive label / username
 // without a DB lookup.
 func setAuthUserFull(r *http.Request, u sqlc.User) *http.Request {
-	au := &middleware.AuthenticatedUser{
+	au := &reqctx.User{
 		ID:         u.ID.String(),
 		Email:      u.Email,
 		Username:   u.Username,
 		AuthMethod: "jwt",
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(r.Context(), au)
+	ctx := reqctx.WithUser(r.Context(), au)
 	return r.WithContext(ctx)
 }
 
@@ -176,7 +211,7 @@ func TestEnrollFlow_StartThenConfirm(t *testing.T) {
 	store := newFakeTOTPStore()
 	enc := mustEncryptor(t)
 
-	h := NewTOTPHandler(store, newMockQuerier(user), enc, jwtMgr)
+	h := newTestTOTPHandler(store, newMockQuerier(user), enc, jwtMgr)
 	h.SetIssuer("TestIssuer")
 
 	// Start
@@ -279,7 +314,7 @@ func TestDisableRequiresPasswordAndCode(t *testing.T) {
 		ConfirmedAt:     time.Now(),
 	})
 
-	h := NewTOTPHandler(store, newMockQuerier(user), enc, jwtMgr)
+	h := newTestTOTPHandler(store, newMockQuerier(user), enc, jwtMgr)
 
 	// Wrong password
 	body := mustJSON(t, map[string]string{"password": "wrong", "code": "000000"})
@@ -348,7 +383,8 @@ func TestLogin_TOTPRequiredAfterEnroll(t *testing.T) {
 
 	mock := newMockQuerier(user)
 	authH := NewAuthHandler(mock, jwtMgr)
-	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	wireAuthTestMutationTx(authH, &authTestMutationTx{users: mock})
+	totpH := newTestTOTPHandler(store, mock, enc, jwtMgr)
 	authH.SetTOTPGate(totpH)
 
 	body := mustJSON(t, map[string]string{"email": user.Email, "password": "testpassword"})
@@ -387,7 +423,8 @@ func TestLogin_TOTPChallengeWithValidCode(t *testing.T) {
 
 	mock := newMockQuerier(user)
 	authH := NewAuthHandler(mock, jwtMgr)
-	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	wireAuthTestMutationTx(authH, &authTestMutationTx{users: mock})
+	totpH := newTestTOTPHandler(store, mock, enc, jwtMgr)
 	authH.SetTOTPGate(totpH)
 
 	// Step 1: Login -> 423 + challenge.
@@ -422,11 +459,21 @@ func TestLogin_TOTPChallengeWithValidCode(t *testing.T) {
 	if data["token"] == nil || data["token"] == "" {
 		t.Error("missing session token after verify")
 	}
-	if !responseHasCookie(w.Result(), middleware.SessionCookieName, true) {
-		t.Fatalf("expected HttpOnly %s cookie after verify", middleware.SessionCookieName)
+	if !responseHasCookie(w.Result(), auth.SessionCookieName, true) {
+		t.Fatalf("expected HttpOnly %s cookie after verify", auth.SessionCookieName)
 	}
-	if !responseHasCookie(w.Result(), middleware.RefreshCookieName, true) {
-		t.Fatalf("expected HttpOnly %s cookie after verify", middleware.RefreshCookieName)
+	if !responseHasCookie(w.Result(), auth.RefreshCookieName, true) {
+		t.Fatalf("expected HttpOnly %s cookie after verify", auth.RefreshCookieName)
+	}
+
+	// The same signed challenge is one-shot even while its JWT has not expired.
+	body = mustJSON(t, map[string]any{"challenge_token": challenge, "code": code})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/totp/verify/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	totpH.Verify(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("challenge replay status = %d; want 401", w.Code)
 	}
 }
 
@@ -451,7 +498,8 @@ func TestLogin_TOTPChallengeWithRecoveryCode(t *testing.T) {
 
 	mock := newMockQuerier(user)
 	authH := NewAuthHandler(mock, jwtMgr)
-	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	wireAuthTestMutationTx(authH, &authTestMutationTx{users: mock})
+	totpH := newTestTOTPHandler(store, mock, enc, jwtMgr)
 	authH.SetTOTPGate(totpH)
 
 	body := mustJSON(t, map[string]string{"email": user.Email, "password": "testpassword"})
@@ -503,7 +551,7 @@ func TestLogin_TOTPLockoutAfterN(t *testing.T) {
 	})
 
 	mock := newMockQuerier(user)
-	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	totpH := newTestTOTPHandler(store, mock, enc, jwtMgr)
 	challenge, _ := jwtMgr.GeneratePurposeToken(user.ID, auth.PurposeTOTPChallenge, auth.TOTPChallengeTTL)
 
 	for i := 0; i < 5; i++ {
@@ -515,6 +563,12 @@ func TestLogin_TOTPLockoutAfterN(t *testing.T) {
 		if w.Code != http.StatusUnauthorized {
 			t.Errorf("attempt %d status = %d; want 401", i, w.Code)
 		}
+	}
+	store.mu.Lock()
+	failed := store.failed[user.ID]
+	store.mu.Unlock()
+	if failed != 5 {
+		t.Fatalf("failed_login_count = %d, want 5", failed)
 	}
 }
 
@@ -529,7 +583,8 @@ func TestRequireMode_NewUserMustEnroll(t *testing.T) {
 
 	mock := newMockQuerier(user)
 	authH := NewAuthHandler(mock, jwtMgr)
-	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	wireAuthTestMutationTx(authH, &authTestMutationTx{users: mock})
+	totpH := newTestTOTPHandler(store, mock, enc, jwtMgr)
 	authH.SetTOTPGate(totpH)
 	authH.SetTOTPRequireAll(true)
 
@@ -566,7 +621,8 @@ func TestTOTPPolicy_RuntimeEnforcement(t *testing.T) {
 
 	mock := newMockQuerier(user)
 	authH := NewAuthHandler(mock, jwtMgr)
-	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	wireAuthTestMutationTx(authH, &authTestMutationTx{users: mock})
+	totpH := newTestTOTPHandler(store, mock, enc, jwtMgr)
 	authH.SetTOTPGate(totpH)
 
 	// Runtime switch driven by the platform setting (here a closure-over
@@ -615,7 +671,8 @@ func TestRefreshEnforcesEnrollment(t *testing.T) {
 
 	mock := newMockQuerier(user)
 	authH := NewAuthHandler(mock, jwtMgr)
-	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	wireAuthTestMutationTx(authH, &authTestMutationTx{users: mock})
+	totpH := newTestTOTPHandler(store, mock, enc, jwtMgr)
 	authH.SetTOTPGate(totpH)
 	authH.SetTOTPPolicy(func(context.Context) bool { return true }) // enforcement ON
 
@@ -663,7 +720,8 @@ func TestTOTPPolicy_FailsClosedOnDBError(t *testing.T) {
 
 	mock := newMockQuerier(user)
 	authH := NewAuthHandler(mock, jwtMgr)
-	totpH := NewTOTPHandler(store, mock, enc, jwtMgr)
+	wireAuthTestMutationTx(authH, &authTestMutationTx{users: mock})
+	totpH := newTestTOTPHandler(store, mock, enc, jwtMgr)
 	authH.SetTOTPGate(totpH)
 
 	// resolver replicates the server.NewApp SetTOTPPolicy closure verbatim,
@@ -748,7 +806,7 @@ func TestAdminForceDisable_RequiresSuperuser(t *testing.T) {
 
 	mock := newMockQuerier(target, nonAdmin)
 	jwtMgr := auth.MustNewJWTManager("test-secret", 60)
-	h := NewTOTPHandler(store, mock, enc, jwtMgr)
+	h := newTestTOTPHandler(store, mock, enc, jwtMgr)
 
 	req := newAdminTOTPRequest(http.MethodPost, target.ID, nonAdmin)
 	w := httptest.NewRecorder()
@@ -768,7 +826,7 @@ func TestAdminForceDisable_RequiresSuperuser(t *testing.T) {
 	admin.IsSuperuser = true
 
 	mock = newMockQuerier(target, admin)
-	h = NewTOTPHandler(store, mock, enc, jwtMgr)
+	h = newTestTOTPHandler(store, mock, enc, jwtMgr)
 	req = newAdminTOTPRequest(http.MethodPost, target.ID, admin)
 	w = httptest.NewRecorder()
 	h.AdminForceDisable(w, req)

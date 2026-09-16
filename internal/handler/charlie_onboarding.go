@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"mime"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/google/uuid"
 )
 
@@ -56,7 +56,7 @@ func (h *CharlieOnboardingHandler) Import(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	user, authenticated := appmiddleware.GetAuthenticatedUser(r.Context())
+	user, authenticated := reqctx.AuthenticatedUser(r.Context())
 	if !authenticated {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication is required")
 		return
@@ -68,7 +68,7 @@ func (h *CharlieOnboardingHandler) Import(w http.ResponseWriter, r *http.Request
 	}
 	status, err := h.consumer.Consume(r.Context(), validated, actorID)
 	if err != nil {
-		charlie.LogOperationalFailure(r.Context(), h.log, charlie.OnboardingFailureCode(err), appmiddleware.GetCorrelationID(r.Context()))
+		charlie.LogOperationalFailure(r.Context(), h.log, charlie.OnboardingFailureCode(err), reqctx.CorrelationID(r.Context()))
 		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Charlie onboarding could not be consumed safely")
 		return
 	}
@@ -129,12 +129,4 @@ func (h *CharlieOnboardingHandler) validateRequest(w http.ResponseWriter, r *htt
 		return charlie.ValidatedOnboarding{}, false
 	}
 	return validated, true
-}
-
-func ensureJSONEOF(decoder *json.Decoder) error {
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return err
-	}
-	return nil
 }

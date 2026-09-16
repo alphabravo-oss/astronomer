@@ -72,7 +72,7 @@ const (
 // Declared as an interface so tests can swap a fake without standing up a
 // real database. *sqlc.Queries satisfies this naturally.
 type ClusterQuerier interface {
-	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
+	ListClusterRuntimeTargets(ctx context.Context, arg sqlc.ListClusterRuntimeTargetsParams) ([]sqlc.ListClusterRuntimeTargetsRow, error)
 	// UpdateClusterStatusOnHeartbeat is the authoritative status writer for
 	// this publisher (CORR-02): it re-checks the 2m liveness window at write
 	// time so a mid-sweep reconnect is not clobbered back to disconnected.
@@ -195,11 +195,11 @@ func (p *Publisher) runStatusSweepLoop(ctx context.Context) {
 // metrics publish and the status sweep are authoritative full-fleet passes, so
 // a single Limit:500,Offset:0 read silently froze every cluster past the 500th
 // (its status never transitioned active<->disconnected). Page until short.
-func (p *Publisher) listAllClusters(ctx context.Context) ([]sqlc.Cluster, error) {
+func (p *Publisher) listAllClusters(ctx context.Context) ([]sqlc.ListClusterRuntimeTargetsRow, error) {
 	const pageSize = 500
-	var all []sqlc.Cluster
+	var all []sqlc.ListClusterRuntimeTargetsRow
 	for offset := int32(0); ; offset += pageSize {
-		page, err := p.queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: pageSize, Offset: offset})
+		page, err := p.queries.ListClusterRuntimeTargets(ctx, sqlc.ListClusterRuntimeTargetsParams{Limit: pageSize, Offset: offset})
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +220,7 @@ func (p *Publisher) publishMetrics(ctx context.Context) {
 		return
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	publish := func(c sqlc.Cluster, snap clustermetrics.Snapshot) {
+	publish := func(c sqlc.ListClusterRuntimeTargetsRow, snap clustermetrics.Snapshot) {
 		p.bus.Publish(events.TypeClusterMetrics, map[string]any{
 			"cluster_id":        c.ID.String(),
 			"cpu_percentage":    snap.CPUPercentage,
@@ -315,7 +315,7 @@ func (p *Publisher) sweepStatuses(ctx context.Context) {
 // concrete next-state without sentinel hacks. Local clusters are exempted
 // from the disconnected flip — the management cluster is always reachable
 // when the server is running, and its row exists primarily for UI display.
-func decideStatus(c sqlc.Cluster, threshold time.Duration) string {
+func decideStatus(c sqlc.ListClusterRuntimeTargetsRow, threshold time.Duration) string {
 	if c.IsLocal {
 		return ""
 	}

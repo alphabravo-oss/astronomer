@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import {
   useProjects,
   useCreateProject,
   useDeleteProject,
-  useClusters,
-  useClusterNamespaces,
-} from "@/lib/hooks";
+} from "@/lib/hooks/projects";
+import { useClusters, useClusterNamespaces } from "@/lib/hooks/clusters";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -15,23 +15,31 @@ import { Select } from "@/components/ui/select";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import type { Project } from "@/types";
 import { FolderKanban, Plus, Trash2, Users } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
+import { pageRowCount } from "@/lib/api/pagination";
+
+const PROJECTS_PAGE_SIZE = 50;
 
 function ProjectsPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
 
-  const {
-    data: projectsData,
-    isLoading: projectsLoading,
-    isError: projectsError,
-    refetch: refetchProjects,
-  } = useProjects();
+  const projectsQuery = useProjects({
+    page: pageIndex + 1,
+    pageSize: PROJECTS_PAGE_SIZE,
+    search: debouncedSearch.trim() || undefined,
+  });
+  const projectsData = projectsQuery.data;
   const { data: clustersData } = useClusters();
   const deleteProject = useDeleteProject();
 
@@ -103,14 +111,14 @@ function ProjectsPage() {
             {ids.slice(0, 2).map((cid) => (
               <span
                 key={cid}
-                className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium"
+                className="text-xs px-2 py-0.5 rounded-sm bg-primary/10 text-primary font-medium"
                 title={cid}
               >
                 {clusterById.get(cid) || cid.slice(0, 8)}
               </span>
             ))}
             {ids.length > 2 && (
-              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+              <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
                 +{ids.length - 2}
               </span>
             )}
@@ -140,13 +148,13 @@ function ProjectsPage() {
                 {namespaces.slice(0, 3).map((ns) => (
                   <span
                     key={ns}
-                    className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+                    className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
                   >
                     {ns}
                   </span>
                 ))}
                 {namespaces.length > 3 && (
-                  <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                  <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
                     +{namespaces.length - 3}
                   </span>
                 )}
@@ -193,12 +201,12 @@ function ProjectsPage() {
         return (
           <div className="flex flex-wrap gap-1">
             {cpu ? (
-              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+              <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
                 CPU: {cpu}
               </span>
             ) : null}
             {mem ? (
-              <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+              <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
                 Mem: {mem}
               </span>
             ) : null}
@@ -223,7 +231,7 @@ function ProjectsPage() {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete project"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -250,18 +258,58 @@ function ProjectsPage() {
         }
       />
 
-      {/* Projects Table */}
-      <DataTable
-        data={projects}
-        columns={projectColumns}
-        keyExtractor={(row) => row.id}
-        searchPlaceholder="Search projects..."
-        loading={projectsLoading}
-        isError={projectsError}
-        onRetry={() => refetchProjects()}
-        emptyMessage="No projects created yet"
-        onRowClick={(row) => router.push(`/dashboard/projects/${row.id}`)}
-      />
+      <QueryStates
+        query={projectsQuery}
+        loadingTitle="Loading projects"
+        permission="projects:read"
+        errorTitle="Failed to load projects"
+        isEmpty={(result) =>
+          result.data.length === 0 && debouncedSearch.trim() === ""
+        }
+        empty={
+          <EmptyState
+            icon={FolderKanban}
+            title="No projects created"
+            description="Create a project to group namespaces, members, policy, and quota across adopted clusters."
+            actionLabel="Create project"
+            actionIcon={Plus}
+            onAction={() => setShowCreateModal(true)}
+          />
+        }
+      >
+        <DataTable
+          data={projects}
+          columns={projectColumns}
+          keyExtractor={(row) => row.id}
+          searchPlaceholder="Search projects..."
+          pageSize={PROJECTS_PAGE_SIZE}
+          filtersActive={debouncedSearch.trim() !== ""}
+          onClearFilters={() => {
+            setSearch("");
+            setPageIndex(0);
+          }}
+          serverSide={{
+            rowCount: pageRowCount(projectsData),
+            pagination: { pageIndex, pageSize: PROJECTS_PAGE_SIZE },
+            onPaginationChange: (next) => setPageIndex(next.pageIndex),
+            search: {
+              value: search,
+              onChange: (value) => {
+                setSearch(value);
+                setPageIndex(0);
+              },
+            },
+          }}
+          emptyState={{
+            title: "No projects available",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
+          onRowClick={(row) =>
+            void navigate({ to: `/dashboard/projects/${row.id}` })
+          }
+        />
+      </QueryStates>
 
       {/* Create Project Modal */}
       {showCreateModal && (
@@ -486,7 +534,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
                   key={ns.name}
                   onClick={() => toggleNamespace(ns.name)}
                   className={cn(
-                    "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                    "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
                     selectedNamespaces.includes(ns.name)
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:text-foreground",

@@ -1,6 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import * as apiClient from "@/lib/api";
+import {
+  getGenericResources,
+  getClusterResourceCounts,
+} from "@/lib/api/resource-search";
+import {
+  getResourceDiscovery,
+  ResourceType,
+  getResourceSchema,
+} from "@/lib/api/resources";
+import {
+  downloadProxyKubeconfig,
+  downloadDirectKubeconfig,
+  k8sGetYaml,
+  k8sGet,
+  k8sDelete,
+  k8sApplyYaml,
+  k8sDryRunYaml,
+  k8sCreate,
+  k8sPatch,
+} from "@/lib/api/kubernetes-proxy";
 import { liveFallback } from "@/lib/live/status-store";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
@@ -13,16 +32,39 @@ export function useGenericResources(clusterId: string, resourceType: string) {
   return useQuery({
     queryKey: queryKeys.generic.resources(clusterId, resourceType),
     queryFn: ({ signal }) =>
-      apiClient.getGenericResources(clusterId, resourceType, signal),
+      getGenericResources(clusterId, resourceType, signal),
     enabled: !!clusterId && !!resourceType,
     refetchInterval: liveFallback(30000),
+  });
+}
+
+export function useClusterResourceCounts(
+  clusterId: string,
+  resourceTypes: readonly string[],
+  namespaces: readonly string[] | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.generic.resourceCounts(
+      clusterId,
+      resourceTypes,
+      namespaces,
+    ),
+    queryFn: ({ signal }) =>
+      getClusterResourceCounts(clusterId, resourceTypes, namespaces, signal),
+    enabled:
+      enabled &&
+      !!clusterId &&
+      resourceTypes.length > 0 &&
+      (namespaces === null || namespaces.length > 0),
+    refetchInterval: liveFallback(30_000),
   });
 }
 
 export function useResourceDiscovery(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.generic.discovery(clusterId),
-    queryFn: () => apiClient.getResourceDiscovery(clusterId),
+    queryFn: () => getResourceDiscovery(clusterId),
     enabled: !!clusterId,
     staleTime: 5 * 60_000,
   });
@@ -30,12 +72,12 @@ export function useResourceDiscovery(clusterId: string) {
 
 export function useResourceSchema(
   clusterId: string,
-  resourceType: apiClient.ResourceType,
+  resourceType: ResourceType,
   enabled = true,
 ) {
   return useQuery({
     queryKey: queryKeys.generic.schema(clusterId, resourceType),
-    queryFn: () => apiClient.getResourceSchema(clusterId, resourceType),
+    queryFn: () => getResourceSchema(clusterId, resourceType),
     enabled: enabled && !!clusterId && !!resourceType,
     staleTime: 5 * 60_000,
   });
@@ -47,8 +89,7 @@ export function useResourceSchema(
 
 export function useDownloadProxyKubeconfig() {
   return useMutation({
-    mutationFn: (clusterId: string) =>
-      apiClient.downloadProxyKubeconfig(clusterId),
+    mutationFn: (clusterId: string) => downloadProxyKubeconfig(clusterId),
     onSuccess: () => {
       toastSuccess("Read-only proxy kubeconfig downloaded");
     },
@@ -60,8 +101,7 @@ export function useDownloadProxyKubeconfig() {
 
 export function useDownloadDirectKubeconfig() {
   return useMutation({
-    mutationFn: (clusterId: string) =>
-      apiClient.downloadDirectKubeconfig(clusterId),
+    mutationFn: (clusterId: string) => downloadDirectKubeconfig(clusterId),
     onSuccess: () => {
       toastSuccess("15-minute direct read-only kubeconfig downloaded");
     },
@@ -85,7 +125,7 @@ export const k8sQueryKeys = {
 export function useK8sGetYaml(clusterId: string, path: string, enabled = true) {
   return useQuery({
     queryKey: k8sQueryKeys.yaml(clusterId, path),
-    queryFn: () => apiClient.k8sGetYaml(clusterId, path),
+    queryFn: () => k8sGetYaml(clusterId, path),
     enabled: !!clusterId && !!path && enabled,
     staleTime: 0,
     gcTime: 0,
@@ -100,7 +140,7 @@ export function useK8sResource(
 ) {
   return useQuery({
     queryKey: k8sQueryKeys.resource(clusterId, path),
-    queryFn: () => apiClient.k8sGet(clusterId, path),
+    queryFn: () => k8sGet(clusterId, path),
     enabled: !!clusterId && !!path && enabled,
     staleTime: 0,
     gcTime: 0,
@@ -111,7 +151,7 @@ export function useK8sDelete() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ clusterId, path }: { clusterId: string; path: string }) =>
-      apiClient.k8sDelete(clusterId, path),
+      k8sDelete(clusterId, path),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
@@ -140,7 +180,7 @@ export function useK8sApplyYaml() {
       path: string;
       yaml: string;
       force?: boolean;
-    }) => apiClient.k8sApplyYaml(clusterId, path, yaml, force),
+    }) => k8sApplyYaml(clusterId, path, yaml, force),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
@@ -166,7 +206,7 @@ export function useK8sDryRunYaml() {
       clusterId: string;
       path: string;
       yaml: string;
-    }) => apiClient.k8sDryRunYaml(clusterId, path, yaml),
+    }) => k8sDryRunYaml(clusterId, path, yaml),
     onSuccess: () => {
       toastSuccess("Dry run passed");
     },
@@ -187,7 +227,7 @@ export function useK8sCreate() {
       clusterId: string;
       path: string;
       body: unknown;
-    }) => apiClient.k8sCreate(clusterId, path, body),
+    }) => k8sCreate(clusterId, path, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
@@ -199,6 +239,55 @@ export function useK8sCreate() {
     },
     onError: (error: Error) => {
       toastApiError("Failed to create resource", error);
+    },
+  });
+}
+
+export interface K8sCreateBatchItem {
+  id: string;
+  path: string;
+  body: unknown;
+  label: string;
+}
+
+export interface K8sCreateBatchResult extends K8sCreateBatchItem {
+  ok: boolean;
+  error?: unknown;
+}
+
+/**
+ * Create Kubernetes objects in document order and retain an independent result
+ * for each one. Sequential execution is intentional: manifests commonly place
+ * namespaces and config ahead of the workloads that consume them.
+ */
+export function useK8sCreateBatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      clusterId,
+      items,
+    }: {
+      clusterId: string;
+      items: K8sCreateBatchItem[];
+    }): Promise<K8sCreateBatchResult[]> => {
+      const results: K8sCreateBatchResult[] = [];
+      for (const item of items) {
+        try {
+          await k8sCreate(clusterId, item.path, item.body);
+          results.push({ ...item, ok: true });
+        } catch (error) {
+          results.push({ ...item, ok: false, error });
+        }
+      }
+      return results;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.workloads.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.generic.all });
     },
   });
 }
@@ -216,7 +305,7 @@ export function useK8sPatch() {
       path: string;
       body: unknown;
       patchType?: "strategic-merge" | "merge" | "json";
-    }) => apiClient.k8sPatch(clusterId, path, body, patchType),
+    }) => k8sPatch(clusterId, path, body, patchType),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.k8s.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.clusters.all });

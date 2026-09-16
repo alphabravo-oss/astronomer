@@ -1,6 +1,4 @@
-"use client";
-
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useToolOperation } from "@/lib/hooks/tools";
 import {
   CheckCircle2,
@@ -37,6 +35,39 @@ export function ToolInstallProgress({
   const isTerminal = TERMINAL.includes(status);
   const failed = status === "failed";
   const events = op?.events ?? [];
+  const releases = useMemo(() => {
+    const latest = new Map<
+      string,
+      { name: string; namespace: string; index: number; state: string }
+    >();
+    for (const event of op?.events ?? []) {
+      if (!event.stage.startsWith("release.")) continue;
+      const detail = event.detail;
+      if (
+        typeof detail?.releaseName !== "string" ||
+        typeof detail.namespace !== "string" ||
+        typeof detail.stepIndex !== "number"
+      )
+        continue;
+      latest.set(`${detail.namespace}/${detail.releaseName}`, {
+        name: detail.releaseName,
+        namespace: detail.namespace,
+        index: detail.stepIndex,
+        state: event.stage.slice("release.".length),
+      });
+    }
+    return [...latest.values()].sort((a, b) => a.index - b.index);
+  }, [op?.events]);
+  const actionLabel =
+    op?.operationType === "uninstall"
+      ? "Removing"
+      : op?.operationType === "rollback"
+        ? "Rolling back"
+        : op?.operationType === "upgrade"
+          ? "Upgrading"
+          : op?.operationType === "adopt"
+            ? "Adopting"
+            : "Installing";
 
   // Auto-scroll the log to the newest event.
   const logRef = useRef<HTMLDivElement>(null);
@@ -53,21 +84,21 @@ export function ToolInstallProgress({
   const statusLabel = failed
     ? "Failed"
     : status === "completed"
-      ? "Deployed"
+      ? "Completed"
       : status === "superseded"
         ? "Superseded"
         : status === "running"
-          ? "Installing…"
+          ? `${actionLabel}…`
           : "Queued…";
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-popover shadow-2xl">
-      <div className="mx-auto w-[80%]">
+      <div className="mx-auto w-full max-w-[1800px]">
         <header className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border">
           <div className="flex items-center gap-2.5">
             <Terminal className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium text-foreground">
-              Installing {toolName}
+              {actionLabel} {toolName}
             </span>
             <span
               className={`inline-flex items-center gap-1.5 text-xs font-medium ${statusTone}`}
@@ -92,6 +123,35 @@ export function ToolInstallProgress({
           </button>
         </header>
 
+        {releases.length > 0 && (
+          <ol
+            aria-label="Release progress"
+            className="flex flex-wrap gap-3 px-4 py-3 text-xs"
+          >
+            {releases.map((release) => (
+              <li
+                key={`${release.namespace}/${release.name}`}
+                className="rounded-sm border border-border px-3 py-2"
+              >
+                <span className="font-medium">
+                  {release.index + 1}. {release.name}
+                </span>
+                {" · "}
+                <span
+                  className={
+                    release.state === "failed"
+                      ? "text-status-error"
+                      : release.state === "completed"
+                        ? "text-status-success"
+                        : "text-muted-foreground"
+                  }
+                >
+                  {release.state}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
         <div
           ref={logRef}
           className="max-h-56 overflow-y-auto px-4 py-3 font-mono text-xs space-y-1 bg-background/40"
@@ -104,10 +164,10 @@ export function ToolInstallProgress({
           )}
           {events.map((ev) => (
             <div key={ev.id} className="flex items-start gap-2">
-              <span className="text-muted-foreground/60 tabular-nums flex-shrink-0">
+              <span className="text-muted-foreground/60 tabular-nums shrink-0">
                 {new Date(ev.createdAt).toLocaleTimeString()}
               </span>
-              <span className="text-muted-foreground/80 flex-shrink-0 w-20 truncate">
+              <span className="text-muted-foreground/80 shrink-0 w-20 truncate">
                 [{ev.stage}]
               </span>
               <span className={levelColor(ev.level)}>{ev.message}</span>

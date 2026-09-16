@@ -10,14 +10,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
-
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type listEnvelope struct {
 	Data       []map[string]any `json:"data"`
-	Pagination Pagination       `json:"pagination"`
+	Pagination paging.Metadata  `json:"pagination"`
 }
 
 // TestPageWindow covers the slicing helper the cluster resource list endpoints
@@ -111,11 +112,55 @@ func TestListNodes_HonoursLimitOffset(t *testing.T) {
 	}
 }
 
+func TestListEventsClampsUpstreamLimit(t *testing.T) {
+	eventBody, err := json.Marshal(map[string]any{"items": []any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name      string
+		query     string
+		wantLimit string
+	}{
+		{name: "default", wantLimit: "100"},
+		{name: "negative", query: "?limit=-1", wantLimit: "100"},
+		{name: "overflow", query: "?limit=999999999", wantLimit: "500"},
+		{name: "bounded", query: "?limit=25", wantLimit: "25"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clusterID := uuid.NewString()
+			stub := &stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+				if req.Path != "/api/v1/events?limit="+tt.wantLimit {
+					t.Fatalf("upstream path = %q, want bounded limit %s", req.Path, tt.wantLimit)
+				}
+				return &protocol.K8sResponsePayload{
+					StatusCode: http.StatusOK,
+					Body:       base64.StdEncoding.EncodeToString(eventBody),
+				}, nil
+			}}
+			h := NewWorkloadHandlerWithRequester(stub)
+			rc := chi.NewRouteContext()
+			rc.URLParams.Add("cluster_id", clusterID)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/events/"+tt.query, nil)
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
+			rec := httptest.NewRecorder()
+
+			h.ListEvents(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func doListNodes(t *testing.T, h *WorkloadHandler, query string) listEnvelope {
 	t.Helper()
+	clusterID := uuid.NewString()
 	rc := chi.NewRouteContext()
-	rc.URLParams.Add("cluster_id", "c1")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/nodes/"+query, nil)
+	rc.URLParams.Add("cluster_id", clusterID)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/nodes/"+query, nil)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
 	rec := httptest.NewRecorder()
 	h.ListNodes(rec, req)

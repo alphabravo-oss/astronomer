@@ -156,8 +156,6 @@ func TestApiserverAllowlistReconcileCommitsTaskAndAuditWithoutInlineEffect(t *te
 		row:     &sqlc.ApiserverAllowlist{ClusterID: clusterID, Mode: "monitor"},
 	}}
 	h := transactionalAllowlistHandler(q)
-	inlineCalls := 0
-	h.SetReconciler(func(context.Context, uuid.UUID) error { inlineCalls++; return nil })
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/clusters/"+clusterID.String()+"/apiserver-allowlist/reconcile/", nil)
 	req.Header.Set("Idempotency-Key", "allowlist-reconcile-transactional")
@@ -166,7 +164,7 @@ func TestApiserverAllowlistReconcileCommitsTaskAndAuditWithoutInlineEffect(t *te
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	if q.rowLocks != 1 || len(q.tasks) != 1 || len(q.auditRows) != 1 || inlineCalls != 0 {
-		t.Fatalf("locks=%d tasks=%d audits=%d inline=%d", q.rowLocks, len(q.tasks), len(q.auditRows), inlineCalls)
+	if q.rowLocks != 1 || len(q.tasks) != 1 || len(q.auditRows) != 1 {
+		t.Fatalf("locks=%d tasks=%d audits=%d", q.rowLocks, len(q.tasks), len(q.auditRows))
 	}
 }

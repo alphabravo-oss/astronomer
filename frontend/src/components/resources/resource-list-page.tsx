@@ -1,13 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
+import { useCluster } from "@/lib/hooks/clusters";
 import {
-  useCluster,
   useWorkloads,
   useScaleWorkload,
   useRestartWorkload,
-  useK8sDelete,
-} from "@/lib/hooks";
-import * as apiClient from "@/lib/api";
-import { DataTable, type Column } from "@/components/ui/data-table";
+} from "@/lib/hooks/workloads";
+import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
+import { getWorkloadPods } from "@/lib/api/workloads";
+import type { Column } from "@/components/ui/data-table";
+import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -63,8 +64,8 @@ import {
   type ResourcePermissionDecisions,
 } from "@/components/resources/resource-action-policy";
 import type { Workload } from "@/types";
-import { useParams, useRouter } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   RESOURCE_TITLES,
   WORKLOAD_KINDS,
@@ -212,7 +213,8 @@ function WorkloadsTable({
   title: string;
 }) {
   const { data, isLoading } = useWorkloads(clusterId);
-  const router = useRouter();
+  const resourceType = kindToResourceType(kind);
+  const navigate = useNavigate();
   const filtered = (data?.data || []).filter((w) => w.kind === kind);
   const scaleWorkload = useScaleWorkload();
   const restartWorkload = useRestartWorkload();
@@ -239,7 +241,7 @@ function WorkloadsTable({
         return;
       }
       try {
-        const pods = await apiClient.getWorkloadPods(
+        const pods = await getWorkloadPods(
           clusterId,
           workload.kind,
           workload.namespace,
@@ -270,8 +272,8 @@ function WorkloadsTable({
         key: "name",
         header: "Name",
         accessor: (row) => (
-          <Link
-            href={workloadDetailHref(
+          <RouterLink
+            to={workloadDetailHref(
               clusterId,
               row.kind,
               row.namespace,
@@ -281,7 +283,7 @@ function WorkloadsTable({
             className="font-medium text-foreground font-mono text-xs hover:underline"
           >
             {row.name}
-          </Link>
+          </RouterLink>
         ),
       },
       ...workloadColumns.slice(1),
@@ -334,7 +336,9 @@ function WorkloadsTable({
           Create {kind}
         </ActionButton>
       </div>
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType={resourceType}
         data={filtered}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
@@ -343,13 +347,32 @@ function WorkloadsTable({
             toastPermissionDenied(permissions.read);
             return;
           }
-          router.push(
-            workloadDetailHref(clusterId, row.kind, row.namespace, row.name),
-          );
+          void navigate({
+            to: workloadDetailHref(
+              clusterId,
+              row.kind,
+              row.namespace,
+              row.name,
+            ),
+          });
         }}
         searchPlaceholder={`Search ${title.toLowerCase()}...`}
         loading={isLoading}
-        emptyMessage={`No ${title.toLowerCase()} found`}
+        emptyState={{
+          title: `No ${title.toLowerCase()} found`,
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        bulkDelete={{
+          path: (row) =>
+            k8sResourcePath(
+              kindToResourceType(row.kind),
+              row.name,
+              row.namespace,
+            ),
+          label: (row) => `${row.namespace}/${row.name}`,
+          noun: kind,
+        }}
       />
 
       <ScaleDialog
@@ -442,9 +465,9 @@ function WorkloadsTable({
 // ── Main Page Component ──
 
 export function ClusterResourcePage() {
-  const params = useParams();
-  const clusterId = params.id as string;
-  const resource = params.resource as string;
+  const params = useParams({ from: "/dashboard/clusters/$id/$resource/" });
+  const clusterId = params.id;
+  const resource = params.resource;
 
   const title = RESOURCE_TITLES[resource];
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);

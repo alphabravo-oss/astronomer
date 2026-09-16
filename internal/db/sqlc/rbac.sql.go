@@ -8,10 +8,89 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const applyProjectRoleTemplate = `-- name: ApplyProjectRoleTemplate :one
+WITH materialized_role AS (
+    INSERT INTO project_roles (
+        name, display_name, description, permissions, rules, is_builtin,
+        source_template, source_digest
+    )
+    VALUES (
+        $1, $2, $3,
+        '{}'::jsonb, $4, true,
+        $5, $6
+    )
+    ON CONFLICT (source_template, source_digest)
+        WHERE source_template IS NOT NULL AND source_digest IS NOT NULL
+    DO UPDATE SET source_template = EXCLUDED.source_template
+    RETURNING id
+), materialized_binding AS (
+    INSERT INTO project_role_bindings (user_id, "group", role_id, project_id)
+    SELECT $7, '', id, $8
+    FROM materialized_role
+    ON CONFLICT (user_id, role_id, project_id)
+    DO UPDATE SET updated_at = project_role_bindings.updated_at
+    RETURNING id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id
+)
+SELECT id, user_id, "group", role_id, project_id, created_at, updated_at, source, group_sync_connector_id FROM materialized_binding
+`
+
+type ApplyProjectRoleTemplateParams struct {
+	RoleName       string          `json:"role_name"`
+	DisplayName    string          `json:"display_name"`
+	Description    string          `json:"description"`
+	Rules          json.RawMessage `json:"rules"`
+	TemplateName   pgtype.Text     `json:"template_name"`
+	TemplateDigest pgtype.Text     `json:"template_digest"`
+	UserID         pgtype.UUID     `json:"user_id"`
+	ProjectID      uuid.UUID       `json:"project_id"`
+}
+
+type ApplyProjectRoleTemplateRow struct {
+	ID                   uuid.UUID   `json:"id"`
+	UserID               pgtype.UUID `json:"user_id"`
+	Group                string      `json:"group"`
+	RoleID               uuid.UUID   `json:"role_id"`
+	ProjectID            uuid.UUID   `json:"project_id"`
+	CreatedAt            time.Time   `json:"created_at"`
+	UpdatedAt            time.Time   `json:"updated_at"`
+	Source               string      `json:"source"`
+	GroupSyncConnectorID pgtype.UUID `json:"group_sync_connector_id"`
+}
+
+// Materialize an immutable catalog template and bind it to a user in one
+// statement. The template+digest identity makes retries and concurrent calls
+// converge on the same role and binding without mutating older grants.
+func (q *Queries) ApplyProjectRoleTemplate(ctx context.Context, arg ApplyProjectRoleTemplateParams) (ApplyProjectRoleTemplateRow, error) {
+	row := q.db.QueryRow(ctx, applyProjectRoleTemplate,
+		arg.RoleName,
+		arg.DisplayName,
+		arg.Description,
+		arg.Rules,
+		arg.TemplateName,
+		arg.TemplateDigest,
+		arg.UserID,
+		arg.ProjectID,
+	)
+	var i ApplyProjectRoleTemplateRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Group,
+		&i.RoleID,
+		&i.ProjectID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Source,
+		&i.GroupSyncConnectorID,
+	)
+	return i, err
+}
 
 const countClusterRoles = `-- name: CountClusterRoles :one
 SELECT count(*) FROM cluster_roles
@@ -193,7 +272,7 @@ func (q *Queries) CreateGlobalRoleBinding(ctx context.Context, arg CreateGlobalR
 const createProjectRole = `-- name: CreateProjectRole :one
 INSERT INTO project_roles (name, display_name, description, permissions, rules, is_builtin)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name
+RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name, source_template, source_digest
 `
 
 type CreateProjectRoleParams struct {
@@ -225,6 +304,8 @@ func (q *Queries) CreateProjectRole(ctx context.Context, arg CreateProjectRolePa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisplayName,
+		&i.SourceTemplate,
+		&i.SourceDigest,
 	)
 	return i, err
 }
@@ -316,6 +397,45 @@ DELETE FROM project_role_bindings WHERE id = $1
 func (q *Queries) DeleteProjectRoleBinding(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteProjectRoleBinding, id)
 	return err
+}
+
+const getAppliedProjectRoleTemplateBinding = `-- name: GetAppliedProjectRoleTemplateBinding :one
+SELECT b.id, b.user_id, b."group", b.role_id, b.project_id, b.created_at, b.updated_at, b.source, b.group_sync_connector_id
+FROM project_role_bindings b
+JOIN project_roles r ON r.id = b.role_id
+WHERE b.user_id = $1
+  AND b.project_id = $2
+  AND r.source_template = $3
+  AND r.source_digest = $4
+`
+
+type GetAppliedProjectRoleTemplateBindingParams struct {
+	UserID         pgtype.UUID `json:"user_id"`
+	ProjectID      uuid.UUID   `json:"project_id"`
+	TemplateName   pgtype.Text `json:"template_name"`
+	TemplateDigest pgtype.Text `json:"template_digest"`
+}
+
+func (q *Queries) GetAppliedProjectRoleTemplateBinding(ctx context.Context, arg GetAppliedProjectRoleTemplateBindingParams) (ProjectRoleBinding, error) {
+	row := q.db.QueryRow(ctx, getAppliedProjectRoleTemplateBinding,
+		arg.UserID,
+		arg.ProjectID,
+		arg.TemplateName,
+		arg.TemplateDigest,
+	)
+	var i ProjectRoleBinding
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Group,
+		&i.RoleID,
+		&i.ProjectID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Source,
+		&i.GroupSyncConnectorID,
+	)
+	return i, err
 }
 
 const getClusterRoleBindingByID = `-- name: GetClusterRoleBindingByID :one
@@ -435,7 +555,7 @@ func (q *Queries) GetProjectRoleBindingByID(ctx context.Context, id uuid.UUID) (
 
 const getProjectRoleByID = `-- name: GetProjectRoleByID :one
 
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM project_roles WHERE id = $1
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name, source_template, source_digest FROM project_roles WHERE id = $1
 `
 
 // Project Roles
@@ -452,6 +572,8 @@ func (q *Queries) GetProjectRoleByID(ctx context.Context, id uuid.UUID) (Project
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisplayName,
+		&i.SourceTemplate,
+		&i.SourceDigest,
 	)
 	return i, err
 }
@@ -733,7 +855,7 @@ func (q *Queries) ListProjectRoleBindingsByProject(ctx context.Context, arg List
 }
 
 const listProjectRoles = `-- name: ListProjectRoles :many
-SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name FROM project_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name, source_template, source_digest FROM project_roles ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
 
 type ListProjectRolesParams struct {
@@ -760,6 +882,8 @@ func (q *Queries) ListProjectRoles(ctx context.Context, arg ListProjectRolesPara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DisplayName,
+			&i.SourceTemplate,
+			&i.SourceDigest,
 		); err != nil {
 			return nil, err
 		}
@@ -957,7 +1081,7 @@ UPDATE project_roles SET
     permissions = $5,
     rules = $6
 WHERE id = $1
-RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name
+RETURNING id, name, description, permissions, rules, is_builtin, created_at, updated_at, display_name, source_template, source_digest
 `
 
 type UpdateProjectRoleParams struct {
@@ -989,6 +1113,8 @@ func (q *Queries) UpdateProjectRole(ctx context.Context, arg UpdateProjectRolePa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisplayName,
+		&i.SourceTemplate,
+		&i.SourceDigest,
 	)
 	return i, err
 }

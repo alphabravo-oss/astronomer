@@ -4,7 +4,7 @@ import type {
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from "axios";
-import api from "@/lib/api";
+import api from "@/lib/api/transport";
 
 const realAdapter = api.defaults.adapter;
 

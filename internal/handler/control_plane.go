@@ -9,18 +9,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 type ControlPlaneQuerier interface {
@@ -44,30 +44,6 @@ type ControlPlaneMutationTx interface {
 }
 
 type controlPlaneRunTxFunc func(context.Context, func(ControlPlaneMutationTx) error) error
-
-func executeControlPlaneMutation[T any](r *http.Request, h *ControlPlaneHandler, mutate func(ControlPlaneQuerier) (T, error), describe func(T) clusterAuditEvent) (T, error) {
-	var zero T
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q ControlPlaneMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(result)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return result, err
-	}
-	result, err := mutate(h.queries)
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
 
 type ControlPlaneHandler struct {
 	queries    ControlPlaneQuerier
@@ -193,12 +169,12 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		CatalogRecentFailureThreshold:    atLeastOne(req.CatalogRecentFailureThreshold),
 		RecentFailureWindowMinutes:       atLeastOne(req.RecentFailureWindowMinutes),
 	}
-	policy, err := executeControlPlaneMutation(r, h,
-		func(q ControlPlaneQuerier) (sqlc.ControlPlanePolicy, error) {
+	policy, err := executeMutation(r, h.runTx,
+		func(q ControlPlaneMutationTx) (sqlc.ControlPlanePolicy, error) {
 			return q.UpsertDefaultControlPlanePolicy(r.Context(), params)
 		},
-		func(policy sqlc.ControlPlanePolicy) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(policy sqlc.ControlPlanePolicy) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "controlplane.policy.update", resourceType: "control_plane_policy", resourceID: policy.ID.String(), status: http.StatusOK,
 				detail: map[string]any{
 					"monitoring_queue_depth_threshold": policy.MonitoringQueueDepthThreshold,
@@ -221,7 +197,7 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	arg := sqlc.ListControlPlaneAlertsParams{
 		Limit:  int32(queryLimit(r, 50)),
-		Offset: int32(queryInt(r, "offset", 0)),
+		Offset: int32(queryOffset(r)),
 	}
 	if status := r.URL.Query().Get("status"); status != "" {
 		arg.Status = pgtype.Text{String: status, Valid: true}
@@ -238,7 +214,7 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 	for _, alert := range alerts {
 		resp = append(resp, controlPlaneAlertResponse(alert))
 	}
-	RespondList(w, resp, NewPaginationFromPage(int(arg.Limit), int(arg.Offset), len(resp)))
+	paging.Write(w, resp, paging.FromPage(int(arg.Limit), int(arg.Offset), len(resp)))
 }
 
 func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
@@ -247,12 +223,12 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid alert ID")
 		return
 	}
-	alert, err := executeControlPlaneMutation(r, h,
-		func(q ControlPlaneQuerier) (sqlc.ControlPlaneAlert, error) {
+	alert, err := executeMutation(r, h.runTx,
+		func(q ControlPlaneMutationTx) (sqlc.ControlPlaneAlert, error) {
 			return q.AcknowledgeControlPlaneAlert(r.Context(), sqlc.AcknowledgeControlPlaneAlertParams{ID: id, AcknowledgedByID: currentUserUUID(r)})
 		},
-		func(alert sqlc.ControlPlaneAlert) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(alert sqlc.ControlPlaneAlert) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "controlplane.alert.acknowledge", resourceType: "control_plane_alert", resourceID: id.String(), resourceName: alert.Controller, status: http.StatusOK,
 				detail: map[string]any{"condition_type": alert.ConditionType, "status": alert.Status},
 			}
@@ -272,7 +248,7 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
 	items, err := h.queries.ListControlPlaneSilences(r.Context(), sqlc.ListControlPlaneSilencesParams{
 		Limit:  int32(queryLimit(r, 50)),
-		Offset: int32(queryInt(r, "offset", 0)),
+		Offset: int32(queryOffset(r)),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SilenceError, "Failed to list control plane silences")
@@ -282,7 +258,7 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 	for _, item := range items {
 		resp = append(resp, controlPlaneSilenceResponse(item))
 	}
-	RespondList(w, resp, NewPaginationFromPage(queryLimit(r, 50), queryInt(r, "offset", 0), len(resp)))
+	paging.Write(w, resp, paging.FromPage(queryLimit(r, 50), queryOffset(r), len(resp)))
 }
 
 func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {
@@ -304,12 +280,12 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 		EndsAt:        time.Now().UTC().Add(duration),
 		CreatedByID:   currentUserUUID(r),
 	}
-	item, err := executeControlPlaneMutation(r, h,
-		func(q ControlPlaneQuerier) (sqlc.ControlPlaneSilence, error) {
+	item, err := executeMutation(r, h.runTx,
+		func(q ControlPlaneMutationTx) (sqlc.ControlPlaneSilence, error) {
 			return q.CreateControlPlaneSilence(r.Context(), params)
 		},
-		func(item sqlc.ControlPlaneSilence) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(item sqlc.ControlPlaneSilence) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "controlplane.silence.create", resourceType: "control_plane_silence", resourceID: item.ID.String(), resourceName: item.Controller, status: http.StatusCreated,
 				detail: map[string]any{"controller": item.Controller, "condition_type": item.ConditionType, "duration": duration.String()},
 			}
@@ -329,12 +305,12 @@ func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
 		return
 	}
-	_, err = executeControlPlaneMutation(r, h,
-		func(q ControlPlaneQuerier) (sqlc.ControlPlaneSilence, error) {
+	_, err = executeMutation(r, h.runTx,
+		func(q ControlPlaneMutationTx) (sqlc.ControlPlaneSilence, error) {
 			return q.DeleteControlPlaneSilence(r.Context(), id)
 		},
-		func(item sqlc.ControlPlaneSilence) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(item sqlc.ControlPlaneSilence) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "controlplane.silence.delete", resourceType: "control_plane_silence", resourceID: item.ID.String(), resourceName: item.Controller, status: http.StatusNoContent,
 				detail: map[string]any{"condition_type": item.ConditionType},
 			}
@@ -560,7 +536,7 @@ func (h *ControlPlaneHandler) enqueueNotifications(ctx context.Context, alert sq
 		if err != nil {
 			continue
 		}
-		payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
+		payload := observability.EnrichTaskPayload(ctx, task.Payload(), reqctx.CorrelationID(ctx))
 		task = asynq.NewTask(task.Type(), payload)
 		_, _ = h.queue.Enqueue(task)
 	}

@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +37,6 @@ func fixtureCluster(t *testing.T, withOptionals bool) sqlc.Cluster {
 	creatorID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	createdAt := time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 2, 20, 12, 45, 30, 123456789, time.UTC)
-	hb := time.Date(2026, 5, 10, 8, 15, 0, 0, time.UTC)
 	dec := time.Date(2026, 5, 11, 9, 0, 0, 0, time.UTC)
 
 	c := sqlc.Cluster{
@@ -52,6 +52,7 @@ func fixtureCluster(t *testing.T, withOptionals bool) sqlc.Cluster {
 		Provider:          "aws",
 		Labels:            json.RawMessage(`{"team":"platform"}`),
 		Annotations:       json.RawMessage(`{"owner":"sre"}`),
+		AgentOverrides:    json.RawMessage(`{}`),
 		Distribution:      "eks",
 		AgentVersion:      "v1.2.3",
 		KubernetesVersion: "v1.30.2",
@@ -61,7 +62,6 @@ func fixtureCluster(t *testing.T, withOptionals bool) sqlc.Cluster {
 		IsLocal:           false,
 	}
 	if withOptionals {
-		c.LastHeartbeat = pgtype.Timestamptz{Time: hb, Valid: true}
 		c.DecommissionedAt = pgtype.Timestamptz{Time: dec, Valid: true}
 		c.CreatedByID = pgtype.UUID{Bytes: creatorID, Valid: true}
 	}
@@ -74,11 +74,12 @@ func fixtureCluster(t *testing.T, withOptionals bool) sqlc.Cluster {
 // guarantee that the DTO migration didn't change the dashboard API contract.
 func TestClusterResponse_WireCompat(t *testing.T) {
 	cases := []struct {
-		name    string
-		cluster sqlc.Cluster
-		cpu     float64
-		mem     float64
-		pods    int
+		name      string
+		cluster   sqlc.Cluster
+		cpu       float64
+		mem       float64
+		pods      int
+		heartbeat pgtype.Timestamptz
 	}{
 		{
 			name:    "all fields populated",
@@ -86,6 +87,10 @@ func TestClusterResponse_WireCompat(t *testing.T) {
 			cpu:     42.5,
 			mem:     63.1,
 			pods:    87,
+			heartbeat: pgtype.Timestamptz{
+				Time:  time.Date(2026, 5, 10, 8, 15, 0, 0, time.UTC),
+				Valid: true,
+			},
 		},
 		{
 			name:    "optionals invalid (null pgtype)",
@@ -111,12 +116,18 @@ func TestClusterResponse_WireCompat(t *testing.T) {
 			if err := json.Unmarshal(legacyJSON, &legacyMap); err != nil {
 				t.Fatalf("unmarshal legacy: %v", err)
 			}
+			if tc.heartbeat.Valid {
+				legacyMap["last_heartbeat"] = tc.heartbeat.Time.Format(time.RFC3339Nano)
+			} else {
+				legacyMap["last_heartbeat"] = nil
+			}
 			legacyJSON, err = json.Marshal(legacyMap)
 			if err != nil {
 				t.Fatalf("remarshal legacy: %v", err)
 			}
 
-			resp := clusterToResponse(tc.cluster)
+			resp := mustClusterResponse(t, tc.cluster)
+			setClusterResponseHeartbeat(&resp, tc.heartbeat)
 			resp.CPUPercentage = tc.cpu
 			resp.MemoryPercentage = tc.mem
 			resp.PodCount = tc.pods
@@ -132,6 +143,9 @@ func TestClusterResponse_WireCompat(t *testing.T) {
 			// Additive, same as agent_privilege_profile: derived from
 			// annotations, always "off" unless a superuser set the flag.
 			delete(dtoMap, "downstream_impersonation")
+			// Additive typed configuration metadata introduced after the DTO
+			// migration; the legacy anonymous sqlc row had no derived digest.
+			delete(dtoMap, "agent_overrides_digest")
 			dtoJSON, err = json.Marshal(dtoMap)
 			if err != nil {
 				t.Fatalf("remarshal dto: %v", err)
@@ -148,7 +162,7 @@ func TestClusterResponseIncludesAgentPrivilegeProfile(t *testing.T) {
 	cluster := fixtureCluster(t, false)
 	cluster.Annotations = json.RawMessage(`{"astronomer.io/agent-privilege-profile":"operator"}`)
 
-	resp := clusterToResponse(cluster)
+	resp := mustClusterResponse(t, cluster)
 	if resp.AgentPrivilegeProfile != "operator" {
 		t.Fatalf("agent privilege profile = %q, want operator", resp.AgentPrivilegeProfile)
 	}
@@ -156,15 +170,44 @@ func TestClusterResponseIncludesAgentPrivilegeProfile(t *testing.T) {
 	// An invalid/unknown profile must fail closed to least privilege (C2),
 	// never to the cluster-admin profile.
 	cluster.Annotations = json.RawMessage(`{"astronomer.io/agent-privilege-profile":"invalid"}`)
-	resp = clusterToResponse(cluster)
+	resp = mustClusterResponse(t, cluster)
 	if resp.AgentPrivilegeProfile != "viewer" {
 		t.Fatalf("invalid profile = %q, want viewer fallback", resp.AgentPrivilegeProfile)
 	}
 
 	// An explicit admin profile must still resolve to admin.
 	cluster.Annotations = json.RawMessage(`{"astronomer.io/agent-privilege-profile":"admin"}`)
-	resp = clusterToResponse(cluster)
+	resp = mustClusterResponse(t, cluster)
 	if resp.AgentPrivilegeProfile != "admin" {
 		t.Fatalf("explicit admin profile = %q, want admin", resp.AgentPrivilegeProfile)
+	}
+}
+
+func TestClusterToResponseRejectsMalformedPersistedOverridesWithoutPanic(t *testing.T) {
+	cluster := fixtureCluster(t, false)
+	cluster.AgentOverrides = json.RawMessage(`{"resources":`)
+	if _, err := clusterToResponse(cluster); err == nil {
+		t.Fatal("malformed persisted agent_overrides was accepted")
+	}
+}
+
+func TestClusterToResponseAcceptsEmptyAndForwardCompatibleOverrides(t *testing.T) {
+	for _, raw := range []json.RawMessage{
+		json.RawMessage(`{}`),
+		json.RawMessage(`{"future_field":{"enabled":true}}`),
+	} {
+		cluster := fixtureCluster(t, false)
+		cluster.AgentOverrides = raw
+		if _, err := clusterToResponse(cluster); err != nil {
+			t.Fatalf("agent_overrides %s: %v", raw, err)
+		}
+	}
+}
+
+func TestClusterToResponseRejectsOversizedPersistedOverrides(t *testing.T) {
+	cluster := fixtureCluster(t, false)
+	cluster.AgentOverrides = json.RawMessage(`{"future":"` + strings.Repeat("x", 33<<10) + `"}`)
+	if _, err := clusterToResponse(cluster); err == nil {
+		t.Fatal("oversized persisted agent_overrides was accepted")
 	}
 }

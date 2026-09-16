@@ -27,8 +27,8 @@ type ccrStuckQuerier struct {
 	clearedTo   string
 }
 
-func (q *ccrStuckQuerier) ListClusterConditionsByStatus(_ context.Context, status string) ([]sqlc.ClusterCondition, error) {
-	switch status {
+func (q *ccrStuckQuerier) ListClusterConditionsByStatus(_ context.Context, arg sqlc.ListClusterConditionsByStatusParams) ([]sqlc.ClusterCondition, error) {
+	switch arg.Status {
 	case ccrStatusFalse:
 		q.falseListed = true
 		return nil, nil

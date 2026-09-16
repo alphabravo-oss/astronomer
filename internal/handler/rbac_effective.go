@@ -7,13 +7,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type effectivePermissionResponse struct {
@@ -107,7 +108,7 @@ type permissionSensitiveFlags struct {
 }
 
 func (h *RBACHandler) MyEffectivePermissions(w http.ResponseWriter, r *http.Request) {
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -125,7 +126,7 @@ func (h *RBACHandler) EffectivePermissionsForUser(w http.ResponseWriter, r *http
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid user ID")
 		return
 	}
-	current, _ := middleware.GetAuthenticatedUser(r.Context())
+	current, _ := reqctx.AuthenticatedUser(r.Context())
 	self := current != nil && current.ID == userID
 	h.respondEffectivePermissions(w, r, userID, self)
 }

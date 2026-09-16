@@ -19,12 +19,17 @@ import (
 type ccrPrecheckQuerier struct {
 	RuntimeQuerier
 	cluster       sqlc.Cluster
+	liveness      sqlc.ClusterLiveness
 	tokensCreated int
 	attempts      []sqlc.InsertClusterConditionRemediationParams
 }
 
 func (q *ccrPrecheckQuerier) GetClusterByID(_ context.Context, _ uuid.UUID) (sqlc.Cluster, error) {
 	return q.cluster, nil
+}
+
+func (q *ccrPrecheckQuerier) GetClusterLiveness(_ context.Context, _ uuid.UUID) (sqlc.ClusterLiveness, error) {
+	return q.liveness, nil
 }
 
 func (q *ccrPrecheckQuerier) CreateClusterRegistrationToken(_ context.Context, _ sqlc.CreateClusterRegistrationTokenParams) (sqlc.ClusterRegistrationToken, error) {
@@ -50,10 +55,8 @@ func TestRemediateConnectedFalse_SkipsWhenAgentReconnected(t *testing.T) {
 
 	// Fresh heartbeat (30s ago, well inside the 2m window) => reconnected.
 	freshQ := &ccrPrecheckQuerier{
-		cluster: sqlc.Cluster{
-			ID:            clusterID,
-			LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-30 * time.Second), Valid: true},
-		},
+		cluster:  sqlc.Cluster{ID: clusterID},
+		liveness: sqlc.ClusterLiveness{ClusterID: clusterID, LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-30 * time.Second), Valid: true}},
 	}
 	freshCtx := testRuntimeContext(RuntimeDependencies{Queries: freshQ})
 	if err := remediateConnectedFalse(freshCtx, row); err != nil {
@@ -68,10 +71,8 @@ func TestRemediateConnectedFalse_SkipsWhenAgentReconnected(t *testing.T) {
 
 	// Stale heartbeat (5m ago, outside the window) => still down, reissue.
 	staleQ := &ccrPrecheckQuerier{
-		cluster: sqlc.Cluster{
-			ID:            clusterID,
-			LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-5 * time.Minute), Valid: true},
-		},
+		cluster:  sqlc.Cluster{ID: clusterID},
+		liveness: sqlc.ClusterLiveness{ClusterID: clusterID, LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-5 * time.Minute), Valid: true}},
 	}
 	staleCtx := testRuntimeContext(RuntimeDependencies{Queries: staleQ})
 	if err := remediateConnectedFalse(staleCtx, row); err != nil {

@@ -50,9 +50,6 @@ func TestBoundaryEnumsAreCompleteBoundedAndInstrumented(t *testing.T) {
 			"Record(downstreamboundary.EntrypointTunnelMessage, operation)",
 			"Record(downstreamboundary.EntrypointTunnelBroadcast, operation)",
 		},
-		filepath.Join(internal, "tunnel2", "server.go"): {
-			"RecordContext(ctx, downstreamboundary.EntrypointRemoteDialer, downstreamboundary.OperationKubernetes)",
-		},
 	}
 	for path, markers := range required {
 		source, err := os.ReadFile(path)
@@ -104,7 +101,7 @@ func TestCharlieAttributionIsTrustedAndIndependentFromClusterTraffic(t *testing.
 
 	allBefore = TakeSnapshot()
 	charlieBefore = TakeCharlieSnapshot()
-	RecordContext(WithCharlieOrigin(context.Background()), EntrypointRemoteDialer, OperationKubernetes)
+	RecordContext(WithCharlieOrigin(context.Background()), EntrypointKubernetesProxy, OperationKubernetes)
 	if delta := TakeSnapshot().DeltaTotal(allBefore); delta != 1 {
 		t.Fatalf("cluster boundary delta=%d want=1", delta)
 	}

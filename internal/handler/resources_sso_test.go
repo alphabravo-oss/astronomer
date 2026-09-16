@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +23,41 @@ type fakeSSOSettingsQuerier struct {
 	byID        map[uuid.UUID]sqlc.SsoConfiguration
 	created     *sqlc.CreateSSOConfigurationParams
 	deletedID   uuid.UUID
+}
+
+type resourceSSOTestTx struct {
+	*fakeSSOSettingsQuerier
+	audit *resourceAuditQuerier
+}
+
+func (tx *resourceSSOTestTx) GetPlatformConfigForUpdate(context.Context) (sqlc.PlatformConfiguration, error) {
+	return sqlc.PlatformConfiguration{}, pgx.ErrNoRows
+}
+
+func (tx *resourceSSOTestTx) UpsertPlatformConfig(context.Context, sqlc.UpsertPlatformConfigParams) (sqlc.PlatformConfiguration, error) {
+	return sqlc.PlatformConfiguration{}, errors.New("unexpected platform settings mutation")
+}
+
+func (tx *resourceSSOTestTx) LockSSOProviderKey(context.Context, string) error { return nil }
+
+func (tx *resourceSSOTestTx) GetSSOConfigurationByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.SsoConfiguration, error) {
+	return tx.GetSSOConfigurationByID(ctx, id)
+}
+
+func (tx *resourceSSOTestTx) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	tx.audit.rows = append(tx.audit.rows, sqlc.CreateAuditLogV1Params{
+		Source: arg.Source, CorrelationID: arg.CorrelationID, UserID: arg.UserID,
+		ActorAuthMethod: arg.ActorAuthMethod, Action: arg.Action, ResourceType: arg.ResourceType,
+		ResourceID: arg.ResourceID, ResourceName: arg.ResourceName, HTTPMethod: arg.HttpMethod,
+		Path: arg.Path, StatusCode: arg.StatusCode, DurationMs: arg.DurationMs, RequestID: arg.RequestID,
+		IpAddress: arg.IpAddress, UserAgent: arg.UserAgent, Detail: arg.Detail, ActionClass: arg.ActionClass,
+	})
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action, Detail: arg.Detail}, nil
+}
+
+func wireResourceSSOTestTransaction(h *ResourceHandler, q *fakeSSOSettingsQuerier, audit *resourceAuditQuerier) {
+	tx := &resourceSSOTestTx{fakeSSOSettingsQuerier: q, audit: audit}
+	h.SetRunTx(func(_ context.Context, fn func(ResourceSettingsMutationTx) error) error { return fn(tx) })
 }
 
 func (f *fakeSSOSettingsQuerier) ListSSOConfigurations(context.Context, sqlc.ListSSOConfigurationsParams) ([]sqlc.SsoConfiguration, error) {
@@ -97,6 +133,7 @@ func TestCreateSSOProviderRegistersGenericOIDCProvider(t *testing.T) {
 	}
 	audit := &resourceAuditQuerier{}
 	h := &ResourceHandler{queries: audit, sso: q, encryptor: enc, ssoMgr: ssoMgr}
+	wireResourceSSOTestTransaction(h, q, audit)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/settings/sso/", stringsReader(`{
 		"type":"oidc",
@@ -210,6 +247,7 @@ func TestDeleteSSOProviderRemovesProviderFromManager(t *testing.T) {
 	}
 	audit := &resourceAuditQuerier{}
 	h := &ResourceHandler{queries: audit, sso: q, ssoMgr: ssoMgr}
+	wireResourceSSOTestTransaction(h, q, audit)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/settings/sso/"+row.ID.String()+"/", nil)
 	rctx := chi.NewRouteContext()

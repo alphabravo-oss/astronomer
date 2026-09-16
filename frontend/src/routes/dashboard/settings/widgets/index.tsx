@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +8,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * /dashboard/settings/widgets — admin CRUD for dashboard widgets +
  * Prometheus datasources (migration 058).
@@ -26,7 +28,7 @@ import {
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Plus,
@@ -38,7 +40,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { QueryStates } from "@/components/ui/query-states";
 import { useAppForm } from "@/lib/form";
+import { Textarea } from "@/components/ui/textarea";
 import {
   listWidgets,
   createWidget,
@@ -131,6 +135,7 @@ function WidgetsAdminPage() {
   const widgets = widgetsQuery.data ?? [];
   const datasources = datasourcesQuery.data ?? [];
   const loading = widgetsQuery.isLoading;
+
 
   const invalidateWidgets = () =>
     queryClient.invalidateQueries({ queryKey: WIDGETS_KEY });
@@ -300,12 +305,12 @@ function WidgetsAdminPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <Link
-            href="/dashboard/settings"
+          <RouterLink
+            to="/dashboard/settings"
             className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
           >
             <ArrowLeft className="h-3 w-3" /> Settings
-          </Link>
+          </RouterLink>
           <h1 className="text-2xl font-semibold mt-1">Dashboard widgets</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Define widgets pinned to the global dashboard, per-cluster pages, or
@@ -314,7 +319,18 @@ function WidgetsAdminPage() {
         </div>
       </div>
 
-      {error || widgetsQuery.isError ? (
+      {widgetsQuery.isError && (
+        <QueryStates query={widgetsQuery} permission="dashboard_widgets:read">
+          {() => null}
+        </QueryStates>
+      )}
+      {datasourcesQuery.isError && (
+        <QueryStates query={datasourcesQuery} permission="dashboard_widgets:read">
+          {() => null}
+        </QueryStates>
+      )}
+
+      {error ? (
         <div className="text-sm text-status-error">
           {error ??
             (widgetsQuery.error instanceof Error
@@ -329,7 +345,7 @@ function WidgetsAdminPage() {
           {!editing ? (
             <button
               onClick={startCreate}
-              className="text-sm inline-flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded"
+              className="text-sm inline-flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded-sm"
             >
               <Plus className="h-4 w-4" /> New widget
             </button>
@@ -343,8 +359,8 @@ function WidgetsAdminPage() {
                 <div className="text-muted-foreground mb-1">Name</div>
                 <form.Field name="name">
                   {(field) => (
-                    <input
-                      className="w-full bg-background border border-border rounded px-2 py-1"
+                    <Input
+                      className="w-full bg-background border border-border rounded-sm px-2 py-1"
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -356,8 +372,8 @@ function WidgetsAdminPage() {
                 <div className="text-muted-foreground mb-1">Widget type</div>
                 <form.Field name="widgetType">
                   {(field) => (
-                    <select
-                      className="w-full bg-background border border-border rounded px-2 py-1"
+                    <Select
+                      className="w-full bg-background border border-border rounded-sm px-2 py-1"
                       value={field.state.value}
                       onChange={(e) => {
                         const t = e.target.value as WidgetType;
@@ -374,7 +390,7 @@ function WidgetsAdminPage() {
                       <option value="prom_stat">Prometheus stat</option>
                       <option value="grafana_panel">Grafana panel</option>
                       <option value="url_iframe">URL iframe</option>
-                    </select>
+                    </Select>
                   )}
                 </form.Field>
               </label>
@@ -382,8 +398,8 @@ function WidgetsAdminPage() {
                 <div className="text-muted-foreground mb-1">Scope</div>
                 <form.Field name="scope">
                   {(field) => (
-                    <select
-                      className="w-full bg-background border border-border rounded px-2 py-1"
+                    <Select
+                      className="w-full bg-background border border-border rounded-sm px-2 py-1"
                       value={field.state.value}
                       onChange={(e) =>
                         field.handleChange(e.target.value as WidgetScope)
@@ -393,7 +409,7 @@ function WidgetsAdminPage() {
                       <option value="global">Global</option>
                       <option value="cluster">Cluster</option>
                       <option value="project">Project</option>
-                    </select>
+                    </Select>
                   )}
                 </form.Field>
               </label>
@@ -403,9 +419,9 @@ function WidgetsAdminPage() {
                 </div>
                 <form.Field name="refreshSeconds">
                   {(field) => (
-                    <input
+                    <Input
                       type="number"
-                      className="w-full bg-background border border-border rounded px-2 py-1"
+                      className="w-full bg-background border border-border rounded-sm px-2 py-1"
                       value={field.state.value}
                       onChange={(e) =>
                         field.handleChange(parseInt(e.target.value, 10) || 60)
@@ -423,10 +439,10 @@ function WidgetsAdminPage() {
                   {(field) => (
                     <div className="flex gap-2">
                       {(["x", "y", "w", "h"] as const).map((k) => (
-                        <input
+                        <Input
                           key={k}
                           type="number"
-                          className="w-20 bg-background border border-border rounded px-2 py-1"
+                          className="w-20 bg-background border border-border rounded-sm px-2 py-1"
                           value={field.state.value[k] ?? 0}
                           onChange={(e) =>
                             field.handleChange({
@@ -446,9 +462,9 @@ function WidgetsAdminPage() {
               <div className="text-muted-foreground mb-1">Spec (JSON)</div>
               <form.Field name="specText">
                 {(field) => (
-                  <textarea
+                  <Textarea
                     rows={10}
-                    className="w-full font-mono text-xs bg-background border border-border rounded p-2"
+                    className="w-full font-mono text-xs bg-background border border-border rounded-sm p-2"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
@@ -460,7 +476,7 @@ function WidgetsAdminPage() {
               <button
                 onClick={() => void form.handleSubmit()}
                 disabled={saving}
-                className="inline-flex items-center gap-1 bg-primary text-primary-foreground text-sm px-3 py-1.5 rounded"
+                className="inline-flex items-center gap-1 bg-primary text-primary-foreground text-sm px-3 py-1.5 rounded-sm"
               >
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -471,7 +487,7 @@ function WidgetsAdminPage() {
               </button>
               <button
                 onClick={cancel}
-                className="text-sm px-3 py-1.5 rounded border border-border"
+                className="text-sm px-3 py-1.5 rounded-sm border border-border"
               >
                 Cancel
               </button>
@@ -621,24 +637,24 @@ function WidgetsAdminPage() {
               {showAddDS && (
                 <TableRow className="border-t border-border bg-muted/20">
                   <TableCell className="px-3 py-2">
-                    <input
-                      className="bg-background border border-border rounded px-2 py-1 w-32"
+                    <Input
+                      className="bg-background border border-border rounded-sm px-2 py-1 w-32"
                       placeholder="name"
                       value={dsName}
                       onChange={(e) => setDsName(e.target.value)}
                     />
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    <input
-                      className="bg-background border border-border rounded px-2 py-1 w-full font-mono text-xs"
+                    <Input
+                      className="bg-background border border-border rounded-sm px-2 py-1 w-full font-mono text-xs"
                       placeholder="https://prom..."
                       value={dsURL}
                       onChange={(e) => setDsURL(e.target.value)}
                     />
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    <input
-                      className="bg-background border border-border rounded px-2 py-1 w-32"
+                    <Input
+                      className="bg-background border border-border rounded-sm px-2 py-1 w-32"
                       placeholder="Bearer (optional)"
                       value={dsBearer}
                       onChange={(e) => setDsBearer(e.target.value)}

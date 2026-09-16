@@ -33,7 +33,7 @@ func testSSOHandler(t *testing.T) *SSOHandler {
 	if err := mgr.RegisterProvider("github", "client-id", encrypted, "", nil); err != nil {
 		t.Fatalf("register provider: %v", err)
 	}
-	h := NewSSOHandler(mgr, nil, jwt, "/")
+	h := NewSSOHandler(mgr, jwt, "/")
 	h.now = func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
 	return h
 }

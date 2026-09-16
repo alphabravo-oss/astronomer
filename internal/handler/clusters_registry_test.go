@@ -45,6 +45,10 @@ func (q *clusterRegistryTestQuerier) GetClusterByID(context.Context, uuid.UUID) 
 	return sqlc.Cluster{}, nil
 }
 
+func (q *clusterRegistryTestQuerier) GetClusterByIDForUpdate(context.Context, uuid.UUID) (sqlc.Cluster, error) {
+	return sqlc.Cluster{}, nil
+}
+
 func (q *clusterRegistryTestQuerier) GetClusterByName(context.Context, string) (sqlc.Cluster, error) {
 	return sqlc.Cluster{}, nil
 }
@@ -55,6 +59,10 @@ func (q *clusterRegistryTestQuerier) ListClusters(context.Context, sqlc.ListClus
 
 func (q *clusterRegistryTestQuerier) CreateCluster(context.Context, sqlc.CreateClusterParams) (sqlc.Cluster, error) {
 	return sqlc.Cluster{}, nil
+}
+
+func (q *clusterRegistryTestQuerier) CreateAPIToken(context.Context, sqlc.CreateAPITokenParams) (sqlc.ApiToken, error) {
+	return sqlc.ApiToken{}, nil
 }
 
 func (q *clusterRegistryTestQuerier) UpdateCluster(context.Context, sqlc.UpdateClusterParams) (sqlc.Cluster, error) {
@@ -107,6 +115,11 @@ func (q *clusterRegistryTestQuerier) CreateAuditLogV1(_ context.Context, arg sql
 	return nil
 }
 
+func (q *clusterRegistryTestQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	q.auditRows = append(q.auditRows, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{}, nil
+}
+
 // ListClusterConditions satisfies the ClusterQuerier interface introduced by
 // the cluster-conditions reconciler. This stub is only used by the registry
 // tests, which never exercise the conditions endpoint, so a nil return is
@@ -122,16 +135,28 @@ func (q *clusterRegistryTestQuerier) CreateClusterDecommission(context.Context, 
 	return sqlc.ClusterDecommission{}, nil
 }
 
-func (q *clusterRegistryTestQuerier) GetLatestClusterDecommissionByCluster(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error) {
-	return sqlc.ClusterDecommission{}, nil
-}
-
-func (q *clusterRegistryTestQuerier) ListPendingClusterDecommissions(context.Context, int32) ([]sqlc.ClusterDecommission, error) {
-	return nil, nil
+func (q *clusterRegistryTestQuerier) UpsertTaskOutbox(context.Context, sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	return sqlc.TaskOutbox{}, nil
 }
 
 func (q *clusterRegistryTestQuerier) SetClusterDecommissionForce(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error) {
 	return sqlc.ClusterDecommission{}, nil
+}
+
+func (q *clusterRegistryTestQuerier) GetClusterOwnership(context.Context, uuid.UUID) (sqlc.GetClusterOwnershipRow, error) {
+	return sqlc.GetClusterOwnershipRow{}, nil
+}
+
+func (q *clusterRegistryTestQuerier) SetClusterOwnership(context.Context, sqlc.SetClusterOwnershipParams) (sqlc.SetClusterOwnershipRow, error) {
+	return sqlc.SetClusterOwnershipRow{}, nil
+}
+
+func (q *clusterRegistryTestQuerier) GetLatestClusterDecommissionByCluster(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error) {
+	return sqlc.ClusterDecommission{}, nil
+}
+
+func (q *clusterRegistryTestQuerier) ListPendingClusterDecommissionsForClusters(context.Context, []uuid.UUID) ([]sqlc.ClusterDecommission, error) {
+	return nil, nil
 }
 
 // Sprint 074 — auto-attach surface. These three methods are no-ops in
@@ -166,6 +191,7 @@ func TestUpdateRegistryConfigAuditsLegacyRegistryMutation(t *testing.T) {
 	clusterID := uuid.New()
 	q := &clusterRegistryTestQuerier{}
 	h := NewClusterHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(ClusterMutationTx) error) error { return fn(q) })
 	body, _ := json.Marshal(UpdateRegistryConfigRequest{
 		PrivateRegistryUrl: "https://registry.example.com",
 		RegistryUsername:   "alice",
@@ -200,6 +226,7 @@ func TestDeleteRegistryConfig(t *testing.T) {
 	clusterID := uuid.New()
 	q := &clusterRegistryTestQuerier{}
 	h := NewClusterHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(ClusterMutationTx) error) error { return fn(q) })
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/registry/", nil)
 	rctx := chi.NewRouteContext()

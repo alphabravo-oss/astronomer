@@ -1,7 +1,7 @@
-"use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { usePodLogs, type PodLogsStatus } from "@/lib/hooks";
+import { usePodLogs } from "@/lib/hooks/workloads";
+import type { PodLogsStatus } from "@/lib/hooks/workloads";
 import { cn } from "@/lib/utils";
 import {
   ArrowDown,
@@ -163,7 +163,7 @@ export function LogsTab({
           <button
             onClick={() => setShowTimestamps((v) => !v)}
             className={cn(
-              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
+              "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               showTimestamps
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -175,7 +175,7 @@ export function LogsTab({
           <button
             onClick={() => setWrap((v) => !v)}
             className={cn(
-              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
+              "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               wrap
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -187,7 +187,7 @@ export function LogsTab({
           <button
             onClick={() => setShowSearch((v) => !v)}
             className={cn(
-              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
+              "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               showSearch
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -199,7 +199,7 @@ export function LogsTab({
           <button
             onClick={() => setFollow((v) => !v)}
             className={cn(
-              "inline-flex items-center gap-1 h-6 px-1.5 rounded text-2xs transition-colors",
+              "inline-flex items-center gap-1 h-6 px-1.5 rounded-sm text-2xs transition-colors",
               follow
                 ? "bg-status-success/10 text-status-success"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -217,7 +217,7 @@ export function LogsTab({
           </button>
           <button
             onClick={handleDownload}
-            className="inline-flex items-center h-6 px-1.5 rounded text-2xs
+            className="inline-flex items-center h-6 px-1.5 rounded-sm text-2xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Download logs"
           >
@@ -228,14 +228,14 @@ export function LogsTab({
 
       {showSearch && (
         <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 border-b border-border">
-          <Search className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+          <Search className="h-3 w-3 text-muted-foreground shrink-0" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter logs..."
             className="flex-1 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground
-              focus:outline-none"
+              focus:outline-hidden"
             data-initial-focus
           />
           {searchQuery && (
@@ -277,12 +277,12 @@ export function LogsTab({
             <div
               key={i}
               className={cn(
-                "flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded",
+                "flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded-sm",
                 getLogLineClass(log),
               )}
             >
               {showTimestamps && (
-                <span className="log-timestamp flex-shrink-0 whitespace-nowrap">
+                <span className="log-timestamp shrink-0 whitespace-nowrap">
                   {new Date(log.timestamp).toLocaleTimeString()}
                 </span>
               )}
@@ -307,7 +307,7 @@ export function LogsTab({
             }
           }}
           className="flex items-center justify-center gap-1.5 py-1
-            bg-muted/80 backdrop-blur-sm border-t border-border text-2xs text-muted-foreground
+            bg-muted/80 backdrop-blur-xs border-t border-border text-2xs text-muted-foreground
             hover:text-foreground transition-colors"
         >
           <ArrowDown className="h-3 w-3" />
@@ -412,7 +412,7 @@ function TailRangeSelect({
         key={opt.label}
         onClick={() => pick(opt)}
         className={cn(
-          "w-full flex items-center px-2 py-1 rounded text-2xs transition-colors",
+          "w-full flex items-center px-2 py-1 rounded-sm text-2xs transition-colors",
           selected
             ? "bg-accent text-foreground"
             : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -427,9 +427,9 @@ function TailRangeSelect({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 h-6 px-2 rounded border border-border bg-background
+        className="inline-flex items-center gap-1 h-6 px-2 rounded-sm border border-border bg-background
           text-2xs text-foreground hover:bg-accent transition-colors
-          focus:outline-none focus:ring-1 focus:ring-ring"
+          focus:outline-hidden focus:ring-1 focus:ring-ring"
         title="Tail range"
       >
         <span className="tabular-nums">{labelForRange(value)}</span>

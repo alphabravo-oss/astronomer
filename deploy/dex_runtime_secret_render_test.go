@@ -18,6 +18,7 @@ func renderDexRuntimeContract(t *testing.T) []renderedDoc {
 	t.Helper()
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	cmd := exec.Command("helm", "template", "astronomer", chart,
+		"-f", filepath.Join(chart, "values-dev.yaml"),
 		"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 		"--set", "dex.enabled=true",
 		"--set", "dex.runtimeSecretName=dex-runtime-contract")
@@ -86,7 +87,7 @@ func TestDexRuntimeSecretChartOwnsMetadataOnlyAndRBACIsExactName(t *testing.T) {
 
 func TestDexBundledIdentityTracksCustomReleaseNamespaceAndRuntimeName(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
-	cmd := exec.Command("helm", "template", "elite", chart, "--namespace", "platform-auth", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", "dex.runtimeSecretName=company-dex-runtime")
+	cmd := exec.Command("helm", "template", "elite", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--namespace", "platform-auth", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", "dex.runtimeSecretName=company-dex-runtime")
 	raw, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("render: %v\n%s", err, raw)
@@ -148,6 +149,7 @@ func TestDexRuntimeSecretThreeWayUpgradePreservesRuntimeOwnedData(t *testing.T) 
 func TestDexRuntimeCutoverIsGatedOrderedAndZeroUnavailable(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	cmd := exec.Command("helm", "template", "astronomer", chart,
+		"-f", filepath.Join(chart, "values-dev.yaml"),
 		"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 		"--set", "dex.enabled=true",
 		"--set", "dex.runtimeSecretName=dex-runtime-contract",
@@ -275,7 +277,7 @@ func TestDexMigrationLifecycleFailsClosedAcrossPrepareCutoverAndRollback(t *test
 	if ready < 0 || ownership <= ready || deleteOriginal <= ownership || deleteRetained <= deleteOriginal {
 		t.Fatal("cleanup may delete recovery ConfigMaps before Secret-backed readiness and ownership proof")
 	}
-	if strings.Contains(strings.ToLower(p+c), "argo"+"cd") {
+	if strings.Contains(strings.ToLower(p+c), "argocd") {
 		t.Fatal("Dex migration hooks retain removed deployment-engine annotations")
 	}
 }
@@ -284,6 +286,7 @@ func TestDexRenderedReleaseNeverArchivesCredentialCanaries(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	for _, phase := range []string{"fresh", "cutover"} {
 		cmd := exec.Command("helm", "template", "astronomer", chart,
+			"-f", filepath.Join(chart, "values-dev.yaml"),
 			"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 			"--set", "dex.enabled=true", "--set", "dex.migration.phase="+phase,
 			"--set-string", "dex.runtimeSecretName=dex-runtime-contract")

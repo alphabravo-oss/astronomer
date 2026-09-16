@@ -18,8 +18,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"sigs.k8s.io/yaml"
 )
 
@@ -178,9 +176,8 @@ func probeDirectEndpoint(ctx context.Context, rawURL, caPEM string) error {
 // read-only ServiceAccount. Registration, agent identity and administrator
 // tokens are never read or reused by this path.
 func (h *ClusterHandler) GenerateDirectKubeconfig(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), id)
@@ -330,17 +327,21 @@ func buildDirectKubeconfig(cluster sqlc.Cluster, token string) map[string]any {
 
 func endpointHostPort(rawURL string) string {
 	u, err := url.Parse(rawURL)
-	if err != nil {
+	if err != nil || u.Hostname() == "" {
 		return "invalid"
 	}
-	port := u.Port()
-	if port == "" {
-		port = "443"
+	rawPort := u.Port()
+	if rawPort == "" {
+		rawPort = "443"
 	}
-	return net.JoinHostPort(strings.ToLower(u.Hostname()), strconv.Itoa(mustPort(port)))
+	port, ok := parsePort(rawPort)
+	if !ok {
+		return "invalid"
+	}
+	return net.JoinHostPort(strings.ToLower(u.Hostname()), strconv.Itoa(port))
 }
 
-func mustPort(raw string) int {
-	port, _ := strconv.Atoi(raw)
-	return port
+func parsePort(raw string) (int, bool) {
+	port, err := strconv.Atoi(raw)
+	return port, err == nil && port > 0 && port <= 65535
 }

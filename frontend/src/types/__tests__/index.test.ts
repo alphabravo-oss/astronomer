@@ -57,13 +57,16 @@ describe("API Response types", () => {
   it("PaginatedResponse can be created", () => {
     const response: PaginatedResponse<string> = {
       data: ["a", "b"],
-      total: 10,
-      page: 1,
-      pageSize: 2,
-      totalPages: 5,
+      pagination: {
+        total: 10,
+        limit: 2,
+        offset: 0,
+        has_more: true,
+        next_offset: 2,
+      },
     };
     expect(response.data).toHaveLength(2);
-    expect(response.totalPages).toBe(5);
+    expect(response.pagination.total).toBe(10);
   });
 
   it("APIError can be created", () => {

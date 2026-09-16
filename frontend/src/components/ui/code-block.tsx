@@ -1,4 +1,3 @@
-"use client";
 
 import { useState } from "react";
 import { Check, Copy, Terminal } from "lucide-react";
@@ -78,7 +77,7 @@ export function CodeBlock({
             {lines.map((line, i) => (
               <div key={i} className="flex">
                 {showLineNumbers && (
-                  <span className="mr-4 w-8 flex-shrink-0 select-none text-right text-muted-foreground">
+                  <span className="mr-4 w-8 shrink-0 select-none text-right text-muted-foreground">
                     {i + 1}
                   </span>
                 )}

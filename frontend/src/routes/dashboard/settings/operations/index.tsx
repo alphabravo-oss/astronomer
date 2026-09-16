@@ -1,3 +1,4 @@
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Operations admin tab (T28b) — surface the asynq queue state + DLQ so on-call
  * can answer "why isn't anything reconciling?" from the UI instead of curl /
@@ -21,7 +22,7 @@ import {
  */
 
 import { useState, useMemo } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Loader2,
@@ -36,7 +37,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
-import { queryKeys } from "@/lib/hooks";
+import { queryKeys } from "@/lib/query-keys";
 import { liveFallback } from "@/lib/live/status-store";
 import {
   listQueues,
@@ -52,6 +53,7 @@ import {
   type TaskOutboxStatus,
 } from "@/lib/api/admin-operations";
 import { useOperationMutation } from "@/lib/hooks/operation-mutation";
+import { QueryStates } from "@/components/ui/query-states";
 
 function OperationsBody() {
   const qc = useQueryClient();
@@ -145,13 +147,13 @@ function OperationsBody() {
             ? `DLQ discard ${discard.operationState.phase}`
             : ""}
       </p>
-      <Link
-        href="/dashboard/settings"
+      <RouterLink
+        to="/dashboard/settings"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to Settings
-      </Link>
+      </RouterLink>
 
       <div>
         <h1 className="text-2xl font-semibold flex items-center gap-2">
@@ -162,13 +164,29 @@ function OperationsBody() {
         </p>
       </div>
 
+      {queues.isError && (
+        <QueryStates query={queues} permission="admin_operations:read">
+          {() => null}
+        </QueryStates>
+      )}
+      {dlq.isError && (
+        <QueryStates query={dlq} permission="admin_operations:read">
+          {() => null}
+        </QueryStates>
+      )}
+      {outbox.isError && (
+        <QueryStates query={outbox} permission="admin_operations:read">
+          {() => null}
+        </QueryStates>
+      )}
+
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-foreground">Queues</h2>
           <button
             type="button"
             onClick={() => queues.refetch()}
-            className="inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs border border-border hover:bg-accent"
+            className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm text-xs border border-border hover:bg-accent"
             title="Refresh now"
           >
             <RefreshCw
@@ -199,7 +217,7 @@ function OperationsBody() {
             type="button"
             onClick={() => dlq.refetch()}
             disabled={!activeQueue}
-            className="inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs border border-border hover:bg-accent disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm text-xs border border-border hover:bg-accent disabled:opacity-50"
             title="Refresh DLQ"
           >
             <RefreshCw
@@ -232,12 +250,12 @@ function OperationsBody() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <select
+            <Select
               value={outboxStatus}
               onChange={(e) =>
                 setOutboxStatus(e.target.value as TaskOutboxStatus | "")
               }
-              className="h-8 rounded border border-border bg-background px-2 text-xs"
+              className="h-8 rounded-sm border border-border bg-background px-2 text-xs"
               title="Filter task outbox rows"
             >
               <option value="dead">Dead</option>
@@ -246,11 +264,11 @@ function OperationsBody() {
               <option value="delivering">Delivering</option>
               <option value="delivered">Delivered</option>
               <option value="">All</option>
-            </select>
+            </Select>
             <button
               type="button"
               onClick={() => outbox.refetch()}
-              className="inline-flex items-center gap-1.5 h-7 px-2 rounded text-xs border border-border hover:bg-accent"
+              className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm text-xs border border-border hover:bg-accent"
               title="Refresh task outbox"
             >
               <RefreshCw
@@ -451,7 +469,7 @@ function DLQTable({
                   <button
                     onClick={() => onRetry(row.id)}
                     disabled={pendingRetry}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border hover:bg-muted disabled:opacity-50"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border hover:bg-muted disabled:opacity-50"
                     title="Move this task back to pending"
                   >
                     <RotateCw className="h-3 w-3" /> Retry
@@ -459,7 +477,7 @@ function DLQTable({
                   <button
                     onClick={() => onDiscard(row.id)}
                     disabled={pendingDiscard}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border text-status-error hover:bg-status-error/10 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border text-status-error hover:bg-status-error/10 disabled:opacity-50"
                     title="Permanently delete this task"
                   >
                     <Trash2 className="h-3 w-3" /> Discard
@@ -558,7 +576,7 @@ function TaskOutboxTable({
                 <button
                   onClick={() => onRetry(row.id)}
                   disabled={pendingRetry || row.status === "delivered"}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-border hover:bg-muted disabled:opacity-50"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border hover:bg-muted disabled:opacity-50"
                   title="Move this task outbox row back to pending"
                 >
                   <RotateCw className="h-3 w-3" /> Retry
@@ -573,7 +591,7 @@ function TaskOutboxTable({
 }
 
 function taskOutboxStatusClass(status: TaskOutboxStatus) {
-  const base = "inline-flex rounded px-1.5 py-0.5 text-xs font-medium";
+  const base = "inline-flex rounded-sm px-1.5 py-0.5 text-xs font-medium";
   switch (status) {
     case "dead":
       return `${base} bg-status-error/10 text-status-error`;

@@ -10,13 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeSIEMQuerier is the in-memory SIEMQuerier the handler tests use.
@@ -228,7 +229,7 @@ func authedSIEMRequest(method, target string, callerID uuid.UUID, body []byte) *
 	} else {
 		r = httptest.NewRequest(method, target, bytes.NewReader(body))
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 		ID:         callerID.String(),
 		AuthMethod: "jwt",
 	})

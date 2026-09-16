@@ -1,4 +1,4 @@
-import { queryKeys } from "./query-keys";
+import { queryKeys } from "@/lib/query-keys";
 
 describe("delivery query keys", () => {
   it("isolates projects, filters, details, and cluster inventory", () => {

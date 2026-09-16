@@ -55,7 +55,7 @@ func TestCreateClusterRoleBinding_NamespaceValidation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			q := newFakeRBACAuditQuerier()
-			h := NewRBACHandler(q)
+			h := wireRBACMutationFixture(NewRBACHandler(q), q)
 
 			body := []byte(fmt.Sprintf(
 				`{"user_id":"%s","role_id":"%s","cluster_id":"%s","namespace":"%s"}`,

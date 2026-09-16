@@ -10,6 +10,7 @@ import {
   formatBytes,
   formatCPU,
   formatPercentage,
+  formatRelativeTime,
   statusColor,
   statusBgColor,
   statusDotColor,
@@ -96,6 +97,23 @@ describe("formatBytes()", () => {
     const tib = 1024 ** 4;
     expect(formatBytes(tib)).toBe("1 TiB");
   });
+
+  it("returns an em dash for missing, non-finite, and negative values", () => {
+    expect(formatBytes(null)).toBe("—");
+    expect(formatBytes(undefined)).toBe("—");
+    expect(formatBytes(NaN)).toBe("—");
+    expect(formatBytes(Infinity)).toBe("—");
+    expect(formatBytes(-1)).toBe("—");
+  });
+});
+
+describe("formatRelativeTime()", () => {
+  it.each([null, undefined, "0001-01-01T00:00:00Z", "1970-01-01T00:00:00Z"])(
+    "renders the missing timestamp %s as Never",
+    (value) => {
+      expect(formatRelativeTime(value)).toBe("Never");
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -132,7 +150,7 @@ describe("formatCPU()", () => {
   });
 
   // Regression: prometheus rate() queries can return 118.99999999999999
-  // for what should display as ~119m. The unrounded float used to bleed
+  // for what should display as ~119m. The unrounded-sm float used to bleed
   // straight to the UI as "118.99999999999999m"; the rounder pins it.
   it("rounds float-noisy millicores to an integer", () => {
     expect(formatCPU(118.99999999999999)).toBe("119m");

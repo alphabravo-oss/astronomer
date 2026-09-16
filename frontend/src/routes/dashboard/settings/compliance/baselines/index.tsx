@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 import { DrawerShell } from "@/components/ui/drawer-shell";
 import { OverlayShell } from "@/components/ui/overlay-shell";
 /**
@@ -16,8 +16,10 @@ import { OverlayShell } from "@/components/ui/overlay-shell";
  * / SOC 2). Each card renders the controls the baseline encodes and a
  * "View diff" drawer + Apply / Revert action. Active card is badged.
  */
-import { useEffect, useState } from "react";
-import { Link } from "@/lib/link";
+import { useState } from "react";
+import { useComplianceBaselines, useComplianceBaselineDiff } from "@/lib/hooks/policy-queries";
+import { QueryStates } from "@/components/ui/query-states";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -28,16 +30,11 @@ import {
 } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   applyComplianceBaseline,
-  getActiveComplianceBaseline,
-  getComplianceBaselineDiff,
-  listComplianceBaselineApplications,
-  listComplianceBaselines,
   revertComplianceBaselineApplication,
   type ComplianceBaselineView,
-  type ComplianceBaselineApplicationView,
-  type ComplianceBaselineDiffView,
 } from "@/lib/api/settings";
 
 function ActiveBadge() {
@@ -108,14 +105,14 @@ function BaselineCard({
         <button
           type="button"
           onClick={() => onViewDiff(b)}
-          className="text-sm px-3 py-1.5 rounded border bg-background hover:bg-muted"
+          className="text-sm px-3 py-1.5 rounded-sm border bg-background hover:bg-muted"
         >
           View diff
         </button>
         <button
           type="button"
           onClick={() => onApply(b)}
-          className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground hover:opacity-90"
+          className="text-sm px-3 py-1.5 rounded-sm bg-primary text-primary-foreground hover:opacity-90"
         >
           Apply baseline
         </button>
@@ -123,7 +120,7 @@ function BaselineCard({
           <button
             type="button"
             onClick={() => onRevert(latestApplicationId)}
-            className="text-sm px-3 py-1.5 rounded border bg-background hover:bg-muted flex items-center gap-1"
+            className="text-sm px-3 py-1.5 rounded-sm border bg-background hover:bg-muted flex items-center gap-1"
           >
             <Undo2 className="w-3.5 h-3.5" /> Revert
           </button>
@@ -134,20 +131,20 @@ function BaselineCard({
 }
 
 function DiffDrawer({
-  diff,
+  baseline,
   onClose,
 }: {
-  diff: ComplianceBaselineDiffView | null;
+  baseline: ComplianceBaselineView;
   onClose: () => void;
 }) {
-  if (!diff) return null;
+  const query = useComplianceBaselineDiff(baseline.id);
   return (
     <DrawerShell
-      title={`${diff.baselineName} - change preview`}
+      title={`${baseline.name} - change preview`}
       onClose={onClose}
       panelClassName="sm:max-w-lg bg-card"
     >
-      {diff.changes.length === 0 ? (
+      <QueryStates query={query}>{(diff) => diff.changes.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No changes — baseline already matches current state.
         </p>
@@ -176,74 +173,34 @@ function DiffDrawer({
             ))}
           </TableBody>
         </Table>
-      )}
+      )}</QueryStates>
     </DrawerShell>
   );
 }
 
 function ComplianceBaselinesPage() {
-  const [baselines, setBaselines] = useState<ComplianceBaselineView[]>([]);
-  const [history, setHistory] = useState<ComplianceBaselineApplicationView[]>(
-    [],
-  );
-  const [diff, setDiff] = useState<ComplianceBaselineDiffView | null>(null);
-  const [loading, setLoading] = useState(true);
+  const baselinesQuery = useComplianceBaselines();
+  const baselines = baselinesQuery.data?.baselines ?? [];
+  const history = baselinesQuery.data?.history ?? [];
+  const [diffBaseline, setDiffBaseline] = useState<ComplianceBaselineView | null>(null);
+  const loading = baselinesQuery.isLoading;
   const [busy, setBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState<
+    | { kind: "apply"; baseline: ComplianceBaselineView }
+    | { kind: "revert"; applicationId: string; baselineName: string }
+    | null
+  >(null);
 
   const latestApplicationId = history[0]?.id ?? null;
 
-  const reload = async () => {
-    setLoading(true);
-    try {
-      const [bs, hist] = await Promise.all([
-        listComplianceBaselines(),
-        listComplianceBaselineApplications().catch(
-          () => [] as ComplianceBaselineApplicationView[],
-        ),
-      ]);
-      // Active = highest-priority match from /active.
-      try {
-        const active = await getActiveComplianceBaseline();
-        const slug = active.active?.baselineSlug;
-        if (slug) {
-          bs.forEach((b) => {
-            b.active = b.slug === slug;
-          });
-        }
-      } catch {
-        /* ignore */
-      }
-      setBaselines(bs);
-      setHistory(hist);
-    } catch {
-      toastError("Failed to load compliance baselines");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    reload();
-  }, []);
-
-  const handleViewDiff = async (b: ComplianceBaselineView) => {
-    try {
-      const d = await getComplianceBaselineDiff(b.id);
-      setDiff(d);
-    } catch {
-      toastError(`Failed to compute diff for ${b.name}`);
-    }
-  };
+  const reload = async () => { await baselinesQuery.refetch(); };
 
   const handleApply = async (b: ComplianceBaselineView) => {
-    if (
-      !confirm(`Apply ${b.name}? Current state will be snapshotted for revert.`)
-    )
-      return;
     setBusy(true);
     try {
       await applyComplianceBaseline(b.id);
       toastSuccess(`Applied ${b.name}`);
+      setConfirmation(null);
       await reload();
     } catch (err) {
       const status = (
@@ -265,11 +222,11 @@ function ComplianceBaselinesPage() {
   };
 
   const handleRevert = async (id: string) => {
-    if (!confirm("Revert the most-recent baseline application?")) return;
     setBusy(true);
     try {
       await revertComplianceBaselineApplication(id);
       toastSuccess("Reverted");
+      setConfirmation(null);
       await reload();
     } catch (err) {
       const status = (err as { response?: { status?: number } })?.response
@@ -286,16 +243,18 @@ function ComplianceBaselinesPage() {
     }
   };
 
+  if (baselinesQuery.isError) return <QueryStates query={baselinesQuery}>{null}</QueryStates>;
+
   return (
     <SettingsAuthGate>
       <div className="space-y-6">
         <div className="flex items-center gap-2">
-          <Link
-            href="/dashboard/settings/compliance"
+          <RouterLink
+            to="/dashboard/settings/compliance"
             className="text-sm text-muted-foreground inline-flex items-center gap-1"
           >
             <ArrowLeft className="w-4 h-4" /> Compliance
-          </Link>
+          </RouterLink>
         </div>
         <div>
           <h1 className="text-2xl font-semibold">Compliance baselines</h1>
@@ -316,9 +275,17 @@ function ComplianceBaselinesPage() {
               <BaselineCard
                 key={b.id}
                 b={b}
-                onViewDiff={handleViewDiff}
-                onApply={handleApply}
-                onRevert={handleRevert}
+                onViewDiff={setDiffBaseline}
+                onApply={(baseline) =>
+                  setConfirmation({ kind: "apply", baseline })
+                }
+                onRevert={(applicationId) =>
+                  setConfirmation({
+                    kind: "revert",
+                    applicationId,
+                    baselineName: history[0]?.baselineName ?? "latest baseline",
+                  })
+                }
                 latestApplicationId={latestApplicationId}
               />
             ))}
@@ -334,7 +301,7 @@ function ComplianceBaselinesPage() {
               No baseline has been applied yet.
             </p>
           ) : (
-            <ul className="mt-2 text-sm divide-y border rounded">
+            <ul className="mt-2 text-sm divide-y border rounded-sm">
               {history.map((h) => (
                 <li
                   key={h.id}
@@ -351,7 +318,51 @@ function ComplianceBaselinesPage() {
           )}
         </section>
 
-        <DiffDrawer diff={diff} onClose={() => setDiff(null)} />
+        {diffBaseline ? <DiffDrawer baseline={diffBaseline} onClose={() => setDiffBaseline(null)} /> : null}
+        <ConfirmDialog
+          open={confirmation !== null}
+          onClose={() => setConfirmation(null)}
+          onConfirm={() => {
+            if (confirmation?.kind === "apply") {
+              void handleApply(confirmation.baseline);
+            } else if (confirmation?.kind === "revert") {
+              void handleRevert(confirmation.applicationId);
+            }
+          }}
+          title={
+            confirmation?.kind === "apply"
+              ? "Apply compliance baseline"
+              : "Revert baseline application"
+          }
+          description={
+            confirmation?.kind === "apply"
+              ? "The current platform settings will be snapshotted before the baseline is applied."
+              : "This restores the snapshot captured before the latest baseline application."
+          }
+          confirmText={confirmation?.kind === "apply" ? "Apply" : "Revert"}
+          loading={busy}
+          impact={
+            confirmation?.kind === "apply"
+              ? {
+                  scope: confirmation.baseline.name,
+                  consequences: [
+                    "Platform security and retention settings will change to match the baseline.",
+                    "The previous settings will be retained as a reversible snapshot.",
+                  ],
+                  recovery: "Use Revert on the latest application.",
+                }
+              : confirmation?.kind === "revert"
+                ? {
+                    scope: confirmation.baselineName,
+                    consequences: [
+                      "The most recent baseline changes will be replaced by their saved prior values.",
+                      "Any later application blocks this revert to prevent stale restoration.",
+                    ],
+                    recovery: "Apply the baseline again if needed.",
+                  }
+                : undefined
+          }
+        />
         {busy ? (
           <OverlayShell onClose={() => undefined} closeOnBackdrop={false}>
             <Loader2 className="w-6 h-6 animate-spin text-white" />

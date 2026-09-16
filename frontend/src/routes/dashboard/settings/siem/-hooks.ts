@@ -8,7 +8,14 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import * as api from "@/lib/api";
+import {
+  listSIEMForwarders,
+  getSIEMForwarderStatus,
+  createSIEMForwarder,
+  updateSIEMForwarder,
+  deleteSIEMForwarder,
+  testSIEMForwarder,
+} from "@/lib/api/siem-forwarders";
 import type { SIEMForwarderWriteRequest } from "@/lib/api/siem-forwarders";
 import { queryKeys } from "@/lib/query-keys";
 import { liveFallback } from "@/lib/live/status-store";
@@ -16,15 +23,14 @@ import { liveFallback } from "@/lib/live/status-store";
 export function useSIEMForwarders() {
   return useQuery({
     queryKey: queryKeys.siemForwarders.list,
-    queryFn: ({ signal }) => api.listSIEMForwarders({ signal }),
+    queryFn: ({ signal }) => listSIEMForwarders({ signal }),
   });
 }
 
 export function useSIEMForwarderStatus(id: string | undefined, enabled = true) {
   return useQuery({
     queryKey: queryKeys.siemForwarders.status(id ?? ""),
-    queryFn: ({ signal }) =>
-      api.getSIEMForwarderStatus(id as string, { signal }),
+    queryFn: ({ signal }) => getSIEMForwarderStatus(id as string, { signal }),
     enabled: !!id && enabled,
     // Status (queue depth / dropped counts) is live-ish; refresh while the
     // drawer is open — `siem_forwarder.changed` covers config changes but not
@@ -36,8 +42,7 @@ export function useSIEMForwarderStatus(id: string | undefined, enabled = true) {
 export function useCreateSIEMForwarder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: SIEMForwarderWriteRequest) =>
-      api.createSIEMForwarder(body),
+    mutationFn: (body: SIEMForwarderWriteRequest) => createSIEMForwarder(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.siemForwarders.all });
       toastSuccess("SIEM forwarder created");
@@ -56,7 +61,7 @@ export function useUpdateSIEMForwarder() {
     }: {
       id: string;
       body: SIEMForwarderWriteRequest;
-    }) => api.updateSIEMForwarder(id, body),
+    }) => updateSIEMForwarder(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.siemForwarders.all });
       toastSuccess("SIEM forwarder updated");
@@ -69,7 +74,7 @@ export function useUpdateSIEMForwarder() {
 export function useDeleteSIEMForwarder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.deleteSIEMForwarder(id),
+    mutationFn: (id: string) => deleteSIEMForwarder(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.siemForwarders.all });
       toastSuccess("SIEM forwarder deleted");
@@ -81,7 +86,7 @@ export function useDeleteSIEMForwarder() {
 
 export function useTestSIEMForwarder() {
   return useMutation({
-    mutationFn: (id: string) => api.testSIEMForwarder(id),
+    mutationFn: (id: string) => testSIEMForwarder(id),
     onSuccess: () =>
       toastSuccess("Test event queued — it ships on the next dispatch tick"),
     onError: (err: Error) => toastApiError("Failed to queue test event", err),

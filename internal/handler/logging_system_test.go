@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -17,7 +19,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -54,7 +55,7 @@ func TestSystemLoggingOutputUniquePerCluster(t *testing.T) {
 
 func TestUpsertSystemLoggingOutputIdempotent(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	clusterID := uuid.New()
 	first, err := h.upsertSystemLoggingOutput(context.Background(), systemLoggingOutputSpec{
 		ClusterID: clusterID,
@@ -131,7 +132,7 @@ func TestLoggingOutputDTORedactsSystemBearer(t *testing.T) {
 
 func TestListOutputsRedactsSystemBearer(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	clusterID := uuid.New()
 	cfg, _ := json.Marshal(map[string]any{
 		"host":         "loki-ingest.example.com",
@@ -177,7 +178,7 @@ func TestQueryOutputSystemRowFailsClosedWithoutManagementProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: []rbac.RoleBinding{{
 		ClusterID: clusterID.String(),
 		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceLogging), Verbs: []string{string(rbac.VerbRead)}}},
@@ -186,7 +187,7 @@ func TestQueryOutputSystemRowFailsClosedWithoutManagementProxy(t *testing.T) {
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", out.ID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	rec := httptest.NewRecorder()
 	h.QueryOutput(rec, req)
 	if rec.Code != http.StatusBadGateway {
@@ -204,8 +205,8 @@ func TestQueryOutputSystemRowFailsClosedWithoutManagementProxy(t *testing.T) {
 	if wrap.Error.Code != apierror.ProxyError {
 		t.Fatalf("code = %q", wrap.Error.Code)
 	}
-	if !strings.Contains(strings.ToLower(wrap.Error.Message), "not configured") {
-		t.Fatalf("message = %q, want fail-closed proxy error", wrap.Error.Message)
+	if wrap.Error.Message != publicServerErrorMessage(http.StatusBadGateway) {
+		t.Fatalf("message = %q, want redacted upstream error", wrap.Error.Message)
 	}
 }
 
@@ -223,7 +224,7 @@ func TestDeleteSystemOutputForbidden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: []rbac.RoleBinding{{
 		ClusterID: clusterID.String(),
 		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceLogging), Verbs: []string{string(rbac.VerbDelete)}}},
@@ -232,7 +233,7 @@ func TestDeleteSystemOutputForbidden(t *testing.T) {
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", out.ID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	rec := httptest.NewRecorder()
 	h.DeleteOutput(rec, req)
 	if rec.Code != http.StatusForbidden {
@@ -245,7 +246,7 @@ func TestDeleteSystemOutputForbidden(t *testing.T) {
 
 func TestLokiUninstallDisablesSystemOutputs(t *testing.T) {
 	loggingQ := newLoggingFakeQuerier()
-	lh := NewLoggingHandler(loggingQ)
+	lh := newLoggingHandlerForTest(loggingQ)
 	clusterA := uuid.New()
 	clusterB := uuid.New()
 	if _, err := lh.upsertSystemLoggingOutput(context.Background(), systemLoggingOutputSpec{
@@ -373,7 +374,7 @@ func TestRenderOutputBlockSystemLokiBearerAndTLS(t *testing.T) {
 
 func TestCreateOutputStripsBearerFromConfiguration(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	clusterID := uuid.New()
 	body, _ := json.Marshal(map[string]any{
 		"name":        "byo-loki",
@@ -407,7 +408,7 @@ func TestCreateOutputStripsBearerFromConfiguration(t *testing.T) {
 
 func TestApplySystemLokiInjectsBearerFromFernet(t *testing.T) {
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	key, err := auth.GenerateKey()
 	if err != nil {
 		t.Fatal(err)

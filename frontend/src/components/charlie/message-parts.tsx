@@ -232,7 +232,7 @@ function ToolCard({ tool }: { tool: CharlieToolRun }) {
         </div>
       </dl>
       <p className="mt-2 text-muted-foreground">Argument fields</p>
-      <p className="mt-1 rounded bg-muted p-2 text-[11px]">
+      <p className="mt-1 rounded-sm bg-muted p-2 text-[11px]">
         {tool.argumentSummary?.length
           ? tool.argumentSummary.slice(0, 20).join(", ")
           : "No display-safe argument fields were provided."}
@@ -331,14 +331,14 @@ function ApprovalCard({
               maxLength={512}
               rows={2}
               onChange={(event) => setRationale(event.target.value)}
-              className="mt-1 w-full rounded border bg-background p-2"
+              className="mt-1 w-full rounded-sm border bg-background p-2"
             />
           </label>
           <div className="flex gap-2">
             <button
               disabled={!!pending}
               onClick={() => setConfirm("approve")}
-              className="rounded bg-primary px-3 py-2 text-primary-foreground"
+              className="rounded-sm bg-primary px-3 py-2 text-primary-foreground"
             >
               {pending === "approve" ? (
                 <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
@@ -350,7 +350,7 @@ function ApprovalCard({
             <button
               disabled={!!pending}
               onClick={() => setConfirm("deny")}
-              className="rounded border px-3 py-2"
+              className="rounded-sm border px-3 py-2"
             >
               {pending === "deny" ? (
                 <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />

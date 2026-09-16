@@ -7,20 +7,24 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import * as api from "@/lib/api";
+import {
+  listSCIMTokens,
+  createSCIMToken,
+  deleteSCIMToken,
+} from "@/lib/api/scim-tokens";
 import { queryKeys } from "@/lib/query-keys";
 
 export function useSCIMTokens() {
   return useQuery({
     queryKey: queryKeys.scimTokens,
-    queryFn: () => api.listSCIMTokens(),
+    queryFn: () => listSCIMTokens(),
   });
 }
 
 export function useCreateSCIMToken() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => api.createSCIMToken(name),
+    mutationFn: (name: string) => createSCIMToken(name),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.scimTokens });
       toastSuccess("SCIM token created");
@@ -32,7 +36,7 @@ export function useCreateSCIMToken() {
 export function useRevokeSCIMToken() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.deleteSCIMToken(id),
+    mutationFn: (id: string) => deleteSCIMToken(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.scimTokens });
       toastSuccess("SCIM token revoked");

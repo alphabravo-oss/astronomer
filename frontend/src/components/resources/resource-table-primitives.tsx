@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { detailHref, kindToResourceType } from "@/lib/k8s-paths";
 import { toastPermissionDenied } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
@@ -30,13 +30,13 @@ export function NameLink({
   name: string;
 }) {
   return (
-    <Link
-      href={detailHref(clusterId, resourceType, namespace, name)}
+    <RouterLink
+      to={detailHref(clusterId, resourceType, namespace, name)}
       onClick={(event) => event.stopPropagation()}
       className="font-medium text-foreground font-mono text-xs hover:underline"
     >
       {name}
-    </Link>
+    </RouterLink>
   );
 }
 
@@ -66,7 +66,7 @@ export function nameColumn<T extends { name: string; namespace?: string }>(
 
 /** Build an authorization-aware row drill-down callback. */
 export function makeRowClick<T extends { name: string; namespace?: string }>(
-  router: ReturnType<typeof useRouter>,
+  navigate: ReturnType<typeof useNavigate>,
   clusterId: string,
   resourceType: string,
   read: PermissionDecision,
@@ -76,6 +76,6 @@ export function makeRowClick<T extends { name: string; namespace?: string }>(
       toastPermissionDenied(read);
       return;
     }
-    router.push(detailHref(clusterId, resourceType, row.namespace, row.name));
+    void navigate({ to: detailHref(clusterId, resourceType, row.namespace, row.name) });
   };
 }

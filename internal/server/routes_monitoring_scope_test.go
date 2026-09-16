@@ -221,13 +221,7 @@ func newSharedMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.Rol
 	querier := routeSecurityRBACQuerier{bindings: bindings}
 	monitoring := handler.NewMonitoringHandler()
 	monitoring.SetAuthorization(engine, querier)
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  engine,
-		RBACQueries: querier,
-		Resources:   handler.NewResourceHandler(),
-		Monitoring:  monitoring,
-	})
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: engine, RBACQueries: querier}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler(), Monitoring: monitoring}})
 }
 
 // TestSharedMonitoringRoutesStayGlobalForClusterScopedBinding is the trap.

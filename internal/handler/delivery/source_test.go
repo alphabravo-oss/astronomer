@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,7 +21,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type sourceVerifyTxFake struct {
@@ -46,6 +47,7 @@ func (f *sourceVerifyTxFake) UpsertAuditOutbox(_ context.Context, arg sqlc.Upser
 }
 
 type sourceQueryFake struct {
+	audits    []sqlc.UpsertAuditOutboxParams
 	countFn   func(context.Context, sqlc.CountDeliverySourcesParams) (int64, error)
 	listFn    func(context.Context, sqlc.ListDeliverySourcesParams) ([]sqlc.ListDeliverySourcesRow, error)
 	createFn  func(context.Context, sqlc.CreateDeliverySourceParams) (sqlc.CreateDeliverySourceRow, error)
@@ -54,6 +56,17 @@ type sourceQueryFake struct {
 	updateFn  func(context.Context, sqlc.UpdateDeliverySourceParams) (sqlc.UpdateDeliverySourceRow, error)
 	rotateFn  func(context.Context, sqlc.RotateDeliverySourceCredentialParams) (sqlc.RotateDeliverySourceCredentialRow, error)
 	resolveFn func(context.Context, sqlc.CreateDeliverySourceResolutionAndOutboxParams) (sqlc.CreateDeliverySourceResolutionAndOutboxRow, error)
+}
+
+func (f *sourceQueryFake) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.audits = append(f.audits, arg)
+	return sqlc.AuditOutbox{ID: arg.ID}, nil
+}
+
+func newSourceHandlerWithTestTransaction(q *sourceQueryFake, encryptor CredentialEncryptor, version int32) *SourceHandler {
+	h := NewSourceHandler(q, encryptor, version)
+	h.SetRunTx(func(_ context.Context, fn func(SourceMutationTx) error) error { return fn(q) })
+	return h
 }
 
 func (f *sourceQueryFake) CountDeliverySources(ctx context.Context, arg sqlc.CountDeliverySourcesParams) (int64, error) {
@@ -129,7 +142,7 @@ func TestSourceCreateUsesFernetAndNeverEchoesCredential(t *testing.T) {
 		persisted = arg
 		return createSourceRow(sourceID, arg), nil
 	}}
-	handler := NewSourceHandler(fake, encryptor, 7)
+	handler := newSourceHandlerWithTestTransaction(fake, encryptor, 7)
 	body := fmt.Sprintf(`{"project_id":%q,"name":"platform-source","type":"git","url":"https://git.example.test/platform/config.git","auth_mode":"basic","credential":{"username":"release-bot","password":%q},"trust_policy":{"allow_unsigned":true}}`, projectID, secret)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources", strings.NewReader(body))
 	recorder := httptest.NewRecorder()
@@ -190,7 +203,7 @@ func TestSourceUpdateChangesMetadataWithoutReadingCredentials(t *testing.T) {
 	request := requestWithPathParams(http.MethodPatch, "/api/v1/delivery/sources/"+sourceID.String(), strings.NewReader(body), map[string]string{"id": sourceID.String()})
 	request.Header.Set("Idempotency-Key", "source-update-1")
 	recorder := httptest.NewRecorder()
-	NewSourceHandler(fake, nil, 0).Update(recorder, request)
+	newSourceHandlerWithTestTransaction(fake, nil, 0).Update(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -222,9 +235,9 @@ func TestSourceVerifyQueuesOnlyPublicIdentity(t *testing.T) {
 	body := fmt.Sprintf(`{"project_id":%q,"requested_revision":"1.2.3","chart":"widget"}`, projectID)
 	request := requestWithPathParams(http.MethodPost, "/api/v1/delivery/sources/"+sourceID.String()+"/verify", strings.NewReader(body), map[string]string{"id": sourceID.String()})
 	request.Header.Set("Idempotency-Key", "verify-widget-1.2.3")
-	request = request.WithContext(middleware.SetAuthenticatedUserForTest(request.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	request = request.WithContext(reqctx.WithUser(request.Context(), &reqctx.User{ID: uuid.NewString()}))
 	recorder := httptest.NewRecorder()
-	handler := NewSourceHandler(fake, nil, 0)
+	handler := newSourceHandlerWithTestTransaction(fake, nil, 0)
 	tx := &sourceVerifyTxFake{sourceQueryFake: fake}
 	handler.SetRunTx(func(_ context.Context, fn func(SourceMutationTx) error) error { return fn(tx) })
 	handler.Verify(recorder, request)
@@ -247,7 +260,7 @@ func TestSourceCreateEncryptionFailureIsFailClosed(t *testing.T) {
 		createCalled = true
 		return sqlc.CreateDeliverySourceRow{}, nil
 	}}
-	handler := NewSourceHandler(fake, failingEncryptor{}, 1)
+	handler := newSourceHandlerWithTestTransaction(fake, failingEncryptor{}, 1)
 	body := fmt.Sprintf(`{"project_id":%q,"name":"registry-source","type":"oci_artifact","url":"oci://registry.example.test/platform/config","auth_mode":"bearer","credential":{"token":%q},"trust_policy":{"allow_unsigned":true}}`, projectID, secret)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources", strings.NewReader(body))
 	recorder := httptest.NewRecorder()
@@ -279,7 +292,7 @@ func TestSourceCreateRejectsUnknownAndInvalidCredentialShapes(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			handler := NewSourceHandler(&sourceQueryFake{}, passthroughEncryptor{}, 1)
+			handler := newSourceHandlerWithTestTransaction(&sourceQueryFake{}, passthroughEncryptor{}, 1)
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources", strings.NewReader(test.body))
 			recorder := httptest.NewRecorder()
 			handler.Create(recorder, request)
@@ -298,7 +311,7 @@ func TestSourceScopeMismatchAndCrossProjectLookup(t *testing.T) {
 		body := fmt.Sprintf(`{"project_id":%q,"name":"source","type":"git","url":"https://git.example.test/repo.git","auth_mode":"none","trust_policy":{"allow_unsigned":true}}`, projectB)
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources?project_id="+projectA.String(), strings.NewReader(body))
 		recorder := httptest.NewRecorder()
-		NewSourceHandler(&sourceQueryFake{}, passthroughEncryptor{}, 1).Create(recorder, request)
+		newSourceHandlerWithTestTransaction(&sourceQueryFake{}, passthroughEncryptor{}, 1).Create(recorder, request)
 		if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "project scopes do not match") {
 			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 		}
@@ -313,7 +326,7 @@ func TestSourceScopeMismatchAndCrossProjectLookup(t *testing.T) {
 		}}
 		request := requestWithPathParams(http.MethodGet, "/api/v1/delivery/sources/"+sourceID.String()+"?project_id="+projectB.String(), nil, map[string]string{"id": sourceID.String()})
 		recorder := httptest.NewRecorder()
-		NewSourceHandler(fake, nil, 0).Get(recorder, request)
+		newSourceHandlerWithTestTransaction(fake, nil, 0).Get(recorder, request)
 		if recorder.Code != http.StatusNotFound {
 			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 		}
@@ -339,7 +352,7 @@ func TestSourceRotateIsWriteOnlyAndScopedBeforeEncryption(t *testing.T) {
 	body := fmt.Sprintf(`{"project_id":%q,"auth_mode":"basic","credential":{"username":"release-bot","password":%q}}`, projectID, secret)
 	request := requestWithPathParams(http.MethodPost, "/api/v1/delivery/sources/"+sourceID.String()+"/rotate-credential", strings.NewReader(body), map[string]string{"id": sourceID.String()})
 	recorder := httptest.NewRecorder()
-	NewSourceHandler(fake, passthroughEncryptor{}, 2).RotateCredential(recorder, request)
+	newSourceHandlerWithTestTransaction(fake, passthroughEncryptor{}, 2).RotateCredential(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -373,7 +386,7 @@ func TestSourceDeleteUsesProjectScopeAndReportsMissing(t *testing.T) {
 			request := requestWithPathParams(http.MethodDelete, target, nil, map[string]string{"id": sourceID.String()})
 			request.Header.Set("X-Project-ID", projectID.String())
 			recorder := httptest.NewRecorder()
-			NewSourceHandler(fake, nil, 0).Delete(recorder, request)
+			newSourceHandlerWithTestTransaction(fake, nil, 0).Delete(recorder, request)
 			if recorder.Code != test.wantStatus {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
@@ -397,7 +410,7 @@ func TestSourceListPaginationValidationAndSecretFreeProjection(t *testing.T) {
 	}
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/delivery/sources?project_id="+projectID.String()+"&limit=2&offset=1", nil)
 	recorder := httptest.NewRecorder()
-	NewSourceHandler(fake, nil, 0).List(recorder, request)
+	newSourceHandlerWithTestTransaction(fake, nil, 0).List(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -406,13 +419,13 @@ func TestSourceListPaginationValidationAndSecretFreeProjection(t *testing.T) {
 			t.Fatalf("list exposed %q: %s", forbidden, recorder.Body.String())
 		}
 	}
-	if !strings.Contains(recorder.Body.String(), `"next":"/api/v1/delivery/sources?limit=2\u0026offset=3\u0026project_id=`) {
-		t.Fatalf("pagination did not preserve project filter: %s", recorder.Body.String())
+	if !strings.Contains(recorder.Body.String(), `"next_offset":2`) {
+		t.Fatalf("pagination did not advance by returned page length: %s", recorder.Body.String())
 	}
 
 	badRequest := httptest.NewRequest(http.MethodGet, "/api/v1/delivery/sources?project_id="+projectID.String()+"&limit=201", nil)
 	badRecorder := httptest.NewRecorder()
-	NewSourceHandler(&sourceQueryFake{}, nil, 0).List(badRecorder, badRequest)
+	newSourceHandlerWithTestTransaction(&sourceQueryFake{}, nil, 0).List(badRecorder, badRequest)
 	if badRecorder.Code != http.StatusBadRequest {
 		t.Fatalf("oversized page status=%d body=%s", badRecorder.Code, badRecorder.Body.String())
 	}
@@ -456,7 +469,7 @@ func TestSourceRequestBodyLimit(t *testing.T) {
 	body := fmt.Sprintf(`{"project_id":%q,"name":"source","description":%q,"type":"git","url":"https://git.example.test/repo.git","auth_mode":"none","trust_policy":{"allow_unsigned":true}}`, projectID, string(padding))
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources", strings.NewReader(body))
 	recorder := httptest.NewRecorder()
-	NewSourceHandler(&sourceQueryFake{}, nil, 0).Create(recorder, request)
+	newSourceHandlerWithTestTransaction(&sourceQueryFake{}, nil, 0).Create(recorder, request)
 	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "exceeds") {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}

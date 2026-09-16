@@ -13,12 +13,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -35,6 +36,7 @@ type policyTestQuerier struct {
 	lastUpdatePolicy *sqlc.UpdateProjectPolicyParams
 	updatePolicyErr  error
 	audits           []sqlc.CreateAuditLogV1Params
+	taskOutbox       []sqlc.UpsertTaskOutboxParams
 }
 
 func newPolicyTestQuerier() *policyTestQuerier {
@@ -52,6 +54,10 @@ func (q *policyTestQuerier) GetProjectByID(_ context.Context, id uuid.UUID) (sql
 		return sqlc.Project{}, errors.New("no rows in result set")
 	}
 	return p, nil
+}
+
+func (q *policyTestQuerier) GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.Project, error) {
+	return q.GetProjectByID(ctx, id)
 }
 
 func (q *policyTestQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
@@ -147,7 +153,13 @@ func (q *policyTestQuerier) DeleteProject(_ context.Context, id uuid.UUID) error
 	return nil
 }
 func (q *policyTestQuerier) CountProjects(context.Context) (int64, error) { return 0, nil }
+func (q *policyTestQuerier) CountProjectsFiltered(context.Context, string) (int64, error) {
+	return 0, nil
+}
 func (q *policyTestQuerier) CountProjectsByCluster(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (q *policyTestQuerier) CountProjectsByClusterFiltered(context.Context, sqlc.CountProjectsByClusterFilteredParams) (int64, error) {
 	return 0, nil
 }
 func (q *policyTestQuerier) GetClusterRegistryConfig(context.Context, uuid.UUID) (sqlc.ClusterRegistryConfig, error) {
@@ -205,20 +217,40 @@ func (q *policyTestQuerier) ListProjectNamespaces(_ context.Context, _ uuid.UUID
 	copy(out, q.nsRows)
 	return out, nil
 }
+func (q *policyTestQuerier) UpsertProjectResourceQuotaAllocation(_ context.Context, arg sqlc.UpsertProjectResourceQuotaAllocationParams) (sqlc.ProjectResourceQuotaAllocation, error) {
+	return sqlc.ProjectResourceQuotaAllocation{ProjectID: arg.ProjectID, ClusterID: arg.ClusterID, Namespace: arg.Namespace, CpuLimit: arg.CpuLimit, MemoryLimit: arg.MemoryLimit, PodCount: arg.PodCount}, nil
+}
+func (q *policyTestQuerier) DeleteProjectResourceQuotaAllocation(context.Context, sqlc.DeleteProjectResourceQuotaAllocationParams) error {
+	return nil
+}
 func (q *policyTestQuerier) ListAllProjectNamespaces(context.Context) ([]sqlc.ProjectNamespace, error) {
 	return nil, nil
 }
 func (q *policyTestQuerier) ClaimProjectNamespaceReconcile(context.Context, sqlc.ClaimProjectNamespaceReconcileParams) (sqlc.ProjectNamespace, error) {
 	return sqlc.ProjectNamespace{}, nil
 }
-func (q *policyTestQuerier) MarkProjectNamespaceReconciled(context.Context, sqlc.MarkProjectNamespaceReconciledParams) error {
-	return nil
+func (q *policyTestQuerier) MarkProjectNamespaceReconciled(context.Context, sqlc.MarkProjectNamespaceReconciledParams) (int64, error) {
+	return 1, nil
 }
 func (q *policyTestQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.CreateAuditLogV1Params) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.audits = append(q.audits, arg)
 	return nil
+}
+
+func (q *policyTestQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.audits = append(q.audits, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{ID: arg.ID, DedupeKey: arg.DedupeKey, Action: arg.Action}, nil
+}
+
+func (q *policyTestQuerier) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.taskOutbox = append(q.taskOutbox, arg)
+	return sqlc.TaskOutbox{ID: uuid.New(), DedupeKey: arg.DedupeKey, TaskType: arg.TaskType, Payload: arg.Payload}, nil
 }
 
 // RBAC-matrix surface — the policy tests don't exercise this path,
@@ -251,7 +283,7 @@ func authedProjectRequest(t *testing.T, method, path string, callerID uuid.UUID,
 		}
 	}
 	req := httptest.NewRequest(method, path, &buf)
-	return req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	return req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: callerID.String(),
 	}))
 }
@@ -306,6 +338,7 @@ func assertProjectAudit(t *testing.T, rows []sqlc.CreateAuditLogV1Params, action
 func TestProjectMutationsAreAudited(t *testing.T) {
 	q := newPolicyTestQuerier()
 	h := NewProjectHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(ProjectNamespaceTx) error) error { return fn(q) })
 	callerID := uuid.New()
 	clusterID := uuid.New()
 	// Every mutation below claims or moves namespaces, which now requires
@@ -581,7 +614,10 @@ func TestGetProjectQuotaUsage_AggregatesPerNamespace(t *testing.T) {
 	clusterAID := uuid.New()
 	clusterBID := uuid.New()
 	q := newPolicyTestQuerier()
-	q.projects[projectID] = sqlc.Project{ID: projectID, Name: "team-a"}
+	q.projects[projectID] = sqlc.Project{
+		ID: projectID, Name: "team-a",
+		ResourceQuotaCpuLimit: "4", ResourceQuotaMemoryLimit: "8Gi", ResourceQuotaPodCount: 20,
+	}
 	q.clusters[clusterAID] = sqlc.Cluster{ID: clusterAID, Name: "alpha"}
 	q.clusters[clusterBID] = sqlc.Cluster{ID: clusterBID, Name: "bravo"}
 	q.nsRows = []sqlc.ProjectNamespace{
@@ -613,12 +649,14 @@ func TestGetProjectQuotaUsage_AggregatesPerNamespace(t *testing.T) {
 	var envelope struct {
 		Data struct {
 			Results []struct {
-				ClusterName string         `json:"cluster_name"`
-				Namespace   string         `json:"namespace"`
-				Used        map[string]any `json:"used"`
-				Hard        map[string]any `json:"hard"`
+				ClusterName string                     `json:"cluster_name"`
+				Namespace   string                     `json:"namespace"`
+				Used        map[string]any             `json:"used"`
+				Hard        map[string]any             `json:"hard"`
+				Allocation  ProjectResourceCapResponse `json:"allocation"`
 			} `json:"results"`
-			Errors []map[string]any `json:"errors"`
+			Errors     []map[string]any                    `json:"errors"`
+			ProjectCap ProjectResourceQuotaSummaryResponse `json:"project_cap"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &envelope); err != nil {
@@ -633,7 +671,7 @@ func TestGetProjectQuotaUsage_AggregatesPerNamespace(t *testing.T) {
 	}
 	byNs := map[string]map[string]any{}
 	for _, it := range resp.Results {
-		byNs[it.Namespace] = map[string]any{"used": it.Used, "hard": it.Hard, "cluster": it.ClusterName}
+		byNs[it.Namespace] = map[string]any{"used": it.Used, "hard": it.Hard, "cluster": it.ClusterName, "allocation": it.Allocation}
 	}
 	if stg := byNs["team-a-stg"]; stg["cluster"] != "alpha" {
 		t.Errorf("expected stg cluster=alpha, got %v", stg)
@@ -643,6 +681,53 @@ func TestGetProjectQuotaUsage_AggregatesPerNamespace(t *testing.T) {
 	}
 	if used, ok := byNs["team-a-stg"]["used"].(map[string]any); !ok || used["limits.cpu"] != "1500m" {
 		t.Errorf("expected stg.used.limits.cpu=1500m, got %+v", byNs["team-a-stg"]["used"])
+	}
+	if got := resp.ProjectCap.Total; got != (ProjectResourceCapResponse{CPU: "4", Memory: "8Gi", Pods: 20}) {
+		t.Errorf("project cap total = %+v", got)
+	}
+	if got := resp.ProjectCap.Allocated; got != resp.ProjectCap.Total {
+		t.Errorf("project cap allocated = %+v, want total %+v", got, resp.ProjectCap.Total)
+	}
+	if got := resp.ProjectCap.Remaining; got != (ProjectResourceCapResponse{}) {
+		t.Errorf("project cap remaining = %+v, want empty", got)
+	}
+	if got, ok := byNs["team-a-stg"]["allocation"].(ProjectResourceCapResponse); !ok || got != (ProjectResourceCapResponse{CPU: "2000m", Memory: "4294967296", Pods: 10}) {
+		t.Errorf("stg allocation = %+v", byNs["team-a-stg"]["allocation"])
+	}
+}
+
+func TestGetProjectQuotaUsage_UnallocatedWhenProjectHasNoNamespaces(t *testing.T) {
+	projectID := uuid.New()
+	q := newPolicyTestQuerier()
+	q.projects[projectID] = sqlc.Project{
+		ID: projectID, Name: "team-a",
+		ResourceQuotaCpuLimit: "4", ResourceQuotaMemoryLimit: "8Gi", ResourceQuotaPodCount: 20,
+	}
+	h := NewProjectHandler(q)
+	h.requester = &quotaTestRequester{}
+
+	httpReq := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/quota-usage/", nil)
+	httpReq = patchURLParam(httpReq, "id", projectID.String())
+	rr := httptest.NewRecorder()
+	h.QuotaUsage(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var envelope struct {
+		Data struct {
+			ProjectCap ProjectResourceQuotaSummaryResponse `json:"project_cap"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	want := ProjectResourceCapResponse{CPU: "4", Memory: "8Gi", Pods: 20}
+	if got := envelope.Data.ProjectCap.Allocated; got != (ProjectResourceCapResponse{}) {
+		t.Errorf("allocated = %+v, want empty", got)
+	}
+	if got := envelope.Data.ProjectCap.Remaining; got != want {
+		t.Errorf("remaining = %+v, want %+v", got, want)
 	}
 }
 

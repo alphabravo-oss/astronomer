@@ -1,4 +1,3 @@
-"use client";
 
 import { lazy, Suspense, useRef, useCallback } from "react";
 import { CheckCircle2, Copy, Download, Save, Loader2 } from "lucide-react";
@@ -82,14 +81,14 @@ export function YamlEditor({
         <div className="flex items-center gap-1">
           <button
             onClick={handleCopy}
-            className="p-1.5 rounded hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors"
+            className="p-1.5 rounded-sm hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors"
             title="Copy"
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={handleDownload}
-            className="p-1.5 rounded hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors"
+            className="p-1.5 rounded-sm hover:bg-white/10 text-terminal-foreground/80 hover:text-terminal-foreground transition-colors"
             title="Download"
           >
             <Download className="h-3.5 w-3.5" />

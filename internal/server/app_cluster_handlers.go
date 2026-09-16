@@ -88,6 +88,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	meshRuntime := tasks.MeshRuntime{Deps: tasks.MeshDetectDeps{
 		Queries:   queries,
 		Requester: requester,
+		Bus:       c.bus,
 	}}
 	// Sprint 069: CRD-mirror v2 cluster-detail read surface + tunnel
 	// ingest router. The Hub routes MIRROR_EVENT frames into

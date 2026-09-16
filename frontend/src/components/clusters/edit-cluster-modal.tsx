@@ -1,15 +1,19 @@
-"use client";
-
 import { useState } from "react";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useUpdateCluster } from "@/lib/hooks";
+import { useUpdateCluster } from "@/lib/hooks/clusters";
 import type { UpdateClusterInput } from "@/lib/api/clusters";
+import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { Cluster, ClusterEnvironment } from "@/types";
 import { Pencil } from "lucide-react";
+import {
+  CLUSTER_BADGE_COLORS,
+  ClusterBadge,
+  type ClusterBadgeColor,
+} from "@/components/clusters/cluster-badge";
 
 interface EditClusterModalProps {
   cluster: Cluster;
@@ -22,6 +26,9 @@ interface ClusterEditForm {
   description: string;
   apiServerUrl: string;
   caCertificate: string;
+  badgeText: string;
+  badgeColor: ClusterBadgeColor;
+  agentOverrides?: OpenAPIComponents["schemas"]["AgentOverrides"];
 }
 
 export function buildClusterEditRequest(
@@ -33,6 +40,9 @@ export function buildClusterEditRequest(
     description: form.description,
     api_server_url: form.apiServerUrl,
     ca_certificate: form.caCertificate,
+    badge_text: form.badgeText.trim(),
+    badge_color: form.badgeText.trim() ? form.badgeColor : "",
+    agent_overrides: form.agentOverrides ?? {},
   };
 }
 
@@ -44,7 +54,41 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
     description: cluster.description || "",
     apiServerUrl: cluster.apiServerUrl || "",
     caCertificate: cluster.caCertificate || "",
+    badgeText: cluster.badgeText || "",
+    badgeColor: cluster.badgeColor || "slate",
+    agentOverrides: cluster.agentOverrides ?? {},
   });
+
+  const setAgentResource = (
+    group: "requests" | "limits",
+    resource: "cpu" | "memory",
+    value: string,
+  ) =>
+    setForm((current) => ({
+      ...current,
+      agentOverrides: {
+        ...current.agentOverrides,
+        resources: {
+          ...current.agentOverrides?.resources,
+          [group]: {
+            ...current.agentOverrides?.resources?.[group],
+            [resource]: value,
+          },
+        },
+      },
+    }));
+
+  const setAgentProxy = (
+    field: "http_proxy" | "https_proxy" | "no_proxy",
+    value: string,
+  ) =>
+    setForm((current) => ({
+      ...current,
+      agentOverrides: {
+        ...current.agentOverrides,
+        proxy: { ...current.agentOverrides?.proxy, [field]: value },
+      },
+    }));
 
   const handleSubmit = async () => {
     try {
@@ -102,6 +146,57 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
         </p>
       </div>
 
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="cluster-badge-text"
+          >
+            Cluster badge{" "}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </label>
+          <ClusterBadge text={form.badgeText} color={form.badgeColor} />
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-2">
+          <Input
+            id="cluster-badge-text"
+            type="text"
+            maxLength={24}
+            value={form.badgeText}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                badgeText: event.target.value,
+              }))
+            }
+            placeholder="Production"
+          />
+          <Select
+            aria-label="Cluster badge color"
+            value={form.badgeColor}
+            disabled={!form.badgeText.trim()}
+            onChange={(event) =>
+              setForm((current) => ({
+                ...current,
+                badgeColor: event.target.value as ClusterBadgeColor,
+              }))
+            }
+          >
+            {CLUSTER_BADGE_COLORS.map((color) => (
+              <option key={color} value={color}>
+                {color[0].toUpperCase() + color.slice(1)}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          A short, color-coded marker helps distinguish similarly named
+          production and non-production clusters.
+        </p>
+      </div>
+
       {!cluster.isLocal && (
         <>
           <div className="space-y-1.5">
@@ -144,6 +239,85 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
             />
           </div>
         </>
+      )}
+
+      {!cluster.isLocal && (
+        <section className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
+          <div>
+            <h3 className="text-sm font-medium text-foreground">
+              Agent runtime
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Kubernetes quantities and outbound proxy settings applied by the
+              next manifest or agent upgrade.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {(["requests", "limits"] as const).flatMap((group) =>
+              (["cpu", "memory"] as const).map((resource) => (
+                <div className="space-y-1" key={`${group}-${resource}`}>
+                  <label
+                    className="text-xs font-medium text-muted-foreground"
+                    htmlFor={`agent-${group}-${resource}`}
+                  >
+                    {group === "requests" ? "Request" : "Limit"}{" "}
+                    {resource.toUpperCase()}
+                  </label>
+                  <Input
+                    id={`agent-${group}-${resource}`}
+                    value={
+                      form.agentOverrides?.resources?.[group]?.[resource] ?? ""
+                    }
+                    onChange={(event) =>
+                      setAgentResource(group, resource, event.target.value)
+                    }
+                    placeholder={
+                      group === "requests"
+                        ? resource === "cpu"
+                          ? "100m"
+                          : "128Mi"
+                        : resource === "cpu"
+                          ? "500m"
+                          : "512Mi"
+                    }
+                  />
+                </div>
+              )),
+            )}
+          </div>
+          <div className="space-y-2">
+            <Input
+              aria-label="Agent HTTPS proxy"
+              type="url"
+              value={form.agentOverrides?.proxy?.https_proxy ?? ""}
+              onChange={(event) =>
+                setAgentProxy("https_proxy", event.target.value)
+              }
+              placeholder="HTTPS proxy, e.g. http://proxy.internal:3128"
+            />
+            <Input
+              aria-label="Agent HTTP proxy"
+              type="url"
+              value={form.agentOverrides?.proxy?.http_proxy ?? ""}
+              onChange={(event) =>
+                setAgentProxy("http_proxy", event.target.value)
+              }
+              placeholder="HTTP proxy (optional)"
+            />
+            <Input
+              aria-label="Agent no proxy"
+              value={form.agentOverrides?.proxy?.no_proxy ?? ""}
+              onChange={(event) =>
+                setAgentProxy("no_proxy", event.target.value)
+              }
+              placeholder="NO_PROXY, comma separated"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Advanced tolerations and node affinity are available through the
+            typed cluster API.
+          </p>
+        </section>
       )}
 
       <div className="space-y-1.5">

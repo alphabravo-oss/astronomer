@@ -163,9 +163,40 @@ func (q *installedCatalogAuditQuerier) CreateAuditLogV1(_ context.Context, arg s
 	return nil
 }
 
+func (q *installedCatalogAuditQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	q.audits = append(q.audits, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{}, nil
+}
+
+func (q *installedCatalogAuditQuerier) UpsertTaskOutbox(_ context.Context, _ sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	return sqlc.TaskOutbox{}, nil
+}
+
+func (q *installedCatalogAuditQuerier) CreateCatalogOperationIdempotent(ctx context.Context, arg sqlc.CreateCatalogOperationIdempotentParams) (sqlc.CatalogOperation, error) {
+	return q.CreateCatalogOperation(ctx, sqlc.CreateCatalogOperationParams{
+		TargetType: arg.TargetType, TargetKey: arg.TargetKey, OperationType: arg.OperationType,
+		Payload: arg.Payload, Status: arg.Status, CreatedByID: arg.CreatedByID,
+	})
+}
+
+func (q *installedCatalogAuditQuerier) CreateCatalogOperationIdempotentWithDisposition(ctx context.Context, arg sqlc.CreateCatalogOperationIdempotentWithDispositionParams) (sqlc.CreateCatalogOperationIdempotentWithDispositionRow, error) {
+	op, err := q.CreateCatalogOperationIdempotent(ctx, sqlc.CreateCatalogOperationIdempotentParams(arg))
+	return sqlc.CreateCatalogOperationIdempotentWithDispositionRow{CatalogOperation: op, Inserted: err == nil}, err
+}
+
+func (q *installedCatalogAuditQuerier) RequeueCatalogOperation(_ context.Context, id uuid.UUID) (sqlc.CatalogOperation, error) {
+	for _, op := range q.operations {
+		if op.ID == id {
+			return op, nil
+		}
+	}
+	return sqlc.CatalogOperation{}, pgx.ErrNoRows
+}
+
 func TestCatalogInstalledMutationsAreAudited(t *testing.T) {
 	q, clusterID, projectID, versionID := newInstalledCatalogAuditQuerier()
 	h := NewCatalogHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(CatalogMutationTx) error) error { return fn(q) })
 
 	createBody, _ := json.Marshal(map[string]any{
 		"cluster_id":       clusterID.String(),

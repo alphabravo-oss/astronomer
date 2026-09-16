@@ -12,6 +12,7 @@ import {
   putSettingsGeneral,
   putUsersById,
 } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
 import type { APIToken, PaginatedResponse, SSOProvider, User } from "@/types";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 
@@ -26,6 +27,7 @@ export type GeneralSettings = Required<Schemas["UsersSettingsGeneral"]>;
 export interface UserListParameters {
   page?: number;
   pageSize?: number;
+  search?: string;
 }
 
 export interface CreateUserInput {
@@ -150,19 +152,16 @@ export async function getUsers(
   const pageSize = Math.max(1, Math.min(200, params?.pageSize ?? 20));
   const page = Math.max(1, params?.page ?? 1);
   const response = await getUsersOperation({
-    query: { limit: pageSize, offset: (page - 1) * pageSize },
+    query: {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      search: params?.search?.trim() || undefined,
+    },
   });
-  const count = response.count;
-  return {
-    data: (response.data ?? []).map(mapUser),
-    total: count,
-    count,
-    next: response.next,
-    previous: response.previous,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(count / pageSize)),
-  };
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapUser,
+  );
 }
 
 export async function createUser(input: CreateUserInput): Promise<User> {

@@ -45,13 +45,6 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	resourceHandler.SetEncryptor(encryptor)
 	resourceHandler.SetSSOManager(ssoManager)
 	resourceHandler.SetJWTManager(jwtManager)
-	// Admin force-logout SLO clean-up (migration 054). The handler
-	// enumerates the target user's sso_sessions rows and fires
-	// best-effort back-channel end-session POSTs against each IdP
-	// before deleting the rows. Wired unconditionally; the encryptor
-	// gate inside the handler is what actually decides whether the
-	// back-channel POST can fire.
-	resourceHandler.SetSSOSessionStore(queries)
 	resourceHandler.SetSSOBackchannelClient(handler.NewDefaultSSOBackchannelClient())
 	// User delete cascades through *_role_bindings; signal the RBAC cache to
 	// drop the per-user entry instead of waiting out the TTL.
@@ -192,8 +185,10 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 			}
 		}
 	}
-	streamTicketHandler := handler.NewStreamTicketHandler(streamTickets)
-	streamTicketHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	streamTicketHandler, err := handler.NewStreamTicketHandler(streamTickets, rbacEngine, rbacQuerier)
+	if err != nil {
+		return err
+	}
 	settingsCache := handler.NewSettingsCache(queries, 30*time.Second)
 	c.resourceHandler = resourceHandler
 	c.platformCharts = platformCharts

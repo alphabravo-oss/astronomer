@@ -14,6 +14,7 @@ func TestTranslateFromFrontend_Stdin(t *testing.T) {
 	}
 	if msg == nil {
 		t.Fatal("expected message")
+		return
 	}
 	if msg.Type != protocol.MsgExecInput {
 		t.Errorf("type = %q, want %q", msg.Type, protocol.MsgExecInput)

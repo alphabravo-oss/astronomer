@@ -271,6 +271,10 @@ type AgentUpgradePayload struct {
 	// replacement agent to report Ready before rolling back. Zero means the
 	// agent's own default.
 	RolloutTimeoutSeconds int `json:"rollout_timeout_seconds,omitempty"`
+	// AgentOverrides is the validated canonical configuration stored with the
+	// upgrade plan. ConfigurationDigest binds it to that operator-approved plan.
+	AgentOverrides      json.RawMessage `json:"agent_overrides,omitempty"`
+	ConfigurationDigest string          `json:"configuration_digest,omitempty"`
 }
 
 // Agent self-upgrade result phases. Phase is the authoritative outcome signal
@@ -431,6 +435,7 @@ const K8sChunkSizeBytes = 256 * 1024
 
 // HelmRequestPayload represents a Helm operation request.
 type HelmRequestPayload struct {
+	Description string         `json:"description,omitempty"`
 	ReleaseName string         `json:"release_name"`
 	Namespace   string         `json:"namespace"`
 	ChartURL    string         `json:"chart_url,omitempty"`

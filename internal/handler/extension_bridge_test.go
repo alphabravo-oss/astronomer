@@ -12,11 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeTicketIssuer records the scope it was asked to mint for so a test can
@@ -63,7 +64,7 @@ func tokenRequest(t *testing.T, userID uuid.UUID, dataSource string, ctx map[str
 	rctx.URLParams.Add("name", "cost-insights")
 	c := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
 	if userID != uuid.Nil {
-		c = middleware.SetAuthenticatedUserForTest(c, &middleware.AuthenticatedUser{ID: userID.String(), AuthMethod: "jwt"})
+		c = reqctx.WithUser(c, &reqctx.User{ID: userID.String(), AuthMethod: "jwt"})
 	}
 	return req.WithContext(c)
 }
@@ -213,7 +214,7 @@ func TestVerifyBundle_LiftsGateForSignedTrustedBundle(t *testing.T) {
 
 	q := newFakeExtensionQuerier()
 	q.seedExtension(t, m, true, "compatible", false) // installed, but NOT yet verified
-	h := NewExtensionHandler(q)
+	h := mutableExtensionHandler(q)
 	if err := h.SetTrustedBundleKey(base64.StdEncoding.EncodeToString(pub)); err != nil {
 		t.Fatalf("set key: %v", err)
 	}
@@ -296,7 +297,7 @@ func TestVerifyBundle_ChecksumMustMatchStoredDescriptor(t *testing.T) {
 	m := tier2Manifest() // descriptor sha256 = repeat("a",64), not our bundle
 	q := newFakeExtensionQuerier()
 	q.seedExtension(t, m, true, "compatible", false)
-	h := NewExtensionHandler(q)
+	h := mutableExtensionHandler(q)
 	if err := h.SetTrustedBundleKey(base64.StdEncoding.EncodeToString(pub)); err != nil {
 		t.Fatalf("set key: %v", err)
 	}

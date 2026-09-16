@@ -78,7 +78,7 @@ jq -n --argjson requirements "${requirements}" '
     elif $p=="surface.ui" then common($p)+{path:"/delivery",response:"text",expect_contains:["Astronomer"]}
     elif $p=="surface.sse" then common($p)+{path:"/api/v1/events/stream/",response:"text",expect_contains:["delivery"],allow_timeout:true}
     elif $p=="surface.metrics" then common($p)+{path:"/api/v1/metrics"}
-    elif $p=="surface.alerts" then common($p)+{path:"/api/v1/alerts/"}
+    elif $p=="surface.alerts" then common($p)+{path:"/api/v1/alerting/rules/"}
     elif $p=="surface.runbook" then common($p)+{path:"/api/v1/runbooks/delivery/"}
     elif $p=="resilience.drift_detect" or $p=="resilience.drift_repair" then common($p)+{path:"/api/v1/delivery/test-controls/drift/"}
     elif $p=="resilience.disconnect" then common($p)+{path:"/api/v1/delivery/test-controls/disconnect/"}

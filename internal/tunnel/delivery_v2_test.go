@@ -89,9 +89,11 @@ func TestDeliveryStatusPassesDatabaseSessionFence(t *testing.T) {
 	sink := &fakeDeliveryStatusSink{}
 	hub.SetDeliveryStatusSink(sink)
 	connection := &AgentConnection{ClusterID: clusterID.String(), DBID: connectionID, SessionID: "session-1"}
-	payload, _ := json.Marshal(protocol.DeliveryStatusV2{
+	status := protocol.DeliveryStatusV2{
 		ProtocolVersion: protocol.DeliveryProtocolVersion, ClusterID: clusterID.String(), SessionSequence: 1,
-	})
+	}
+	status.StatusDigest = status.SemanticDigest()
+	payload, _ := json.Marshal(status)
 	hub.handleMessage(connection, &protocol.Message{Type: protocol.MsgDeliveryStatus, Payload: payload})
 	if sink.cluster != clusterID || sink.connection != connectionID || sink.session != "session-1" || sink.payload.SessionSequence != 1 {
 		t.Fatalf("status sink identity was not bound: %#v", sink)

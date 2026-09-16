@@ -17,6 +17,11 @@
 #   SYSTEM_OIDC_IDENTITY         - Enrollment-pinned system artifact subject
 #   AGENT_SERVICE_ACCOUNT_NAME   - Agent ServiceAccount name
 #   AGENT_POD_LABELS             - Additional Deployment pod-template labels
+#   AGENT_CONFIGURATION_DIGEST   - Canonical scheduling/runtime configuration digest
+#   AGENT_PROXY_ENV              - Validated standard proxy environment variables
+#   AGENT_RESOURCES              - Effective CPU and memory requests/limits
+#   AGENT_AFFINITY               - Validated optional node-affinity block
+#   AGENT_TOLERATIONS            - Fixed and validated additional tolerations
 #   AGENT_RBAC_RULES             - ClusterRole rules selected by privilege profile
 #   AGENT_DELIVERY_CLUSTER_RULES - Typed Flux delivery object permissions
 #   AGENT_RBAC_BINDING_KIND      - ClusterRoleBinding or RoleBinding
@@ -692,6 +697,7 @@ spec:
         app.kubernetes.io/component: agent
         app.kubernetes.io/part-of: astronomer
 {{AGENT_POD_LABELS}}      annotations:
+        management.astronomer.io/agent-configuration-digest: "{{AGENT_CONFIGURATION_DIGEST}}"
         prometheus.io/scrape: "true"
         prometheus.io/port: "8081"
         prometheus.io/path: "/metrics"
@@ -784,6 +790,7 @@ spec:
               value: "{{SYSTEM_OIDC_ISSUER}}"
             - name: ASTRONOMER_SYSTEM_OIDC_IDENTITY
               value: "{{SYSTEM_OIDC_IDENTITY}}"
+{{AGENT_PROXY_ENV}}
           ports:
             - name: health
               containerPort: 8081
@@ -805,12 +812,7 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
           resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
+{{AGENT_RESOURCES}}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -833,13 +835,9 @@ spec:
             sizeLimit: 64Mi
       nodeSelector:
         kubernetes.io/os: linux
+{{AGENT_AFFINITY}}
       tolerations:
-        - key: node-role.kubernetes.io/control-plane
-          operator: Exists
-          effect: NoSchedule
-        - key: node-role.kubernetes.io/master
-          operator: Exists
-          effect: NoSchedule
+{{AGENT_TOLERATIONS}}
 
 ---
 # Service for health check endpoint

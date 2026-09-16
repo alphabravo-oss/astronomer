@@ -55,6 +55,7 @@ func TestGenerateLocalTrustSeparatesEKUsSANsAndStorage(t *testing.T) {
 		block, _ := pem.Decode([]byte(certificatePEM))
 		if block == nil {
 			t.Fatalf("%s certificate is not PEM", name)
+			return
 		}
 		certificate, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {

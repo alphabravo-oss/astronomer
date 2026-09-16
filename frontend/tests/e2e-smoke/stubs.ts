@@ -12,11 +12,13 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { overrides, type StubOverride } from './stub-overrides';
 
+const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const generatedStubs = JSON.parse(
-  fs.readFileSync(path.join(__dirname, 'openapi-stubs.generated.json'), 'utf8'),
+  fs.readFileSync(path.join(moduleDirectory, 'openapi-stubs.generated.json'), 'utf8'),
 ) as Record<string, unknown>;
 
 function escapeRegExp(literal: string): string {

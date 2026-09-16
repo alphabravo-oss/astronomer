@@ -70,6 +70,25 @@ mandatoryAudit: {ratePerSecond: 2, maxOperations: 100}
 	}
 }
 
+func TestMandatoryAuditTargetOperationsIncludesWindowOpening(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		duration time.Duration
+		rate     int
+		want     int
+	}{
+		{name: "exact interval", duration: 30 * time.Minute, rate: 5, want: 9000},
+		{name: "partial interval", duration: 1100 * time.Millisecond, rate: 2, want: 3},
+		{name: "disabled", duration: time.Minute, rate: 0, want: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := mandatoryAuditTargetOperations(test.duration, test.rate); got != test.want {
+				t.Fatalf("mandatoryAuditTargetOperations(%s, %d) = %d, want %d", test.duration, test.rate, got, test.want)
+			}
+		})
+	}
+}
+
 func TestCertificationProfilesUseExactEstateRungs(t *testing.T) {
 	profiles := map[string]int{
 		"estate-100.yaml": 100, "estate-500.yaml": 500,

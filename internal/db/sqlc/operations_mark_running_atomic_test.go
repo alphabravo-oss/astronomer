@@ -17,9 +17,9 @@ func pinAtomicClaimSQL(t *testing.T, name, sql string) {
 	if !strings.Contains(sql, "status = 'running'") || !strings.Contains(sql, "started_at") {
 		t.Errorf("%s must permit re-claiming a stale 'running' lease; got:\n%s", name, sql)
 	}
-	whereIdx := strings.Index(sql, "WHERE id = $1")
-	if whereIdx == -1 {
-		t.Fatalf("%s: expected `WHERE id = $1` anchor; got:\n%s", name, sql)
+	whereIdx := strings.Index(sql, "WHERE ")
+	if whereIdx == -1 || !strings.Contains(sql[whereIdx:], "id = $1") {
+		t.Fatalf("%s: expected a WHERE clause anchored on id = $1; got:\n%s", name, sql)
 	}
 	tail := sql[whereIdx:]
 	if !strings.Contains(tail, "AND") {

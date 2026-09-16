@@ -8,10 +8,82 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const checkpointToolOperation = `-- name: CheckpointToolOperation :one
+WITH checkpoint AS (
+    UPDATE tool_operations
+    SET payload = $1::jsonb, updated_at = now(), started_at = now()
+    WHERE id = $2::uuid
+      AND status = 'running' AND attempt_count = $3::integer
+    RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
+), event AS (
+    INSERT INTO tool_operation_events (operation_id, level, stage, message, detail)
+    SELECT id, $4::text, $5::text,
+           $6::text, $7::jsonb
+    FROM checkpoint
+)
+SELECT id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at FROM checkpoint
+`
+
+type CheckpointToolOperationParams struct {
+	Payload      json.RawMessage `json:"payload"`
+	ID           uuid.UUID       `json:"id"`
+	AttemptCount int32           `json:"attempt_count"`
+	EventLevel   string          `json:"event_level"`
+	EventStage   string          `json:"event_stage"`
+	EventMessage string          `json:"event_message"`
+	EventDetail  json.RawMessage `json:"event_detail"`
+}
+
+type CheckpointToolOperationRow struct {
+	ID            uuid.UUID          `json:"id"`
+	TargetType    string             `json:"target_type"`
+	TargetKey     string             `json:"target_key"`
+	OperationType string             `json:"operation_type"`
+	Payload       json.RawMessage    `json:"payload"`
+	Status        string             `json:"status"`
+	AttemptCount  int32              `json:"attempt_count"`
+	StartedAt     pgtype.Timestamptz `json:"started_at"`
+	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
+	ErrorMessage  string             `json:"error_message"`
+	CreatedByID   pgtype.UUID        `json:"created_by_id"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+}
+
+func (q *Queries) CheckpointToolOperation(ctx context.Context, arg CheckpointToolOperationParams) (CheckpointToolOperationRow, error) {
+	row := q.db.QueryRow(ctx, checkpointToolOperation,
+		arg.Payload,
+		arg.ID,
+		arg.AttemptCount,
+		arg.EventLevel,
+		arg.EventStage,
+		arg.EventMessage,
+		arg.EventDetail,
+	)
+	var i CheckpointToolOperationRow
+	err := row.Scan(
+		&i.ID,
+		&i.TargetType,
+		&i.TargetKey,
+		&i.OperationType,
+		&i.Payload,
+		&i.Status,
+		&i.AttemptCount,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
 
 const countToolOperations = `-- name: CountToolOperations :one
 SELECT count(*) FROM tool_operations
@@ -118,6 +190,48 @@ func (q *Queries) CreateToolOperation(ctx context.Context, arg CreateToolOperati
 	return i, err
 }
 
+const finishToolOperation = `-- name: FinishToolOperation :one
+UPDATE tool_operations
+SET status = $1::text, error_message = $2::text,
+    completed_at = now(), updated_at = now()
+WHERE id = $3::uuid AND status = 'running'
+  AND attempt_count = $4::integer
+RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
+`
+
+type FinishToolOperationParams struct {
+	FinalStatus  string    `json:"final_status"`
+	ErrorMessage string    `json:"error_message"`
+	ID           uuid.UUID `json:"id"`
+	AttemptCount int32     `json:"attempt_count"`
+}
+
+func (q *Queries) FinishToolOperation(ctx context.Context, arg FinishToolOperationParams) (ToolOperation, error) {
+	row := q.db.QueryRow(ctx, finishToolOperation,
+		arg.FinalStatus,
+		arg.ErrorMessage,
+		arg.ID,
+		arg.AttemptCount,
+	)
+	var i ToolOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TargetType,
+		&i.TargetKey,
+		&i.OperationType,
+		&i.Payload,
+		&i.Status,
+		&i.AttemptCount,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getLatestToolOperationForTarget = `-- name: GetLatestToolOperationForTarget :one
 SELECT id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at FROM tool_operations
 WHERE target_type = $1 AND target_key = $2
@@ -177,9 +291,13 @@ func (q *Queries) GetToolOperation(ctx context.Context, id uuid.UUID) (ToolOpera
 }
 
 const listPendingToolOperations = `-- name: ListPendingToolOperations :many
-SELECT id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at FROM tool_operations
-WHERE status IN ('pending', 'running')
-ORDER BY created_at ASC
+SELECT operation.id, operation.target_type, operation.target_key, operation.operation_type, operation.payload, operation.status, operation.attempt_count, operation.started_at, operation.completed_at, operation.error_message, operation.created_by_id, operation.created_at, operation.updated_at FROM tool_operations operation
+WHERE operation.status = 'running' OR (operation.status = 'pending' AND NOT EXISTS (
+    SELECT 1 FROM tool_operations running
+    WHERE running.target_type = operation.target_type AND running.target_key = operation.target_key
+      AND running.status = 'running'
+))
+ORDER BY operation.created_at ASC
 LIMIT $1
 `
 
@@ -342,75 +460,6 @@ func (q *Queries) ListToolOperationsForScopes(ctx context.Context, arg ListToolO
 	return items, nil
 }
 
-const markToolOperationCompleted = `-- name: MarkToolOperationCompleted :one
-UPDATE tool_operations
-SET
-    status = 'completed',
-    completed_at = now(),
-    error_message = '',
-    updated_at = now()
-WHERE id = $1
-RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
-`
-
-func (q *Queries) MarkToolOperationCompleted(ctx context.Context, id uuid.UUID) (ToolOperation, error) {
-	row := q.db.QueryRow(ctx, markToolOperationCompleted, id)
-	var i ToolOperation
-	err := row.Scan(
-		&i.ID,
-		&i.TargetType,
-		&i.TargetKey,
-		&i.OperationType,
-		&i.Payload,
-		&i.Status,
-		&i.AttemptCount,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.ErrorMessage,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const markToolOperationFailed = `-- name: MarkToolOperationFailed :one
-UPDATE tool_operations
-SET
-    status = 'failed',
-    completed_at = now(),
-    error_message = $2,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
-`
-
-type MarkToolOperationFailedParams struct {
-	ID           uuid.UUID `json:"id"`
-	ErrorMessage string    `json:"error_message"`
-}
-
-func (q *Queries) MarkToolOperationFailed(ctx context.Context, arg MarkToolOperationFailedParams) (ToolOperation, error) {
-	row := q.db.QueryRow(ctx, markToolOperationFailed, arg.ID, arg.ErrorMessage)
-	var i ToolOperation
-	err := row.Scan(
-		&i.ID,
-		&i.TargetType,
-		&i.TargetKey,
-		&i.OperationType,
-		&i.Payload,
-		&i.Status,
-		&i.AttemptCount,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.ErrorMessage,
-		&i.CreatedByID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const markToolOperationRunning = `-- name: MarkToolOperationRunning :one
 UPDATE tool_operations
 SET
@@ -419,10 +468,16 @@ SET
     started_at = now(),
     error_message = '',
     updated_at = now()
-WHERE id = $1
+WHERE tool_operations.id = $1
   AND (
-      status = 'pending'
-      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
+      tool_operations.status = 'pending'
+      OR (tool_operations.status = 'running' AND (tool_operations.started_at IS NULL OR tool_operations.started_at < now() - interval '1 minute'))
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM tool_operations other
+      WHERE other.target_type = tool_operations.target_type
+        AND other.target_key = tool_operations.target_key
+        AND other.status = 'running' AND other.id <> tool_operations.id
   )
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
 `
@@ -460,7 +515,7 @@ SET
     completed_at = now(),
     error_message = $2,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status = 'pending'
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
 `
 
@@ -490,6 +545,39 @@ func (q *Queries) MarkToolOperationSuperseded(ctx context.Context, arg MarkToolO
 	return i, err
 }
 
+const renewToolOperationLease = `-- name: RenewToolOperationLease :one
+UPDATE tool_operations
+SET started_at = now(), updated_at = now()
+WHERE id = $1 AND status = 'running' AND attempt_count = $2
+RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
+`
+
+type RenewToolOperationLeaseParams struct {
+	ID           uuid.UUID `json:"id"`
+	AttemptCount int32     `json:"attempt_count"`
+}
+
+func (q *Queries) RenewToolOperationLease(ctx context.Context, arg RenewToolOperationLeaseParams) (ToolOperation, error) {
+	row := q.db.QueryRow(ctx, renewToolOperationLease, arg.ID, arg.AttemptCount)
+	var i ToolOperation
+	err := row.Scan(
+		&i.ID,
+		&i.TargetType,
+		&i.TargetKey,
+		&i.OperationType,
+		&i.Payload,
+		&i.Status,
+		&i.AttemptCount,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ErrorMessage,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const requeueToolOperation = `-- name: RequeueToolOperation :one
 UPDATE tool_operations
 SET
@@ -499,6 +587,7 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND status IN ('failed', 'superseded')
 RETURNING id, target_type, target_key, operation_type, payload, status, attempt_count, started_at, completed_at, error_message, created_by_id, created_at, updated_at
 `
 

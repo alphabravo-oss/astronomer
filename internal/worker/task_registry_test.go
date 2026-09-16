@@ -75,6 +75,10 @@ func TestExplicitRuntimeDescriptorsCannotFallBackToGlobals(t *testing.T) {
 		tasks.KubectlSessionReapType:                 false,
 		tasks.SecurityIngestType:                     false,
 		tasks.SecurityIngestRecoveryType:             false,
+		tasks.SupportBundleOperationType:             false,
+		tasks.SupportBundleRecoveryType:              false,
+		tasks.AuditExportOperationType:               false,
+		tasks.AuditExportRecoveryType:                false,
 	}
 	for _, item := range TaskDescriptors() {
 		if _, ok := runtimeTypes[item.Type]; !ok {
@@ -120,4 +124,20 @@ func TestLegacyBackupTasksRemainConsumableButUnscheduled(t *testing.T) {
 			t.Errorf("legacy backup task %s must not be scheduled: %+v", taskType, item.Schedules)
 		}
 	}
+}
+
+func TestInactiveUserRetentionIsDailyAndWorkerOwned(t *testing.T) {
+	for _, item := range TaskDescriptors() {
+		if item.Type != tasks.InactiveUserRetentionType {
+			continue
+		}
+		if item.Owner != TaskOwnerWorker || item.Queue != "default" {
+			t.Fatalf("inactive-user retention owner/queue = %s/%s", item.Owner, item.Queue)
+		}
+		if len(item.Schedules) != 1 || item.Schedules[0].Cron != "30 5 * * *" {
+			t.Fatalf("inactive-user retention schedules = %+v, want daily 05:30", item.Schedules)
+		}
+		return
+	}
+	t.Fatalf("task descriptor %q is missing", tasks.InactiveUserRetentionType)
 }

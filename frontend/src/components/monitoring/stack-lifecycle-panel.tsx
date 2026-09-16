@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * One monitoring-stack lifecycle surface: status, preview, install / upgrade /
@@ -95,7 +94,7 @@ export interface StackLifecyclePanelProps {
 }
 
 const inputClass =
-  "h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring";
+  "h-8 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-hidden focus:ring-1 focus:ring-ring";
 
 function denialReason(decision: PermissionDecision): string {
   return decision.disabledReason || decision.reason;
@@ -622,7 +621,7 @@ function StackFieldControl({
       {field.required && <span className="text-status-error">*</span>}
       {field.replaceTrigger && (
         <span
-          className="rounded bg-muted px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground"
+          className="rounded-sm bg-muted px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground"
           title="Changing this needs a reinstall (Replace), not an in-place upgrade."
         >
           replace
@@ -640,7 +639,7 @@ function StackFieldControl({
           onChange={(event) =>
             onChange(event.target.checked ? "true" : "false")
           }
-          className="mt-0.5 h-4 w-4 rounded border-border"
+          className="mt-0.5 h-4 w-4 rounded-sm border-border"
           aria-label={field.label}
         />
         <span className="min-w-0">

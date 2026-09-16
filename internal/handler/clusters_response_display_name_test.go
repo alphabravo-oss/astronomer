@@ -21,7 +21,7 @@ func TestClusterToResponseFallsBackToNameForDisplayName(t *testing.T) {
 		{"explicit display_name wins", sqlc.Cluster{Name: "prod-1", DisplayName: "Production"}, "Production"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := clusterToResponse(tc.cluster).DisplayName; got != tc.want {
+			if got := mustClusterResponse(t, tc.cluster).DisplayName; got != tc.want {
 				t.Fatalf("DisplayName = %q, want %q", got, tc.want)
 			}
 		})

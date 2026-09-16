@@ -1,4 +1,3 @@
-"use client";
 
 // §Schema Tier-1 — chart renderer. Series rows -> first-party SVG bars/areas.
 // Runs no third-party JS and no charting library: geometry comes from the pure
@@ -127,7 +126,7 @@ export function ExtChart({ rows, spec, emptyText }: ExtChartProps) {
             className="flex items-center gap-1 text-xs text-muted-foreground"
           >
             <span
-              className="inline-block h-2 w-2 rounded-sm"
+              className="inline-block h-2 w-2 rounded-xs"
               style={{ background: SERIES_COLORS[s % SERIES_COLORS.length] }}
             />
             {formatValue(y, "text")}

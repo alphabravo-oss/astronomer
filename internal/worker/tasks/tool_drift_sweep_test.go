@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -23,20 +24,43 @@ func (f *fakeDriftHelm) Status(_ context.Context, _, _, _ string) (*protocol.Hel
 
 // fakeDriftQuerier records the drift marks the sweep writes.
 type fakeDriftQuerier struct {
-	charts []sqlc.InstalledChart
-	marks  map[uuid.UUID]sqlc.MarkInstalledChartDriftParams
+	charts      []sqlc.InstalledChart
+	marks       map[uuid.UUID]sqlc.MarkInstalledChartDriftParams
+	releases    map[uuid.UUID]sqlc.ReleaseInstalledChartDriftClaimParams
+	claim       sqlc.ClaimInstalledChartsForDriftSweepParams
+	markRows    int64
+	releaseRows int64
+	markErr     error
+	releaseErr  error
 }
 
-func (f *fakeDriftQuerier) ListInstalledChartsForDriftSweep(_ context.Context, _ int32) ([]sqlc.InstalledChart, error) {
+func (f *fakeDriftQuerier) ClaimInstalledChartsForDriftSweep(_ context.Context, arg sqlc.ClaimInstalledChartsForDriftSweepParams) ([]sqlc.InstalledChart, error) {
+	f.claim = arg
 	return f.charts, nil
 }
 
-func (f *fakeDriftQuerier) MarkInstalledChartDrift(_ context.Context, arg sqlc.MarkInstalledChartDriftParams) error {
+func (f *fakeDriftQuerier) ReleaseInstalledChartDriftClaim(_ context.Context, arg sqlc.ReleaseInstalledChartDriftClaimParams) (int64, error) {
+	if f.releases == nil {
+		f.releases = map[uuid.UUID]sqlc.ReleaseInstalledChartDriftClaimParams{}
+	}
+	f.releases[arg.ID] = arg
+	rows := f.releaseRows
+	if rows == 0 && f.releaseErr == nil {
+		rows = 1
+	}
+	return rows, f.releaseErr
+}
+
+func (f *fakeDriftQuerier) MarkInstalledChartDrift(_ context.Context, arg sqlc.MarkInstalledChartDriftParams) (int64, error) {
 	if f.marks == nil {
 		f.marks = map[uuid.UUID]sqlc.MarkInstalledChartDriftParams{}
 	}
 	f.marks[arg.ID] = arg
-	return nil
+	rows := f.markRows
+	if rows == 0 && f.markErr == nil {
+		rows = 1
+	}
+	return rows, f.markErr
 }
 
 func TestRunToolDriftSweep(t *testing.T) {
@@ -94,7 +118,16 @@ func TestRunToolDriftSweep(t *testing.T) {
 				if ok {
 					t.Fatalf("expected MarkInstalledChartDrift NOT to be called on transient probe failure, got %+v", mark)
 				}
+				if _, released := q.releases[id]; !released {
+					t.Fatal("expected transient failure to release the durable claim")
+				}
+				if !q.releases[id].ClaimToken.Valid || q.releases[id].ClaimToken != q.claim.ClaimToken {
+					t.Fatal("expected release to be fenced by the claim token")
+				}
 				return
+			}
+			if q.claim.QueryLimit != toolDriftSweepBatch || !q.claim.LockedUntil.Valid || !q.claim.ClaimToken.Valid {
+				t.Fatalf("claim = %+v, want bounded durable lease", q.claim)
 			}
 			if !ok {
 				t.Fatal("expected MarkInstalledChartDrift to be called")
@@ -108,6 +141,24 @@ func TestRunToolDriftSweep(t *testing.T) {
 			if !tc.wantDrift && mark.DriftDetail != "" {
 				t.Fatalf("expected empty drift detail when no drift, got %q", mark.DriftDetail)
 			}
+			if mark.ClaimToken != q.claim.ClaimToken {
+				t.Fatal("expected completion to be fenced by the claim token")
+			}
 		})
+	}
+}
+
+func TestRunToolDriftSweepReturnsPersistenceFailure(t *testing.T) {
+	id := uuid.New()
+	q := &fakeDriftQuerier{
+		charts:  []sqlc.InstalledChart{{ID: id, ReleaseName: "rel", Namespace: "ns"}},
+		markErr: errors.New("database unavailable"),
+	}
+	err := runToolDriftSweep(context.Background(), ToolDriftSweepDeps{
+		Queries: q,
+		Helm:    &fakeDriftHelm{status: &protocol.HelmResultPayload{Status: "deployed"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "database unavailable") {
+		t.Fatalf("runToolDriftSweep error = %v, want persistence failure", err)
 	}
 }

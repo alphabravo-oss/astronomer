@@ -38,16 +38,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 )
 
 // controlPlaneSnapshotJobImage is the image the one-shot snapshot Job
@@ -67,16 +67,14 @@ const controlPlaneSnapshotJobNamespace = "kube-system"
 type ControlPlaneSnapshotQuerier interface {
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 
-	CreateControlPlaneSnapshot(ctx context.Context, arg sqlc.CreateControlPlaneSnapshotParams) (sqlc.ControlPlaneSnapshot, error)
 	GetControlPlaneSnapshotByID(ctx context.Context, id uuid.UUID) (sqlc.ControlPlaneSnapshot, error)
 	ListControlPlaneSnapshotsByCluster(ctx context.Context, arg sqlc.ListControlPlaneSnapshotsByClusterParams) ([]sqlc.ControlPlaneSnapshot, error)
 	CountControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
-	MarkControlPlaneSnapshotStatus(ctx context.Context, arg sqlc.MarkControlPlaneSnapshotStatusParams) error
-	MarkControlPlaneSnapshotFailed(ctx context.Context, arg sqlc.MarkControlPlaneSnapshotFailedParams) error
 }
 
 type ControlPlaneSnapshotMutationTx interface {
 	ControlPlaneSnapshotQuerier
+	CreateControlPlaneSnapshot(context.Context, sqlc.CreateControlPlaneSnapshotParams) (sqlc.ControlPlaneSnapshot, error)
 	resourceOperationIdempotencyQuerier
 	audit.OutboxQuerier
 	tasks.TaskOutboxWriter
@@ -115,7 +113,7 @@ func enqueueControlPlaneSnapshotApply(ctx context.Context, q tasks.TaskOutboxWri
 	if err != nil {
 		return err
 	}
-	payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
+	payload := observability.EnrichTaskPayload(ctx, task.Payload(), reqctx.CorrelationID(ctx))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(5))
 	_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{
 		DedupeKey: "control_plane_snapshot:apply:" + snapshotID.String(),
@@ -227,9 +225,8 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		return
 	}
 	r = r.WithContext(withOperationIdempotency(r, "control-plane-snapshot"))
-	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return
 	}
 	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
@@ -279,75 +276,45 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 		"cluster_id": clusterID.String(), "distribution": family,
 		"name": name, "location": location,
 	}
-	if h.runTx != nil {
-		var row sqlc.ControlPlaneSnapshot
-		err := h.runTx(r.Context(), func(q ControlPlaneSnapshotMutationTx) error {
-			existingID, isReplay, claimErr := claimResourceOperation(r.Context(), q, "control_plane_snapshots")
-			if claimErr != nil {
-				return claimErr
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "control-plane snapshot transaction runner is not configured")
+		return
+	}
+	var row sqlc.ControlPlaneSnapshot
+	err = h.runTx(r.Context(), func(q ControlPlaneSnapshotMutationTx) error {
+		existingID, isReplay, claimErr := claimResourceOperation(r.Context(), q, "control_plane_snapshots")
+		if claimErr != nil {
+			return claimErr
+		}
+		if isReplay {
+			replayed, getErr := q.GetControlPlaneSnapshotByID(r.Context(), existingID)
+			if getErr != nil || replayed.ClusterID != clusterID {
+				return errOperationIdempotencyConflict
 			}
-			if isReplay {
-				replayed, getErr := q.GetControlPlaneSnapshotByID(r.Context(), existingID)
-				if getErr != nil || replayed.ClusterID != clusterID {
-					return errOperationIdempotencyConflict
-				}
-				row = replayed
-				return nil
-			}
-			var createErr error
-			row, createErr = q.CreateControlPlaneSnapshot(r.Context(), params)
-			if createErr != nil {
-				return createErr
-			}
-			if err := enqueueControlPlaneSnapshotApply(r.Context(), q, row.ID); err != nil {
-				return err
-			}
-			if err := attachResourceOperation(r.Context(), q, "control_plane_snapshots", row.ID, controlPlaneSnapshotToResponse(row)); err != nil {
-				return err
-			}
-			return recordAuditOutbox(r, q, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, http.StatusAccepted, detail)
-		})
-		if err != nil {
-			if errors.Is(err, errOperationIdempotencyConflict) {
-				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
-				return
-			}
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create control-plane snapshot intent")
+			row = replayed
+			return nil
+		}
+		var createErr error
+		row, createErr = q.CreateControlPlaneSnapshot(r.Context(), params)
+		if createErr != nil {
+			return createErr
+		}
+		if taskErr := enqueueControlPlaneSnapshotApply(r.Context(), q, row.ID); taskErr != nil {
+			return taskErr
+		}
+		if attachErr := attachResourceOperation(r.Context(), q, "control_plane_snapshots", row.ID, controlPlaneSnapshotToResponse(row)); attachErr != nil {
+			return attachErr
+		}
+		return recordAuditOutbox(r, q, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, http.StatusAccepted, detail)
+	})
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, err.Error())
 			return
 		}
-		RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/control-plane-snapshots/%s/", clusterID, row.ID), controlPlaneSnapshotToResponse(row))
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create control-plane snapshot intent")
 		return
 	}
-
-	row, err := h.queries.CreateControlPlaneSnapshot(r.Context(), params)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create snapshot row")
-		return
-	}
-
-	applyErr := h.ApplySnapshotJob(r.Context(), clusterID.String(), row.ID.String(), name, family, location)
-	if applyErr != nil {
-		_ = h.queries.MarkControlPlaneSnapshotFailed(r.Context(), sqlc.MarkControlPlaneSnapshotFailedParams{
-			ID:    row.ID,
-			Error: applyErr.Error(),
-		})
-		row.Status = "failed"
-		row.Error = applyErr.Error()
-		detail["remote_submission"] = "failed"
-		recordAudit(r, h.queries, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, detail)
-		RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/control-plane-snapshots/%s/", clusterID, row.ID), controlPlaneSnapshotToResponse(row))
-		return
-	}
-
-	if err := h.queries.MarkControlPlaneSnapshotStatus(r.Context(), sqlc.MarkControlPlaneSnapshotStatusParams{
-		ID:     row.ID,
-		Status: "running",
-		Error:  "",
-	}); err == nil {
-		row.Status = "running"
-	}
-
-	recordAudit(r, h.queries, "cluster.control_plane_snapshot.triggered", "control_plane_snapshot", row.ID.String(), cluster.Name, detail)
 	RespondAcceptedOperation(w, fmt.Sprintf("/api/v1/clusters/%s/control-plane-snapshots/%s/", clusterID, row.ID), controlPlaneSnapshotToResponse(row))
 }
 
@@ -359,9 +326,8 @@ func (h *ControlPlaneSnapshotHandler) TriggerSnapshot(w http.ResponseWriter, r *
 // via ?limit= (default 50, max 200) and ?offset=. The DB is the source
 // of truth — we never re-poll the member cluster on list.
 func (h *ControlPlaneSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *http.Request) {
-	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {
@@ -369,7 +335,8 @@ func (h *ControlPlaneSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *ht
 		return
 	}
 
-	limit, offset := parseLimitOffset(r, 50, 200)
+	pageLimit, pageOffset := queryLimitOffset(r, 50)
+	limit, offset := int32(pageLimit), int32(pageOffset)
 	rows, err := h.queries.ListControlPlaneSnapshotsByCluster(r.Context(), sqlc.ListControlPlaneSnapshotsByClusterParams{
 		ClusterID: clusterID,
 		Limit:     limit,
@@ -388,12 +355,7 @@ func (h *ControlPlaneSnapshotHandler) ListSnapshots(w http.ResponseWriter, r *ht
 	for _, row := range rows {
 		out = append(out, controlPlaneSnapshotToResponse(row))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"items":  out,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
-	})
+	paging.Write(w, out, paging.Exact(total, int(limit), int(offset), len(out)))
 }
 
 // GetSnapshot returns a single snapshot row scoped to the cluster.
@@ -726,9 +688,8 @@ func controlPlaneSnapshotJobName(snapshotID string) string {
 }
 
 func parseControlPlaneSnapshotIDs(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
-	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return uuid.Nil, uuid.Nil, false
 	}
 	snapshotID, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -737,31 +698,4 @@ func parseControlPlaneSnapshotIDs(w http.ResponseWriter, r *http.Request) (uuid.
 		return uuid.Nil, uuid.Nil, false
 	}
 	return clusterID, snapshotID, true
-}
-
-// parseLimitOffset reads ?limit=/?offset= with a default + hard cap on
-// limit and a floor of 0 on offset.
-func parseLimitOffset(r *http.Request, def, max int32) (int32, int32) {
-	limit := def
-	if v := strings.TrimSpace(r.URL.Query().Get("limit")); v != "" {
-		if n, err := parseInt32(v); err == nil && n > 0 {
-			limit = n
-		}
-	}
-	if limit > max {
-		limit = max
-	}
-	var offset int32
-	if v := strings.TrimSpace(r.URL.Query().Get("offset")); v != "" {
-		if n, err := parseInt32(v); err == nil && n > 0 {
-			offset = n
-		}
-	}
-	return limit, offset
-}
-
-func parseInt32(s string) (int32, error) {
-	var n int32
-	_, err := fmt.Sscan(s, &n)
-	return n, err
 }

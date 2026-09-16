@@ -8,11 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -36,7 +37,7 @@ func doListPods(t *testing.T, h *WorkloadHandler, clusterID string) listEnvelope
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("cluster_id", clusterID)
 	req := httptest.NewRequest(http.MethodGet, "/clusters/"+clusterID+"/pods/", nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.New().String(), Email: "u@test.com"})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.New().String(), Email: "u@test.com"})
 	ctx = context.WithValue(ctx, chi.RouteCtxKey, rc)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -120,7 +121,8 @@ func TestListPods_FlagOffNoFiltering(t *testing.T) {
 
 	h := NewWorkloadHandlerWithRequester(podsAcrossNamespaces(t))
 	h.SetAuthorization(engine, stubWorkloadRBACQuerier{bindings: binding})
-	// SetNamespaceScopedRBAC NOT called => flag off (default).
+	// SetNamespaceScopedRBAC is not called on this isolated test handler;
+	// application configuration defaults the production wiring to enabled.
 
 	env := doListPods(t, h, clusterID)
 	if len(env.Data) != 3 {

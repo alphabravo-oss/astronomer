@@ -5,7 +5,6 @@ import {
   getClustersByClusterIdNamespaces,
   getClustersByClusterIdPods,
   getClustersByClusterIdWorkloads,
-  getClustersByClusterIdWorkloadsByKindByNamespaceByName,
   getClustersByClusterIdWorkloadsByKindByNamespaceByNamePods,
   getWorkloadsOperationsById,
   getWorkloadsPodsByClusterIdByNamespaceByPodLogs,
@@ -16,6 +15,7 @@ import {
   createIdempotencyKey,
   type OperationSnapshot,
 } from "@/lib/api/operation-polling";
+import { mapPage } from "@/lib/api/pagination";
 import { wsBase } from "@/lib/env";
 import type {
   ClusterEvent,
@@ -167,11 +167,25 @@ export async function getClusterNamespaces(
   clusterId: string,
   signal?: AbortSignal,
 ): Promise<Namespace[]> {
-  const response = await getClustersByClusterIdNamespaces({
-    path: { cluster_id: clusterId },
-    signal,
-  });
-  return (response.data ?? []).map(mapNamespace);
+  const namespaces: Namespace[] = [];
+  let offset = 0;
+  let hasMore = true;
+  while (hasMore) {
+    const response = await getClustersByClusterIdNamespaces({
+      path: { cluster_id: clusterId },
+      query: { limit: 200, offset },
+      signal,
+    });
+    namespaces.push(...(response.data ?? []).map(mapNamespace));
+    const nextOffset = response.pagination.next_offset;
+    hasMore = response.pagination.has_more && nextOffset !== null;
+    if (!hasMore || nextOffset === null) break;
+    if (nextOffset <= offset) {
+      throw new Error("Namespace pagination did not advance");
+    }
+    offset = nextOffset;
+  }
+  return namespaces;
 }
 
 export async function getClusterEvents(
@@ -220,10 +234,6 @@ export async function getWorkloadOperation(
   return mapOperation(response.data);
 }
 
-// Compatibility name retained for the pod-delete hook; every workload
-// mutation is polled through the same operation endpoint.
-export const getPodDeleteOperation = getWorkloadOperation;
-
 export async function getWorkloads(
   clusterId: string,
   params?: {
@@ -248,34 +258,10 @@ export async function getWorkloads(
     },
     signal: params?.signal,
   });
-  const data = (response.data ?? []).map(mapWorkload);
-  const total = response.count ?? data.length;
-  return {
-    data,
-    total,
-    count: total,
-    next: response.next ?? null,
-    previous: response.previous ?? null,
-    page,
-    pageSize,
-    totalPages: Math.ceil(total / pageSize),
-  };
-}
-
-export async function getWorkload(
-  clusterId: string,
-  kind: string,
-  namespace: string,
-  name: string,
-  signal?: AbortSignal,
-): Promise<Workload> {
-  const response = await getClustersByClusterIdWorkloadsByKindByNamespaceByName(
-    {
-      path: { cluster_id: clusterId, kind, namespace, name },
-      signal,
-    },
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapWorkload,
   );
-  return mapWorkload(response.data ?? {});
 }
 
 export async function scaleWorkload(

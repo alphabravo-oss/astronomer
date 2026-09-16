@@ -158,6 +158,40 @@ func TestValidateToken_NoCheckerLeavesValidationUntouched(t *testing.T) {
 	}
 }
 
+func TestJWTValidationCacheEvictsExpiredEntriesAndStaysBounded(t *testing.T) {
+	mgr := MustNewJWTManager("test-secret", 60)
+	mgr.SetValidationCacheTTL(time.Minute)
+	mgr.SetValidationCacheMaxEntries(2)
+
+	mgr.cachePut("oldest", uuid.New())
+	time.Sleep(time.Millisecond)
+	mgr.cachePut("newer", uuid.New())
+	mgr.cachePut("newest", uuid.New())
+
+	mgr.cacheMu.RLock()
+	if got := len(mgr.cache); got != 2 {
+		t.Fatalf("cache size = %d, want 2", got)
+	}
+	_, hasOldest := mgr.cache["oldest"]
+	mgr.cacheMu.RUnlock()
+	if hasOldest {
+		t.Fatal("oldest cache entry was not evicted at capacity")
+	}
+
+	mgr.cacheMu.Lock()
+	mgr.cache["newer"] = validationCacheEntry{expiresAt: time.Now().Add(-time.Second)}
+	mgr.cacheMu.Unlock()
+	if mgr.cacheHit("newer") {
+		t.Fatal("expired cache entry returned a hit")
+	}
+	mgr.cacheMu.RLock()
+	_, stillCached := mgr.cache["newer"]
+	mgr.cacheMu.RUnlock()
+	if stillCached {
+		t.Fatal("expired cache entry was not removed on lookup")
+	}
+}
+
 func TestValidateTokenRevocationDBErrorAlwaysFailsClosed(t *testing.T) {
 	for _, failure := range []string{"jti", "user_cutoff"} {
 		t.Run(failure, func(t *testing.T) {

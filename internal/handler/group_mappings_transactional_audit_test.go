@@ -122,7 +122,7 @@ func TestEveryGroupMappingMutationUsesTransactionalExecutor(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeGroupMappingsMutation" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 				want[fn.Name.Name] = true
 			}
 			return true
@@ -130,7 +130,7 @@ func TestEveryGroupMappingMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeGroupMappingsMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

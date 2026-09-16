@@ -1,0 +1,8 @@
+# Explicit local-development profile. The base values are production-safe and
+# intentionally fail preflight until production infrastructure is supplied;
+# opt into this file for local rendering and disposable clusters.
+config:
+  env: development
+  debug: "true"
+  logLevel: debug
+  allowedHosts: "*"

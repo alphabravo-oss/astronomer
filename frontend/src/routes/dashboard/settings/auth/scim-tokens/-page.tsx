@@ -6,7 +6,7 @@
  * immediately after creation; list rows only ever carry metadata.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   ArrowLeft,
@@ -90,7 +90,7 @@ function SCIMTokensList() {
             e.stopPropagation();
             setRevokeTarget(row);
           }}
-          className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+          className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
           title="Revoke token"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -119,7 +119,10 @@ function SCIMTokensList() {
         isError={isError}
         onRetry={() => refetch()}
         searchPlaceholder="Search tokens..."
-        emptyMessage="No SCIM tokens minted"
+        emptyState={{
+          title: "No SCIM tokens minted",
+          description: "Create the first item to configure this feature.",
+        }}
       />
 
       {showCreate && (
@@ -259,7 +262,7 @@ function RevealTokenModal({
       }
     >
       <div className="flex items-start gap-2 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3">
-        <ShieldAlert className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
+        <ShieldAlert className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
         <p className="text-xs text-foreground">
           Copy this token now — it is shown <b>only once</b>. Only its hash is
           stored; it cannot be recovered later.
@@ -295,13 +298,13 @@ export default function SCIMTokensPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings/auth"
+        <RouterLink
+          to="/dashboard/settings/auth"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Auth
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Auth · SCIM"
           title="SCIM Provisioning Tokens"

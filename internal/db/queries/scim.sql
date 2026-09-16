@@ -1,14 +1,17 @@
--- SCIM 2.0 provisioning queries (migration 114). Bearer-token auth +
+-- SCIM 2.0 provisioning queries. Bearer-token auth +
 -- the User/Group provisioning surface mapped onto the existing users +
 -- identity_group_mappings tables.
 
 -- name: CreateSCIMToken :one
-INSERT INTO scim_tokens (name, token_hash, prefix)
-VALUES ($1, $2, $3)
+INSERT INTO scim_tokens (name, token_hash, prefix, expires_at)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: GetSCIMTokenByHash :one
-SELECT * FROM scim_tokens WHERE token_hash = $1;
+SELECT * FROM scim_tokens
+WHERE token_hash = $1
+  AND revoked_at IS NULL
+  AND expires_at > now();
 
 -- name: TouchSCIMToken :exec
 UPDATE scim_tokens SET last_used_at = now() WHERE id = $1;
@@ -16,8 +19,10 @@ UPDATE scim_tokens SET last_used_at = now() WHERE id = $1;
 -- name: ListSCIMTokens :many
 SELECT * FROM scim_tokens ORDER BY created_at DESC;
 
--- name: DeleteSCIMToken :exec
-DELETE FROM scim_tokens WHERE id = $1;
+-- name: RevokeSCIMToken :execrows
+UPDATE scim_tokens
+SET revoked_at = now()
+WHERE id = $1 AND revoked_at IS NULL;
 
 -- name: ListSCIMGroupNames :many
 -- SCIM Groups are read off the distinct group_name values an operator

@@ -25,12 +25,7 @@ func TestSecurityMutatingRoutesRequireSecurityRBAC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
-		Security:    handler.NewSecurityHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()}}, AdminPlatform: AdminPlatformDependencies{Security: handler.NewSecurityHandler(nil)}})
 
 	for _, tc := range []struct {
 		name   string
@@ -72,12 +67,7 @@ func TestSecurityReadRoutesRequireExplicitRBAC(t *testing.T) {
 	clusterID := uuid.NewString()
 	scanID := uuid.NewString()
 	templateID := uuid.NewString()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceUsers, rbac.VerbRead)},
-		Security:    handler.NewSecurityHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceUsers, rbac.VerbRead)}}, AdminPlatform: AdminPlatformDependencies{Security: handler.NewSecurityHandler(nil)}})
 
 	paths := []string{
 		"/api/v1/security/controller/status/",
@@ -114,12 +104,7 @@ func TestCatalogRepositoryRoutesRequireCatalogRBAC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
-		Catalog:     handler.NewCatalogHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()}}, AdminPlatform: AdminPlatformDependencies{Catalog: handler.NewCatalogHandler(nil)}})
 
 	for _, tc := range []struct {
 		name   string
@@ -154,13 +139,10 @@ func TestControllersMutatingRoutesRequireSuperuser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT: jwtMgr,
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{
+
 		// Non-superuser user resolved by the superuser gate.
-		AuthQueries:  routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}},
-		RBACEngine:   rbac.NewEngine(),
-		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ControlPlane: handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil),
+		JWT: jwtMgr, AuthQueries: routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}}, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ControlPlane: handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil)},
 	})
 
 	for _, tc := range []struct {
@@ -210,14 +192,10 @@ func newMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.RoleBindi
 	querier := routeSecurityRBACQuerier{bindings: bindings}
 	monitoring := handler.NewMonitoringHandler()
 	monitoring.SetAuthorization(engine, querier)
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  engine,
-		RBACQueries: querier,
-		// The /settings group only exists when Resources is wired, and the
-		// monitoring routes hang off it.
-		Resources:  handler.NewResourceHandler(),
-		Monitoring: monitoring,
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: engine, RBACQueries: querier}, ClusterResources:
+	// The /settings group only exists when Resources is wired, and the
+	// monitoring routes hang off it.
+	ClusterResourceDependencies{Resources: handler.NewResourceHandler(), Monitoring: monitoring},
 	})
 }
 
@@ -272,11 +250,7 @@ func TestMonitoringSettingsReadRoutesRequireMonitoringRBAC(t *testing.T) {
 // authorizeGlobalAction fall through to "allowed"), an anonymous request never
 // reaches the handler.
 func TestMonitoringSettingsReadRoutesDenyUnauthenticatedWithoutHandlerAuthz(t *testing.T) {
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:        auth.MustNewJWTManager("route-security-test-secret", 60),
-		Resources:  handler.NewResourceHandler(),
-		Monitoring: handler.NewMonitoringHandler(),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: auth.MustNewJWTManager("route-security-test-secret", 60)}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler(), Monitoring: handler.NewMonitoringHandler()}})
 	for _, tc := range monitoringSettingsReadRoutes {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
@@ -316,14 +290,10 @@ func newClusterMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.Ro
 	monitoring.SetAuthorization(engine, querier)
 	clusters := handler.NewClusterHandler(&routeSecurityClusterQuerier{})
 	clusters.SetAuthorization(engine, querier)
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  engine,
-		RBACQueries: querier,
-		// The /clusters group only exists when Clusters is wired, and the
-		// per-cluster monitoring routes hang off it.
-		Clusters:   clusters,
-		Monitoring: monitoring,
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: engine, RBACQueries: querier}, ClusterResources:
+	// The /clusters group only exists when Clusters is wired, and the
+	// per-cluster monitoring routes hang off it.
+	ClusterResourceDependencies{Clusters: clusters, Monitoring: monitoring},
 	})
 }
 

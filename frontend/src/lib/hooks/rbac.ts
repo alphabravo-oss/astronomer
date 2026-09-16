@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  applyProjectRoleTemplate,
   createClusterRole,
   createClusterRoleBinding,
   createGlobalRole,
   createGlobalRoleBinding,
   createProjectRole,
   createProjectRoleBinding,
+  deleteRole,
   deleteClusterRoleBinding,
   deleteGlobalRoleBinding,
   deleteProjectRoleBinding,
@@ -17,7 +19,13 @@ import {
   listClusterRoleBindings,
   listGlobalRoleBindings,
   listProjectRoleBindings,
+  listRoleTemplates,
+  materializePrincipal,
+  searchPrincipals,
+  updateRole,
   type EffectivePermissionParams,
+  type RoleInput,
+  type RoleScope,
 } from "@/lib/api/rbac";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
@@ -57,11 +65,7 @@ export function useEffectivePermissions(
 ) {
   const self = !userId;
   return useQuery({
-    queryKey: queryKeys.rbac.effectivePermissions(
-      userId || "me",
-      params,
-      self,
-    ),
+    queryKey: queryKeys.rbac.effectivePermissions(userId || "me", params, self),
     queryFn: () =>
       self
         ? getMyEffectivePermissions(params)
@@ -96,6 +100,75 @@ export function useCreateRole() {
     onError: (error: Error) => {
       toastApiError("Failed to create role", error);
     },
+  });
+}
+
+export function useUpdateRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { scope: RoleScope; id: string; role: RoleInput }) =>
+      updateRole(data.scope, data.id, data.role),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess("Role updated successfully");
+    },
+    onError: (error: Error) => toastApiError("Failed to update role", error),
+  });
+}
+
+export function useDeleteRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { scope: RoleScope; id: string }) =>
+      deleteRole(data.scope, data.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess("Role deleted");
+    },
+    onError: (error: Error) => toastApiError("Failed to delete role", error),
+  });
+}
+
+export function useRoleTemplates() {
+  return useQuery({
+    queryKey: queryKeys.rbac.templates,
+    queryFn: listRoleTemplates,
+  });
+}
+
+export function usePrincipalSearch(query: string) {
+  const normalized = query.trim();
+  return useQuery({
+    queryKey: queryKeys.rbac.principals(normalized),
+    queryFn: ({ signal }) => searchPrincipals(normalized, signal),
+    enabled: normalized.length >= 3 && normalized.length <= 128,
+    staleTime: 30_000,
+  });
+}
+
+export function useMaterializePrincipal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: materializePrincipal,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.rbac.principalsAll,
+      });
+    },
+    onError: (error: Error) =>
+      toastApiError("Failed to verify external identity", error),
+  });
+}
+
+export function useApplyProjectRoleTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: applyProjectRoleTemplate,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.rbac.all });
+      toastSuccess("Template applied");
+    },
+    onError: (error: Error) => toastApiError("Failed to apply template", error),
   });
 }
 

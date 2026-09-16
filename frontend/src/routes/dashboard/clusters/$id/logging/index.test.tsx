@@ -2,27 +2,28 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-vi.mock("@/lib/link", () => ({
-  Link: ({ href, children, ...rest }: React.ComponentProps<"a">) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
 
-vi.mock("@/lib/navigation", () => ({
-  useParams: () => ({ id: "cluster-1" }),
-}));
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    Link: RouterLinkStub,
+    useParams: () => ({ id: "cluster-1" }),
+  };
+});
 
 const mockUseCluster = vi.hoisted(() => vi.fn());
 const mockUseLoggingAttachStatus = vi.hoisted(() => vi.fn());
 const mockUseAttachAstronomerLogs = vi.hoisted(() => vi.fn());
 const mockUsePermissionDecision = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/hooks", () => ({
-  useCluster: () => mockUseCluster(),
+vi.mock("@/lib/hooks/logging", () => ({
   useLoggingAttachStatus: () => mockUseLoggingAttachStatus(),
   useAttachAstronomerLogs: () => mockUseAttachAstronomerLogs(),
+}));
+
+vi.mock("@/lib/hooks/clusters", () => ({
+  useCluster: () => mockUseCluster(),
 }));
 
 vi.mock("@/lib/permission-hooks", () => ({

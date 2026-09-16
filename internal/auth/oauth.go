@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -62,6 +63,11 @@ type SSOUserInfo struct {
 	LastName  string `json:"last_name"`
 	AvatarURL string `json:"avatar_url"`
 	Provider  string `json:"provider"`
+	// Subject and ConnectorID are the stable upstream identity coordinates.
+	// Dex emits both in federated_claims; direct providers use their immutable
+	// provider ID and provider name. They are never derived from email.
+	Subject     string `json:"subject"`
+	ConnectorID string `json:"connector_id"`
 	// Provider-specific fields
 	Organizations []string `json:"organizations,omitempty"` // GitHub orgs
 	Domain        string   `json:"domain,omitempty"`        // Google hosted domain
@@ -488,6 +494,15 @@ func (m *SSOManager) fetchGenericOIDCUserInfo(ctx context.Context, p *SSOProvide
 		endSession = doc.EndSessionEndpoint
 	}
 
+	subject := claims.Subject
+	connectorID := strings.ToLower(p.Name)
+	if claims.FederatedClaims.UserID != "" {
+		subject = claims.FederatedClaims.UserID
+	}
+	if claims.FederatedClaims.ConnectorID != "" {
+		connectorID = claims.FederatedClaims.ConnectorID
+	}
+
 	return &SSOUserInfo{
 		Email:              claims.Email,
 		Username:           username,
@@ -495,6 +510,8 @@ func (m *SSOManager) fetchGenericOIDCUserInfo(ctx context.Context, p *SSOProvide
 		LastName:           lastName,
 		AvatarURL:          claims.Picture,
 		Provider:           strings.ToLower(p.Name),
+		Subject:            subject,
+		ConnectorID:        connectorID,
 		Groups:             claims.Groups,
 		Domain:             claims.HostedDomain,
 		UpstreamIDToken:    rawIDToken,
@@ -511,6 +528,7 @@ func (m *SSOManager) fetchGitHubUserInfo(ctx context.Context, token *oauth2.Toke
 	}
 
 	var ghUser struct {
+		ID        int64  `json:"id"`
 		Login     string `json:"login"`
 		Name      string `json:"name"`
 		Email     string `json:"email"`
@@ -524,12 +542,14 @@ func (m *SSOManager) fetchGitHubUserInfo(ctx context.Context, token *oauth2.Toke
 	firstName, lastName := splitName(ghUser.Name)
 
 	info := &SSOUserInfo{
-		Email:     ghUser.Email,
-		Username:  ghUser.Login,
-		FirstName: firstName,
-		LastName:  lastName,
-		AvatarURL: ghUser.AvatarURL,
-		Provider:  "github",
+		Email:       ghUser.Email,
+		Username:    ghUser.Login,
+		FirstName:   firstName,
+		LastName:    lastName,
+		AvatarURL:   ghUser.AvatarURL,
+		Provider:    "github",
+		Subject:     strconv.FormatInt(ghUser.ID, 10),
+		ConnectorID: "github",
 	}
 
 	// Fetch organizations
@@ -556,6 +576,7 @@ func (m *SSOManager) fetchGoogleUserInfo(ctx context.Context, token *oauth2.Toke
 	}
 
 	var gUser struct {
+		ID         string `json:"id"`
 		Email      string `json:"email"`
 		GivenName  string `json:"given_name"`
 		FamilyName string `json:"family_name"`
@@ -567,13 +588,15 @@ func (m *SSOManager) fetchGoogleUserInfo(ctx context.Context, token *oauth2.Toke
 	}
 
 	return &SSOUserInfo{
-		Email:     gUser.Email,
-		Username:  gUser.Email, // Google uses email as username
-		FirstName: gUser.GivenName,
-		LastName:  gUser.FamilyName,
-		AvatarURL: gUser.Picture,
-		Provider:  "google",
-		Domain:    gUser.HD,
+		Email:       gUser.Email,
+		Username:    gUser.Email, // Google uses email as username
+		FirstName:   gUser.GivenName,
+		LastName:    gUser.FamilyName,
+		AvatarURL:   gUser.Picture,
+		Provider:    "google",
+		Subject:     gUser.ID,
+		ConnectorID: "google",
+		Domain:      gUser.HD,
 	}, nil
 }
 
@@ -604,14 +627,26 @@ func (m *SSOManager) fetchOIDCUserInfo(token *oauth2.Token) (*SSOUserInfo, error
 	if firstName == "" && lastName == "" {
 		firstName, lastName = splitName(claimString(claims, "name"))
 	}
+	connectorID := "oidc"
+	subject := claimString(claims, "sub")
+	if federated, ok := claims["federated_claims"].(map[string]any); ok {
+		if value := claimString(federated, "connector_id"); value != "" {
+			connectorID = value
+		}
+		if value := claimString(federated, "user_id"); value != "" {
+			subject = value
+		}
+	}
 	return &SSOUserInfo{
-		Email:     email,
-		Username:  username,
-		FirstName: firstName,
-		LastName:  lastName,
-		AvatarURL: claimString(claims, "picture"),
-		Provider:  "oidc",
-		Groups:    claimStringSlice(claims["groups"]),
+		Email:       email,
+		Username:    username,
+		FirstName:   firstName,
+		LastName:    lastName,
+		AvatarURL:   claimString(claims, "picture"),
+		Provider:    "oidc",
+		Subject:     subject,
+		ConnectorID: connectorID,
+		Groups:      claimStringSlice(claims["groups"]),
 	}, nil
 }
 

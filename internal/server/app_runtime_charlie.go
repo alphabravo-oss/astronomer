@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 )
 
 func (c *productionComposition) composeCharlieLifecycles(cfg *config.Config, logger *slog.Logger, deps RouterDependencies) (*charlieLifecycleGroup, error) {
-	leaseOwner := strings.TrimSpace(os.Getenv("HOSTNAME"))
+	leaseOwner := strings.TrimSpace(cfg.ProcessHostname)
 	if leaseOwner == "" {
 		leaseOwner = "astronomer-server-" + uuid.NewString()
 	}
@@ -183,12 +182,12 @@ func (c *productionComposition) composeCharlieLifecycles(cfg *config.Config, log
 			}
 		})
 	}
-	if deps.PlatformSettings != nil {
+	if deps.AdminPlatform.PlatformSettings != nil {
 		lifecycle, err := charlie.NewFeatureLifecycle(c.database.Pool(), c.managedCharlieBridge, lifecycles, c.charlieWriteFence)
 		if err != nil {
 			charlie.LogOperationalFailure(context.Background(), logger, "runtime.feature_dependencies_incomplete", "")
 		} else {
-			deps.PlatformSettings.SetCharlieLifecycle(lifecycle)
+			deps.AdminPlatform.PlatformSettings.SetCharlieLifecycle(lifecycle)
 		}
 	}
 	return lifecycles, nil

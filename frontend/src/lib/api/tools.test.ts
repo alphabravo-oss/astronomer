@@ -1,15 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as generated from "@/lib/api/generated/client";
-import {
-  getTools,
-  previewToolInstall,
-  uninstallTool,
-} from "@/lib/api/tools";
+import { getTools, previewToolInstall, uninstallTool } from "@/lib/api/tools";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("@/lib/api/generated/client")
-  >();
+  const actual =
+    await importOriginal<typeof import("@/lib/api/generated/client")>();
   return {
     ...actual,
     deleteToolsBySlugUninstall: vi.fn(),
@@ -81,9 +76,13 @@ describe("tools generated API boundary", () => {
   it("maps the raw tool definition into one camelCase view model", async () => {
     vi.mocked(generated.getTools).mockResolvedValueOnce({
       data: [toolWire],
-      count: 1,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 1,
+        limit: 100,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
 
     const [tool] = await getTools();
@@ -96,7 +95,10 @@ describe("tools generated API boundary", () => {
       }),
     );
     expect(tool.charts[0]).toEqual(
-      expect.objectContaining({ chartName: "fluent-bit", repoUrl: toolWire.charts[0].repo_url }),
+      expect.objectContaining({
+        chartName: "fluent-bit",
+        repoUrl: toolWire.charts[0].repo_url,
+      }),
     );
     expect(tool.formSchema?.fields[0].storageClassPath).toBe(
       "storage.className",

@@ -21,6 +21,8 @@ const tokenWire = {
   prefix: "astro_scim_AbCd",
   last_used_at: null,
   created_at: "2026-08-24T07:00:00Z",
+  expires_at: "2026-11-22T07:00:00Z",
+  revoked_at: null,
 };
 
 describe("SCIM token generated API boundary", () => {
@@ -38,6 +40,8 @@ describe("SCIM token generated API boundary", () => {
         prefix: tokenWire.prefix,
         lastUsedAt: null,
         createdAt: tokenWire.created_at,
+        expiresAt: tokenWire.expires_at,
+        revokedAt: null,
       },
     ]);
   });
@@ -56,6 +60,8 @@ describe("SCIM token generated API boundary", () => {
       prefix: tokenWire.prefix,
       lastUsedAt: null,
       createdAt: tokenWire.created_at,
+      expiresAt: tokenWire.expires_at,
+      revokedAt: null,
       token: "astro_scim_plaintext-once",
     });
     expect(postAdminScimTokens).toHaveBeenCalledWith({

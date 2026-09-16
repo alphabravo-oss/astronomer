@@ -41,12 +41,7 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 	defer ticker.Stop()
 	client := &http.Client{Timeout: 15 * time.Second}
 	base := strings.TrimRight(cfg.server, "/")
-	for sequence := 0; sequence < profile.MaxOperations; sequence++ {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
+	runMandatoryAuditOperations(ctx, profile.MaxOperations, ticker.C, func(sequence int) {
 		clusterID := cfg.fixtureClusterIDs[sequence%len(cfg.fixtureClusterIDs)]
 		requestID := uuid.NewString()
 		body, err := json.Marshal(map[string]any{
@@ -58,12 +53,12 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 		})
 		if err != nil {
 			rec.recordAuditMutation(requestID, false, time.Time{})
-			continue
+			return
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, base+"/api/v1/clusters/"+clusterID+"/", bytes.NewReader(body))
 		if err != nil {
 			rec.recordAuditMutation(requestID, false, time.Time{})
-			continue
+			return
 		}
 		// The mounted route is PATCH; it reaches the same transactional update
 		// handler and avoids the deprecated PUT alias.
@@ -81,6 +76,36 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 		if !accepted {
 			log.Warn("mandatory-audit qualification mutation rejected", "sequence", sequence, "transport_error", err != nil)
 		}
+	})
+}
+
+// runMandatoryAuditOperations opens the workload window with an operation at
+// t=0, then paces subsequent operations on ticks. Starting with a tick would
+// place the operation required to sustain the declared rate exactly on the
+// workload deadline (for example operation 9000 at 30:00 for 5/s). That races
+// cancellation and turns a healthy run into one artificial rejected request.
+//
+// Re-checking ctx after a tick is intentional: a timer tick and cancellation
+// may become selectable together at the boundary. No operation may begin once
+// the qualification window is closed.
+func runMandatoryAuditOperations(
+	ctx context.Context,
+	maxOperations int,
+	ticks <-chan time.Time,
+	operation func(sequence int),
+) {
+	for sequence := 0; sequence < maxOperations; sequence++ {
+		if sequence > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticks:
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		operation(sequence)
 	}
 }
 

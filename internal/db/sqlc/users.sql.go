@@ -7,8 +7,10 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const clearMustChangePassword = `-- name: ClearMustChangePassword :exec
@@ -18,6 +20,25 @@ UPDATE users SET must_change_password = false, updated_at = now() WHERE id = $1
 func (q *Queries) ClearMustChangePassword(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, clearMustChangePassword, id)
 	return err
+}
+
+const countSearchUsers = `-- name: CountSearchUsers :one
+SELECT count(*)
+FROM users
+WHERE is_service = false
+  AND lower(
+    coalesce(username, '') || ' ' ||
+    coalesce(email, '') || ' ' ||
+    coalesce(first_name, '') || ' ' ||
+    coalesce(last_name, '')
+  ) LIKE '%' || lower($1) || '%'
+`
+
+func (q *Queries) CountSearchUsers(ctx context.Context, search string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchUsers, search)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countUsers = `-- name: CountUsers :one
@@ -142,6 +163,122 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.IsService,
 	)
 	return i, err
+}
+
+const deactivateInactiveUsers = `-- name: DeactivateInactiveUsers :many
+WITH affected AS (
+    UPDATE users
+    SET is_active = false,
+        tokens_invalidated_at = GREATEST(
+            COALESCE(tokens_invalidated_at, '-infinity'::timestamptz),
+            $1::timestamptz
+        ),
+        updated_at = $1::timestamptz
+    WHERE is_active = true
+      AND is_superuser = false
+      AND is_service = false
+      AND COALESCE(last_login, date_joined, created_at) < $2::timestamptz
+    RETURNING id, username, email, last_login, date_joined, created_at,
+              COALESCE(last_login, date_joined, created_at) AS inactive_since,
+              tokens_invalidated_at
+), cleared_sessions AS (
+    DELETE FROM sso_sessions AS session
+    USING affected
+    WHERE session.user_id = affected.id
+    RETURNING session.user_id
+), session_counts AS (
+    SELECT user_id, count(*)::bigint AS sessions_cleared
+    FROM cleared_sessions
+    GROUP BY user_id
+), audited AS (
+    INSERT INTO audit_log (
+        source, action, resource_type, resource_id, resource_name,
+        detail, action_class
+    )
+    SELECT
+        'worker',
+        'user.inactive_retention.deactivated',
+        'user',
+        affected.id::text,
+        affected.username,
+        jsonb_build_object(
+            'email', affected.email,
+            'inactive_since', affected.inactive_since,
+            'cutoff', $2::timestamptz,
+            'retention_days', $3::integer,
+            'tokens_invalidated_at', affected.tokens_invalidated_at,
+            'sso_sessions_cleared', COALESCE(session_counts.sessions_cleared, 0)
+        ),
+        'system'
+    FROM affected
+    LEFT JOIN session_counts ON session_counts.user_id = affected.id
+    RETURNING resource_id
+)
+SELECT
+    affected.id,
+    affected.username,
+    affected.email,
+    affected.last_login,
+    affected.date_joined,
+    affected.created_at,
+    affected.inactive_since,
+    affected.tokens_invalidated_at,
+    COALESCE(session_counts.sessions_cleared, 0)::bigint AS sso_sessions_cleared
+FROM affected
+LEFT JOIN session_counts ON session_counts.user_id = affected.id
+JOIN audited ON audited.resource_id = affected.id::text
+ORDER BY affected.id
+`
+
+type DeactivateInactiveUsersParams struct {
+	InvalidatedAt time.Time `json:"invalidated_at"`
+	Cutoff        time.Time `json:"cutoff"`
+	RetentionDays int32     `json:"retention_days"`
+}
+
+type DeactivateInactiveUsersRow struct {
+	ID                  uuid.UUID          `json:"id"`
+	Username            string             `json:"username"`
+	Email               string             `json:"email"`
+	LastLogin           pgtype.Timestamptz `json:"last_login"`
+	DateJoined          time.Time          `json:"date_joined"`
+	CreatedAt           time.Time          `json:"created_at"`
+	InactiveSince       time.Time          `json:"inactive_since"`
+	TokensInvalidatedAt pgtype.Timestamptz `json:"tokens_invalidated_at"`
+	SsoSessionsCleared  int64              `json:"sso_sessions_cleared"`
+}
+
+// Deactivation, credential invalidation, SSO-session cleanup, and audit
+// evidence are deliberately one statement. A failure in any part rolls the
+// whole sweep back, so a retry cannot leave an unaudited account transition.
+func (q *Queries) DeactivateInactiveUsers(ctx context.Context, arg DeactivateInactiveUsersParams) ([]DeactivateInactiveUsersRow, error) {
+	rows, err := q.db.Query(ctx, deactivateInactiveUsers, arg.InvalidatedAt, arg.Cutoff, arg.RetentionDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DeactivateInactiveUsersRow{}
+	for rows.Next() {
+		var i DeactivateInactiveUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Email,
+			&i.LastLogin,
+			&i.DateJoined,
+			&i.CreatedAt,
+			&i.InactiveSince,
+			&i.TokensInvalidatedAt,
+			&i.SsoSessionsCleared,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const deleteUser = `-- name: DeleteUser :exec
@@ -307,6 +444,78 @@ type ListUsersParams struct {
 // reconcile.
 func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
 	rows, err := q.db.Query(ctx, listUsers, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Username,
+			&i.FirstName,
+			&i.LastName,
+			&i.Password,
+			&i.IsActive,
+			&i.IsStaff,
+			&i.IsSuperuser,
+			&i.LastLogin,
+			&i.DateJoined,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.MustChangePassword,
+			&i.FailedLoginCount,
+			&i.FailedLoginAt,
+			&i.LockedUntil,
+			&i.LockedReason,
+			&i.TokensInvalidatedAt,
+			&i.QuotaPlan,
+			&i.QuotaOverrides,
+			&i.IsService,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchUsers = `-- name: SearchUsers :many
+SELECT id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides, is_service
+FROM users
+WHERE is_service = false
+  AND lower(
+    coalesce(username, '') || ' ' ||
+    coalesce(email, '') || ' ' ||
+    coalesce(first_name, '') || ' ' ||
+    coalesce(last_name, '')
+  ) LIKE '%' || lower($1) || '%'
+ORDER BY
+  CASE
+    WHEN lower(username) = lower($1) THEN 0
+    WHEN lower(email) = lower($1) THEN 1
+    ELSE 2
+  END,
+  created_at DESC,
+  id DESC
+LIMIT $3 OFFSET $2
+`
+
+type SearchUsersParams struct {
+	Search     string `json:"search"`
+	PageOffset int32  `json:"page_offset"`
+	PageLimit  int32  `json:"page_limit"`
+}
+
+// Server-side human-user lookup for RBAC subject pickers. Keep the expression
+// aligned with idx_users_directory_search_trgm in migration 032.
+func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]User, error) {
+	rows, err := q.db.Query(ctx, searchUsers, arg.Search, arg.PageOffset, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}

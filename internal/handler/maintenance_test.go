@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,7 +21,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeMaintenanceQuerier is the narrowest MaintenanceQuerier the test
@@ -135,7 +136,7 @@ func makeMaintenanceRequest(method, target string, callerID uuid.UUID, body any)
 		_ = json.NewEncoder(&buf).Encode(body)
 	}
 	req := httptest.NewRequest(method, target, &buf)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         callerID.String(),
 		AuthMethod: "jwt",
 	})
@@ -145,7 +146,7 @@ func makeMaintenanceRequest(method, target string, callerID uuid.UUID, body any)
 func TestHandler_RequiresSuperuser(t *testing.T) {
 	callerID := uuid.New()
 	q := &fakeMaintenanceQuerier{user: sqlc.User{ID: callerID, IsSuperuser: false}}
-	h := NewMaintenanceHandler(q, nil)
+	h := wireMaintenanceMutationFixture(NewMaintenanceHandler(q, nil), q)
 	w := httptest.NewRecorder()
 	req := makeMaintenanceRequest(http.MethodGet, "/api/v1/admin/maintenance-windows/", callerID, nil)
 	h.List(w, req)
@@ -171,7 +172,7 @@ func TestWindow_CRUD(t *testing.T) {
 			OperationTypes:  []byte("[]"),
 		},
 	}
-	h := NewMaintenanceHandler(q, nil)
+	h := wireMaintenanceMutationFixture(NewMaintenanceHandler(q, nil), q)
 
 	// Create.
 	body := MaintenanceWindowRequest{
@@ -241,7 +242,7 @@ func TestWindow_CRUD(t *testing.T) {
 func TestHandler_Create_RejectsInvalidCron(t *testing.T) {
 	callerID := uuid.New()
 	q := &fakeMaintenanceQuerier{user: sqlc.User{ID: callerID, IsSuperuser: true}}
-	h := NewMaintenanceHandler(q, nil)
+	h := wireMaintenanceMutationFixture(NewMaintenanceHandler(q, nil), q)
 
 	body := MaintenanceWindowRequest{
 		Name:            "bad-cron",
@@ -265,7 +266,7 @@ func TestHandler_Create_RejectsDuplicateName(t *testing.T) {
 		user:       sqlc.User{ID: callerID, IsSuperuser: true},
 		nameExists: true,
 	}
-	h := NewMaintenanceHandler(q, nil)
+	h := wireMaintenanceMutationFixture(NewMaintenanceHandler(q, nil), q)
 
 	body := MaintenanceWindowRequest{
 		Name:            "dup",
@@ -294,7 +295,7 @@ func TestHandler_CancelDeferred(t *testing.T) {
 			Status:        "pending",
 		},
 	}
-	h := NewMaintenanceHandler(q, nil)
+	h := wireMaintenanceMutationFixture(NewMaintenanceHandler(q, nil), q)
 	w := httptest.NewRecorder()
 	req := makeMaintenanceRequest(http.MethodPost, "/api/v1/admin/deferred-operations/{id}/cancel/", callerID, nil)
 	rctx := chi.NewRouteContext()
@@ -319,7 +320,7 @@ func TestHandler_CancelDeferred_RejectsDispatched(t *testing.T) {
 			Status: "dispatched",
 		},
 	}
-	h := NewMaintenanceHandler(q, nil)
+	h := wireMaintenanceMutationFixture(NewMaintenanceHandler(q, nil), q)
 	w := httptest.NewRecorder()
 	req := makeMaintenanceRequest(http.MethodPost, "/api/v1/admin/deferred-operations/{id}/cancel/", callerID, nil)
 	rctx := chi.NewRouteContext()
@@ -337,7 +338,7 @@ func TestHandler_CancelDeferred_NotFound(t *testing.T) {
 		user:           sqlc.User{ID: callerID, IsSuperuser: true},
 		getDeferredErr: pgx.ErrNoRows,
 	}
-	h := NewMaintenanceHandler(q, nil)
+	h := wireMaintenanceMutationFixture(NewMaintenanceHandler(q, nil), q)
 	w := httptest.NewRecorder()
 	req := makeMaintenanceRequest(http.MethodPost, "/api/v1/admin/deferred-operations/{id}/cancel/", callerID, nil)
 	rctx := chi.NewRouteContext()
@@ -455,7 +456,7 @@ func TestRefuse_Returns409(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/abc/", nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), AuthMethod: "jwt",
 	})
 	req = req.WithContext(ctx)
@@ -501,10 +502,11 @@ func TestDefer_Returns202AndInserts(t *testing.T) {
 		createdRow: sqlc.DeferredOperation{ID: uuid.New(), Status: "pending"},
 	}
 	gate := NewMaintenanceGate(ev, q, gateTestCipher{})
+	gate.SetRunTx(fakeMaintenanceGateRunTx(q))
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/abc/template/", strings.NewReader(`{"secret":"top-secret"}`))
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), AuthMethod: "jwt",
 	})
 	req = req.WithContext(ctx)
@@ -531,7 +533,7 @@ func TestDeferredOperationUsesIdempotencyKey(t *testing.T) {
 	callerID := uuid.New()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/abc/", nil)
 	req.Header.Set("Idempotency-Key", "defer-retry-1")
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: callerID.String(), AuthMethod: "jwt",
 	}))
 	ctx := withOperationIdempotency(req, "deferred")
@@ -589,7 +591,7 @@ func TestGate_DeferDegrade_ToRefuseWhenQuerierMissing(t *testing.T) {
 	gate := NewMaintenanceGate(ev, nil) // intentionally nil queries
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/", nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), AuthMethod: "jwt",
 	})
 	req = req.WithContext(ctx)
@@ -617,9 +619,10 @@ func TestGate_DeferInsertFailure_FallsBackTo409(t *testing.T) {
 	ev := maintenance.NewEvaluator(&gateEvalQuerier{rows: []sqlc.MaintenanceWindow{row}})
 	q := &gateMaintenanceQuerier{createErr: errors.New("disk full")}
 	gate := NewMaintenanceGate(ev, q, gateTestCipher{})
+	gate.SetRunTx(fakeMaintenanceGateRunTx(q))
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/", nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), AuthMethod: "jwt",
 	})
 	req = req.WithContext(ctx)

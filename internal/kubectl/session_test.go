@@ -124,7 +124,7 @@ func (f *fakeQuerier) CreateKubectlSession(_ context.Context, arg sqlc.CreateKub
 		Status:       arg.Status,
 		StartedAt:    f.now(),
 		LastInputAt:  f.now(),
-		ExpiresAt:    f.now().Add(4 * time.Hour),
+		ExpiresAt:    arg.ExpiresAt,
 		UserAgent:    arg.UserAgent,
 		ClientIp:     arg.ClientIp,
 	}
@@ -142,31 +142,60 @@ func (f *fakeQuerier) GetKubectlSessionByID(_ context.Context, id uuid.UUID) (sq
 	return *row, nil
 }
 
-func (f *fakeQuerier) ListActiveKubectlSessionsByCluster(_ context.Context, clusterID uuid.UUID) ([]sqlc.KubectlSession, error) {
+func (f *fakeQuerier) ListActiveKubectlSessionsByCluster(_ context.Context, arg sqlc.ListActiveKubectlSessionsByClusterParams) ([]sqlc.KubectlSession, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []sqlc.KubectlSession
+	for _, r := range f.sessions {
+		if r.ClusterID == arg.ClusterID && (r.Status == "starting" || r.Status == "active") {
+			out = append(out, *r)
+		}
+	}
+	return sessionPage(out, arg.QueryLimit, arg.QueryOffset), nil
+}
+
+func (f *fakeQuerier) CountActiveKubectlSessionsByCluster(_ context.Context, clusterID uuid.UUID) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var count int64
 	for _, r := range f.sessions {
 		if r.ClusterID == clusterID && (r.Status == "starting" || r.Status == "active") {
-			out = append(out, *r)
+			count++
 		}
 	}
-	return out, nil
+	return count, nil
 }
 
-func (f *fakeQuerier) ListAllActiveKubectlSessions(_ context.Context) ([]sqlc.KubectlSession, error) {
+func (f *fakeQuerier) ListActiveKubectlSessionClusters(_ context.Context, arg sqlc.ListActiveKubectlSessionClustersParams) ([]uuid.UUID, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []sqlc.KubectlSession
+	seen := make(map[uuid.UUID]struct{})
+	var out []uuid.UUID
 	for _, r := range f.sessions {
-		if r.Status == "starting" || r.Status == "active" {
-			out = append(out, *r)
+		if r.Status != "starting" && r.Status != "active" {
+			continue
+		}
+		if _, ok := seen[r.ClusterID]; !ok {
+			seen[r.ClusterID] = struct{}{}
+			out = append(out, r.ClusterID)
 		}
 	}
-	return out, nil
+	return sessionPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
 
-func (f *fakeQuerier) ListExpiredKubectlSessions(_ context.Context) ([]sqlc.KubectlSession, error) {
+func (f *fakeQuerier) CountAllActiveKubectlSessions(_ context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var count int64
+	for _, r := range f.sessions {
+		if r.Status == "starting" || r.Status == "active" {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (f *fakeQuerier) ListExpiredKubectlSessions(_ context.Context, arg sqlc.ListExpiredKubectlSessionsParams) ([]sqlc.KubectlSession, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := f.now()
@@ -176,12 +205,25 @@ func (f *fakeQuerier) ListExpiredKubectlSessions(_ context.Context) ([]sqlc.Kube
 			continue
 		}
 		hard := !r.ExpiresAt.After(now)
-		idle := r.LastInputAt.Add(30 * time.Minute).Before(now)
+		idleTimeout := time.Duration(arg.IdleTimeout.Microseconds) * time.Microsecond
+		idle := r.LastInputAt.Add(idleTimeout).Before(now)
 		if hard || idle {
 			out = append(out, *r)
 		}
 	}
-	return out, nil
+	return sessionPage(out, arg.QueryLimit, 0), nil
+}
+
+func sessionPage[T any](rows []T, limit, offset int32) []T {
+	start := int(offset)
+	if start >= len(rows) {
+		return []T{}
+	}
+	end := start + int(limit)
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[start:end]
 }
 
 func (f *fakeQuerier) SetKubectlSessionStatus(_ context.Context, arg sqlc.SetKubectlSessionStatusParams) error {
@@ -255,7 +297,15 @@ func (f *fakeQuerier) snapshot(id uuid.UUID) sqlc.KubectlSession {
 func TestOpen_CreatesRowAndPod(t *testing.T) {
 	q := newFakeQuerier()
 	r := newFakeRequester()
-	deps := Deps{Queries: q, Requester: r, PodReadyTimeout: 2 * time.Second}
+	now := time.Date(2026, time.September, 10, 12, 0, 0, 0, time.UTC)
+	q.now = func() time.Time { return now }
+	deps := Deps{
+		Queries:         q,
+		Requester:       r,
+		HardCap:         90 * time.Minute,
+		PodReadyTimeout: 2 * time.Second,
+		Now:             func() time.Time { return now },
+	}
 
 	info, err := Open(context.Background(), deps, OpenRequest{
 		UserID:    uuid.New(),
@@ -275,6 +325,9 @@ func TestOpen_CreatesRowAndPod(t *testing.T) {
 	if !strings.HasPrefix(row.PodName, "astro-shell-") {
 		t.Fatalf("pod name prefix: got %s", row.PodName)
 	}
+	if want := now.Add(90 * time.Minute); !row.ExpiresAt.Equal(want) {
+		t.Fatalf("session expiry = %s, want configured hard cap %s", row.ExpiresAt, want)
+	}
 	// Verify we POSTed at least SA, ClusterRole, Binding, Pod.
 	posts := r.callsByMethod("POST")
 	if len(posts) < 4 {
@@ -289,7 +342,7 @@ func TestOpen_RBACBindingMatchesEffectiveVerbs(t *testing.T) {
 
 	_, err := Open(context.Background(), deps, OpenRequest{
 		UserID: uuid.New(), ClusterID: uuid.New(),
-		Verbs: EffectiveVerbs{Read: true, Update: true, Delete: true},
+		Verbs: (EffectiveVerbs{Read: true, Update: true, Delete: true}).WithPermissions(func(_, _, _ string) bool { return true }),
 	})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -309,19 +362,56 @@ func TestOpen_RBACBindingMatchesEffectiveVerbs(t *testing.T) {
 		t.Fatalf("decode role: %v", err)
 	}
 	rules, ok := role["rules"].([]any)
-	if !ok || len(rules) != 1 {
+	if !ok || len(rules) == 0 {
 		t.Fatalf("rules: %v", role["rules"])
 	}
-	verbs := rules[0].(map[string]any)["verbs"].([]any)
 	want := map[string]bool{"get": true, "list": true, "watch": true, "create": true, "update": true, "patch": true, "delete": true}
 	got := map[string]bool{}
-	for _, v := range verbs {
-		got[v.(string)] = true
+	for _, rawRule := range rules {
+		for _, v := range rawRule.(map[string]any)["verbs"].([]any) {
+			got[v.(string)] = true
+		}
 	}
 	for v := range want {
 		if !got[v] {
-			t.Errorf("ClusterRole missing verb %q (verbs=%v)", v, verbs)
+			t.Errorf("ClusterRole missing verb %q (verbs=%v)", v, got)
 		}
+	}
+}
+
+func TestClusterRoleManifest_SecretsRequireExplicitGrant(t *testing.T) {
+	names := NewNames()
+	decodeResources := func(t *testing.T, body []byte) (all, secrets, wildcard bool) {
+		t.Helper()
+		var role struct {
+			Rules []struct {
+				Resources []string `json:"resources"`
+			} `json:"rules"`
+		}
+		if err := json.Unmarshal(body, &role); err != nil {
+			t.Fatalf("decode role: %v", err)
+		}
+		for _, rule := range role.Rules {
+			for _, resource := range rule.Resources {
+				all = true
+				wildcard = wildcard || resource == "*"
+				secrets = secrets || resource == "secrets"
+			}
+		}
+		return all, secrets, wildcard
+	}
+
+	all, secrets, wildcard := decodeResources(t, ClusterRoleManifest(names, EffectiveVerbs{Read: true}))
+	if all || secrets || wildcard {
+		t.Fatalf("missing derived policy must deny every resource: all=%v secrets=%v wildcard=%v", all, secrets, wildcard)
+	}
+	all, secrets, wildcard = decodeResources(t, ClusterRoleManifest(names, (EffectiveVerbs{Read: true}).WithPermissions(func(_, _, _ string) bool { return true })))
+	if !all || secrets || wildcard {
+		t.Fatalf("default role resources: all=%v secrets=%v wildcard=%v", all, secrets, wildcard)
+	}
+	_, secrets, wildcard = decodeResources(t, ClusterRoleManifest(names, (EffectiveVerbs{Read: true, ReadSecrets: true}).WithPermissions(func(_, _, _ string) bool { return true })))
+	if !secrets || wildcard {
+		t.Fatalf("secret-authorized role resources: secrets=%v wildcard=%v", secrets, wildcard)
 	}
 }
 

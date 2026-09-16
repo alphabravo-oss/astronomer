@@ -22,6 +22,7 @@ const (
 	MaxActorLength          = 512
 	MaxIdempotencyKeyLength = 128
 	MaxLeaseOwnerLength     = 253
+	MaxRolloutClusters      = 10_000
 )
 
 // VersionIdentity is all immutable information needed to apply or roll back a
@@ -30,6 +31,7 @@ type VersionIdentity struct {
 	BundleVersionID uuid.UUID                `json:"bundle_version_id"`
 	SpecDigest      model.Digest             `json:"spec_digest"`
 	Source          model.ResolvedSourceSpec `json:"source"`
+	Overrides       model.TargetOverrides    `json:"overrides"`
 }
 
 func (v VersionIdentity) Validate() error {
@@ -41,6 +43,9 @@ func (v VersionIdentity) Validate() error {
 	}
 	if err := v.Source.Validate(); err != nil {
 		return &Error{Code: CodeInvalidInput, Field: "source", Cause: err}
+	}
+	if err := v.Overrides.Validate(); err != nil {
+		return &Error{Code: CodeInvalidInput, Field: "overrides", Cause: err}
 	}
 	return nil
 }

@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Project · Policy tab.
  *
@@ -23,12 +23,12 @@ import {
  * disabled, Save hidden) so non-admins can still inspect policy.
  */
 import { useEffect, useMemo } from "react";
-import { useParams } from "@/lib/navigation";
+
 import { useAppForm, useStore } from "@/lib/form";
 import { Loader2, Save, AlertCircle, ExternalLink } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import {
   useProjectPolicy,
   useUpdateProjectPolicy,
@@ -93,8 +93,8 @@ const netpolOptions: {
 ];
 
 function PolicyPage() {
-  const params = useParams();
-  const id = params.id as string;
+  const params = Route.useParams();
+  const id = params.id;
   const { data: user } = useCurrentUser();
   const canEdit = canEditProject(user);
 
@@ -178,7 +178,7 @@ function PolicyPage() {
     <div className="space-y-6">
       {!canEdit && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
           <p>
             You can view this project&apos;s policy but not change it. Editing
             requires the <span className="font-mono">projects:update</span>{" "}
@@ -248,8 +248,8 @@ function PolicyPage() {
             Resource Quota
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Applied as ResourceQuota objects in every project namespace. Leave a
-            field empty for no limit.
+            One project-wide cap, split deterministically across its namespaces.
+            Leave a field empty for no limit.
           </p>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -326,7 +326,7 @@ function PolicyPage() {
                 !canEdit && "opacity-60 cursor-not-allowed hover:bg-background",
               )}
             >
-              <input
+              <Input
                 type="radio"
                 name="netpol"
                 value={opt.value}
@@ -367,10 +367,11 @@ function PolicyPage() {
         <header>
           <h2 className="text-sm font-medium text-foreground">Quota usage</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Live ResourceQuota.status.used per cluster / namespace. Polls every
-            30 seconds.
+            Live usage and the allocated share per namespace. Polls every 30
+            seconds.
           </p>
         </header>
+        {usage && <ProjectCapSummary summary={usage.summary} />}
         <div
           className="overflow-x-auto"
           role="region"
@@ -394,6 +395,9 @@ function PolicyPage() {
                 </TableHead>
                 <TableHead className="text-left font-medium py-2 px-3">
                   Pods
+                </TableHead>
+                <TableHead className="text-left font-medium py-2 px-3">
+                  Allocated share
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -419,12 +423,17 @@ function PolicyPage() {
                     <TableCell className="py-2 px-3 tabular-nums">
                       {row.podsUsed ?? 0} / {row.podsLimit ?? "—"}
                     </TableCell>
+                    <TableCell className="py-2 px-3 text-xs tabular-nums text-muted-foreground">
+                      CPU {row.allocation.cpu || "—"} · Memory{" "}
+                      {row.allocation.memory || "—"} · Pods{" "}
+                      {row.allocation.pods || "—"}
+                    </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={5}
+                    colSpan={6}
                     className="py-6 text-center text-xs text-muted-foreground"
                   >
                     No quotas applied yet.
@@ -435,6 +444,52 @@ function PolicyPage() {
           </Table>
         </div>
       </section>
+    </div>
+  );
+}
+
+function ProjectCapSummary({
+  summary,
+}: {
+  summary: {
+    total: { cpu: string; memory: string; pods: number };
+    allocated: { cpu: string; memory: string; pods: number };
+    remaining: { cpu: string; memory: string; pods: number };
+  };
+}) {
+  const formatTotal = (cap: { cpu: string; memory: string; pods: number }) =>
+    `CPU ${cap.cpu || "∞"} · Memory ${cap.memory || "∞"} · Pods ${cap.pods || "∞"}`;
+  const formatAllocation = (cap: {
+    cpu: string;
+    memory: string;
+    pods: number;
+  }) =>
+    `CPU ${allocatedDimension(cap.cpu, summary.total.cpu)} · Memory ${allocatedDimension(cap.memory, summary.total.memory)} · Pods ${allocatedPodDimension(cap.pods, summary.total.pods)}`;
+  return (
+    <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+      <CapStat label="Project total" value={formatTotal(summary.total)} />
+      <CapStat label="Allocated" value={formatAllocation(summary.allocated)} />
+      <CapStat
+        label="Unallocated"
+        value={formatAllocation(summary.remaining)}
+      />
+    </div>
+  );
+}
+
+function allocatedDimension(value: string, total: string): string {
+  return value || (total ? "0" : "∞");
+}
+
+function allocatedPodDimension(value: number, total: number): string {
+  return value ? String(value) : total ? "0" : "∞";
+}
+
+function CapStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+      <p className="font-medium text-muted-foreground">{label}</p>
+      <p className="mt-0.5 font-mono text-foreground">{value}</p>
     </div>
   );
 }

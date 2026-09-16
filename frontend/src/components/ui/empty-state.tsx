@@ -1,6 +1,5 @@
-"use client";
 
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import type { ElementType, ReactNode } from "react";
 import {
   AlertCircle,
@@ -71,7 +70,7 @@ export function StatePanel({
     <div
       role={role}
       className={cn(
-        "flex flex-col items-center justify-center py-16 text-center space-y-3",
+        "flex min-w-0 flex-col items-center justify-center space-y-3 py-16 text-center",
         className,
       )}
     >
@@ -85,23 +84,23 @@ export function StatePanel({
           <Icon className={cn("h-6 w-6", iconClassName)} />
         </div>
       )}
-      <div className="space-y-1">
-        <p className="text-base font-medium text-foreground">{title}</p>
+      <div className="w-full min-w-0 space-y-1 px-4">
+        <p className="break-words text-base font-medium text-foreground">{title}</p>
         {description && (
-          <p className="max-w-md text-sm text-muted-foreground">
+          <p className="mx-auto max-w-md break-words text-sm text-muted-foreground">
             {description}
           </p>
         )}
       </div>
       {hasAction &&
         (actionHref && !disabled ? (
-          <Link
-            href={actionHref}
+          <RouterLink
+            to={actionHref}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border px-4 text-sm font-medium transition-colors hover:bg-accent"
           >
             {ActionIcon && <ActionIcon className="h-4 w-4" />}
             {actionLabel}
-          </Link>
+          </RouterLink>
         ) : (
           <ActionButton
             type="button"

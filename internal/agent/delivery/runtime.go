@@ -20,6 +20,7 @@ import (
 const (
 	defaultDeliveryPollInterval   = 30 * time.Second
 	defaultDeliveryStatusInterval = 15 * time.Second
+	deliveryStatusHeartbeatFloor  = 5 * time.Minute
 	deliveryResponseTimeout       = 30 * time.Second
 )
 
@@ -63,6 +64,10 @@ type Runtime struct {
 	checkpoint checkpoint
 	transient  map[string]protocol.DeliveryDeploymentStatusV2
 	sequence   int64
+	now        func() time.Time
+
+	lastStatusDigest string
+	lastStatusSentAt time.Time
 }
 
 // SetSystemManager installs the separate fixed-name reconciler for the signed
@@ -98,6 +103,7 @@ func NewRuntime(config RuntimeConfig, executor *Executor, store CheckpointStore,
 		config: config, executor: executor, store: store, probe: probe,
 		replies: make(chan stateReply, 4), wake: make(chan struct{}, 1),
 		checkpoint: emptyCheckpoint(), transient: make(map[string]protocol.DeliveryDeploymentStatusV2),
+		now: time.Now,
 	}, nil
 }
 
@@ -157,6 +163,7 @@ func (r *Runtime) Run(ctx context.Context, send Sender) error {
 	defer disconnected.Stop()
 
 	request := true
+	wasConnected := r.config.Connected()
 	for {
 		if request && r.config.Connected() {
 			if err := r.requestAndReconcile(ctx, send); err != nil && ctx.Err() == nil {
@@ -172,9 +179,13 @@ func (r *Runtime) Run(ctx context.Context, send Sender) error {
 		case <-r.wake:
 			request = true
 		case <-disconnected.C:
-			if r.config.Connected() {
+			connected := r.config.Connected()
+			if connected && !wasConnected {
+				r.lastStatusDigest = ""
+				r.lastStatusSentAt = time.Time{}
 				request = true
 			}
+			wasConnected = connected
 		case <-status.C:
 			if r.config.Connected() {
 				if err := r.sendStatus(ctx, send); err != nil && ctx.Err() == nil {
@@ -368,6 +379,7 @@ func (r *Runtime) sendStatus(ctx context.Context, send Sender) error {
 }
 
 func (r *Runtime) sendStatusWithInventory(ctx context.Context, send Sender, inventory protocol.DeliveryControllerInventory) error {
+	now := r.now().UTC()
 	statuses := make([]protocol.DeliveryDeploymentStatusV2, 0, len(r.checkpoint.Assignments)+len(r.transient))
 	for _, deploymentID := range sortedAssignmentIDs(r.checkpoint.Assignments) {
 		accepted := r.checkpoint.Assignments[deploymentID]
@@ -376,18 +388,18 @@ func (r *Runtime) sendStatusWithInventory(ctx context.Context, send Sender, inve
 			statuses = append(statuses, protocol.DeliveryDeploymentStatusV2{
 				DeploymentID: accepted.DeploymentID, Generation: accepted.Generation, SpecDigest: accepted.SpecDigest,
 				Phase: "unknown", ErrorCode: "local_observation_failed", Message: "Flux state could not be read",
-				ObservedAt: time.Now().UTC(),
+				ObservedAt: now,
 			})
 			continue
 		}
 		normalized, err := NormalizeAcceptedObservation(AcceptedObservation{
-			Assignment: accepted, Source: source, Reconciler: reconciler, ObservedAt: time.Now().UTC(),
+			Assignment: accepted, Source: source, Reconciler: reconciler, ObservedAt: now,
 		})
 		if err != nil {
 			statuses = append(statuses, protocol.DeliveryDeploymentStatusV2{
 				DeploymentID: accepted.DeploymentID, Generation: accepted.Generation, SpecDigest: accepted.SpecDigest,
 				Phase: "unknown", ErrorCode: "local_observation_refused", Message: "Flux state failed its ownership fence",
-				ObservedAt: time.Now().UTC(),
+				ObservedAt: now,
 			})
 			continue
 		}
@@ -409,20 +421,34 @@ func (r *Runtime) sendStatusWithInventory(ctx context.Context, send Sender, inve
 	if err != nil {
 		return err
 	}
-	r.sequence++
 	payload := protocol.DeliveryStatusV2{
 		ProtocolVersion: protocol.DeliveryProtocolVersion, ClusterID: r.config.ClusterID,
-		SessionSequence: r.sequence, SnapshotGeneration: r.checkpoint.SnapshotGeneration,
+		SessionSequence: r.sequence + 1, SnapshotGeneration: r.checkpoint.SnapshotGeneration,
 		SnapshotETag: r.checkpoint.SnapshotETag, Deployments: coalesced, ControllerInventory: inventory,
 	}
+	payload.StatusDigest = payload.SemanticDigest()
+	return r.sendStatusPayload(send, payload, now)
+}
+
+func (r *Runtime) sendStatusPayload(send Sender, payload protocol.DeliveryStatusV2, now time.Time) error {
 	if err := payload.Validate(); err != nil {
 		return fmt.Errorf("validate delivery status: %w", err)
+	}
+	elapsed := now.Sub(r.lastStatusSentAt)
+	if payload.StatusDigest == r.lastStatusDigest && !r.lastStatusSentAt.IsZero() && elapsed >= 0 && elapsed < deliveryStatusHeartbeatFloor {
+		return nil
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("encode delivery status: %w", err)
 	}
-	return send(&protocol.Message{Type: protocol.MsgDeliveryStatus, ClusterID: r.config.ClusterID, Timestamp: time.Now().UTC(), Payload: body})
+	if err := send(&protocol.Message{Type: protocol.MsgDeliveryStatus, ClusterID: r.config.ClusterID, Timestamp: now, Payload: body}); err != nil {
+		return err
+	}
+	r.sequence = payload.SessionSequence
+	r.lastStatusDigest = payload.StatusDigest
+	r.lastStatusSentAt = now
+	return nil
 }
 
 func (r *Runtime) observe(ctx context.Context, accepted AcceptedAssignment) (*unstructured.Unstructured, *unstructured.Unstructured, error) {

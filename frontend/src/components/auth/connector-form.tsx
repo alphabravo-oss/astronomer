@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Schema-driven Dex connector form (TanStack Form).
  *
@@ -30,7 +28,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppForm, useFieldContext } from "@/lib/form";
-import { inputClassName } from "@/components/form/fields";
+import { controlClassName } from "@/components/ui/input";
 import { ActionButton } from "@/components/ui/action-button";
 import {
   isStoredSecret,
@@ -139,6 +137,9 @@ export function ConnectorForm({
 
   return (
     <div className="space-y-5">
+      <form.AppForm>
+        <form.FormErrorSummary />
+      </form.AppForm>
       {/* Identity row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <form.AppField
@@ -406,7 +407,7 @@ function ListField({
           field.handleChange(next);
         }}
         onBlur={field.handleBlur}
-        className={inputClassName}
+        className={controlClassName}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${id}-error` : undefined}
       />

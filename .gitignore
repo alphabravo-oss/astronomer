@@ -28,6 +28,7 @@ bin/
 # Test output
 coverage.out
 *.test
+/test-artifacts/
 /keyrotate
 /node_modules/
 .claude/

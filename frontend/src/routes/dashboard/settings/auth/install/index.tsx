@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/auth/install/ — Dex install wizard.
@@ -14,8 +15,8 @@ import { createFileRoute } from "@tanstack/react-router";
  *      unrelated upstream chart through the remote tools catalog.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,7 +25,7 @@ import {
   Server,
   Globe,
 } from "lucide-react";
-import { useClusters } from "@/lib/hooks";
+import { useClusters } from "@/lib/hooks/clusters";
 import { useAppForm, useStore } from "@/lib/form";
 import { useUpdateDexSettings } from "@/components/auth/hooks";
 import { ActionButton } from "@/components/ui/action-button";
@@ -35,7 +36,7 @@ import type { Cluster } from "@/types";
 type Step = 1 | 2 | 3;
 
 function InstallDexPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data: clustersData, isLoading: clustersLoading } = useClusters({
     pageSize: 100,
   });
@@ -60,7 +61,7 @@ function InstallDexPage() {
           issuer_url: value.issuerUrl,
           cluster_id: cluster.id,
         });
-        router.push("/dashboard/settings/auth/");
+        void navigate({ to: "/dashboard/settings/auth" });
       } catch {
         /* mutation toasts on error */
       }
@@ -177,13 +178,13 @@ function InstallDexPage() {
 
 function BackLink() {
   return (
-    <Link
-      href="/dashboard/settings/auth"
+    <RouterLink
+      to="/dashboard/settings/auth"
       className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
     >
       <ArrowLeft className="h-3.5 w-3.5" />
       Back to Auth
-    </Link>
+    </RouterLink>
   );
 }
 
@@ -231,7 +232,7 @@ function Stepper({ step }: { step: Step }) {
 }
 
 function EmptyClusters() {
-  const router = useRouter();
+  const navigate = useNavigate();
   return (
     <div className="text-center py-10">
       <Server className="h-8 w-8 mx-auto text-muted-foreground" />
@@ -245,7 +246,7 @@ function EmptyClusters() {
         size="sm"
         intent="primary"
         className="mt-4"
-        onClick={() => router.push("/dashboard/clusters/register")}
+        onClick={() => void navigate({ to: "/dashboard/clusters/register" })}
       >
         Register Cluster
       </ActionButton>
@@ -298,7 +299,7 @@ function ClusterPicker({
               )}
             >
               <div className="flex items-center gap-3 min-w-0">
-                <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Server className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
                     {c.displayName || c.name}
@@ -309,7 +310,7 @@ function ClusterPicker({
                 </div>
               </div>
               {active && (
-                <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                <Check className="h-4 w-4 text-primary shrink-0" />
               )}
             </button>
           );
@@ -356,12 +357,12 @@ function IssuerStep({
       <div className="space-y-1.5">
         <div className="flex items-center gap-2 px-3 rounded-lg border border-border bg-background">
           <Globe className="h-4 w-4 text-muted-foreground" />
-          <input
+          <Input
             type="text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder="https://dex.example.com"
-            className="flex-1 h-10 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+            className="flex-1 h-10 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-hidden"
           />
         </div>
         {!valid && value && (

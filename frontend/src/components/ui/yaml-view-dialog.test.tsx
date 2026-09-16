@@ -5,10 +5,10 @@ import {
   resourceTypeFromK8sPath,
   YamlPanel,
 } from "./yaml-view-dialog";
-import * as hooks from "@/lib/hooks";
+import { useK8sGetYaml, useK8sApplyYaml } from "@/lib/hooks/kubernetes-proxy";
 
 // Mock the data hooks so we can drive `useK8sGetYaml`'s returned value.
-vi.mock("@/lib/hooks", () => ({
+vi.mock("@/lib/hooks/kubernetes-proxy", () => ({
   useK8sGetYaml: vi.fn(),
   useK8sApplyYaml: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useK8sDryRunYaml: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
@@ -36,11 +36,9 @@ vi.mock("@/components/ui/yaml-editor", () => ({
   ),
 }));
 
-const mockedGetYaml = hooks.useK8sGetYaml as MockedFunction<
-  typeof hooks.useK8sGetYaml
->;
-const mockedApplyYaml = hooks.useK8sApplyYaml as MockedFunction<
-  typeof hooks.useK8sApplyYaml
+const mockedGetYaml = useK8sGetYaml as MockedFunction<typeof useK8sGetYaml>;
+const mockedApplyYaml = useK8sApplyYaml as MockedFunction<
+  typeof useK8sApplyYaml
 >;
 
 const permission = (allowed: boolean) => ({
@@ -64,7 +62,7 @@ function loadedYaml(refetch = vi.fn()) {
     isLoading: false,
     error: null,
     refetch,
-  } as unknown as ReturnType<typeof hooks.useK8sGetYaml>);
+  } as unknown as ReturnType<typeof useK8sGetYaml>);
   return refetch;
 }
 
@@ -81,7 +79,7 @@ describe("YamlPanel — edit-mode preservation", () => {
       isLoading: false,
       error: null,
       refetch,
-    } as unknown as ReturnType<typeof hooks.useK8sGetYaml>);
+    } as unknown as ReturnType<typeof useK8sGetYaml>);
 
     const { getByText, getByTestId, rerender } = render(
       <YamlPanel clusterId="c1" k8sPath="api/v1/namespaces/default/pods/p" />,
@@ -103,7 +101,7 @@ describe("YamlPanel — edit-mode preservation", () => {
       isLoading: false,
       error: null,
       refetch,
-    } as unknown as ReturnType<typeof hooks.useK8sGetYaml>);
+    } as unknown as ReturnType<typeof useK8sGetYaml>);
     rerender(
       <YamlPanel clusterId="c1" k8sPath="api/v1/namespaces/default/pods/p" />,
     );
@@ -121,7 +119,7 @@ describe("YamlPanel — edit-mode preservation", () => {
       isLoading: false,
       error: null,
       refetch,
-    } as unknown as ReturnType<typeof hooks.useK8sGetYaml>);
+    } as unknown as ReturnType<typeof useK8sGetYaml>);
 
     const { getByText, getByTestId, rerender } = render(
       <YamlPanel clusterId="c1" k8sPath="api/v1/namespaces/default/pods/p" />,
@@ -133,7 +131,7 @@ describe("YamlPanel — edit-mode preservation", () => {
       isLoading: false,
       error: null,
       refetch,
-    } as unknown as ReturnType<typeof hooks.useK8sGetYaml>);
+    } as unknown as ReturnType<typeof useK8sGetYaml>);
     rerender(
       <YamlPanel clusterId="c1" k8sPath="api/v1/namespaces/default/pods/p" />,
     );
@@ -206,7 +204,7 @@ describe("YamlPanel — structured recovery", () => {
         status: 503,
       }),
       refetch,
-    } as unknown as ReturnType<typeof hooks.useK8sGetYaml>);
+    } as unknown as ReturnType<typeof useK8sGetYaml>);
 
     const { getByRole } = render(
       <YamlPanel
@@ -227,7 +225,7 @@ describe("YamlPanel — structured recovery", () => {
       isPending: false,
       isError: true,
       error: Object.assign(new Error("opaque"), { status: 409 }),
-    } as unknown as ReturnType<typeof hooks.useK8sApplyYaml>);
+    } as unknown as ReturnType<typeof useK8sApplyYaml>);
 
     const { getByRole, getByText } = render(
       <YamlPanel
@@ -237,9 +235,7 @@ describe("YamlPanel — structured recovery", () => {
       />,
     );
     fireEvent.click(getByText("Edit"));
-    fireEvent.click(
-      getByRole("button", { name: "Take ownership and apply" }),
-    );
+    fireEvent.click(getByRole("button", { name: "Take ownership and apply" }));
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({ force: true, yaml: "name: v1" }),
@@ -254,7 +250,7 @@ describe("YamlPanel — structured recovery", () => {
       isPending: false,
       isError: true,
       error: Object.assign(new Error("opaque"), { status: 409 }),
-    } as unknown as ReturnType<typeof hooks.useK8sApplyYaml>);
+    } as unknown as ReturnType<typeof useK8sApplyYaml>);
 
     const { getByText, queryByRole } = render(
       <YamlPanel
@@ -278,7 +274,7 @@ describe("YamlPanel — structured recovery", () => {
       isPending: false,
       isError: true,
       error: Object.assign(new Error("opaque"), { status: 403 }),
-    } as unknown as ReturnType<typeof hooks.useK8sApplyYaml>);
+    } as unknown as ReturnType<typeof useK8sApplyYaml>);
 
     const { getByTestId, getByText, queryByRole } = render(
       <YamlPanel
@@ -296,9 +292,7 @@ describe("YamlPanel — structured recovery", () => {
       "name: preserved",
     );
     expect(queryByRole("button", { name: /retry apply/i })).toBeNull();
-    expect(
-      queryByRole("button", { name: /take ownership/i }),
-    ).toBeNull();
+    expect(queryByRole("button", { name: /take ownership/i })).toBeNull();
     expect(mutate).not.toHaveBeenCalled();
   });
 
@@ -310,7 +304,7 @@ describe("YamlPanel — structured recovery", () => {
       isPending: false,
       isError: true,
       error: Object.assign(new Error("offline"), { status: 503 }),
-    } as unknown as ReturnType<typeof hooks.useK8sApplyYaml>);
+    } as unknown as ReturnType<typeof useK8sApplyYaml>);
 
     const { getByRole, getByText } = render(
       <YamlPanel

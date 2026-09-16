@@ -2,8 +2,10 @@ package delivery
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"k8s.io/client-go/dynamic/fake"
@@ -15,6 +17,67 @@ func (s *memoryCheckpointStore) Load(context.Context) (checkpoint, error) { retu
 func (s *memoryCheckpointStore) Save(_ context.Context, value checkpoint) error {
 	s.value = value
 	return nil
+}
+
+func TestRuntimeSuppressesUnchangedStatusUntilHeartbeatFloor(t *testing.T) {
+	runtime, _ := newRuntimeFixture(t)
+	now := time.Date(2026, time.September, 10, 12, 0, 0, 0, time.UTC)
+	payload := protocol.DeliveryStatusV2{
+		ProtocolVersion: protocol.DeliveryProtocolVersion, ClusterID: runtime.config.ClusterID,
+		SessionSequence: 1, Deployments: []protocol.DeliveryDeploymentStatusV2{{
+			DeploymentID: "55555555-5555-4555-8555-555555555555", Generation: 1,
+			SpecDigest: "sha256:" + strings.Repeat("a", 64), Phase: "ready", ObservedAt: now,
+		}},
+	}
+	payload.StatusDigest = payload.SemanticDigest()
+	sent := 0
+	sender := func(*protocol.Message) error { sent++; return nil }
+	if err := runtime.sendStatusPayload(sender, payload, now); err != nil {
+		t.Fatal(err)
+	}
+	payload.SessionSequence++
+	payload.Deployments[0].ObservedAt = now.Add(time.Minute)
+	payload.StatusDigest = payload.SemanticDigest()
+	if err := runtime.sendStatusPayload(sender, payload, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if sent != 1 || runtime.sequence != 1 {
+		t.Fatalf("unchanged status sent=%d sequence=%d, want 1/1", sent, runtime.sequence)
+	}
+	payload.SessionSequence = 2
+	if err := runtime.sendStatusPayload(sender, payload, now.Add(deliveryStatusHeartbeatFloor)); err != nil {
+		t.Fatal(err)
+	}
+	if sent != 2 || runtime.sequence != 2 {
+		t.Fatalf("heartbeat status sent=%d sequence=%d, want 2/2", sent, runtime.sequence)
+	}
+}
+
+func TestRuntimeSendsSemanticChangesAndDoesNotCommitFailedSend(t *testing.T) {
+	runtime, _ := newRuntimeFixture(t)
+	now := time.Date(2026, time.September, 10, 12, 0, 0, 0, time.UTC)
+	payload := protocol.DeliveryStatusV2{ProtocolVersion: protocol.DeliveryProtocolVersion, ClusterID: runtime.config.ClusterID, SessionSequence: 1}
+	payload.StatusDigest = payload.SemanticDigest()
+	if err := runtime.sendStatusPayload(func(*protocol.Message) error { return errors.New("offline") }, payload, now); err == nil {
+		t.Fatal("expected send failure")
+	}
+	if runtime.sequence != 0 || runtime.lastStatusDigest != "" || !runtime.lastStatusSentAt.IsZero() {
+		t.Fatal("failed send advanced suppression state")
+	}
+	sent := 0
+	if err := runtime.sendStatusPayload(func(*protocol.Message) error { sent++; return nil }, payload, now); err != nil {
+		t.Fatal(err)
+	}
+	payload.SessionSequence = 2
+	payload.SnapshotGeneration = 1
+	payload.SnapshotETag = "sha256:" + strings.Repeat("b", 64)
+	payload.StatusDigest = payload.SemanticDigest()
+	if err := runtime.sendStatusPayload(func(*protocol.Message) error { sent++; return nil }, payload, now.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if sent != 2 || runtime.sequence != 2 {
+		t.Fatalf("changed status sent=%d sequence=%d, want 2/2", sent, runtime.sequence)
+	}
 }
 
 type staticCapabilityProbe struct {

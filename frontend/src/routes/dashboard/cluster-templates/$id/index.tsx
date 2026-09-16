@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Cluster Templates · Detail.
  *
@@ -14,17 +14,18 @@ import {
  * row per cluster with its apply status). Edit jumps to `./edit` where the
  * full form is re-rendered.
  */
-import { Link } from "@/lib/link";
-import { useParams, useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, PencilLine, Layers } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import {
-  ErrorState,
-  LoadingState,
+  EmptyState,
   PermissionState,
+  StatePanel,
 } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import {
   useClusterTemplate,
   useClusterTemplateBoundClusters,
@@ -42,28 +43,26 @@ const statusStyles: Record<ClusterTemplateBoundCluster["status"], string> = {
 };
 
 function ClusterTemplateDetailPage() {
-  const router = useRouter();
-  const params = useParams();
-  const id = params.id as string;
+  const navigate = useNavigate();
+  const params = Route.useParams();
+  const id = params.id;
   const { data: user } = useCurrentUser();
   const canRead = canReadClusterTemplates(user);
   const canWrite = canWriteClusterTemplates(user);
 
-  const { data: template, isLoading } = useClusterTemplate(id);
-  const { data: bound = [] } = useClusterTemplateBoundClusters(
-    canRead ? id : undefined,
-  );
+  const templateQuery = useClusterTemplate(id);
+  const boundQuery = useClusterTemplateBoundClusters(canRead ? id : undefined);
 
   if (!canRead) {
     return (
       <div className="space-y-4">
-        <Link
-          href="/dashboard/cluster-templates"
+        <RouterLink
+          to="/dashboard/cluster-templates"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to bundles
-        </Link>
+        </RouterLink>
         <PermissionState
           permission="cluster_templates:read"
           description={
@@ -78,29 +77,42 @@ function ClusterTemplateDetailPage() {
     );
   }
 
-  if (isLoading) {
+  if (
+    templateQuery.isLoading ||
+    templateQuery.isError ||
+    templateQuery.data === undefined
+  ) {
     return (
-      <LoadingState title="Loading cluster template" className="h-32 py-0" />
+      <QueryStates
+        query={templateQuery}
+        loadingTitle="Loading onboarding bundle"
+        permission="cluster_templates:read"
+        errorTitle="Failed to load onboarding bundle"
+        notFound={
+          <StatePanel
+            icon={Layers}
+            title="Bundle not found"
+            description="The onboarding bundle may have been deleted or is outside your access scope."
+            actionLabel="Back to bundles"
+            actionHref="/dashboard/cluster-templates"
+          />
+        }
+      >
+        {null}
+      </QueryStates>
     );
   }
-  if (!template) {
-    return (
-      <ErrorState
-        title="Template not found"
-        description="The requested cluster template does not exist or is no longer available."
-      />
-    );
-  }
+  const template = templateQuery.data;
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/cluster-templates"
+      <RouterLink
+        to="/dashboard/cluster-templates"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to bundles
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Onboarding Bundle"
@@ -119,7 +131,7 @@ function ClusterTemplateDetailPage() {
             <ActionButton
               icon={<PencilLine className="h-3.5 w-3.5" />}
               onClick={() =>
-                router.push(`/dashboard/cluster-templates/${template.id}/edit`)
+                void navigate({ to: `/dashboard/cluster-templates/${template.id}/edit` })
               }
             >
               Edit
@@ -207,71 +219,78 @@ function ClusterTemplateDetailPage() {
             Registered clusters this bundle has been applied to.
           </p>
         </div>
-        <Table className="w-full text-sm">
-          <TableHeader>
-            <TableRow className="text-xs text-muted-foreground border-b border-border bg-muted/30">
-              <TableHead className="text-left font-medium py-2 px-4">
-                Cluster
-              </TableHead>
-              <TableHead className="text-left font-medium py-2 px-4">
-                Status
-              </TableHead>
-              <TableHead className="text-left font-medium py-2 px-4">
-                Last applied
-              </TableHead>
-              <TableHead className="text-left font-medium py-2 px-4">
-                Detail
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {bound.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="py-6 text-center text-xs text-muted-foreground"
-                >
-                  No clusters bound yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              bound.map((row) => (
-                <TableRow
-                  key={row.clusterId}
-                  className="border-b border-border last:border-0"
-                >
-                  <TableCell className="py-2 px-4">
-                    <Link
-                      href={`/dashboard/clusters/${row.clusterId}`}
-                      className="text-foreground hover:underline underline-offset-2"
-                    >
-                      {row.clusterName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="py-2 px-4">
-                    <span
-                      className={cn(
-                        "inline-flex px-2 py-0.5 rounded text-xs font-medium capitalize",
-                        statusStyles[row.status] ??
-                          "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {row.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="py-2 px-4 text-xs text-muted-foreground">
-                    {row.lastAppliedAt
-                      ? formatRelativeTime(row.lastAppliedAt)
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="py-2 px-4 text-xs text-muted-foreground truncate max-w-[260px]">
-                    {row.message || "—"}
-                  </TableCell>
+        <QueryStates
+          query={boundQuery}
+          loadingTitle="Loading bound clusters"
+          permission="cluster_templates:read"
+          errorTitle="Failed to load bound clusters"
+          isEmpty={(clusters) => clusters.length === 0}
+          empty={
+            <EmptyState
+              icon={Layers}
+              title="No clusters bound"
+              description="Apply this bundle during cluster registration to track its rollout here."
+              className="py-10"
+            />
+          }
+        >
+          {(bound) => (
+            <Table className="w-full text-sm">
+              <TableHeader>
+                <TableRow className="text-xs text-muted-foreground border-b border-border bg-muted/30">
+                  <TableHead className="text-left font-medium py-2 px-4">
+                    Cluster
+                  </TableHead>
+                  <TableHead className="text-left font-medium py-2 px-4">
+                    Status
+                  </TableHead>
+                  <TableHead className="text-left font-medium py-2 px-4">
+                    Last applied
+                  </TableHead>
+                  <TableHead className="text-left font-medium py-2 px-4">
+                    Detail
+                  </TableHead>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>
+                {bound.map((row) => (
+                  <TableRow
+                    key={row.clusterId}
+                    className="border-b border-border last:border-0"
+                  >
+                    <TableCell className="py-2 px-4">
+                      <RouterLink
+                        to="/dashboard/clusters/$id" params={{ id: row.clusterId }}
+                        className="text-foreground hover:underline underline-offset-2"
+                      >
+                        {row.clusterName}
+                      </RouterLink>
+                    </TableCell>
+                    <TableCell className="py-2 px-4">
+                      <span
+                        className={cn(
+                          "inline-flex px-2 py-0.5 rounded-sm text-xs font-medium capitalize",
+                          statusStyles[row.status] ??
+                            "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {row.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-2 px-4 text-xs text-muted-foreground">
+                      {row.lastAppliedAt
+                        ? formatRelativeTime(row.lastAppliedAt)
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="py-2 px-4 text-xs text-muted-foreground truncate max-w-[260px]">
+                      {row.message || "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </QueryStates>
       </section>
     </PageShell>
   );

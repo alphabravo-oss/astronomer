@@ -24,6 +24,8 @@ interface BindingsTabProps {
   users: User[];
   loading: boolean;
   isError: boolean;
+  error?: unknown;
+  permission?: string;
   onRetry: () => void;
   onRevoke: (binding: AccessBinding) => void;
 }
@@ -38,6 +40,8 @@ export function BindingsTab({
   users,
   loading,
   isError,
+  error,
+  permission = "rbac:read",
   onRetry,
   onRevoke,
 }: BindingsTabProps) {
@@ -128,8 +132,14 @@ export function BindingsTab({
       searchPlaceholder="Search bindings..."
       loading={loading}
       isError={isError}
+      error={error}
+      permission={permission}
       onRetry={onRetry}
-      emptyMessage="No role bindings found"
+      emptyState={{
+        title: "No role bindings found",
+        description:
+          "Resources will appear here when they are available in this scope.",
+      }}
     />
   );
 }

@@ -3,7 +3,7 @@ import type {
   LabelOperator,
   Placement,
   PlacementRequest,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-targets";
 
 export function placementFromForm(
   form: FormData,

@@ -306,6 +306,17 @@ func TestCertificationFailsClosedOnTrafficAndCardinalityGaps(t *testing.T) {
 	}
 }
 
+func TestEngineeringRunFailsOnNon2xxResponses(t *testing.T) {
+	cfg := &config{skipAgents: true, duration: time.Second}
+	rec := newRecorder()
+	rec.httpCount["cluster_pods"] = 100
+	rec.httpStatus["cluster_pods"] = map[int]int{200: 99, 503: 1}
+	report := newReport(cfg, rec)
+	if report.Verdict != "fail" || !strings.Contains(strings.Join(report.Reasons, "\n"), "HTTP failure ratio") {
+		t.Fatalf("verdict=%q reasons=%v, want non-2xx failure", report.Verdict, report.Reasons)
+	}
+}
+
 func TestCertificationFailsClosedOnInvalidComponentReplicaMetadata(t *testing.T) {
 	setCertificationMetadata(t)
 	t.Setenv("LOADTEST_COMPONENT_REPLICAS", `{"server":3,"worker":0}`)

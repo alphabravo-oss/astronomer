@@ -20,14 +20,16 @@ import (
 
 const estateStaleAfter = 5 * time.Minute
 
+const maxDeliveryEstateClusters int32 = 10_000
+
 type InventoryQueries interface {
-	GetDeliveryControllerInventory(context.Context, sqlc.GetDeliveryControllerInventoryParams) (sqlc.DeliveryControllerInventory, error)
+	GetDeliveryControllerInventory(context.Context, sqlc.GetDeliveryControllerInventoryParams) (sqlc.GetDeliveryControllerInventoryRow, error)
 	ListClusterDeployments(context.Context, sqlc.ListClusterDeploymentsParams) ([]sqlc.ClusterDeployment, error)
 	CountClusterDeployments(context.Context, sqlc.CountClusterDeploymentsParams) (int64, error)
 	CountDeliveryControllerCompatibility(context.Context) ([]sqlc.CountDeliveryControllerCompatibilityRow, error)
 	GetCurrentDeliverySystemRollout(context.Context) (sqlc.DeliverySystemRollout, error)
 	ListDeliverySystemReleases(context.Context, sqlc.ListDeliverySystemReleasesParams) ([]sqlc.ListDeliverySystemReleasesRow, error)
-	ListDeliveryEstateClusters(context.Context) ([]sqlc.ListDeliveryEstateClustersRow, error)
+	ListDeliveryEstateClusters(context.Context, int32) ([]sqlc.ListDeliveryEstateClustersRow, error)
 	CountActiveDeliveryRollouts(context.Context) (int64, error)
 }
 
@@ -193,9 +195,13 @@ func (h *InventoryHandler) Estate(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery inventory persistence is unavailable")
 		return
 	}
-	rows, err := h.queries.ListDeliveryEstateClusters(r.Context())
+	rows, err := h.queries.ListDeliveryEstateClusters(r.Context(), maxDeliveryEstateClusters+1)
 	if err != nil {
 		respondDatabaseError(w, err)
+		return
+	}
+	if len(rows) > int(maxDeliveryEstateClusters) {
+		respondError(w, http.StatusUnprocessableEntity, "estate_limit_exceeded", "delivery estate exceeds the supported 10000-cluster dashboard limit")
 		return
 	}
 	activeRollouts, err := h.queries.CountActiveDeliveryRollouts(r.Context())

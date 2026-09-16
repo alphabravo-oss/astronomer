@@ -187,7 +187,6 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		slog.String("cluster_id", conn.ClusterID),
 		slog.Int("payload_len", len(msg.Payload)),
 	)
-	h.persistPing(conn)
 	if h.validator == nil {
 		return
 	}
@@ -200,15 +199,6 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		h.log.Warn("invalid heartbeat payload", slog.String("error", err.Error()))
 		return
-	}
-	if err := h.validator.UpdateClusterHeartbeat(context.Background(), sqlc.UpdateClusterHeartbeatParams{
-		ID:                clusterID,
-		AgentVersion:      payload.AgentVersion,
-		KubernetesVersion: payload.KubernetesVersion,
-		NodeCount:         int32(payload.NodeCount),
-		Distribution:      payload.Distribution,
-	}); err != nil {
-		h.log.Warn("failed to update cluster heartbeat", slog.String("error", err.Error()))
 	}
 	conditions, _ := json.Marshal(map[string]any{
 		"connected":                 true,
@@ -224,18 +214,41 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 		"last_successful_action_at": payload.LastSuccessfulActionAt,
 		"degraded_reasons":          payload.DegradedReasons,
 	})
-	if _, err := h.validator.UpsertClusterHealthStatus(context.Background(), sqlc.UpsertClusterHealthStatusParams{
+	persistCtx, cancel := context.WithTimeout(context.Background(), agentPersistenceTimeout)
+	commandsPending, err := h.validator.RecordAgentHeartbeat(persistCtx, sqlc.RecordAgentHeartbeatParams{
+		ConnectionID:       conn.DBID,
 		ClusterID:          clusterID,
+		AgentVersion:       payload.AgentVersion,
+		KubernetesVersion:  payload.KubernetesVersion,
+		NodeCount:          int32(payload.NodeCount),
+		Distribution:       payload.Distribution,
 		CpuUsagePercent:    payload.CPUUsagePercent,
 		MemoryUsagePercent: payload.MemoryUsagePercent,
 		PodCount:           int32(payload.PodCount),
-		NodeCount:          int32(payload.NodeCount),
 		Conditions:         conditions,
-	}); err != nil {
-		h.log.Warn("failed to upsert cluster health from heartbeat", slog.String("error", err.Error()))
+	})
+	cancel()
+	if err != nil {
+		outcome := "error"
+		if errors.Is(err, pgx.ErrNoRows) {
+			outcome = "superseded_session"
+		}
+		tunnelHeartbeatsPersistedTotal.WithLabelValues(observability.MetricValues(outcome)...).Inc()
+		h.log.Warn("failed to persist agent heartbeat",
+			slog.String("cluster_id", conn.ClusterID),
+			slog.String("session_id", conn.SessionID),
+			slog.String("error", err.Error()),
+		)
+		return
 	}
+	tunnelHeartbeatsPersistedTotal.WithLabelValues(observability.MetricValues("success")...).Inc()
 
-	h.reconcileAgentLifecycle(conn, clusterID, payload)
+	if commandsPending {
+		tunnelHeartbeatsLifecycleTotal.WithLabelValues(observability.MetricValues("checked")...).Inc()
+		h.reconcileAgentLifecycle(conn, clusterID, payload)
+	} else {
+		tunnelHeartbeatsLifecycleTotal.WithLabelValues(observability.MetricValues("skipped")...).Inc()
+	}
 
 	// Fan out a heartbeat tick so SSE subscribers can flip "Last heartbeat"
 	// timestamps and pulse status indicators without polling.
@@ -243,8 +256,11 @@ func (h *Hub) handleHeartbeat(conn *AgentConnection, msg *protocol.Message) {
 }
 
 func (h *Hub) reconcileAgentLifecycle(conn *AgentConnection, clusterID uuid.UUID, payload protocol.HeartbeatPayload) {
+	reconcileCtx, cancel := context.WithTimeout(context.Background(), agentPersistenceTimeout)
+	defer cancel()
+
 	if payload.AgentVersion != "" {
-		affected, err := h.validator.MarkRunningAgentUpgradeSucceededByVersion(context.Background(), sqlc.MarkRunningAgentUpgradeSucceededByVersionParams{
+		affected, err := h.validator.MarkRunningAgentUpgradeSucceededByVersion(reconcileCtx, sqlc.MarkRunningAgentUpgradeSucceededByVersionParams{
 			ClusterID:     clusterID,
 			TargetVersion: payload.AgentVersion,
 		})
@@ -263,7 +279,7 @@ func (h *Hub) reconcileAgentLifecycle(conn *AgentConnection, clusterID uuid.UUID
 		}
 	}
 
-	op, err := h.validator.ClaimPendingAgentLifecycleOperation(context.Background(), clusterID)
+	op, err := h.validator.ClaimPendingAgentLifecycleOperation(reconcileCtx, clusterID)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			h.log.Warn("failed to claim pending agent lifecycle operation",
@@ -290,6 +306,7 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 			// only one it can prove is pullable.
 			RollbackImage: agentUpgradeRollbackImage(op.OperationSpec),
 		}
+		payload.AgentOverrides, payload.ConfigurationDigest = agentUpgradeConfiguration(op.OperationSpec)
 		body, err := json.Marshal(payload)
 		if err != nil {
 			h.completeAgentLifecycleOperation(op.ID, agentlifecycle.StatusFailed, "failed to encode agent upgrade payload: "+err.Error())
@@ -314,6 +331,22 @@ func (h *Hub) dispatchAgentLifecycleOperation(conn *AgentConnection, op sqlc.Age
 	default:
 		h.completeAgentLifecycleOperation(op.ID, agentlifecycle.StatusFailed, "unsupported agent lifecycle operation type: "+op.OperationType)
 	}
+}
+
+func agentUpgradeConfiguration(spec json.RawMessage) (json.RawMessage, string) {
+	if len(spec) == 0 {
+		return nil, ""
+	}
+	var envelope struct {
+		Plan struct {
+			AgentOverrides      json.RawMessage `json:"agent_overrides"`
+			ConfigurationDigest string          `json:"configuration_digest"`
+		} `json:"plan"`
+	}
+	if err := json.Unmarshal(spec, &envelope); err != nil {
+		return nil, ""
+	}
+	return envelope.Plan.AgentOverrides, strings.TrimSpace(envelope.Plan.ConfigurationDigest)
 }
 
 // agentUpgradeRollbackImage pulls the rollback image out of the operation spec
@@ -534,8 +567,6 @@ func (h *Hub) handleMetrics(conn *AgentConnection, msg *protocol.Message) {
 		"node_count":        payload.ClusterNodeCount,
 		"timestamp":         payload.Timestamp,
 		"metrics_available": payload.MetricsAvailable,
-		"nodes":             payload.Nodes,
-		"namespaces":        payload.Namespaces,
 	})
 }
 

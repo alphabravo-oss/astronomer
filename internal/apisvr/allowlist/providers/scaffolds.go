@@ -18,7 +18,7 @@ func NewSelfManagedProvider() *SelfManagedProvider {
 func (p *SelfManagedProvider) ID() ProviderID { return ProviderSelfManaged }
 
 func (p *SelfManagedProvider) Capability() Capability {
-	return Capability{Provider: ProviderSelfManaged, CanMonitor: true, Reason: "self-managed API-server firewalls are operator-owned"}
+	return Capability{Provider: ProviderSelfManaged, Reason: "self-managed API-server firewalls are operator-owned and cannot be observed by the controller"}
 }
 
 func (p *SelfManagedProvider) Detect(ctx context.Context, cluster Cluster) string {

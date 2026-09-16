@@ -6,12 +6,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 func monitoringReadBindings(clusterID uuid.UUID) []rbac.RoleBinding {
@@ -31,7 +32,7 @@ func authedAnomalyReq(target string, params map[string]string) *http.Request {
 		rc.URLParams.Add(k, v)
 	}
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rc)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: uuid.NewString()})
+	ctx = reqctx.WithUser(ctx, &reqctx.User{ID: uuid.NewString()})
 	return req.WithContext(ctx)
 }
 

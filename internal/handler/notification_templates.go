@@ -55,34 +55,6 @@ type NotificationTemplateMutationTx interface {
 
 type notificationTemplateRunTxFunc func(context.Context, func(NotificationTemplateMutationTx) error) error
 
-func executeNotificationTemplateMutation[T any](r *http.Request, h *NotificationTemplateHandler, mutate func(NotificationTemplateQuerier) (T, error), describe func(T) clusterAuditEvent) (T, error) {
-	var zero T
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q NotificationTemplateMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(result)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return result, err
-	}
-	result, err := mutate(h.queries)
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	writer := any(h.audit)
-	if h.audit == nil {
-		writer = h.queries
-	}
-	recordAudit(r, writer, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
-
 // NotificationTemplateHandler owns /api/v1/admin/notification-templates/*.
 type NotificationTemplateHandler struct {
 	queries NotificationTemplateQuerier
@@ -285,15 +257,15 @@ func (h *NotificationTemplateHandler) Update(w http.ResponseWriter, r *http.Requ
 	}
 
 	caller := currentUserUUID(r)
-	row, err := executeNotificationTemplateMutation(r, h,
-		func(q NotificationTemplateQuerier) (sqlc.NotificationTemplate, error) {
+	row, err := executeMutation(r, h.runTx,
+		func(q NotificationTemplateMutationTx) (sqlc.NotificationTemplate, error) {
 			return q.UpsertNotificationTemplate(r.Context(), sqlc.UpsertNotificationTemplateParams{
 				TemplateKey: key, Channel: def.Channel, SubjectTpl: subject, BodyTpl: *req.Body,
 				BodyFormat: bodyFormat, Enabled: enabled, UpdatedBy: caller,
 			})
 		},
-		func(row sqlc.NotificationTemplate) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(row sqlc.NotificationTemplate) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.notification_template.updated", resourceType: "notification_template",
 				resourceID: row.ID.String(), resourceName: key, status: http.StatusOK,
 				detail: map[string]any{"channel": row.Channel, "enabled": row.Enabled, "body_format": row.BodyFormat, "body_size": len(row.BodyTpl), "subject_set": row.SubjectTpl != ""},
@@ -318,12 +290,12 @@ func (h *NotificationTemplateHandler) Delete(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown template key")
 		return
 	}
-	_, err := executeNotificationTemplateMutation(r, h,
-		func(q NotificationTemplateQuerier) (string, error) {
+	_, err := executeMutation(r, h.runTx,
+		func(q NotificationTemplateMutationTx) (string, error) {
 			return key, q.DeleteNotificationTemplate(r.Context(), key)
 		},
-		func(key string) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(key string) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.notification_template.reset", resourceType: "notification_template",
 				resourceID: key, resourceName: key, status: http.StatusNoContent,
 			}

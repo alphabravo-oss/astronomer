@@ -1,4 +1,11 @@
 -- name: GetClusterByID :one
+-- Public/runtime lookups are active-only by default so a retained tombstone
+-- cannot accidentally become an actionable target.
+SELECT * FROM clusters WHERE id = $1 AND decommissioned_at IS NULL;
+
+-- name: GetClusterByIDIncludingDecommissioned :one
+-- Historical lifecycle code may need the retained identity after the public
+-- cluster has disappeared. Keep this deliberately explicit at every callsite.
 SELECT * FROM clusters WHERE id = $1;
 
 -- name: GetClusterByIDForUpdate :one
@@ -56,6 +63,24 @@ SELECT * FROM clusters WHERE name = $1 AND decommissioned_at IS NULL;
 -- Excludes tombstoned (sprint 038) rows. Decommissioned clusters keep
 -- their row in the DB for forensics but never appear in the UI list.
 SELECT * FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+
+-- name: ListClusterRuntimeTargets :many
+-- Narrow projection for periodic server-side metrics/status/probe sweeps. These
+-- loops need only liveness identity, not credential PEM or the JSONB metadata
+-- carried by the full clusters row.
+SELECT c.id, c.status, c.is_local, l.last_heartbeat
+FROM clusters c
+LEFT JOIN cluster_liveness l ON l.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+ORDER BY c.created_at DESC, c.id DESC
+LIMIT $1 OFFSET $2;
+
+-- name: ListClusterProbeTargets :many
+-- Resume bounded probe sweeps by stable identity, independent of fleet churn.
+SELECT id FROM clusters
+WHERE decommissioned_at IS NULL AND status = 'active' AND id > sqlc.arg(after_id)::uuid
+ORDER BY id
+LIMIT sqlc.arg(page_size);
 
 -- name: ListClustersFiltered :many
 -- Authorization-independent fleet filter. The handler selects this only for
@@ -138,8 +163,8 @@ WHERE decommissioned_at IS NULL
 SELECT * FROM clusters WHERE status = sqlc.arg(status) AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CreateCluster :one
-INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, api_server_url, ca_certificate, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, api_server_url, ca_certificate, created_by_id, badge_text, badge_color, agent_overrides)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, sqlc.arg(agent_overrides))
 RETURNING *;
 
 -- name: UpdateCluster :one
@@ -151,7 +176,10 @@ UPDATE clusters SET
     labels = $6,
     annotations = $7,
     api_server_url = COALESCE(sqlc.narg(api_server_url), api_server_url),
-    ca_certificate = COALESCE(sqlc.narg(ca_certificate), ca_certificate)
+    ca_certificate = COALESCE(sqlc.narg(ca_certificate), ca_certificate),
+    badge_text = COALESCE(sqlc.narg(badge_text), badge_text),
+    badge_color = COALESCE(sqlc.narg(badge_color), badge_color),
+    agent_overrides = sqlc.arg(agent_overrides)
 WHERE id = $1
 RETURNING *;
 
@@ -172,30 +200,27 @@ UPDATE clusters SET status = $2 WHERE id = $1 AND decommissioned_at IS NULL;
 -- stale 'disconnected' matches zero rows once the agent is back, and a stale
 -- 'active' matches zero rows once it's really gone. Keeps the decommissioned
 -- guard. Callers pass only 'active' or 'disconnected'.
-UPDATE clusters SET status = sqlc.arg(status)
-WHERE id = sqlc.arg(id)
-  AND decommissioned_at IS NULL
+WITH current_liveness AS (
+  SELECT last_heartbeat
+  FROM cluster_liveness
+  WHERE cluster_id = sqlc.arg(id)
+)
+UPDATE clusters c SET status = sqlc.arg(status)
+WHERE c.id = sqlc.arg(id)
+  AND c.decommissioned_at IS NULL
   AND (
     (sqlc.arg(status) = 'active'
-      AND last_heartbeat IS NOT NULL
-      AND last_heartbeat >= now() - interval '2 minutes')
+      AND EXISTS (
+        SELECT 1 FROM current_liveness
+        WHERE last_heartbeat >= now() - interval '2 minutes'
+      ))
     OR
     (sqlc.arg(status) = 'disconnected'
-      AND (last_heartbeat IS NULL OR last_heartbeat < now() - interval '2 minutes'))
+      AND NOT EXISTS (
+        SELECT 1 FROM current_liveness
+        WHERE last_heartbeat >= now() - interval '2 minutes'
+      ))
   );
-
--- name: UpdateClusterHeartbeat :exec
--- last_heartbeat ALWAYS advances (liveness, decoupled from inventory per H11),
--- but inventory columns are keep-last-good (L11): a degraded/minimal beat sends
--- empty/zero inventory and must NOT clobber prior values. A full beat carries
--- real values and updates normally.
-UPDATE clusters SET
-    last_heartbeat = now(),
-    agent_version = COALESCE(NULLIF(sqlc.arg(agent_version)::text, ''), agent_version),
-    kubernetes_version = COALESCE(NULLIF(sqlc.arg(kubernetes_version)::text, ''), kubernetes_version),
-    node_count = CASE WHEN sqlc.arg(node_count)::int > 0 THEN sqlc.arg(node_count)::int ELSE node_count END,
-    distribution = COALESCE(NULLIF(sqlc.arg(distribution)::text, ''), distribution)
-WHERE id = sqlc.arg(id);
 
 -- name: DeleteCluster :exec
 DELETE FROM clusters WHERE id = $1;
@@ -222,6 +247,14 @@ SELECT count(*) FROM clusters WHERE decommissioned_at IS NULL;
 
 -- name: GetClusterHealthStatus :one
 SELECT * FROM cluster_health_statuses WHERE cluster_id = $1;
+
+-- name: ListClusterHealthStatusesForClusters :many
+-- Batch form used by fleet-wide alert evaluation. Missing rows deliberately
+-- stay missing so callers can distinguish "no health sample" from a zeroed
+-- health sample without issuing one point lookup per cluster.
+SELECT *
+FROM cluster_health_statuses
+WHERE cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[]);
 
 -- name: UpsertClusterHealthStatus :one
 INSERT INTO cluster_health_statuses (cluster_id, cpu_usage_percent, memory_usage_percent, pod_count, node_count, conditions)

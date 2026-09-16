@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,7 +36,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 const (
@@ -475,22 +476,21 @@ func newPostgresOutageResiduals(t *testing.T, ctx context.Context, database *db.
 	if err != nil {
 		t.Fatal(err)
 	}
-	residuals.planner.RequireTransactionalAudit()
+
 	residuals.rolloutControl, err = deliveryrollout.NewPostgresController(database.Pool(), time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	residuals.rolloutControl.RequireTransactionalAudit()
+
 	residuals.deployment, err = deliverydeployment.NewPostgresController(database.Pool(), time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	residuals.deployment.RequireTransactionalAudit()
+
 	residuals.systemRollout, err = systemrollout.New(database.Pool())
 	if err != nil {
 		t.Fatal(err)
 	}
-	residuals.systemRollout.RequireTransactionalAudit()
 
 	_, preview, err := store.Preview(ctx, residuals.targetID)
 	if err != nil {
@@ -531,7 +531,7 @@ func (r *postgresOutageResiduals) seedDeliveryGraph(t *testing.T, ctx context.Co
 		{`INSERT INTO projects (id,name,display_name,cluster_id) VALUES ($1,$2,$2,$3)`, []any{projectID, "postgres-outage-residual-project", clusterID}},
 		{`INSERT INTO cluster_agent_tokens (cluster_id,token,token_hash) VALUES ($1,$2,$3)`, []any{clusterID, "qualification-token-" + uuid.NewString(), "qualification-hash-" + uuid.NewString()}},
 		{`INSERT INTO agent_connections (cluster_id,agent_id,session_id,status) VALUES ($1,$2,$3,'connected')`, []any{clusterID, "qualification-agent", uuid.NewString()}},
-		{`INSERT INTO delivery_controller_inventory (cluster_id,flux_version,components,ready,compatibility_status) VALUES ($1,'2.4.0','{}',true,'compatible')`, []any{clusterID}},
+		{`INSERT INTO delivery_controller_inventory (cluster_id,flux_version,components,ready,compatibility_status,status_digest,agent_session_id,agent_sequence,semantic_sequence) VALUES ($1,'2.4.0','{}',true,'compatible','sha256:0000000000000000000000000000000000000000000000000000000000000000','fixture',1,1)`, []any{clusterID}},
 		{`INSERT INTO delivery_sources (id,project_id,name,source_type,url,status) VALUES ($1,$2,$3,'git',$4,'ready')`, []any{sourceID, projectID, "qualification-source", "https://git.example.test/qualification.git"}},
 		{`INSERT INTO component_bundles (id,project_id,name) VALUES ($1,$2,$3)`, []any{bundleID, projectID, "qualification-bundle"}},
 		{`INSERT INTO component_bundle_versions (id,bundle_id,source_id,version,renderer,requested_revision,resolved_revision,artifact_digest,source_spec,requirements,spec_digest,verification_status,state) VALUES ($1,$2,$3,'v1','kustomize',$4,$4,$5,$6,'[]',$5,'verified','ready')`, []any{versionID, bundleID, sourceID, strings.Repeat("b", 40), digest, sourceSpec}},
@@ -732,7 +732,7 @@ func postgresOutageChiRequest(method, path, id, body string, admin sqlc.User, ba
 	ctx := request.Context()
 	if base != nil {
 		ctx = base
-		ctx = appmiddleware.SetAuthenticatedUserForTest(ctx, &appmiddleware.AuthenticatedUser{
+		ctx = reqctx.WithUser(ctx, &reqctx.User{
 			ID: admin.ID.String(), Email: admin.Email, Username: admin.Username, AuthMethod: "jwt",
 		})
 	}
@@ -773,7 +773,7 @@ func postgresOutageRequest(method, path, body string, admin sqlc.User) *http.Req
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Secret", postgresOutageSecret)
-	ctx := appmiddleware.SetAuthenticatedUserForTest(request.Context(), &appmiddleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(request.Context(), &reqctx.User{
 		ID: admin.ID.String(), Email: admin.Email, Username: admin.Username, AuthMethod: "jwt",
 	})
 	return request.WithContext(ctx)

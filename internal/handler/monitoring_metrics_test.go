@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -39,11 +40,12 @@ func TestLegacyNodeMetrics_NotStub(t *testing.T) {
 		}, nil
 	}}
 	h := NewMonitoringHandlerWithRequester(stub)
+	clusterID := uuid.NewString()
 
 	rc := chi.NewRouteContext()
-	rc.URLParams.Add("cluster_id", "c1")
+	rc.URLParams.Add("cluster_id", clusterID)
 	rc.URLParams.Add("node", "node-a")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/monitoring/metrics/node/c1/node-a/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/monitoring/metrics/node/"+clusterID+"/node-a/", nil)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
 	rec := httptest.NewRecorder()
 

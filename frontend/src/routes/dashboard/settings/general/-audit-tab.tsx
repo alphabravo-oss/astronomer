@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAuditLogs } from "@/lib/hooks";
+import { useAuditLogs } from "@/lib/hooks/audit";
 import { formatDate } from "@/lib/utils";
 import type { AuditLogEntry } from "@/types";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -42,7 +42,7 @@ export function AuditTab() {
       key: "action",
       header: "Action",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.action}
         </span>
       ),
@@ -93,7 +93,7 @@ export function AuditTab() {
           onChange={(e) =>
             setAuditClassFilter(e.target.value as AuditClassFilter)
           }
-          className="w-auto"
+          containerClassName="w-auto"
         >
           <option value="all">All</option>
           <option value="mutation">Mutation</option>
@@ -108,7 +108,11 @@ export function AuditTab() {
         keyExtractor={(row) => row.id}
         searchPlaceholder="Search audit logs..."
         loading={auditLoading}
-        emptyMessage="No audit log entries"
+        emptyState={{
+          title: "No audit log entries",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
         pageSize={25}
       />
     </div>

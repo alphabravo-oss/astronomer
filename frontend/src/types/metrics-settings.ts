@@ -90,9 +90,8 @@ export interface AuditLogEntry {
   user: string;
   userAgent?: string;
   sourceIP: string;
-  status: "success" | "failure" | "error";
-  detail?: Record<string, unknown>;
-  details?: Record<string, unknown>;
+	status: "success" | "failure" | "error";
+	detail?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
   timestamp: string;

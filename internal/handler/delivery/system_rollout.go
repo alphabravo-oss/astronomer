@@ -6,13 +6,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type SystemRolloutService interface {
@@ -23,20 +24,12 @@ type SystemRolloutService interface {
 }
 
 type SystemRolloutHandler struct {
-	service            SystemRolloutService
-	audit              any
-	bus                *events.Bus
-	transactionalAudit bool
+	service SystemRolloutService
+	bus     *events.Bus
 }
 
-func (h *SystemRolloutHandler) EnableTransactionalAudit() {
-	if h != nil {
-		h.transactionalAudit = true
-	}
-}
-
-func NewSystemRolloutHandler(service SystemRolloutService, auditWriter any, bus *events.Bus) *SystemRolloutHandler {
-	return &SystemRolloutHandler{service: service, audit: auditWriter, bus: bus}
+func NewSystemRolloutHandler(service SystemRolloutService, bus *events.Bus) *SystemRolloutHandler {
+	return &SystemRolloutHandler{service: service, bus: bus}
 }
 
 type systemRolloutStartRequest struct {
@@ -77,12 +70,7 @@ func (h *SystemRolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 	}
 	setEntityTag(w, result.FencingGeneration)
 	events.PublishChanged(h.bus, "delivery_system_rollout", "", result.ID.String(), map[string]any{"action": "created"})
-	if !h.transactionalAudit {
-		recordAudit(r, h.audit, "delivery.system_rollout.created", "delivery_system_rollout", result.ID.String(), "", map[string]any{
-			"release_id": result.ReleaseID.String(), "strategy_digest": result.StrategyDigest,
-			"cluster_count": result.TotalClusters, "state": result.State,
-		})
-	}
+
 	respondData(w, http.StatusAccepted, result)
 }
 
@@ -183,12 +171,7 @@ func (h *SystemRolloutHandler) action(w http.ResponseWriter, r *http.Request, ac
 	}
 	setEntityTag(w, result.FencingGeneration)
 	events.PublishChanged(h.bus, "delivery_system_rollout", "", result.ID.String(), map[string]any{"action": string(action)})
-	if !h.transactionalAudit {
-		recordAudit(r, h.audit, "delivery.system_rollout."+string(action), "delivery_system_rollout", result.ID.String(), "", map[string]any{
-			"release_id": result.ReleaseID.String(), "strategy_digest": result.StrategyDigest,
-			"state": result.State, "fencing_generation": result.FencingGeneration, "reason_code": reason,
-		})
-	}
+
 	respondData(w, http.StatusAccepted, result)
 }
 
@@ -196,7 +179,7 @@ func authenticatedActorUUID(r *http.Request) uuid.UUID {
 	if r == nil {
 		return uuid.Nil
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	actor := reqctx.UserUUID(r.Context())
 	if !actor.Valid {
 		return uuid.Nil
 	}

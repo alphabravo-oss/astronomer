@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -22,7 +24,7 @@ import (
 func lokiAuthed(method, target, body string) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	req.Header.Set("Idempotency-Key", "loki-lifecycle-test")
-	return req.WithContext(appmiddleware.SetAuthenticatedUserForTest(req.Context(), &appmiddleware.AuthenticatedUser{
+	return req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.NewString(), AuthMethod: "jwt",
 	}))
 }
@@ -130,8 +132,34 @@ func TestSharedLokiFeatureGateDefaultFalse(t *testing.T) {
 	if !strings.Contains(string(raw), `FeatureGateDefault("feature.hosted_loki"`) {
 		t.Fatal("Loki status/preview/mutate routes must use FeatureGateDefault(\"feature.hosted_loki\", ..., false)")
 	}
-	if !strings.Contains(string(raw), `deps.Monitoring.GetSharedLokiStatus`) {
+	if !strings.Contains(string(raw), `deps.ClusterResources.Monitoring.GetSharedLokiStatus`) {
 		t.Fatal("Loki status route is not mounted")
+	}
+}
+
+func TestLokiAuthQueryCredentialAndIngressAreIdentityBound(t *testing.T) {
+	expose := GrafanaExpose{PlatformNamespace: "astronomer-system", GatewayName: "astronomer"}
+	objects := lokiFamilyExtraObjects(SharedLokiRequest{
+		Namespace: "monitoring", ReleaseName: sharedLokiDefaultRelease,
+	}, "example/server:latest", expose)
+	raw, err := json.Marshal(objects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := string(raw)
+	for _, required := range []string{
+		`"QUERY_KEY_PATH"`, `"astronomer-loki-query-key"`, `"optional":true`,
+		`"app.kubernetes.io/name":"grafana"`,
+		`"app.kubernetes.io/instance":"astronomer-grafana"`,
+		`"kubernetes.io/metadata.name":"astronomer-system"`,
+		`"gateway.networking.k8s.io/gateway-name":"astronomer"`,
+	} {
+		if !strings.Contains(rendered, required) {
+			t.Fatalf("loki-auth objects missing %s: %s", required, rendered)
+		}
+	}
+	if !strings.Contains(lokiGrafanaDatasourceYAML("http://loki-auth"), "httpHeaderValue1: 'Bearer $LOKI_QUERY_KEY'") {
+		t.Fatal("Loki datasource must authenticate with the dedicated projected query key")
 	}
 }
 

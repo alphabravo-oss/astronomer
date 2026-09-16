@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Cluster Resources tab — sprint 069 CRD-mirror v2 read-only view.
  *
@@ -25,8 +25,9 @@ import {
  */
 
 import { useState } from "react";
-import { useParams } from "@/lib/navigation";
+
 import { useQuery } from "@tanstack/react-query";
+import { QueryStates } from "@/components/ui/query-states";
 import {
   ChevronDown,
   ChevronRight,
@@ -51,8 +52,8 @@ import {
   type MirroredLimitRange,
   type MirroredNetworkPolicy,
   type MirroredResourceQuota,
-} from "@/lib/api/cluster-detail";
-import { queryKeys } from "@/lib/hooks";
+} from "@/lib/api/cluster-resource-inventory";
+import { queryKeys } from "@/lib/query-keys";
 
 // ---------------------------------------------------------------------
 // Helpers
@@ -335,7 +336,7 @@ function QuotaProgressRow({
           {pct != null ? ` (${pct}%)` : ""}
         </span>
       </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-muted">
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-sm bg-muted">
         <div
           className={`h-full ${barColor}`}
           style={{ width: pct == null ? "0%" : `${pct}%` }}
@@ -358,7 +359,7 @@ function ResourceQuotasView({ rows }: { rows: MirroredResourceQuota[] }) {
       {rows.map((r) => {
         const hardEntries = Object.entries(r.hard ?? {});
         return (
-          <div key={`${r.namespace}/${r.name}`} className="rounded border p-3">
+          <div key={`${r.namespace}/${r.name}`} className="rounded-sm border p-3">
             <div className="mb-2 flex items-center justify-between">
               <div>
                 <span className="font-mono text-sm">
@@ -411,7 +412,7 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
       {rows.map((r) => {
         const limits = (r.limits ?? []) as LimitRangeItem[];
         return (
-          <div key={`${r.namespace}/${r.name}`} className="rounded border p-3">
+          <div key={`${r.namespace}/${r.name}`} className="rounded-sm border p-3">
             <div className="mb-2 flex items-center justify-between">
               <span className="font-mono text-sm">
                 {r.namespace}/{r.name}
@@ -471,7 +472,7 @@ function fmtMap(m?: Record<string, string>): string {
 // ---------------------------------------------------------------------
 
 function ClusterResourcesPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = Route.useParams();
 
   const ingressClassesQ = useQuery({
     queryKey: queryKeys.clusterPages.mirroredIngressClasses(id),
@@ -505,6 +506,32 @@ function ClusterResourcesPage() {
           an hour.
         </p>
       </header>
+
+      {ingressClassesQ.isError && (
+        <QueryStates query={ingressClassesQ} permission="clusters:read">
+          {() => null}
+        </QueryStates>
+      )}
+      {gatewayClassesQ.isError && (
+        <QueryStates query={gatewayClassesQ} permission="clusters:read">
+          {() => null}
+        </QueryStates>
+      )}
+      {networkPoliciesQ.isError && (
+        <QueryStates query={networkPoliciesQ} permission="clusters:read">
+          {() => null}
+        </QueryStates>
+      )}
+      {resourceQuotasQ.isError && (
+        <QueryStates query={resourceQuotasQ} permission="clusters:read">
+          {() => null}
+        </QueryStates>
+      )}
+      {limitRangesQ.isError && (
+        <QueryStates query={limitRangesQ} permission="clusters:read">
+          {() => null}
+        </QueryStates>
+      )}
 
       <Section
         title="Ingress classes"

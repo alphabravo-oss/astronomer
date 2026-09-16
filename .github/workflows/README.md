@@ -27,6 +27,7 @@ parallel:
 The scopes are intentionally additive rather than quick approximations:
 
 - `backend` runs migration safety, sqlc generated drift, `go build`, `go vet`,
+  reachable-vulnerability analysis with pinned `govulncheck`,
   `scripts/check-go-lint.sh` (golangci-lint, pinned, against `.golangci.yml`),
   the complete normal and race suites, and API/OpenAPI/generated/embed/route/
   error-code contracts.
@@ -120,6 +121,12 @@ cannot execute locally. Release integrity is decided by the protected
 `release.yaml`/`resume-release.yaml` promotion jobs, which download and verify
 the exact signed RC, cloud, scale/audit/sizing, Rancher automated+human, and
 assistive-technology evidence named by the digest-bound release approval.
+
+`make verify-all` is the explicit local aggregate for the static gate plus the
+stateful, race, tunnel-HA, PostgreSQL failover, Playwright, visual, and live
+browser lanes. It requires Docker, browser dependencies, and substantially more
+time than the static gate; unlike `verify-enterprise`, it does not represent
+those external qualifications as merely pending.
 
 ### `release.yaml` — qualified immutable release pipeline (T12)
 

@@ -21,12 +21,10 @@ import type {
 } from "@/types";
 import type {
   AgentDiagnostics,
-  AgentLifecycleOperationsResponse as AgentLifecycleOperationsWire,
   AgentSelfTest,
   AgentUpgradeOperationResponse as AgentUpgradeOperationWire,
   AgentUpgradePlan,
   AgentUpgradePlanRequest as AgentUpgradePlanWireRequest,
-  ClusterAgentResponse as ClusterAgentWireResponse,
 } from "@/types/openapi.generated";
 
 export interface AgentRequestOptions {
@@ -71,9 +69,15 @@ export async function getClusterAgents(
     query: params,
     signal: options.signal,
   });
-  return mapWire<ClusterAgentWireResponse, ClusterAgentResponse>(
-    requireData(response.data, "List cluster agents"),
-  );
+  return {
+    summary: mapWire<typeof response.summary, ClusterAgentResponse["summary"]>(
+      response.summary,
+    ),
+    data: response.data.map((row) =>
+      mapWire<typeof row, ClusterAgentResponse["data"][number]>(row),
+    ),
+    pagination: response.pagination,
+  };
 }
 
 export async function getAgentDiagnostics(
@@ -156,10 +160,14 @@ export async function getAgentOperations(
     query: params,
     signal: options.signal,
   });
-  return mapWire<
-    AgentLifecycleOperationsWire,
-    AgentLifecycleOperationsResponse
-  >(requireData(response.data, "List agent operations"));
+  return {
+    data: response.data.map((row) =>
+      mapWire<typeof row, AgentLifecycleOperationsResponse["data"][number]>(
+        row,
+      ),
+    ),
+    pagination: response.pagination,
+  };
 }
 
 export async function registerCluster(

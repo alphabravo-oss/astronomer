@@ -63,16 +63,12 @@ func TestClusterGroupStateAndAllAuditsCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/cluster-groups/", nil)
 			params := sqlc.CreateClusterGroupParams{Name: "production", Slug: "production"}
 
-			_, err := executeClusterGroupMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q ClusterGroupMutationTx) (sqlc.ClusterGroup, error) {
 					return q.CreateClusterGroup(r.Context(), params)
 				},
-				func() (sqlc.ClusterGroup, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.ClusterGroup{}, nil
-				},
-				func(row sqlc.ClusterGroup) []clusterAuditEvent {
-					return []clusterAuditEvent{
+				func(row sqlc.ClusterGroup) []mutationAuditEvent {
+					return []mutationAuditEvent{
 						{action: "admin.cluster_group.created", resourceType: "cluster_group", resourceID: row.ID.String(), status: http.StatusCreated},
 						{action: "admin.cluster_group.moved_cluster", resourceType: "cluster", resourceID: uuid.NewString(), status: http.StatusCreated},
 					}
@@ -111,7 +107,7 @@ func TestEveryClusterGroupMutationUsesTransactionalExecutor(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeClusterGroupMutation" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 				want[fn.Name.Name] = true
 			}
 			return true
@@ -119,7 +115,7 @@ func TestEveryClusterGroupMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeClusterGroupMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

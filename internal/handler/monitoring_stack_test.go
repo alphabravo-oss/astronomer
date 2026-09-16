@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -187,9 +189,15 @@ func (q *stackLifecycleQuerier) ListClusters(context.Context, sqlc.ListClustersP
 		Name:              "local",
 		IsLocal:           true,
 		KubernetesVersion: "v1.31.4",
-		LastHeartbeat:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}}
 	return append(rows, q.extraClusters...), nil
+}
+
+func (q *stackLifecycleQuerier) ListClusterLivenessForClusters(context.Context, []uuid.UUID) ([]sqlc.ClusterLiveness, error) {
+	return []sqlc.ClusterLiveness{{
+		ClusterID:     uuid.MustParse(stackTestClusterID),
+		LastHeartbeat: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}}, nil
 }
 
 func (q *stackLifecycleQuerier) GetClusterMonitoringContext(context.Context, uuid.UUID) (sqlc.GetClusterMonitoringContextRow, error) {
@@ -237,7 +245,7 @@ func newStackLifecycleHandler(t *testing.T) (*MonitoringHandler, *stackLifecycle
 		clusterErr: pgx.ErrNoRows,
 	}
 	k8s := grafanaPassingK8sFake(t)
-	h := NewMonitoringHandlerWithDeps(q, k8s, stackLifecycleHelmStub{})
+	h := newMonitoringHandlerWithDepsForTest(q, k8s, stackLifecycleHelmStub{})
 	h.SetServerURL("https://astronomer.example.com")
 	h.SetGrafanaProxyImage("ghcr.io/alphabravo-oss/astronomer-go-server:test-pr3")
 	return h, q
@@ -323,7 +331,7 @@ func (c stackLifecycleCase) request() *http.Request {
 		rc.URLParams.Add(k, v)
 	}
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rc)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{
+	ctx = reqctx.WithUser(ctx, &reqctx.User{
 		ID:         uuid.NewString(),
 		AuthMethod: "jwt",
 	})

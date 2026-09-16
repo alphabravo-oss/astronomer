@@ -17,8 +17,12 @@
 SELECT id, cluster_id, name, controller, parameters, is_default,
        labels, annotations, last_seen_at, created_at, updated_at
 FROM mirrored_ingress_classes
-WHERE cluster_id = $1
-ORDER BY name ASC;
+WHERE cluster_id = sqlc.arg(cluster_id)
+ORDER BY name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountMirroredIngressClasses :one
+SELECT count(*) FROM mirrored_ingress_classes WHERE cluster_id = $1;
 
 -- name: UpsertMirroredIngressClass :one
 INSERT INTO mirrored_ingress_classes (
@@ -50,8 +54,12 @@ DELETE FROM mirrored_ingress_classes WHERE last_seen_at < $1;
 SELECT id, cluster_id, name, controller_name, description, parameters,
        accepted_status, labels, annotations, last_seen_at, created_at, updated_at
 FROM mirrored_gateway_classes
-WHERE cluster_id = $1
-ORDER BY name ASC;
+WHERE cluster_id = sqlc.arg(cluster_id)
+ORDER BY name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountMirroredGatewayClasses :one
+SELECT count(*) FROM mirrored_gateway_classes WHERE cluster_id = $1;
 
 -- name: UpsertMirroredGatewayClass :one
 INSERT INTO mirrored_gateway_classes (
@@ -85,16 +93,26 @@ SELECT id, cluster_id, namespace, name, pod_selector, policy_types,
        ingress_rules, egress_rules, labels, annotations, is_managed,
        last_seen_at, created_at, updated_at
 FROM mirrored_network_policies
-WHERE cluster_id = $1
-ORDER BY namespace ASC, name ASC;
+WHERE cluster_id = sqlc.arg(cluster_id)
+ORDER BY namespace ASC, name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountMirroredNetworkPolicies :one
+SELECT count(*) FROM mirrored_network_policies WHERE cluster_id = $1;
 
 -- name: ListMirroredNetworkPoliciesByNamespace :many
 SELECT id, cluster_id, namespace, name, pod_selector, policy_types,
        ingress_rules, egress_rules, labels, annotations, is_managed,
        last_seen_at, created_at, updated_at
 FROM mirrored_network_policies
-WHERE cluster_id = $1 AND namespace = $2
-ORDER BY name ASC;
+WHERE cluster_id = sqlc.arg(cluster_id) AND namespace = sqlc.arg(namespace)
+ORDER BY name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountMirroredNetworkPoliciesByNamespace :one
+SELECT count(*)
+FROM mirrored_network_policies
+WHERE cluster_id = sqlc.arg(cluster_id) AND namespace = sqlc.arg(namespace);
 
 -- name: UpsertMirroredNetworkPolicy :one
 INSERT INTO mirrored_network_policies (
@@ -130,15 +148,25 @@ DELETE FROM mirrored_network_policies WHERE last_seen_at < $1;
 SELECT id, cluster_id, namespace, name, hard, used, scopes,
        labels, annotations, last_seen_at, created_at, updated_at
 FROM mirrored_resource_quotas
-WHERE cluster_id = $1
-ORDER BY namespace ASC, name ASC;
+WHERE cluster_id = sqlc.arg(cluster_id)
+ORDER BY namespace ASC, name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountMirroredResourceQuotas :one
+SELECT count(*) FROM mirrored_resource_quotas WHERE cluster_id = $1;
 
 -- name: ListMirroredResourceQuotasByNamespace :many
 SELECT id, cluster_id, namespace, name, hard, used, scopes,
        labels, annotations, last_seen_at, created_at, updated_at
 FROM mirrored_resource_quotas
-WHERE cluster_id = $1 AND namespace = $2
-ORDER BY name ASC;
+WHERE cluster_id = sqlc.arg(cluster_id) AND namespace = sqlc.arg(namespace)
+ORDER BY name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountMirroredResourceQuotasByNamespace :one
+SELECT count(*)
+FROM mirrored_resource_quotas
+WHERE cluster_id = sqlc.arg(cluster_id) AND namespace = sqlc.arg(namespace);
 
 -- name: UpsertMirroredResourceQuota :one
 INSERT INTO mirrored_resource_quotas (
@@ -171,15 +199,25 @@ DELETE FROM mirrored_resource_quotas WHERE last_seen_at < $1;
 SELECT id, cluster_id, namespace, name, limits,
        labels, annotations, last_seen_at, created_at, updated_at
 FROM mirrored_limit_ranges
-WHERE cluster_id = $1
-ORDER BY namespace ASC, name ASC;
+WHERE cluster_id = sqlc.arg(cluster_id)
+ORDER BY namespace ASC, name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountMirroredLimitRanges :one
+SELECT count(*) FROM mirrored_limit_ranges WHERE cluster_id = $1;
 
 -- name: ListMirroredLimitRangesByNamespace :many
 SELECT id, cluster_id, namespace, name, limits,
        labels, annotations, last_seen_at, created_at, updated_at
 FROM mirrored_limit_ranges
-WHERE cluster_id = $1 AND namespace = $2
-ORDER BY name ASC;
+WHERE cluster_id = sqlc.arg(cluster_id) AND namespace = sqlc.arg(namespace)
+ORDER BY name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountMirroredLimitRangesByNamespace :one
+SELECT count(*)
+FROM mirrored_limit_ranges
+WHERE cluster_id = sqlc.arg(cluster_id) AND namespace = sqlc.arg(namespace);
 
 -- name: UpsertMirroredLimitRange :one
 INSERT INTO mirrored_limit_ranges (

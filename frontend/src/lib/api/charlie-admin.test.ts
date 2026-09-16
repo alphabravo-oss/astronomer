@@ -235,7 +235,6 @@ describe("Charlie admin generated-operation boundary", () => {
       flap_window_seconds: 900,
       flap_count: 3,
       estate_threshold_percent: 25,
-      fleet_threshold_percent: 25,
       suppressed: false,
       maximum_attempts: 5,
       dead_letter_enabled: true,

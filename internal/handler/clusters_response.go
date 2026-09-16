@@ -2,12 +2,31 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/prometheus/client_golang/prometheus"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
+
+var clusterResponseDecodeFailures = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "astronomer",
+		Subsystem: "clusters",
+		Name:      "response_decode_failures_total",
+		Help:      "Persisted cluster fields that could not be decoded into a safe API response.",
+	},
+	[]string{"field"},
+)
+
+func init() {
+	prometheus.MustRegister(clusterResponseDecodeFailures)
+}
 
 // ClusterResponse is the explicit wire shape for /api/v1/clusters/ responses.
 // It enumerates every field the legacy embed-sqlc.Cluster + clusterWithMetrics
@@ -26,40 +45,44 @@ import (
 // optional enrichment populated by ClusterHandler.enrichClusterFromCache /
 // enrichClusterFresh; they default to zero when no metrics provider is wired.
 type ClusterResponse struct {
-	ID                      string          `json:"id"`
-	Name                    string          `json:"name"`
-	DisplayName             string          `json:"display_name"`
-	Description             string          `json:"description"`
-	Status                  string          `json:"status"`
-	ApiServerUrl            string          `json:"api_server_url"`
-	CaCertificate           string          `json:"ca_certificate"`
-	Environment             string          `json:"environment"`
-	Region                  string          `json:"region"`
-	Provider                string          `json:"provider"`
-	Labels                  json.RawMessage `json:"labels"`
-	Annotations             json.RawMessage `json:"annotations"`
-	Distribution            string          `json:"distribution"`
-	AgentVersion            string          `json:"agent_version"`
-	LastHeartbeat           *string         `json:"last_heartbeat"`
-	KubernetesVersion       string          `json:"kubernetes_version"`
-	NodeCount               int32           `json:"node_count"`
-	CreatedByID             *string         `json:"created_by_id"`
-	CreatedAt               string          `json:"created_at"`
-	UpdatedAt               string          `json:"updated_at"`
-	IsLocal                 bool            `json:"is_local"`
-	DecommissionedAt        *string         `json:"decommissioned_at"`
-	ClusterUid              string          `json:"cluster_uid"`
-	GroupID                 *string         `json:"group_id"`
-	RegistrationPhase       string          `json:"registration_phase"`
-	RegistrationStartedAt   *string         `json:"registration_started_at"`
-	RegistrationCompletedAt *string         `json:"registration_completed_at"`
-	InstallBaseline         *bool           `json:"install_baseline"`
-	ManagedBy               string          `json:"managed_by"`
-	ExternalRefApiVersion   string          `json:"external_ref_api_version"`
-	ExternalRefKind         string          `json:"external_ref_kind"`
-	ExternalRefNamespace    string          `json:"external_ref_namespace"`
-	ExternalRefName         string          `json:"external_ref_name"`
-	ObservedGeneration      int64           `json:"observed_generation"`
+	ID                      string                       `json:"id"`
+	Name                    string                       `json:"name"`
+	DisplayName             string                       `json:"display_name"`
+	BadgeText               string                       `json:"badge_text"`
+	BadgeColor              string                       `json:"badge_color"`
+	AgentOverrides          agenttemplate.AgentOverrides `json:"agent_overrides"`
+	AgentOverridesDigest    string                       `json:"agent_overrides_digest"`
+	Description             string                       `json:"description"`
+	Status                  string                       `json:"status"`
+	ApiServerUrl            string                       `json:"api_server_url"`
+	CaCertificate           string                       `json:"ca_certificate"`
+	Environment             string                       `json:"environment"`
+	Region                  string                       `json:"region"`
+	Provider                string                       `json:"provider"`
+	Labels                  json.RawMessage              `json:"labels"`
+	Annotations             json.RawMessage              `json:"annotations"`
+	Distribution            string                       `json:"distribution"`
+	AgentVersion            string                       `json:"agent_version"`
+	LastHeartbeat           *string                      `json:"last_heartbeat"`
+	KubernetesVersion       string                       `json:"kubernetes_version"`
+	NodeCount               int32                        `json:"node_count"`
+	CreatedByID             *string                      `json:"created_by_id"`
+	CreatedAt               string                       `json:"created_at"`
+	UpdatedAt               string                       `json:"updated_at"`
+	IsLocal                 bool                         `json:"is_local"`
+	DecommissionedAt        *string                      `json:"decommissioned_at"`
+	ClusterUid              string                       `json:"cluster_uid"`
+	GroupID                 *string                      `json:"group_id"`
+	RegistrationPhase       string                       `json:"registration_phase"`
+	RegistrationStartedAt   *string                      `json:"registration_started_at"`
+	RegistrationCompletedAt *string                      `json:"registration_completed_at"`
+	InstallBaseline         *bool                        `json:"install_baseline"`
+	ManagedBy               string                       `json:"managed_by"`
+	ExternalRefApiVersion   string                       `json:"external_ref_api_version"`
+	ExternalRefKind         string                       `json:"external_ref_kind"`
+	ExternalRefNamespace    string                       `json:"external_ref_namespace"`
+	ExternalRefName         string                       `json:"external_ref_name"`
+	ObservedGeneration      int64                        `json:"observed_generation"`
 
 	// Metric enrichment (added by clusterWithMetrics historically).
 	CPUPercentage    float64 `json:"cpu_percentage"`
@@ -92,7 +115,19 @@ type ClusterResponse struct {
 // clusterToResponse maps a sqlc.Cluster row into the explicit wire DTO.
 // Metric fields default to zero; callers that have a metrics provider should
 // overwrite them after the call.
-func clusterToResponse(c sqlc.Cluster) ClusterResponse {
+func clusterToResponse(c sqlc.Cluster) (ClusterResponse, error) {
+	overrides, err := persistedAgentOverrides(c.AgentOverrides)
+	if err != nil {
+		clusterResponseDecodeFailures.WithLabelValues("agent_overrides").Inc()
+		slog.Error("invalid persisted cluster metadata", "cluster_id", c.ID.String(), "field", "agent_overrides", "error", err)
+		return ClusterResponse{}, fmt.Errorf("decode cluster %s agent_overrides: %w", c.ID, err)
+	}
+	overridesDigest, err := overrides.Digest()
+	if err != nil {
+		clusterResponseDecodeFailures.WithLabelValues("agent_overrides").Inc()
+		slog.Error("invalid persisted cluster metadata", "cluster_id", c.ID.String(), "field", "agent_overrides", "error", err)
+		return ClusterResponse{}, fmt.Errorf("digest cluster %s agent_overrides: %w", c.ID, err)
+	}
 	resp := ClusterResponse{
 		ID:   c.ID.String(),
 		Name: c.Name,
@@ -105,6 +140,10 @@ func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 		// call site to remember. Matches the ownership endpoint, which has always
 		// coalesced these two.
 		DisplayName:             firstNonEmptyAgentValue(c.DisplayName, c.Name),
+		BadgeText:               c.BadgeText,
+		BadgeColor:              c.BadgeColor,
+		AgentOverrides:          overrides,
+		AgentOverridesDigest:    overridesDigest,
 		Description:             c.Description,
 		Status:                  c.Status,
 		ApiServerUrl:            c.ApiServerUrl,
@@ -132,10 +171,6 @@ func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 		AgentPrivilegeProfile:   clusterAgentPrivilegeProfile(c.Annotations),
 		DownstreamImpersonation: clusterDownstreamImpersonationMode(c.Annotations),
 	}
-	if c.LastHeartbeat.Valid {
-		s := c.LastHeartbeat.Time.Format(time.RFC3339Nano)
-		resp.LastHeartbeat = &s
-	}
 	if c.DecommissionedAt.Valid {
 		s := c.DecommissionedAt.Time.Format(time.RFC3339Nano)
 		resp.DecommissionedAt = &s
@@ -160,10 +195,18 @@ func clusterToResponse(c sqlc.Cluster) ClusterResponse {
 		b := c.InstallBaseline.Bool
 		resp.InstallBaseline = &b
 	}
-	return resp
+	return resp, nil
+}
+
+func setClusterResponseHeartbeat(resp *ClusterResponse, heartbeat pgtype.Timestamptz) {
+	if resp == nil || !heartbeat.Valid {
+		return
+	}
+	formatted := heartbeat.Time.Format(time.RFC3339Nano)
+	resp.LastHeartbeat = &formatted
 }
 
 // Note: sqlc.ClusterDecommission is already wrapped by renderDecommission
-// (clusters.go) into DecommissionStatusResponse — a richer DTO with parsed
+// (clusters_decommission.go) into DecommissionStatusResponse — a richer DTO with parsed
 // phases + a status URL. No raw sqlc row leaves the cluster decommission
 // endpoints, so no additional DTO is needed here.

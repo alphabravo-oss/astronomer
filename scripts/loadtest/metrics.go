@@ -271,6 +271,9 @@ func scrapeMetricsLoop(ctx context.Context, server, token string, rec *recorder,
 	t := time.NewTicker(metricsScrape)
 	defer t.Stop()
 	if err := scrapeOnce(ctx, server, token, rec); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		log.Warn("initial /metrics scrape failed", "error", err)
 	}
 	rec.snapshotDriverMetrics()
@@ -279,7 +282,16 @@ func scrapeMetricsLoop(ctx context.Context, server, token string, rec *recorder,
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			// A scrape tick can race the workload deadline. Avoid starting a
+			// request with an already-cancelled context, and do not report normal
+			// workload shutdown as a metrics endpoint failure.
+			if ctx.Err() != nil {
+				return
+			}
 			if err := scrapeOnce(ctx, server, token, rec); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
 				log.Warn("/metrics scrape failed", "error", err)
 			}
 			rec.snapshotDriverMetrics()

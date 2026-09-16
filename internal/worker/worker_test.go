@@ -323,11 +323,14 @@ func (workerTaskEnqueuer) Enqueue(*asynq.Task, ...asynq.Option) (*asynq.TaskInfo
 
 type workerToolDriftQueries struct{}
 
-func (workerToolDriftQueries) ListInstalledChartsForDriftSweep(context.Context, int32) ([]sqlc.InstalledChart, error) {
+func (workerToolDriftQueries) ClaimInstalledChartsForDriftSweep(context.Context, sqlc.ClaimInstalledChartsForDriftSweepParams) ([]sqlc.InstalledChart, error) {
 	return nil, nil
 }
-func (workerToolDriftQueries) MarkInstalledChartDrift(context.Context, sqlc.MarkInstalledChartDriftParams) error {
-	return nil
+func (workerToolDriftQueries) MarkInstalledChartDrift(context.Context, sqlc.MarkInstalledChartDriftParams) (int64, error) {
+	return 1, nil
+}
+func (workerToolDriftQueries) ReleaseInstalledChartDriftClaim(context.Context, sqlc.ReleaseInstalledChartDriftClaimParams) (int64, error) {
+	return 1, nil
 }
 
 type workerHelmStatusProber struct{}
@@ -351,6 +354,12 @@ func (workerToolInstaller) EnsureInstalled(context.Context, uuid.UUID, string, s
 }
 
 type workerK8sRequester struct{ tasks.K8sRequester }
+
+var _ tasks.K8sCapabilityChecker = workerK8sRequester{}
+
+func (workerK8sRequester) SupportsCapability(context.Context, string, string) (bool, error) {
+	return true, nil
+}
 
 type workerNetworkPolicyQueries struct{ tasks.NetworkPolicyQuerier }
 
@@ -412,7 +421,7 @@ type workerDecommissionQueries struct {
 	tasks.ClusterDecommissionQuerier
 }
 
-func (workerDecommissionQueries) ListPendingClusterDecommissions(context.Context, int32) ([]sqlc.ClusterDecommission, error) {
+func (workerDecommissionQueries) ClaimPendingClusterDecommissions(context.Context, sqlc.ClaimPendingClusterDecommissionsParams) ([]sqlc.ClusterDecommission, error) {
 	return nil, nil
 }
 
@@ -457,6 +466,15 @@ func (workerLeaderElector) TryLeader(context.Context, string) (func(), bool, err
 type workerRuntimeQueries struct{ tasks.RuntimeQuerier }
 type workerDexQueries struct{ tasks.DexOperationQuerier }
 type workerDexExecutor struct{ tasks.DexOperationExecutor }
+type workerSupportBundleQueries struct {
+	tasks.SupportBundleOperationQuerier
+}
+type workerSupportBundleGenerator struct{ tasks.SupportBundleGenerator }
+
+type workerAuditExportQueries struct {
+	tasks.AuditExportOperationQuerier
+}
+type workerAuditExportGenerator struct{ tasks.AuditExportGenerator }
 
 func (workerDexQueries) RecoverDexOperationOutbox(context.Context, time.Time) (int64, error) {
 	return 0, nil
@@ -482,7 +500,7 @@ func testTunnelRuntime() TunnelRuntime {
 	if err != nil {
 		panic(err)
 	}
-	return TunnelRuntime{Features: tasks.TunnelRuntimeFeatures{CRDOwnership: true}, Core: tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
+	runtime := TunnelRuntime{Features: tasks.TunnelRuntimeFeatures{CRDOwnership: true}, Core: tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
 		Queries: workerRuntimeQueries{}, Leader: workerLeaderElector{}, K8s: workerK8sRequester{}, ResourceDecryptor: encryptor, Log: testLogger(), ManagementBackup: workerManagementBackupExecutor{},
 	}}, ToolDrift: tasks.ToolDriftRuntime{Deps: tasks.ToolDriftSweepDeps{
 		Queries: workerToolDriftQueries{}, Helm: workerHelmStatusProber{},
@@ -514,7 +532,13 @@ func testTunnelRuntime() TunnelRuntime {
 		Leader: workerLeaderElector{},
 	}, CRDOwnership: tasks.CRDOwnershipRuntime{Deps: tasks.CRDOwnershipDriftDeps{
 		Queries: &workerDispatchQueries{}, Dynamic: dynamicfake.NewSimpleDynamicClient(k8sruntime.NewScheme()),
-	}}, Dex: tasks.DexOperationRuntime{Queries: workerDexQueries{}, Executor: workerDexExecutor{}}}
+	}}, Dex: tasks.DexOperationRuntime{Queries: workerDexQueries{}, Executor: workerDexExecutor{}},
+		SupportBundle: tasks.SupportBundleRuntime{Queries: workerSupportBundleQueries{}, Generator: workerSupportBundleGenerator{}},
+		AuditExport:   tasks.AuditExportRuntime{Queries: workerAuditExportQueries{}, Generator: workerAuditExportGenerator{}}}
+	if _, ok := runtime.Core.Deps.K8s.(tasks.K8sCapabilityChecker); !ok {
+		panic("test tunnel Kubernetes requester does not expose capability checks")
+	}
+	return runtime
 }
 
 func testStandaloneRuntime() StandaloneRuntime {
@@ -559,12 +583,13 @@ func testStandaloneRuntime() StandaloneRuntime {
 }
 
 func TestNewWorker(t *testing.T) {
-	w, err := NewWorker("redis://localhost:6379/0", testLogger(), testStandaloneRuntime())
+	w, err := NewWorker("redis://localhost:6379/0", 32, testLogger(), testStandaloneRuntime())
 	if err != nil {
 		t.Fatalf("NewWorker: %v", err)
 	}
 	if w == nil {
 		t.Fatal("expected non-nil Worker")
+		return
 	}
 	if w.server == nil {
 		t.Fatal("expected non-nil asynq.Server")
@@ -574,11 +599,21 @@ func TestNewWorker(t *testing.T) {
 	}
 }
 
+func TestNewWorkerRejectsInvalidConcurrency(t *testing.T) {
+	worker, err := NewWorker("redis://localhost:6379/0", 0, testLogger(), testStandaloneRuntime())
+	if err == nil || !strings.Contains(err.Error(), "concurrency must be positive") {
+		t.Fatalf("NewWorker invalid concurrency error = %v", err)
+	}
+	if worker != nil {
+		t.Fatal("invalid concurrency returned a worker")
+	}
+}
+
 func TestNewWorkerManagementBackupOwnershipFollowsFeature(t *testing.T) {
 	runtime := testStandaloneRuntime()
 	runtime.Features.ManagementBackup = false
 	runtime.Core.Deps.ManagementBackup = nil
-	w, err := NewWorker("redis://localhost:6379/0", testLogger(), runtime)
+	w, err := NewWorker("redis://localhost:6379/0", 32, testLogger(), runtime)
 	if err != nil {
 		t.Fatalf("disabled management backup rejected worker startup: %v", err)
 	}
@@ -589,7 +624,7 @@ func TestNewWorkerManagementBackupOwnershipFollowsFeature(t *testing.T) {
 	}
 
 	runtime = testStandaloneRuntime()
-	w, err = NewWorker("redis://localhost:6379/0", testLogger(), runtime)
+	w, err = NewWorker("redis://localhost:6379/0", 32, testLogger(), runtime)
 	if err != nil {
 		t.Fatalf("enabled ready management backup rejected worker startup: %v", err)
 	}
@@ -610,7 +645,7 @@ func TestNewWorkerManagementBackupOwnershipFollowsFeature(t *testing.T) {
 
 	runtime = testStandaloneRuntime()
 	runtime.Core.Deps.ManagementBackup = notReadyWorkerManagementBackup{}
-	if w, err = NewWorker("redis://localhost:6379/0", testLogger(), runtime); err == nil || w != nil || !strings.Contains(err.Error(), "management_backup") {
+	if w, err = NewWorker("redis://localhost:6379/0", 32, testLogger(), runtime); err == nil || w != nil || !strings.Contains(err.Error(), "management_backup") {
 		t.Fatalf("enabled unready management backup startup = (%v, %v), want fail-closed", w, err)
 	}
 }
@@ -620,7 +655,7 @@ type notReadyWorkerManagementBackup struct{ workerManagementBackupExecutor }
 func (notReadyWorkerManagementBackup) ManagementBackupReady() bool { return false }
 
 func TestNewWorkerRejectsIncompleteExplicitRuntime(t *testing.T) {
-	w, err := NewWorker("redis://localhost:6379/0", testLogger(), StandaloneRuntime{})
+	w, err := NewWorker("redis://localhost:6379/0", 32, testLogger(), StandaloneRuntime{})
 	if err == nil {
 		t.Fatal("expected incomplete runtime error")
 	}
@@ -635,7 +670,7 @@ func TestNewWorkerRejectsIncompleteExplicitRuntime(t *testing.T) {
 }
 
 func TestNewWorkerBindsRuntimeHandlersIntoCompositionGraph(t *testing.T) {
-	w, err := NewWorker("redis://localhost:6379/0", testLogger(), testStandaloneRuntime())
+	w, err := NewWorker("redis://localhost:6379/0", 32, testLogger(), testStandaloneRuntime())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -683,7 +718,7 @@ func TestNewWorkerBindsRuntimeHandlersIntoCompositionGraph(t *testing.T) {
 // nil Worker), NOT silently fall back to localhost. The previous behavior
 // was a production footgun.
 func TestNewWorkerInvalidRedis(t *testing.T) {
-	w, err := NewWorker("not-a-valid-url", testLogger(), testStandaloneRuntime())
+	w, err := NewWorker("not-a-valid-url", 32, testLogger(), testStandaloneRuntime())
 	if err == nil {
 		t.Fatal("expected error for invalid REDIS_URL, got nil")
 	}
@@ -693,7 +728,7 @@ func TestNewWorkerInvalidRedis(t *testing.T) {
 }
 
 func TestRegisterHandlers(t *testing.T) {
-	w, err := NewWorker("redis://localhost:6379/0", testLogger(), testStandaloneRuntime())
+	w, err := NewWorker("redis://localhost:6379/0", 32, testLogger(), testStandaloneRuntime())
 	if err != nil {
 		t.Fatalf("NewWorker: %v", err)
 	}
@@ -779,6 +814,15 @@ func TestNewTunnelWorkerFailsClosedWithoutResourceDecryptor(t *testing.T) {
 	}
 }
 
+func TestNewTunnelWorkerFailsClosedWithoutK8sCapabilityChecker(t *testing.T) {
+	runtime := testTunnelRuntime()
+	runtime.Core.Deps.K8s = struct{ tasks.K8sRequester }{}
+	w, err := NewTunnelWorker("redis://localhost:6379/0", 0, testLogger(), runtime)
+	if err == nil || w != nil || !strings.Contains(err.Error(), "k8s_capability_checker") {
+		t.Fatalf("missing Kubernetes capability checker returned worker=%v error=%v", w, err)
+	}
+}
+
 func TestNewTunnelWorkerCRDOwnershipFollowsFeature(t *testing.T) {
 	runtime := testTunnelRuntime()
 	runtime.Features.CRDOwnership = false
@@ -843,6 +887,7 @@ func TestNewScheduler(t *testing.T) {
 	}
 	if s == nil {
 		t.Fatal("expected non-nil Scheduler")
+		return
 	}
 	if s.scheduler == nil {
 		t.Fatal("expected non-nil asynq.Scheduler")

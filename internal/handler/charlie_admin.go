@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -644,7 +645,7 @@ func (h *CharlieAdminHandler) Diagnostics(w http.ResponseWriter, r *http.Request
 	if _, ok := h.actor(w, r); !ok {
 		return
 	}
-	correlationID := appmiddleware.GetCorrelationID(r.Context())
+	correlationID := reqctx.CorrelationID(r.Context())
 	var view charlie.AdminDiagnosticsView
 	var err error
 	if h.features != nil && !h.features.BoolValue(r.Context(), "feature.charlie", false) {
@@ -665,7 +666,7 @@ func (h *CharlieAdminHandler) Diagnostics(w http.ResponseWriter, r *http.Request
 	RespondJSON(w, http.StatusOK, view)
 }
 
-func (h *CharlieAdminHandler) actor(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, bool) {
+func (h *CharlieAdminHandler) actor(w http.ResponseWriter, r *http.Request) (*reqctx.User, bool) {
 	if h == nil || h.backend == nil {
 		h.respondError(w, r, charlie.ErrAdminUnavailable)
 		return nil, false

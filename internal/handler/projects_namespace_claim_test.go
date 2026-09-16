@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
@@ -256,6 +257,6 @@ func TestRBACInvalidatorWired_RejectsTypedNil(t *testing.T) {
 // nilSQLCRBACQuerier returns the typed-nil *SQLCRBACQuerier that
 // NewSQLCRBACQuerierWithCache yields for a nil queries argument, boxed into the
 // interface exactly as SetRBACInvalidator would receive it.
-func nilSQLCRBACQuerier() middleware.RBACQuerier {
+func nilSQLCRBACQuerier() rbac.BindingQuerier {
 	return middleware.NewSQLCRBACQuerierWithCache(nil, middleware.NewRBACCache())
 }

@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"os"
 	"sort"
 	"strconv"
 	"time"
@@ -38,34 +37,21 @@ const MinRatingsForSimilar = 3
 // row: a single 5-star outlier shouldn't dominate the hero row.
 const MinRatingsForPopular = 3
 
-// bayesianDefaults captures the operator-tunable knobs for the
-// Bayesian recompute. See bayesianParams() for env-var resolution.
-type bayesianDefaults struct {
+// RecommendationPolicy captures the startup-resolved Bayesian scoring knobs.
+type RecommendationPolicy struct {
 	avgGlobal float64
 	weight    float64
 	minimum   float64
 }
 
-func bayesianParams() bayesianDefaults {
-	// 4.0 is the empirical mean across mature Helm chart catalogs.
-	// CHART_RATING_BAYESIAN_AVG lets the operator tune this; values
-	// outside [1, 5] are clamped to 4.0 to protect the formula.
-	avg := 4.0
-	if v := os.Getenv("CHART_RATING_BAYESIAN_AVG"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil && f >= 1 && f <= 5 {
-			avg = f
-		}
+func NewRecommendationPolicy(average, weight float64) RecommendationPolicy {
+	if average < 1 || average > 5 {
+		average = 4
 	}
-	// Confidence weight. Larger = more pull toward avgGlobal for
-	// low-sample charts. 10 means "until you've got 10 ratings, the
-	// score is half-anchored to the global mean".
-	weight := 10.0
-	if v := os.Getenv("CHART_RATING_BAYESIAN_WEIGHT"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
-			weight = f
-		}
+	if weight <= 0 {
+		weight = 10
 	}
-	return bayesianDefaults{avgGlobal: avg, weight: weight, minimum: 1.0}
+	return RecommendationPolicy{avgGlobal: average, weight: weight, minimum: 1}
 }
 
 // Querier is the database surface RecomputeAggregate / RecomputeCoInstallation
@@ -106,15 +92,14 @@ type ChartScore struct {
 //	bayesian = ((avg_global * confidence_weight) + (sum + minimum)) /
 //	           (confidence_weight + count)
 //
-// Where avg_global ≈ 4.0 (env: CHART_RATING_BAYESIAN_AVG),
-// confidence_weight = 10 (env: CHART_RATING_BAYESIAN_WEIGHT), and
+// Where avg_global defaults to 4.0, confidence_weight defaults to 10, and
 // minimum = 1 (lowest possible star). The +minimum prevents a single
 // 1-star from pulling the score below the global mean for a
 // previously-unrated chart on the very first vote.
 //
 // Called inline on rating create/update/delete and via the nightly
 // chart_recommendations:recompute task.
-func RecomputeAggregate(ctx context.Context, q Querier, chartID uuid.UUID) error {
+func RecomputeAggregate(ctx context.Context, q Querier, chartID uuid.UUID, policy RecommendationPolicy) error {
 	// We page through every rating for this chart. Most charts have
 	// O(10–1000) ratings, so pulling them all and computing in memory
 	// is faster than two round-trips for SUM / AVG / COUNT.
@@ -143,7 +128,7 @@ func RecomputeAggregate(ctx context.Context, q Querier, chartID uuid.UUID) error
 		offset += pageSize
 	}
 
-	params := bayesianParams()
+	params := NewRecommendationPolicy(policy.avgGlobal, policy.weight)
 	var avg float64
 	var bayes float64
 	if count > 0 {
@@ -336,13 +321,13 @@ func SimilarCharts(ctx context.Context, q Querier, chartID uuid.UUID, limit int)
 
 // RecomputeAllAggregates walks every chart_id present in chart_ratings
 // and recomputes its aggregate. Called by the nightly retention task.
-func RecomputeAllAggregates(ctx context.Context, q Querier) error {
+func RecomputeAllAggregates(ctx context.Context, q Querier, policy RecommendationPolicy) error {
 	ids, err := q.ListDistinctRatedChartIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("list rated chart ids: %w", err)
 	}
 	for _, id := range ids {
-		if err := RecomputeAggregate(ctx, q, id); err != nil {
+		if err := RecomputeAggregate(ctx, q, id, policy); err != nil {
 			return fmt.Errorf("recompute %s: %w", id, err)
 		}
 	}

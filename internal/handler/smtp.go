@@ -11,15 +11,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // activeBaselineRequiresSMTP returns (slug, true) when the active
@@ -41,7 +41,7 @@ func activeBaselineRequiresSMTP(ctx context.Context, q activeBaselineQuerier) (s
 // "anonymous" when not authenticated). Used by the test-send path so
 // the rendered email body identifies who clicked the button.
 func callerUsername(r *http.Request) string {
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
 		return "anonymous"
 	}
@@ -317,38 +317,27 @@ func (h *SMTPHandler) Update(w http.ResponseWriter, r *http.Request) {
 		TimeoutSeconds:    merged.TimeoutSeconds,
 	}
 	var saved sqlc.SmtpSettings
-	if h.runTx != nil {
-		err = h.runTx(r.Context(), func(q SMTPMutationTx) error {
-			var mutationErr error
-			saved, mutationErr = q.UpsertSMTPSettings(r.Context(), params)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			return recordAuditOutbox(r, q, "admin.smtp.update", "smtp", saved.ID.String(), "smtp_settings", http.StatusOK, map[string]any{
-				"enabled": saved.Enabled, "password_set": saved.PasswordEncrypted != "",
-				"auth_mechanism": saved.AuthMechanism, "encryption": saved.Encryption, "require_tls": saved.RequireTls,
-			})
-		})
-	} else {
-		saved, err = h.queries.UpsertSMTPSettings(r.Context(), params)
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "SMTP transaction runner is not configured")
+		return
 	}
+	err = h.runTx(r.Context(), func(q SMTPMutationTx) error {
+		var mutationErr error
+		saved, mutationErr = q.UpsertSMTPSettings(r.Context(), params)
+		if mutationErr != nil {
+			return mutationErr
+		}
+		return recordAuditOutbox(r, q, "admin.smtp.update", "smtp", saved.ID.String(), "smtp_settings", http.StatusOK, map[string]any{
+			"enabled": saved.Enabled, "password_set": saved.PasswordEncrypted != "",
+			"auth_mechanism": saved.AuthMechanism, "encryption": saved.Encryption, "require_tls": saved.RequireTls,
+		})
+	})
 	if err != nil {
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.WriteError, "Failed to save SMTP settings")
 		return
 	}
 	if h.provider != nil {
 		h.provider.Invalidate()
-	}
-
-	// Audit row. We DON'T persist host/port/from into the audit
-	// detail — that's already in smtp_settings and would only widen
-	// the log surface. We DO persist the enabled flag because it
-	// changes runtime behaviour for everyone.
-	if h.runTx == nil {
-		recordAudit(r, h.audit, "admin.smtp.update", "smtp", saved.ID.String(), "smtp_settings", map[string]any{
-			"enabled": saved.Enabled, "password_set": saved.PasswordEncrypted != "",
-			"auth_mechanism": saved.AuthMechanism, "encryption": saved.Encryption, "require_tls": saved.RequireTls,
-		})
 	}
 
 	h.writeResponseFromRow(w, saved)
@@ -589,7 +578,11 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to read email messages")
 		return
 	}
-	total, _ := h.queries.CountEmailMessages(r.Context())
+	total, err := h.queries.CountEmailMessages(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to count email messages")
+		return
+	}
 
 	items := make([]emailListItem, 0, len(rows))
 	for _, row := range rows {
@@ -616,12 +609,7 @@ func (h *SMTPHandler) List(w http.ResponseWriter, r *http.Request) {
 			UserID:    userID,
 		})
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{
-		"items":  items,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
-	})
+	paging.Write(w, items, paging.Exact(total, int(limit), int(offset), len(items)))
 }
 
 // writeResponseFromRow renders the GET-shape payload from a freshly

@@ -4,12 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -73,48 +69,12 @@ func transactionalExtensionHandler(q *transactionalExtensionQ) *ExtensionHandler
 	return h
 }
 
-func parsedMethodCalls(t *testing.T, filename string) map[string]map[string]bool {
-	t.Helper()
-	path, err := filepath.Abs(filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	calls := map[string]map[string]bool{}
-	for _, declaration := range file.Decls {
-		fn, ok := declaration.(*ast.FuncDecl)
-		if !ok || fn.Recv == nil || fn.Body == nil {
-			continue
-		}
-		calls[fn.Name.Name] = map[string]bool{}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			selector, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			receiver, ok := selector.X.(*ast.Ident)
-			if ok && receiver.Name == "h" {
-				calls[fn.Name.Name][selector.Sel.Name] = true
-			}
-			return true
-		})
-	}
-	return calls
-}
-
 // TestEveryExtensionMutationEntryPointReachesTransaction prevents a new
 // handler implementation from quietly bypassing the production transaction.
 // Behavioral tests below prove rollback; this structural guard keeps the full
 // public entry-point inventory attached to those transaction-owning helpers.
 func TestEveryExtensionMutationEntryPointReachesTransaction(t *testing.T) {
-	calls := parsedMethodCalls(t, "extensions.go")
+	calls := parsedMethodCalls(t, "ExtensionHandler")
 	for method, requiredCall := range map[string]string{
 		"Install":            "runTx",
 		"setEnabled":         "runTx",
@@ -190,5 +150,16 @@ func TestExtensionBundleGateLocksAndRollsBackWhenAuditFails(t *testing.T) {
 	ok, err := h.markBundleVerified(httptest.NewRequest(http.MethodPost, "/", nil), manifest.Name, checksum)
 	if err == nil || ok || q.locks != 1 || q.rows[manifest.Name].BundleVerified || len(q.audits) != 0 {
 		t.Fatalf("ok=%v err=%v locks=%d row=%+v audits=%d", ok, err, q.locks, q.rows[manifest.Name], len(q.audits))
+	}
+}
+
+func TestExtensionInstallFailsClosedWithoutTransactionRunner(t *testing.T) {
+	h := NewExtensionHandler(newFakeExtensionQuerier())
+	h.SetCurrentVersion("0.9.1")
+	raw, _ := json.Marshal(InstallExtensionRequest{Manifest: sampleExtensionManifest(), Source: "marketplace", Enable: true})
+	w := httptest.NewRecorder()
+	h.Install(w, extensionReq(t, http.MethodPost, "/api/v1/extensions/", string(raw)))
+	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), `"code":"runner_unwired"`) {
+		t.Fatalf("status=%d body=%s, want 503 runner_unwired", w.Code, w.Body.String())
 	}
 }

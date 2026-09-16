@@ -1,8 +1,11 @@
 package deploy
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db"
 )
 
 func TestFluxNativeDeliveryConfigIsProjectedWithoutManagementControllers(t *testing.T) {
@@ -136,8 +139,8 @@ func TestDatabaseUpgradePreflightIsReadOnlyAndBounded(t *testing.T) {
 	for _, want := range []string{
 		"database_schema_rejected:",
 		"SELECT count(*), COALESCE(max(version), 0), COALESCE(bool_or(dirty), false)",
-		"outside supported range 1-26",
-		"accepted for migration to 26",
+		fmt.Sprintf("outside supported range 1-%d", db.ExpectedSchemaVersion),
+		fmt.Sprintf("accepted for migration to %d", db.ExpectedSchemaVersion),
 		"delivery_assignment_receipts",
 		"delivery_controller_inventory",
 		"this preflight never changes the database",

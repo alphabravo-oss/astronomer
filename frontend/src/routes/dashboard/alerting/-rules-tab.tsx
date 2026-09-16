@@ -40,7 +40,7 @@ export function RulesTab({
       key: "type",
       header: "Type",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.type}
         </span>
       ),
@@ -51,7 +51,7 @@ export function RulesTab({
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded capitalize font-medium",
+            "text-xs px-2 py-0.5 rounded-sm capitalize font-medium",
             statusBgColor(row.severity),
           )}
         >
@@ -136,7 +136,10 @@ export function RulesTab({
         loading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
-        emptyMessage="No alert rules configured"
+        emptyState={{
+          title: "No alert rules configured",
+          description: "Create the first item to configure this feature.",
+        }}
       />
       <ConfirmDialog
         open={!!deleteRuleTarget}

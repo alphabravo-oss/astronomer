@@ -56,7 +56,7 @@ func (c *recordingCatalog) QueryValue(_ context.Context, dest any, query string,
 
 func TestEvaluateRejectsV03CatalogWithoutMutation(t *testing.T) {
 	before := Snapshot{
-		LegacyTables:     []string{"argo" + "cd_instances", "fl" + "eet_operations"},
+		LegacyTables:     []string{"argocd_instances", "fleet_operations"},
 		HasMigrations:    true,
 		PublicTableCount: 40,
 		MigrationRows:    158,
@@ -88,7 +88,7 @@ func TestEvaluateAllowsEmptyDatabase(t *testing.T) {
 
 func TestInspectIssuesOnlySelectsAgainstAV03ShapedCatalog(t *testing.T) {
 	catalog := &recordingCatalog{
-		legacy:  "argo" + "cd_applications,argo" + "cd_instances,fl" + "eet_operations",
+		legacy:  "argocd_applications,argocd_instances,fleet_operations",
 		hasMig:  true,
 		public:  87,
 		state:   []any{int64(158), int64(159), false},

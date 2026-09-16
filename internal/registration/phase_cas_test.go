@@ -64,7 +64,7 @@ func TestAdvance_CASRejectsLostUpdate(t *testing.T) {
 	id := uuid.New()
 	yes := true
 	base.seed(id, PhaseProvisioning, &yes)
-	svc := New(q, nil)
+	svc := newTestService(q, nil)
 
 	// The apply worker (racer B) commits provisioning→ready in the window
 	// between the Cancel handler's read and its CAS write.
@@ -107,7 +107,7 @@ func TestAdvance_CASAllowsLegitTransition(t *testing.T) {
 	id := uuid.New()
 	yes := true
 	base.seed(id, PhaseProvisioning, &yes)
-	svc := New(q, nil)
+	svc := newTestService(q, nil)
 
 	rec, err := svc.Advance(ctx, id, EventDeliveryApplied)
 	if err != nil {

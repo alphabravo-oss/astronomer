@@ -1,45 +1,47 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { createFileRoute, useParams } from "@tanstack/react-router";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Eye, Pause, RefreshCw } from "lucide-react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { AuditReasonForm } from "@/components/delivery/audit-reason-form";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
   DeliveryShell,
   Detail,
   DetailGrid,
-  ErrorMessage,
   RedirectDeliveryDetail,
   deliveryPageRowCount,
   primaryButton,
   secondaryButton,
-  textareaClass,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
   withProjectQuery,
 } from "@/components/delivery/shared";
+import { DeploymentEventTimeline } from "@/components/delivery/deployment-event-timeline";
 import {
   actOnClusterDeployment,
   getClusterDeployment,
   listClusterDeploymentEvents,
   type ClusterDeploymentEvent,
   type DeliveryConditionView,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-deployments";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
-import { useParams } from "@/lib/navigation";
+
 import { formatRelativeTime } from "@/lib/utils";
 import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { toastSuccess } from "@/lib/toast";
 
 export function DeploymentDetailPage() {
-  const { deploymentId } = useParams<{ deploymentId: string }>();
+  const { deploymentId } = useParams({ strict: false }) as {
+    deploymentId: string;
+  };
   const { projectId, projects, projectQuery, setProjectId, listHref } =
     useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
@@ -129,12 +131,12 @@ export function DeploymentDetailPage() {
         onRetry={() => void projectQuery.refetch()}
       >
         <PageShell>
-          <Link
-            href={withProjectQuery(listHref("deployments"), projectId)}
+          <RouterLink
+            to={withProjectQuery(listHref("deployments"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Deployments
-          </Link>
+          </RouterLink>
           <PageHeader
             eyebrow="Cluster deployment"
             title={deployment?.id ?? "Deployment"}
@@ -229,7 +231,11 @@ export function DeploymentDetailPage() {
                   columns={conditionColumns}
                   keyExtractor={(row) => row.type}
                   searchable={false}
-                  emptyMessage="No conditions observed"
+                  emptyState={{
+                    title: "No conditions observed",
+                    description:
+                      "New observations will appear here as they are reported.",
+                  }}
                 />
               </PageSection>
             </>
@@ -238,6 +244,7 @@ export function DeploymentDetailPage() {
             title="Event history"
             description="Observed phase changes for this deployment. Historical transitions are complete; they are not in-flight."
           >
+            <DeploymentEventTimeline events={events.data?.data ?? []} />
             <DataTable
               data={events.data?.data ?? []}
               columns={eventColumns}
@@ -245,14 +252,15 @@ export function DeploymentDetailPage() {
               searchable={false}
               loading={events.isLoading}
               isError={events.isError}
+              error={events.error}
               onRetry={() => void events.refetch()}
-              emptyMessage="No deployment events recorded"
+              emptyState={{
+                title: "No deployment events recorded",
+                description:
+                  "New observations will appear here as they are reported.",
+              }}
               serverSide={{
-                rowCount: deliveryPageRowCount(
-                  events.data,
-                  eventPage,
-                  pageSize,
-                ),
+                rowCount: deliveryPageRowCount(events.data),
                 pagination: { pageIndex: eventPage, pageSize },
                 onPaginationChange: (next) => setEventPage(next.pageIndex),
               }}
@@ -320,41 +328,13 @@ function DeploymentActionDialog({
       onClose={onClose}
       subtitle="The request is generation-fenced and does not expose or edit downstream objects."
     >
-      <form
-        className="space-y-4"
-        onSubmit={(event: FormEvent<HTMLFormElement>) => {
-          event.preventDefault();
-          mutation.mutate(
-            String(
-              new FormData(event.currentTarget).get("reason") ?? "",
-            ).trim(),
-          );
-        }}
-      >
-        <label className="block space-y-1.5 text-sm">
-          <span className="font-medium">Audit reason code</span>
-          <textarea
-            name="reason"
-            required
-            maxLength={96}
-            className={textareaClass}
-            placeholder={`${action}_requested`}
-          />
-        </label>
-        {mutation.isError && <ErrorMessage error={mutation.error} />}
-        <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className={primaryButton}
-            disabled={mutation.isPending}
-          >
-            Confirm {action}
-          </button>
-        </div>
-      </form>
+      <AuditReasonForm
+        action={action}
+        onSubmit={(reason) => mutation.mutate(reason)}
+        pending={mutation.isPending}
+        error={mutation.error}
+        onClose={onClose}
+      />
     </ModalShell>
   );
 }
@@ -459,7 +439,9 @@ const eventColumns: Column<ClusterDeploymentEvent>[] = [
 ];
 
 function DeliveryDeploymentDetailRedirect() {
-  const { deploymentId } = useParams<{ deploymentId: string }>();
+  const { deploymentId } = useParams({ strict: false }) as {
+    deploymentId: string;
+  };
   return (
     <RedirectDeliveryDetail tab="deployments" id={deploymentId}>
       <DeploymentDetailPage />

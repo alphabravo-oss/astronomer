@@ -5,19 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type stagedClusterMutationTx struct {
@@ -123,20 +120,16 @@ func TestExecuteClusterMutationCommitsClusterAndAuditTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/", nil)
 			params := sqlc.CreateClusterParams{Name: "prod-east", DisplayName: "Production East"}
 
-			_, err := executeClusterMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q ClusterMutationTx) (sqlc.Cluster, error) { return q.CreateCluster(r.Context(), params) },
-				func() (sqlc.Cluster, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.Cluster{}, nil
-				},
-				func(cluster sqlc.Cluster) clusterAuditEvent {
-					return clusterAuditEvent{
+				func(cluster sqlc.Cluster) mutationAuditEvent {
+					return mutationAuditEvent{
 						action: "cluster.create", resourceType: "cluster", resourceID: cluster.ID.String(),
 						resourceName: cluster.Name, status: http.StatusCreated,
 					}
 				})
 			if (err != nil) != tc.wantErr {
-				t.Fatalf("executeClusterMutation error = %v, wantErr=%v", err, tc.wantErr)
+				t.Fatalf("executeMutation error = %v, wantErr=%v", err, tc.wantErr)
 			}
 			if len(committedClusters) != tc.wantClusters || len(committedAudits) != tc.wantAuditIntents {
 				t.Fatalf("committed clusters/audits = %d/%d, want %d/%d", len(committedClusters), len(committedAudits), tc.wantClusters, tc.wantAuditIntents)
@@ -225,7 +218,7 @@ func TestMintKubeconfigTokenCommitsTokenAndAuditTogether(t *testing.T) {
 			})
 			actor := uuid.New()
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/id/generate-kubeconfig/", nil)
-			r = r.WithContext(middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{ID: actor.String(), AuthMethod: "jwt"}))
+			r = r.WithContext(reqctx.WithUser(r.Context(), &reqctx.User{ID: actor.String(), AuthMethod: "jwt"}))
 
 			plaintext, _, err := h.mintKubeconfigToken(r, sqlc.Cluster{ID: uuid.New(), Name: "prod"})
 			if (err != nil) != tc.wantErr {
@@ -256,9 +249,6 @@ func TestClusterRegistryMutationCommitsDomainTaskAndAuditTogether(t *testing.T) 
 		t.Run(tc.name, func(t *testing.T) {
 			committedRows, committedTasks, committedAudits := 0, 0, 0
 			h := NewClusterRegistriesHandler(nil)
-			// The field is a configuration gate; the transaction-bound q below is
-			// the writer actually used for the durable task intent.
-			h.SetTaskOutbox(&stagedClusterRegistryMutationTx{})
 			h.SetRunTx(func(_ context.Context, fn func(ClusterRegistryMutationTx) error) error {
 				tx := &stagedClusterRegistryMutationTx{taskErr: tc.taskErr, auditErr: tc.auditErr}
 				if err := fn(tx); err != nil {
@@ -273,21 +263,17 @@ func TestClusterRegistryMutationCommitsDomainTaskAndAuditTogether(t *testing.T) 
 			clusterID := uuid.New()
 			params := sqlc.CreateClusterRegistryConfigParams{ClusterID: clusterID, PrivateRegistryUrl: "registry.example.com"}
 
-			_, err := executeClusterRegistryMutation(r, h,
-				func(q ClusterRegistryMutationTx) (clusterRegistryMutationResult, error) {
+			_, err := executeMutation(r, h.runTx,
+				func(q ClusterRegistryMutationTx) (sqlc.ClusterRegistryConfig, error) {
 					row, mutationErr := q.CreateClusterRegistryConfig(r.Context(), params)
 					if mutationErr != nil {
-						return clusterRegistryMutationResult{}, mutationErr
+						return sqlc.ClusterRegistryConfig{}, mutationErr
 					}
-					durable, mutationErr := h.enqueueApplyOutbox(r, q, row.ID, clusterID, "apply")
-					return clusterRegistryMutationResult{row: row, durableTask: durable}, mutationErr
+					mutationErr = h.enqueueApplyOutbox(r, q, row.ID, clusterID)
+					return row, mutationErr
 				},
-				func() (clusterRegistryMutationResult, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return clusterRegistryMutationResult{}, nil
-				},
-				func(result clusterRegistryMutationResult) clusterAuditEvent {
-					return clusterAuditEvent{action: "cluster.registry.created", resourceType: "cluster_registry_config", resourceID: result.row.ID.String(), status: http.StatusCreated}
+				func(row sqlc.ClusterRegistryConfig) mutationAuditEvent {
+					return mutationAuditEvent{action: "cluster.registry.created", resourceType: "cluster_registry_config", resourceID: row.ID.String(), status: http.StatusCreated}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -334,77 +320,13 @@ func TestGeneratedClusterOwnershipSurfaceEnforcesAndTransfersCRDOwnership(t *tes
 }
 
 func TestEveryClusterAdministrationMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("clusters.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]bool{
-		"Create": false, "Update": false, "TakeoverOwnership": false, "Delete": false,
-		"GenerateRegistrationToken": false, "RotateAgentToken": false, "RevokeAgentToken": false,
-		"GetManifest": false, "UpdateRegistryConfig": false, "DeleteRegistryConfig": false,
-	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
-		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeClusterMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
-	}
-	for name, found := range want {
-		if !found {
-			t.Errorf("%s does not use executeClusterMutation", name)
-		}
-	}
+	assertHandlerMutationsUseExecutor(t, "ClusterHandler", []string{
+		"Create", "Update", "TakeoverOwnership", "Delete",
+		"GenerateRegistrationToken", "RotateAgentToken", "RevokeAgentToken",
+		"GetManifest", "UpdateRegistryConfig", "DeleteRegistryConfig",
+	})
 }
 
 func TestEveryMultiRegistryMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("cluster_registries.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]bool{"Create": false, "Update": false, "Delete": false}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
-		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeClusterRegistryMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
-	}
-	for name, found := range want {
-		if !found {
-			t.Errorf("%s does not use executeClusterRegistryMutation", name)
-		}
-	}
+	assertHandlerMutationsUseExecutor(t, "ClusterRegistriesHandler", []string{"Create", "Update", "Delete"})
 }

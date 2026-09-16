@@ -11,9 +11,7 @@ import (
 )
 
 func TestLoginRouteIsRateLimited(t *testing.T) {
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		Auth: handler.NewAuthHandler(nil, nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{Auth: handler.NewAuthHandler(nil, nil)}})
 
 	for i := 0; i < 5; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", strings.NewReader(`{}`))

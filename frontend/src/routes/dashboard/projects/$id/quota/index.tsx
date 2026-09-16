@@ -7,22 +7,24 @@ import { createFileRoute } from "@tanstack/react-router";
  * members the project can claim. Editing the plan is admin-only and lives
  * on /dashboard/settings/quotas/; we just deep-link there.
  */
-import { useParams } from "@/lib/navigation";
-import { Link } from "@/lib/link";
-import { Loader2, Settings, Server, Layers, Users } from "lucide-react";
+
+import { Link as RouterLink } from "@tanstack/react-router";
+import { Settings, Server, Layers, Users } from "lucide-react";
 import { useProjectEffectiveQuota } from "@/components/projects/hooks";
 import { cn } from "@/lib/utils";
+import { QueryStates } from "@/components/ui/query-states";
 
 function ProjectQuotaPage() {
-  const params = useParams();
+  const params = Route.useParams();
   const id = String(params?.id ?? "");
-  const { data: quota, isLoading } = useProjectEffectiveQuota(id);
+  const quotaQuery = useProjectEffectiveQuota(id);
+  const { data: quota, isLoading } = quotaQuery;
 
-  if (isLoading) {
+  if (isLoading || quotaQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates query={quotaQuery} permission="projects:read">
+        {() => null}
+      </QueryStates>
     );
   }
 
@@ -60,13 +62,13 @@ function ProjectQuotaPage() {
               </span>
             </p>
           </div>
-          <Link
-            href="/dashboard/settings/quotas/"
+          <RouterLink
+            to="/dashboard/settings/quotas"
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             <Settings className="h-3.5 w-3.5" />
             Manage plans
-          </Link>
+          </RouterLink>
         </div>
       </section>
 

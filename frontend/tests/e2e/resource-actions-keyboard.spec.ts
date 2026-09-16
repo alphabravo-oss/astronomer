@@ -112,10 +112,13 @@ async function mockApi(page: Page, mutations: MutationRecord[]) {
       return route.fulfill({
         json: {
           data: [workloadRow],
-          total: 1,
-          page: 1,
-          page_size: 20,
-          total_pages: 1,
+          pagination: {
+            total: 1,
+            limit: 20,
+            offset: 0,
+            has_more: false,
+            next_offset: null,
+          },
         },
       });
     }
@@ -185,7 +188,7 @@ async function mockApi(page: Page, mutations: MutationRecord[]) {
     ) {
       mutations.push({ method, path, dryRun: false });
       return route.fulfill({
-        json: apiResponse({ ...deployment, replicas: 3 }),
+        json: apiResponse({ id: "operation-scale", status: "completed" }),
       });
     }
     if (
@@ -194,7 +197,9 @@ async function mockApi(page: Page, mutations: MutationRecord[]) {
       method === "POST"
     ) {
       mutations.push({ method, path, dryRun: false });
-      return route.fulfill({ json: apiResponse(null) });
+      return route.fulfill({
+        json: apiResponse({ id: "operation-restart", status: "completed" }),
+      });
     }
     return route.fulfill({ json: apiResponse([]) });
   });
@@ -242,6 +247,7 @@ test("keyboard-only resource create, scale, restart, YAML preview/apply, and del
   await expect(createSubmit).toBeEnabled();
   await createSubmit.focus();
   await page.keyboard.press("Enter");
+  await createDialog.getByRole("button", { name: "Done" }).click();
   await expect(createDialog).not.toBeVisible();
 
   const row = page.locator("tbody tr").filter({ hasText: NAME }).first();

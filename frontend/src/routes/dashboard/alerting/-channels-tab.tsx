@@ -53,7 +53,7 @@ export function ChannelsTab() {
       key: "type",
       header: "Type",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.type === "msteams"
             ? "MS Teams"
             : row.type === "pagerduty"
@@ -112,7 +112,10 @@ export function ChannelsTab() {
       loading={isLoading}
       isError={isError}
       onRetry={() => refetch()}
-      emptyMessage="No notification channels configured"
+      emptyState={{
+        title: "No notification channels configured",
+        description: "Create the first item to configure this feature.",
+      }}
     />
   );
 }

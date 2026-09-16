@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type stubMonitoringRBACQuerier struct {
@@ -63,7 +64,7 @@ func TestRetryMonitoringOperationDeniedWithoutClusterUpdate(t *testing.T) {
 		UpdatedAt:     time.Now(),
 	}
 	q := &monitoringRetryQuerier{operations: map[uuid.UUID]sqlc.MonitoringOperation{op.ID: op}}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{
 		bindings: []rbac.RoleBinding{{
 			ClusterID: clusterID.String(),
@@ -78,7 +79,7 @@ func TestRetryMonitoringOperationDeniedWithoutClusterUpdate(t *testing.T) {
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", op.ID.String())
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rc)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: uuid.NewString()})
+	ctx = reqctx.WithUser(ctx, &reqctx.User{ID: uuid.NewString()})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 

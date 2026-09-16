@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // fakeMirrorQuerier is a tiny in-memory ClusterResourcesQuerier. We
@@ -60,32 +60,38 @@ func (f *fakeClusterResourcesQuerier) GetClusterByID(_ context.Context, id uuid.
 	return c, nil
 }
 
-func (f *fakeClusterResourcesQuerier) ListMirroredIngressClasses(_ context.Context, cid uuid.UUID) ([]sqlc.MirroredIngressClass, error) {
+func (f *fakeClusterResourcesQuerier) ListMirroredIngressClasses(_ context.Context, arg sqlc.ListMirroredIngressClassesParams) ([]sqlc.MirroredIngressClass, error) {
 	out := []sqlc.MirroredIngressClass{}
 	for _, r := range f.ic {
-		if r.ClusterID == cid {
+		if r.ClusterID == arg.ClusterID {
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return fakeMirrorPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
-func (f *fakeClusterResourcesQuerier) ListMirroredGatewayClasses(_ context.Context, cid uuid.UUID) ([]sqlc.MirroredGatewayClass, error) {
+func (f *fakeClusterResourcesQuerier) CountMirroredIngressClasses(_ context.Context, cid uuid.UUID) (int64, error) {
+	return int64(countMatching(f.ic, func(r sqlc.MirroredIngressClass) bool { return r.ClusterID == cid })), nil
+}
+func (f *fakeClusterResourcesQuerier) ListMirroredGatewayClasses(_ context.Context, arg sqlc.ListMirroredGatewayClassesParams) ([]sqlc.MirroredGatewayClass, error) {
 	out := []sqlc.MirroredGatewayClass{}
 	for _, r := range f.gwc {
-		if r.ClusterID == cid {
+		if r.ClusterID == arg.ClusterID {
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return fakeMirrorPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
-func (f *fakeClusterResourcesQuerier) ListMirroredNetworkPolicies(_ context.Context, cid uuid.UUID) ([]sqlc.MirroredNetworkPolicy, error) {
+func (f *fakeClusterResourcesQuerier) CountMirroredGatewayClasses(_ context.Context, cid uuid.UUID) (int64, error) {
+	return int64(countMatching(f.gwc, func(r sqlc.MirroredGatewayClass) bool { return r.ClusterID == cid })), nil
+}
+func (f *fakeClusterResourcesQuerier) ListMirroredNetworkPolicies(_ context.Context, arg sqlc.ListMirroredNetworkPoliciesParams) ([]sqlc.MirroredNetworkPolicy, error) {
 	out := []sqlc.MirroredNetworkPolicy{}
 	for _, r := range f.np {
-		if r.ClusterID == cid {
+		if r.ClusterID == arg.ClusterID {
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return fakeMirrorPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
 func (f *fakeClusterResourcesQuerier) ListMirroredNetworkPoliciesByNamespace(_ context.Context, arg sqlc.ListMirroredNetworkPoliciesByNamespaceParams) ([]sqlc.MirroredNetworkPolicy, error) {
 	out := []sqlc.MirroredNetworkPolicy{}
@@ -94,16 +100,24 @@ func (f *fakeClusterResourcesQuerier) ListMirroredNetworkPoliciesByNamespace(_ c
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return fakeMirrorPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
-func (f *fakeClusterResourcesQuerier) ListMirroredResourceQuotas(_ context.Context, cid uuid.UUID) ([]sqlc.MirroredResourceQuota, error) {
+func (f *fakeClusterResourcesQuerier) CountMirroredNetworkPolicies(_ context.Context, cid uuid.UUID) (int64, error) {
+	return int64(countMatching(f.np, func(r sqlc.MirroredNetworkPolicy) bool { return r.ClusterID == cid })), nil
+}
+func (f *fakeClusterResourcesQuerier) CountMirroredNetworkPoliciesByNamespace(_ context.Context, arg sqlc.CountMirroredNetworkPoliciesByNamespaceParams) (int64, error) {
+	return int64(countMatching(f.np, func(r sqlc.MirroredNetworkPolicy) bool {
+		return r.ClusterID == arg.ClusterID && r.Namespace == arg.Namespace
+	})), nil
+}
+func (f *fakeClusterResourcesQuerier) ListMirroredResourceQuotas(_ context.Context, arg sqlc.ListMirroredResourceQuotasParams) ([]sqlc.MirroredResourceQuota, error) {
 	out := []sqlc.MirroredResourceQuota{}
 	for _, r := range f.rq {
-		if r.ClusterID == cid {
+		if r.ClusterID == arg.ClusterID {
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return fakeMirrorPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
 func (f *fakeClusterResourcesQuerier) ListMirroredResourceQuotasByNamespace(_ context.Context, arg sqlc.ListMirroredResourceQuotasByNamespaceParams) ([]sqlc.MirroredResourceQuota, error) {
 	out := []sqlc.MirroredResourceQuota{}
@@ -112,16 +126,24 @@ func (f *fakeClusterResourcesQuerier) ListMirroredResourceQuotasByNamespace(_ co
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return fakeMirrorPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
-func (f *fakeClusterResourcesQuerier) ListMirroredLimitRanges(_ context.Context, cid uuid.UUID) ([]sqlc.MirroredLimitRange, error) {
+func (f *fakeClusterResourcesQuerier) CountMirroredResourceQuotas(_ context.Context, cid uuid.UUID) (int64, error) {
+	return int64(countMatching(f.rq, func(r sqlc.MirroredResourceQuota) bool { return r.ClusterID == cid })), nil
+}
+func (f *fakeClusterResourcesQuerier) CountMirroredResourceQuotasByNamespace(_ context.Context, arg sqlc.CountMirroredResourceQuotasByNamespaceParams) (int64, error) {
+	return int64(countMatching(f.rq, func(r sqlc.MirroredResourceQuota) bool {
+		return r.ClusterID == arg.ClusterID && r.Namespace == arg.Namespace
+	})), nil
+}
+func (f *fakeClusterResourcesQuerier) ListMirroredLimitRanges(_ context.Context, arg sqlc.ListMirroredLimitRangesParams) ([]sqlc.MirroredLimitRange, error) {
 	out := []sqlc.MirroredLimitRange{}
 	for _, r := range f.lr {
-		if r.ClusterID == cid {
+		if r.ClusterID == arg.ClusterID {
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return fakeMirrorPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
 func (f *fakeClusterResourcesQuerier) ListMirroredLimitRangesByNamespace(_ context.Context, arg sqlc.ListMirroredLimitRangesByNamespaceParams) ([]sqlc.MirroredLimitRange, error) {
 	out := []sqlc.MirroredLimitRange{}
@@ -130,7 +152,37 @@ func (f *fakeClusterResourcesQuerier) ListMirroredLimitRangesByNamespace(_ conte
 			out = append(out, r)
 		}
 	}
-	return out, nil
+	return fakeMirrorPage(out, arg.QueryLimit, arg.QueryOffset), nil
+}
+func (f *fakeClusterResourcesQuerier) CountMirroredLimitRanges(_ context.Context, cid uuid.UUID) (int64, error) {
+	return int64(countMatching(f.lr, func(r sqlc.MirroredLimitRange) bool { return r.ClusterID == cid })), nil
+}
+func (f *fakeClusterResourcesQuerier) CountMirroredLimitRangesByNamespace(_ context.Context, arg sqlc.CountMirroredLimitRangesByNamespaceParams) (int64, error) {
+	return int64(countMatching(f.lr, func(r sqlc.MirroredLimitRange) bool {
+		return r.ClusterID == arg.ClusterID && r.Namespace == arg.Namespace
+	})), nil
+}
+
+func fakeMirrorPage[T any](rows []T, limit, offset int32) []T {
+	start := int(offset)
+	if start >= len(rows) {
+		return []T{}
+	}
+	end := start + int(limit)
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[start:end]
+}
+
+func countMatching[T any](rows []T, matches func(T) bool) int {
+	count := 0
+	for _, row := range rows {
+		if matches(row) {
+			count++
+		}
+	}
+	return count
 }
 
 // Compile-time assertion the fake satisfies the interface.
@@ -194,14 +246,14 @@ func TestCRDMirrorHandler_ListsForCluster(t *testing.T) {
 				t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
 			}
 			var body struct {
-				Data  []map[string]any `json:"data"`
-				Count int64            `json:"count"`
+				Data       []map[string]any `json:"data"`
+				Pagination paging.Metadata  `json:"pagination"`
 			}
 			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 				t.Fatalf("decode: %v body=%s", err, rec.Body.String())
 			}
-			if body.Count != int64(c.minRowCount) {
-				t.Fatalf("count: got %d want %d body=%s", body.Count, c.minRowCount, rec.Body.String())
+			if exactPageTotal(t, body.Pagination) != int64(c.minRowCount) {
+				t.Fatalf("count: got %d want %d body=%s", exactPageTotal(t, body.Pagination), c.minRowCount, rec.Body.String())
 			}
 			if len(body.Data) != c.minRowCount {
 				t.Fatalf("data len: got %d want %d", len(body.Data), c.minRowCount)
@@ -227,17 +279,48 @@ func TestCRDMirrorHandler_FilterByNamespace(t *testing.T) {
 		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
 	}
 	var body struct {
-		Data  []map[string]any `json:"data"`
-		Count int64            `json:"count"`
+		Data       []map[string]any `json:"data"`
+		Pagination paging.Metadata  `json:"pagination"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Count != 1 {
-		t.Fatalf("expected 1 row in prod-api, got %d", body.Count)
+	if exactPageTotal(t, body.Pagination) != 1 {
+		t.Fatalf("expected 1 row in prod-api, got %d", exactPageTotal(t, body.Pagination))
 	}
 	if ns, _ := body.Data[0]["namespace"].(string); ns != "prod-api" {
 		t.Fatalf("wrong namespace returned: %v", body.Data[0])
+	}
+}
+
+func TestCRDMirrorHandler_PaginatesInDatabaseAndPreservesTotal(t *testing.T) {
+	cid := uuid.New()
+	q := newFakeClusterResourcesQuerier(cid, "prod-1")
+	now := time.Now()
+	for _, name := range []string{"a", "b", "c"} {
+		q.np = append(q.np, sqlc.MirroredNetworkPolicy{
+			ID: uuid.New(), ClusterID: cid, Namespace: "apps", Name: name,
+			Labels: []byte("{}"), Annotations: []byte("{}"), PodSelector: []byte("{}"),
+			PolicyTypes: []byte("[]"), IngressRules: []byte("[]"), EgressRules: []byte("[]"),
+			LastSeenAt: now, CreatedAt: now, UpdatedAt: now,
+		})
+	}
+	h := NewClusterResourcesHandler(q)
+	req := withClusterParam(httptest.NewRequest(http.MethodGet, "/clusters/"+cid.String()+"/network-policies/?limit=1&offset=1", nil), cid)
+	rec := httptest.NewRecorder()
+	h.ListNetworkPolicies(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data       []ClusterMirroredNetworkPolicyDTO `json:"data"`
+		Pagination paging.Metadata                   `json:"pagination"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if exactPageTotal(t, body.Pagination) != 3 || len(body.Data) != 1 || body.Data[0].Name != "b" {
+		t.Fatalf("page=%+v count=%d", body.Data, exactPageTotal(t, body.Pagination))
 	}
 }
 

@@ -189,10 +189,10 @@ const GENERATED_TYPES_FILE = 'frontend/src/types/openapi.generated.ts';
 // fails too, so the list cannot rot.
 const SHADOWED_GENERATED_SCHEMAS = new Set([
   'frontend/src/lib/api/admin-security.ts:ShellSession',
-  'frontend/src/lib/api/cluster-detail.ts:RestoreSnapshotRequest',
-  'frontend/src/lib/api/cluster-detail.ts:ServiceMeshInventory',
-  'frontend/src/lib/api/cluster-detail.ts:ServiceMeshPolicyValidation',
-  'frontend/src/lib/api/cluster-detail.ts:SnapshotSpec',
+  'frontend/src/lib/api/cluster-velero.ts:RestoreSnapshotRequest',
+  'frontend/src/lib/api/cluster-service-mesh.ts:ServiceMeshInventory',
+  'frontend/src/lib/api/cluster-service-mesh.ts:ServiceMeshPolicyValidation',
+  'frontend/src/lib/api/cluster-velero.ts:SnapshotSpec',
   'frontend/src/lib/api/extensions.ts:ExtensionManifest',
   'frontend/src/lib/api/extensions.ts:ExtensionMount',
   'frontend/src/lib/api/extensions.ts:ExtensionMountsResponse',
@@ -202,7 +202,6 @@ const SHADOWED_GENERATED_SCHEMAS = new Set([
   'frontend/src/lib/api/project-detail.ts:CreateProjectCatalogRequest',
   'frontend/src/lib/api/project-detail.ts:ProjectCatalog',
   'frontend/src/lib/api/settings-network-policy-templates.ts:ApplyNetworkPolicyRequest',
-  'frontend/src/routes/dashboard/clusters/$id/workloads/index.tsx:Workload',
   'frontend/src/types/clusters.ts:AgentLifecycleOperation',
   'frontend/src/types/clusters.ts:AgentLifecycleOperationsResponse',
   'frontend/src/types/clusters.ts:AgentUpgradeOperationResponse',

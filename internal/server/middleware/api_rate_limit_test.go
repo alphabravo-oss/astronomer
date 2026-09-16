@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -146,6 +148,49 @@ func TestAPIRateLimitMiddleware_PerCallerBuckets(t *testing.T) {
 	hit("10.0.0.2:2", http.StatusTooManyRequests)
 }
 
+func TestAPIRateLimitConfigsOverrideOneClassWithoutDroppingDefaults(t *testing.T) {
+	configs := APIRateLimitConfigs(map[APIRateLimitClass]APIRateLimitConfig{
+		ClassK8sProxy: {RatePerSecond: 500, Burst: 1000},
+		ClassSearch:   {RatePerSecond: 0, Burst: 0},
+	})
+	if got := configs[ClassK8sProxy]; got.RatePerSecond != 500 || got.Burst != 1000 {
+		t.Fatalf("k8s proxy override = %+v", got)
+	}
+	if got := configs[ClassSearch]; got != defaultLimits[ClassSearch] {
+		t.Fatalf("invalid search override disabled the default: got %+v want %+v", got, defaultLimits[ClassSearch])
+	}
+	if _, found := configs[ClassSCIM]; !found {
+		t.Fatal("unrelated default class was dropped")
+	}
+}
+
+func TestAPIRateLimiterSharesClassBucketAcrossRouteBindings(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	limiter := NewAPIRateLimiter(ctx, map[APIRateLimitClass]APIRateLimitConfig{
+		"test": {RatePerSecond: 0.001, Burst: 1},
+	})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	firstRoute := limiter.Middleware("test")(handler)
+	secondRoute := limiter.Middleware("test")(handler)
+
+	request := func(target string, route http.Handler) int {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		req.RemoteAddr = "10.20.30.40:1234"
+		recorder := httptest.NewRecorder()
+		route.ServeHTTP(recorder, req)
+		return recorder.Code
+	}
+	if got := request("/first", firstRoute); got != http.StatusNoContent {
+		t.Fatalf("first route status = %d", got)
+	}
+	if got := request("/second", secondRoute); got != http.StatusTooManyRequests {
+		t.Fatalf("second route escaped shared class quota: status = %d", got)
+	}
+}
+
 // Bucket eviction must clear idle entries — same memory-leak fix as the
 // login limiter.
 func TestAPIRateLimiter_EvictExpired(t *testing.T) {
@@ -236,7 +281,7 @@ func TestAPIRateLimit_PerClusterCeiling_ManyUsersOnOneCluster(t *testing.T) {
 	// hit issues one request as `userID` against `clusterID`.
 	hit := func(clusterID, userID string) int {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/k8s/api/v1/pods", nil)
-		req = req.WithContext(context.WithValue(req.Context(), userContextKey, &AuthenticatedUser{ID: userID}))
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID}))
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		return rec.Code
@@ -292,7 +337,7 @@ func TestAPIRateLimitMiddleware_PerClusterCeiling_EndToEnd(t *testing.T) {
 
 	hit := func(clusterID, userID string) int {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/k8s/api/v1/pods", nil)
-		req = req.WithContext(context.WithValue(req.Context(), userContextKey, &AuthenticatedUser{ID: userID}))
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID}))
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		return rec.Code
@@ -366,7 +411,7 @@ func TestAPIRateLimit_PerUserLimitStillEnforced(t *testing.T) {
 
 	hit := func() int {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/cid/k8s/api/v1/pods", nil)
-		req = req.WithContext(context.WithValue(req.Context(), userContextKey, &AuthenticatedUser{ID: "solo-user"}))
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: "solo-user"}))
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		return rec.Code

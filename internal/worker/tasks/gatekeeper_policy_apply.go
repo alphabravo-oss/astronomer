@@ -12,6 +12,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/gatekeeperpolicy"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // GatekeeperPolicyApplyType is the periodic task that delivers the starter
@@ -59,6 +60,10 @@ func HandleGatekeeperPolicyApply(ctx context.Context, _ *asynq.Task) error {
 		if runtimeDependencies(ctx).K8s == nil {
 			return fmt.Errorf("gatekeeper policy tunnel requester is not configured")
 		}
+		capabilities, ok := runtimeDependencies(ctx).K8s.(K8sCapabilityChecker)
+		if !ok {
+			return fmt.Errorf("gatekeeper policy tunnel requester does not expose agent capabilities")
+		}
 		manifests, err := gatekeeperpolicy.Manifests()
 		if err != nil {
 			return fmt.Errorf("load gatekeeper bundle: %w", err)
@@ -72,13 +77,28 @@ func HandleGatekeeperPolicyApply(ctx context.Context, _ *asynq.Task) error {
 		// is skipped-with-log instead of stalling the whole 5m tick. A tunnel
 		// error already reads as "not installed" and skips the cluster.
 		fanOutClusters(ctx, clusters, gatekeeperPolicyPerClusterTimeout, func(ctx context.Context, c sqlc.Cluster) {
-			if !gatekeeperInstalled(ctx, c.ID) {
-				return
-			}
-			applyGatekeeperBundle(ctx, c.ID, manifests)
+			reconcileGatekeeperPolicyCluster(ctx, c.ID, manifests, capabilities)
 		})
 		return nil
 	})
+}
+
+func reconcileGatekeeperPolicyCluster(ctx context.Context, clusterID uuid.UUID, manifests []gatekeeperpolicy.Manifest, capabilities K8sCapabilityChecker) {
+	supported, err := capabilities.SupportsCapability(ctx, clusterID.String(), protocol.AgentCapabilityMutate)
+	if err != nil {
+		runtimeLogger(ctx).DebugContext(ctx, "gatekeeper policy capability unavailable; skipping cluster",
+			"cluster", clusterID.String(), "capability", protocol.AgentCapabilityMutate, "error", err)
+		return
+	}
+	if !supported {
+		runtimeLogger(ctx).DebugContext(ctx, "gatekeeper policy requires mutation capability; skipping read-only cluster",
+			"cluster", clusterID.String(), "capability", protocol.AgentCapabilityMutate)
+		return
+	}
+	if !gatekeeperInstalled(ctx, clusterID) {
+		return
+	}
+	applyGatekeeperBundle(ctx, clusterID, manifests)
 }
 
 // gatekeeperInstalled returns true when the cluster serves the Gatekeeper

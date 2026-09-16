@@ -156,11 +156,11 @@ func TestPreflightOwnershipUsesHelmOnly(t *testing.T) {
 	for _, doc := range docs {
 		annotations := nestedMap(doc, "metadata", "annotations")
 		for key := range annotations {
-			if strings.HasPrefix(key, "argo"+"cd.") {
+			if strings.HasPrefix(key, "argocd.") {
 				t.Fatalf("rendered %s/%s retains removed lifecycle annotation %q", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"), key)
 			}
 		}
-		if strings.Contains(stringAt(doc, "metadata", "name"), "preflight-argo"+"cd") {
+		if strings.Contains(stringAt(doc, "metadata", "name"), "preflight-argocd") {
 			t.Fatalf("rendered obsolete preflight resource %s/%s", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"))
 		}
 	}

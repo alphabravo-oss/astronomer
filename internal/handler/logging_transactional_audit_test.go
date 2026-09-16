@@ -8,7 +8,9 @@ import (
 	"go/token"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -85,7 +87,7 @@ func TestLoggingStateOperationAndAuditCommitTogether(t *testing.T) {
 			clusterID := uuid.New()
 			params := sqlc.CreateLoggingOutputParams{Name: "loki", OutputType: "loki", Configuration: []byte(`{}`), ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}}
 
-			_, err := executeLoggingMutation(request, h,
+			_, err := executeMutation(request, h.runTx,
 				func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
 					row, mutationErr := q.CreateLoggingOutput(request.Context(), params)
 					if mutationErr != nil {
@@ -94,12 +96,8 @@ func TestLoggingStateOperationAndAuditCommitTogether(t *testing.T) {
 					op, mutationErr := createLoggingOutputApplyOperation(request.Context(), q, row, pgtype.UUID{})
 					return loggingMutationResult[sqlc.LoggingOutput]{row: row, op: op}, mutationErr
 				},
-				func() (loggingMutationResult[sqlc.LoggingOutput], error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return loggingMutationResult[sqlc.LoggingOutput]{}, nil
-				},
-				func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
-					return clusterAuditEvent{action: "logging.output.create", resourceType: "logging_output", resourceID: result.row.ID.String(), status: http.StatusCreated, detail: map[string]any{"operation_id": result.op.ID.String()}}
+				func(result loggingMutationResult[sqlc.LoggingOutput]) mutationAuditEvent {
+					return mutationAuditEvent{action: "logging.output.create", resourceType: "logging_output", resourceID: result.row.ID.String(), status: http.StatusCreated, detail: map[string]any{"operation_id": result.op.ID.String()}}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -139,13 +137,9 @@ func TestLoggingSavedSearchAndAuditCommitTogether(t *testing.T) {
 				ResultLimit: 100, Direction: "backward",
 			}
 
-			_, err := executeLoggingMutation(request, h,
+			_, err := executeMutation(request, h.runTx,
 				func(q LoggingMutationTx) (sqlc.LoggingSavedSearch, error) {
 					return q.CreateLoggingSavedSearch(request.Context(), params)
-				},
-				func() (sqlc.LoggingSavedSearch, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.LoggingSavedSearch{}, nil
 				},
 				loggingSavedSearchAuditEvent("logging.saved_search.create", http.StatusCreated),
 			)
@@ -177,7 +171,7 @@ func TestLoggingReplayCannotCommitOrphanConfiguration(t *testing.T) {
 	params := sqlc.CreateLoggingOutputParams{Name: "loki", OutputType: "loki", Configuration: []byte(`{}`), ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}}
 	opCtx := withOperationIdempotency(request, "logging")
 
-	_, err := executeLoggingMutation(request, h,
+	_, err := executeMutation(request, h.runTx,
 		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
 			row, mutationErr := q.CreateLoggingOutput(request.Context(), params)
 			if mutationErr != nil {
@@ -186,11 +180,8 @@ func TestLoggingReplayCannotCommitOrphanConfiguration(t *testing.T) {
 			op, mutationErr := createLoggingOutputApplyOperation(opCtx, q, row, pgtype.UUID{})
 			return loggingMutationResult[sqlc.LoggingOutput]{row: row, op: op}, mutationErr
 		},
-		func() (loggingMutationResult[sqlc.LoggingOutput], error) {
-			return loggingMutationResult[sqlc.LoggingOutput]{}, nil
-		},
-		func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
-			return clusterAuditEvent{action: "logging.output.create", resourceType: "logging_output", resourceID: result.row.ID.String(), status: http.StatusCreated}
+		func(result loggingMutationResult[sqlc.LoggingOutput]) mutationAuditEvent {
+			return mutationAuditEvent{action: "logging.output.create", resourceType: "logging_output", resourceID: result.row.ID.String(), status: http.StatusCreated}
 		})
 	if !errors.Is(err, errLoggingOperationIdempotencyConflict) {
 		t.Fatalf("error = %v, want idempotency conflict", err)
@@ -208,11 +199,17 @@ func TestLoggingHighRiskMutationsUseTransactionalExecutor(t *testing.T) {
 		"RotateOutputToken": false, "AttachAstronomerLogs": false,
 		"CreateSavedSearch": false, "UpdateSavedSearch": false, "DeleteSavedSearch": false,
 	}
-	for _, name := range []string{"logging.go", "logging_loki_token.go", "logging_attach.go", "logging_saved_searches.go"} {
-		path, err := filepath.Abs(name)
-		if err != nil {
-			t.Fatal(err)
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, "logging") ||
+			!strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
 		}
+		path := filepath.Join(".", name)
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {
 			t.Fatal(err)
@@ -230,7 +227,7 @@ func TestLoggingHighRiskMutationsUseTransactionalExecutor(t *testing.T) {
 				if !ok {
 					return true
 				}
-				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeLoggingMutation" {
+				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 					want[fn.Name.Name] = true
 				}
 				return true
@@ -239,7 +236,7 @@ func TestLoggingHighRiskMutationsUseTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeLoggingMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

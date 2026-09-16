@@ -39,15 +39,15 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/quota"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // QuotaQuerier is the narrow DB surface the quota handler uses.
@@ -82,29 +82,6 @@ type QuotaMutationTx interface {
 }
 
 type quotaRunTxFunc func(context.Context, func(QuotaMutationTx) error) error
-
-func executeQuotaMutation(r *http.Request, h *QuotaHandler, mutate func(QuotaQuerier) (sqlc.QuotaPlan, error), describe func(sqlc.QuotaPlan) clusterAuditEvent) (sqlc.QuotaPlan, error) {
-	if h.runTx != nil {
-		var plan sqlc.QuotaPlan
-		err := h.runTx(r.Context(), func(q QuotaMutationTx) error {
-			var mutationErr error
-			plan, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(plan)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return plan, err
-	}
-	plan, err := mutate(h.queries)
-	if err != nil {
-		return sqlc.QuotaPlan{}, err
-	}
-	event := describe(plan)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return plan, nil
-}
 
 var (
 	errQuotaPlanInUse      = errors.New("quota plan is in use")
@@ -211,7 +188,7 @@ func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 		out = append(out, planToResponse(p))
 	}
 	page, pagination := pageWindow(r, out)
-	RespondList(w, page, pagination)
+	paging.Write(w, page, pagination)
 }
 
 // GetPlan handles GET /api/v1/admin/quota-plans/{name}/.
@@ -257,8 +234,8 @@ func (h *QuotaHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "enforcement must be 'soft' or 'hard'")
 		return
 	}
-	p, err := executeQuotaMutation(r, h,
-		func(q QuotaQuerier) (sqlc.QuotaPlan, error) {
+	p, err := executeMutation(r, h.runTx,
+		func(q QuotaMutationTx) (sqlc.QuotaPlan, error) {
 			return q.UpsertQuotaPlan(r.Context(), upsertParamsFromRequest(req))
 		},
 		quotaPlanAuditEvent("quota.plan_create", http.StatusCreated),
@@ -295,8 +272,8 @@ func (h *QuotaHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "enforcement must be 'soft' or 'hard'")
 		return
 	}
-	p, err := executeQuotaMutation(r, h,
-		func(q QuotaQuerier) (sqlc.QuotaPlan, error) {
+	p, err := executeMutation(r, h.runTx,
+		func(q QuotaMutationTx) (sqlc.QuotaPlan, error) {
 			// Keep the existence decision and upsert in the same transaction so a
 			// concurrent delete cannot turn an update into an implicit create.
 			if _, getErr := q.GetQuotaPlanForUpdate(r.Context(), name); getErr != nil {
@@ -338,8 +315,8 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusConflict, apierror.PlanIsReserved, "The 'free' and 'global' quota plans are reserved and cannot be deleted")
 		return
 	}
-	_, err := executeQuotaMutation(r, h,
-		func(q QuotaQuerier) (sqlc.QuotaPlan, error) {
+	_, err := executeMutation(r, h.runTx,
+		func(q QuotaMutationTx) (sqlc.QuotaPlan, error) {
 			plan, getErr := q.GetQuotaPlanForUpdate(r.Context(), name)
 			if getErr != nil {
 				return sqlc.QuotaPlan{}, getErr
@@ -379,9 +356,9 @@ func (h *QuotaHandler) DeletePlan(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func quotaPlanAuditEvent(action string, status int) func(sqlc.QuotaPlan) clusterAuditEvent {
-	return func(plan sqlc.QuotaPlan) clusterAuditEvent {
-		return clusterAuditEvent{
+func quotaPlanAuditEvent(action string, status int) func(sqlc.QuotaPlan) mutationAuditEvent {
+	return func(plan sqlc.QuotaPlan) mutationAuditEvent {
+		return mutationAuditEvent{
 			action: action, resourceType: "quota_plan", resourceID: plan.Name, resourceName: plan.Name, status: status,
 			detail: map[string]any{"enforcement": plan.Enforcement, "max_clusters_per_project": plan.MaxClustersPerProject, "max_projects_per_user": plan.MaxProjectsPerUser, "max_tokens_per_user": plan.MaxTokensPerUser},
 		}
@@ -647,7 +624,7 @@ func (h *QuotaHandler) ProjectQuota(w http.ResponseWriter, r *http.Request) {
 
 // MyQuota handles GET /api/v1/auth/me/quota/.
 func (h *QuotaHandler) MyQuota(w http.ResponseWriter, r *http.Request) {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
+	caller, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || caller == nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return

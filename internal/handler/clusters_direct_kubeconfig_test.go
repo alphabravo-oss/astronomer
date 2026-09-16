@@ -55,6 +55,18 @@ func TestValidateDirectAccessConfigFailsClosed(t *testing.T) {
 	}
 }
 
+func TestEndpointHostPortRejectsMalformedPorts(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{"https://api.example.test:0", "https://api.example.test:65536", "://bad"} {
+		if got := endpointHostPort(endpoint); got != "invalid" {
+			t.Fatalf("endpointHostPort(%q) = %q, want invalid", endpoint, got)
+		}
+	}
+	if got := endpointHostPort("https://API.EXAMPLE.TEST:6443"); got != "api.example.test:6443" {
+		t.Fatalf("valid endpoint = %q", got)
+	}
+}
+
 func TestBuildDirectKubeconfigContainsOnlyScopedCredential(t *testing.T) {
 	t.Parallel()
 	ca := "-----BEGIN CERTIFICATE-----\nPUBLIC-CA-SENTINEL\n-----END CERTIFICATE-----"

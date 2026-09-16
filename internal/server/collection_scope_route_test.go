@@ -3,17 +3,20 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
-
-	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // The fleet landing page is the first surface a scoped multi-tenant persona
@@ -45,6 +48,24 @@ func (q *scopeFilterClusterQuerier) ListClustersForScopes(_ context.Context, arg
 
 func (q *scopeFilterClusterQuerier) CountClustersForScopes(_ context.Context, ids []uuid.UUID) (int64, error) {
 	return int64(len(filterClustersByID(q.clusters, ids))), nil
+}
+
+func (q *scopeFilterClusterQuerier) GetClusterLiveness(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterLiveness, error) {
+	for _, cluster := range q.clusters {
+		if cluster.ID == clusterID {
+			return sqlc.ClusterLiveness{ClusterID: clusterID}, nil
+		}
+	}
+	return sqlc.ClusterLiveness{}, pgx.ErrNoRows
+}
+
+func (q *scopeFilterClusterQuerier) ListClusterLivenessForClusters(_ context.Context, clusterIDs []uuid.UUID) ([]sqlc.ClusterLiveness, error) {
+	clusters := filterClustersByID(q.clusters, clusterIDs)
+	rows := make([]sqlc.ClusterLiveness, 0, len(clusters))
+	for _, cluster := range clusters {
+		rows = append(rows, sqlc.ClusterLiveness{ClusterID: cluster.ID})
+	}
+	return rows, nil
 }
 
 func filterClustersByID(clusters []sqlc.Cluster, ids []uuid.UUID) []sqlc.Cluster {
@@ -92,19 +113,40 @@ type scopeFilterProjectQuerier struct {
 }
 
 func (q *scopeFilterProjectQuerier) ListProjects(_ context.Context, arg sqlc.ListProjectsParams) ([]sqlc.Project, error) {
-	return pageProjects(q.projects, arg.Limit, arg.Offset), nil
+	return pageProjects(filterProjectsBySearch(q.projects, arg.FilterSearch), arg.QueryLimit, arg.QueryOffset), nil
 }
 
 func (q *scopeFilterProjectQuerier) CountProjects(context.Context) (int64, error) {
 	return int64(len(q.projects)), nil
 }
 
+func (q *scopeFilterProjectQuerier) CountProjectsFiltered(_ context.Context, search string) (int64, error) {
+	return int64(len(filterProjectsBySearch(q.projects, search))), nil
+}
+
 func (q *scopeFilterProjectQuerier) ListProjectsForScopes(_ context.Context, arg sqlc.ListProjectsForScopesParams) ([]sqlc.Project, error) {
-	return pageProjects(filterProjectsByScope(q.projects, arg.ProjectIds, arg.ClusterIds), arg.QueryLimit, arg.QueryOffset), nil
+	visible := filterProjectsByScope(q.projects, arg.ProjectIds, arg.ClusterIds)
+	return pageProjects(filterProjectsBySearch(visible, arg.FilterSearch), arg.QueryLimit, arg.QueryOffset), nil
 }
 
 func (q *scopeFilterProjectQuerier) CountProjectsForScopes(_ context.Context, arg sqlc.CountProjectsForScopesParams) (int64, error) {
-	return int64(len(filterProjectsByScope(q.projects, arg.ProjectIds, arg.ClusterIds))), nil
+	visible := filterProjectsByScope(q.projects, arg.ProjectIds, arg.ClusterIds)
+	return int64(len(filterProjectsBySearch(visible, arg.FilterSearch))), nil
+}
+
+func filterProjectsBySearch(projects []sqlc.Project, search string) []sqlc.Project {
+	needle := strings.ToLower(strings.TrimSpace(search))
+	if needle == "" {
+		return projects
+	}
+	out := make([]sqlc.Project, 0, len(projects))
+	for _, project := range projects {
+		haystack := strings.ToLower(project.Name + " " + project.DisplayName + " " + project.Description)
+		if strings.Contains(haystack, needle) {
+			out = append(out, project)
+		}
+	}
+	return out
 }
 
 // filterProjectsByScope mirrors ListProjectsForScopes' predicate: bound
@@ -144,19 +186,13 @@ func newCollectionScopeRouter(t *testing.T, bindings []rbac.RoleBinding, cluster
 	querier := routeSecurityRBACQuerier{bindings: bindings}
 	clusterHandler.SetAuthorization(engine, querier)
 	projectHandler.SetAuthorization(engine, querier)
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  engine,
-		RBACQueries: querier,
-		Clusters:    clusterHandler,
-		Projects:    projectHandler,
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: engine, RBACQueries: querier}, ClusterResources: ClusterResourceDependencies{Clusters: clusterHandler, Projects: projectHandler}})
 	return router, token
 }
 
 type collectionPage struct {
-	Data  []map[string]any `json:"data"`
-	Count int64            `json:"count"`
+	Data       []map[string]any `json:"data"`
+	Pagination paging.Metadata  `json:"pagination"`
 }
 
 func getCollection(t *testing.T, router http.Handler, path, token string) (int, collectionPage) {
@@ -169,6 +205,9 @@ func getCollection(t *testing.T, router http.Handler, path, token string) (int, 
 	if rec.Code == http.StatusOK {
 		if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
 			t.Fatalf("decode %s: %v; body=%s", path, err, rec.Body.String())
+		}
+		if page.Pagination.Total == nil {
+			t.Fatalf("missing exact pagination total: %s", rec.Body.String())
 		}
 	}
 	return rec.Code, page
@@ -223,8 +262,8 @@ func TestClusterCollectionIsScopeFilteredForClusterBoundCaller(t *testing.T) {
 	if page.Data[0]["id"] != mine.ID.String() {
 		t.Fatalf("cluster id = %v, want %s", page.Data[0]["id"], mine.ID)
 	}
-	if page.Count != 1 {
-		t.Fatalf("count = %d, want 1 (the filtered total, not the fleet size)", page.Count)
+	if *page.Pagination.Total != 1 {
+		t.Fatalf("count = %d, want 1 (the filtered total, not the fleet size)", *page.Pagination.Total)
 	}
 }
 
@@ -252,8 +291,8 @@ func TestProjectCollectionIsScopeFilteredForScopedCaller(t *testing.T) {
 		if len(page.Data) != 1 || page.Data[0]["id"] != onB.ID.String() {
 			t.Fatalf("projects = %+v, want only %s", page.Data, onB.ID)
 		}
-		if page.Count != 1 {
-			t.Fatalf("count = %d, want 1", page.Count)
+		if *page.Pagination.Total != 1 {
+			t.Fatalf("count = %d, want 1", *page.Pagination.Total)
 		}
 	})
 
@@ -266,8 +305,8 @@ func TestProjectCollectionIsScopeFilteredForScopedCaller(t *testing.T) {
 		if len(page.Data) != 2 {
 			t.Fatalf("projects returned = %d, want 2; page=%+v", len(page.Data), page)
 		}
-		if page.Count != 2 {
-			t.Fatalf("count = %d, want 2", page.Count)
+		if *page.Pagination.Total != 2 {
+			t.Fatalf("count = %d, want 2", *page.Pagination.Total)
 		}
 	})
 }
@@ -305,8 +344,8 @@ func TestNamespaceNarrowedBindingDoesNotSeeNeighbouringProjects(t *testing.T) {
 	if len(page.Data) != 1 || page.Data[0]["id"] != mine.ID.String() {
 		t.Fatalf("projects = %+v, want only %s (%q must not be listed)", page.Data, mine.ID, neighbour.Name)
 	}
-	if page.Count != 1 {
-		t.Fatalf("count = %d, want 1", page.Count)
+	if *page.Pagination.Total != 1 {
+		t.Fatalf("count = %d, want 1", *page.Pagination.Total)
 	}
 
 	// The same narrowed binding still names its cluster on /clusters/.
@@ -334,16 +373,16 @@ func TestGlobalBindingStillSeesEntireFleet(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("clusters status = %d, want %d", code, http.StatusOK)
 	}
-	if len(page.Data) != 7 || page.Count != 7 {
-		t.Fatalf("clusters = %d (count %d), want 7/7", len(page.Data), page.Count)
+	if len(page.Data) != 7 || *page.Pagination.Total != 7 {
+		t.Fatalf("clusters = %d (count %d), want 7/7", len(page.Data), *page.Pagination.Total)
 	}
 
 	code, page = getCollection(t, router, "/api/v1/projects/", token)
 	if code != http.StatusOK {
 		t.Fatalf("projects status = %d, want %d", code, http.StatusOK)
 	}
-	if len(page.Data) != 2 || page.Count != 2 {
-		t.Fatalf("projects = %d (count %d), want 2/2", len(page.Data), page.Count)
+	if len(page.Data) != 2 || *page.Pagination.Total != 2 {
+		t.Fatalf("projects = %d (count %d), want 2/2", len(page.Data), *page.Pagination.Total)
 	}
 }
 
@@ -358,8 +397,8 @@ func TestSuperuserStillSeesEntireFleet(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
 	}
-	if len(page.Data) != 4 || page.Count != 4 {
-		t.Fatalf("clusters = %d (count %d), want 4/4", len(page.Data), page.Count)
+	if len(page.Data) != 4 || *page.Pagination.Total != 4 {
+		t.Fatalf("clusters = %d (count %d), want 4/4", len(page.Data), *page.Pagination.Total)
 	}
 }
 
@@ -379,8 +418,8 @@ func TestScopedCollectionCountMatchesFilteredSetAcrossPages(t *testing.T) {
 	if len(first.Data) != 2 {
 		t.Fatalf("page 1 rows = %d, want 2", len(first.Data))
 	}
-	if first.Count != 3 {
-		t.Fatalf("page 1 count = %d, want 3 (filtered total, not the 9-cluster fleet)", first.Count)
+	if *first.Pagination.Total != 3 {
+		t.Fatalf("page 1 count = %d, want 3 (filtered total, not the 9-cluster fleet)", *first.Pagination.Total)
 	}
 
 	code, second := getCollection(t, router, "/api/v1/clusters/?limit=2&offset=2", token)
@@ -390,8 +429,8 @@ func TestScopedCollectionCountMatchesFilteredSetAcrossPages(t *testing.T) {
 	if len(second.Data) != 1 {
 		t.Fatalf("page 2 rows = %d, want 1", len(second.Data))
 	}
-	if second.Count != 3 {
-		t.Fatalf("page 2 count = %d, want 3", second.Count)
+	if *second.Pagination.Total != 3 {
+		t.Fatalf("page 2 count = %d, want 3", *second.Pagination.Total)
 	}
 	// The two pages together must be exactly the caller's three clusters.
 	seen := map[string]struct{}{}
@@ -405,6 +444,40 @@ func TestScopedCollectionCountMatchesFilteredSetAcrossPages(t *testing.T) {
 	}
 	if len(seen) != 3 {
 		t.Fatalf("distinct clusters across pages = %d, want 3", len(seen))
+	}
+}
+
+func TestProjectCollectionPaginatesAndSearchesBeyondDefaultPage(t *testing.T) {
+	clusterID := uuid.New()
+	projects := make([]sqlc.Project, 45)
+	for i := range projects {
+		projects[i] = sqlc.Project{
+			ID:          uuid.New(),
+			ClusterID:   clusterID,
+			Name:        fmt.Sprintf("project-%02d", i),
+			DisplayName: fmt.Sprintf("Project %02d", i),
+		}
+	}
+	projects[44].Description = "needle beyond the first two default pages"
+	router, token := newCollectionScopeRouter(t, globalReadOnlyListBindings(), nil, projects)
+
+	code, second := getCollection(t, router, "/api/v1/projects/?limit=20&offset=20", token)
+	if code != http.StatusOK {
+		t.Fatalf("page 2 status = %d, want %d", code, http.StatusOK)
+	}
+	if len(second.Data) != 20 || *second.Pagination.Total != 45 {
+		t.Fatalf("page 2 = %d rows / %d total, want 20 / 45", len(second.Data), *second.Pagination.Total)
+	}
+
+	code, found := getCollection(t, router, "/api/v1/projects/?search=needle", token)
+	if code != http.StatusOK {
+		t.Fatalf("search status = %d, want %d", code, http.StatusOK)
+	}
+	if len(found.Data) != 1 || found.Data[0]["id"] != projects[44].ID.String() {
+		t.Fatalf("search result = %+v, want project %s", found.Data, projects[44].ID)
+	}
+	if *found.Pagination.Total != 1 {
+		t.Fatalf("search total = %d, want 1", *found.Pagination.Total)
 	}
 }
 
@@ -444,12 +517,9 @@ func TestCollectionFailsClosedWhenHandlerAuthorizationUnwired(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 	querier := routeSecurityRBACQuerier{bindings: clusterScopedListBindings(clusters[0].ID)}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: querier,
-		// Deliberately no SetAuthorization on the handler.
-		Clusters: handler.NewClusterHandler(&scopeFilterClusterQuerier{clusters: clusters}),
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: querier}, ClusterResources:
+	// Deliberately no SetAuthorization on the handler.
+	ClusterResourceDependencies{Clusters: handler.NewClusterHandler(&scopeFilterClusterQuerier{clusters: clusters})},
 	})
 
 	code, page := getCollection(t, router, "/api/v1/clusters/", token)
@@ -469,7 +539,7 @@ func TestScopedCallerSeesEmptyPageWhenGrantedClusterIsGone(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)
 	}
-	if len(page.Data) != 0 || page.Count != 0 {
-		t.Fatalf("clusters = %d (count %d), want 0/0", len(page.Data), page.Count)
+	if len(page.Data) != 0 || *page.Pagination.Total != 0 {
+		t.Fatalf("clusters = %d (count %d), want 0/0", len(page.Data), *page.Pagination.Total)
 	}
 }

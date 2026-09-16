@@ -2,7 +2,6 @@ package server
 
 import (
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -18,15 +17,15 @@ func (c *productionComposition) composePlatformRouterDependencies(cfg *config.Co
 	rbacQuerier := c.rbacQuerier
 	queue := c.queue
 
-	deps.CharlieOnboarding = c.charlieOnboardingHandler
-	deps.CharlieAdmin = c.charlieAdminHandler
-	deps.CharlieSessions = c.charlieSessionsHandler
-	deps.CharlieThreads = c.charlieThreadsHandler
-	deps.CharlieApprovals = c.charlieApprovalsHandler
-	deps.CharlieContext = c.charlieContextHandler
-	deps.CharlieFindings = c.charlieFindingsHandler
-	deps.CharlieOperations = c.charlieOperationsHandler
-	deps.Extensions = func() *handler.ExtensionHandler {
+	deps.AdminPlatform.CharlieOnboarding = c.charlieOnboardingHandler
+	deps.AdminPlatform.CharlieAdmin = c.charlieAdminHandler
+	deps.AdminPlatform.CharlieSessions = c.charlieSessionsHandler
+	deps.AdminPlatform.CharlieThreads = c.charlieThreadsHandler
+	deps.AdminPlatform.CharlieApprovals = c.charlieApprovalsHandler
+	deps.AdminPlatform.CharlieContext = c.charlieContextHandler
+	deps.AdminPlatform.CharlieFindings = c.charlieFindingsHandler
+	deps.AdminPlatform.CharlieOperations = c.charlieOperationsHandler
+	deps.AdminPlatform.Extensions = func() *handler.ExtensionHandler {
 		h := handler.NewExtensionHandler(queries)
 		h.SetRunTx(sqlcMutationTxRunner[handler.ExtensionMutationTx](database))
 		h.SetAuditWriter(queries)
@@ -34,32 +33,30 @@ func (c *productionComposition) composePlatformRouterDependencies(cfg *config.Co
 		extensionTickets := auth.NewExtensionTicketStore(time.Minute)
 		h.SetExtensionTickets(extensionTickets)
 		h.SetExtensionTicketIssuer(extensionTickets)
-		if err := h.SetTrustedBundleKey(os.Getenv("EXTENSION_BUNDLE_TRUSTED_KEY")); err != nil {
+		if err := h.SetTrustedBundleKey(cfg.ExtensionBundleTrustedKey); err != nil {
 			logger.Warn("invalid EXTENSION_BUNDLE_TRUSTED_KEY; bundle verification will fail closed", "error", err)
 		}
 		return h
 	}()
-	deps.PlatformDefaultTemplate = func() *handler.PlatformDefaultTemplateHandler {
+	deps.AdminPlatform.PlatformDefaultTemplate = func() *handler.PlatformDefaultTemplateHandler {
 		h := handler.NewPlatformDefaultTemplateHandler(queries)
 		h.SetRunTx(sqlcMutationTxRunner[handler.PlatformDefaultTemplateMutationTx](database))
-		h.SetApplyQueue(queue)
-		h.SetTaskOutbox(queries)
 		return h
 	}()
-	deps.PlatformBaselineCoverage = handler.NewPlatformBaselineCoverageHandler(queries)
-	deps.Quotas = func() *handler.QuotaHandler {
+	deps.AdminPlatform.PlatformBaselineCoverage = handler.NewPlatformBaselineCoverageHandler(queries)
+	deps.AdminPlatform.Quotas = func() *handler.QuotaHandler {
 		h := handler.NewQuotaHandler(queries)
 		h.SetRunTx(sqlcMutationTxRunner[handler.QuotaMutationTx](database))
 		return h
 	}()
-	deps.CloudCredentials = c.cloudCredentialsHandler
-	deps.Maintenance = func() *handler.MaintenanceHandler {
+	deps.ClusterResources.CloudCredentials = c.cloudCredentialsHandler
+	deps.AdminPlatform.Maintenance = func() *handler.MaintenanceHandler {
 		h := handler.NewMaintenanceHandler(queries, c.maintenanceEvaluator)
 		h.SetRunTx(sqlcMutationTxRunner[handler.MaintenanceMutationTx](database))
 		return h
 	}()
-	deps.Dashboards = c.dashboardsHandler
-	deps.GitOps = func() *handler.GitOpsHandler {
+	deps.AdminPlatform.Dashboards = c.dashboardsHandler
+	deps.Delivery.GitOps = func() *handler.GitOpsHandler {
 		gitopsRuntime := tasks.GitOpsRuntime{Deps: tasks.GitOpsDeps{
 			Queries: queries, Enqueuer: queue, TaskOutbox: queries,
 			Decryptor: c.encryptor, Log: logger,
@@ -69,16 +66,15 @@ func (c *productionComposition) composePlatformRouterDependencies(cfg *config.Co
 		h.SetTaskOutbox(queries)
 		h.SetAuditWriter(queries)
 		h.SetEncryptor(c.encryptor)
-		h.SetWebhookSecret(cfg.GitopsWebhookSecret)
 		return h
 	}()
-	deps.ProjectCatalogs = c.projectCatalogsHandler
-	deps.ComplianceBaselines = handler.NewComplianceBaselinesHandlerFromPool(database.Pool(), logger)
-	deps.KubectlShell = c.kubectlShell
-	deps.ClusterGroups = c.clusterGroupsHandler
-	deps.Vault = c.vaultHandler
-	deps.ClusterResources = c.clusterResourcesHandler
-	deps.ServiceMesh = func() *handler.ServiceMeshHandler {
+	deps.ClusterResources.ProjectCatalogs = c.projectCatalogsHandler
+	deps.AdminPlatform.ComplianceBaselines = handler.NewComplianceBaselinesHandlerFromPool(database.Pool(), logger)
+	deps.StreamingInternal.KubectlShell = c.kubectlShell
+	deps.ClusterResources.ClusterGroups = c.clusterGroupsHandler
+	deps.ClusterResources.Vault = c.vaultHandler
+	deps.ClusterResources.ClusterResources = c.clusterResourcesHandler
+	deps.ClusterResources.ServiceMesh = func() *handler.ServiceMeshHandler {
 		h := handler.NewServiceMeshHandler(queries)
 		h.SetRequester(c.requester)
 		h.SetAuditor(queries)

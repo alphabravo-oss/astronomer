@@ -83,14 +83,7 @@ func typedMutationCases(clusterID string) []typedMutationCase {
 
 func newTypedMutationRouter(rawToken string, userID uuid.UUID, scopes json.RawMessage, bindings []rbac.RoleBinding) http.Handler {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, scopes),
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: bindings},
-		Resources:   handler.NewResourceHandler(),
-		Workloads:   handler.NewWorkloadHandler(),
-	})
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, scopes), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: bindings}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler(), Workloads: handler.NewWorkloadHandler()}})
 }
 
 // TestTypedMutationRoutesRejectReadScopedTokens is the H1 negative test:
@@ -152,16 +145,11 @@ func doRequest(h http.Handler, method, path, rawToken, body string) *httptest.Re
 func newStreamTicketRouter(rawToken string, userID uuid.UUID, scopes json.RawMessage, bindings []rbac.RoleBinding) http.Handler {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	ticketStore := auth.NewStreamTicketStore(0)
-	ticketHandler := handler.NewStreamTicketHandler(ticketStore)
-	ticketHandler.SetAuthorization(rbac.NewEngine(), routeSecurityRBACQuerier{bindings: bindings})
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:               jwtMgr,
-		AuthQueries:       routeSecurityAPITokenQuerier(rawToken, userID, scopes),
-		RBACEngine:        rbac.NewEngine(),
-		RBACQueries:       routeSecurityRBACQuerier{bindings: bindings},
-		StreamTickets:     ticketHandler,
-		StreamTicketStore: ticketStore,
-	})
+	ticketHandler, err := handler.NewStreamTicketHandler(ticketStore, rbac.NewEngine(), routeSecurityRBACQuerier{bindings: bindings})
+	if err != nil {
+		panic(err)
+	}
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, scopes), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: bindings}}, StreamingInternal: StreamingInternalDependencies{StreamTickets: ticketHandler, StreamTicketStore: ticketStore}})
 }
 
 func issueTicket(h http.Handler, rawToken, streamType, clusterID string) *httptest.ResponseRecorder {
@@ -244,15 +232,8 @@ func newRawBearerStreamRouter(rawToken string, userID uuid.UUID, scopes json.Raw
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	authQueries := routeSecurityAPITokenQuerier(rawToken, userID, scopes)
 	hub := tunnel.NewHub(slog.Default())
-	execConsumer := tunnel.NewExecConsumer(hub, slog.Default())
-	execConsumer.SetAuth(jwtMgr, authQueries)
-	logsConsumer := tunnel.NewLogsConsumer(hub, slog.Default())
-	logsConsumer.SetAuth(jwtMgr, authQueries)
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:  jwtMgr,
-		Exec: execConsumer,
-		Logs: logsConsumer,
-	})
+	execConsumer, logsConsumer, _, _ := mustNewTestStreamSecurity(hub, jwtMgr, authQueries, nil, routeSecurityAdminBindings())
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr}, StreamingInternal: StreamingInternalDependencies{Exec: execConsumer, Logs: logsConsumer}})
 }
 
 // TestRawBearerExecRejectsReadScopedTokens is the other half of the H2
@@ -434,13 +415,7 @@ func TestAgentIngestTokenIngestsForItsOwnCluster(t *testing.T) {
 	clusterA := uuid.New()
 	clusterB := uuid.New()
 	rawToken, userID, bindings := issueIngestIdentity(t, clusterA, clusterB)
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:            auth.MustNewJWTManager("route-security-test-secret", 60),
-		AuthQueries:    routeSecurityAPITokenQuerier(rawToken, userID, ingestTokenScopes(t)),
-		RBACEngine:     rbac.NewEngine(),
-		RBACQueries:    routeSecurityRBACQuerier{bindings: bindings},
-		ApiserverAudit: handler.NewApiserverAuditHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: auth.MustNewJWTManager("route-security-test-secret", 60), AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, ingestTokenScopes(t)), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: bindings}}, ClusterResources: ClusterResourceDependencies{ApiserverAudit: handler.NewApiserverAuditHandler(nil)}})
 
 	rec := doRequest(router, http.MethodPost, "/api/v1/clusters/"+clusterA.String()+"/apiserver-audit/", rawToken, `{"events":[]}`)
 	if rec.Code != http.StatusAccepted {

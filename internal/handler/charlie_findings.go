@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -115,7 +116,7 @@ func (h *CharlieFindingHandler) transitionWorkflow(w http.ResponseWriter, r *htt
 	RespondJSON(w, http.StatusOK, map[string]any{"finding": safeCharlieFinding(view, true)})
 }
 
-func charlieFindingTransition(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, uuid.UUID, uuid.UUID, bool) {
+func charlieFindingTransition(w http.ResponseWriter, r *http.Request) (*reqctx.User, uuid.UUID, uuid.UUID, bool) {
 	actor, findingID, ok := charlieFindingActorAndID(w, r)
 	if !ok {
 		return nil, uuid.Nil, uuid.Nil, false
@@ -132,7 +133,7 @@ func charlieFindingTransition(w http.ResponseWriter, r *http.Request) (*appmiddl
 	return actor, findingID, requestID, true
 }
 
-func charlieFindingActorAndID(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, uuid.UUID, bool) {
+func charlieFindingActorAndID(w http.ResponseWriter, r *http.Request) (*reqctx.User, uuid.UUID, bool) {
 	actor, ok := browserCharlieActor(w, r)
 	if !ok {
 		return nil, uuid.Nil, false

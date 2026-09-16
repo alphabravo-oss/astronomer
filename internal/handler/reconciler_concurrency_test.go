@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -86,7 +87,7 @@ func (h *sleepyHelmStub) History(context.Context, string, string, string) (*prot
 }
 
 func (h *sleepyHelmStub) Status(context.Context, string, string, string) (*protocol.HelmResultPayload, error) {
-	return &protocol.HelmResultPayload{}, nil
+	return &protocol.HelmResultPayload{Success: true, Status: "deployed", Revision: 1}, nil
 }
 
 func TestProcessPendingToolOperations_ParallelDispatch(t *testing.T) {
@@ -102,16 +103,14 @@ func TestProcessPendingToolOperations_ParallelDispatch(t *testing.T) {
 	rec := newToolQueryRecorder(clusterID)
 	queries := &parallelToolQueries{toolQueryRecorder: rec}
 
-	// Pre-seed installed rows so the uninstall path skips findInstalledTool
-	// and goes directly to DeleteInstalledChart after the slow helm.Do.
+	// Independent release plans must dispatch without a global execution lock.
 	for i := 0; i < numOps; i++ {
-		chartID := uuid.New()
+		slug, releaseName, namespace := "tool-"+uuid.NewString()[:8], "rel-"+uuid.NewString()[:8], "ns-"+uuid.NewString()[:8]
+		rec.installedByRef[installedRefKey(clusterID, releaseName, namespace)] = sqlc.InstalledChart{ID: uuid.New(), ClusterID: clusterID, ReleaseName: releaseName, Namespace: namespace, ToolSlug: pgtype.Text{String: slug, Valid: true}}
 		envPayload, err := json.Marshal(toolOperationEnvelope{
-			ClusterID:      clusterID.String(),
-			ToolSlug:       "tool-" + uuid.NewString()[:8],
-			ReleaseName:    "rel-" + uuid.NewString()[:8],
-			Namespace:      "ns-" + uuid.NewString()[:8],
-			InstalledChart: &chartID,
+			ClusterID: clusterID.String(),
+			ToolSlug:  slug,
+			Releases:  []toolRelease{{ReleaseName: releaseName, Namespace: namespace, State: "pending"}},
 		})
 		if err != nil {
 			t.Fatalf("marshal envelope: %v", err)

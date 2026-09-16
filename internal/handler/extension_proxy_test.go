@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // stubBindings returns a fixed set of bindings for any user id. The whole point
@@ -66,7 +67,7 @@ func proxyRequest(t *testing.T, userID uuid.UUID, dataSourceID string, body map[
 	rctx.URLParams.Add("name", "cost-insights")
 	rctx.URLParams.Add("dataSourceId", dataSourceID)
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: userID.String(), AuthMethod: "jwt"})
+	ctx = reqctx.WithUser(ctx, &reqctx.User{ID: userID.String(), AuthMethod: "jwt"})
 	return req.WithContext(ctx)
 }
 

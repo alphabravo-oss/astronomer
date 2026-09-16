@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	corev1 "k8s.io/api/core/v1"
@@ -20,13 +22,12 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func sizerAuthedRequest(method, target string) *http.Request {
 	req := httptest.NewRequest(method, target, nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         uuid.NewString(),
 		AuthMethod: "jwt",
 	})
@@ -476,7 +477,10 @@ func TestGetMonitoringSizerNeverMutatesDisks(t *testing.T) {
 			Name:              "local",
 			IsLocal:           true,
 			KubernetesVersion: "v1.31.4",
-			LastHeartbeat:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		}},
+		liveness: []sqlc.ClusterLiveness{{
+			ClusterID:     clusterID,
+			LastHeartbeat: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		}},
 		backend: sqlc.MonitoringBackend{
 			ID:         uuid.New(),
@@ -489,7 +493,7 @@ func TestGetMonitoringSizerNeverMutatesDisks(t *testing.T) {
 		},
 	}
 	k8s := &sizerK8sFake{t: t}
-	h := NewMonitoringHandlerWithQueries(q, k8s)
+	h := newMonitoringHandlerWithQueriesForTest(q, k8s)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
 	rec := httptest.NewRecorder()
 	req := sizerAuthedRequest(http.MethodGet, "/api/v1/settings/monitoring/sizer/?skipDiskCheck=true")
@@ -607,15 +611,15 @@ func TestCountConnectedAdoptedClustersSkipsLocal(t *testing.T) {
 	hb := func(age time.Duration) pgtype.Timestamptz {
 		return pgtype.Timestamptz{Time: now.Add(-age), Valid: true}
 	}
-	clusters := []sqlc.Cluster{
-		{ID: uuid.New(), Name: "local", IsLocal: true, LastHeartbeat: hb(time.Minute)},
-		{ID: uuid.New(), Name: "m1", LastHeartbeat: hb(time.Minute)},
-		{ID: uuid.New(), Name: "m2", LastHeartbeat: hb(time.Minute)},
-		{ID: uuid.New(), Name: "m3", LastHeartbeat: hb(time.Minute)},
-		{ID: uuid.New(), Name: "m4", LastHeartbeat: hb(time.Minute)},
-		{ID: uuid.New(), Name: "m5", LastHeartbeat: hb(time.Minute)},
-		{ID: uuid.New(), Name: "stale", LastHeartbeat: hb(10 * time.Minute)},
-		{ID: uuid.New(), Name: "nohb"},
+	clusters := []sizerCluster{
+		{Cluster: sqlc.Cluster{ID: uuid.New(), Name: "local", IsLocal: true}, LastHeartbeat: hb(time.Minute)},
+		{Cluster: sqlc.Cluster{ID: uuid.New(), Name: "m1"}, LastHeartbeat: hb(time.Minute)},
+		{Cluster: sqlc.Cluster{ID: uuid.New(), Name: "m2"}, LastHeartbeat: hb(time.Minute)},
+		{Cluster: sqlc.Cluster{ID: uuid.New(), Name: "m3"}, LastHeartbeat: hb(time.Minute)},
+		{Cluster: sqlc.Cluster{ID: uuid.New(), Name: "m4"}, LastHeartbeat: hb(time.Minute)},
+		{Cluster: sqlc.Cluster{ID: uuid.New(), Name: "m5"}, LastHeartbeat: hb(time.Minute)},
+		{Cluster: sqlc.Cluster{ID: uuid.New(), Name: "stale"}, LastHeartbeat: hb(10 * time.Minute)},
+		{Cluster: sqlc.Cluster{ID: uuid.New(), Name: "nohb"}},
 	}
 	if got := countConnectedAdoptedClusters(clusters, now); got != 5 {
 		t.Fatalf("connectedClusters = %d, want 5 (local + stale + no heartbeat excluded)", got)
@@ -641,7 +645,7 @@ func TestSizerListClustersFailClosed(t *testing.T) {
 
 	t.Run("missing lister", func(t *testing.T) {
 		q := &sizerNoListQuerier{backend: backend, storage: storage}
-		h := NewMonitoringHandlerWithQueries(q, k8s)
+		h := newMonitoringHandlerWithQueriesForTest(q, k8s)
 		if _, err := h.sizerListAllClusters(context.Background()); err == nil {
 			t.Fatal("want error when querier cannot list clusters")
 		}
@@ -662,7 +666,7 @@ func TestSizerListClustersFailClosed(t *testing.T) {
 			sizerTestQuerier: sizerTestQuerier{backend: backend, storage: storage},
 			err:              fmt.Errorf("db down"),
 		}
-		h := NewMonitoringHandlerWithQueries(q, k8s)
+		h := newMonitoringHandlerWithQueriesForTest(q, k8s)
 		if _, err := h.sizerListAllClusters(context.Background()); err == nil {
 			t.Fatal("want list error")
 		}
@@ -732,8 +736,13 @@ func TestSizerStorageClassRWOFromAccessModes(t *testing.T) {
 type sizerTestQuerier struct {
 	MonitoringQuerier
 	clusters []sqlc.Cluster
+	liveness []sqlc.ClusterLiveness
 	backend  sqlc.MonitoringBackend
 	storage  sqlc.BackupStorageConfig
+}
+
+func (q *sizerTestQuerier) ListClusterLivenessForClusters(context.Context, []uuid.UUID) ([]sqlc.ClusterLiveness, error) {
+	return q.liveness, nil
 }
 
 func (q *sizerTestQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {

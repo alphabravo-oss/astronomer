@@ -66,10 +66,13 @@ function data<T>(value: T) {
 function page<T>(rows: T[]) {
   return {
     data: rows,
-    count: rows.length,
-    total: rows.length,
-    next: null,
-    previous: null,
+    pagination: {
+      total: rows.length,
+      limit: 200,
+      offset: 0,
+      has_more: false,
+      next_offset: null,
+    },
   };
 }
 
@@ -123,6 +126,21 @@ async function mockApi(pageContext: Page, mutations: MutationRecord[]) {
             createdAt: "2026-08-01T00:00:00Z",
           },
         ]),
+      });
+    }
+    if (path === "/rbac/principals" && method === "GET") {
+      return route.fulfill({
+        json: data({
+          principals: [
+            {
+              kind: "local",
+              user_id: USER_ID,
+              display_name: "Admin User",
+              email: "admin@example.com",
+            },
+          ],
+          connectors: [],
+        }),
       });
     }
 
@@ -198,8 +216,8 @@ async function mockApi(pageContext: Page, mutations: MutationRecord[]) {
         json: data({
           installed: true,
           namespace: "velero",
-          storageReady: true,
-          storageLocations: [
+          storage_ready: true,
+          storage_locations: [
             {
               name: "default",
               provider: "aws",
@@ -213,28 +231,30 @@ async function mockApi(pageContext: Page, mutations: MutationRecord[]) {
     }
     if (path === `/clusters/${CLUSTER_ID}/snapshots` && method === "GET") {
       return route.fulfill({
-        json: data([
-          {
-            id: SNAPSHOT_ID,
-            name: "nightly-prod",
-            source: "schedule",
-            scheduleName: "nightly",
-            phase: "Completed",
-            spec: { includedNamespaces: ["payments"] },
-            startTimestamp: "2026-08-22T23:00:00Z",
-            completionTimestamp: "2026-08-22T23:02:00Z",
-            warnings: 0,
-            errors: 0,
-            createdAt: "2026-08-22T23:00:00Z",
-          },
-        ]),
+        json: data({
+          items: [
+            {
+              id: SNAPSHOT_ID,
+              velero_name: "nightly-prod",
+              source: "schedule",
+              schedule_name: "nightly",
+              phase: "Completed",
+              spec: { includedNamespaces: ["payments"] },
+              start_time: "2026-08-22T23:00:00Z",
+              completion_time: "2026-08-22T23:02:00Z",
+              warnings_count: 0,
+              errors_count: 0,
+              created_at: "2026-08-22T23:00:00Z",
+            },
+          ],
+        }),
       });
     }
     if (
       path === `/clusters/${CLUSTER_ID}/snapshot-schedules` &&
       method === "GET"
     ) {
-      return route.fulfill({ json: data([]) });
+      return route.fulfill({ json: data({ items: [] }) });
     }
     if (
       path === `/clusters/${CLUSTER_ID}/snapshots/${SNAPSHOT_ID}/restore` &&
@@ -287,7 +307,14 @@ test("keyboard-only RBAC binding creation submits the selected scope", async ({
   const dialog = page.getByRole("dialog", { name: "Create Binding" });
   await expect(dialog).toBeVisible();
 
-  await chooseNextOption(page, "User");
+  const principalSearch = page.getByRole("searchbox", {
+    name: "Search local and external identities",
+  });
+  await principalSearch.focus();
+  await page.keyboard.type("admin");
+  const principal = page.getByRole("button", { name: /Admin User/ });
+  await principal.focus();
+  await page.keyboard.press("Enter");
   await chooseNextOption(page, "Role");
   await chooseNextOption(page, "Cluster");
   const submit = dialog.getByRole("button", { name: "Create Binding" });

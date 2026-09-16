@@ -74,7 +74,7 @@ func TestBundleVersionTaskAndAuditCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/bundles/b/versions/", nil)
 			params := sqlc.CreateComponentBundleVersionParams{BundleID: uuid.New(), SourceID: uuid.New(), Version: "2026.08"}
 
-			_, err := executeBundleMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q BundleMutationTx) (bundleVersionMutationResult, error) {
 					version, mutationErr := q.CreateComponentBundleVersion(r.Context(), params)
 					if mutationErr != nil {
@@ -82,10 +82,6 @@ func TestBundleVersionTaskAndAuditCommitTogether(t *testing.T) {
 					}
 					resolution, mutationErr := q.CreateDeliverySourceResolutionAndOutbox(r.Context(), sqlc.CreateDeliverySourceResolutionAndOutboxParams{SourceID: params.SourceID})
 					return bundleVersionMutationResult{version: version, resolution: resolution}, mutationErr
-				},
-				func() (bundleVersionMutationResult, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return bundleVersionMutationResult{}, nil
 				},
 				func(result bundleVersionMutationResult) deliveryAuditEvent {
 					return deliveryAuditEvent{action: "delivery.bundle.version_created", resourceType: "component_bundle_version", resourceID: result.version.ID.String(), status: http.StatusCreated}
@@ -123,7 +119,7 @@ func TestEveryDeliveryBundleMutationUsesTransactionalExecutor(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeBundleMutation" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 				want[fn.Name.Name] = true
 			}
 			return true
@@ -131,7 +127,7 @@ func TestEveryDeliveryBundleMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeBundleMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

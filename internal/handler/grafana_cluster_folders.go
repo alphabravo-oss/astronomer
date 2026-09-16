@@ -87,8 +87,8 @@ func (h *MonitoringHandler) ReconcileGrafanaClusterFolders(ctx context.Context) 
 		if id == "" {
 			continue
 		}
-		wanted[id] = c
-		cm, err := grafanaClusterDashboardConfigMap(c)
+		wanted[id] = c.Cluster
+		cm, err := grafanaClusterDashboardConfigMap(c.Cluster)
 		if err != nil {
 			return err
 		}
@@ -97,7 +97,11 @@ func (h *MonitoringHandler) ReconcileGrafanaClusterFolders(ctx context.Context) 
 		}
 	}
 
-	providers := grafanaClusterFolderProvidersConfigMap(ns, clusters)
+	providerClusters := make([]sqlc.Cluster, 0, len(clusters))
+	for _, cluster := range clusters {
+		providerClusters = append(providerClusters, cluster.Cluster)
+	}
+	providers := grafanaClusterFolderProvidersConfigMap(ns, providerClusters)
 	if err := h.ensureGrafanaConfigMap(ctx, mgmtID, ns, providers); err != nil {
 		return fmt.Errorf("apply cluster folder providers: %w", err)
 	}

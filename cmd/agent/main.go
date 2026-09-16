@@ -17,7 +17,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
-	"github.com/alphabravocompany/astronomer-go/internal/agent2"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -46,18 +45,6 @@ func main() {
 		},
 	}
 
-	// connect2 is experimental and supports already-adopted durable identity
-	// only. It has no CONNECT_ACK credential handoff, so bootstrap adoption and
-	// rotation remain on the deployed `connect` path.
-	connect2Cmd := &cobra.Command{
-		Use:   "connect2",
-		Short: "Experimental remotedialer tunnel for already-adopted agents",
-		Long:  "Experimental existing-durable-identity-only path. It cannot adopt bootstrap credentials or receive durable-token rotations; use the deployed connect command for those workflows.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConnect2(logger)
-		},
-	}
-
 	// upgrade-watchdog is the self-upgrade safety net. It runs as a short-lived
 	// Job created by the agent BEFORE the agent patches its own Deployment: with
 	// strategy Recreate the patching process is terminated by its own rollout,
@@ -73,53 +60,11 @@ func main() {
 	}
 
 	rootCmd.AddCommand(connectCmd)
-	rootCmd.AddCommand(connect2Cmd)
 	rootCmd.AddCommand(upgradeWatchdogCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
-}
-
-// runConnect2 is the experimental remotedialer tunnel. It deliberately rejects
-// bootstrap/legacy/environment sources because remotedialer has no CONNECT_ACK
-// channel for durable identity handoff or rotation.
-func runConnect2(logger *slog.Logger) error {
-	cfg, err := agent.LoadAgentConfigWithLogger(logger)
-	if err != nil {
-		logger.Error("failed to load config", "error", err)
-		return err
-	}
-	if err := validateConnect2CredentialSource(cfg.CredentialSource); err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigCh
-		logger.Info("received signal, shutting down", "signal", sig)
-		cancel()
-	}()
-
-	logger.Info("starting agent (remotedialer)",
-		"server_url", cfg.ServerURL,
-		"cluster_id", cfg.ClusterID,
-	)
-	if err := agent2.ConnectAndServe(ctx, logger, cfg.ServerURL, cfg.ClusterID, cfg.AgentToken, cfg.CACert, cfg.CAChecksum); err != nil && err != context.Canceled {
-		logger.Error("agent2 exited with error", "error", err)
-		return err
-	}
-	return nil
-}
-
-func validateConnect2CredentialSource(source string) error {
-	if source != agent.CredentialSourceIdentity {
-		return fmt.Errorf("connect2 requires credential_source=%s; bootstrap, legacy, and environment credentials must use connect", agent.CredentialSourceIdentity)
-	}
-	return nil
 }
 
 func runConnect(logger *slog.Logger) error {

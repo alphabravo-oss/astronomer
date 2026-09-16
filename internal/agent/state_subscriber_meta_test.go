@@ -165,6 +165,7 @@ func TestStateSubscriberMetadataInformerRegistration(t *testing.T) {
 	found := waitForStateUpdate(t, sender, "Namespace", "team-a", 2*time.Second)
 	if found == nil {
 		t.Fatal("expected a STATE_UPDATE for Namespace team-a, got none")
+		return
 	}
 	if found.Op != protocol.StateUpdateOpAdded {
 		t.Errorf("expected op=added, got %s", found.Op)
@@ -281,6 +282,7 @@ func TestStateSubscriberToleratesAbsentCRD(t *testing.T) {
 	found := waitForStateUpdate(t, sender, "Backup", "nightly-2026", 2*time.Second)
 	if found == nil {
 		t.Fatal("expected a STATE_UPDATE for the late-installed Backup CRD")
+		return
 	}
 	if found.APIGroup != "velero.io" {
 		t.Errorf("expected api_group=velero.io, got %q", found.APIGroup)
@@ -328,6 +330,7 @@ func TestStateSubscriberGatekeeperConstraintDiscovery(t *testing.T) {
 	found := waitForStateUpdate(t, sender, "Constraint", "require-team-label", 3*time.Second)
 	if found == nil {
 		t.Fatal("expected a STATE_UPDATE with normalized kind Constraint for the discovered gatekeeper resource")
+		return
 	}
 	if found.APIGroup != "constraints.gatekeeper.sh" {
 		t.Errorf("expected api_group=constraints.gatekeeper.sh, got %q", found.APIGroup)

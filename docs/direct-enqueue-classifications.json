@@ -3,68 +3,12 @@
   "description": "Classifies direct Redis enqueue call sites that are not statically proven task-outbox backed by scripts/operation-task-inventory.mjs.",
   "classifications": [
     {
-      "file": "internal/handler/apiserver_allowlist.go",
-      "function": "fireReconcile",
-      "classification": "repair-backed",
-      "owner": "backend/network",
-      "reason": "HTTP handlers persist the allowlist row and audit event before this best-effort on-demand reconcile. Missed delivery leaves durable desired state in Postgres.",
-      "validation": "apiserver_allowlist:reconcile_all is registered and scheduled every 15 minutes to reconcile active allowlists."
-    },
-    {
-      "file": "internal/handler/cluster_registries.go",
-      "function": "enqueueApply",
-      "classification": "repair-backed",
-      "owner": "backend/registry",
-      "reason": "Registry config writes are durable in cluster_registry_configs; this direct enqueue only accelerates Secret/ServiceAccount convergence.",
-      "validation": "cluster:registry_drift_reconcile is registered and scheduled every 30 minutes, and its handler re-applies every registry row idempotently."
-    },
-    {
       "file": "internal/handler/control_plane.go",
       "function": "enqueueNotifications",
       "classification": "best-effort",
       "owner": "backend/notifications",
       "reason": "Notification fan-out is side-effect delivery for already-detected control-plane alerts. It should not block control-plane health responses.",
       "validation": "Failure only drops an outbound notification attempt; alert state remains queryable through control-plane status."
-    },
-    {
-      "file": "internal/handler/network_policies.go",
-      "function": "enqueueApply",
-      "classification": "outbox-backed",
-      "owner": "backend/network",
-      "reason": "Production create/reapply paths commit each network-policy application with a unique task_outbox row and mandatory audit intent. Direct Redis enqueue remains only in the legacy/unit-test fallback.",
-      "validation": "Production wires NetworkPolicyMutationTx; rollback tests prove application rows, task intents, and audit intent commit together. Periodic apply and drift sweeps remain a second repair layer."
-    },
-    {
-      "file": "internal/handler/platform_default_template.go",
-      "function": "Reapply",
-      "classification": "outbox-backed",
-      "owner": "backend/templates",
-      "reason": "The handler attempts task_outbox before the direct queue fallback, and the Reapply endpoint writes cluster_template_applications first.",
-      "validation": "Production ClusterTemplateHandler server wiring sets taskOutbox and cluster_template:drift_check repairs missed direct delivery."
-    },
-    {
-      "file": "internal/handler/projects.go",
-      "function": "dispatchProjectReconcile",
-      "classification": "outbox-backed",
-      "owner": "backend/projects",
-      "reason": "The transactional namespace mutation persists the project_namespaces sidecar before dispatch. When no live requester is available, this path writes task_outbox with a stable project/cluster/namespace/op dedupe key before reaching the direct Redis fallback.",
-      "validation": "Production server wiring calls SetTaskOutbox, dispatchProjectReconcile uses enqueueProjectTaskOutbox, and the existing project async tests assert the same helper's payload, queue, dedupe key, and delivery-attempt contract."
-    },
-    {
-      "file": "internal/handler/projects.go",
-      "function": "upsertAndEnqueue",
-      "classification": "outbox-backed",
-      "owner": "backend/projects",
-      "reason": "Production server wiring provides a live requester, so project apply runs in-process. Non-requester fallback persists task_outbox before direct Redis enqueue, after project_namespaces is persisted.",
-      "validation": "TestProjectHandlerUpsertAndEnqueueUsesTaskOutboxWithoutRequester asserts the fallback writes task_outbox with a stable dedupe key and project:reconcile payload."
-    },
-    {
-      "file": "internal/handler/projects.go",
-      "function": "enqueueCleanup",
-      "classification": "outbox-backed",
-      "owner": "backend/projects",
-      "reason": "Production server wiring provides a live requester, so namespace cleanup runs in-process. Non-requester fallback now persists task_outbox before direct Redis enqueue; DB-only cleanup remains limited to no-outbox/no-queue dev wiring.",
-      "validation": "TestProjectHandlerEnqueueCleanupUsesTaskOutboxWithoutRequester asserts cleanup writes task_outbox, keeps the DB sidecar row for task ownership, and stores the remove payload."
     },
     {
       "file": "internal/worker/job_metrics.go",

@@ -388,6 +388,7 @@ func TestApplyVeleroBSL_RoundTrip(t *testing.T) {
 	}
 	if bslPost == nil {
 		t.Fatalf("no POST to backupstoragelocations: %+v", reqs)
+		return
 	}
 	var doc map[string]any
 	if err := json.Unmarshal(bslPost.Body, &doc); err != nil {
@@ -418,6 +419,20 @@ type fakeBackupQuerier struct {
 	restoreByKey    map[string]sqlc.RestoreOperation
 	restoreCreates  []sqlc.CreateRestoreOperationParams
 	idemRestoreArgs []sqlc.CreateRestoreOperationIdempotentParams
+}
+
+func (f *fakeBackupQuerier) UpsertAuditOutbox(_ context.Context, _ sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{}, nil
+}
+
+func (f *fakeBackupQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAuditLogV1Params) error {
+	return nil
+}
+
+func wireBackupTestTransaction(h *BackupHandler, tx BackupMutationTx) {
+	h.SetRunTx(func(_ context.Context, fn func(BackupMutationTx) error) error {
+		return fn(tx)
+	})
 }
 
 func (f *fakeBackupQuerier) GetBackupStorageConfigByID(ctx context.Context, id uuid.UUID) (sqlc.BackupStorageConfig, error) {
@@ -644,6 +659,7 @@ func TestCreateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
 	}
 	q := &fakeBackupQuerier{}
 	h := NewBackupHandler(q)
+	wireBackupTestTransaction(h, q)
 	h.SetEncryptor(enc)
 
 	body := `{"name":"primary","storage_type":"s3","bucket":"backups","access_key":"AKIA","secret_key":"SECRET","velero_namespace":"velero","bsl_name":"primary"}`
@@ -700,6 +716,7 @@ func TestUpdateStorageConfigStoresEncryptedCredentialsOnly(t *testing.T) {
 	// cluster), so the fake must know about it.
 	q := &fakeBackupQuerier{cfg: sqlc.BackupStorageConfig{ID: id, Name: "primary", Bucket: "backups"}}
 	h := NewBackupHandler(q)
+	wireBackupTestTransaction(h, q)
 	h.SetEncryptor(enc)
 
 	body := `{"name":"primary","storage_type":"s3","bucket":"backups","access_key":"AKIA","secret_key":"SECRET","velero_namespace":"velero","bsl_name":"primary"}`
@@ -743,7 +760,7 @@ func TestStorageConfigEndpoint_Success(t *testing.T) {
 	h := &BackupHandler{queries: q, httpClient: srv.Client()}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/backups/storage/"+id.String()+"/test/", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/backups/storage/"+id.String()+"/test-connection/", nil)
 	// chi URL params would normally be set by the router; mimic that.
 	req = req.WithContext(setChiURLParam(req.Context(), "id", id.String()))
 	h.TestStorageConfig(rec, req)

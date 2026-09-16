@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Project · Cloud Credentials tab — list view.
  *
@@ -20,7 +20,7 @@ import {
  * key gets rejected.
  */
 import { useState } from "react";
-import { useParams, useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Plus,
   Loader2,
@@ -36,9 +36,10 @@ import {
   useTestCloudCredential,
   canEditProject,
 } from "@/components/projects/hooks";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { ProviderBadge } from "@/components/projects/cloud-credentials/provider-badge";
 import { ActionButton } from "@/components/ui/action-button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type {
   CloudCredential,
   CloudCredentialTestResult,
@@ -46,9 +47,9 @@ import type {
 import { cn, formatRelativeTime } from "@/lib/utils";
 
 function CloudCredentialsListPage() {
-  const params = useParams();
-  const projectId = params.id as string;
-  const router = useRouter();
+  const params = Route.useParams();
+  const projectId = params.id;
+  const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const canEdit = canEditProject(user);
 
@@ -63,6 +64,7 @@ function CloudCredentialsListPage() {
     Record<string, CloudCredentialTestResult>
   >({});
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CloudCredential | null>(null);
 
   const handleTest = async (cred: CloudCredential) => {
     setTestingId(cred.id);
@@ -80,16 +82,6 @@ function CloudCredentialsListPage() {
     }
   };
 
-  const handleDelete = (cred: CloudCredential) => {
-    if (
-      !confirm(
-        `Delete cloud credential "${cred.name}"? This action cannot be undone.`,
-      )
-    )
-      return;
-    deleteMutation.mutate(cred.id);
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -102,9 +94,7 @@ function CloudCredentialsListPage() {
             intent="primary"
             icon={<Plus className="h-4 w-4" />}
             onClick={() =>
-              router.push(
-                `/dashboard/projects/${projectId}/cloud-credentials/new`,
-              )
+              void navigate({ to: `/dashboard/projects/${projectId}/cloud-credentials/new` })
             }
           >
             New credential
@@ -192,7 +182,7 @@ function CloudCredentialsListPage() {
                         type="button"
                         onClick={() => handleTest(cred)}
                         disabled={testing}
-                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded border border-border text-xs hover:bg-accent transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-sm border border-border text-xs hover:bg-accent transition-colors disabled:opacity-50"
                       >
                         {testing ? (
                           <Loader2 className="h-3 w-3 animate-spin" />
@@ -227,11 +217,9 @@ function CloudCredentialsListPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              router.push(
-                                `/dashboard/projects/${projectId}/cloud-credentials/${cred.id}/edit`,
-                              )
+                              void navigate({ to: `/dashboard/projects/${projectId}/cloud-credentials/${cred.id}/edit` })
                             }
-                            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                            className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                             title="Edit credential"
                           >
                             <PencilLine className="h-3.5 w-3.5" />
@@ -240,8 +228,8 @@ function CloudCredentialsListPage() {
                         {canEdit && (
                           <button
                             type="button"
-                            onClick={() => handleDelete(cred)}
-                            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+                            onClick={() => setDeleteTarget(cred)}
+                            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
                             title="Delete credential"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -256,6 +244,33 @@ function CloudCredentialsListPage() {
           </Table>
         </div>
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          deleteMutation.mutate(deleteTarget.id, {
+            onSuccess: () => setDeleteTarget(null),
+          });
+        }}
+        title="Delete cloud credential"
+        description="This permanently removes the stored cloud credential and its project binding."
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={deleteMutation.isPending}
+        impact={
+          deleteTarget
+            ? {
+                scope: deleteTarget.name,
+                consequences: [
+                  `Credential material will stop being managed across ${deleteTarget.targetRefs.length} target cluster${deleteTarget.targetRefs.length === 1 ? "" : "s"}.`,
+                  "Workloads that depend on the credential may lose cloud-provider access.",
+                ],
+                recovery: "Create and distribute a replacement credential.",
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

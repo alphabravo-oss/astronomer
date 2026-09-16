@@ -12,16 +12,16 @@ func TestChartRatingsProductionWiresTransactionRunner(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(source)
-	constructor := strings.Index(text, "h := handler.NewChartRatingsHandler(queries)")
+	constructor := strings.Index(text, "chartRatings := handler.NewChartRatingsHandler(queries)")
 	if constructor < 0 {
 		t.Fatal("ChartRatings production constructor not found")
 	}
-	end := strings.Index(text[constructor:], "return h")
+	end := strings.Index(text[constructor:], "return RouterDependencies{")
 	if end < 0 {
 		t.Fatal("ChartRatings production constructor terminator not found")
 	}
 	block := text[constructor : constructor+end]
-	want := "h.SetRunTx(sqlcMutationTxRunner[handler.ChartRatingMutationTx](database))"
+	want := "chartRatings.SetRunTx(sqlcMutationTxRunner[handler.ChartRatingMutationTx](database))"
 	if !strings.Contains(block, want) {
 		t.Fatalf("ChartRatings production constructor does not wire the exact transaction runner: %s", block)
 	}

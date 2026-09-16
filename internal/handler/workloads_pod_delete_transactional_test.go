@@ -9,6 +9,7 @@ import (
 	"go/token"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -196,36 +197,45 @@ func TestDeletePodFailsClosedWithoutTransactionRunner(t *testing.T) {
 }
 
 func TestDeletePodAllEntriesAreTransactionOnly(t *testing.T) {
-	file, err := parser.ParseFile(token.NewFileSet(), "workloads.go", nil, 0)
+	paths, err := filepath.Glob("workloads*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	found, runTxCalls, remoteCalls := false, 0, 0
-	ast.Inspect(file, func(node ast.Node) bool {
-		declaration, ok := node.(*ast.FuncDecl)
-		if !ok || declaration.Name.Name != "DeletePod" {
-			return true
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
 		}
-		found = true
-		ast.Inspect(declaration.Body, func(child ast.Node) bool {
-			call, ok := child.(*ast.CallExpr)
-			if !ok {
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			declaration, ok := node.(*ast.FuncDecl)
+			if !ok || declaration.Name.Name != "DeletePod" {
 				return true
 			}
-			selector, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
+			found = true
+			ast.Inspect(declaration.Body, func(child ast.Node) bool {
+				call, ok := child.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				selector, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if selector.Sel.Name == "runTx" {
+					runTxCalls++
+				}
+				if selector.Sel.Name == "Do" {
+					remoteCalls++
+				}
 				return true
-			}
-			if selector.Sel.Name == "runTx" {
-				runTxCalls++
-			}
-			if selector.Sel.Name == "Do" {
-				remoteCalls++
-			}
-			return true
+			})
+			return false
 		})
-		return false
-	})
+	}
 	if !found || runTxCalls != 1 || remoteCalls != 0 {
 		t.Fatalf("found=%t runTxCalls=%d remoteCalls=%d", found, runTxCalls, remoteCalls)
 	}

@@ -6,8 +6,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * editable on this surface (it becomes the immutable URL key once saved).
  */
 import { useId, useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Gauge, Save } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
@@ -17,10 +17,7 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateQuotaPlan } from "@/components/settings/hooks";
-import type {
-  QuotaEnforcement,
-  QuotaPlanWriteRequest,
-} from "@/lib/api/quotas";
+import type { QuotaEnforcement, QuotaPlanWriteRequest } from "@/lib/api/quotas";
 
 const DEFAULT_FORM: QuotaPlanWriteRequest = {
   name: "",
@@ -63,7 +60,7 @@ function NumberField({
 }
 
 function NewQuotaPlanForm() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const create = useCreateQuotaPlan();
   const [form, setForm] = useState<QuotaPlanWriteRequest>(DEFAULT_FORM);
 
@@ -78,9 +75,9 @@ function NewQuotaPlanForm() {
     }
     try {
       const created = await create.mutateAsync(form);
-      router.push(
-        `/dashboard/settings/quotas/${encodeURIComponent(created.name)}`,
-      );
+      void navigate({
+        to: `/dashboard/settings/quotas/${encodeURIComponent(created.name)}`,
+      });
     } catch {
       // mutation toasts
     }
@@ -158,9 +155,7 @@ function NewQuotaPlanForm() {
           <NumberField
             label="Max clusters per project"
             value={form.max_clusters_per_project}
-            onChange={(v) =>
-              setForm({ ...form, max_clusters_per_project: v })
-            }
+            onChange={(v) => setForm({ ...form, max_clusters_per_project: v })}
           />
           <NumberField
             label="Max namespaces per project"
@@ -172,30 +167,22 @@ function NewQuotaPlanForm() {
           <NumberField
             label="Max members per project"
             value={form.max_members_per_project}
-            onChange={(v) =>
-              setForm({ ...form, max_members_per_project: v })
-            }
+            onChange={(v) => setForm({ ...form, max_members_per_project: v })}
           />
           <NumberField
             label="Max projects per user"
             value={form.max_projects_per_user}
-            onChange={(v) =>
-              setForm({ ...form, max_projects_per_user: v })
-            }
+            onChange={(v) => setForm({ ...form, max_projects_per_user: v })}
           />
           <NumberField
             label="Max API tokens per user"
             value={form.max_tokens_per_user}
-            onChange={(v) =>
-              setForm({ ...form, max_tokens_per_user: v })
-            }
+            onChange={(v) => setForm({ ...form, max_tokens_per_user: v })}
           />
           <NumberField
             label="Max concurrent streams per user"
             value={form.max_streams_per_user}
-            onChange={(v) =>
-              setForm({ ...form, max_streams_per_user: v })
-            }
+            onChange={(v) => setForm({ ...form, max_streams_per_user: v })}
           />
           <NumberField
             label="Fleet cluster cap"
@@ -211,7 +198,9 @@ function NewQuotaPlanForm() {
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <ActionButton onClick={() => router.push("/dashboard/settings/quotas")}>
+        <ActionButton
+          onClick={() => void navigate({ to: "/dashboard/settings/quotas" })}
+        >
           Cancel
         </ActionButton>
         <ActionButton
@@ -231,13 +220,13 @@ function NewQuotaPlanPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings/quotas"
+        <RouterLink
+          to="/dashboard/settings/quotas"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Quotas · New"
           title={

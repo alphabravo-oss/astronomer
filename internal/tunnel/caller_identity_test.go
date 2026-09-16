@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -25,7 +26,7 @@ import (
 func TestBuildK8sRequestPayloadIdentityFromSession(t *testing.T) {
 	userID := uuid.New()
 	req := httptest.NewRequest("GET", "/api/v1/clusters/c1/k8s/api/v1/pods", nil)
-	req = req.WithContext(appmiddleware.SetAuthenticatedUserForTest(req.Context(), &appmiddleware.AuthenticatedUser{ID: userID.String()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID.String()}))
 
 	payload, err := buildK8sRequestPayload(req)
 	if err != nil {
@@ -228,7 +229,7 @@ func TestInternalK8sHandlerForwardsIdentityToAgent(t *testing.T) {
 			seen, stop := captureRespondingAgent(t, hub, clusterID, respJSON)
 			defer stop()
 
-			h := NewInternalK8sHandler(hub, "the-right-psk", slog.Default())
+			h := NewInternalK8sHandler(hub, InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
 			router := chi.NewRouter()
 			router.Post("/internal/tunnel/k8s/{cluster_id}", h.Handle)
 
@@ -279,7 +280,7 @@ func TestInternalK8sHandlerIgnoresHeaderSuppliedIdentity(t *testing.T) {
 	seen, stop := captureRespondingAgent(t, hub, clusterID, respJSON)
 	defer stop()
 
-	h := NewInternalK8sHandler(hub, "the-right-psk", slog.Default())
+	h := NewInternalK8sHandler(hub, InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
 	router := chi.NewRouter()
 	router.Post("/internal/tunnel/k8s/{cluster_id}", h.Handle)
 

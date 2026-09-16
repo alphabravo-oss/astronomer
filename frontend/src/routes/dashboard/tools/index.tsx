@@ -1,26 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMemo } from "react";
+import { Server } from "lucide-react";
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { useRouter } from "@/lib/navigation";
-import { useClusters } from "@/lib/hooks";
+import { QueryStates } from "@/components/ui/query-states";
+import { useClusters } from "@/lib/hooks/clusters";
 import { useClusterToolsStatus, useTools } from "@/lib/hooks/tools";
-import { cn } from "@/lib/utils";
 import { normalizeToolStatus } from "@/lib/tool-status";
-import type {
-  Cluster,
-  ClusterTool,
-  ClusterToolStatus,
-  ToolStatus,
-} from "@/types";
-import { Loader2, Server } from "lucide-react";
+import type { Cluster, ClusterTool, ToolStatus } from "@/types";
+import { cn } from "@/lib/utils";
 
 const toolStatusDotColor: Record<ToolStatus, string> = {
   installed: "bg-status-success",
@@ -44,83 +34,112 @@ const toolStatusLabel: Record<ToolStatus, string> = {
   unknown: "Unknown",
 };
 
-function ClusterToolRow({
-  cluster,
-  tools,
+function ToolStatusCell({
+  clusterId,
+  tool,
 }: {
-  cluster: Cluster;
-  tools: ClusterTool[];
+  clusterId: string;
+  tool: ClusterTool;
 }) {
-  const router = useRouter();
-  const { data: statuses } = useClusterToolsStatus(cluster.id);
-
-  const statusMap = new Map<string, ClusterToolStatus>();
-  statuses?.forEach((s) => statusMap.set(s.slug, s));
+  const statusQuery = useClusterToolsStatus(clusterId);
+  const status = normalizeToolStatus(
+    statusQuery.data?.find((item) => item.slug === tool.slug)?.status,
+  );
+  const working = ["installing", "upgrading", "uninstalling"].includes(status);
 
   return (
-    <TableRow
-      onClick={() => router.push(`/dashboard/clusters/${cluster.id}/tools`)}
-      className="border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
+    <span
+      className="flex items-center gap-2"
+      aria-label={`${tool.name}: ${toolStatusLabel[status]}`}
     >
-      <TableCell className="px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Server className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-          <div>
-            <p className="font-medium text-foreground text-sm">
-              {cluster.displayName}
-            </p>
-            <p className="text-xs text-muted-foreground">{cluster.name}</p>
-          </div>
-        </div>
-      </TableCell>
-      <TableCell className="px-4 py-3">
-        <span className="text-xs text-muted-foreground capitalize">
-          {cluster.environment}
-        </span>
-      </TableCell>
-      {tools.map((tool) => {
-        const toolStatus = statusMap.get(tool.slug);
-        const status = normalizeToolStatus(toolStatus?.status);
-        return (
-          <TableCell key={tool.slug} className="px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                {(status === "installing" ||
-                  status === "upgrading" ||
-                  status === "uninstalling") && (
-                  <span
-                    className={cn(
-                      "absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping",
-                      toolStatusDotColor[status],
-                    )}
-                  />
-                )}
-                <span
-                  className={cn(
-                    "relative inline-flex rounded-full h-2.5 w-2.5",
-                    toolStatusDotColor[status],
-                  )}
-                />
-              </span>
-              <span className="text-xs text-muted-foreground hidden xl:inline">
-                {toolStatusLabel[status]}
-              </span>
+      <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
+        {working ? (
+          <span
+            className={cn(
+              "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
+              toolStatusDotColor[status],
+            )}
+          />
+        ) : null}
+        <span
+          className={cn(
+            "relative inline-flex h-2.5 w-2.5 rounded-full",
+            toolStatusDotColor[status],
+          )}
+        />
+      </span>
+      <span className="text-xs text-muted-foreground">
+        {toolStatusLabel[status]}
+      </span>
+    </span>
+  );
+}
+
+function ManagedToolsTable({
+  clusters,
+  tools,
+}: {
+  clusters: Cluster[];
+  tools: ClusterTool[];
+}) {
+  const navigate = useNavigate();
+  const columns = useMemo<Column<Cluster>[]>(
+    () => [
+      {
+        key: "cluster",
+        header: "Cluster",
+        accessor: (cluster) => (
+          <div className="flex items-center gap-3">
+            <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div>
+              <p className="font-medium text-foreground">
+                {cluster.displayName}
+              </p>
+              <p className="text-xs text-muted-foreground">{cluster.name}</p>
             </div>
-          </TableCell>
-        );
-      })}
-    </TableRow>
+          </div>
+        ),
+        sortAccessor: (cluster) => cluster.displayName || cluster.name,
+      },
+      {
+        key: "environment",
+        header: "Environment",
+        accessor: (cluster) => (
+          <span className="capitalize">{cluster.environment}</span>
+        ),
+        sortAccessor: (cluster) => cluster.environment,
+      },
+      ...tools.map<Column<Cluster>>((tool) => ({
+        key: tool.slug,
+        header: tool.name,
+        accessor: (cluster) => (
+          <ToolStatusCell clusterId={cluster.id} tool={tool} />
+        ),
+      })),
+    ],
+    [tools],
+  );
+
+  return (
+    <DataTable
+      data={clusters}
+      columns={columns}
+      keyExtractor={(cluster) => cluster.id}
+      persistKey="estate-tools"
+      searchPlaceholder="Filter clusters…"
+      onRowClick={(cluster) =>
+        void navigate({
+          to: "/dashboard/clusters/$id/tools",
+          params: { id: cluster.id },
+        })
+      }
+    />
   );
 }
 
 function ManagedToolsPage() {
-  const { data: clustersData, isLoading: clustersLoading } = useClusters({
-    pageSize: 100,
-  });
-  const { data: tools, isLoading: toolsLoading } = useTools();
-
-  const clusters = clustersData?.data || [];
-  const isLoading = clustersLoading || toolsLoading;
+  const clustersQuery = useClusters({ pageSize: 100 });
+  const toolsQuery = useTools();
 
   return (
     <PageShell>
@@ -128,55 +147,37 @@ function ManagedToolsPage() {
         title="Cluster Tools"
         description="Manage operational tools across your clusters"
       />
-
-      {/* Table */}
-      {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : clusters.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <Server className="h-10 w-10 mb-3" />
-          <p className="text-sm">No clusters registered</p>
-          <p className="text-xs mt-1">
-            Register a cluster to start managing tools
-          </p>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table className="w-full">
-              <TableHeader>
-                <TableRow className="border-b border-border bg-muted/30">
-                  <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Cluster
-                  </TableHead>
-                  <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Environment
-                  </TableHead>
-                  {(tools || []).map((tool) => (
-                    <TableHead
-                      key={tool.slug}
-                      className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
-                    >
-                      {tool.name}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {clusters.map((cluster) => (
-                  <ClusterToolRow
-                    key={cluster.id}
-                    cluster={cluster}
-                    tools={tools || []}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
-      )}
+      <QueryStates
+        query={clustersQuery}
+        permission="clusters:read"
+        isEmpty={(page) => page.data.length === 0}
+        empty={
+          <EmptyState
+            icon={Server}
+            title="No clusters registered"
+            description="Register a cluster to start managing tools."
+          />
+        }
+      >
+        {(page) => (
+          <QueryStates
+            query={toolsQuery}
+            permission="tools:read"
+            isEmpty={(tools) => tools.length === 0}
+            empty={
+              <EmptyState
+                icon={Server}
+                title="No tools available"
+                description="No cluster tools are configured for this installation."
+              />
+            }
+          >
+            {(tools) => (
+              <ManagedToolsTable clusters={page.data} tools={tools} />
+            )}
+          </QueryStates>
+        )}
+      </QueryStates>
     </PageShell>
   );
 }

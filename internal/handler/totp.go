@@ -4,19 +4,21 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // chiURLParam is a tiny indirection so the rest of the file reads as
@@ -38,14 +40,7 @@ var base64URLEncoding = base64.RawURLEncoding
 // constructors without dragging the rest of the schema along.
 type TOTPQuerier interface {
 	GetUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) (sqlc.UserTotpEnrollment, error)
-	UpsertUserTOTPEnrollment(ctx context.Context, arg sqlc.UpsertUserTOTPEnrollmentParams) (sqlc.UserTotpEnrollment, error)
-	DeleteUserTOTPEnrollment(ctx context.Context, userID uuid.UUID) error
-	TouchUserTOTPLastUsed(ctx context.Context, arg sqlc.TouchUserTOTPLastUsedParams) error
-	InsertRecoveryCode(ctx context.Context, arg sqlc.InsertRecoveryCodeParams) error
-	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]sqlc.UserTotpRecoveryCode, error)
 	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
-	ConsumeRecoveryCode(ctx context.Context, arg sqlc.ConsumeRecoveryCodeParams) (int64, error)
-	DeleteRecoveryCodesByUser(ctx context.Context, userID uuid.UUID) error
 }
 
 // TOTPHandler owns the /auth/totp/* endpoints. It's split out from
@@ -58,11 +53,13 @@ type TOTPHandler struct {
 	rehasher   PasswordRehasher // for password verify on disable
 	encryptor  *auth.Encryptor
 	jwt        *auth.JWTManager
-	audit      AuthAuditWriter
+	runTx      totpRunTxFunc
 	log        *slog.Logger
 	issuer     string
 	requireAll bool
 	emails     EmailNotifier
+	failThresh int
+	lockoutDur time.Duration
 }
 
 // SetEmailNotifier attaches the email-enqueue hook used by the
@@ -71,9 +68,7 @@ type TOTPHandler struct {
 func (h *TOTPHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
 // NewTOTPHandler wires the TOTP handler. queries / users / encryptor /
-// jwt are required at construction; the optional dependencies (audit,
-// logger, issuer, require-all) are set via dedicated setters so the
-// existing test fakes can leave them off.
+// jwt are required at construction. Mutations also require SetRunTx.
 func NewTOTPHandler(queries TOTPQuerier, users UserQuerier, encryptor *auth.Encryptor, jwt *auth.JWTManager) *TOTPHandler {
 	return &TOTPHandler{
 		queries:   queries,
@@ -84,9 +79,6 @@ func NewTOTPHandler(queries TOTPQuerier, users UserQuerier, encryptor *auth.Encr
 		issuer:    "Astronomer",
 	}
 }
-
-// SetAuditWriter attaches the audit-log writer. Optional.
-func (h *TOTPHandler) SetAuditWriter(a AuthAuditWriter) { h.audit = a }
 
 // SetLogger overrides the default logger.
 func (h *TOTPHandler) SetLogger(l *slog.Logger) {
@@ -116,16 +108,36 @@ func (h *TOTPHandler) SetPasswordRehasher(p PasswordRehasher) { h.rehasher = p }
 // the flag (see AuthHandler.SetTOTPRequireAll).
 func (h *TOTPHandler) SetRequireAll(require bool) { h.requireAll = require }
 
-// IsEnrolled is a convenience for Login (and tests) — returns true if
-// the user has a confirmed enrollment row. Errors are treated as
-// "not enrolled" (the caller never wants a DB hiccup to grant a free
-// login).
-func (h *TOTPHandler) IsEnrolled(ctx context.Context, userID uuid.UUID) bool {
+// SetLockoutPolicy keeps the second-factor failure budget identical to the
+// password failure budget. The database update is atomic across replicas.
+func (h *TOTPHandler) SetLockoutPolicy(threshold int, duration time.Duration) {
+	h.failThresh = threshold
+	h.lockoutDur = duration
+}
+
+func (h *TOTPHandler) effectiveLockoutPolicy() (int, time.Duration) {
+	threshold := h.failThresh
+	if threshold <= 0 {
+		threshold = auth.LoginFailureThreshold
+	}
+	duration := h.lockoutDur
+	if duration <= 0 {
+		duration = auth.LockoutDuration
+	}
+	return threshold, duration
+}
+
+// IsEnrolled distinguishes missing enrollment from unavailable storage so
+// authentication cannot bypass MFA during an enrollment-read outage.
+func (h *TOTPHandler) IsEnrolled(ctx context.Context, userID uuid.UUID) (bool, error) {
 	if h == nil || h.queries == nil {
-		return false
+		return false, errors.New("TOTP enrollment store is unavailable")
 	}
 	_, err := h.queries.GetUserTOTPEnrollment(ctx, userID)
-	return err == nil
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // --- Enrollment: start ---
@@ -147,7 +159,10 @@ type enrollChallengeClaims struct {
 // the browser. Nothing lands in the DB at this stage — the user is
 // free to abandon the flow.
 func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
+	if !h.requireRunner(w, r) {
+		return
+	}
+	authUser, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -221,8 +236,10 @@ func (h *TOTPHandler) EnrollStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Audit (no secret, only the user_id + that we issued a challenge).
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
-		"auth.totp.enroll_started", "user", userID.String(), authUser.Username, nil)
+	if !h.auditEvent(w, r, pgtype.UUID{Bytes: userID, Valid: true},
+		"auth.totp.enroll_started", userID.String(), authUser.Username, http.StatusOK, nil) {
+		return
+	}
 
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"otpauth_url":     url,
@@ -259,7 +276,10 @@ type enrollConfirmResponse struct {
 // the user-supplied 6-digit code, persists the enrollment row, and
 // generates+returns 10 recovery codes (shown ONCE).
 func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
+	if !h.requireRunner(w, r) {
+		return
+	}
+	authUser, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -316,27 +336,15 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok2 {
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
-			"auth.totp.verify_failed", "user", userID.String(), authUser.Username, map[string]any{
+		if !h.auditEvent(w, r, pgtype.UUID{Bytes: userID, Valid: true},
+			"auth.totp.verify_failed", userID.String(), authUser.Username, http.StatusBadRequest, map[string]any{
 				"flow": "enroll_confirm",
-			})
+			}) {
+			return
+		}
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidCode, "TOTP code is invalid")
 		return
 	}
-
-	// Persist the encrypted secret. The plaintext goes out of scope on
-	// return from this function — never log it.
-	_, err = h.queries.UpsertUserTOTPEnrollment(r.Context(), sqlc.UpsertUserTOTPEnrollmentParams{
-		UserID:          userID,
-		SecretEncrypted: c.Secret,
-		Label:           c.Label,
-		ConfirmedAt:     time.Now(),
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PersistError, "Failed to persist enrollment")
-		return
-	}
-
 	// Generate recovery codes. The plaintext set is returned ONCE; only
 	// the hashes are stored.
 	codes, hashes, err := auth.GenerateRecoveryCodes(auth.RecoveryCodeCount)
@@ -344,53 +352,74 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RecoveryFailed, "Failed to generate recovery codes")
 		return
 	}
-	// Wipe any pre-existing codes (re-enroll path) before inserting new ones.
-	_ = h.queries.DeleteRecoveryCodesByUser(r.Context(), userID)
-	for _, hashed := range hashes {
-		if err := h.queries.InsertRecoveryCode(r.Context(), sqlc.InsertRecoveryCodeParams{
-			UserID:   userID,
-			CodeHash: hashed,
-		}); err != nil {
-			// Inserting the same hash twice is the only realistic failure
-			// here (uidx_totp_recovery_hash). Log + continue; the user
-			// will simply have fewer codes than expected.
-			h.log.Warn("totp insert recovery code failed", "user_id", userID.String(), "error", err)
-		}
-	}
-
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
-		"auth.totp.enrolled", "user", userID.String(), authUser.Username, map[string]any{
-			"recovery_codes_issued": len(codes),
-		})
-
-	if h.emails != nil {
-		if u, err := h.users.GetUserByID(r.Context(), userID); err == nil && u.Email != "" {
-			h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
-				To:       u.Email,
-				Template: "totp_enabled",
-				Data: map[string]any{
-					"Username":          u.Username,
-					"RecoveryCodeCount": len(codes),
-				},
-				UserID: userID,
-			})
-		}
-	}
-
 	resp := enrollConfirmResponse{RecoveryCodes: codes, Enrolled: true}
+	enrollOnly := reqctx.IsTOTPEnrollOnly(r.Context())
+	var session auth.PreparedTokenPair
+	if enrollOnly {
+		session, err = h.jwt.PrepareTokenPairContext(r.Context())
+		if err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to prepare session")
+			return
+		}
+	}
+	var enrolledUser sqlc.User
+	if !h.mutate(w, r, func(q TOTPMutationTx) error {
+		var err error
+		enrolledUser, err = q.GetUserByIDForUpdate(r.Context(), userID)
+		if err != nil {
+			return err
+		}
+		if !enrolledUser.IsActive {
+			return errTOTPAccountDisabled
+		}
+		if enrollOnly && enrolledUser.LockedUntil.Valid && enrolledUser.LockedUntil.Time.After(time.Now()) {
+			return errTOTPAccountLocked
+		}
+		if err := consumeTOTPChallenge(r.Context(), q, claims); err != nil {
+			return err
+		}
+		if err := q.ResetFailedLoginCount(r.Context(), userID); err != nil {
+			return err
+		}
+		if _, err := q.UpsertUserTOTPEnrollment(r.Context(), sqlc.UpsertUserTOTPEnrollmentParams{
+			UserID: userID, SecretEncrypted: c.Secret, Label: c.Label, ConfirmedAt: time.Now(),
+		}); err != nil {
+			return err
+		}
+		if err := replaceTOTPRecoveryCodes(r.Context(), q, userID, hashes); err != nil {
+			return err
+		}
+		if enrollOnly {
+			if err := q.UpdateUserLastLogin(r.Context(), userID); err != nil {
+				return err
+			}
+		}
+		return recordAuditOutboxAs(r, q, pgtype.UUID{Bytes: userID, Valid: true},
+			"auth.totp.enrolled", "user", userID.String(), authUser.Username, http.StatusOK,
+			map[string]any{"recovery_codes_issued": len(codes)})
+	}) {
+		return
+	}
+	h.jwt.InvalidateJTI(r.Context(), claims.ID)
+
+	if h.emails != nil && enrolledUser.Email != "" {
+		h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
+			To: enrolledUser.Email, Template: "totp_enabled", UserID: userID,
+			Data: map[string]any{"Username": enrolledUser.Username, "RecoveryCodeCount": len(codes)},
+		})
+	}
+
 	// Forced-enrollment path: the caller authenticated with the enroll-only
 	// challenge and has no session. Now that MFA is enrolled, mint the real
 	// session pair and log them in — otherwise they'd complete enrollment and
 	// still be stuck at a login wall.
-	if middleware.IsTOTPEnrollOnlyAuth(r.Context()) {
-		accessToken, refreshToken, terr := h.jwt.GenerateTokenPairContext(r.Context(), userID)
-		if terr != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate session")
+	if enrollOnly {
+		resp.Token, resp.Refresh, err = h.jwt.SignPreparedTokenPair(userID, session)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate session")
 			return
 		}
-		setBrowserSessionCookies(w, r, accessToken, refreshToken)
-		resp.Token = accessToken
-		resp.Refresh = refreshToken
+		setBrowserSessionCookies(w, r, resp.Token, resp.Refresh)
 	}
 	RespondJSON(w, http.StatusOK, resp)
 }
@@ -409,7 +438,10 @@ type disableRequest struct {
 // valid TOTP code — disabling 2FA from a session that's missing one
 // factor would defeat the point. Audit emits auth.totp.disabled.
 func (h *TOTPHandler) Disable(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
+	if !h.requireRunner(w, r) {
+		return
+	}
+	authUser, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -448,25 +480,35 @@ func (h *TOTPHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	}
 	ok2, err := auth.VerifyCode(plaintextSecret, req.Code)
 	if err != nil || !ok2 {
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
-			"auth.totp.verify_failed", "user", userID.String(), authUser.Username, map[string]any{
+		if !h.auditEvent(w, r, pgtype.UUID{Bytes: userID, Valid: true},
+			"auth.totp.verify_failed", userID.String(), authUser.Username, http.StatusUnauthorized, map[string]any{
 				"flow": "disable",
-			})
+			}) {
+			return
+		}
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidCode, "TOTP code is invalid")
 		return
 	}
 
-	if err := h.queries.DeleteUserTOTPEnrollment(r.Context(), userID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PersistError, "Failed to disable 2FA")
+	if !h.mutate(w, r, func(q TOTPMutationTx) error {
+		current, err := lockTOTPEnrollment(r.Context(), q, userID, enrollment)
+		if err != nil {
+			return err
+		}
+		if current.Password != dbUser.Password {
+			return errTOTPEnrollmentChanged
+		}
+		if err := q.DeleteUserTOTPEnrollment(r.Context(), userID); err != nil {
+			return err
+		}
+		if err := q.DeleteRecoveryCodesByUser(r.Context(), userID); err != nil {
+			return err
+		}
+		return recordAuditOutboxAs(r, q, pgtype.UUID{Bytes: userID, Valid: true},
+			"auth.totp.disabled", "user", userID.String(), authUser.Username, http.StatusOK, nil)
+	}) {
 		return
 	}
-	// Best-effort: wipe the recovery codes too. Leaving them behind on
-	// disable would leak partial-2FA bypass capability if 2FA is
-	// re-enabled later with a fresh device.
-	_ = h.queries.DeleteRecoveryCodesByUser(r.Context(), userID)
-
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
-		"auth.totp.disabled", "user", userID.String(), authUser.Username, nil)
 
 	if h.emails != nil && dbUser.Email != "" {
 		h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
@@ -492,7 +534,7 @@ type statusResponse struct {
 // this on the account-security page to render the "you have 2FA on /
 // off" toggle.
 func (h *TOTPHandler) Status(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
+	authUser, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -504,8 +546,12 @@ func (h *TOTPHandler) Status(w http.ResponseWriter, r *http.Request) {
 	}
 
 	enrollment, err := h.queries.GetUserTOTPEnrollment(r.Context(), userID)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		RespondJSON(w, http.StatusOK, statusResponse{Enrolled: false})
+		return
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "TOTP status is temporarily unavailable")
 		return
 	}
 	var lastUsed *string
@@ -513,7 +559,11 @@ func (h *TOTPHandler) Status(w http.ResponseWriter, r *http.Request) {
 		s := enrollment.LastUsedAt.Time.UTC().Format("2006-01-02T15:04:05Z")
 		lastUsed = &s
 	}
-	count, _ := h.queries.CountUnusedRecoveryCodes(r.Context(), userID)
+	count, err := h.queries.CountUnusedRecoveryCodes(r.Context(), userID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StatusError, "TOTP status is temporarily unavailable")
+		return
+	}
 	RespondJSON(w, http.StatusOK, statusResponse{
 		Enrolled:               true,
 		LastUsedAt:             lastUsed,
@@ -536,7 +586,10 @@ type regenerateResponse struct {
 // Body: { code }. Requires a fresh TOTP code (NOT a recovery code) to
 // prove possession before issuing a new sheet.
 func (h *TOTPHandler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := middleware.GetAuthenticatedUser(r.Context())
+	if !h.requireRunner(w, r) {
+		return
+	}
+	authUser, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || authUser == nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -568,178 +621,36 @@ func (h *TOTPHandler) RegenerateRecoveryCodes(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.queries.DeleteRecoveryCodesByUser(r.Context(), userID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PersistError, "Failed to clear recovery codes")
-		return
-	}
 	codes, hashes, err := auth.GenerateRecoveryCodes(auth.RecoveryCodeCount)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.RecoveryFailed, "Failed to generate recovery codes")
 		return
 	}
-	for _, hashed := range hashes {
-		_ = h.queries.InsertRecoveryCode(r.Context(), sqlc.InsertRecoveryCodeParams{
-			UserID:   userID,
-			CodeHash: hashed,
-		})
+	var enrolledUser sqlc.User
+	if !h.mutate(w, r, func(q TOTPMutationTx) error {
+		var err error
+		enrolledUser, err = lockTOTPEnrollment(r.Context(), q, userID, enrollment)
+		if err != nil {
+			return err
+		}
+		if err := replaceTOTPRecoveryCodes(r.Context(), q, userID, hashes); err != nil {
+			return err
+		}
+		return recordAuditOutboxAs(r, q, pgtype.UUID{Bytes: userID, Valid: true},
+			"auth.totp.recovery_codes_regenerated", "user", userID.String(), authUser.Username,
+			http.StatusOK, map[string]any{"recovery_codes_issued": len(codes)})
+	}) {
+		return
 	}
 
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
-		"auth.totp.recovery_codes_regenerated", "user", userID.String(), authUser.Username, map[string]any{
-			"recovery_codes_issued": len(codes),
+	if h.emails != nil && enrolledUser.Email != "" {
+		h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
+			To: enrolledUser.Email, Template: "recovery_codes_regenerated", UserID: userID,
+			Data: map[string]any{"Username": enrolledUser.Username},
 		})
-
-	if h.emails != nil {
-		if u, err := h.users.GetUserByID(r.Context(), userID); err == nil && u.Email != "" {
-			h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
-				To:       u.Email,
-				Template: "recovery_codes_regenerated",
-				Data:     map[string]any{"Username": u.Username},
-				UserID:   userID,
-			})
-		}
 	}
 
 	RespondJSON(w, http.StatusOK, regenerateResponse{RecoveryCodes: codes})
-}
-
-// --- Verify (challenge -> session JWT) ---
-
-// openapi:request-operation postAuthTotpVerify
-type verifyRequest struct {
-	ChallengeToken string `json:"challenge_token" validate:"required"`
-	Code           string `json:"code" validate:"required"`
-	// Optional explicit hint so the client can choose to send a
-	// recovery code (e.g. user's phone is dead). When empty, we try
-	// TOTP first then fall back to recovery; both paths emit distinct
-	// audit actions.
-	UseRecovery bool `json:"use_recovery"`
-}
-
-// Verify handles POST /api/v1/auth/totp/verify/.
-//
-// Body: { challenge_token, code, use_recovery? }. On success, mints
-// the real session JWT pair and returns it in the same shape the
-// regular Login endpoint does. On failure, increments the user's
-// failed-login counter (same lockout policy as bcrypt) and returns
-// 401.
-//
-// The handler is mounted PUBLIC (no auth middleware) — the
-// challenge_token is the user's proof of identity at this stage.
-func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
-	var req verifyRequest
-	if !decodeAndValidate(w, r, &req) {
-		return
-	}
-	claims, err := h.jwt.ValidateToken(req.ChallengeToken)
-	if err != nil {
-		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.totp.verify_failed", "user", "", "", map[string]any{
-			"reason": "invalid_challenge",
-		})
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidChallenge, "Challenge token is invalid or expired")
-		return
-	}
-	if claims.TokenType != auth.PurposeToken || claims.Purpose != auth.PurposeTOTPChallenge {
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: claims.UserID, Valid: true}, "auth.totp.verify_failed", "user", claims.UserID.String(), "", map[string]any{
-			"reason": "wrong_purpose",
-		})
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidChallenge, "Challenge token is not a TOTP challenge")
-		return
-	}
-	userID := claims.UserID
-
-	user, err := h.users.GetUserByID(r.Context(), userID)
-	if err != nil || !user.IsActive {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid credentials")
-		return
-	}
-
-	enrollment, err := h.queries.GetUserTOTPEnrollment(r.Context(), userID)
-	if err != nil {
-		// Race: user disabled TOTP after the challenge was issued.
-		// Reject — the client should restart the login.
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.NotEnrolled, "TOTP is not enabled for this account")
-		return
-	}
-	secret, err := h.encryptor.Decrypt(enrollment.SecretEncrypted)
-	if err != nil {
-		h.log.Warn("totp decrypt failed", "user_id", userID.String(), "error", err)
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Stored secret could not be read")
-		return
-	}
-
-	// Try TOTP first unless the client explicitly opted into recovery
-	// (the "lost phone" path).
-	verified := false
-	usedRecovery := false
-	if !req.UseRecovery {
-		ok2, vErr := auth.VerifyCode(secret, req.Code)
-		if vErr == nil && ok2 {
-			verified = true
-		}
-	}
-	if !verified {
-		// Either the user explicitly chose recovery, or the TOTP code
-		// failed and we get a free second-chance check against a
-		// recovery code (avoids forcing the user to click an extra
-		// "use recovery code" link first).
-		hash := auth.HashRecoveryCode(req.Code)
-		rows, cErr := h.queries.ConsumeRecoveryCode(r.Context(), sqlc.ConsumeRecoveryCodeParams{
-			UserID:   userID,
-			CodeHash: hash,
-			UsedAt:   pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		})
-		if cErr == nil && rows > 0 {
-			verified = true
-			usedRecovery = true
-		}
-	}
-
-	if !verified {
-		recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
-			"auth.totp.verify_failed", "user", userID.String(), user.Username, map[string]any{
-				"reason": "bad_code",
-			})
-		// The TOTP failure path reuses the same lockout counter as
-		// bcrypt so a user that's been guessing 6-digit codes gets
-		// locked out the same way as one guessing passwords. This is
-		// wired via the AuthHandler — the public route doesn't know
-		// the lockout querier; we surface a simple 401 here and let
-		// the upstream metric pick up the failure.
-		auth.TOTPVerifiesTotal.WithLabelValues(observability.MetricValues("failed")...).Inc()
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid TOTP or recovery code")
-		return
-	}
-
-	// Successful verify — mint the real session pair and (best-effort)
-	// touch last_used_at.
-	accessToken, refreshToken, err := h.jwt.GenerateTokenPairContext(r.Context(), userID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
-		return
-	}
-	_ = h.queries.TouchUserTOTPLastUsed(r.Context(), sqlc.TouchUserTOTPLastUsedParams{
-		UserID:     userID,
-		LastUsedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	})
-	_ = h.users.UpdateUserLastLogin(r.Context(), userID)
-
-	action := "auth.totp.verified"
-	outcome := "success"
-	if usedRecovery {
-		action = "auth.totp.recovery_code_consumed"
-		outcome = "recovery"
-	}
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: userID, Valid: true},
-		action, "user", userID.String(), user.Username, nil)
-	auth.TOTPVerifiesTotal.WithLabelValues(observability.MetricValues(outcome)...).Inc()
-
-	setBrowserSessionCookies(w, r, accessToken, refreshToken)
-	RespondJSON(w, http.StatusOK, LoginResponse{
-		Token:   accessToken,
-		Refresh: refreshToken,
-		User:    userToResponse(user),
-	})
 }
 
 // --- Admin force-disable ---
@@ -752,6 +663,9 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 // flag from the request context (via the auth middleware) + a fresh
 // DB lookup so the gate can't be spoofed by a stale claim.
 func (h *TOTPHandler) AdminForceDisable(w http.ResponseWriter, r *http.Request) {
+	if !h.requireRunner(w, r) {
+		return
+	}
 	adminUser, ok := requireSuperuser(w, r, h.users, superuserGateConfig{
 		InvalidUserMessage: "Invalid user ID",
 		ForbiddenMessage:   "Superuser required",
@@ -773,16 +687,22 @@ func (h *TOTPHandler) AdminForceDisable(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.queries.DeleteUserTOTPEnrollment(r.Context(), targetID); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.PersistError, "Failed to disable 2FA")
+	if !h.mutate(w, r, func(q TOTPMutationTx) error {
+		if _, err := q.GetUserByIDForUpdate(r.Context(), targetID); err != nil {
+			return err
+		}
+		if err := q.DeleteUserTOTPEnrollment(r.Context(), targetID); err != nil {
+			return err
+		}
+		if err := q.DeleteRecoveryCodesByUser(r.Context(), targetID); err != nil {
+			return err
+		}
+		return recordAuditOutboxAs(r, q, pgtype.UUID{Bytes: adminID, Valid: true},
+			"admin.user.totp_disabled", "user", target.ID.String(), target.Username, http.StatusOK,
+			map[string]any{"actor_username": adminUser.Username})
+	}) {
 		return
 	}
-	_ = h.queries.DeleteRecoveryCodesByUser(r.Context(), targetID)
-
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: adminID, Valid: true},
-		"admin.user.totp_disabled", "user", target.ID.String(), target.Username, map[string]any{
-			"actor_username": adminUser.Username,
-		})
 
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]string{"detail": "TOTP disabled for user"})
 }

@@ -29,7 +29,7 @@ export function SilencesTab() {
           {Object.entries(row.matchers).map(([k, v]) => (
             <span
               key={k}
-              className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+              className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
             >
               {k}={v}
             </span>
@@ -65,7 +65,11 @@ export function SilencesTab() {
       loading={isLoading}
       isError={isError}
       onRetry={() => refetch()}
-      emptyMessage="No active silences"
+      emptyState={{
+        title: "No active silences",
+        description:
+          "There are no active items requiring attention in this scope.",
+      }}
     />
   );
 }

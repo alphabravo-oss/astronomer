@@ -1,8 +1,10 @@
+import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   Bot,
   CheckCircle2,
   Clock,
@@ -10,12 +12,13 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { EmptyState, StatePanel } from "@/components/ui/empty-state";
+import { QueryStates, type QueryState } from "@/components/ui/query-states";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SafeMarkdown, safeLink } from "@/components/charlie/safe-markdown";
 import { CharlieMessageParts } from "@/components/charlie/message-parts";
-import { useRouter, useSearchParams } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+import { useNavigate, useLocation } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   decideCharlieApproval,
   getCharlieFinding,
@@ -51,18 +54,26 @@ export const CHARLIE_HUB_TABS = [
   "approvals",
 ] as const;
 type Tab = (typeof CHARLIE_HUB_TABS)[number];
+function isCharlieTab(value: unknown): value is Tab {
+  return typeof value === "string" && CHARLIE_HUB_TABS.some((tab) => tab === value);
+}
+
 export function normalizeCharlieTab(value: string | null): Tab {
-  return CHARLIE_HUB_TABS.includes(value as Tab)
-    ? (value as Tab)
-    : "conversations";
+  return isCharlieTab(value) ? value : "conversations";
 }
 export const Route = createFileRoute("/dashboard/charlie/")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: isCharlieTab(search.tab) ? search.tab : undefined,
+    session: typeof search.session === "string" ? search.session : undefined,
+  }),
   component: CharlieHub,
 });
 
 function CharlieHub() {
-  const params = useSearchParams();
-  const router = useRouter();
+  const params = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
+  const navigate = useNavigate();
   const tab = normalizeCharlieTab(params.get("tab"));
   const overview = useQuery({
     queryKey: queryKeys.charlie.overview,
@@ -70,7 +81,9 @@ function CharlieHub() {
   });
   const mode = productModePresentation(overview.data?.mode);
   const set = (updates: Record<string, string | undefined>) => {
-    router.push(`/dashboard/charlie?${mergeCharlieSearch(params, updates)}`);
+    void navigate({
+      to: `/dashboard/charlie?${mergeCharlieSearch(params, updates)}`,
+    });
   };
   const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
     const next = adjacentTab(CHARLIE_HUB_TABS, tab, event.key);
@@ -180,11 +193,11 @@ function FilterField({
     <label className="min-w-36 space-y-1 text-xs">
       <span className="text-foreground/70">{label}</span>
       {options ? (
-        <select
+        <Select
           aria-label={label}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-9 w-full rounded border bg-background px-2"
+          className="h-9 w-full rounded-sm border bg-background px-2"
         >
           <option value="">All</option>
           {options.map((option) => (
@@ -192,14 +205,14 @@ function FilterField({
               {option.replaceAll("_", " ")}
             </option>
           ))}
-        </select>
+        </Select>
       ) : (
-        <input
+        <Input
           type={type}
           aria-label={label}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="h-9 w-full rounded border bg-background px-2"
+          className="h-9 w-full rounded-sm border bg-background px-2"
         />
       )}
     </label>
@@ -223,15 +236,16 @@ function resourceHref(type: string, id: string): string {
   }
 }
 
-function QueryFailure({ label, retry }: { label: string; retry?: () => void }) {
+function QueryFailure<T>({ label, query }: { label: string; query: QueryState<T> }) {
   return (
-    <EmptyState
-      icon={AlertTriangle}
-      title={`${label} unavailable`}
-      description="This Charlie gateway capability is unavailable or you do not have permission. No action was taken."
-      actionLabel={retry ? "Retry" : undefined}
-      onAction={retry}
-    />
+    <QueryStates
+      query={query}
+      permission="charlie:read"
+      errorTitle={`${label} unavailable`}
+      errorDescription="This Charlie gateway capability is unavailable. No action was taken."
+    >
+      {() => null}
+    </QueryStates>
   );
 }
 function Conversations({
@@ -266,7 +280,7 @@ function Conversations({
     );
   if (q.isError)
     return (
-      <QueryFailure label="Conversations" retry={() => void q.refetch()} />
+      <QueryFailure label="Conversations" query={q} />
     );
   return (
     <div className="grid gap-4 md:grid-cols-[18rem_1fr]">
@@ -309,7 +323,7 @@ function Conversations({
             title="Loading private conversation"
           />
         ) : h.isError ? (
-          <QueryFailure label="Conversation" retry={() => void h.refetch()} />
+          <QueryFailure label="Conversation" query={h} />
         ) : (
           h.data?.map((m) => (
             <div key={m.id} className="mb-3 rounded-md bg-muted/40 p-3">
@@ -343,16 +357,9 @@ function Investigations({
     queryFn: listCharlieFindings,
     retry: false,
   });
-  if (q.isError || findings.isError)
-    return (
-      <QueryFailure
-        label="Investigations"
-        retry={() => {
-          void q.refetch();
-          void findings.refetch();
-        }}
-      />
-    );
+  if (q.isError) return <QueryFailure label="Investigations" query={q} />;
+  if (findings.isError)
+    return <QueryFailure label="Investigation findings" query={findings} />;
   const status = params.get("status") ?? "";
   const severity = params.get("severity") ?? "";
   const cluster = params.get("cluster") ?? "";
@@ -483,16 +490,16 @@ function Investigations({
           </p>
           {detail.finding && (
             <>
-              <Link
+              <RouterLink
                 className="mt-2 inline-block text-sm text-primary underline"
-                href={resourceHref(
+                to={resourceHref(
                   detail.finding.affectedResource.type,
                   detail.finding.affectedResource.id,
                 )}
               >
                 Open originating{" "}
                 {detail.finding.affectedResource.type.replaceAll("_", " ")}
-              </Link>
+              </RouterLink>
               <p className="mt-3 text-sm">
                 Repeated {detail.finding.repeatCount ?? 1} time
                 {(detail.finding.repeatCount ?? 1) === 1 ? "" : "s"}.
@@ -567,7 +574,7 @@ function Findings({
     },
   });
   if (q.isError)
-    return <QueryFailure label="Findings" retry={() => void q.refetch()} />;
+    return <QueryFailure label="Findings" query={q} />;
   const status = params.get("status") ?? "";
   const severity = params.get("severity") ?? "";
   const source = params.get("source") ?? "";
@@ -690,7 +697,7 @@ function Findings({
               title="Loading authorized finding detail"
             />
           ) : d.isError ? (
-            <QueryFailure label="Finding" retry={() => void d.refetch()} />
+            <QueryFailure label="Finding" query={d} />
           ) : (
             d.data && (
               <div className="space-y-4">
@@ -698,7 +705,7 @@ function Findings({
                 <p className="text-sm text-foreground/70">
                   Workflow: {findingWorkflowLabel(d.data)}
                 </p>
-                <p className="rounded bg-muted p-3 text-sm">
+                <p className="rounded-sm bg-muted p-3 text-sm">
                   {findingWorkflowGuidance(d.data)}
                 </p>
                 <SafeMarkdown>{d.data.summary}</SafeMarkdown>
@@ -709,7 +716,7 @@ function Findings({
                     : `${Math.round(d.data.confidence * 100)}%`}
                 </p>
                 {d.data.reasonNoAction && (
-                  <p className="rounded bg-muted p-3 text-sm">
+                  <p className="rounded-sm bg-muted p-3 text-sm">
                     No action: {d.data.reasonNoAction}
                   </p>
                 )}
@@ -723,7 +730,7 @@ function Findings({
                       return (
                         <div
                           key={`${e.label}:${i}`}
-                          className="rounded border p-3 text-sm"
+                          className="rounded-sm border p-3 text-sm"
                         >
                           <b>{e.label.slice(0, 160)}</b>
                           <p className="mt-1 text-foreground/70">
@@ -757,7 +764,7 @@ function Findings({
                   </section>
                 ) : null}
                 {d.data.manualRemediation ? (
-                  <section className="space-y-2 rounded border p-3 text-sm">
+                  <section className="space-y-2 rounded-sm border p-3 text-sm">
                     <h3 className="font-medium">Manual remediation</h3>
                     {d.data.manualRemediation.preconditions.length ? (
                       <div>
@@ -876,7 +883,7 @@ function Approvals({ selected }: { selected: string | null }) {
     },
   });
   if (q.isError)
-    return <QueryFailure label="Approvals" retry={() => void q.refetch()} />;
+    return <QueryFailure label="Approvals" query={q} />;
   if (q.isLoading)
     return (
       <StatePanel
@@ -974,7 +981,7 @@ function Approvals({ selected }: { selected: string | null }) {
             <div className="mt-3 space-y-2">
               <label className="block text-xs">
                 <span className="text-foreground/70">Rationale (optional)</span>
-                <textarea
+                <Textarea
                   aria-label={`Rationale for ${a.title}`}
                   maxLength={512}
                   rows={2}
@@ -985,7 +992,7 @@ function Approvals({ selected }: { selected: string | null }) {
                       [a.id]: event.target.value,
                     }))
                   }
-                  className="mt-1 w-full rounded border bg-background p-2"
+                  className="mt-1 w-full rounded-sm border bg-background p-2"
                 />
               </label>
               <div className="flex gap-2">
@@ -993,13 +1000,13 @@ function Approvals({ selected }: { selected: string | null }) {
                   onClick={() =>
                     setConfirm({ approval: a, decision: "approve" })
                   }
-                  className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground"
+                  className="rounded-sm bg-primary px-3 py-2 text-sm text-primary-foreground"
                 >
                   Review approval
                 </button>
                 <button
                   onClick={() => setConfirm({ approval: a, decision: "deny" })}
-                  className="rounded border px-3 py-2 text-sm"
+                  className="rounded-sm border px-3 py-2 text-sm"
                 >
                   Review denial
                 </button>

@@ -2,14 +2,16 @@
 //
 // Push: Ingress → this process → Loki gateway ClusterIP. Bearer SHA-256 is
 // looked up in the reconciled hash Secret (no plaintext). Query: Grafana
-// datasource URL points here; X-Grafana-User is mapped to an allow-list and
-// X-Scope-OrgID is selected hop-by-hop. No Postgres, Redis, or
+// datasource URL points here and authenticates with a dedicated query key;
+// only then is X-Grafana-User mapped to an allow-list and X-Scope-OrgID
+// selected hop-by-hop. No Postgres, Redis, or
 // ASTRONOMER_SECRET_KEY.
 package lokiauth
 
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -33,17 +35,20 @@ const (
 	aclFileKey     = "acl"
 )
 
-// Config is env-driven. No Redis, Postgres, or ASTRONOMER_SECRET_KEY.
+// Config is resolved by the executable bootstrap. No Redis, Postgres, or
+// ASTRONOMER_SECRET_KEY.
 type Config struct {
-	ListenAddr string
-	Upstream   *url.URL
-	HashesPath string
-	ACLPath    string
-	Now        func() time.Time
-	Log        *slog.Logger
+	ListenAddr   string
+	Upstream     *url.URL
+	HashesPath   string
+	ACLPath      string
+	QueryKeyPath string
+	Now          func() time.Time
+	Log          *slog.Logger
 	// Optional in-memory stores for tests. When set, file paths are ignored.
-	Hashes func() map[string]string
-	ACL    func() QueryACL
+	Hashes   func() map[string]string
+	ACL      func() QueryACL
+	QueryKey func() string
 }
 
 type QueryACL struct {
@@ -51,12 +56,12 @@ type QueryACL struct {
 	Users  map[string][]string `json:"users"`
 }
 
-func ConfigFromEnv() (Config, error) {
-	listen := strings.TrimSpace(os.Getenv("LISTEN_ADDR"))
+func ParseConfig(listen, upstreamRaw, hashes, acl, queryKey string) (Config, error) {
+	listen = strings.TrimSpace(listen)
 	if listen == "" {
 		listen = ":8080"
 	}
-	upstreamRaw := strings.TrimSpace(os.Getenv("LOKI_UPSTREAM"))
+	upstreamRaw = strings.TrimSpace(upstreamRaw)
 	if upstreamRaw == "" {
 		return Config{}, fmt.Errorf("LOKI_UPSTREAM is required")
 	}
@@ -64,27 +69,28 @@ func ConfigFromEnv() (Config, error) {
 	if err != nil || upstream.Scheme == "" || upstream.Host == "" {
 		return Config{}, fmt.Errorf("LOKI_UPSTREAM is not a valid URL")
 	}
-	hashes := strings.TrimSpace(os.Getenv("HASHES_PATH"))
+	hashes = strings.TrimSpace(hashes)
 	if hashes == "" {
 		hashes = "/var/run/loki-auth/hashes/" + hashesFileKey
 	}
-	acl := strings.TrimSpace(os.Getenv("ACL_PATH"))
+	acl = strings.TrimSpace(acl)
 	if acl == "" {
 		acl = "/var/run/loki-auth/acl/" + aclFileKey
 	}
+	queryKey = strings.TrimSpace(queryKey)
+	if queryKey == "" {
+		queryKey = "/var/run/loki-auth/query-key/key"
+	}
 	return Config{
-		ListenAddr: listen,
-		Upstream:   upstream,
-		HashesPath: hashes,
-		ACLPath:    acl,
+		ListenAddr:   listen,
+		Upstream:     upstream,
+		HashesPath:   hashes,
+		ACLPath:      acl,
+		QueryKeyPath: queryKey,
 	}, nil
 }
 
-func Run() error {
-	cfg, err := ConfigFromEnv()
-	if err != nil {
-		return err
-	}
+func Run(cfg Config) error {
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           New(cfg),
@@ -100,12 +106,14 @@ func HashBearer(token string) string {
 }
 
 type handler struct {
-	cfg     Config
-	reverse *httputil.ReverseProxy
-	mu      sync.RWMutex
-	hashes  map[string]string // cluster_id → hash
-	acl     QueryACL
-	log     *slog.Logger
+	cfg           Config
+	reverse       *httputil.ReverseProxy
+	mu            sync.RWMutex
+	hashes        map[string]string // cluster_id → hash
+	acl           QueryACL
+	queryKeyHash  [sha256.Size]byte
+	queryKeyReady bool
+	log           *slog.Logger
 }
 
 func New(cfg Config) http.Handler {
@@ -123,7 +131,7 @@ func New(cfg Config) http.Handler {
 		log:    log,
 	}
 	h.reload()
-	if cfg.Hashes == nil && cfg.ACL == nil {
+	if cfg.Hashes == nil || cfg.ACL == nil || cfg.QueryKey == nil {
 		go h.reloadLoop()
 	}
 	h.reverse = &httputil.ReverseProxy{
@@ -132,6 +140,7 @@ func New(cfg Config) http.Handler {
 			pr.Out.Host = cfg.Upstream.Host
 			stripHopByHop(pr.Out.Header)
 			pr.Out.Header.Del("Authorization")
+			pr.Out.Header.Del(grafanaUserHdr)
 			org, _ := pr.In.Context().Value(boundOrgContextKey{}).(string)
 			if org != "" {
 				pr.Out.Header.Set(scopeHeader, org)
@@ -164,10 +173,29 @@ func (h *handler) reload() {
 	if acl == nil {
 		acl = func() QueryACL { return loadACLFile(h.cfg.ACLPath) }
 	}
+	queryKey := h.cfg.QueryKey
+	if queryKey == nil {
+		queryKey = func() string { return loadSecretFile(h.cfg.QueryKeyPath) }
+	}
+	key := strings.TrimSpace(queryKey())
 	h.mu.Lock()
 	h.hashes = hashes()
 	h.acl = normalizeACL(acl())
+	h.queryKeyReady = key != ""
+	if h.queryKeyReady {
+		h.queryKeyHash = sha256.Sum256([]byte(key))
+	} else {
+		h.queryKeyHash = [sha256.Size]byte{}
+	}
 	h.mu.Unlock()
+}
+
+func loadSecretFile(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 func normalizeACL(in QueryACL) QueryACL {
@@ -257,6 +285,10 @@ func (h *handler) handlePush(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) handleQuery(w http.ResponseWriter, r *http.Request) {
+	if !h.validQueryToken(bearerToken(r.Header.Get("Authorization"))) {
+		h.deny(w, r, "bad_query_token", http.StatusUnauthorized, "unauth")
+		return
+	}
 	user := strings.TrimSpace(r.Header.Get(grafanaUserHdr))
 	allow := h.allowList(user)
 	clientOrg := strings.TrimSpace(r.Header.Get(scopeHeader))
@@ -271,6 +303,17 @@ func (h *handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	ingestRequests.WithLabelValues("ok").Inc()
 	h.proxy(w, r, org)
+}
+
+func (h *handler) validQueryToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	got := sha256.Sum256([]byte(token))
+	h.mu.RLock()
+	want, ready := h.queryKeyHash, h.queryKeyReady
+	h.mu.RUnlock()
+	return ready && subtle.ConstantTimeCompare(got[:], want[:]) == 1
 }
 
 func (h *handler) proxy(w http.ResponseWriter, r *http.Request, org string) {

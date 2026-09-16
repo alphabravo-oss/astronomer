@@ -10,7 +10,12 @@ import (
 
 type coreRuntimeQueries struct{ RuntimeQuerier }
 type coreRuntimeK8s struct{ K8sRequester }
+type coreRuntimeK8sWithoutCapabilities struct{ K8sRequester }
 type coreRuntimeDecryptor struct{}
+
+func (*coreRuntimeK8s) SupportsCapability(context.Context, string, string) (bool, error) {
+	return true, nil
+}
 
 func (*coreRuntimeDecryptor) DecryptBytes(value string) ([]byte, error) { return []byte(value), nil }
 
@@ -69,5 +74,17 @@ func TestTunnelCoreDoesNotRequireManagementBackup(t *testing.T) {
 	}}
 	if err := runtime.ValidateTunnel(); err != nil {
 		t.Fatalf("tunnel core unexpectedly requires management backup: %v", err)
+	}
+}
+
+func TestTunnelCoreRequiresCapabilityAwareK8sRequester(t *testing.T) {
+	runtime := CoreRuntime{Deps: RuntimeDependencies{
+		Queries:           &coreRuntimeQueries{},
+		Leader:            &fakeLeader{held: true},
+		K8s:               &coreRuntimeK8sWithoutCapabilities{},
+		ResourceDecryptor: &coreRuntimeDecryptor{},
+	}}
+	if err := runtime.ValidateTunnel(); err == nil || !strings.Contains(err.Error(), "k8s_capability_checker") {
+		t.Fatalf("capability checker validation error = %v", err)
 	}
 }

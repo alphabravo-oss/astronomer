@@ -184,6 +184,8 @@ type TunnelRuntime struct {
 	SecurityIngest       tasks.SecurityIngestRuntime
 	CRDOwnership         tasks.CRDOwnershipRuntime
 	Dex                  tasks.DexOperationRuntime
+	SupportBundle        tasks.SupportBundleRuntime
+	AuditExport          tasks.AuditExportRuntime
 }
 
 func (runtime TunnelRuntime) handlerBindings() (map[string]asynq.HandlerFunc, error) {
@@ -196,6 +198,26 @@ func (runtime TunnelRuntime) handlerBindings() (map[string]asynq.HandlerFunc, er
 		return nil, err
 	}
 	for taskType, handler := range dexBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	supportBundleBindings, err := runtime.SupportBundle.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range supportBundleBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	auditExportBindings, err := runtime.AuditExport.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range auditExportBindings {
 		if _, exists := bindings[taskType]; exists {
 			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
 		}
@@ -395,7 +417,10 @@ func bindCoreRuntimeHandlersForDescriptors(core tasks.CoreRuntime, bindings map[
 // footgun in air-gapped or split-network production clusters — the worker
 // would come up, fail every redis op invisibly, and take hours to
 // diagnose. Now a bad URL surfaces at process start.
-func NewWorker(redisURL string, log *slog.Logger, runtime StandaloneRuntime, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
+func NewWorker(redisURL string, concurrency int, log *slog.Logger, runtime StandaloneRuntime, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
+	if concurrency <= 0 {
+		return nil, fmt.Errorf("worker concurrency must be positive")
+	}
 	bindings, err := runtime.handlerBindings()
 	if err != nil {
 		return nil, fmt.Errorf("compose standalone worker runtime: %w", err)
@@ -410,7 +435,7 @@ func NewWorker(redisURL string, log *slog.Logger, runtime StandaloneRuntime, err
 	}
 
 	config := asynq.Config{
-		Concurrency:    10,
+		Concurrency:    concurrency,
 		RetryDelayFunc: retryDelay,
 		Queues: map[string]int{
 			"critical": 6,

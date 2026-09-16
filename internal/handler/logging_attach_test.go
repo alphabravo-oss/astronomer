@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,7 +18,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type stubLokiAttachGate struct {
@@ -58,7 +59,7 @@ func healthyPublicAttachGate() *stubLokiAttachGate {
 func attachAstronomerReq(t *testing.T, clusterID uuid.UUID, rotate bool, bindings []rbac.RoleBinding) (*LoggingHandler, *loggingFakeQuerier, *recordingLokiReconciler, *http.Request) {
 	t.Helper()
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	key, err := auth.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
@@ -81,9 +82,9 @@ func attachAstronomerReq(t *testing.T, clusterID uuid.UUID, rotate bool, binding
 	req.Header.Set("Idempotency-Key", "attach-astronomer-1")
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID.String())
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(
+	req = req.WithContext(reqctx.WithUser(
 		context.WithValue(req.Context(), chi.RouteCtxKey, rc),
-		&middleware.AuthenticatedUser{ID: uuid.NewString()},
+		&reqctx.User{ID: uuid.NewString()},
 	))
 	return h, q, rec, req
 }
@@ -175,9 +176,9 @@ func TestAttachAstronomerLogsIdempotent(t *testing.T) {
 	secondReq.Header.Set("Idempotency-Key", "attach-astronomer-noop-1")
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID.String())
-	secondReq = secondReq.WithContext(middleware.SetAuthenticatedUserForTest(
+	secondReq = secondReq.WithContext(reqctx.WithUser(
 		context.WithValue(secondReq.Context(), chi.RouteCtxKey, rc),
-		&middleware.AuthenticatedUser{ID: uuid.NewString()},
+		&reqctx.User{ID: uuid.NewString()},
 	))
 	second := httptest.NewRecorder()
 	h.AttachAstronomerLogs(second, secondReq)
@@ -210,9 +211,9 @@ func TestAttachAstronomerLogsRotate(t *testing.T) {
 	rotateReq.Header.Set("Idempotency-Key", "attach-astronomer-rotate-1")
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID.String())
-	rotateReq = rotateReq.WithContext(middleware.SetAuthenticatedUserForTest(
+	rotateReq = rotateReq.WithContext(reqctx.WithUser(
 		context.WithValue(rotateReq.Context(), chi.RouteCtxKey, rc),
-		&middleware.AuthenticatedUser{ID: uuid.NewString()},
+		&reqctx.User{ID: uuid.NewString()},
 	))
 	rotate := httptest.NewRecorder()
 	h.AttachAstronomerLogs(rotate, rotateReq)
@@ -287,7 +288,7 @@ func TestAttachAstronomerLogsForbiddenWithoutCreate(t *testing.T) {
 func TestGetAstronomerAttachStatus(t *testing.T) {
 	clusterID := uuid.New()
 	q := newLoggingFakeQuerier()
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	h.SetLokiAttachGate(healthyPublicAttachGate())
 	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: []rbac.RoleBinding{{
 		ClusterID: clusterID.String(),
@@ -296,9 +297,9 @@ func TestGetAstronomerAttachStatus(t *testing.T) {
 	req := authedLoggingReq(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/logging/outputs/attach-astronomer/", nil)
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID.String())
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(
+	req = req.WithContext(reqctx.WithUser(
 		context.WithValue(req.Context(), chi.RouteCtxKey, rc),
-		&middleware.AuthenticatedUser{ID: uuid.NewString()},
+		&reqctx.User{ID: uuid.NewString()},
 	))
 	w := httptest.NewRecorder()
 	h.GetAstronomerAttachStatus(w, req)

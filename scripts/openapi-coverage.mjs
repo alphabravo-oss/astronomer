@@ -57,97 +57,19 @@ const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'patch', 'head', '
 // in production; --check must not treat them as spec drift. Keys are
 // "METHOD <normalized-path>" (params collapsed to {}, no trailing slash).
 const KNOWN_NIL_GATED = new Set([
-  'GET /api/v1/admin/backup-drill',
-  'GET /api/v1/admin/backup-drill/history',
-  'GET /api/v1/admin/management-backup',
-  'POST /api/v1/admin/management-backup/destinations',
-  'PUT /api/v1/admin/management-backup/destinations/{}',
-  'DELETE /api/v1/admin/management-backup/destinations/{}',
-  'POST /api/v1/admin/management-backup/destinations/{}/test',
-  'POST /api/v1/admin/management-backup/destinations/{}/run',
-  'GET /api/v1/admin/management-backup/operations/{}',
-  // Compliance baselines and SIEM forwarders are optional production
-  // dependencies and are nil in the route-dump test router.
-  'GET /api/v1/admin/compliance-baselines',
-  'GET /api/v1/admin/compliance-baselines/active',
-  'GET /api/v1/admin/compliance-baselines/{}',
-  'GET /api/v1/admin/compliance-baselines/{}/diff',
-  'POST /api/v1/admin/compliance-baselines/{}/apply',
-  'GET /api/v1/admin/compliance-baseline-applications',
-  'POST /api/v1/admin/compliance-baseline-applications/{}/revert',
-  'GET /api/v1/admin/siem-forwarders',
-  'POST /api/v1/admin/siem-forwarders',
-  'GET /api/v1/admin/siem-forwarders/{}',
-  'PUT /api/v1/admin/siem-forwarders/{}',
-  'DELETE /api/v1/admin/siem-forwarders/{}',
-  'POST /api/v1/admin/siem-forwarders/{}/test',
-  'GET /api/v1/admin/siem-forwarders/{}/status',
-  // Notification templates are nil in the route-dump test router.
+  // These two operator-enabled handlers require real infrastructure and stay
+  // deliberately absent from the route-shape fixture. Every other normal
+  // route owner is constructed, so this list cannot mask composition drift.
   'GET /api/v1/admin/notification-templates',
   'GET /api/v1/admin/notification-templates/{}',
   'PUT /api/v1/admin/notification-templates/{}',
   'DELETE /api/v1/admin/notification-templates/{}',
   'POST /api/v1/admin/notification-templates/{}/preview',
   'GET /api/v1/admin/notification-templates/{}/variables',
-  'GET /api/v1/admin/read-audit-policies',
-  'POST /api/v1/admin/read-audit-policies',
-  'GET /api/v1/admin/read-audit-policies/{}',
-  'PUT /api/v1/admin/read-audit-policies/{}',
-  'DELETE /api/v1/admin/read-audit-policies/{}',
-  // Task delivery operations and control-plane snapshot guidance are optional
-  // production dependencies and are nil in the route-dump test router.
-  'GET /api/v1/admin/task-outbox',
-  'POST /api/v1/admin/task-outbox/{}/retry',
   'GET /api/v1/clusters/{}/control-plane-snapshots',
   'POST /api/v1/clusters/{}/control-plane-snapshots',
   'GET /api/v1/clusters/{}/control-plane-snapshots/{}',
   'GET /api/v1/clusters/{}/control-plane-snapshots/{}/restore-guidance',
-  'GET /api/v1/alerting/channels',
-  'POST /api/v1/alerting/channels',
-  'GET /api/v1/alerting/events',
-  // P-03 alert inhibitions — the Alerting handler is nil in the route-dump
-  // router, so chi omits these real, served routes from docs/routes.json.
-  'GET /api/v1/admin/alerting/inhibitions',
-  'POST /api/v1/admin/alerting/inhibitions',
-  'GET /api/v1/admin/alerting/inhibitions/{}',
-  'PUT /api/v1/admin/alerting/inhibitions/{}',
-  'DELETE /api/v1/admin/alerting/inhibitions/{}',
-  // P-04 custom Gatekeeper constraint authoring — the Gatekeeper handler is
-  // nil in the route-dump router, so chi omits these real, served routes.
-  'GET /api/v1/clusters/{}/gatekeeper/constraints',
-  'POST /api/v1/clusters/{}/gatekeeper/constraints',
-  'POST /api/v1/clusters/{}/gatekeeper/constraints/validate',
-  'DELETE /api/v1/clusters/{}/gatekeeper/constraints/{}',
-  'GET /api/v1/clusters/{}/vulnerabilities/images',
-  'GET /api/v1/clusters/{}/vulnerabilities/summary',
-  'GET /api/v1/extensions',
-  'POST /api/v1/extensions',
-  'POST /api/v1/extensions/{}/disable',
-  'POST /api/v1/extensions/{}/enable',
-  'GET /api/v1/extensions/sample-manifest',
-  'POST /api/v1/extensions/validate',
-  'POST /api/v1/extensions/verify-bundle',
-  // Extension runtime (Tier 1/2). Handler is nil in the route-dump router,
-  // so chi omits these real, served routes from the dump — same as SCIM.
-  'GET /api/v1/extensions/mounts',
-  'POST /api/v1/extensions/{}/data/{}',
-  'POST /api/v1/extensions/{}/token',
-  'GET /api/v1/settings/features',
-  'GET /api/v1/tools',
-  // SCIM 2.0 provisioning (migration 114). The SCIM handler is nil in
-  // the route-dump test router, so chi omits these routes from
-  // docs/routes.json even though they are real, served routes in prod.
-  'POST /scim/v2/Users',
-  'GET /scim/v2/Users',
-  'GET /scim/v2/Users/{}',
-  'PUT /scim/v2/Users/{}',
-  'PATCH /scim/v2/Users/{}',
-  'DELETE /scim/v2/Users/{}',
-  'GET /scim/v2/Groups',
-  'GET /scim/v2/Groups/{}',
-  'GET /scim/v2/ServiceProviderConfig',
-  'GET /scim/v2/ResourceTypes',
-  'GET /scim/v2/Schemas',
 ]);
 
 // Normalize a path so router and spec forms compare equal:
@@ -180,12 +102,11 @@ function opKey(method, p) {
 const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
 const routerOps = new Map(); // key -> { method, pattern }
 for (const r of routes) {
-  // OpenAPI 3 has no `connect` operation object, so the spec can never emit a
-  // CONNECT operation. chi registers CONNECT on every HandleFunc/catch-all
-  // route, but those are not documentable; counting them would permanently
-  // inflate `missing` and depress coverage. Exclude CONNECT from both the
-  // numerator and the denominator.
-  if (r.method.toUpperCase() === 'CONNECT') continue;
+  // OpenAPI 3 has no operation objects for CONNECT or the HTTP QUERY method,
+  // so the spec can never emit either. chi registers both on catch-all proxy
+  // routes; they remain visible in the route/security inventories, but cannot
+  // participate in OpenAPI coverage without creating permanent false drift.
+  if (['CONNECT', 'QUERY'].includes(r.method.toUpperCase())) continue;
   routerOps.set(opKey(r.method, r.pattern), { method: r.method.toUpperCase(), pattern: r.pattern });
 }
 

@@ -20,8 +20,8 @@ func TestStaleThresholdMatchesWorkerNoFlap(t *testing.T) {
 		t.Fatalf("publisher staleHeartbeatThreshold = %s, must match the worker health-check window %s (M3: different thresholds flap clusters.status)", staleHeartbeatThreshold, workerHealthCheckWindow)
 	}
 
-	stale := func(age time.Duration) sqlc.Cluster {
-		return sqlc.Cluster{
+	stale := func(age time.Duration) sqlc.ListClusterRuntimeTargetsRow {
+		return sqlc.ListClusterRuntimeTargetsRow{
 			ID:            uuid.New(),
 			Status:        "active",
 			LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-age), Valid: true},

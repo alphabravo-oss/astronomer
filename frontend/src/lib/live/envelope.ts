@@ -48,7 +48,8 @@ export type LiveEventType =
   | "cluster_deployment.changed"
   | "template_binding.changed"
   | "registry.changed"
-  | "snapshot.changed";
+  | "snapshot.changed"
+  | "service_mesh.changed";
 
 /** Parsed live event delivered to subscribers (data already camelCase). */
 export interface LiveEvent<T = unknown> {

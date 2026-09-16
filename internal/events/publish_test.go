@@ -30,6 +30,7 @@ var changedTypeContract = []struct {
 	{"template_binding", TypeTemplateBindingChanged, true},
 	{"registry", TypeRegistryChanged, true},
 	{"snapshot", TypeSnapshotChanged, true},
+	{"service_mesh", TypeServiceMeshChanged, true},
 	// P4.9 coverage completion. `alerting` is clusterScoped=false because the
 	// domain cannot guarantee a cluster_id (global rules/silences exist);
 	// publishers still pass the entity's cluster_id through when it has one.
@@ -52,7 +53,7 @@ func TestPublishChangedEnvelopeContract(t *testing.T) {
 			bus := NewBus()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			ch := bus.Subscribe(ctx)
+			ch := bus.Subscribe(ctx, AcceptAll)
 
 			clusterID := ""
 			if tc.clusterScoped {
@@ -98,6 +99,7 @@ func TestChangedTypeConstantsAllInContractTable(t *testing.T) {
 		TypeTemplateBindingChanged,
 		TypeRegistryChanged,
 		TypeSnapshotChanged,
+		TypeServiceMeshChanged,
 		TypeAlertingChanged,
 		TypeCharlieFindingChanged,
 		TypeCharlieInvestigationChanged,
@@ -127,7 +129,7 @@ func TestPublishChangedExtraCannotOverrideReservedKeys(t *testing.T) {
 	bus := NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := bus.Subscribe(ctx)
+	ch := bus.Subscribe(ctx, AcceptAll)
 
 	PublishChanged(bus, "backup", "cluster-123", "entity-1", map[string]any{
 		"cluster_id": "spoofed",
@@ -147,7 +149,7 @@ func TestPublishChangedOmitsEmptyIDs(t *testing.T) {
 	bus := NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := bus.Subscribe(ctx)
+	ch := bus.Subscribe(ctx, AcceptAll)
 
 	PublishChanged(bus, "admin_queue", "", "", nil)
 
@@ -172,7 +174,7 @@ func TestPublishChangedNilBusAndEmptyResourceAreNoOps(t *testing.T) {
 	bus := NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := bus.Subscribe(ctx)
+	ch := bus.Subscribe(ctx, AcceptAll)
 	PublishChanged(bus, "", "cluster-123", "entity-1", nil)
 	select {
 	case e := <-ch:

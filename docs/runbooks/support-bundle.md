@@ -7,7 +7,7 @@ unrestricted chat.
 
 ## Authorization and scope
 
-Only a superuser can download `/api/v1/support-bundle/`. Create a short-lived,
+Only a superuser can create and download `/api/v1/support-bundles/*`. Create a short-lived,
 narrow administrative token for the collection, record the incident/change
 reference, and revoke it immediately afterward. Decide the time window and
 problem scope before collecting additional Kubernetes logs or object YAML.
@@ -27,16 +27,32 @@ mkdir ./astronomer-support-incident-1234
 export ASTRO_SERVER='https://astronomer.example.com'
 export ASTRO_API_TOKEN='<short-lived-superuser-token>'
 curl --fail --silent --show-error \
+  -X POST \
+  -H "Authorization: Bearer ${ASTRO_API_TOKEN}" \
+  -H "Idempotency-Key: incident-1234-support-bundle-v1" \
+  --output ./astronomer-support-incident-1234/operation.json \
+  "${ASTRO_SERVER}/api/v1/support-bundles/"
+
+# Poll until status is succeeded (pending/running/retrying are non-terminal).
+export ASTRO_SUPPORT_OPERATION_ID="$(jq -r '.data.id' \
+  ./astronomer-support-incident-1234/operation.json)"
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer ${ASTRO_API_TOKEN}" \
+  "${ASTRO_SERVER}/api/v1/support-bundles/${ASTRO_SUPPORT_OPERATION_ID}/" | jq
+
+# After status=succeeded, download the immutable 24-hour artifact.
+curl --fail --silent --show-error \
   -H "Authorization: Bearer ${ASTRO_API_TOKEN}" \
   --output ./astronomer-support-incident-1234/support-bundle.zip \
-  "${ASTRO_SERVER}/api/v1/support-bundle/"
+  "${ASTRO_SERVER}/api/v1/support-bundles/${ASTRO_SUPPORT_OPERATION_ID}/download/"
+unset ASTRO_SUPPORT_OPERATION_ID
 unset ASTRO_API_TOKEN
 sha256sum ./astronomer-support-incident-1234/support-bundle.zip \
   > ./astronomer-support-incident-1234/SHA256SUMS
 ```
 
-Record the HTTP request ID from the response/management logs and confirm a
-corresponding audit event exists. A 401 means the token is absent/expired; a
+Record the HTTP request ID from the response/management logs and confirm the
+generation-accepted and download audit events exist. A 401 means the token is absent/expired; a
 403 means the actor is not a superuser. Do not weaken route policy to collect
 the artifact.
 

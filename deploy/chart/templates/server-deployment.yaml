@@ -113,6 +113,17 @@ spec:
                 secretKeyRef:
                   name: {{ include "astronomer.secretsSecretName" . }}
                   key: {{ .Values.secrets.encryptionKeyKey | quote }}
+            - name: ASTRONOMER_INTERNAL_PSK
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.internalPSKKey | quote }}
+            - name: ASTRONOMER_INTERNAL_PSK_PREVIOUS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.secretsSecretName" . }}
+                  key: {{ .Values.secrets.internalPSKPreviousKey | quote }}
+                  optional: true
             # Pod IP is the address sibling replicas use to reverse-proxy
             # tunnel-bound requests (kubectl shell, k8s passthrough, image
             # scans) to whichever pod holds the agent's WebSocket. Without

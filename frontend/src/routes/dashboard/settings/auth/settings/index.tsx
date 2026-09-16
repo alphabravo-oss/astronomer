@@ -13,14 +13,14 @@ import { createFileRoute } from "@tanstack/react-router";
  *      without a code change here.
  */
 import { useEffect, useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
 import { ArrowLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { useClusters } from "@/lib/hooks";
+import { useClusters } from "@/lib/hooks/clusters";
 import {
   useDexSettings,
   useUpdateDexSettings,
@@ -122,13 +122,16 @@ function DexSettingsPage() {
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/settings/auth"
+      <form.AppForm>
+        <form.FormErrorSummary serverError={updateMutation.error?.message} />
+      </form.AppForm>
+      <RouterLink
+        to="/dashboard/settings/auth"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to Auth
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Auth · Dex Settings"
@@ -355,7 +358,7 @@ function DexSummary({
         <button
           type="button"
           onClick={onEdit}
-          className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+          className="inline-flex shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
         >
           {configured ? (
             <Pencil className="h-3.5 w-3.5" />
@@ -466,7 +469,7 @@ function PublicClientEditor({
         <p className="text-xs font-medium text-foreground">
           {value.id ? value.id : "New client"}{" "}
           {value.public && (
-            <span className="ml-1 text-2xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+            <span className="ml-1 text-2xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground">
               public
             </span>
           )}

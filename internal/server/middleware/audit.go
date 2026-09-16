@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"net"
 	"net/http"
-	"net/netip"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
@@ -148,7 +148,7 @@ func CharlieAuthenticationDenialAuditWithWriter(log *slog.Logger, writer any) fu
 				return
 			}
 			duration := time.Since(started).Milliseconds()
-			charlie.LogHTTPAudit(r.Context(), log, r.Method, sw.status, duration, GetRequestID(r.Context()), GetCorrelationID(r.Context()))
+			charlie.LogHTTPAudit(r.Context(), log, r.Method, sw.status, duration, reqctx.RequestID(r.Context()), reqctx.CorrelationID(r.Context()))
 			writeCharlieAuditLog(r, sw.status, writer, duration, "denied")
 		})
 	}
@@ -184,7 +184,7 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			if err := writeMandatoryAuditIntent(r, writer, resourceType, resourceID); err != nil {
 				log.ErrorContext(r.Context(), "mandatory audit intent persistence failed",
 					"method", r.Method, "resource_type", resourceType,
-					"request_id", GetRequestID(r.Context()), "error", err)
+					"request_id", reqctx.RequestID(r.Context()), "error", err)
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "1")
 				w.WriteHeader(http.StatusServiceUnavailable)
@@ -206,7 +206,7 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 			if isCharlieAPIPath(r.URL.Path) {
 				duration := time.Since(start).Milliseconds()
 				outcome := charlieHTTPOutcome(sw.status)
-				charlie.LogHTTPAudit(r.Context(), log, r.Method, sw.status, duration, GetRequestID(r.Context()), GetCorrelationID(r.Context()))
+				charlie.LogHTTPAudit(r.Context(), log, r.Method, sw.status, duration, reqctx.RequestID(r.Context()), reqctx.CorrelationID(r.Context()))
 				writeCharlieAuditLog(r, sw.status, writer, duration, outcome)
 				return
 			}
@@ -222,8 +222,8 @@ func AuditLogWithWriter(log *slog.Logger, writer any) func(http.Handler) http.Ha
 				"resource_id", resourceID,
 				"status", sw.status,
 				"duration_ms", time.Since(start).Milliseconds(),
-				"request_id", GetRequestID(r.Context()),
-				"correlation_id", GetCorrelationID(r.Context()),
+				"request_id", reqctx.RequestID(r.Context()),
+				"correlation_id", reqctx.CorrelationID(r.Context()),
 			)
 			writeAuditLog(r, sw.status, writer, resourceType, resourceID, start)
 		})
@@ -246,11 +246,11 @@ func writeMandatoryAuditIntent(r *http.Request, writer any, resourceType, resour
 		detail = json.RawMessage(`{}`)
 	}
 	return writerV1.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
-		Source: "http", CorrelationID: GetCorrelationID(r.Context()),
-		UserID: AuthenticatedUserUUID(r.Context()), ActorAuthMethod: authMethod(r.Context()),
+		Source: "http", CorrelationID: reqctx.CorrelationID(r.Context()),
+		UserID: reqctx.UserUUID(r.Context()), ActorAuthMethod: authMethod(r.Context()),
 		Action: action, ResourceType: resourceType, ResourceID: resourceID,
 		HTTPMethod: r.Method, Path: path, StatusCode: http.StatusProcessing,
-		RequestID: GetRequestID(r.Context()), IpAddress: RemoteIPAddr(r),
+		RequestID: reqctx.RequestID(r.Context()), IpAddress: reqctx.ClientIP(r),
 		UserAgent: r.UserAgent(), Detail: detail, ActionClass: audit.ClassMutation,
 	})
 }
@@ -282,15 +282,15 @@ func writeCharlieAuditLog(r *http.Request, status int, writer any, duration int6
 		"outcome_code": outcome, "method": r.Method, "status_code": status, "duration_ms": duration,
 	})
 	if err != nil {
-		charlie.LogOperationalFailure(r.Context(), nil, "charlie.http_audit_encode_failed", GetCorrelationID(r.Context()))
+		charlie.LogOperationalFailure(r.Context(), nil, "charlie.http_audit_encode_failed", reqctx.CorrelationID(r.Context()))
 		return
 	}
 	if err := writerV1.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
-		Source: "http", CorrelationID: GetCorrelationID(r.Context()), UserID: AuthenticatedUserUUID(r.Context()),
+		Source: "http", CorrelationID: reqctx.CorrelationID(r.Context()), UserID: reqctx.UserUUID(r.Context()),
 		ActorAuthMethod: authMethod(r.Context()), Action: "charlie.http.mutation", ResourceType: "charlie_http_request",
-		StatusCode: int32(status), DurationMs: duration, RequestID: GetRequestID(r.Context()), Detail: detail, ActionClass: "mutation",
+		StatusCode: int32(status), DurationMs: duration, RequestID: reqctx.RequestID(r.Context()), Detail: detail, ActionClass: "mutation",
 	}); err != nil {
-		charlie.LogOperationalFailure(r.Context(), nil, "charlie.http_audit_persist_failed", GetCorrelationID(r.Context()))
+		charlie.LogOperationalFailure(r.Context(), nil, "charlie.http_audit_persist_failed", reqctx.CorrelationID(r.Context()))
 	}
 }
 
@@ -311,8 +311,8 @@ func writeAuditLog(r *http.Request, status int, writer any, resourceType, resour
 		audit.Record(r.Context(), writerV1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
 			Request:         r,
 			Source:          "http",
-			CorrelationID:   GetCorrelationID(r.Context()),
-			UserID:          AuthenticatedUserUUID(r.Context()),
+			CorrelationID:   reqctx.CorrelationID(r.Context()),
+			UserID:          reqctx.UserUUID(r.Context()),
 			ActorAuthMethod: authMethod(r.Context()),
 			Action:          action,
 			ResourceType:    resourceType,
@@ -320,55 +320,19 @@ func writeAuditLog(r *http.Request, status int, writer any, resourceType, resour
 			ResourceName:    "",
 			StatusCode:      status,
 			DurationMs:      durationMs,
-			RequestID:       GetRequestID(r.Context()),
-			IPAddress:       RemoteIPAddr(r),
+			RequestID:       reqctx.RequestID(r.Context()),
+			IPAddress:       reqctx.ClientIP(r),
 			Detail:          detail,
 		}))
 	}
 }
 
 func authMethod(ctx context.Context) string {
-	user, ok := GetAuthenticatedUser(ctx)
+	user, ok := reqctx.AuthenticatedUser(ctx)
 	if !ok || user == nil {
 		return ""
 	}
 	return user.AuthMethod
-}
-
-func RemoteIPAddr(r *http.Request) *netip.Addr {
-	if r == nil {
-		return nil
-	}
-	candidates := []string{}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if idx := strings.Index(xff, ","); idx != -1 {
-			candidates = append(candidates, strings.TrimSpace(xff[:idx]))
-		} else {
-			candidates = append(candidates, strings.TrimSpace(xff))
-		}
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		candidates = append(candidates, strings.TrimSpace(xri))
-	}
-	if r.RemoteAddr != "" {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err != nil {
-			candidates = append(candidates, r.RemoteAddr)
-		} else {
-			candidates = append(candidates, host)
-		}
-	}
-	for _, c := range candidates {
-		if c == "" {
-			continue
-		}
-		addr, err := netip.ParseAddr(c)
-		if err != nil {
-			continue
-		}
-		return &addr
-	}
-	return nil
 }
 
 // parsePathResource walks the URL path segments and returns the last matched

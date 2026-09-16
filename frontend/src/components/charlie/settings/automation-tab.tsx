@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useDraft } from "@/lib/hooks/use-draft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { StatePanel } from "@/components/ui/empty-state";
@@ -70,13 +71,10 @@ export function AutomationTab() {
     queryFn: () => listCharlieTriggerEvents("dead", 0, 20),
     retry: false,
   });
-  const [draft, setDraft] = useState<CharlieAutomationView>();
+  const [draft, setDraft] = useDraft(q.data);
   const [deleteRule, setDeleteRule] = useState<CharlieTriggerRule>();
   const [retryEvent, setRetryEvent] = useState<CharlieTriggerEvent>();
   const [policyError, setPolicyError] = useState("");
-  useEffect(() => {
-    if (q.data) setDraft(structuredClone(q.data));
-  }, [q.data]);
   const save = useMutation({
     mutationFn: (input: CharlieAutomationView) =>
       updateCharlieAutomation(input),

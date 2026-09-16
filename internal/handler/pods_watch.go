@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
@@ -74,7 +72,11 @@ func (h *WorkloadHandler) SetPodWatcher(w PodWatcher) {
 // Auth is enforced by the stream-ticket-or-auth middleware on the route (same
 // posture as the pod-logs stream), so this handler only opens the watch.
 func (h *WorkloadHandler) WatchPods(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, valid := parseClusterID(w, r)
+	if !valid {
+		return
+	}
+	clusterID := clusterUUID.String()
 	namespace := r.URL.Query().Get("namespace")
 	if h == nil || h.podWatcher == nil {
 		RespondRequestError(w, r, http.StatusNotImplemented, apierror.NotImplemented, "pod watch streaming not configured")
@@ -94,7 +96,7 @@ func (h *WorkloadHandler) WatchPods(w http.ResponseWriter, r *http.Request) {
 	// ListPods relies on. `all==true` (feature flag off, superuser, or a
 	// cluster-wide grant) forwards everything unfiltered; `!all` is a strict
 	// fail-closed allow-list.
-	all, allowed, err := h.authz.authorizedNamespaces(r.Context(), parseClusterUUID(clusterID), rbac.ResourcePods, rbac.VerbRead)
+	all, allowed, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourcePods, rbac.VerbRead)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return

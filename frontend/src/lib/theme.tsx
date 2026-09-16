@@ -7,6 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useAuthStore } from "@/lib/store";
+import { useUserPreferences } from "@/lib/user-preferences";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -47,16 +49,36 @@ function applyTheme(theme: Theme) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
+  const [preAuthTheme, setPreAuthTheme] = useState<Theme>(readStoredTheme);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { preferences, isServerOwned, updatePreferences } =
+    useUserPreferences();
+  const theme =
+    isAuthenticated && isServerOwned ? preferences.theme : preAuthTheme;
 
   const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, next);
-    } catch {
-      // Storage unavailable (private mode/quota): theme still applies in-session.
+    if (isAuthenticated && isServerOwned) {
+      updatePreferences({ theme: next });
+    } else {
+      setPreAuthTheme(next);
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, next);
+      } catch {
+        // Storage unavailable: pre-auth theme still applies in-session.
+      }
     }
-  }, []);
+  }, [isAuthenticated, isServerOwned, updatePreferences]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !isServerOwned) return;
+    // Authenticated preference state has one owner. A prior login-screen choice
+    // must not silently become a fallback for this or the next account.
+    try {
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    } catch {
+      // Removing an optional pre-auth hint is best effort.
+    }
+  }, [isAuthenticated, isServerOwned]);
 
   useEffect(() => {
     applyTheme(theme);

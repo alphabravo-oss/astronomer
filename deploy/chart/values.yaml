@@ -190,6 +190,9 @@ server:
 # =============================================================================
 worker:
   replicaCount: 2
+  # Jobs per worker pod. Fleet sweeps have their own bounded fan-out; size the
+  # database pool for the resulting query concurrency.
+  concurrency: 32
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -299,8 +302,10 @@ postgres:
     minimumWeeklyBackups: 12
     minimumMonthlyBackups: 6
   # pgxpool sizing for the server + worker processes (FEATURES-051126 T21).
-  # Zero / unset = use the binary's defaults (MaxConns=25, MinConns=5,
-  # MaxConnLifetime=30m, MaxConnIdleTime=5m, HealthCheckPeriod=30s).
+  # Zero / unset = use binary defaults. Server MaxConns=25; worker MaxConns is
+  # max(25, WORKER_CONCURRENCY+8), so queue concurrency cannot exhaust the
+  # whole pool by construction. Both use MinConns=5, MaxConnLifetime=30m,
+  # MaxConnIdleTime=5m, and HealthCheckPeriod=30s.
   #
   # Tuning guidance for 50+ managed clusters under load:
   #   pool:
@@ -381,7 +386,6 @@ migrate:
     limits:
       cpu: 500m
       memory: 256Mi
-
 preflight:
   enabled: true
   image:
@@ -401,7 +405,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 26
+    targetVersion: 46
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -424,14 +428,18 @@ preflight:
 config:
   databaseURL: ""        # Defaults to postgres://USER:PASS@<release>-postgres:5432/<db>
   redisURL: ""           # Defaults to redis://<release>-redis:6379/0
-  env: development
-  debug: "true"
+  env: production
+  debug: "false"
   logLevel: info
-  allowedHosts: "*"
+  allowedHosts: ""
   corsAllowedOrigins: "http://astronomer.localtest.me"
   # Only these immediate reverse-proxy networks may assert X-Forwarded-For.
   # Empty is fail-closed: API-token CIDR policy uses the socket peer.
   trustedProxyCIDRs: []
+  # Per-authenticated-caller Kubernetes proxy token bucket. Keep the secure
+  # production defaults; load/capacity environments may raise these explicitly.
+  apiK8sProxyRateLimitRPS: 1
+  apiK8sProxyRateLimitBurst: 20
   # External URL of this install (e.g. http://astronomer.example.com:8080).
   # Seeded into platform_configuration.server_url on first boot. Leave empty
   # to skip the seed and set it later through platform settings.
@@ -638,6 +646,8 @@ secrets:
   existingSecret: ""
   secretKeyKey: SECRET_KEY
   encryptionKeyKey: ASTRONOMER_ENCRYPTION_KEY
+  internalPSKKey: ASTRONOMER_INTERNAL_PSK
+  internalPSKPreviousKey: ASTRONOMER_INTERNAL_PSK_PREVIOUS
   postgresPasswordKey: POSTGRES_PASSWORD
   # REQUIRED (no default). The chart used to ship a working JWT signing key and
   # Fernet key here, which meant every default install was forgeable by anyone
@@ -652,6 +662,14 @@ secrets:
   # (rotation reencrypts all wrapped values). Generate
   # with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
   encryptionKey: ""
+  # Dedicated HMAC key for short-lived, body-bound requests between server
+  # replicas. Keep this separate from both JWT and Fernet keys. Generate with:
+  # openssl rand -base64 48
+  internalPSK: ""
+  # Verification-only predecessor accepted during a rolling key rotation. Set
+  # this to the old internalPSK while deploying a new current key, then clear it
+  # after every server replica has rolled. It never signs new requests.
+  internalPSKPrevious: ""
   githubClientID: ""
   githubClientSecret: ""
   googleClientID: ""

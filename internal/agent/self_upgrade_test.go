@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -45,6 +46,49 @@ func agentDeploymentFixture() *appsv1.Deployment {
 			},
 		},
 	}
+}
+
+func TestSelfUpgradeAppliesValidatedAgentConfiguration(t *testing.T) {
+	fixture := newUpgradeFixture(t, upgradeFixtureOptions{pullSucceeds: true, watchdogStarts: true, operationID: "op-config"})
+	overrides := agenttemplate.AgentOverrides{
+		Tolerations: []agenttemplate.AgentToleration{{Key: "dedicated", Operator: "Equal", Value: "platform", Effect: "NoSchedule"}},
+		Resources:   &agenttemplate.AgentResources{Requests: agenttemplate.AgentResourceValues{CPU: "250m"}},
+		Proxy:       &agenttemplate.AgentProxy{HTTPSProxy: "http://proxy.internal:3128"},
+	}
+	raw, err := overrides.CanonicalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, _ := overrides.Digest()
+	result := fixture.upgrade(t, protocol.AgentUpgradePayload{OperationID: "op-config", TargetImage: testTargetImage, AgentOverrides: raw, ConfigurationDigest: digest})
+	if !result.Success {
+		t.Fatalf("upgrade rejected: %+v", result)
+	}
+	deploy, err := fixture.client.AppsV1().Deployments(DefaultAgentNamespace).Get(context.Background(), DefaultAgentDeploymentName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deploy.Spec.Template.Annotations[agentConfigurationDigestAnnotation] != digest {
+		t.Fatalf("configuration digest annotation = %q", deploy.Spec.Template.Annotations[agentConfigurationDigestAnnotation])
+	}
+	if len(deploy.Spec.Template.Spec.Tolerations) != 3 {
+		t.Fatalf("tolerations = %#v", deploy.Spec.Template.Spec.Tolerations)
+	}
+	if got := deploy.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().String(); got != "250m" {
+		t.Fatalf("cpu request = %s", got)
+	}
+	if got := deploy.Spec.Template.Spec.Containers[0].Env[len(deploy.Spec.Template.Spec.Containers[0].Env)-1]; got.Name != "HTTPS_PROXY" || got.Value != "http://proxy.internal:3128" {
+		t.Fatalf("proxy env = %#v", deploy.Spec.Template.Spec.Containers[0].Env)
+	}
+}
+
+func TestSelfUpgradeRejectsConfigurationDigestMismatch(t *testing.T) {
+	fixture := newUpgradeFixture(t, upgradeFixtureOptions{pullSucceeds: true, watchdogStarts: true, operationID: "op-config-mismatch"})
+	result := fixture.upgrade(t, protocol.AgentUpgradePayload{OperationID: "op-config-mismatch", TargetImage: testTargetImage, AgentOverrides: json.RawMessage(`{}`), ConfigurationDigest: "sha256:wrong"})
+	if result.Success || !strings.Contains(result.Error, "digest mismatch") {
+		t.Fatalf("result = %+v", result)
+	}
+	fixture.assertNoRollout(t)
 }
 
 // actionRecorder captures the ORDER of writes against the fake API. Ordering is

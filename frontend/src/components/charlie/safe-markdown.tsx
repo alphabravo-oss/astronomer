@@ -65,7 +65,7 @@ const markdownComponents: Components = {
   ),
   code: ({ children, className }) => (
     <code
-      className={`${className ?? ""} rounded bg-muted px-1 py-0.5 font-mono text-xs`}
+      className={`${className ?? ""} rounded-sm bg-muted px-1 py-0.5 font-mono text-xs`}
     >
       {children}
     </code>

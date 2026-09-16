@@ -35,8 +35,8 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
-  useReducer,
   useRef,
   useState,
 } from "react";
@@ -426,11 +426,13 @@ export function useMonitoringOperationTracker(
 
   const [trackedId, setTrackedId] = useState<string | null>(null);
   const [dismissedId, setDismissedId] = useState<string | null>(null);
-  // Bumped when a failure's grace window closes; see the timer effect below.
-  const [settleTick, bumpSettleTick] = useReducer((n: number) => n + 1, 0);
+  // Updated by the tracker timer so time-derived operation state has a stable,
+  // render-safe clock rather than reading the wall clock while rendering.
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const settledRef = useRef<string | null>(null);
-  const onSettledRef = useRef(options.onSettled);
-  onSettledRef.current = options.onSettled;
+  const onSettled = useEffectEvent((operation: MonitoringOperation) => {
+    options.onSettled?.(operation);
+  });
 
   const listParams = useMemo(
     () => ({ targetType, targetKey, limit: ADOPT_PAGE_SIZE }),
@@ -440,40 +442,41 @@ export function useMonitoringOperationTracker(
     () => queryKeys.monitoringStack.operations(listParams),
     [listParams],
   );
-  const detailKey = useMemo(
-    () => queryKeys.monitoringStack.operation(trackedId ?? ""),
-    [trackedId],
-  );
   const statusKey = useMemo(
     () => queryKeys.monitoringStack.status(family),
     [family],
   );
-
-  // ── Detail: the tracked row, with its stage events ──
-  const detailQuery = useQuery({
-    queryKey: detailKey,
-    queryFn: () => api.getMonitoringOperation(trackedId as string),
-    enabled: enabled && !!trackedId,
-    // React Query owns this timer; unmounting the component removes the
-    // observer and the timer with it. Nothing to clean up by hand.
-    refetchInterval: (query) =>
-      monitoringOperationPollInterval(query.state.data, Date.now()),
-  });
-
-  const trackedOperation = detailQuery.data ?? null;
-  const active = isActiveOperationStatus(trackedOperation?.status);
 
   // ── Adopt: newest rows for this target ──
   const listQuery = useQuery({
     queryKey: listKey,
     queryFn: () => api.listMonitoringOperations(listParams),
     enabled: enabled && !!targetKey,
-    // While something is in flight the detail poll is authoritative; the adopt
-    // query only needs to run when we are NOT following anything.
-    refetchInterval: active ? false : MONITORING_OP_ADOPT_POLL_MS,
+    // Keep a slow target-level poll even while the detail query is active.
+    // Adoption is derived from this result, so disabling it would leave a
+    // terminal tracked row unable to discover the next operation.
+    refetchInterval: MONITORING_OP_ADOPT_POLL_MS,
   });
 
   const latestOperation = listQuery.data?.[0] ?? null;
+  const adoptedId =
+    enabled &&
+    !trackedId &&
+    latestOperation &&
+    latestOperation.id !== dismissedId &&
+    isActiveOperationStatus(latestOperation.status)
+      ? latestOperation.id
+      : null;
+  const operationId = trackedId ?? adoptedId;
+  const detailKey = queryKeys.monitoringStack.operation(operationId ?? "");
+  const detailQuery = useQuery({
+    queryKey: detailKey,
+    queryFn: () => api.getMonitoringOperation(operationId as string),
+    enabled: enabled && !!operationId,
+    refetchInterval: (query) =>
+      monitoringOperationPollInterval(query.state.data, Date.now()),
+  });
+  const trackedOperation = detailQuery.data ?? null;
 
   /**
    * What the screen renders. While something is being followed that is the
@@ -484,28 +487,11 @@ export function useMonitoringOperationTracker(
    */
   const operation =
     trackedOperation ??
-    (!trackedId && latestOperation && latestOperation.id !== dismissedId
+    (latestOperation &&
+    latestOperation.id !== dismissedId &&
+    (!operationId || latestOperation.id === operationId)
       ? latestOperation
       : null);
-
-  useEffect(() => {
-    if (!enabled || !latestOperation) return;
-    if (latestOperation.id === trackedId) return;
-    // A row the operator explicitly dismissed stays dismissed. Without this the
-    // next 10s adopt poll silently re-adopts a wedged operation the operator
-    // just walked away from, undoing `clear()` and re-locking the panel.
-    if (latestOperation.id === dismissedId) return;
-    if (!isActiveOperationStatus(latestOperation.status)) return;
-    // Seed the detail cache so the UI shows the adopted row immediately rather
-    // than flashing empty for one round-trip. The list row has no events; the
-    // first detail poll fills them in.
-    queryClient.setQueryData<MonitoringOperation>(
-      queryKeys.monitoringStack.operation(latestOperation.id),
-      (prev) => prev ?? latestOperation,
-    );
-    settledRef.current = null;
-    setTrackedId(latestOperation.id);
-  }, [enabled, latestOperation, trackedId, dismissedId, queryClient]);
 
   // ── Settle: refresh the stack's status once the operation finishes ──
   //
@@ -522,7 +508,7 @@ export function useMonitoringOperationTracker(
       return;
     if (
       trackedOperation.status !== "completed" &&
-      !isSettledFailure(trackedOperation, Date.now())
+      !isSettledFailure(trackedOperation, nowMs)
     ) {
       return;
     }
@@ -531,29 +517,29 @@ export function useMonitoringOperationTracker(
     settledRef.current = stamp;
     queryClient.invalidateQueries({ queryKey: statusKey });
     queryClient.invalidateQueries({ queryKey: listKey });
-    onSettledRef.current?.(trackedOperation);
+    onSettled(trackedOperation);
     // `settleTick` is a real dependency: a failure inside its grace window
     // returns above, and the tick is the only thing that re-runs this effect
     // once the window closes (the polled row itself is byte-identical, so
     // React Query hands back the same reference).
-  }, [trackedOperation, queryClient, statusKey, listKey, settleTick]);
+  }, [trackedOperation, queryClient, statusKey, listKey, nowMs]);
 
-  // One timer, cleared on unmount or when the row changes: re-render exactly
-  // when a time-derived state next changes — the failure grace window closing,
-  // the stall threshold, the tracking ceiling, or simply the next second of the
-  // elapsed clock. Nothing else would: the poll that crosses any of those
-  // boundaries returns identical data, which React Query's structural sharing
-  // turns into no state change at all.
-  //
-  // `settleTick` is a real dependency. The timer's own bump is what re-runs
-  // this effect to schedule the NEXT tick; without it the tracker would move
-  // exactly once and freeze again.
+  // A bounded clock keeps time-derived state live even when React Query
+  // structurally shares an unchanged server row. The callback re-checks the
+  // policy before each render, so it stops at the tracking ceiling and is
+  // always cleaned up on operation change or unmount.
   useEffect(() => {
-    const delay = nextTrackerTickMs(operation, Date.now());
+    const delay = nextTrackerTickMs(operation, nowMs);
     if (delay <= 0) return;
-    const timer = setTimeout(() => bumpSettleTick(), delay);
-    return () => clearTimeout(timer);
-  }, [operation, settleTick]);
+    const timer = setInterval(() => {
+      const tickedAt = Date.now();
+      if (nextTrackerTickMs(operation, tickedAt) <= 0) {
+        clearInterval(timer);
+      }
+      setNowMs(tickedAt);
+    }, Math.min(delay, MONITORING_OP_ELAPSED_TICK_MS));
+    return () => clearInterval(timer);
+  }, [operation, nowMs]);
 
   const retryMutation = useMutation({
     mutationFn: (id: string) => api.retryMonitoringOperation(id),
@@ -594,16 +580,11 @@ export function useMonitoringOperationTracker(
     [queryClient, listKey],
   );
 
-  // Read through a ref so `clear` and `retry` keep stable identities across the
-  // poll's re-renders.
-  const operationRef = useRef(operation);
-  operationRef.current = operation;
-
   const clear = useCallback(() => {
     settledRef.current = null;
-    setDismissedId(operationRef.current?.id ?? null);
+    setDismissedId(operation?.id ?? null);
     setTrackedId(null);
-  }, []);
+  }, [operation]);
 
   // Destructured because a query/mutation result object is not referentially
   // stable; `refetch` and `mutate` are.
@@ -617,20 +598,19 @@ export function useMonitoringOperationTracker(
   }, [refetchDetail, refetchList]);
 
   const retry = useCallback(() => {
-    const id = operationRef.current?.id;
+    const id = operation?.id;
     if (!id || isRetrying) return;
     requeueOperation(id);
-  }, [requeueOperation, isRetrying]);
+  }, [operation, requeueOperation, isRetrying]);
 
-  const now = Date.now();
-  const elapsed = monitoringOperationElapsedMs(operation, now);
+  const elapsed = monitoringOperationElapsedMs(operation, nowMs);
   const terminal = isTerminalOperationStatus(operation?.status);
   const failure =
     operation?.status === "failed" || operation?.status === "superseded";
   const settled =
     !!operation &&
     terminal &&
-    (operation.status === "completed" || isSettledFailure(operation, now));
+    (operation.status === "completed" || isSettledFailure(operation, nowMs));
   const errorMessage = operation?.errorMessage?.trim()
     ? operation.errorMessage
     : null;
@@ -738,9 +718,6 @@ export function useMonitoringStackController(
     useState<ReplaceRequiredError | null>(null);
   const family = stackFamilyKey(target);
 
-  const trackRef = useRef(tracker.track);
-  trackRef.current = tracker.track;
-
   const lifecycle = useMutation({
     mutationFn: ({
       verb,
@@ -750,7 +727,7 @@ export function useMonitoringStackController(
       body?: MonitoringStackRequestBody;
     }) => api.runStackLifecycle(target, verb, body),
     onSuccess: (op, { verb }) => {
-      trackRef.current(op);
+      tracker.track(op);
       // The handler persists the new desired state (status "installing" /
       // "updating" / "uninstalled") before enqueueing, so the status card is
       // already stale by the time we get here.

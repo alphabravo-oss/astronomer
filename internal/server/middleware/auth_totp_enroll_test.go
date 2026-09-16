@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -32,10 +34,10 @@ func TestAuthOrTOTPEnrollChallenge(t *testing.T) {
 	var gotUser string
 	var gotEnrollOnly bool
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if u, ok := GetAuthenticatedUser(r.Context()); ok {
+		if u, ok := reqctx.AuthenticatedUser(r.Context()); ok {
 			gotUser = u.ID
 		}
-		gotEnrollOnly = IsTOTPEnrollOnlyAuth(r.Context())
+		gotEnrollOnly = reqctx.IsTOTPEnrollOnly(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
 

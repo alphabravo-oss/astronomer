@@ -30,7 +30,6 @@ type ResourceSettingsMutationTx interface {
 type resourceSettingsRunTxFunc func(context.Context, func(ResourceSettingsMutationTx) error) error
 
 // SetRunTx enables atomic state + mandatory-audit commits for settings/SSO.
-// The nil fallback exists only for the handler's narrow unit/dev fakes.
 func (h *ResourceHandler) SetRunTx(runTx resourceSettingsRunTxFunc) {
 	if h != nil {
 		h.runTx = runTx

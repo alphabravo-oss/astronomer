@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -180,6 +181,7 @@ type sizerEvalResult struct {
 
 type sizerClusterLister interface {
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
+	ListClusterLivenessForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.ClusterLiveness, error)
 }
 
 var _ sizerClusterLister = (*sqlc.Queries)(nil)
@@ -544,10 +546,15 @@ func lokiRunning(meta map[string]any) bool {
 	}
 }
 
-func sizerPickManagementCluster(clusters []sqlc.Cluster, thanosMeta, lokiMeta map[string]any) (sqlc.Cluster, bool) {
+type sizerCluster struct {
+	sqlc.Cluster
+	LastHeartbeat pgtype.Timestamptz
+}
+
+func sizerPickManagementCluster(clusters []sizerCluster, thanosMeta, lokiMeta map[string]any) (sqlc.Cluster, bool) {
 	for _, c := range clusters {
 		if c.IsLocal {
-			return c, true
+			return c.Cluster, true
 		}
 	}
 	id := stringFromMap(thanosMeta, "managementClusterId")
@@ -559,7 +566,7 @@ func sizerPickManagementCluster(clusters []sqlc.Cluster, thanosMeta, lokiMeta ma
 	}
 	for _, c := range clusters {
 		if c.ID.String() == id {
-			return c, true
+			return c.Cluster, true
 		}
 	}
 	parsed, err := uuid.Parse(id)
@@ -569,7 +576,7 @@ func sizerPickManagementCluster(clusters []sqlc.Cluster, thanosMeta, lokiMeta ma
 	return sqlc.Cluster{ID: parsed}, true
 }
 
-func (h *MonitoringHandler) sizerListAllClusters(ctx context.Context) ([]sqlc.Cluster, error) {
+func (h *MonitoringHandler) sizerListAllClusters(ctx context.Context) ([]sizerCluster, error) {
 	if h == nil || h.queries == nil {
 		return nil, fmt.Errorf("monitoring store not configured")
 	}
@@ -578,13 +585,27 @@ func (h *MonitoringHandler) sizerListAllClusters(ctx context.Context) ([]sqlc.Cl
 		return nil, fmt.Errorf("cluster lister not configured")
 	}
 	const page int32 = 500
-	var all []sqlc.Cluster
+	var all []sizerCluster
 	for offset := int32(0); ; offset += page {
 		rows, err := lister.ListClusters(ctx, sqlc.ListClustersParams{Limit: page, Offset: offset})
 		if err != nil {
 			return nil, err
 		}
-		all = append(all, rows...)
+		ids := make([]uuid.UUID, len(rows))
+		for i, cluster := range rows {
+			ids[i] = cluster.ID
+		}
+		livenessRows, err := lister.ListClusterLivenessForClusters(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		liveness := make(map[uuid.UUID]pgtype.Timestamptz, len(livenessRows))
+		for _, row := range livenessRows {
+			liveness[row.ClusterID] = row.LastHeartbeat
+		}
+		for _, cluster := range rows {
+			all = append(all, sizerCluster{Cluster: cluster, LastHeartbeat: liveness[cluster.ID]})
+		}
 		if int32(len(rows)) < page {
 			return all, nil
 		}
@@ -595,7 +616,7 @@ func (h *MonitoringHandler) sizerListAllClusters(ctx context.Context) ([]sqlc.Cl
 // heartbeat. The local management plane is excluded: Loki attach/log
 // estimates are about member shippers, and including is_local would push a
 // 5-member fleet over the SingleBinary cluster cap.
-func countConnectedAdoptedClusters(clusters []sqlc.Cluster, now time.Time) int {
+func countConnectedAdoptedClusters(clusters []sizerCluster, now time.Time) int {
 	n := 0
 	for _, c := range clusters {
 		if c.IsLocal {

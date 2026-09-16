@@ -8,7 +8,9 @@ import (
 	"go/token"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,14 +86,10 @@ func TestSelfServiceTokenAndAuditCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/tokens/", nil)
 			params := sqlc.CreateAPITokenParams{UserID: uuid.New(), Name: "automation", Prefix: "astro_abcd"}
 
-			_, err := executeAuthMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q AuthMutationTx) (sqlc.ApiToken, error) { return q.CreateAPIToken(r.Context(), params) },
-				func() (sqlc.ApiToken, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.ApiToken{}, nil
-				},
-				func(token sqlc.ApiToken) clusterAuditEvent {
-					return clusterAuditEvent{action: "auth.token.create", resourceType: "api_token", resourceID: token.ID.String(), status: http.StatusCreated}
+				func(token sqlc.ApiToken) mutationAuditEvent {
+					return mutationAuditEvent{action: "auth.token.create", resourceType: "api_token", resourceID: token.ID.String(), status: http.StatusCreated}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -131,7 +129,7 @@ func TestLogoutRevocationCutoffAndAuditCommitTogether(t *testing.T) {
 			})
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", nil)
 			userID := uuid.New()
-			_, err := executeAuthMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q AuthMutationTx) (logoutMutationResult, error) {
 					if err := q.RevokeJWT(r.Context(), sqlc.RevokeJWTParams{Jti: "jti-1", UserID: userID}); err != nil {
 						return logoutMutationResult{}, err
@@ -141,12 +139,8 @@ func TestLogoutRevocationCutoffAndAuditCommitTogether(t *testing.T) {
 					}
 					return logoutMutationResult{jti: "jti-1", userID: userID}, nil
 				},
-				func() (logoutMutationResult, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return logoutMutationResult{}, nil
-				},
-				func(result logoutMutationResult) clusterAuditEvent {
-					return clusterAuditEvent{action: "auth.logout", resourceType: "user", resourceID: result.userID.String(), status: http.StatusOK}
+				func(result logoutMutationResult) mutationAuditEvent {
+					return mutationAuditEvent{action: "auth.logout", resourceType: "user", resourceID: result.userID.String(), status: http.StatusOK}
 				})
 			if tc.auditErr == nil && err != nil {
 				t.Fatal(err)
@@ -205,37 +199,43 @@ func TestFailedLoginCounterLockAndAuditCommitTogether(t *testing.T) {
 }
 
 func TestEverySelfServiceCredentialMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("auth.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]bool{"ChangePassword": false, "CreateToken": false, "RevokeToken": false, "Logout": false}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, "auth") || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
+		file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(".", name), nil, 0)
+		if err != nil {
+			t.Fatal(err)
 		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if _, tracked := want[fn.Name.Name]; !tracked {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
+					want[fn.Name.Name] = true
+				}
 				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeAuthMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
+			})
+		}
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeAuthMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

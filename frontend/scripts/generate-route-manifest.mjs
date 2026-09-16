@@ -30,7 +30,7 @@ const outputPath = path.join(frontendRoot, 'tests/e2e-smoke/route-manifest.gener
 // Reviewed 2026-08-23 after adding resource discovery/schema and enterprise
 // operations surfaces. Keep this exact: a route addition needs a smoke fixture
 // and a route removal needs an explicit product decision.
-const EXPECTED_ROUTE_COUNT = 130;
+const EXPECTED_ROUTE_COUNT = 129; // 2026-09-11: install and progress are one stateful registration route.
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to

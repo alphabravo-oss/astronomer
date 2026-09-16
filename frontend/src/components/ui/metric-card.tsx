@@ -1,4 +1,3 @@
-"use client";
 
 import { cn, gaugeColor, gaugeTextColor } from "@/lib/utils";
 import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";

@@ -32,7 +32,7 @@ func TestCreateLoggingPipelinePersistsAndReturnsSelectedOutputs(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/logging/pipelines?cluster_id="+clusterID.String(), bytes.NewReader(body))
 	req.Header.Set("Idempotency-Key", "pipeline-create-1")
 	rec := httptest.NewRecorder()
-	NewLoggingHandler(q).CreatePipeline(rec, req)
+	newLoggingHandlerForTest(q).CreatePipeline(rec, req)
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -83,7 +83,7 @@ func TestUpdateLoggingPipelineRejectsForeignClusterOutputWithoutMutation(t *test
 	routeContext.URLParams.Add("id", pipeline.ID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeContext))
 	rec := httptest.NewRecorder()
-	NewLoggingHandler(q).UpdatePipeline(rec, req)
+	newLoggingHandlerForTest(q).UpdatePipeline(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -112,7 +112,7 @@ func TestCreateLoggingPipelineRequiresIdempotencyKeyBeforeMutation(t *testing.T)
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/logging/pipelines?cluster_id="+clusterID.String(), bytes.NewReader(body))
 	rec := httptest.NewRecorder()
-	NewLoggingHandler(q).CreatePipeline(rec, req)
+	newLoggingHandlerForTest(q).CreatePipeline(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -184,7 +184,7 @@ func TestLoggingPipelineReconciliationMutationsReturnAcceptedReceipts(t *testing
 			routeContext.URLParams.Add("id", pipeline.ID.String())
 			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeContext))
 			rec := httptest.NewRecorder()
-			tt.invoke(NewLoggingHandler(q), rec, req)
+			tt.invoke(newLoggingHandlerForTest(q), rec, req)
 			if rec.Code != http.StatusAccepted {
 				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 			}
@@ -220,7 +220,7 @@ func TestListLoggingPipelinesReturnsOutputAssociations(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/logging/pipelines?cluster_id="+clusterID.String(), nil)
 	rec := httptest.NewRecorder()
-	NewLoggingHandler(q).ListPipelines(rec, req)
+	newLoggingHandlerForTest(q).ListPipelines(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -254,7 +254,7 @@ func TestDeleteLoggingOutputReturnsConflictWhileSelectedByPipeline(t *testing.T)
 	routeContext.URLParams.Add("id", output.ID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeContext))
 	rec := httptest.NewRecorder()
-	NewLoggingHandler(q).DeleteOutput(rec, req)
+	newLoggingHandlerForTest(q).DeleteOutput(rec, req)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}

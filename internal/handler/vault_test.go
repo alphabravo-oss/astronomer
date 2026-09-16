@@ -22,13 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 )
 
@@ -217,7 +218,7 @@ func makeVaultRequest(t *testing.T, method, path string, callerID uuid.UUID, bod
 		_ = json.NewEncoder(&buf).Encode(body)
 	}
 	req := httptest.NewRequest(method, path, &buf)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: callerID.String(),
 	}))
 	return req
@@ -240,7 +241,7 @@ func TestVaultHandler_RequiresSuperuser(t *testing.T) {
 	nonSuper := uuid.New()
 	fq.users[nonSuper] = sqlc.User{ID: nonSuper, IsSuperuser: false}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	h.SetEncryptor(newVaultTestEncryptor(t))
 
 	// Build a chi router so URL params resolve correctly.
@@ -290,7 +291,7 @@ func TestVaultHandler_CreateGetUpdate(t *testing.T) {
 	caller := uuid.New()
 	fq.users[caller] = sqlc.User{ID: caller, IsSuperuser: true}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	h.SetEncryptor(newVaultTestEncryptor(t))
 
 	r := chi.NewRouter()
@@ -393,7 +394,7 @@ func TestVaultHandler_DeleteAuditsConnection(t *testing.T) {
 	}
 	fq.byName["prod"] = connID
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	r := chi.NewRouter()
 	r.Delete("/api/v1/admin/vault-connections/{id}/", h.Delete)
 
@@ -433,7 +434,7 @@ func TestVaultHandler_TestEndpointAuditsProbeResult(t *testing.T) {
 		Enabled:       true,
 	}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	h.SetEncryptor(enc)
 	h.SetProbe(fakeVaultProbe{result: TestResult{
 		OK:        true,
@@ -468,7 +469,7 @@ func TestVaultHandler_ProjectDefaultVaultAssignmentIsAudited(t *testing.T) {
 	fq.projects[projectID] = sqlc.Project{ID: projectID, Name: "team-a"}
 	fq.conns[connID] = sqlc.VaultConnection{ID: connID, Name: "prod", Addr: "https://vault.example.com", AuthMethod: "token"}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	r := chi.NewRouter()
 	r.Put("/api/v1/projects/{id}/default-vault-connection/", h.PutProjectDefault)
 
@@ -496,7 +497,7 @@ func TestVaultHandler_RejectsInsecureAddr(t *testing.T) {
 	caller := uuid.New()
 	fq.users[caller] = sqlc.User{ID: caller, IsSuperuser: true}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	h.SetEncryptor(newVaultTestEncryptor(t))
 
 	r := chi.NewRouter()

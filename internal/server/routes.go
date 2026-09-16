@@ -11,354 +11,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
-	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/remoteproxy"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
-	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
 )
-
-// RouterDependencies contains the optional dependencies used to register API routes.
-type RouterDependencies struct {
-	JWT             *iauth.JWTManager
-	Encryptor       *iauth.Encryptor
-	AuthQueries     appmiddleware.TokenUserQuerier
-	AuditWriter     any
-	PlatformHealth  *handler.PlatformHealthHandler
-	AdminQueues     *handler.AdminQueuesHandler
-	AdminTaskOutbox *handler.AdminTaskOutboxHandler
-	AdminDrill      *handler.AdminDrillHandler
-	// ManagementLogs is the read-side complement of the chart-side
-	// Fluent Bit DaemonSet — GET /api/v1/admin/management-logs/.
-	// Superuser-gated inside the handler. Nil-safe: omitted from the
-	// router when the in-cluster k8s client / namespace pair isn't
-	// wired (laptop dev, test fakes).
-	ManagementLogs *handler.ManagementLogsHandler
-	// GroupMappings is the migration-042 admin CRUD over
-	// identity_group_mappings plus the per-user re-sync endpoint.
-	GroupMappings *handler.GroupMappingsHandler
-	// SMTP owns /api/v1/admin/smtp/* and /api/v1/admin/emails/.
-	// Wired by NewApp once the encryptor is available; routes are
-	// omitted (cleanly) when SMTP is unwired (test fakes, pre-
-	// encryption-key bootstrap).
-	SMTP *handler.SMTPHandler
-	// EmailEnqueuer is the application-wide handle for every hook
-	// site (lockout, totp enroll/disable, recovery regenerate, api
-	// token created, alert fired). Wired in NewApp.
-	EmailEnqueuer *email.Enqueuer
-	// Webhooks owns /api/v1/admin/webhooks/* + the deliveries audit
-	// sub-routes (migration 048). Nil when the encryptor isn't wired
-	// (the secret is Fernet-encrypted, so we degrade off cleanly).
-	Webhooks *handler.WebhookHandler
-	// SIEMForwarders owns /api/v1/admin/siem-forwarders/* — admin
-	// CRUD + test + status for the external SIEM pipeline
-	// (migration 055). Nil when the encryptor isn't wired.
-	SIEMForwarders *handler.SIEMHandler
-	// NotificationTemplates owns /api/v1/admin/notification-templates/*
-	// (migration 059). The handler reads/writes overrides on top of the
-	// built-in registry in internal/notify; the email + webhook
-	// dispatchers consume the overrides via SetOverrideLookup.
-	NotificationTemplates *handler.NotificationTemplateHandler
-	Auth                  *handler.AuthHandler
-	// TOTP owns /api/v1/auth/totp/*. Pre-wired with Encryptor + JWT
-	// + Queries by cmd/server before NewRouter runs. When nil (test
-	// fakes, pre-encryption-key bootstrap), the TOTP routes are
-	// omitted and Login continues to behave as the legacy password
-	// flow.
-	TOTP     *handler.TOTPHandler
-	SSO      *handler.SSOHandler
-	Clusters *handler.ClusterHandler
-	// ClusterTemplates owns /api/v1/cluster-templates/* (CRUD) and the
-	// per-cluster /api/v1/clusters/{cluster_id}/template/* bind/apply
-	// surface. Migration 049. Nil-safe: omitted from the router when
-	// not wired (test harnesses, pre-migration boots).
-	ClusterTemplates *handler.ClusterTemplateHandler
-	// ClusterRegistration owns /api/v1/clusters/{id}/registration/*
-	// — the Rancher-style wizard endpoints from sprint 22 /
-	// migration 078. Nil-safe.
-	ClusterRegistration *handler.ClusterRegistrationHandler
-	// ClusterRegistries owns /api/v1/clusters/{cluster_id}/registries/*
-	// — the multi-registry-per-cluster admin UX from migration 050. The
-	// legacy single-row /registry/ endpoints on the cluster handler are
-	// left in place for back-compat. Nil-safe.
-	ClusterRegistries *handler.ClusterRegistriesHandler
-	// ClusterSnapshots owns /api/v1/clusters/{cluster_id}/snapshots/*,
-	// /snapshot-schedules/* and /velero-status/ — the per-cluster
-	// Velero self-service surface from migration 052. Nil-safe.
-	ClusterSnapshots *handler.ClusterSnapshotsHandler
-	// ControlPlaneSnapshots owns /api/v1/clusters/{cluster_id}/control-plane-snapshots/*
-	// — the etcd/control-plane DR surface (migration 125). Nil unless
-	// control_plane_snapshots_enabled is set, so the privileged-Job path is
-	// unreachable by default.
-	ControlPlaneSnapshots *handler.ControlPlaneSnapshotHandler
-	// NativeAuthz consults native per-CRD RBAC rules on the k8s-proxy authz
-	// hook (additive allow after a coarse deny). Nil unless native_rbac_enabled
-	// is set, so the proxy authz path is byte-for-byte unchanged by default.
-	NativeAuthz nativeAuthorizer
-	// NativeRBAC serves the native-rule CRUD API (author/list/delete). Nil
-	// unless native_rbac_enabled.
-	NativeRBAC *handler.NativeRBACHandler
-	// NamespaceScopedRBAC gates the namespace/project-scoped list gate on the
-	// typed cluster resource routes. False = the routes use the standard
-	// RequirePermission (unchanged behavior).
-	NamespaceScopedRBAC bool
-	// NetworkPolicies owns /api/v1/admin/network-policy-templates/* (CRUD)
-	// and /api/v1/clusters/{cluster_id}/network-policies/applications/*
-	// (per-cluster apply/list/delete) — migration 068. Nil-safe.
-	NetworkPolicies *handler.NetworkPolicyHandler
-	// Gatekeeper owns /api/v1/clusters/{id}/gatekeeper/constraints/* (P-04):
-	// custom ConstraintTemplate/Constraint authoring, validate + server-side
-	// apply through the tunnel, and authored-record CRUD.
-	Gatekeeper *handler.GatekeeperConstraintsHandler
-	Projects   *handler.ProjectHandler
-	// Delivery handlers own the project-scoped Flux-native control-plane
-	// surface. Inventory also serves the separately authorized platform-wide
-	// compatibility projection.
-	// Nil-safe so partial test/bootstrap routers simply omit these routes.
-	DeliverySources     *deliveryhandler.SourceHandler
-	DeliveryBundles     *deliveryhandler.BundleHandler
-	DeliveryTargets     *deliveryhandler.TargetHandler
-	DeliveryRollouts    *deliveryhandler.RolloutHandler
-	DeliveryDeployments *deliveryhandler.DeploymentHandler
-	DeliveryInventory   *deliveryhandler.InventoryHandler
-	DeliverySystem      *deliveryhandler.SystemRolloutHandler
-	Tools               *handler.ToolHandler
-	Audit               *handler.AuditHandler
-	Alerting            *handler.AlertingHandler
-	Anomaly             *handler.AnomalyHandler
-	Backups             *handler.BackupHandler
-	Catalog             *handler.CatalogHandler
-	// ChartRatings owns /api/v1/charts/{chart_id}/ratings/* and
-	// /api/v1/catalog/recommendations/{popular,similar}/* — the
-	// migration-055 catalog rating surface. Nil-safe: routes are
-	// only mounted when this field is non-nil so tests that don't
-	// need the surface (and don't supply the querier) keep building.
-	ChartRatings   *handler.ChartRatingsHandler
-	Logging        *handler.LoggingHandler
-	Monitoring     *handler.MonitoringHandler
-	ControlPlane   *handler.ControlPlaneHandler
-	Resources      *handler.ResourceHandler
-	PlatformCharts *handler.PlatformChartRepoHandler
-	// Docs serves the embedded OpenAPI spec + Swagger UI at
-	// /api/v1/openapi.yaml + /api/v1/docs/. Public — no JWT required.
-	Docs *handler.DocsHandler
-	// SSOPresets serves the canonical GitHub/Google/Azure AD/GitLab/
-	// Okta preset catalog at /api/v1/settings/sso/presets/.
-	SSOPresets   *handler.SSOPresetsHandler
-	RBAC         *handler.RBACHandler
-	RBACQueries  appmiddleware.RBACQuerier
-	RBACEngine   *rbac.Engine
-	Security     *handler.SecurityHandler
-	ServiceProxy *handler.ServiceProxyHandler
-	Workloads    *handler.WorkloadHandler
-	Hub          *tunnel.Hub
-	Proxy        *tunnel.ProxyHandler
-	// InternalK8s receives cross-pod K8sRequest forwards from sibling
-	// server replicas. Mounted OUTSIDE the JWT auth middleware — it
-	// does its own PSK validation. Nil-safe; absent when no encryption
-	// key is configured (single-replica disables the fallback).
-	InternalK8s *tunnel.InternalK8sHandler
-	// InternalHelm receives cross-pod HelmRequest forwards from sibling
-	// server replicas. Same PSK-auth contract as InternalK8s; mounted
-	// outside the JWT chain. Nil-safe.
-	InternalHelm *tunnel.InternalHelmHandler
-	Exec         *tunnel.ExecConsumer
-	Logs         *tunnel.LogsConsumer
-	// RemoteServer is the new remotedialer-based tunnel running alongside
-	// Hub during the migration. Mounted at /api/v1/connect/{cluster_id}/.
-	RemoteServer *tunnel2.RemoteServer
-	// EventStream serves Server-Sent Events for live UI updates (cluster
-	// connect/disconnect, heartbeats). Optional; nil-safe.
-	EventStream *handler.EventStreamHandler
-	// StreamTickets issues short-lived one-use credentials for browser
-	// EventSource/WebSocket connections, avoiding long-lived JWTs in URLs.
-	StreamTickets     *handler.StreamTicketHandler
-	StreamTicketStore *iauth.StreamTicketStore
-	// RemoteQueries is wired into the v2 demonstration handlers below — it's
-	// the same *sqlc.Queries the rest of the app uses, exposed under a
-	// distinct field so the migration code can resolve cluster rows directly
-	// without depending on the cluster handler's private queries field.
-	RemoteQueries *sqlc.Queries
-	// ResourcesSearch fans a single resource-list query out across every
-	// active cluster (Phase A3 of the Rancher-parity plan).
-	ResourcesSearch *handler.ResourcesSearchHandler
-	// ClusterAgent exposes read-only fleet inventory for connected and
-	// disconnected adopted-cluster agents.
-	ClusterAgent *handler.ClusterAgentHandler
-	// ApiserverAudit ingests kube-apiserver audit events streamed by the
-	// per-cluster agent and exposes them for operator read-back
-	// (migration 112). Nil-safe — when unwired the routes are omitted.
-	ApiserverAudit *handler.ApiserverAuditHandler
-	// Readyz exposes control-plane dependency readiness checks.
-	Readyz http.Handler
-	// DexConfig owns CRUD for Dex connectors / settings and renders the
-	// running Dex instance's ConfigMap (Phase B4 of the Rancher-parity plan).
-	DexConfig *handler.DexHandler
-	// SupportBundle generates a downloadable zip of platform diagnostics.
-	// Superuser-gated inside the handler itself.
-	SupportBundle *handler.SupportBundleHandler
-	// Compliance generates the SOC 2 / ISO 27001 audit-prep bundle
-	// for any date range. Superuser-gated inside the handler.
-	Compliance *handler.ComplianceHandler
-	// CompliancePosture (T1.2) is the CISO-facing fleet-wide score
-	// rollup: weighted combination of CIS, image-vulns, netpol
-	// coverage, and audit retention. Read-only.
-	CompliancePosture *handler.CompliancePostureHandler
-	// License (T7.4) is the read-only entitlement scaffold. Returns
-	// {state: "open-source", features_enabled: [...]}; ships now so
-	// future LicenseExpiringSoon condition wiring has a stable
-	// contract.
-	License *handler.LicenseHandler
-	// PlatformSettings owns /api/v1/admin/settings/* + the two pre-auth
-	// /api/v1/settings/{branding,banner}/ readers. Migration 046.
-	PlatformSettings *handler.PlatformSettingsHandler
-	// Extensions owns /api/v1/extensions/* — manifest validation plus
-	// install/enable/disable controls for UI extension registry entries.
-	Extensions *handler.ExtensionHandler
-	// PlatformDefaultTemplate (sprint 074) owns
-	// /api/v1/admin/platform-settings/default-cluster-template/*.
-	PlatformDefaultTemplate *handler.PlatformDefaultTemplateHandler
-	// PlatformBaselineCoverage (sprint 075) owns the read-only
-	// /coverage/ subroute reporting slug resolution status.
-	PlatformBaselineCoverage *handler.PlatformBaselineCoverageHandler
-	// SettingsCache is the shared process-local cache for platform
-	// settings, consumed by the FeatureGate middleware below. Optional
-	// — when nil, every feature-gated route falls through as enabled.
-	SettingsCache *handler.SettingsCache
-	// CharlieOnboarding owns the local-only signed package validation and
-	// consumption endpoints. It is nil unless database encryption and the
-	// in-cluster Kubernetes Secret writer are both available.
-	CharlieOnboarding *handler.CharlieOnboardingHandler
-	// CharlieAdmin owns the fail-closed connection, agent, mode, automation,
-	// access-preview, and diagnostics control plane. It never serves runtime
-	// evidence and is absent unless the local database is available.
-	CharlieAdmin *handler.CharlieAdminHandler
-	// CharlieSessions is the browser-only, live-authorized proxy for private
-	// Charlie chat. Nil keeps every route absent when the optional runtime is
-	// not fully wired.
-	CharlieSessions *handler.CharlieSessionHandler
-	// CharlieThreads is the durable interactive conversation pointer (one active
-	// thread per user). Sessions under a thread remain authorized agent runs.
-	CharlieThreads *handler.CharlieThreadHandler
-	// CharlieApprovals is the browser-facing product authority gate for exact,
-	// signed, single-use write approvals.
-	CharlieApprovals *handler.CharlieApprovalHandler
-	// CharlieContext exposes only live-authorized, bounded product resource
-	// identifiers and labels for the explicit chat context picker.
-	CharlieContext *handler.CharlieContextHandler
-	// CharlieFindings exposes bounded local notification summaries and proxies
-	// central detail only after live product authorization. Nil keeps the
-	// optional surface absent.
-	CharlieFindings *handler.CharlieFindingHandler
-	// CharlieOperations exposes bounded durable action-receipt status only
-	// after the same live session authorization used for history and findings.
-	CharlieOperations *handler.CharlieOperationHandler
-	// Quotas owns /api/v1/admin/quota-plans/* CRUD, the
-	// /admin/quota-usage/ fleet snapshot, and the per-tenant
-	// /projects/{id}/quota/ + /auth/me/quota/ readers. Migration 051.
-	// Nil-safe — when not wired the quota routes are omitted.
-	Quotas *handler.QuotaHandler
-	// CloudCredentials owns /api/v1/projects/{project_id}/cloud-credentials/*
-	// + /api/v1/cloud-credentials/providers/ (migration 053). The handler
-	// is nil-safe — when unwired the routes are omitted and the materialize
-	// worker still runs whatever rows exist in the DB through the drift
-	// sweep.
-	CloudCredentials *handler.CloudCredentialHandler
-	// Maintenance owns /api/v1/admin/maintenance-windows/* and the
-	// /api/v1/admin/deferred-operations/* admin surface (migration 057).
-	// The same migration's gate is wired into the destructive mutation
-	// handlers (cluster.Delete, project.Delete, tool.{Install,Upgrade,
-	// Uninstall}, catalog.{CreateInstallation,DeleteInstallation},
-	// cluster_template.Apply) via SetMaintenanceGate setters.
-	// Nil-safe: when unwired the routes are omitted and the gate
-	// short-circuits to "not blocked" on every mutation.
-	Maintenance *handler.MaintenanceHandler
-	// Dashboards owns /api/v1/admin/dashboard-widgets/*,
-	// /api/v1/admin/prometheus-datasources/*, and the per-scope
-	// /api/v1/dashboards/{global,clusters/{id},projects/{id}}/
-	// render endpoints (migration 058). Nil-safe.
-	Dashboards *handler.DashboardHandler
-	// GitOps owns /api/v1/admin/gitops-sources/* (migration 060). CRUD over
-	// gitops_registration_sources plus the per-source /sync/, /preview/, and
-	// /clusters/ subroutes. Nil-safe — when unwired the routes are omitted
-	// and the periodic gitops:sync worker still runs whatever rows exist
-	// in the DB.
-	GitOps *handler.GitOpsHandler
-	// ProjectCatalogs owns /api/v1/projects/{project_id}/catalogs/*
-	// (migration 061). When nil the per-project BYO catalog routes are
-	// omitted; the existing /catalog/* admin surface is untouched.
-	ProjectCatalogs *handler.ProjectCatalogHandler
-	// ReadAuditPolicies owns /api/v1/admin/read-audit-policies/* (migration
-	// 063). Superuser-gated CRUD over the read_audit_policies table.
-	// Nil-safe — when unwired the routes are omitted; the read-side audit
-	// middleware also no-ops because its PolicyEvaluator returns the empty
-	// list.
-	ReadAuditPolicies *handler.ReadAuditPolicyHandler
-	// ReadAuditEvaluator is the in-process PolicyEvaluator shared between
-	// the middleware and the handler (so policy writes invalidate the
-	// 30s cache). Nil-safe.
-	ReadAuditEvaluator *appmiddleware.PolicyEvaluator
-	// ImageVulns owns the sprint-062 image-vulnerability surface:
-	// /api/v1/clusters/{cluster_id}/vulnerabilities/* + /api/v1/security
-	// /vulnerabilities/*. The handler is nil-safe — when unwired the
-	// routes are omitted and the rest of /security continues to work.
-	ImageVulns *handler.ImageVulnHandler
-	// ComplianceBaselines owns /api/v1/admin/compliance-baselines/* and
-	// the /admin/compliance-baseline-applications/* history endpoints
-	// (migration 064 — sprint 17). Apply / Revert require a pgxpool
-	// transaction; the handler is nil-safe and routes are omitted when
-	// the handler isn't wired.
-	ComplianceBaselines *handler.ComplianceBaselinesHandler
-	// KubectlShell owns /api/v1/clusters/{cluster_id}/shell/* and the
-	// /api/v1/admin/shell-sessions/* superuser views (migration 065 /
-	// sprint 17). Nil-safe: when unwired the routes are omitted and
-	// the frontend Shell tab hides itself based on the missing
-	// feature flag in /me.
-	KubectlShell *handler.KubectlShellHandler
-	// ClusterGroups owns /api/v1/cluster-groups/* — operator-defined folder
-	// hierarchy over clusters (migration 066). Tree depth capped at 3
-	// (root + 2 levels). Nil-safe: omitted from the router when not wired.
-	ClusterGroups *handler.ClusterGroupHandler
-	// Vault owns /api/v1/admin/vault-connections/* (superuser) +
-	// /api/v1/projects/{id}/default-vault-connection/ (project RBAC).
-	// Migration 067. Nil-safe: when not wired the routes are omitted.
-	Vault *handler.VaultHandler
-	// ClusterResources owns the sprint-069 read-only "what's installed"
-	// surface: /clusters/{cluster_id}/{ingress-classes,gateway-classes,
-	// network-policies,resource-quotas,limit-ranges}/. Nil-safe.
-	ClusterResources *handler.ClusterResourcesHandler
-	// ApiserverAllowlist owns /api/v1/clusters/{cluster_id}/apiserver-allowlist/*
-	// (migration 070). The reconciler worker is the auto-correct path;
-	// this handler is the CRUD + on-demand reconcile surface. Nil-safe.
-	ApiserverAllowlist *handler.ApiserverAllowlistHandler
-	// ServiceMesh owns /api/v1/clusters/{cluster_id}/service-mesh/*
-	// (migration 071). Read-only detection + on-demand re-detect; nil-safe.
-	ServiceMesh *handler.ServiceMeshHandler
-	// SCIM owns the /scim/v2/* provisioning surface (migration 114).
-	// Mounted OUTSIDE the JWT auth chain — SCIM clients (Okta, Azure AD,
-	// OneLogin) authenticate with a static bearer token validated by the
-	// handler's own Auth middleware. Nil-safe: when unwired (test fakes,
-	// pre-migration boots) the routes are omitted.
-	SCIM *handler.SCIMHandler
-	// SCIMTokenAdmin owns /api/v1/admin/scim-tokens/* — the superuser
-	// surface to mint/list/revoke the static bearer tokens the /scim/v2/*
-	// chain authenticates against. Unlike SCIM itself this lives INSIDE
-	// the JWT auth chain. Nil-safe: omitted when unwired.
-	SCIMTokenAdmin *handler.SCIMTokenAdminHandler
-}
 
 const charlieAdminReconciliationTimeout = 7 * time.Minute
 
@@ -409,7 +76,17 @@ func apiRequestTimeout(duration time.Duration) func(http.Handler) http.Handler {
 	}
 }
 
-// NewRouter builds and returns the Chi router with all routes and middleware.
+// NewProductionRouter validates every security-critical production dependency
+// before any route or middleware is constructed.
+func NewProductionRouter(cfg *config.Config, deps RouterDependencies) (chi.Router, error) {
+	if err := validateProductionSecurityWiring(cfg, deps); err != nil {
+		return nil, err
+	}
+	return NewRouter(cfg, deps), nil
+}
+
+// NewRouter builds the Chi router. It accepts partial dependency groups for
+// focused tests; every missing security dependency still fails closed.
 func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	r := chi.NewRouter()
 
@@ -419,8 +96,14 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	// limiter). One limiter shared across all four classes so
 	// chart-tuned configs apply uniformly.
 	rateLimitCtx := context.Background()
+	rateLimiter := appmiddleware.NewAPIRateLimiter(rateLimitCtx, appmiddleware.APIRateLimitConfigs(map[appmiddleware.APIRateLimitClass]appmiddleware.APIRateLimitConfig{
+		appmiddleware.ClassK8sProxy: {
+			RatePerSecond: cfg.APIK8sProxyRateLimitRPS,
+			Burst:         cfg.APIK8sProxyRateLimitBurst,
+		},
+	}))
 	rateLimit := func(class appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler {
-		return appmiddleware.APIRateLimit(rateLimitCtx, class, nil)
+		return rateLimiter.Middleware(class)
 	}
 
 	// Middleware
@@ -461,7 +144,7 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		MaxAge:           300,
 	}))
 
-	registerPublicRoutes(r, cfg, deps)
+	registerPublicRoutes(r, cfg, deps, rateLimit)
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {
 		// REST-only timeout. Charlie's authenticated event stream is explicitly
@@ -475,66 +158,67 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 		// first-setup any more.
 
 		registerAPIEntryRoutes(r, cfg, deps)
-		authenticated := r
-		if deps.JWT != nil {
-			authenticated = chi.NewRouter()
-			if deps.RemoteQueries != nil {
-				// Authentication failures return before authenticated middleware
-				// can observe the request. Record only Charlie's unauthenticated
-				// mutation denials here, using its content-free audit contract.
-				authenticated.Use(appmiddleware.CharlieAuthenticationDenialAuditWithWriter(slog.Default(), deps.RemoteQueries))
-			}
-			authenticated.Use(appmiddleware.RequireAuthWithQueries(deps.JWT, deps.AuthQueries))
-			if deps.RemoteQueries != nil {
-				// Keep the normal mutation auditor immediately after auth so it
-				// receives actor context and still observes write-scope/RBAC denials.
-				authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.RemoteQueries))
-			}
-			// Default-deny scope backstop: a read-only API token can never
-			// reach a mutating handler, regardless of whether the specific
-			// subtree opted into a write scope. Wired right after auth so
-			// the token row is in context. `required=""` keeps this purely
-			// a read-only-token rejector — subtree-level
-			// RequireWriteScopeForMutations / requireScope still enforce the
-			// specific write scope on top, and RBAC remains the primary gate.
-			// GET/HEAD/OPTIONS, JWT sessions, and legacy empty-scope tokens
-			// pass through untouched (see RequireWriteScopeForMutations).
-			authenticated.Use(appmiddleware.RequireWriteScopeForMutations(""))
-			// Migration 063 — read-side audit. Wire AFTER auth so we
-			// know the actor, and BEFORE per-route handlers so the
-			// middleware sees every authenticated read. Nil-safe: when
-			// the evaluator or DB writer is unwired the middleware is
-			// simply not attached.
-			if deps.ReadAuditEvaluator != nil && deps.RemoteQueries != nil {
-				authenticated.Use(appmiddleware.ReadAudit(deps.ReadAuditEvaluator, deps.RemoteQueries))
-			}
-			r.Mount("/", authenticated)
+		authenticated := chi.NewRouter()
+		if deps.CoreAuth.Queries != nil {
+			// Authentication failures return before authenticated middleware
+			// can observe the request. Record only Charlie's unauthenticated
+			// mutation denials here, using its content-free audit contract.
+			authenticated.Use(appmiddleware.CharlieAuthenticationDenialAuditWithWriter(slog.Default(), deps.CoreAuth.Queries))
 		}
+		authenticated.Use(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries))
+		if deps.CoreAuth.Queries != nil {
+			// Keep the normal mutation auditor immediately after auth so it
+			// receives actor context and still observes write-scope/RBAC denials.
+			authenticated.Use(appmiddleware.AuditLogWithWriter(slog.Default(), deps.CoreAuth.Queries))
+		}
+		// Default-deny scope backstop: a read-only API token can never
+		// reach a mutating handler, regardless of whether the specific
+		// subtree opted into a write scope. Wired right after auth so
+		// the token row is in context. `required=""` keeps this purely
+		// a read-only-token rejector — subtree-level
+		// RequireWriteScopeForMutations / requireScope still enforce the
+		// specific write scope on top, and RBAC remains the primary gate.
+		// GET/HEAD/OPTIONS, JWT sessions, and legacy empty-scope tokens
+		// pass through untouched (see RequireWriteScopeForMutations).
+		authenticated.Use(appmiddleware.RequireWriteScopeForMutations(""))
+		// Migration 063 — read-side audit. Wire AFTER auth so we
+		// know the actor, and BEFORE per-route handlers so the
+		// middleware sees every authenticated read. Nil-safe: when
+		// the evaluator or DB writer is unwired the middleware is
+		// simply not attached.
+		if deps.CoreAuth.ReadAuditEvaluator != nil && deps.CoreAuth.Queries != nil {
+			authenticated.Use(appmiddleware.ReadAudit(deps.CoreAuth.ReadAuditEvaluator, deps.CoreAuth.Queries))
+		}
+		r.Mount("/", authenticated)
 
 		registerProtectedRoutes(authenticated, cfg, deps, rateLimit)
 	})
 
-	registerLongLivedRoutes(r, cfg, deps, rateLimit)
+	registerLongLivedRoutes(r, deps, rateLimit)
 	return r
 }
 
-func requireAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier) func(http.Handler) http.Handler {
+func requireAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQuerier) func(http.Handler) http.Handler {
 	if jwt == nil {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
+		return unavailableSecurityDependency("JWT authentication")
 	}
 	return appmiddleware.RequireAuthWithQueries(jwt, queries)
+}
+
+func unavailableSecurityDependency(name string) func(http.Handler) http.Handler {
+	return func(http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeRouteAuthError(w, http.StatusServiceUnavailable, "security_dependency_unavailable", name+" is unavailable")
+		})
+	}
 }
 
 // enrollChallengeOrAuth guards a route with either a normal session or a
 // PurposeTOTPEnrollOnly challenge (see AuthOrTOTPEnrollChallenge). Mirrors
 // requireAuth's nil-jwt passthrough for test wiring.
-func enrollChallengeOrAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier) func(http.Handler) http.Handler {
+func enrollChallengeOrAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQuerier) func(http.Handler) http.Handler {
 	if jwt == nil {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
+		return unavailableSecurityDependency("JWT authentication")
 	}
 	return appmiddleware.AuthOrTOTPEnrollChallenge(jwt, queries)
 }
@@ -547,23 +231,17 @@ func requireScope(scope string) func(http.Handler) http.Handler {
 	return appmiddleware.APITokenScopeEnforce(scope)
 }
 
-// featureGate wraps the migration-046 FeatureGate middleware so it
-// degrades cleanly when the SettingsCache is unwired (test fakes,
-// pre-bootstrap). A nil cache returns a pass-through middleware —
-// every feature is treated as enabled, matching the behaviour
-// operators expect on a fresh install before any setting is changed.
+// featureGate wraps the shared registry-backed middleware. A nil cache uses
+// the feature's registered default; unknown keys still fail closed. This keeps
+// fresh-install/test wiring aligned with the platform settings contract rather
+// than inventing a second set of route defaults here.
 func featureGate(key string, cache *handler.SettingsCache) func(http.Handler) http.Handler {
-	if cache == nil {
-		return func(next http.Handler) http.Handler { return next }
-	}
 	return appmiddleware.FeatureGate(key, cache)
 }
 
-func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+func requirePermission(engine *rbac.Engine, querier rbac.BindingQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
+		return unavailableSecurityDependency("RBAC authorization")
 	}
 	return appmiddleware.RequirePermission(engine, querier, resource, verb)
 }
@@ -574,11 +252,9 @@ func requirePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, r
 // else must use requirePermission, which ignores the query and therefore fails
 // closed for a namespace-narrowed caller. See
 // appmiddleware.RequireQueryNamespacePermission.
-func requireQueryNamespacePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+func requireQueryNamespacePermission(engine *rbac.Engine, querier rbac.BindingQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
+		return unavailableSecurityDependency("RBAC authorization")
 	}
 	return appmiddleware.RequireQueryNamespacePermission(engine, querier, resource, verb)
 }
@@ -587,11 +263,9 @@ func requireQueryNamespacePermission(engine *rbac.Engine, querier appmiddleware.
 // /clusters/, GET /projects/), admitting callers whose grant is cluster- or
 // project-scoped instead of global. The handler behind it filters the page —
 // see the RequireCollectionPermission doc for why the gate alone is not enough.
-func requireCollectionPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+func requireCollectionPermission(engine *rbac.Engine, querier rbac.BindingQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
+		return unavailableSecurityDependency("RBAC authorization")
 	}
 	return appmiddleware.RequireCollectionPermission(engine, querier, resource, verb)
 }
@@ -601,15 +275,13 @@ type permissionRequirement struct {
 	verb     rbac.Verb
 }
 
-func requireAnyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, requirements ...permissionRequirement) func(http.Handler) http.Handler {
+func requireAnyPermission(engine *rbac.Engine, querier rbac.BindingQuerier, requirements ...permissionRequirement) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil || len(requirements) == 0 {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
+		return unavailableSecurityDependency("RBAC authorization")
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, ok := appmiddleware.GetAuthenticatedUser(r.Context())
+			user, ok := reqctx.AuthenticatedUser(r.Context())
 			if !ok || user == nil {
 				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
 				return
@@ -631,49 +303,41 @@ func requireAnyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier
 	}
 }
 
-// permissionScopeIDs is the SECOND scope resolver in this codebase and its rule
-// is knowingly different from the first. Read appmiddleware.permissionScope
-// (internal/server/middleware/rbac.go) before touching either.
-//
-// The difference: permissionScope only falls back to a bare {id} when the route
-// subtree declared that {id} names a cluster (ClusterScopeFromIDParam) or the
-// gated resource is clusters/projects. This one falls back UNCONDITIONALLY and
-// binds the same {id} as BOTH the cluster and the project scope. Its callers —
-// requireAnyPermission, requireK8sProxyPermission and the workloads gate in
-// routes_resources_workloads.go — sit on routes where {id} is sometimes neither:
-// /admin/alerting/inhibitions/{id}/ binds an inhibition id as a cluster AND a
-// project, and /clusters/{id}/v2/pods/ binds the cluster uuid as a project id
-// too.
-//
-// TODO(authz-scope-resolvers): collapse this onto permissionScope, passing the
-// gated resource (or a nil resource meaning "infer nothing"). It is left as-is
-// deliberately rather than silently: the rule is WRONG but it fails CLOSED at
-// every live call site, because rbac.bindingApplies only matches a project
-// binding whose ProjectID equals the bound value, and no project id equals a
-// cluster or inhibition uuid — the ids come from different tables. A collision
-// there is the exploit, and unifying the two resolvers is what removes it. The
-// same divergence between two resolvers one file apart is how the monitoring
-// scope bug survived from 016fdbb to 686b794.
+func requireAllPermissions(engine *rbac.Engine, querier rbac.BindingQuerier, requirements ...permissionRequirement) func(http.Handler) http.Handler {
+	if engine == nil || querier == nil || len(requirements) == 0 {
+		return unavailableSecurityDependency("RBAC authorization")
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, ok := reqctx.AuthenticatedUser(r.Context())
+			if !ok || user == nil {
+				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
+				return
+			}
+			bindings, err := querier.GetUserBindings(r.Context(), user.ID)
+			if err != nil {
+				writeRouteAuthError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve user permissions")
+				return
+			}
+			clusterID, projectID := permissionScopeIDs(r)
+			for _, requirement := range requirements {
+				if !engine.CheckPermission(bindings, requirement.resource, requirement.verb, clusterID, projectID) {
+					writeRouteAuthError(w, http.StatusForbidden, "permission_denied", "You do not have permission to perform this action")
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// permissionScopeIDs resolves only unambiguous scope parameters. Callers that
+// use this helper are mounted on {cluster_id}/{project_id} routes or on global
+// collections. A generic {id} may name an alert, user, role, or other object and
+// must never be reinterpreted as an authorization scope.
 func permissionScopeIDs(r *http.Request) (uuid.UUID, uuid.UUID) {
-	var clusterID, projectID uuid.UUID
-	clusterParam := chi.URLParam(r, "cluster_id")
-	if clusterParam == "" {
-		clusterParam = chi.URLParam(r, "id")
-	}
-	if clusterParam != "" {
-		if parsed, err := uuid.Parse(clusterParam); err == nil {
-			clusterID = parsed
-		}
-	}
-	projectParam := chi.URLParam(r, "project_id")
-	if projectParam == "" {
-		projectParam = chi.URLParam(r, "id")
-	}
-	if projectParam != "" {
-		if parsed, err := uuid.Parse(projectParam); err == nil {
-			projectID = parsed
-		}
-	}
+	clusterID, _ := reqctx.ClusterID(r)
+	projectID, _ := reqctx.ProjectID(r)
 	return clusterID, projectID
 }
 
@@ -696,16 +360,14 @@ type nativeNamespaceLister interface {
 	AuthorizedNamespaces(ctx context.Context, userID, clusterID, apiGroup, resource, verb string) (all bool, names map[string]struct{})
 }
 
-func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, native nativeAuthorizer, namespaceScoped bool) func(http.Handler) http.Handler {
+func requireK8sProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier, native nativeAuthorizer, namespaceScoped bool) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
-		return func(next http.Handler) http.Handler {
-			return next
-		}
+		return unavailableSecurityDependency("kubernetes proxy authorization")
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			resource, verb := k8sProxyPermission(r)
-			user, ok := appmiddleware.GetAuthenticatedUser(r.Context())
+			user, ok := reqctx.AuthenticatedUser(r.Context())
 			if !ok || user == nil {
 				writeRouteAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication is required to access this resource")
 				return
@@ -725,7 +387,11 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQu
 			// changing the query. parseK8sProxyObjectRef returns nil (→ empty
 			// namespace) for cluster-scoped / discovery paths, which fails closed
 			// against namespace-scoped bindings — matching the forwarded request.
-			k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+			k8sPath, err := tunnel.CanonicalK8sProxyPath(r)
+			if err != nil {
+				writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
+				return
+			}
 			ref := parseK8sProxyObjectRef(k8sPath)
 			namespace := ref["namespace"]
 			// F1 (M5): a mutating nodes/{name}/proxy request reaches the
@@ -828,6 +494,17 @@ func requireK8sProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQu
 	}
 }
 
+func canonicalK8sProxyPath(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		canonical, err := tunnel.CanonicalK8sProxyPath(r)
+		if err != nil {
+			writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
+			return
+		}
+		next.ServeHTTP(w, tunnel.WithCanonicalK8sProxyPath(r, canonical))
+	})
+}
+
 func requireK8sProxyScope() func(http.Handler) http.Handler {
 	writeClusters := requireScope(iauth.ScopeWriteClusters)
 	return func(next http.Handler) http.Handler {
@@ -850,7 +527,11 @@ func auditK8sProxySecretReads(auditWriter any) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if _, verb, ok := k8sProxySecretReadPermission(r); ok {
 				clusterID := chi.URLParam(r, "cluster_id")
-				k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+				k8sPath, err := tunnel.CanonicalK8sProxyPath(r)
+				if err != nil {
+					writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
+					return
+				}
 				detail := map[string]any{
 					"method":   r.Method,
 					"k8s_path": k8sPath,
@@ -877,7 +558,11 @@ func auditK8sProxyMutationsWithAction(auditWriter any, action string, extraDetai
 			}
 
 			clusterID := chi.URLParam(r, "cluster_id")
-			k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+			k8sPath, err := tunnel.CanonicalK8sProxyPath(r)
+			if err != nil {
+				writeRouteAuthError(w, http.StatusBadRequest, "invalid_k8s_path", "Kubernetes proxy path is not canonical")
+				return
+			}
 			detail := k8sProxyAuditDetail(r.Method, k8sPath, extraDetail)
 			resourceName := k8sProxyAuditResourceName(detail)
 
@@ -988,13 +673,13 @@ func recordMandatoryK8sProxyAudit(ctx context.Context, r *http.Request, writer a
 
 	var userID uuid.UUID
 	authMethod := ""
-	if user, ok := appmiddleware.GetAuthenticatedUser(r.Context()); ok && user != nil {
+	if user, ok := reqctx.AuthenticatedUser(r.Context()); ok && user != nil {
 		userID, _ = uuid.Parse(user.ID)
 		authMethod = user.AuthMethod
 	}
 	return audit.RecordMandatory(ctx, v1, audit.Event{
 		Source:          "service",
-		CorrelationID:   appmiddleware.GetCorrelationID(r.Context()),
+		CorrelationID:   reqctx.CorrelationID(r.Context()),
 		UserID:          audit.UserIDFromUUID(userID),
 		ActorAuthMethod: authMethod,
 		Action:          action,
@@ -1003,8 +688,8 @@ func recordMandatoryK8sProxyAudit(ctx context.Context, r *http.Request, writer a
 		ResourceName:    resourceName,
 		StatusCode:      int32(status),
 		DurationMs:      durationMS,
-		RequestID:       appmiddleware.GetRequestID(r.Context()),
-		IPAddress:       appmiddleware.RemoteIPAddr(r),
+		RequestID:       reqctx.RequestID(r.Context()),
+		IPAddress:       reqctx.ClientIP(r),
 		HTTPMethod:      r.Method,
 		// Store the stable route template, not the raw path. Parsed object
 		// coordinates above are sufficient for operators, while a raw
@@ -1019,7 +704,10 @@ func k8sProxyPermission(r *http.Request) (rbac.Resource, rbac.Verb) {
 		return rbac.ResourceClusters, rbac.VerbRead
 	}
 
-	k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+	k8sPath, err := tunnel.CanonicalK8sProxyPath(r)
+	if err != nil {
+		return rbac.ResourceClusters, rbac.VerbProxy
+	}
 	ref := parseK8sProxyObjectRef(k8sPath)
 
 	// F1 (M2): pod exec/attach/portforward is RCE-equivalent and MUST map to
@@ -1186,7 +874,10 @@ func k8sProxySecretReadPermission(r *http.Request) (rbac.Resource, rbac.Verb, bo
 	if r == nil || isMutatingK8sProxyMethod(r.Method) {
 		return "", "", false
 	}
-	k8sPath := "/" + strings.Trim(chi.URLParam(r, "*"), "/")
+	k8sPath, err := tunnel.CanonicalK8sProxyPath(r)
+	if err != nil {
+		return "", "", false
+	}
 	ref := parseK8sProxyObjectRef(k8sPath)
 	if ref["resource"] != "secrets" {
 		return "", "", false
@@ -1253,22 +944,14 @@ func parseK8sProxyObjectRef(k8sPath string) map[string]string {
 	return out
 }
 
-func requireServiceProxyPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			verb := rbac.VerbRead
-			if isMutatingK8sProxyMethod(r.Method) {
-				verb = rbac.VerbUpdate
-			}
-			requirePermission(engine, querier, rbac.ResourceClusters, verb)(next).ServeHTTP(w, r)
-		})
-	}
+func requireServiceProxyPermission(engine *rbac.Engine, querier rbac.BindingQuerier) func(http.Handler) http.Handler {
+	return requirePermission(engine, querier, rbac.ResourceServices, rbac.VerbProxy)
 }
 
 // requireGenericResourceListPermission gates the generic list route.
 // ResourceHandler.ListGenericResources builds its upstream path from the same
 // ?namespace=, so the query-scoped gate is the honest one here.
-func requireGenericResourceListPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+func requireGenericResourceListPermission(engine *rbac.Engine, querier rbac.BindingQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			resource, verb := namedResourcePermission(chi.URLParam(r, "resource_type"), rbac.VerbList)
@@ -1282,7 +965,7 @@ func requireGenericResourceListPermission(engine *rbac.Engine, querier appmiddle
 // comes from the route only: the named GET/PUT/DELETE forms carry {namespace},
 // and the collection forms are cluster-wide unless mounted through
 // requireNamedResourceListPermission / requireNamedResourceCreatePermission.
-func requireNamedResourcePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier, routeParam string, requestedVerb rbac.Verb) func(http.Handler) http.Handler {
+func requireNamedResourcePermission(engine *rbac.Engine, querier rbac.BindingQuerier, routeParam string, requestedVerb rbac.Verb) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			resource, verb := namedResourcePermission(chi.URLParam(r, routeParam), requestedVerb)
@@ -1295,7 +978,7 @@ func requireNamedResourcePermission(engine *rbac.Engine, querier appmiddleware.R
 // GET /clusters/{cluster_id}/resources/{resource_type}/, whose handler
 // (ResourceHandler.ListNamedResources) builds /api/v1/namespaces/<ns>/<type>
 // from the same ?namespace=. Gate namespace == handler namespace.
-func requireNamedResourceListPermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+func requireNamedResourceListPermission(engine *rbac.Engine, querier rbac.BindingQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			resource, verb := namedResourcePermission(chi.URLParam(r, "resource_type"), rbac.VerbList)
@@ -1322,9 +1005,9 @@ const createBodyMaxBytes = 1 << 20
 // same field the handler will use. A body that names no namespace is refused:
 // the upstream path would then be cluster-wide/implicit, which no
 // namespace-narrowed grant covers.
-func requireNamedResourceCreatePermission(engine *rbac.Engine, querier appmiddleware.RBACQuerier) func(http.Handler) http.Handler {
+func requireNamedResourceCreatePermission(engine *rbac.Engine, querier rbac.BindingQuerier) func(http.Handler) http.Handler {
 	if engine == nil || querier == nil {
-		return func(next http.Handler) http.Handler { return next }
+		return unavailableSecurityDependency("RBAC authorization")
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1380,45 +1063,7 @@ func namedResourcePermission(resourceType string, requestedVerb rbac.Verb) (rbac
 // whether the F2 custom-resource policy should apply instead of the generic
 // clusters fallthrough.
 func knownK8sProxyResource(resourceType string) (rbac.Resource, bool) {
-	switch strings.ToLower(strings.TrimSpace(resourceType)) {
-	case "services", "service", "endpoints", "endpoint":
-		return rbac.ResourceServices, true
-	case "ingresses", "ingress",
-		"gateways", "gateway",
-		"httproutes", "httproute",
-		"gatewayclasses", "gatewayclass",
-		"grpcroutes", "grpcroute",
-		"tcproutes", "tcproute",
-		"udproutes", "udproute",
-		"tlsroutes", "tlsroute",
-		"referencegrants", "referencegrant":
-		return rbac.ResourceIngresses, true
-	case "networkpolicies", "networkpolicy":
-		return rbac.ResourceNetworkPolicies, true
-	case "persistentvolumes", "persistentvolume", "pv",
-		"persistentvolumeclaims", "persistentvolumeclaim", "pvc",
-		"storageclasses", "storageclass":
-		return rbac.ResourceStorage, true
-	case "configmaps", "configmap":
-		return rbac.ResourceConfigMaps, true
-	case "secrets", "secret":
-		return rbac.ResourceSecrets, true
-	case "pods", "pod":
-		return rbac.ResourcePods, true
-	case "nodes", "node":
-		return rbac.ResourceNodes, true
-	case "deployments", "deployment",
-		"daemonsets", "daemonset",
-		"statefulsets", "statefulset",
-		"replicasets", "replicaset",
-		"jobs", "job",
-		"cronjobs", "cronjob",
-		"hpa", "horizontalpodautoscalers", "horizontalpodautoscaler",
-		"poddisruptionbudgets", "poddisruptionbudget":
-		return rbac.ResourceWorkloads, true
-	default:
-		return "", false
-	}
+	return rbac.KubernetesResource(resourceType)
 }
 
 func auditGenericSecretList(auditWriter any) func(http.Handler) http.Handler {
@@ -1449,7 +1094,7 @@ func requireServiceProxyScope() func(http.Handler) http.Handler {
 	return requireK8sProxyScope()
 }
 
-func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries appmiddleware.TokenUserQuerier, tickets *iauth.StreamTicketStore, kind string, clusterParam string) func(http.Handler) http.Handler {
+func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries iauth.TokenUserQuerier, tickets *iauth.StreamTicketStore, kind string, clusterParam string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var clusterID uuid.UUID
@@ -1467,7 +1112,7 @@ func requireStreamTicketOrAuth(jwt *iauth.JWTManager, queries appmiddleware.Toke
 				return
 			}
 			if userID != uuid.Nil {
-				r = r.WithContext(appmiddleware.SetAuthenticatedUserForTest(r.Context(), &appmiddleware.AuthenticatedUser{
+				r = r.WithContext(reqctx.WithUser(r.Context(), &reqctx.User{
 					ID:         userID.String(),
 					AuthMethod: "stream_ticket",
 				}))
@@ -1573,7 +1218,7 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	registerDeliveryRoutes(r, deps)
 	registerDashboardRoutes(r, deps)
 	registerToolsControlPlaneRoutes(r, deps)
-	registerRBACAuditAgentRoutes(r, deps)
+	registerRBACAuditAgentRoutes(r, deps, rateLimit)
 	registerAlertInhibitionRoutes(r, deps)
 	registerGatekeeperConstraintRoutes(r, deps)
 	registerMonitoringRoutes(r, deps)
@@ -1581,65 +1226,6 @@ func registerProtectedRoutes(r chi.Router, cfg *config.Config, deps RouterDepend
 	registerSecurityRoutes(r, cfg, deps, rateLimit)
 	registerDexRoutes(r, deps)
 	registerCharlieRoutes(r, deps, rateLimit)
-}
-
-// remoteV2PodsHandler is the demonstration endpoint for the new
-// remotedialer-based tunnel. It looks up the cluster row by id (so callers
-// can use either cluster.id UUID or — if we later choose — a name lookup),
-// builds a client-go clientset whose transport is dialed through the WS
-// tunnel, and lists pods in the requested namespace.
-//
-// Returns 503 if the agent is not currently connected.
-func remoteV2PodsHandler(cfg *config.Config, deps RouterDependencies) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		clusterID := chi.URLParam(r, "id")
-		namespace := r.URL.Query().Get("namespace")
-		if namespace == "" {
-			namespace = "default"
-		}
-
-		// This route is hard-gated out of production (see route registration).
-		// The v2 transport verifies the apiserver cert against the in-cluster
-		// CA bundle by default; if that bundle is not provisioned in this
-		// (non-production) environment, fall back to the explicit, loudly
-		// logged insecure opt-in. Validate() refuses Insecure when Production
-		// is true, so this can never graduate InsecureSkipVerify into prod.
-		client, err := remoteproxy.K8sClientWithOptions(deps.RemoteServer, clusterID, remoteproxy.TLSOptions{
-			Insecure:   true,
-			Production: isProductionConfig(cfg),
-		})
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		pods, err := client.CoreV1().Pods(namespace).List(r.Context(), metav1.ListOptions{})
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadGateway)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		out := make([]map[string]any, 0, len(pods.Items))
-		for _, p := range pods.Items {
-			out = append(out, map[string]any{
-				"name":      p.Name,
-				"namespace": p.Namespace,
-				"phase":     string(p.Status.Phase),
-				"node":      p.Spec.NodeName,
-			})
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"cluster_id": clusterID,
-			"namespace":  namespace,
-			"count":      len(out),
-			"pods":       out,
-		})
-	}
 }
 
 // keyStatusHandler returns the number of loaded encryption + JWT signing
@@ -1654,7 +1240,7 @@ func remoteV2PodsHandler(cfg *config.Config, deps RouterDependencies) http.Handl
 // population.
 func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := handler.RequireSuperuser(w, r, deps.AuthQueries, handler.SuperuserGateConfig{
+		if _, ok := handler.RequireSuperuser(w, r, deps.CoreAuth.AuthQueries, handler.SuperuserGateConfig{
 			StoreUnavailableStatus:  http.StatusInternalServerError,
 			StoreUnavailableCode:    "internal_error",
 			StoreUnavailableMessage: "User store not configured",
@@ -1664,12 +1250,12 @@ func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerF
 		}
 
 		encKeys := 0
-		if deps.Encryptor != nil {
-			encKeys = deps.Encryptor.KeyCount()
+		if deps.CoreAuth.Encryptor != nil {
+			encKeys = deps.CoreAuth.Encryptor.KeyCount()
 		}
 		jwtKeys := 0
-		if deps.JWT != nil {
-			jwtKeys = deps.JWT.KeyCount()
+		if deps.CoreAuth.JWT != nil {
+			jwtKeys = deps.CoreAuth.JWT.KeyCount()
 		}
 		insecureDevKeys := config.DevSentinelsInUse(cfg)
 		if insecureDevKeys == nil {
@@ -1679,7 +1265,7 @@ func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerF
 		// Read-only superuser endpoint that exposes the live key-rotation
 		// state — leave an explicit audit trail. The mutating-HTTP audit
 		// middleware skips GET, so this trail wouldn't otherwise exist.
-		handler.RecordAuditFromRequest(r, deps.AuthQueries, "admin.key_status.viewed",
+		handler.RecordAuditFromRequest(r, deps.CoreAuth.AuthQueries, "admin.key_status.viewed",
 			"platform", "", "key-status", map[string]any{
 				"encryption_keys":   encKeys,
 				"jwt_keys":          jwtKeys,

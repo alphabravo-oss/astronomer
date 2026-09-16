@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * Cluster Template form — shared between the New page and the Edit page.
@@ -416,19 +415,19 @@ function LabelsEditor({
             value={label.key}
             placeholder="key"
             onChange={(e) => updateAt(i, { key: e.target.value })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
           />
           <input
             type="text"
             value={label.value}
             placeholder="value"
             onChange={(e) => updateAt(i, { value: e.target.value })}
-            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
           />
           <button
             type="button"
             onClick={() => remove(i)}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Remove label"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -513,7 +512,7 @@ function ToolsEditor({
               <button
                 type="button"
                 onClick={() => remove(binding.slug)}
-                className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+                className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
                 title="Remove tool"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -535,7 +534,7 @@ function ToolsEditor({
                       preset: e.target.value || undefined,
                     })
                   }
-                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
                 >
                   <option value="">(no preset)</option>
                   {presetNames.map((p) => (
@@ -562,7 +561,7 @@ function ToolsEditor({
                   onChange={(e) =>
                     updateAt(binding.slug, { valuesOverride: e.target.value })
                   }
-                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-y"
+                  className="w-full px-3 py-2 rounded-md border border-border bg-background text-xs font-mono placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
                 />
               </div>
             </div>
@@ -574,7 +573,7 @@ function ToolsEditor({
         <select
           value={pending}
           onChange={(e) => setPending(e.target.value)}
-          className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
         >
           <option value="">Add a tool…</option>
           {remainingTools.map((t) => (

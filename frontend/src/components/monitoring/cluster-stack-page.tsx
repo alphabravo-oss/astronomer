@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * /dashboard/clusters/$id/monitoring-stack — lifecycle for ONE cluster's
@@ -8,13 +7,13 @@
  * The backend declares {id} as a cluster scope for this subtree, so UI
  * decisions use the same cluster-scoped monitoring grant as the API.
  */
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, BarChart3, ExternalLink } from "lucide-react";
 
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { PermissionState } from "@/components/ui/empty-state";
 import { usePermissionDecision } from "@/lib/permission-hooks";
-import { useCluster } from "@/lib/hooks";
+import { useCluster } from "@/lib/hooks/clusters";
 import { useB2StorageLocations } from "@/components/backups/hooks";
 import {
   StackLifecyclePanel,
@@ -71,31 +70,31 @@ export function ClusterMonitoringStackPage({
     <PageShell>
       <PageHeader
         eyebrow={
-          <Link
-            href={`/dashboard/clusters/${clusterId}`}
+          <RouterLink
+            to="/dashboard/clusters/$id" params={{ id: clusterId }}
             className="inline-flex items-center gap-1 hover:text-foreground"
           >
             <ArrowLeft className="h-3 w-3" />
             {cluster?.displayName || "Cluster"}
-          </Link>
+          </RouterLink>
         }
         title="Monitoring stack"
         description="kube-prometheus-stack for this cluster. Install, upgrade, replace or uninstall the release; the panel follows the queued operation to completion and surfaces the reconciler's own errors."
         actions={
           <div className="flex items-center gap-2">
-            <Link
-              href={`/dashboard/clusters/${clusterId}/metrics`}
+            <RouterLink
+              to="/dashboard/clusters/$id/metrics" params={{ id: clusterId }}
               className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <BarChart3 className="h-3.5 w-3.5" />
               Metrics
-            </Link>
-            <Link
-              href="/dashboard/settings/monitoring"
+            </RouterLink>
+            <RouterLink
+              to="/dashboard/settings/monitoring"
               className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               Shared stacks
-            </Link>
+            </RouterLink>
           </div>
         }
       />

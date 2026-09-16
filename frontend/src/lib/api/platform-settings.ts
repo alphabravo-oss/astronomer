@@ -48,6 +48,10 @@ export interface PlatformSettingsGrouped {
     maxTtlMinutes: number;
   };
   session: { timeoutMinutes: number };
+  governance: {
+    inactiveRetentionDays: number;
+    readAuditTier: "standard" | "diagnostic" | "incident";
+  };
   telemetry: { enabled: boolean; endpoint: string };
   registration: {
     tlsMode: "public_ca" | "private_ca" | "insecure";

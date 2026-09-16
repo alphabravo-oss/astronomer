@@ -35,7 +35,11 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 	}
 
 	if args[0] == "grafana-proxy" {
-		if err := grafanaproxy.Run(); err != nil {
+		cfg, err := grafanaproxy.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("GRAFANA_UPSTREAM"), os.Getenv("ASTRONOMER_URL"), os.Getenv("GRAFANA_HOST"), os.Getenv("GRAFANA_PROXY_KEY"))
+		if err == nil {
+			err = grafanaproxy.Run(cfg)
+		}
+		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "grafana-proxy: %v\n", err)
 			return true, 1
 		}
@@ -43,7 +47,11 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 	}
 
 	if args[0] == "loki-auth" {
-		if err := lokiauth.Run(); err != nil {
+		cfg, err := lokiauth.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("LOKI_UPSTREAM"), os.Getenv("HASHES_PATH"), os.Getenv("ACL_PATH"), os.Getenv("QUERY_KEY_PATH"))
+		if err == nil {
+			err = lokiauth.Run(cfg)
+		}
+		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "loki-auth: %v\n", err)
 			return true, 1
 		}
@@ -94,7 +102,12 @@ func main() {
 	// exporter behind the global TracerProvider so the chi otelhttp
 	// middleware, pgx OTel tracer, and tunnel originator spans all
 	// flow into the same backend.
-	tracingCfg := observability.TracingFromEnv()
+	tracingCfg := observability.TracingConfig{
+		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		ServiceName: cfg.OTELServiceName, ServiceVersion: cfg.OTELServiceVersion,
+		SamplerRatio: cfg.OTELSamplerRatio,
+	}
 	tracingCfg.ServiceName = "astronomer-server"
 	tracingCfg.ServiceVersion = version.Version
 	otelShutdown, err := observability.InitTracing(context.Background(), logger, tracingCfg)
@@ -173,7 +186,11 @@ func main() {
 		// $ASTRONOMER_BOOTSTRAP_PASSWORD or a random password (logged once)
 		// and flag must_change_password so the dashboard forces a rotation
 		// on first sign-in.
-		if err := auth.EnsureBootstrapAdmin(context.Background(), queries, logger); err != nil {
+		if err := auth.EnsureBootstrapAdmin(context.Background(), queries, auth.BootstrapAdminConfig{
+			Password: cfg.BootstrapAdminPassword,
+			Username: cfg.BootstrapAdminUsername,
+			Email:    cfg.BootstrapAdminEmail,
+		}, logger); err != nil {
 			logger.Error("failed to ensure bootstrap admin", "error", err)
 			os.Exit(1)
 		}

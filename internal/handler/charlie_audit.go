@@ -9,7 +9,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/google/uuid"
 )
 
@@ -65,9 +65,9 @@ func persistCharlieAdminAudit(r *http.Request, writer any, action, resourceType,
 	}
 	if err == nil {
 		err = w.CreateAuditLogV1(r.Context(), sqlc.CreateAuditLogV1Params{
-			Source: "service", CorrelationID: appmiddleware.GetCorrelationID(r.Context()), UserID: currentUserUUID(r),
+			Source: "service", CorrelationID: reqctx.CorrelationID(r.Context()), UserID: currentUserUUID(r),
 			ActorAuthMethod: authMethodFromRequest(r), Action: action, ResourceType: resourceType, ResourceID: resourceID,
-			StatusCode: http.StatusOK, RequestID: appmiddleware.GetRequestID(r.Context()), Detail: detail, ActionClass: actionClass,
+			StatusCode: http.StatusOK, RequestID: reqctx.RequestID(r.Context()), Detail: detail, ActionClass: actionClass,
 		})
 	}
 	return err

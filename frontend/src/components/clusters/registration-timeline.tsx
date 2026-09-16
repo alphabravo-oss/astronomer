@@ -1,26 +1,28 @@
-"use client";
-
 // Sprint 23 - shared registration-timeline component.
 //
-// Used by both:
-//   - the wizard's progress page (/clusters/register/[id]/progress/)
-//   - the cluster-detail Adoption tab (/clusters/[id]/adoption/)
+// Used by both the unified registration flow and the cluster-detail Adoption
+// tab. Registration progress stays inline so operators retain the install
+// command context while the cluster connects.
 //
 // Subscribes to the wizard SSE stream + polls /clusters/{id}/registration/
 // status/ as a fallback. Renders each step row with status icon, label,
 // detail, optional progress bar, and a Retry button on failed rows.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
+import { apiErrorStatus } from "@/lib/api/errors";
 import { toastError, toastSuccess } from "@/lib/toast";
 import {
   getRegistrationStatus,
   retryRegistrationStep,
-  type RegistrationStatusView,
-  type RegistrationStepView,
-} from "@/lib/api";
+} from "@/lib/api/cluster-registration";
+import type {
+  RegistrationStatusView,
+  RegistrationStepView,
+} from "@/lib/api/cluster-registration";
 import { useLiveEvents } from "@/lib/live/hooks";
-import { useStore } from "@tanstack/react-store";
-import { liveStatus } from "@/lib/live/status-store";
+import { useLiveStatus } from "@/lib/live/status-store";
 import { ActionButton } from "@/components/ui/action-button";
 import {
   OperationTimeline,
@@ -45,27 +47,28 @@ export function RegistrationTimeline({
   embedded = false,
   onReady,
 }: Props) {
-  const [status, setStatus] = useState<RegistrationStatusView | null>(null);
+  const queryClient = useQueryClient();
+  const streamStatus = useLiveStatus();
+  const statusKey = queryKeys.clusterPages.registrationStatus(clusterId);
+  const statusQuery = useQuery({
+    queryKey: statusKey,
+    queryFn: ({ signal }) => getRegistrationStatus(clusterId, { signal }),
+    enabled: !!clusterId,
+    retry: false,
+    refetchInterval: (query) => {
+      const phase = query.state.data?.phase;
+      return streamStatus === "open" ||
+        phase === "ready" ||
+        phase === "failed" ||
+        apiErrorStatus(query.state.error) === 404
+        ? false
+        : 5000;
+    },
+  });
+  const status = statusQuery.data;
+  const notFound = apiErrorStatus(statusQuery.error) === 404;
+  const { refetch: refresh } = statusQuery;
   const [retrying, setRetrying] = useState<string | null>(null);
-  const [notFound, setNotFound] = useState(false);
-
-  const refresh = useCallback(async () => {
-    if (!clusterId) return;
-    try {
-      const s = await getRegistrationStatus(clusterId);
-      setStatus(s);
-      setNotFound(false);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "";
-      if (msg.includes("404") || msg.toLowerCase().includes("not_found")) {
-        setNotFound(true);
-      }
-    }
-  }, [clusterId]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
 
   const live = useLiveEvents();
   useEffect(() => {
@@ -84,30 +87,17 @@ export function RegistrationTimeline({
     };
   }, [live, clusterId, refresh]);
 
-  // Stream-status-conditional polling fallback (P4.5): SSE is the primary
-  // channel — while the stream is open the registration.step/phase events
-  // drive refresh and the poll stays off. It only runs when the stream is
-  // down (proxy timeout, tab throttling) and stops at a terminal phase.
-  const streamStatus = useStore(liveStatus);
-  useEffect(() => {
-    if (notFound || status?.phase === "ready" || status?.phase === "failed")
-      return;
-    if (streamStatus === "open") return;
-    const interval = setInterval(refresh, 5000);
-    return () => clearInterval(interval);
-  }, [refresh, notFound, status?.phase, streamStatus]);
-
   // Fire onReady once when we transition into ready phase.
+  const notifyReady = useEffectEvent(() => onReady?.());
   useEffect(() => {
-    if (status?.phase === "ready") onReady?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (status?.phase === "ready") notifyReady();
   }, [status?.phase]);
 
   const onRetry = async (step: RegistrationStepView) => {
     setRetrying(step.id);
     try {
       const s = await retryRegistrationStep(clusterId, step.id);
-      setStatus(s);
+      queryClient.setQueryData(statusKey, s);
       toastSuccess("Retry queued");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";

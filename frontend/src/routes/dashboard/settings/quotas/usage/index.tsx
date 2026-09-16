@@ -10,7 +10,7 @@ import { createFileRoute } from "@tanstack/react-router";
  *   - Deployment totals — aggregate sums across the entire installation, useful
  *     for capacity planning.
  */
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, Gauge } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ErrorState, LoadingState } from "@/components/ui/empty-state";
@@ -108,12 +108,12 @@ function UsageInner() {
       key: "planName",
       header: "Plan",
       accessor: (row) => (
-        <Link
-          href={`/dashboard/settings/quotas/${encodeURIComponent(row.planName)}`}
+        <RouterLink
+          to="/dashboard/settings/quotas/$name" params={{ name: row.planName }}
           className="text-sm text-foreground hover:underline font-mono"
         >
           {row.planName}
-        </Link>
+        </RouterLink>
       ),
     },
     {
@@ -159,7 +159,11 @@ function UsageInner() {
             keyExtractor={(row) =>
               `${row.planName}-${row.scopeId ?? row.scopeName ?? "global"}`
             }
-            emptyMessage="No offenders"
+            emptyState={{
+              title: "No offenders",
+              description:
+                "There are no active items requiring attention in this scope.",
+            }}
             searchable={false}
           />
         )}
@@ -204,13 +208,13 @@ function QuotaUsagePage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings/quotas"
+        <RouterLink
+          to="/dashboard/settings/quotas"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Quota usage"
           title={

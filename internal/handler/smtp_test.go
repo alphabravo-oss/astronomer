@@ -4,19 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/email"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // smtpFakeQuerier implements the narrow surface SMTPHandler needs.
@@ -26,6 +28,7 @@ type smtpFakeQuerier struct {
 	rows       []sqlc.EmailMessage
 	upserts    int32
 	countCalls atomic.Int32
+	countErr   error
 }
 
 func (f *smtpFakeQuerier) GetSMTPSettings(_ context.Context, _ uuid.UUID) (sqlc.SmtpSettings, error) {
@@ -61,7 +64,7 @@ func (f *smtpFakeQuerier) ListEmailMessages(_ context.Context, _ sqlc.ListEmailM
 
 func (f *smtpFakeQuerier) CountEmailMessages(_ context.Context) (int64, error) {
 	f.countCalls.Add(1)
-	return int64(len(f.rows)), nil
+	return int64(len(f.rows)), f.countErr
 }
 
 func (f *smtpFakeQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -81,13 +84,17 @@ func (f *smtpFakeQuerier) GetComplianceBaseline(_ context.Context, _ uuid.UUID) 
 	return sqlc.ComplianceBaseline{}, pgx.ErrNoRows
 }
 
+func (f *smtpFakeQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
+}
+
 func buildSuperuserCtx(t *testing.T, q *smtpFakeQuerier) (context.Context, uuid.UUID) {
 	t.Helper()
 	id := uuid.New()
 	q.users = map[uuid.UUID]sqlc.User{
 		id: {ID: id, Username: "admin", IsSuperuser: true, IsActive: true},
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(context.Background(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(context.Background(), &reqctx.User{
 		ID:       id.String(),
 		Username: "admin",
 	})
@@ -112,6 +119,7 @@ func TestSMTPHandler_GetSetTest(t *testing.T) {
 	q := &smtpFakeQuerier{}
 	ctx, _ := buildSuperuserCtx(t, q)
 	h := NewSMTPHandler(q, enc, nil)
+	h.SetRunTx(func(_ context.Context, fn func(SMTPMutationTx) error) error { return fn(q) })
 
 	// GET on an empty DB should return the safe defaults.
 	rec := httptest.NewRecorder()
@@ -245,12 +253,39 @@ func TestSMTPHandler_RejectsBadConfig(t *testing.T) {
 	}
 }
 
+func TestSMTPListCanonicalPageAndCountFailure(t *testing.T) {
+	for _, failCount := range []bool{false, true} {
+		t.Run(fmt.Sprint(failCount), func(t *testing.T) {
+			q := &smtpFakeQuerier{rows: []sqlc.EmailMessage{{ID: uuid.New(), ToAddress: "ops@example.test"}}}
+			if failCount {
+				q.countErr = errors.New("database unavailable")
+			}
+			ctx, _ := buildSuperuserCtx(t, q)
+			rec := httptest.NewRecorder()
+			NewSMTPHandler(q, nil, nil).List(rec, httptest.NewRequest(http.MethodGet, "/?limit=1", nil).WithContext(ctx))
+			if failCount {
+				if rec.Code != http.StatusInternalServerError {
+					t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+				}
+				return
+			}
+			var page paging.Response[emailListItem]
+			if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != http.StatusOK || len(page.Data) != 1 || exactPageTotal(t, page.Pagination) != 1 || page.Pagination.Limit != 1 || page.Pagination.HasMore {
+				t.Fatalf("invalid page: status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestSMTPHandler_RequiresSuperuser(t *testing.T) {
 	enc := newEncryptor(t)
 	q := &smtpFakeQuerier{}
 	id := uuid.New()
 	q.users = map[uuid.UUID]sqlc.User{id: {ID: id, Username: "alice", IsSuperuser: false, IsActive: true}}
-	ctx := middleware.SetAuthenticatedUserForTest(context.Background(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(context.Background(), &reqctx.User{
 		ID:       id.String(),
 		Username: "alice",
 	})

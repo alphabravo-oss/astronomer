@@ -27,6 +27,11 @@ const wire: OpenAPIComponents["schemas"]["Cluster"] = {
   id: "cluster-1",
   name: "west-prod",
   display_name: "West production",
+  badge_text: "Production",
+  badge_color: "red",
+  agent_overrides: {},
+  agent_overrides_digest:
+    "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
   description: "",
   status: "active",
   api_server_url: "https://kubernetes.example.test",
@@ -72,9 +77,13 @@ describe("cluster API mapper", () => {
     vi.clearAllMocks();
     list.mockResolvedValue({
       data: [wire],
-      count: 1,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 1,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
     create.mockResolvedValue({ data: wire });
     update.mockResolvedValue({ data: wire });
@@ -107,11 +116,13 @@ describe("cluster API mapper", () => {
       },
     });
     expect(page).toMatchObject({
-      total: 1,
-      count: 1,
-      page: 2,
-      pageSize: 25,
-      totalPages: 1,
+      pagination: {
+        total: 1,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
   });
 

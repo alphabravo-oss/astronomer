@@ -237,6 +237,7 @@ func TestNewTunnelClient(t *testing.T) {
 
 	if tc == nil {
 		t.Fatal("NewTunnelClient returned nil")
+		return
 	}
 	if tc.config != cfg {
 		t.Error("config not set correctly")

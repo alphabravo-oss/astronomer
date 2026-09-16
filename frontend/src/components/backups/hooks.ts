@@ -8,12 +8,24 @@
  * calls for user-visible side-effects.
  */
 
-"use client";
-
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { liveFallback } from "@/lib/live/status-store";
-import * as api from "@/lib/api";
+import {
+  b2ListStorageLocations,
+  b2CreateStorageLocation,
+  b2DeleteStorageLocation,
+  b2TestStorageLocation,
+  b2ListSchedules,
+  b2CreateSchedule,
+  b2UpdateSchedule,
+  b2DeleteSchedule,
+  b2TriggerScheduleNow,
+  b2ListRuns,
+  b2GetRun,
+  b2GetRestore,
+  b2CreateRestore,
+} from "@/lib/api/backups";
 import type {
   BackupRestore,
   BackupRun,
@@ -46,14 +58,14 @@ export const b2Keys = {
 export function useB2StorageLocations(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: b2Keys.storage(params),
-    queryFn: () => api.b2ListStorageLocations({ ...params, page_size: 100 }),
+    queryFn: () => b2ListStorageLocations({ ...params, page_size: 100 }),
   });
 }
 
 export function useB2CreateStorageLocation() {
   const qc = useQueryClient();
   return useMutation<BackupStorageLocation, Error, CreateBackupStorageRequest>({
-    mutationFn: (body) => api.b2CreateStorageLocation(body),
+    mutationFn: (body) => b2CreateStorageLocation(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
       toastSuccess("Storage location created");
@@ -65,7 +77,7 @@ export function useB2CreateStorageLocation() {
 export function useB2DeleteStorageLocation() {
   const qc = useQueryClient();
   return useMutation<void, Error, string>({
-    mutationFn: (id) => api.b2DeleteStorageLocation(id),
+    mutationFn: (id) => b2DeleteStorageLocation(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
       toastSuccess("Storage location deleted");
@@ -76,7 +88,7 @@ export function useB2DeleteStorageLocation() {
 
 export function useB2TestStorageLocation() {
   return useMutation<TestStorageResult, Error, string>({
-    mutationFn: (id) => api.b2TestStorageLocation(id),
+    mutationFn: (id) => b2TestStorageLocation(id),
     // Caller renders inline result; no toast here so the wizard can show a
     // structured success/failure card without being shouted at twice.
   });
@@ -87,14 +99,14 @@ export function useB2TestStorageLocation() {
 export function useB2Schedules(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: b2Keys.schedules(params),
-    queryFn: () => api.b2ListSchedules({ ...params, page_size: 100 }),
+    queryFn: () => b2ListSchedules({ ...params, page_size: 100 }),
   });
 }
 
 export function useB2CreateSchedule() {
   const qc = useQueryClient();
   return useMutation<BackupScheduleRow, Error, CreateScheduleRequestB2>({
-    mutationFn: (body) => api.b2CreateSchedule(body),
+    mutationFn: (body) => b2CreateSchedule(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
       toastSuccess("Schedule created");
@@ -110,7 +122,7 @@ export function useB2UpdateSchedule() {
     Error,
     { id: string; data: Partial<CreateScheduleRequestB2> }
   >({
-    mutationFn: ({ id, data }) => api.b2UpdateSchedule(id, data),
+    mutationFn: ({ id, data }) => b2UpdateSchedule(id, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
     },
@@ -121,7 +133,7 @@ export function useB2UpdateSchedule() {
 export function useB2DeleteSchedule() {
   const qc = useQueryClient();
   return useMutation<void, Error, string>({
-    mutationFn: (id) => api.b2DeleteSchedule(id),
+    mutationFn: (id) => b2DeleteSchedule(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
       toastSuccess("Schedule deleted");
@@ -133,7 +145,7 @@ export function useB2DeleteSchedule() {
 export function useB2TriggerScheduleNow() {
   const qc = useQueryClient();
   return useMutation<BackupRun, Error, string>({
-    mutationFn: (id) => api.b2TriggerScheduleNow(id),
+    mutationFn: (id) => b2TriggerScheduleNow(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
       toastSuccess("One-off backup triggered");
@@ -147,7 +159,7 @@ export function useB2TriggerScheduleNow() {
 export function useB2Runs(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: b2Keys.runs(params),
-    queryFn: () => api.b2ListRuns({ ...params, page_size: 100 }),
+    queryFn: () => b2ListRuns({ ...params, page_size: 100 }),
     refetchInterval: liveFallback(15000),
   });
 }
@@ -155,7 +167,7 @@ export function useB2Runs(params?: { cluster_id?: string }) {
 export function useB2Run(id: string) {
   return useQuery({
     queryKey: b2Keys.runDetail(id),
-    queryFn: () => api.b2GetRun(id),
+    queryFn: () => b2GetRun(id),
     enabled: !!id,
     refetchInterval: liveFallback(10000),
   });
@@ -166,7 +178,7 @@ export function useB2Run(id: string) {
 export function useB2Restore(id: string) {
   return useQuery({
     queryKey: b2Keys.restoreDetail(id),
-    queryFn: () => api.b2GetRestore(id),
+    queryFn: () => b2GetRestore(id),
     enabled: !!id,
     refetchInterval: liveFallback(10000),
   });
@@ -175,7 +187,7 @@ export function useB2Restore(id: string) {
 export function useB2CreateRestore() {
   const qc = useQueryClient();
   return useMutation<BackupRestore, Error, CreateRestoreRequestB2>({
-    mutationFn: (body) => api.b2CreateRestore(body),
+    mutationFn: (body) => b2CreateRestore(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: b2Keys.all });
       toastSuccess("Restore initiated");

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type operationRunnerTestRow struct {
@@ -101,6 +102,35 @@ func TestClaimLatestOperations(t *testing.T) {
 				t.Fatalf("claimed = %v, want %v", gotClaimed, tt.wantClaimed)
 			}
 		})
+	}
+}
+
+func TestClaimLatestOperationsReportsDatabaseErrorsButNotCASMisses(t *testing.T) {
+	casMiss := operationRunnerTestRow{id: uuid.New(), target: "cas", status: OpStatusPending}
+	dbFailure := operationRunnerTestRow{id: uuid.New(), target: "db", status: OpStatusPending}
+	reported := make([]error, 0, 1)
+
+	claimed := claimLatestOperations(context.Background(), []operationRunnerTestRow{casMiss, dbFailure}, operationRunnerConfig[operationRunnerTestRow]{
+		ID:        func(row operationRunnerTestRow) uuid.UUID { return row.id },
+		TargetKey: func(row operationRunnerTestRow) string { return row.target },
+		Status:    func(row operationRunnerTestRow) string { return row.status },
+		MarkRunning: func(_ context.Context, row operationRunnerTestRow) (operationRunnerTestRow, error) {
+			if row.id == casMiss.id {
+				return operationRunnerTestRow{}, pgx.ErrNoRows
+			}
+			return operationRunnerTestRow{}, errors.New("database unavailable")
+		},
+		MarkRunningError: func(_ context.Context, _ operationRunnerTestRow, err error) {
+			reported = append(reported, err)
+		},
+		Claimed: func(row operationRunnerTestRow) claimedOp { return claimedOp{ID: row.id} },
+	})
+
+	if len(claimed) != 0 {
+		t.Fatalf("claimed = %v, want none", claimed)
+	}
+	if len(reported) != 1 || reported[0].Error() != "database unavailable" {
+		t.Fatalf("reported errors = %v", reported)
 	}
 }
 

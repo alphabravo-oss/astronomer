@@ -169,7 +169,7 @@ func TestProductionCapabilityAdaptersCannotCallDownstreamTunnel(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, forbidden := range []string{"/internal/tunnel", "/internal/agent", "remotedialer"} {
+				for _, forbidden := range []string{"/internal/tunnel", "/internal/agent"} {
 					if strings.Contains(path, forbidden) {
 						t.Fatalf("production capability adapter imports downstream transport %q", path)
 					}

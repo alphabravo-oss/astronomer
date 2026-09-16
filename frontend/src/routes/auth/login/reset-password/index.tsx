@@ -1,4 +1,6 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
+import { FormShell } from "@/components/ui/form-shell";
 
 /**
  * Reset-password — completes a password reset using the one-time `token`
@@ -12,8 +14,8 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+import { useNavigate, useLocation } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   Orbit,
   Eye,
@@ -29,14 +31,17 @@ import { useAppForm, useStore } from "@/lib/form";
 import { ActionButton } from "@/components/ui/action-button";
 
 function ResetPasswordPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const searchParams = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
   const token = searchParams?.get("token") ?? "";
 
   const [showNext, setShowNext] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [done, setDone] = useState(false);
 
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
     defaultValues: { next: "", confirm: "" },
     validators: {
@@ -49,11 +54,15 @@ function ResetPasswordPage() {
           : undefined,
     },
     onSubmit: async ({ value }) => {
+      setSubmissionError(null);
       try {
         await completePasswordReset(token, value.next);
         toastSuccess("Password reset — sign in with your new password.");
         setDone(true);
       } catch (err) {
+        setSubmissionError(
+          err instanceof Error ? err.message : "The request failed. Try again.",
+        );
         toastApiError("", err, "Reset failed. The link may have expired.");
       }
     },
@@ -71,10 +80,10 @@ function ResetPasswordPage() {
     if (done) {
       // Send the user to /auth/login after a brief pause so they see the
       // success banner.
-      const t = setTimeout(() => router.push("/auth/login"), 2000);
+      const t = setTimeout(() => void navigate({ to: "/auth/login" }), 2000);
       return () => clearTimeout(t);
     }
-  }, [done, router]);
+  }, [done, navigate]);
 
   if (!token) {
     return (
@@ -90,12 +99,12 @@ function ResetPasswordPage() {
               This reset link is missing its token. Request a new one to
               continue.
             </p>
-            <Link
-              href="/auth/login/forgot-password"
+            <RouterLink
+              to="/auth/login/forgot-password"
               className="inline-flex items-center gap-1 text-sm text-foreground hover:underline"
             >
               Request a new link <ArrowRight className="h-4 w-4" />
-            </Link>
+            </RouterLink>
           </div>
         </div>
       </div>
@@ -125,21 +134,24 @@ function ResetPasswordPage() {
             <p className="text-sm text-muted-foreground">
               You can sign in with your new password now.
             </p>
-            <Link
-              href="/auth/login"
+            <RouterLink
+              to="/auth/login"
               className="inline-flex items-center gap-1 text-sm text-foreground hover:underline"
             >
               <ArrowLeft className="h-4 w-4" /> Back to sign in
-            </Link>
+            </RouterLink>
           </div>
         ) : (
-          <form
+          <FormShell
             onSubmit={(e) => {
               e.preventDefault();
               void form.handleSubmit();
             }}
-            className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
+            className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-xs"
           >
+            <form.AppForm>
+              <form.FormErrorSummary serverError={submissionError} />
+            </form.AppForm>
             <form.Field name="next">
               {(field) => (
                 <PasswordField
@@ -204,14 +216,14 @@ function ResetPasswordPage() {
               Update password
             </ActionButton>
             <div className="text-center">
-              <Link
-                href="/auth/login"
+              <RouterLink
+                to="/auth/login"
                 className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ArrowLeft className="h-3 w-3" /> Back to sign in
-              </Link>
+              </RouterLink>
             </div>
-          </form>
+          </FormShell>
         )}
       </div>
     </div>
@@ -245,14 +257,14 @@ function PasswordField({
         {label}
       </label>
       <div className="relative">
-        <input
+        <Input
           id={id}
           type={visible ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           autoComplete="new-password"
           data-initial-focus={autoFocus}
-          className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
         />
         <button
           type="button"

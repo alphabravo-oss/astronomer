@@ -1,7 +1,5 @@
-"use client";
-
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { usePodLogs } from "@/lib/hooks";
+import { usePodLogs } from "@/lib/hooks/workloads";
 import type { Pod, PodLog } from "@/types";
 import { cn } from "@/lib/utils";
 import {
@@ -42,19 +40,11 @@ export function PodLogsViewer({
   const activePod = pods.find((p) => p.name === selectedPod) || pods[0];
   const podName = activePod?.name || "";
   const containers = useMemo(() => activePod?.containers ?? [], [activePod]);
-  const [selectedContainer, setSelectedContainer] = useState(
-    containers[0]?.name || "",
-  );
-
-  // Update container when pod changes
-  useEffect(() => {
-    if (
-      containers.length > 0 &&
-      !containers.find((c) => c.name === selectedContainer)
-    ) {
-      setSelectedContainer(containers[0].name);
-    }
-  }, [containers, selectedContainer]);
+  const [containerChoice, setSelectedContainer] = useState("");
+  const selectedContainer =
+    containers.find((container) => container.name === containerChoice)?.name ??
+    containers[0]?.name ??
+    "";
 
   const { data: logs, isLoading } = usePodLogs(clusterId, namespace, podName, {
     container: selectedContainer,
@@ -170,8 +160,8 @@ export function PodLogsViewer({
           <select
             value={podName}
             onChange={(e) => onPodChange(e.target.value)}
-            className="h-7 px-2 rounded border border-border bg-background text-xs
-              focus:outline-none focus:ring-1 focus:ring-ring max-w-[200px]"
+            className="h-7 px-2 rounded-sm border border-border bg-background text-xs
+              focus:outline-hidden focus:ring-1 focus:ring-ring max-w-[200px]"
           >
             {pods.map((pod) => (
               <option key={pod.name} value={pod.name}>
@@ -185,8 +175,8 @@ export function PodLogsViewer({
             <select
               value={selectedContainer}
               onChange={(e) => setSelectedContainer(e.target.value)}
-              className="h-7 px-2 rounded border border-border bg-background text-xs
-                focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-7 px-2 rounded-sm border border-border bg-background text-xs
+                focus:outline-hidden focus:ring-1 focus:ring-ring"
             >
               {containers.map((c) => (
                 <option key={c.name} value={c.name}>
@@ -200,8 +190,8 @@ export function PodLogsViewer({
           <select
             value={tailLines}
             onChange={(e) => setTailLines(Number(e.target.value))}
-            className="h-7 px-2 rounded border border-border bg-background text-xs
-              focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-7 px-2 rounded-sm border border-border bg-background text-xs
+              focus:outline-hidden focus:ring-1 focus:ring-ring"
           >
             <option value={100}>100 lines</option>
             <option value={500}>500 lines</option>
@@ -215,7 +205,7 @@ export function PodLogsViewer({
           <button
             onClick={() => setShowTimestamps(!showTimestamps)}
             className={cn(
-              "inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors",
+              "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
               showTimestamps
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -229,7 +219,7 @@ export function PodLogsViewer({
           <button
             onClick={() => setShowSearch(!showSearch)}
             className={cn(
-              "inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors",
+              "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
               showSearch
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -243,7 +233,7 @@ export function PodLogsViewer({
           <button
             onClick={() => setFollow(!follow)}
             className={cn(
-              "inline-flex items-center gap-1 h-7 px-2 rounded text-xs transition-colors",
+              "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
               follow
                 ? "bg-status-success/10 text-status-success"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -263,7 +253,7 @@ export function PodLogsViewer({
           {/* Download */}
           <button
             onClick={handleDownload}
-            className="inline-flex items-center gap-1 h-7 px-2 rounded text-xs
+            className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Download logs"
           >
@@ -275,14 +265,14 @@ export function PodLogsViewer({
       {/* Search bar */}
       {showSearch && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 border-b border-border">
-          <Search className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter logs..."
             className="flex-1 h-6 bg-transparent text-xs text-foreground placeholder:text-muted-foreground
-              focus:outline-none"
+              focus:outline-hidden"
             data-initial-focus
           />
           {searchQuery && (
@@ -324,12 +314,12 @@ export function PodLogsViewer({
             <div
               key={i}
               className={cn(
-                "flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded",
+                "flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded-sm",
                 getLogLineClass(log),
               )}
             >
               {showTimestamps && (
-                <span className="log-timestamp flex-shrink-0 whitespace-nowrap">
+                <span className="log-timestamp shrink-0 whitespace-nowrap">
                   {new Date(log.timestamp).toLocaleTimeString()}
                 </span>
               )}
@@ -351,7 +341,7 @@ export function PodLogsViewer({
             }
           }}
           className="sticky bottom-0 w-full flex items-center justify-center gap-1.5 py-1.5
-            bg-muted/80 backdrop-blur-sm border-t border-border text-xs text-muted-foreground
+            bg-muted/80 backdrop-blur-xs border-t border-border text-xs text-muted-foreground
             hover:text-foreground transition-colors"
         >
           <ArrowDown className="h-3 w-3" />

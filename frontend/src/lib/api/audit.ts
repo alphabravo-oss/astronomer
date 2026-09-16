@@ -1,4 +1,5 @@
 import { getActivity, listAuditLogs } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
 import { API_BASE } from "@/lib/env";
 import type { ActivityEvent, AuditLogEntry, PaginatedResponse } from "@/types";
 import type {
@@ -76,10 +77,6 @@ function mapAuditLog(wire: AuditLogWire): AuditLogEntry {
     wire.detail && typeof wire.detail === "object"
       ? (wire.detail as Record<string, unknown>)
       : undefined;
-  const details =
-    wire.details && typeof wire.details === "object"
-      ? (wire.details as Record<string, unknown>)
-      : undefined;
   return {
     id: wire.id ?? "",
     userId: wire.user_id,
@@ -100,9 +97,8 @@ function mapAuditLog(wire: AuditLogWire): AuditLogEntry {
     ipAddress: wire.ip_address,
     userAgent: wire.user_agent,
     sourceIP: wire.source_ip ?? "",
-    status: (wire.status ?? "error") as AuditLogEntry["status"],
-    detail,
-    details,
+	    status: (wire.status ?? "error") as AuditLogEntry["status"],
+	    detail,
     createdAt: wire.created_at,
     updatedAt: wire.updated_at,
     timestamp: wire.timestamp ?? wire.created_at ?? "",
@@ -114,19 +110,10 @@ export async function getAuditLogs(
 ): Promise<PaginatedResponse<AuditLogEntry>> {
   const query = auditLogRequestParams(params);
   const response = await listAuditLogs({ query });
-  const pageSize = query?.limit ?? 20;
-  const offset = query?.offset ?? 0;
-  return {
-    data: (response.data ?? []).map(mapAuditLog),
-    total: response.count,
-    count: response.count,
-    next: response.next,
-    previous: response.previous,
-    page: pageSize > 0 ? Math.floor(offset / pageSize) + 1 : 1,
-    pageSize,
-    totalPages:
-      pageSize > 0 ? Math.max(1, Math.ceil(response.count / pageSize)) : 1,
-  };
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapAuditLog,
+  );
 }
 
 export function getAuditLogExportURL(params?: AuditLogQueryParams) {

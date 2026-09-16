@@ -43,23 +43,28 @@ describe("settings API client", () => {
     ]);
   });
 
-  it("normalizes sent email items envelopes into paginated responses", async () => {
+  it("preserves canonical sent-email pagination metadata", async () => {
     mockedAdminEmailsList.mockResolvedValueOnce({
-      data: {
-        items: [],
+      data: [],
+      pagination: {
         limit: 25,
         offset: 25,
         total: 60,
+        has_more: true,
+        next_offset: 50,
       },
-    } as never);
+    });
 
     await expect(listSentEmails({ page: 2, page_size: 25 })).resolves.toEqual(
       expect.objectContaining({
         data: [],
-        page: 2,
-        pageSize: 25,
-        total: 60,
-        totalPages: 3,
+        pagination: {
+          limit: 25,
+          offset: 25,
+          total: 60,
+          has_more: true,
+          next_offset: 50,
+        },
       }),
     );
     expect(mockedAdminEmailsList).toHaveBeenCalledWith({

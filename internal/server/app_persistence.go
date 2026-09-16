@@ -85,7 +85,7 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	// dex_settings row so the operator's first connector + Apply works
 	// without a manual settings step. No-op when dex.enabled=false (legacy
 	// operator-managed Dex flow stays in effect).
-	if _, err := SeedBundledDexSettings(ctx, queries, logger); err != nil {
+	if _, err := SeedBundledDexSettings(ctx, queries, logger, cfg); err != nil {
 		logger.Warn("dex bootstrap: seed failed", "error", err)
 	}
 	// Surface drift between legacy sso_configurations and the new

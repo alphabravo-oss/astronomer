@@ -33,16 +33,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
-
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 )
 
 // MaintenanceQuerier is the slice of *sqlc.Queries the handler needs.
@@ -71,30 +71,6 @@ type MaintenanceMutationTx interface {
 }
 
 type maintenanceRunTxFunc func(context.Context, func(MaintenanceMutationTx) error) error
-
-func executeMaintenanceMutation[T any](r *http.Request, h *MaintenanceHandler, mutate func(MaintenanceQuerier) (T, error), describe func(T) clusterAuditEvent) (T, error) {
-	var zero T
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q MaintenanceMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(result)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return result, err
-	}
-	result, err := mutate(h.queries)
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
 
 var errMaintenanceNameConflict = errors.New("maintenance window name conflict")
 
@@ -150,6 +126,7 @@ type ActiveMaintenanceWindowResponse struct {
 
 // MaintenanceWindowRequest is the wire shape for POST/PUT bodies. Empty
 // strings on optional fields default to the schema defaults.
+// openapi:request MaintenanceWindowRequest
 type MaintenanceWindowRequest struct {
 	Name            string            `json:"name"`
 	Description     string            `json:"description"`
@@ -196,7 +173,7 @@ func (h *MaintenanceHandler) List(w http.ResponseWriter, r *http.Request) {
 		out = append(out, windowToWire(row))
 	}
 	// ListMaintenanceWindows returns every window unpaginated.
-	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
+	paging.Write(w, out, paging.Exact(len(out), len(out), 0, len(out)))
 }
 
 // Get handles GET /api/v1/admin/maintenance-windows/{id}/.
@@ -261,8 +238,8 @@ func (h *MaintenanceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Enabled:         enabled,
 		CreatedBy:       currentUserUUID(r),
 	}
-	row, err := executeMaintenanceMutation(r, h,
-		func(q MaintenanceQuerier) (sqlc.MaintenanceWindow, error) {
+	row, err := executeMutation(r, h.runTx,
+		func(q MaintenanceMutationTx) (sqlc.MaintenanceWindow, error) {
 			if _, getErr := q.GetMaintenanceWindowByName(r.Context(), req.Name); getErr == nil {
 				return sqlc.MaintenanceWindow{}, errMaintenanceNameConflict
 			} else if !errors.Is(getErr, pgx.ErrNoRows) {
@@ -313,8 +290,8 @@ func (h *MaintenanceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if string(ops) == "null" {
 		ops = []byte("[]")
 	}
-	row, err := executeMaintenanceMutation(r, h,
-		func(q MaintenanceQuerier) (sqlc.MaintenanceWindow, error) {
+	row, err := executeMutation(r, h.runTx,
+		func(q MaintenanceMutationTx) (sqlc.MaintenanceWindow, error) {
 			existing, getErr := q.GetMaintenanceWindowForUpdate(r.Context(), id)
 			if getErr != nil {
 				return sqlc.MaintenanceWindow{}, getErr
@@ -366,8 +343,8 @@ func (h *MaintenanceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid window ID")
 		return
 	}
-	_, err = executeMaintenanceMutation(r, h,
-		func(q MaintenanceQuerier) (sqlc.MaintenanceWindow, error) {
+	_, err = executeMutation(r, h.runTx,
+		func(q MaintenanceMutationTx) (sqlc.MaintenanceWindow, error) {
 			existing, getErr := q.GetMaintenanceWindowForUpdate(r.Context(), id)
 			if getErr != nil {
 				return sqlc.MaintenanceWindow{}, getErr
@@ -423,7 +400,7 @@ func (h *MaintenanceHandler) ListActive(w http.ResponseWriter, r *http.Request) 
 		out = append(out, entry)
 	}
 	// The active-windows widget returns the complete filtered enabled set.
-	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
+	paging.Write(w, out, paging.Exact(len(out), len(out), 0, len(out)))
 }
 
 // ListDeferred handles GET /api/v1/admin/deferred-operations/.
@@ -449,7 +426,7 @@ func (h *MaintenanceHandler) ListDeferred(w http.ResponseWriter, r *http.Request
 	for _, row := range rows {
 		out = append(out, deferredToWire(row))
 	}
-	RespondPaginated(w, r, out, total)
+	paging.Write(w, out, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(out)))
 }
 
 // CancelDeferred handles POST /api/v1/admin/deferred-operations/{id}/cancel/.
@@ -462,8 +439,8 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid deferred-operation ID")
 		return
 	}
-	_, err = executeMaintenanceMutation(r, h,
-		func(q MaintenanceQuerier) (sqlc.DeferredOperation, error) {
+	_, err = executeMutation(r, h.runTx,
+		func(q MaintenanceMutationTx) (sqlc.DeferredOperation, error) {
 			row, getErr := q.GetDeferredOperationForUpdate(r.Context(), id)
 			if getErr != nil {
 				return sqlc.DeferredOperation{}, getErr
@@ -474,8 +451,8 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 			markErr := q.MarkDeferredCancelled(r.Context(), sqlc.MarkDeferredCancelledParams{ID: id, LastError: "cancelled by operator"})
 			return row, markErr
 		},
-		func(row sqlc.DeferredOperation) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(row sqlc.DeferredOperation) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.deferred_operation.cancelled", resourceType: "deferred_operation",
 				resourceID: row.ID.String(), resourceName: row.OperationType, status: http.StatusNoContent,
 				detail: map[string]any{"window_id": row.WindowID.String()},
@@ -500,9 +477,9 @@ func (h *MaintenanceHandler) CancelDeferred(w http.ResponseWriter, r *http.Reque
 
 var errDeferredNotCancellable = errors.New("deferred operation is not cancellable")
 
-func maintenanceWindowAuditEvent(action string, status int) func(sqlc.MaintenanceWindow) clusterAuditEvent {
-	return func(row sqlc.MaintenanceWindow) clusterAuditEvent {
-		return clusterAuditEvent{
+func maintenanceWindowAuditEvent(action string, status int) func(sqlc.MaintenanceWindow) mutationAuditEvent {
+	return func(row sqlc.MaintenanceWindow) mutationAuditEvent {
+		return mutationAuditEvent{
 			action: action, resourceType: "maintenance_window", resourceID: row.ID.String(), resourceName: row.Name, status: status,
 			detail: map[string]any{"mode": row.Mode, "on_block": row.OnBlock, "enabled": row.Enabled},
 		}

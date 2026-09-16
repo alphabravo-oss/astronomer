@@ -10,7 +10,7 @@ func TestPublishRemoteMarksRemoteTrue(t *testing.T) {
 	bus := NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := bus.Subscribe(ctx)
+	ch := bus.Subscribe(ctx, AcceptAll)
 
 	bus.PublishRemote(TypeClusterConnected, map[string]any{"cluster_id": "c1"})
 
@@ -31,7 +31,7 @@ func TestPublishLocalIsNotRemote(t *testing.T) {
 	bus := NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch := bus.Subscribe(ctx)
+	ch := bus.Subscribe(ctx, AcceptAll)
 
 	bus.Publish(TypeClusterConnected, map[string]any{"cluster_id": "c1"})
 

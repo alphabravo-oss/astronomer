@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 )
 
 // trivyOperatorNamespace is the recommended install namespace from the
@@ -118,7 +118,7 @@ func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Reque
 	if limit <= 0 || limit > 200 {
 		limit = 20
 	}
-	offset := int32(queryInt(r, "offset", 0))
+	offset := int32(queryOffset(r))
 	if offset < 0 {
 		offset = 0
 	}
@@ -151,7 +151,7 @@ func (h *ImageVulnHandler) ClusterTopImages(w http.ResponseWriter, r *http.Reque
 	for _, it := range items {
 		rendered = append(rendered, renderReport(it))
 	}
-	RespondPaginated(w, r, rendered, total)
+	paging.Write(w, rendered, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(rendered)))
 }
 
 // ClusterReportDetail handles GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id}/.
@@ -183,7 +183,7 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	offset := int32(queryInt(r, "offset", 0))
+	offset := int32(queryOffset(r))
 	if offset < 0 {
 		offset = 0
 	}
@@ -204,12 +204,9 @@ func (h *ImageVulnHandler) ClusterReportDetail(w http.ResponseWriter, r *http.Re
 	}
 
 	out := map[string]any{
-		"report":              renderReport(report),
-		"vulnerabilities":     renderVulnList(cves),
-		"vulnerability_total": total,
-		"severity_filter":     severity,
-		"limit":               limit,
-		"offset":              offset,
+		"report":          renderReport(report),
+		"vulnerabilities": paging.Response[map[string]any]{Data: renderVulnList(cves), Pagination: paging.Exact(total, int(limit), int(offset), len(cves))},
+		"severity_filter": severity,
 	}
 	RespondJSON(w, http.StatusOK, out)
 }
@@ -271,7 +268,7 @@ func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return err
 		}
-		taskPayload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+		taskPayload := observability.EnrichTaskPayload(r.Context(), task.Payload(), reqctx.CorrelationID(r.Context()))
 		task = asynq.NewTask(task.Type(), taskPayload, asynq.MaxRetry(5), asynq.Timeout(2*time.Minute))
 		if _, err := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
 			DedupeKey: "vulnerability:rescan:" + operation.ID.String(), QueueName: tasks.ClusterTemplateApplyQueueName,
@@ -438,13 +435,4 @@ func renderVulnList(cves []sqlc.ImageVulnerability) []map[string]any {
 		out = append(out, entry)
 	}
 	return out
-}
-
-func parseClusterID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	id, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
-		return uuid.Nil, false
-	}
-	return id, true
 }

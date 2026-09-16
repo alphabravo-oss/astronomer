@@ -4,10 +4,12 @@ import { formatDate, formatRelativeTime } from "@/lib/utils";
 import type { APIToken } from "@/types";
 import { ActionButton } from "@/components/ui/action-button";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export function TokensTab({ onCreate }: { onCreate: () => void }) {
   const { data: tokens, isLoading: tokensLoading } = useAPITokens();
   const deleteToken = useDeleteAPIToken();
+  const [deleteTarget, setDeleteTarget] = useState<APIToken | null>(null);
 
   const tokenColumns: Column<APIToken>[] = [
     {
@@ -64,9 +66,7 @@ export function TokensTab({ onCreate }: { onCreate: () => void }) {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (confirm("Are you sure you want to delete this token?")) {
-              deleteToken.mutate(row.id);
-            }
+            setDeleteTarget(row);
           }}
           className="text-muted-foreground hover:text-status-error transition-colors"
           title="Delete token"
@@ -98,8 +98,40 @@ export function TokensTab({ onCreate }: { onCreate: () => void }) {
         keyExtractor={(row) => row.id}
         searchPlaceholder="Search tokens..."
         loading={tokensLoading}
-        emptyMessage="No API tokens created"
+        emptyState={{
+          title: "No API tokens created",
+          description: "Create the first item to configure this feature.",
+        }}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          deleteToken.mutate(deleteTarget.id, {
+            onSuccess: () => setDeleteTarget(null),
+          });
+        }}
+        title="Delete API token"
+        description="This immediately invalidates the selected API credential."
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={deleteToken.isPending}
+        impact={
+          deleteTarget
+            ? {
+                scope: deleteTarget.name,
+                consequences: [
+                  "Automations using this token will lose API access.",
+                  "The token secret cannot be recovered after deletion.",
+                ],
+                recovery:
+                  "Create a replacement token and update its consumers.",
+              }
+            : undefined
+        }
       />
     </div>
   );
 }
+import { useState } from "react";

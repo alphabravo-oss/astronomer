@@ -142,6 +142,22 @@ the DB-backed path.
 
 ## Pagination consistency
 
+Offset-paginated collections use one envelope:
+
+```json
+{"data": [], "pagination": {"total": 0, "limit": 20, "offset": 0, "has_more": false, "next_offset": null}}
+```
+
+`pagination.total` is present only when the server knows the exact filtered
+total. It is omitted for uncounted queries, never replaced by the current page
+length. Continue with `next_offset` while `has_more` is true, preserving the
+original filters; an empty page never advertises continuation. Uncounted queries
+without a look-ahead row may need one final empty request to establish exhaustion.
+The page `limit` records the applied server cap, not the unchecked request.
+Domain summaries can be siblings of `data` and `pagination`; nested collections
+inside detail resources use the same envelope. There are no `count`, `next`,
+`previous`, or `total_known` aliases.
+
 Operational streams use keyset cursors ordered by a stable, unique tuple such
 as `(created_at, id)`. Every next page is strictly greater than the final tuple
 from the previous page. This prevents duplicates when rows are inserted while a

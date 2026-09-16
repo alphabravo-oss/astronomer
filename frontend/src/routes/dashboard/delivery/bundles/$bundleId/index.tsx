@@ -1,4 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FormShell } from "@/components/ui/form-shell";
+import { Select } from "@/components/ui/select";
+import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,7 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { load as parseYaml } from "js-yaml";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -33,22 +37,22 @@ import {
   createComponentBundleVersion,
   getComponentBundle,
   listComponentBundleVersions,
-  listDeliverySources,
   type BundleScope,
   type ComponentBundleVersion,
   type CreateBundleVersionRequest,
   type DriftPolicy,
   type RendererKind,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-bundles";
+import { listDeliverySources } from "@/lib/api/delivery-sources";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can, isSuperuser } from "@/lib/permissions";
-import { useParams } from "@/lib/navigation";
+
 import { formatRelativeTime } from "@/lib/utils";
 import { toastSuccess } from "@/lib/toast";
 
 export function BundleDetailPage() {
-  const { bundleId } = useParams<{ bundleId: string }>();
+  const { bundleId } = useParams({ strict: false }) as { bundleId: string };
   const { projectId, projects, projectQuery, setProjectId, listHref } =
     useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
@@ -158,12 +162,12 @@ export function BundleDetailPage() {
         onRetry={() => void projectQuery.refetch()}
       >
         <PageShell>
-          <Link
-            href={withProjectQuery(listHref("bundles"), projectId)}
+          <RouterLink
+            to={withProjectQuery(listHref("bundles"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Bundles
-          </Link>
+          </RouterLink>
           <PageHeader
             eyebrow="Immutable delivery content"
             title={bundle.data?.name ?? "Bundle"}
@@ -206,15 +210,16 @@ export function BundleDetailPage() {
               keyExtractor={(row) => row.id}
               loading={versions.isLoading}
               isError={versions.isError}
+              error={versions.error}
               onRetry={() => void versions.refetch()}
               searchable={false}
-              emptyMessage="No versions yet"
+              emptyState={{
+                title: "No versions yet",
+                description:
+                  "Resources will appear here when they are available in this scope.",
+              }}
               serverSide={{
-                rowCount: deliveryPageRowCount(
-                  versions.data,
-                  pageIndex,
-                  pageSize,
-                ),
+                rowCount: deliveryPageRowCount(versions.data),
                 pagination: { pageIndex, pageSize },
                 onPaginationChange: (next) => setPageIndex(next.pageIndex),
               }}
@@ -353,25 +358,25 @@ function CreateVersionDialog({
       titleIcon={<GitCommitHorizontal className="h-5 w-5" />}
       subtitle="The management plane resolves the requested reference to an immutable commit or digest and verifies trust before use."
     >
-      <form className="space-y-5" onSubmit={submit}>
+      <FormShell className="space-y-5" onSubmit={submit}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Version label">
-            <input name="version" required className={inputClass} />
+            <Input name="version" required className={inputClass} />
           </Field>
           <Field label="Source">
-            <select name="source_id" required className={inputClass}>
+            <Select name="source_id" required className={inputClass}>
               <option value="">Select source</option>
               {sources.data?.data.map((source) => (
                 <option key={source.id} value={source.id}>
                   {source.name} · {source.type}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Requested revision">
-            <input
+            <Input
               name="requested_revision"
               required
               className={inputClass}
@@ -379,17 +384,17 @@ function CreateVersionDialog({
             />
           </Field>
           <Field label="Renderer">
-            <select
+            <Select
               value={renderer}
               onChange={(e) => setRenderer(e.target.value as RendererKind)}
               className={inputClass}
             >
               <option value="helm">Helm</option>
               <option value="kustomize">Kustomize</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Scope">
-            <select
+            <Select
               value={scope}
               onChange={(e) => setScope(e.target.value as BundleScope)}
               className={inputClass}
@@ -400,7 +405,7 @@ function CreateVersionDialog({
                   Platform (superuser + approval)
                 </option>
               )}
-            </select>
+            </Select>
           </Field>
         </div>
         <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2">
@@ -410,18 +415,18 @@ function CreateVersionDialog({
           {renderer === "helm" ? (
             <>
               <Field label="Chart">
-                <input name="chart" required className={inputClass} />
+                <Input name="chart" required className={inputClass} />
               </Field>
               <Field label="Chart version">
-                <input name="chart_version" required className={inputClass} />
+                <Input name="chart_version" required className={inputClass} />
               </Field>
               <Field label="Release name">
-                <input name="release_name" required className={inputClass} />
+                <Input name="release_name" required className={inputClass} />
               </Field>
             </>
           ) : (
             <Field label="Repository path">
-              <input
+              <Input
                 name="path"
                 required
                 defaultValue="./"
@@ -430,12 +435,12 @@ function CreateVersionDialog({
             </Field>
           )}
           <Field label="Target namespace">
-            <input name="target_namespace" required className={inputClass} />
+            <Input name="target_namespace" required className={inputClass} />
           </Field>
           {renderer === "helm" ? (
             <>
               <Field label="Install retries">
-                <input
+                <Input
                   name="install_retries"
                   required
                   type="number"
@@ -446,7 +451,7 @@ function CreateVersionDialog({
                 />
               </Field>
               <Field label="Upgrade retries">
-                <input
+                <Input
                   name="upgrade_retries"
                   required
                   type="number"
@@ -457,12 +462,12 @@ function CreateVersionDialog({
                 />
               </Field>
               <label className="flex items-center gap-2 text-sm">
-                <input name="test" type="checkbox" defaultChecked /> Run chart
+                <Input name="test" type="checkbox" defaultChecked /> Run chart
                 tests
               </label>
               <div className="sm:col-span-2">
                 <Field label="Values (YAML mapping)">
-                  <textarea
+                  <Textarea
                     name="values"
                     className={textareaClass}
                     spellCheck={false}
@@ -473,7 +478,7 @@ function CreateVersionDialog({
           ) : (
             <div className="sm:col-span-2">
               <Field label="Patches (separate documents with ---)">
-                <textarea
+                <Textarea
                   name="patches"
                   className={textareaClass}
                   spellCheck={false}
@@ -487,7 +492,7 @@ function CreateVersionDialog({
             Reconciliation policy
           </legend>
           <Field label="Interval">
-            <input
+            <Input
               name="interval"
               required
               defaultValue="10m"
@@ -495,7 +500,7 @@ function CreateVersionDialog({
             />
           </Field>
           <Field label="Retry interval">
-            <input
+            <Input
               name="retry_interval"
               required
               defaultValue="1m"
@@ -503,7 +508,7 @@ function CreateVersionDialog({
             />
           </Field>
           <Field label="Timeout">
-            <input
+            <Input
               name="timeout"
               required
               defaultValue="10m"
@@ -511,7 +516,7 @@ function CreateVersionDialog({
             />
           </Field>
           <Field label="Drift">
-            <select
+            <Select
               value={drift}
               onChange={(e) => setDrift(e.target.value as DriftPolicy)}
               className={inputClass}
@@ -519,22 +524,22 @@ function CreateVersionDialog({
               <option value="repair">Detect and repair</option>
               <option value="detect">Detect only</option>
               <option value="ignore">Ignore</option>
-            </select>
+            </Select>
           </Field>
           <label className="flex items-center gap-2 text-sm">
-            <input name="prune" type="checkbox" defaultChecked /> Prune removed
+            <Input name="prune" type="checkbox" defaultChecked /> Prune removed
             resources
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input name="wait" type="checkbox" defaultChecked /> Wait for health
+            <Input name="wait" type="checkbox" defaultChecked /> Wait for health
           </label>
         </fieldset>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Required capabilities (one name and optional constraint per line)">
-            <textarea name="capabilities" className={textareaClass} />
+            <Textarea name="capabilities" className={textareaClass} />
           </Field>
           <Field label="Dependency bundle IDs (comma-separated)">
-            <textarea name="dependencies" className={textareaClass} />
+            <Textarea name="dependencies" className={textareaClass} />
           </Field>
         </div>
         {scope === "platform" && (
@@ -558,7 +563,7 @@ function CreateVersionDialog({
             {mutation.isPending ? "Creating…" : "Create immutable version"}
           </button>
         </div>
-      </form>
+      </FormShell>
     </ModalShell>
   );
 }
@@ -578,7 +583,7 @@ function Field({
   );
 }
 function DeliveryBundleDetailRedirect() {
-  const { bundleId } = useParams<{ bundleId: string }>();
+  const { bundleId } = useParams({ strict: false }) as { bundleId: string };
   return (
     <RedirectDeliveryDetail tab="bundles" id={bundleId}>
       <BundleDetailPage />

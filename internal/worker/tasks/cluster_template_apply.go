@@ -354,13 +354,14 @@ func applyClusterMutations(ctx context.Context, deps ClusterTemplateApplyDeps, c
 		annotations = json.RawMessage(`{}`)
 	}
 	if _, err := deps.Queries.UpdateCluster(ctx, sqlc.UpdateClusterParams{
-		ID:          cluster.ID,
-		DisplayName: cluster.DisplayName,
-		Description: cluster.Description,
-		Environment: desiredEnv,
-		Region:      cluster.Region,
-		Labels:      labels,
-		Annotations: annotations,
+		ID:             cluster.ID,
+		DisplayName:    cluster.DisplayName,
+		Description:    cluster.Description,
+		Environment:    desiredEnv,
+		Region:         cluster.Region,
+		Labels:         labels,
+		Annotations:    annotations,
+		AgentOverrides: cluster.AgentOverrides,
 	}); err != nil {
 		return fmt.Errorf("update cluster: %w", err)
 	}

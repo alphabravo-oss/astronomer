@@ -1,29 +1,42 @@
 /**
  * Reactive live-stream status + the poll-fallback interval helpers.
  *
- * `liveStatus` is a TanStack Store atom so components (status pills) can
- * subscribe reactively via `useStore`, while query options read it
- * non-reactively inside `refetchInterval` functions — React Query
+ * Components subscribe through React's external-store primitive, while query
+ * options read the status non-reactively inside `refetchInterval` functions — React Query
  * re-evaluates those after every fetch, and the open→closed transition
  * invalidation in `stream.ts` forces a re-evaluation when the stream drops
  * so fallback polling actually restarts.
  */
 
-import { Store } from "@tanstack/store";
+import { useSyncExternalStore } from "react";
 
 export type LiveStatus = "idle" | "connecting" | "open" | "closed";
 
-/** Current SSE connection status. Written only by `stream.ts`. */
-export const liveStatus = new Store<LiveStatus>("idle");
+let status: LiveStatus = "idle";
+const listeners = new Set<() => void>();
+
+/** Reactive connection status for diagnostics and status pills. */
+export function useLiveStatus(): LiveStatus {
+  return useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => status,
+    () => status,
+  );
+}
 
 /** Non-reactive read of the current stream status. */
 export function liveEventsStatus(): LiveStatus {
-  return liveStatus.state;
+  return status;
 }
 
 /** Internal — stream.ts publishes status transitions through this. */
 export function setLiveStatus(next: LiveStatus): void {
-  liveStatus.setState(() => next);
+  if (status === next) return;
+  status = next;
+  listeners.forEach((listener) => listener());
 }
 
 /**
@@ -32,5 +45,5 @@ export function setLiveStatus(next: LiveStatus): void {
  * the base interval. Use as `refetchInterval: liveFallback(baseMs)`.
  */
 export function liveFallback(baseMs: number): () => number | false {
-  return () => (liveStatus.state === "open" ? false : baseMs);
+  return () => (status === "open" ? false : baseMs);
 }

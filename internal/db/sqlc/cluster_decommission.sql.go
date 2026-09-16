@@ -74,11 +74,86 @@ func (q *Queries) ArchiveAndPurgeAuditLogsForCluster(ctx context.Context, cluste
 	return result.RowsAffected(), nil
 }
 
+const claimPendingClusterDecommissions = `-- name: ClaimPendingClusterDecommissions :many
+WITH candidates AS (
+    SELECT id
+    FROM cluster_decommissions
+    WHERE status IN ('pending', 'failed')
+       OR (
+           status = 'running'
+           AND (
+               decommission_lease_until IS NULL
+               OR decommission_lease_until <= now()
+           )
+       )
+    ORDER BY updated_at ASC, created_at ASC, id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT $3
+)
+UPDATE cluster_decommissions AS decommission
+SET status = 'running',
+    attempts = attempts + 1,
+    started_at = COALESCE(started_at, now()),
+    last_error = '',
+    updated_at = now(),
+    decommission_claim_token = $1,
+    decommission_lease_until = now() + make_interval(secs => $2::double precision)
+FROM candidates
+WHERE decommission.id = candidates.id
+RETURNING decommission.id, decommission.cluster_id, decommission.status, decommission.phases, decommission.started_at, decommission.completed_at, decommission.last_error, decommission.attempts, decommission.requested_by_id, decommission.cluster_name, decommission.created_at, decommission.updated_at, decommission.force, decommission.decommission_claim_token, decommission.decommission_lease_until
+`
+
+type ClaimPendingClusterDecommissionsParams struct {
+	ClaimToken      pgtype.UUID `json:"claim_token"`
+	LeaseTtlSeconds float64     `json:"lease_ttl_seconds"`
+	QueryLimit      int32       `json:"query_limit"`
+}
+
+// Atomically claims a fair, bounded batch for a periodic sweep. Live leases
+// are excluded before LIMIT, so an old in-flight prefix cannot starve later
+// rows. updated_at is advanced on every attempt/completion and is the primary
+// ordering key, moving repeatedly failing work behind rows not yet attempted.
+func (q *Queries) ClaimPendingClusterDecommissions(ctx context.Context, arg ClaimPendingClusterDecommissionsParams) ([]ClusterDecommission, error) {
+	rows, err := q.db.Query(ctx, claimPendingClusterDecommissions, arg.ClaimToken, arg.LeaseTtlSeconds, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClusterDecommission{}
+	for rows.Next() {
+		var i ClusterDecommission
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.Status,
+			&i.Phases,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.LastError,
+			&i.Attempts,
+			&i.RequestedByID,
+			&i.ClusterName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Force,
+			&i.DecommissionClaimToken,
+			&i.DecommissionLeaseUntil,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createClusterDecommission = `-- name: CreateClusterDecommission :one
 
 INSERT INTO cluster_decommissions (cluster_id, status, requested_by_id, cluster_name, force)
 VALUES ($1, 'pending', $2, $3, $4)
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until
 `
 
 type CreateClusterDecommissionParams struct {
@@ -121,6 +196,8 @@ func (q *Queries) CreateClusterDecommission(ctx context.Context, arg CreateClust
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Force,
+		&i.DecommissionClaimToken,
+		&i.DecommissionLeaseUntil,
 	)
 	return i, err
 }
@@ -346,7 +423,7 @@ func (q *Queries) DeleteProjectNamespacesByCluster(ctx context.Context, clusterI
 }
 
 const getClusterDecommissionByID = `-- name: GetClusterDecommissionByID :one
-SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force FROM cluster_decommissions WHERE id = $1
+SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until FROM cluster_decommissions WHERE id = $1
 `
 
 func (q *Queries) GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) (ClusterDecommission, error) {
@@ -366,12 +443,14 @@ func (q *Queries) GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Force,
+		&i.DecommissionClaimToken,
+		&i.DecommissionLeaseUntil,
 	)
 	return i, err
 }
 
 const getLatestClusterDecommissionByCluster = `-- name: GetLatestClusterDecommissionByCluster :one
-SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force FROM cluster_decommissions
+SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until FROM cluster_decommissions
 WHERE cluster_id = $1
 ORDER BY created_at DESC
 LIMIT 1
@@ -394,22 +473,23 @@ func (q *Queries) GetLatestClusterDecommissionByCluster(ctx context.Context, clu
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Force,
+		&i.DecommissionClaimToken,
+		&i.DecommissionLeaseUntil,
 	)
 	return i, err
 }
 
-const listPendingClusterDecommissions = `-- name: ListPendingClusterDecommissions :many
-SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force FROM cluster_decommissions
+const listPendingClusterDecommissionsForClusters = `-- name: ListPendingClusterDecommissionsForClusters :many
+SELECT id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until FROM cluster_decommissions
 WHERE status IN ('pending', 'running')
+  AND cluster_id = ANY($1::uuid[])
 ORDER BY created_at ASC
-LIMIT $1
 `
 
-// Used by the periodic sweep to find decommissions that need re-runs (the
-// enqueue-time task may have been lost or the reconciler may have crashed
-// mid-phase).
-func (q *Queries) ListPendingClusterDecommissions(ctx context.Context, limit int32) ([]ClusterDecommission, error) {
-	rows, err := q.db.Query(ctx, listPendingClusterDecommissions, limit)
+// Page enrichment is scoped to the rows already authorized and returned. Keep
+// tenant filtering in SQL and avoid scanning the estate-wide in-flight set.
+func (q *Queries) ListPendingClusterDecommissionsForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]ClusterDecommission, error) {
+	rows, err := q.db.Query(ctx, listPendingClusterDecommissionsForClusters, clusterIds)
 	if err != nil {
 		return nil, err
 	}
@@ -431,6 +511,8 @@ func (q *Queries) ListPendingClusterDecommissions(ctx context.Context, limit int
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Force,
+			&i.DecommissionClaimToken,
+			&i.DecommissionLeaseUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -447,21 +529,31 @@ UPDATE cluster_decommissions
 SET
     status = 'failed',
     completed_at = now(),
-    last_error = $2,
-    phases = $3,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
+    last_error = $1,
+    phases = $2,
+    updated_at = now(),
+    decommission_claim_token = NULL,
+    decommission_lease_until = NULL
+WHERE id = $3
+  AND status = 'running'
+  AND decommission_claim_token = $4
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until
 `
 
 type MarkClusterDecommissionFailedParams struct {
-	ID        uuid.UUID       `json:"id"`
-	LastError string          `json:"last_error"`
-	Phases    json.RawMessage `json:"phases"`
+	LastError  string          `json:"last_error"`
+	Phases     json.RawMessage `json:"phases"`
+	ID         uuid.UUID       `json:"id"`
+	ClaimToken pgtype.UUID     `json:"claim_token"`
 }
 
 func (q *Queries) MarkClusterDecommissionFailed(ctx context.Context, arg MarkClusterDecommissionFailedParams) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, markClusterDecommissionFailed, arg.ID, arg.LastError, arg.Phases)
+	row := q.db.QueryRow(ctx, markClusterDecommissionFailed,
+		arg.LastError,
+		arg.Phases,
+		arg.ID,
+		arg.ClaimToken,
+	)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -477,6 +569,8 @@ func (q *Queries) MarkClusterDecommissionFailed(ctx context.Context, arg MarkClu
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Force,
+		&i.DecommissionClaimToken,
+		&i.DecommissionLeaseUntil,
 	)
 	return i, err
 }
@@ -488,30 +582,33 @@ SET
     attempts = attempts + 1,
     started_at = COALESCE(started_at, now()),
     last_error = '',
-    updated_at = now()
-WHERE id = $1
+    updated_at = now(),
+    decommission_claim_token = $1,
+    decommission_lease_until = now() + make_interval(secs => $2::double precision)
+WHERE id = $3
   AND (
       status IN ('pending', 'failed')
-      OR (status = 'running' AND updated_at < now() - make_interval(secs => $2::double precision))
+      OR (
+          status = 'running'
+          AND (
+              decommission_lease_until IS NULL
+              OR decommission_lease_until <= now()
+          )
+      )
   )
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until
 `
 
 type MarkClusterDecommissionRunningParams struct {
-	ID              uuid.UUID `json:"id"`
-	LeaseTtlSeconds float64   `json:"lease_ttl_seconds"`
+	ClaimToken      pgtype.UUID `json:"claim_token"`
+	LeaseTtlSeconds float64     `json:"lease_ttl_seconds"`
+	ID              uuid.UUID   `json:"id"`
 }
 
-// Lease-CAS claim. Claims the row only when it is pending/failed OR when a
-// prior runner's lease has expired (status='running' but updated_at older than
-// the lease TTL `$2` seconds). The active runner renews its lease implicitly on
-// every UpdateClusterDecommissionPhases (which bumps updated_at), so a healthy
-// in-flight runner is never preempted mid-RPC. When no row matches (a sibling
-// holds a live lease), the query returns no rows and the caller backs off — this
-// is the serialization point that stops the 1-minute periodic sweep from
-// double-running a row concurrently with the enqueued task.
+// Claims one enqueue-time task. A fresh opaque token fences every subsequent
+// state write; an expired owner can never overwrite its replacement.
 func (q *Queries) MarkClusterDecommissionRunning(ctx context.Context, arg MarkClusterDecommissionRunningParams) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, markClusterDecommissionRunning, arg.ID, arg.LeaseTtlSeconds)
+	row := q.db.QueryRow(ctx, markClusterDecommissionRunning, arg.ClaimToken, arg.LeaseTtlSeconds, arg.ID)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -527,6 +624,8 @@ func (q *Queries) MarkClusterDecommissionRunning(ctx context.Context, arg MarkCl
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Force,
+		&i.DecommissionClaimToken,
+		&i.DecommissionLeaseUntil,
 	)
 	return i, err
 }
@@ -538,18 +637,23 @@ SET
     completed_at = now(),
     last_error = '',
     updated_at = now(),
-    phases = $2
-WHERE id = $1
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
+    phases = $1,
+    decommission_claim_token = NULL,
+    decommission_lease_until = NULL
+WHERE id = $2
+  AND status = 'running'
+  AND decommission_claim_token = $3
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until
 `
 
 type MarkClusterDecommissionSucceededParams struct {
-	ID     uuid.UUID       `json:"id"`
-	Phases json.RawMessage `json:"phases"`
+	Phases     json.RawMessage `json:"phases"`
+	ID         uuid.UUID       `json:"id"`
+	ClaimToken pgtype.UUID     `json:"claim_token"`
 }
 
 func (q *Queries) MarkClusterDecommissionSucceeded(ctx context.Context, arg MarkClusterDecommissionSucceededParams) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, markClusterDecommissionSucceeded, arg.ID, arg.Phases)
+	row := q.db.QueryRow(ctx, markClusterDecommissionSucceeded, arg.Phases, arg.ID, arg.ClaimToken)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -565,29 +669,69 @@ func (q *Queries) MarkClusterDecommissionSucceeded(ctx context.Context, arg Mark
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Force,
+		&i.DecommissionClaimToken,
+		&i.DecommissionLeaseUntil,
 	)
 	return i, err
 }
 
-const releaseClusterDecommissionClaim = `-- name: ReleaseClusterDecommissionClaim :exec
+const releaseClusterDecommissionClaim = `-- name: ReleaseClusterDecommissionClaim :execrows
 UPDATE cluster_decommissions
-SET status = 'pending', updated_at = now()
+SET status = 'pending',
+    updated_at = now(),
+    decommission_claim_token = NULL,
+    decommission_lease_until = NULL
 WHERE id = $1
+  AND status = 'running'
+  AND decommission_claim_token = $2
 `
+
+type ReleaseClusterDecommissionClaimParams struct {
+	ID         uuid.UUID   `json:"id"`
+	ClaimToken pgtype.UUID `json:"claim_token"`
+}
 
 // Releases the lease so a sibling pod can re-claim. Used by the HA re-queue
 // path: when the agent's WS is live on a SIBLING pod, the owning pod must be
 // able to claim the row, so the current (wrong) pod sets status back to
-// 'pending' before returning the task to asynq.
-func (q *Queries) ReleaseClusterDecommissionClaim(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, releaseClusterDecommissionClaim, id)
-	return err
+// 'pending' before returning the task to asynq. Token fencing prevents an
+// expired owner from releasing a replacement owner's claim.
+func (q *Queries) ReleaseClusterDecommissionClaim(ctx context.Context, arg ReleaseClusterDecommissionClaimParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseClusterDecommissionClaim, arg.ID, arg.ClaimToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const renewClusterDecommissionClaim = `-- name: RenewClusterDecommissionClaim :execrows
+UPDATE cluster_decommissions
+SET decommission_lease_until = now() + make_interval(secs => $1::double precision)
+WHERE id = $2
+  AND status = 'running'
+  AND decommission_claim_token = $3
+`
+
+type RenewClusterDecommissionClaimParams struct {
+	LeaseTtlSeconds float64     `json:"lease_ttl_seconds"`
+	ID              uuid.UUID   `json:"id"`
+	ClaimToken      pgtype.UUID `json:"claim_token"`
+}
+
+// Long-running side effects renew ownership in the background. A zero row
+// count means the lease was superseded and the runner must stop.
+func (q *Queries) RenewClusterDecommissionClaim(ctx context.Context, arg RenewClusterDecommissionClaimParams) (int64, error) {
+	result, err := q.db.Exec(ctx, renewClusterDecommissionClaim, arg.LeaseTtlSeconds, arg.ID, arg.ClaimToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setClusterDecommissionForce = `-- name: SetClusterDecommissionForce :one
 UPDATE cluster_decommissions SET force = true, updated_at = now()
 WHERE id = $1
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until
 `
 
 // Escalate an already in-flight decommission to force so the reconciler stops
@@ -609,6 +753,8 @@ func (q *Queries) SetClusterDecommissionForce(ctx context.Context, id uuid.UUID)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Force,
+		&i.DecommissionClaimToken,
+		&i.DecommissionLeaseUntil,
 	)
 	return i, err
 }
@@ -634,19 +780,29 @@ func (q *Queries) TombstoneCluster(ctx context.Context, id uuid.UUID) error {
 const updateClusterDecommissionPhases = `-- name: UpdateClusterDecommissionPhases :one
 UPDATE cluster_decommissions
 SET
-    phases = $2,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force
+    phases = $1,
+    updated_at = now(),
+    decommission_lease_until = now() + make_interval(secs => $2::double precision)
+WHERE id = $3
+  AND status = 'running'
+  AND decommission_claim_token = $4
+RETURNING id, cluster_id, status, phases, started_at, completed_at, last_error, attempts, requested_by_id, cluster_name, created_at, updated_at, force, decommission_claim_token, decommission_lease_until
 `
 
 type UpdateClusterDecommissionPhasesParams struct {
-	ID     uuid.UUID       `json:"id"`
-	Phases json.RawMessage `json:"phases"`
+	Phases          json.RawMessage `json:"phases"`
+	LeaseTtlSeconds float64         `json:"lease_ttl_seconds"`
+	ID              uuid.UUID       `json:"id"`
+	ClaimToken      pgtype.UUID     `json:"claim_token"`
 }
 
 func (q *Queries) UpdateClusterDecommissionPhases(ctx context.Context, arg UpdateClusterDecommissionPhasesParams) (ClusterDecommission, error) {
-	row := q.db.QueryRow(ctx, updateClusterDecommissionPhases, arg.ID, arg.Phases)
+	row := q.db.QueryRow(ctx, updateClusterDecommissionPhases,
+		arg.Phases,
+		arg.LeaseTtlSeconds,
+		arg.ID,
+		arg.ClaimToken,
+	)
 	var i ClusterDecommission
 	err := row.Scan(
 		&i.ID,
@@ -662,6 +818,8 @@ func (q *Queries) UpdateClusterDecommissionPhases(ctx context.Context, arg Updat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Force,
+		&i.DecommissionClaimToken,
+		&i.DecommissionLeaseUntil,
 	)
 	return i, err
 }

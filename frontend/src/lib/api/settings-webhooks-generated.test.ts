@@ -101,17 +101,27 @@ describe("generated webhooks API", () => {
       created_at: "2026-08-24T01:59:00Z",
     };
     vi.mocked(adminWebhookDeliveries).mockResolvedValueOnce({
-      data: { items: [delivery], total: 51, limit: 25, offset: 25 },
+      data: [delivery],
+      pagination: {
+        total: 51,
+        limit: 25,
+        offset: 25,
+        has_more: true,
+        next_offset: 50,
+      },
     });
 
     await expect(
       listWebhookDeliveries(subscriptionWire.id, { page: 2, page_size: 25 }),
     ).resolves.toEqual(
       expect.objectContaining({
-        page: 2,
-        pageSize: 25,
-        total: 51,
-        totalPages: 3,
+        pagination: {
+          total: 51,
+          limit: 25,
+          offset: 25,
+          has_more: true,
+          next_offset: 50,
+        },
         data: [
           expect.objectContaining({ status: "delivered", responseCode: 204 }),
         ],

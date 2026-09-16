@@ -2,13 +2,12 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/google/uuid"
 )
 
@@ -19,14 +18,13 @@ func RespondJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 // RespondJSONUnwrapped writes a JSON response without the {"data": ...} wrapper.
-// Used for endpoints that must match the Python/DRF response contract directly
-// (bootstrap status, login token payload, auth/me, etc.) — the Next.js frontend
-// reads these top-level keys without an unwrap layer.
+// Used for endpoints with a deliberately unwrapped contract, such as login
+// token payloads and identity discovery.
 func RespondJSONUnwrapped(w http.ResponseWriter, status int, payload any) {
 	writeJSON(w, status, payload)
 }
 
-// RespondError writes a JSON error response matching DRF format.
+// RespondError writes the standard JSON error envelope.
 func RespondError(w http.ResponseWriter, status int, code, message string) {
 	requestID := ""
 	if status >= http.StatusInternalServerError {
@@ -47,7 +45,7 @@ func RespondError(w http.ResponseWriter, status int, code, message string) {
 func RespondRequestError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	requestID := ""
 	if r != nil {
-		requestID = middleware.GetRequestID(r.Context())
+		requestID = reqctx.RequestID(r.Context())
 	}
 	if status >= http.StatusInternalServerError {
 		if requestID == "" {
@@ -85,35 +83,6 @@ func RespondAcceptedOperation(w http.ResponseWriter, location string, payload an
 	RespondJSON(w, http.StatusAccepted, payload)
 }
 
-// RespondPaginated writes a paginated JSON response matching DRF list format.
-// It extracts limit and offset from the request's query parameters,
-// defaulting to limit=20 and offset=0. Always responds with status 200.
-func RespondPaginated(w http.ResponseWriter, r *http.Request, items any, total int64) {
-	limit := queryInt(r, "limit", 20)
-	offset := queryInt(r, "offset", 0)
-
-	resp := paginatedResponse{
-		Data:  items,
-		Count: total,
-	}
-
-	if offset+limit < int(total) {
-		next := fmt.Sprintf("%s?limit=%d&offset=%d", r.URL.Path, limit, offset+limit)
-		resp.Next = &next
-	}
-
-	if offset > 0 {
-		prevOffset := offset - limit
-		if prevOffset < 0 {
-			prevOffset = 0
-		}
-		prev := fmt.Sprintf("%s?limit=%d&offset=%d", r.URL.Path, limit, prevOffset)
-		resp.Previous = &prev
-	}
-
-	writeJSON(w, http.StatusOK, resp)
-}
-
 // queryInt extracts an integer query parameter with a default fallback.
 func queryInt(r *http.Request, key string, defaultVal int) int {
 	s := r.URL.Query().Get(key)
@@ -125,6 +94,30 @@ func queryInt(r *http.Request, key string, defaultVal int) int {
 		return defaultVal
 	}
 	return v
+}
+
+const maxPaginationOffset = uint64(1<<31 - 1)
+
+// queryOffset parses the shared "offset" query parameter into the non-negative
+// int32 range accepted by sqlc-generated pagination queries. Invalid and
+// negative values start at the first page; oversized values clamp instead of
+// wrapping through an int32 conversion into a negative PostgreSQL OFFSET.
+func queryOffset(r *http.Request) int {
+	s := r.URL.Query().Get("offset")
+	if s == "" {
+		return 0
+	}
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		if numErr, ok := err.(*strconv.NumError); ok && numErr.Err == strconv.ErrRange {
+			return int(maxPaginationOffset)
+		}
+		return 0
+	}
+	if v > maxPaginationOffset {
+		return int(maxPaginationOffset)
+	}
+	return int(v)
 }
 
 // queryBool parses a boolean query param; accepts true/1/yes (case-insensitive).
@@ -172,25 +165,9 @@ func queryLimitMax(r *http.Request, defaultLimit, max int) int {
 // limit to [1, 200] (falling back to defaultLimit when missing, unparseable, or
 // < 1) and offset to >= 0.
 func queryLimitOffset(r *http.Request, defaultLimit int) (limit, offset int) {
-	limit = queryInt(r, "limit", defaultLimit)
-	if limit < 1 {
-		limit = defaultLimit
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	offset = queryInt(r, "offset", 0)
-	if offset < 0 {
-		offset = 0
-	}
+	limit = queryLimit(r, defaultLimit)
+	offset = queryOffset(r)
 	return limit, offset
-}
-
-type paginatedResponse struct {
-	Data     any     `json:"data"`
-	Count    int64   `json:"count"`
-	Next     *string `json:"next"`
-	Previous *string `json:"previous"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

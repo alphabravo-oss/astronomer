@@ -8,13 +8,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // authedLoggingReq builds a request whose context carries an authenticated
@@ -27,7 +28,7 @@ func authedLoggingReq(method, target string, body []byte) *http.Request {
 	} else {
 		req = httptest.NewRequest(method, target, nil)
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()})
 	return req.WithContext(ctx)
 }
 
@@ -39,7 +40,7 @@ func TestLoggingMutatingRoutesDenyZeroGrantViewer(t *testing.T) {
 	clusterID := uuid.New()
 
 	newHandler := func() *LoggingHandler {
-		h := NewLoggingHandler(newLoggingFakeQuerier())
+		h := newLoggingHandlerForTest(newLoggingFakeQuerier())
 		// Zero-grant viewer: authorization configured, but no logging bindings.
 		h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: nil})
 		return h
@@ -89,7 +90,7 @@ func TestLoggingMutatingRoutesDenyZeroGrantViewer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("seed output: %v", err)
 		}
-		h := NewLoggingHandler(q)
+		h := newLoggingHandlerForTest(q)
 		h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: nil})
 		req := authedLoggingReq(http.MethodPost, "/api/v1/logging/outputs/"+out.ID.String()+"/test/", nil)
 		rc := chi.NewRouteContext()
@@ -108,7 +109,7 @@ func TestLoggingMutatingRoutesDenyZeroGrantViewer(t *testing.T) {
 // new authorization gate (it proceeds into the handler body).
 func TestLoggingMutatingRoutesAllowGrantedPrincipal(t *testing.T) {
 	clusterID := uuid.New()
-	h := NewLoggingHandler(newLoggingFakeQuerier())
+	h := newLoggingHandlerForTest(newLoggingFakeQuerier())
 	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: []rbac.RoleBinding{{
 		ClusterID: clusterID.String(),
 		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceLogging), Verbs: []string{string(rbac.VerbCreate)}}},

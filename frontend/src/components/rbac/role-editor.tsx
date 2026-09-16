@@ -1,4 +1,3 @@
-"use client";
 
 import { useId, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
@@ -8,23 +7,32 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toastError } from "@/lib/toast";
-import { useCreateRole } from "@/lib/hooks/rbac";
+import { useCreateRole, useUpdateRole } from "@/lib/hooks/rbac";
+
+export type RoleEditorMode = "create" | "edit" | "duplicate";
+
+export interface EditableRole {
+  id: string;
+  name: string;
+  displayName: string;
+  description: string;
+  scope: "global" | "cluster" | "project";
+  rules: PolicyRuleInput[];
+}
 
 interface RoleEditorProps {
   onClose: () => void;
+  mode?: RoleEditorMode;
   defaultScope?: "global" | "cluster" | "project";
-  initialRole?: {
-    name: string;
-    displayName: string;
-    description: string;
-    scope: "global" | "cluster" | "project";
-    rules: PolicyRuleInput[];
-  };
+  initialRole?: EditableRole;
 }
 
-interface PolicyRuleInput {
+export interface PolicyRuleInput {
   resource: string;
   verbs: string[];
+  api_groups?: string[];
+  apiGroups?: string[];
+  resources?: string[];
 }
 
 interface CRDGrantInput {
@@ -63,11 +71,13 @@ const CRD_VERBS = ["read", "list", "watch", "create", "update", "delete"];
 export function RoleEditor({
   onClose,
   initialRole,
+  mode = initialRole ? "edit" : "create",
   defaultScope = "cluster",
 }: RoleEditorProps) {
   const createRole = useCreateRole();
+  const updateRole = useUpdateRole();
   const [form, setForm] = useState(() =>
-    splitInitial(initialRole, defaultScope),
+    splitInitial(initialRole, defaultScope, mode),
   );
 
   const addPlatform = () => {
@@ -163,13 +173,21 @@ export function RoleEditor({
     ];
 
     try {
-      await createRole.mutateAsync({
-        scope: form.scope,
+      const role = {
         name: form.name,
         displayName: form.displayName,
         description: form.description || undefined,
         rules,
-      });
+      };
+      if (mode === "edit" && initialRole) {
+        await updateRole.mutateAsync({
+          scope: initialRole.scope,
+          id: initialRole.id,
+          role,
+        });
+      } else {
+        await createRole.mutateAsync({ scope: form.scope, ...role });
+      }
       onClose();
     } catch {
       // Error is handled by the mutation's onError callback
@@ -178,7 +196,13 @@ export function RoleEditor({
 
   return (
     <ModalShell
-      title={initialRole ? "Edit Role" : "Create Role"}
+      title={
+        mode === "edit"
+          ? "Edit Role"
+          : mode === "duplicate"
+            ? "Duplicate Role"
+            : "Create Role"
+      }
       onClose={onClose}
       size="lg"
       panelClassName="max-h-[85vh] bg-popover flex flex-col overflow-hidden"
@@ -189,10 +213,10 @@ export function RoleEditor({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            loading={createRole.isPending}
+            loading={createRole.isPending || updateRole.isPending}
             onClick={() => void handleSave()}
           >
-            {initialRole ? "Update Role" : "Create Role"}
+            {mode === "edit" ? "Update Role" : "Create Role"}
           </ActionButton>
         </>
       }
@@ -269,13 +293,16 @@ export function RoleEditor({
         >
           {(["global", "cluster", "project"] as const).map((scope) => (
             <button
+              type="button"
               key={scope}
+              disabled={mode === "edit"}
               onClick={() => setForm((f) => ({ ...f, scope }))}
               className={cn(
                 "px-3 py-1.5 rounded-md text-sm font-medium transition-colors capitalize",
                 form.scope === scope
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:text-foreground",
+                mode === "edit" && "cursor-not-allowed opacity-60",
               )}
             >
               {scope}
@@ -477,7 +504,7 @@ function VerbPills({
             type="button"
             onClick={() => onToggle(verb)}
             className={cn(
-              "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+              "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
               selected.includes(verb)
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:text-foreground",
@@ -494,6 +521,7 @@ function VerbPills({
 function splitInitial(
   initial?: RoleEditorProps["initialRole"],
   defaultScope: "global" | "cluster" | "project" = "cluster",
+  mode: RoleEditorMode = "create",
 ) {
   const platform: PolicyRuleInput[] = [];
   const crd: CRDGrantInput[] = [];
@@ -518,8 +546,14 @@ function splitInitial(
     }
   }
   return {
-    name: initial?.name || "",
-    displayName: initial?.displayName || "",
+    name:
+      mode === "duplicate" && initial
+        ? `copy-of-${initial.name}`.slice(0, 128)
+        : initial?.name || "",
+    displayName:
+      mode === "duplicate" && initial
+        ? `Copy of ${initial.displayName}`
+        : initial?.displayName || "",
     description: initial?.description || "",
     scope: initial?.scope || defaultScope,
     platform: platform.length

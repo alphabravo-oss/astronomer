@@ -23,10 +23,16 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -39,15 +45,24 @@ const ToolDriftSweepType = "tool:drift_sweep"
 
 // toolDriftSweepBatch caps how many installed_charts rows the sweep probes
 // per tick. Each row is one helm Status RPC over the tunnel, so we keep the
-// batch small to bound the leader-lease hold; the ORDER BY drift_checked_at
-// in ListInstalledChartsForDriftSweep rotates coverage across ticks.
+// batch small to bound tunnel load; the claim query rotates oldest coverage
+// across ticks and lets worker replicas process disjoint rows.
 const toolDriftSweepBatch = 100
+
+const toolDriftLeaseTTL = 10 * time.Minute
+
+// A Helm status request may otherwise inherit the tunnel's deliberately long
+// ten-minute command timeout. Keep every claimed unit of work comfortably
+// inside the durable lease instead: a timed-out cluster cannot hold the rest
+// of the sweep hostage or let a stale worker write after ownership expires.
+const toolDriftProbeTimeout = 45 * time.Second
 
 // ToolDriftSweepQuerier is the slice of *sqlc.Queries the sweep uses.
 // Local interface so unit tests can stand up a fake.
 type ToolDriftSweepQuerier interface {
-	ListInstalledChartsForDriftSweep(ctx context.Context, limit int32) ([]sqlc.InstalledChart, error)
-	MarkInstalledChartDrift(ctx context.Context, arg sqlc.MarkInstalledChartDriftParams) error
+	ClaimInstalledChartsForDriftSweep(ctx context.Context, arg sqlc.ClaimInstalledChartsForDriftSweepParams) ([]sqlc.InstalledChart, error)
+	MarkInstalledChartDrift(ctx context.Context, arg sqlc.MarkInstalledChartDriftParams) (int64, error)
+	ReleaseInstalledChartDriftClaim(ctx context.Context, arg sqlc.ReleaseInstalledChartDriftClaimParams) (int64, error)
 }
 
 // HelmStatusProber probes the live helm release. *handler.TunnelHelmRequester
@@ -69,7 +84,7 @@ func (runtime ToolDriftRuntime) HandleToolDriftSweep(ctx context.Context, _ *asy
 	if err := runtime.Validate(); err != nil {
 		return fmt.Errorf("tool drift sweep runtime is not configured")
 	}
-	return runPeriodicTaskWithLeader(ctx, ToolDriftSweepType, func() error {
+	return runPeriodicTaskWithRowLeases(ctx, ToolDriftSweepType, func() error {
 		return runToolDriftSweep(ctx, runtime.Deps)
 	})
 }
@@ -77,33 +92,62 @@ func (runtime ToolDriftRuntime) HandleToolDriftSweep(ctx context.Context, _ *asy
 // runToolDriftSweep is the testable core, split from the asynq handler so
 // tests don't need an asynq.Task or the leader lease.
 func runToolDriftSweep(ctx context.Context, deps ToolDriftSweepDeps) error {
-	charts, err := deps.Queries.ListInstalledChartsForDriftSweep(ctx, toolDriftSweepBatch)
+	claimToken := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	charts, err := deps.Queries.ClaimInstalledChartsForDriftSweep(ctx, sqlc.ClaimInstalledChartsForDriftSweepParams{
+		LockedUntil: pgtype.Timestamptz{Time: time.Now().UTC().Add(toolDriftLeaseTTL), Valid: true},
+		ClaimToken:  claimToken,
+		QueryLimit:  toolDriftSweepBatch,
+	})
 	if err != nil {
 		return fmt.Errorf("list installed charts for drift sweep: %w", err)
 	}
-	drift := 0
-	for _, c := range charts {
-		detected, detail, probeOK := chartDrift(ctx, deps.Helm, c)
+	var drift atomic.Int64
+	var failuresMu sync.Mutex
+	var failures []error
+	recordFailure := func(err error) {
+		failuresMu.Lock()
+		failures = append(failures, err)
+		failuresMu.Unlock()
+	}
+	fanOutClusters(ctx, charts, toolDriftProbeTimeout, func(probeCtx context.Context, c sqlc.InstalledChart) {
+		detected, detail, probeOK := chartDrift(probeCtx, deps.Helm, c)
 		if !probeOK {
 			// Transient probe failure: preserve the prior drift state and
-			// old drift_checked_at so the row is re-probed promptly.
-			continue
+			// advance the attempt timestamp while releasing ownership. That
+			// prevents an unreachable oldest prefix from starving healthy rows.
+			rows, err := deps.Queries.ReleaseInstalledChartDriftClaim(ctx, sqlc.ReleaseInstalledChartDriftClaimParams{
+				ID: c.ID, ClaimToken: claimToken,
+			})
+			if err != nil || rows != 1 {
+				if err == nil {
+					err = fmt.Errorf("claim ownership lost")
+				}
+				recordFailure(fmt.Errorf("release tool drift claim %s: %w", c.ID, err))
+				runtimeLogger(ctx).WarnContext(ctx, "tool drift claim release failed", "installed_chart_id", c.ID, "error", err)
+			}
+			return
 		}
-		if err := deps.Queries.MarkInstalledChartDrift(ctx, sqlc.MarkInstalledChartDriftParams{
+		rows, err := deps.Queries.MarkInstalledChartDrift(ctx, sqlc.MarkInstalledChartDriftParams{
 			ID:            c.ID,
 			DriftDetected: detected,
 			DriftDetail:   detail,
-		}); err != nil {
+			ClaimToken:    claimToken,
+		})
+		if err != nil || rows != 1 {
+			if err == nil {
+				err = fmt.Errorf("claim ownership lost")
+			}
+			recordFailure(fmt.Errorf("mark tool drift %s: %w", c.ID, err))
 			runtimeLogger(ctx).WarnContext(ctx, "tool drift mark failed",
 				"installed_chart_id", c.ID, "error", err)
-			continue
+			return
 		}
 		if detected {
-			drift++
+			drift.Add(1)
 		}
-	}
-	runtimeLogger(ctx).InfoContext(ctx, "tool drift sweep", "evaluated", len(charts), "drift", drift)
-	return nil
+	})
+	runtimeLogger(ctx).InfoContext(ctx, "tool drift sweep", "evaluated", len(charts), "drift", drift.Load())
+	return errors.Join(failures...)
 }
 
 // chartDrift compares one installed_charts row against its live helm

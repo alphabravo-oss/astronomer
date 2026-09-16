@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	deliveryrollout "github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type RolloutQueries interface {
@@ -33,21 +33,14 @@ type RolloutPlanner interface {
 }
 
 type RolloutHandler struct {
-	queries                   RolloutQueries
-	planner                   RolloutPlanner
-	controller                deliveryrollout.Controller
-	bus                       *events.Bus
-	plannerTransactionalAudit bool
+	queries    RolloutQueries
+	planner    RolloutPlanner
+	controller deliveryrollout.Controller
+	bus        *events.Bus
 }
 
 func NewRolloutHandler(queries RolloutQueries, planner RolloutPlanner, controller deliveryrollout.Controller, bus *events.Bus) *RolloutHandler {
 	return &RolloutHandler{queries: queries, planner: planner, controller: controller, bus: bus}
-}
-
-func (h *RolloutHandler) EnableTransactionalPlannerAudit() {
-	if h != nil {
-		h.plannerTransactionalAudit = true
-	}
 }
 
 // openapi:request DeliveryRolloutStart
@@ -146,13 +139,7 @@ func (h *RolloutHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	events.PublishChanged(h.bus, "delivery_rollout", "", plan.ID.String(), map[string]any{"project_id": projectID.String(), "action": "created"})
-	if !h.plannerTransactionalAudit {
-		recordAudit(r, h.queries, "delivery.rollout.created", "delivery_rollout", plan.ID.String(), "", map[string]any{
-			"project_id": projectID.String(), "target_id": plan.TargetID.String(), "target_generation": plan.TargetGeneration,
-			"placement_digest": plan.PlacementDigest.String(), "plan_digest": plan.PlanDigest.String(),
-			"cluster_count": len(plan.Clusters), "approval_required": plan.Approval.Required,
-		})
-	}
+
 	respondAcceptedOperation(w, "/api/v1/delivery/rollouts/"+plan.ID.String()+"/?project_id="+projectID.String(), plan)
 }
 
@@ -196,7 +183,7 @@ func (h *RolloutHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	respondPage(w, r, items, total, limit, offset, int64(offset)+int64(len(items)) < total, true)
+	paging.Write(w, items, paging.Exact(total, int(limit), int(offset), len(items)))
 }
 
 func (h *RolloutHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +241,7 @@ func (h *RolloutHandler) Clusters(w http.ResponseWriter, r *http.Request) {
 		respondDatabaseError(w, err)
 		return
 	}
-	respondPage(w, r, rows, total, limit, offset, int64(offset)+int64(len(rows)) < total, true)
+	paging.Write(w, rows, paging.Exact(total, int(limit), int(offset), len(rows)))
 }
 
 func (h *RolloutHandler) Events(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +264,7 @@ func (h *RolloutHandler) Events(w http.ResponseWriter, r *http.Request) {
 		respondDatabaseError(w, err)
 		return
 	}
-	respondPage(w, r, rows, total, limit, offset, int64(offset)+int64(len(rows)) < total, true)
+	paging.Write(w, rows, paging.Exact(total, int(limit), int(offset), len(rows)))
 }
 
 func (h *RolloutHandler) Pause(w http.ResponseWriter, r *http.Request) {
@@ -332,7 +319,7 @@ func (h *RolloutHandler) action(w http.ResponseWriter, r *http.Request, action d
 	}, "")
 	result, err := h.controller.Act(r.Context(), deliveryrollout.ActionRequest{
 		ProjectID: projectID, RolloutID: rolloutID, ExpectedFence: expected, Action: action,
-		ActorID: middleware.AuthenticatedUserUUID(r.Context()), ReasonCode: request.ReasonCode, IdempotencyKey: key, Audit: auditIntent,
+		ActorID: reqctx.UserUUID(r.Context()), ReasonCode: request.ReasonCode, IdempotencyKey: key, Audit: auditIntent,
 	})
 	if err != nil {
 		respondRolloutError(w, err)
@@ -342,12 +329,7 @@ func (h *RolloutHandler) action(w http.ResponseWriter, r *http.Request, action d
 		setEntityTag(w, result.Rollout.FencingGeneration)
 		events.PublishChanged(h.bus, "delivery_rollout", "", rolloutID.String(), map[string]any{"project_id": projectID.String(), "action": string(action)})
 	}
-	if !result.Replayed && !result.AuditPersisted {
-		recordAudit(r, h.queries, rolloutAuditAction(action), "delivery_rollout", rolloutID.String(), "", map[string]any{
-			"project_id": projectID.String(), "target_id": result.Rollout.TargetID.String(),
-			"state": result.Rollout.State, "fencing_generation": result.Rollout.FencingGeneration,
-		})
-	}
+
 	respondAcceptedOperation(w, result.Receipt.StatusURL, result.Receipt)
 }
 
@@ -391,7 +373,7 @@ func (h *RolloutHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	result, err := h.controller.Approve(r.Context(), deliveryrollout.ApprovalRequest{
 		ProjectID: projectID, RolloutID: rolloutID, ExpectedFence: expected, Cohort: request.Cohort,
 		BindingDigest: request.BindingDigest, Decision: request.Decision,
-		ActorID: middleware.AuthenticatedUserUUID(r.Context()), ExpiresAt: request.ExpiresAt, IdempotencyKey: key, Audit: auditIntent,
+		ActorID: reqctx.UserUUID(r.Context()), ExpiresAt: request.ExpiresAt, IdempotencyKey: key, Audit: auditIntent,
 	})
 	if err != nil {
 		respondRolloutError(w, err)
@@ -401,13 +383,7 @@ func (h *RolloutHandler) Approve(w http.ResponseWriter, r *http.Request) {
 		setEntityTag(w, result.Rollout.FencingGeneration)
 		events.PublishChanged(h.bus, "delivery_rollout", "", rolloutID.String(), map[string]any{"project_id": projectID.String(), "action": request.Decision, "cohort": request.Cohort})
 	}
-	if !result.Replayed && !result.AuditPersisted {
-		recordAudit(r, h.queries, "delivery.rollout.approval_recorded", "delivery_rollout", rolloutID.String(), "", map[string]any{
-			"project_id": projectID.String(), "target_id": result.Rollout.TargetID.String(),
-			"decision": request.Decision, "cohort": request.Cohort, "binding_digest": request.BindingDigest.String(),
-			"fencing_generation": result.Rollout.FencingGeneration,
-		})
-	}
+
 	respondAcceptedOperation(w, result.Receipt.StatusURL, result.Receipt)
 }
 
@@ -492,7 +468,7 @@ func requiredIdempotencyKey(r *http.Request) (string, error) {
 }
 
 func rolloutActor(r *http.Request) string {
-	if user, ok := middleware.GetAuthenticatedUser(r.Context()); ok && user != nil {
+	if user, ok := reqctx.AuthenticatedUser(r.Context()); ok && user != nil {
 		if id := strings.TrimSpace(user.ID); id != "" {
 			return id
 		}

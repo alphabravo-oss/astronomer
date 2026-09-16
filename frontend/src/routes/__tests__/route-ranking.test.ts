@@ -8,7 +8,6 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { routeTree } from "@/routeTree.gen";
-import { hrefToLocation } from "@/lib/link";
 
 const router = createRouter({
   routeTree,
@@ -59,11 +58,6 @@ const rows: Array<[string, string]> = [
     "/dashboard/clusters/c1/nodes/node-1",
     "/dashboard/clusters/$id/nodes/$nodeName/",
   ],
-  [
-    "/dashboard/clusters/c1/workloads/Deployment/default/web",
-    "/dashboard/clusters/$id/workloads/$kind/$namespace/$name/",
-  ],
-
   // ── The $resource dynamic segment and its splat child ──
   ["/dashboard/clusters/c1", "/dashboard/clusters/$id/"],
   ["/dashboard/clusters/c1/deployments", "/dashboard/clusters/$id/$resource/"],
@@ -94,14 +88,6 @@ const rows: Array<[string, string]> = [
 
   // ── register (static) beats clusters/$id (dynamic) ──
   ["/dashboard/clusters/register", "/dashboard/clusters/register/"],
-  [
-    "/dashboard/clusters/register/abc/connect",
-    "/dashboard/clusters/register/$id/connect/",
-  ],
-  [
-    "/dashboard/clusters/register/abc/progress",
-    "/dashboard/clusters/register/$id/progress/",
-  ],
 ];
 
 describe("route ranking (D4)", () => {
@@ -124,16 +110,5 @@ describe("route ranking (D4)", () => {
       resource: "deployments",
       _splat: "ns/foo",
     });
-  });
-});
-
-describe("hrefToLocation", () => {
-  it("parses query-string hrefs into a search object", () => {
-    expect(hrefToLocation("/dashboard/audit?actor=alice&action=login")).toEqual(
-      {
-        to: "/dashboard/audit",
-        search: { actor: "alice", action: "login" },
-      },
-    );
   });
 });

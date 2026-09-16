@@ -1,9 +1,9 @@
 package config
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -50,17 +50,9 @@ var (
 )
 
 // IsProduction reports whether this process is running in production mode. The
-// config value wins, with ASTRONOMER_ENV / ENV as fall-backs so the check still
-// fires for binaries (e.g. the worker) that read the same environment but a
-// leaner config surface.
+// The caller must pass the startup-resolved configuration.
 func IsProduction(cfg *Config) bool {
-	if cfg != nil && strings.EqualFold(strings.TrimSpace(cfg.Env), "production") {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_ENV")), "production") {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("ENV")), "production")
+	return cfg != nil && strings.EqualFold(strings.TrimSpace(cfg.Env), "production")
 }
 
 // DSNEnforcesTLS reports whether a Postgres DSN includes an sslmode setting that
@@ -171,6 +163,22 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		case !encryptorReady:
 			errs = append(errs, "astronomer_encryption_key could not initialize encryptor")
 		}
+		internalPSK := strings.TrimSpace(cfg.InternalPSK)
+		if len(internalPSK) < 32 {
+			errs = append(errs, "astronomer_internal_psk must contain at least 32 characters")
+		}
+		if constantTimeStringEqual(internalPSK, secretKey) || constantTimeStringEqual(internalPSK, encryptionKey) {
+			errs = append(errs, "astronomer_internal_psk must be independent from secret_key and astronomer_encryption_key")
+		}
+		previousInternalPSK := strings.TrimSpace(cfg.InternalPSKPrevious)
+		if previousInternalPSK != "" {
+			if len(previousInternalPSK) < 32 {
+				errs = append(errs, "astronomer_internal_psk_previous must contain at least 32 characters when set")
+			}
+			if constantTimeStringEqual(previousInternalPSK, internalPSK) {
+				errs = append(errs, "astronomer_internal_psk_previous must differ from astronomer_internal_psk")
+			}
+		}
 		if !DSNEnforcesTLS(cfg.DatabaseURL) {
 			errs = append(errs, "database_url does not enforce TLS")
 		}
@@ -220,4 +228,11 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		return fmt.Errorf("production security config invalid: %s", strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func constantTimeStringEqual(left, right string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
 }

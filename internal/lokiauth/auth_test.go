@@ -76,6 +76,7 @@ func testHandler(t *testing.T, upstream http.Handler, hashes map[string]string, 
 		Upstream:   upURL,
 		Hashes:     func() map[string]string { return hashes },
 		ACL:        func() QueryACL { return acl },
+		QueryKey:   func() string { return "grafana-query-key" },
 	})
 }
 
@@ -148,6 +149,7 @@ func TestQueryOrgSelectionAndACL(t *testing.T) {
 
 	query := func(user, org string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, "/loki/api/v1/query?query={}", nil)
+		req.Header.Set("Authorization", "Bearer grafana-query-key")
 		if user != "" {
 			req.Header.Set("X-Grafana-User", user)
 		}
@@ -182,6 +184,60 @@ func TestQueryOrgSelectionAndACL(t *testing.T) {
 	}
 }
 
+func TestQueryRejectsSpoofedUserWithoutDedicatedToken(t *testing.T) {
+	cluster := "11111111-1111-1111-1111-111111111111"
+	called := false
+	h := testHandler(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}), map[string]string{cluster: HashBearer("push")}, QueryACL{
+		Users: map[string][]string{"viewer@example.com": {cluster}},
+	})
+
+	for _, authorization := range []string{"", "Bearer wrong", "Basic grafana-query-key"} {
+		req := httptest.NewRequest(http.MethodGet, "/loki/api/v1/query", nil)
+		req.Header.Set("X-Grafana-User", "viewer@example.com")
+		req.Header.Set("X-Scope-OrgID", cluster)
+		if authorization != "" {
+			req.Header.Set("Authorization", authorization)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("authorization %q status = %d, want 401", authorization, rec.Code)
+		}
+	}
+	if called {
+		t.Fatal("unauthenticated query reached Loki")
+	}
+}
+
+func TestQueryStripsIdentityAndQueryCredentialBeforeProxy(t *testing.T) {
+	cluster := "11111111-1111-1111-1111-111111111111"
+	h := testHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Errorf("Authorization forwarded = %q", got)
+		}
+		if got := r.Header.Get("X-Grafana-User"); got != "" {
+			t.Errorf("X-Grafana-User forwarded = %q", got)
+		}
+		if got := r.Header.Get("X-Scope-OrgID"); got != cluster {
+			t.Errorf("bound org = %q, want %q", got, cluster)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}), map[string]string{cluster: HashBearer("push")}, QueryACL{
+		Users: map[string][]string{"viewer@example.com": {cluster}},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/loki/api/v1/query", nil)
+	req.Header.Set("Authorization", "Bearer grafana-query-key")
+	req.Header.Set("X-Grafana-User", "viewer@example.com")
+	req.Header.Set("X-Scope-OrgID", cluster)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+}
+
 func TestReadyDoesNotRequireToken(t *testing.T) {
 	h := testHandler(t, nil, nil, QueryACL{})
 	rec := httptest.NewRecorder()
@@ -195,10 +251,8 @@ func TestReadyDoesNotRequireToken(t *testing.T) {
 	}
 }
 
-func TestConfigFromEnvRequiresUpstream(t *testing.T) {
-	t.Setenv("LOKI_UPSTREAM", "")
-	t.Setenv("LISTEN_ADDR", "")
-	if _, err := ConfigFromEnv(); err == nil {
+func TestParseConfigRequiresUpstream(t *testing.T) {
+	if _, err := ParseConfig("", "", "", "", ""); err == nil {
 		t.Fatal("expected error when LOKI_UPSTREAM is empty")
 	}
 }
@@ -209,6 +263,7 @@ func TestQuery401sUntilHashesAndACLExist(t *testing.T) {
 		Upstream:   mustURL(t, "http://loki-gateway.monitoring.svc.cluster.local"),
 		Hashes:     func() map[string]string { return map[string]string{} },
 		ACL:        func() QueryACL { return QueryACL{} },
+		QueryKey:   func() string { return "grafana-query-key" },
 	})
 	for _, path := range []string{"/loki/api/v1/push", "/loki/api/v1/query"} {
 		rec := httptest.NewRecorder()

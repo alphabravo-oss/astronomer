@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -194,7 +196,7 @@ func authedRequest(method, target string, callerID uuid.UUID, body []byte) *http
 	} else {
 		r = httptest.NewRequest(method, target, bytes.NewReader(body))
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 		ID:         callerID.String(),
 		AuthMethod: "jwt",
 	})
@@ -212,7 +214,7 @@ func withURLParam(r *http.Request, key, value string) *http.Request {
 func TestSettings_GetSetDeleteCycle(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 
 	// 1) Initial GET → should return the registry default.
 	w := httptest.NewRecorder()
@@ -309,7 +311,7 @@ func TestSettings_GetSetDeleteCycle(t *testing.T) {
 func TestSettings_BatchUpdateValidatesBeforeAtomicWrite(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 
 	bad := authedRequest(http.MethodPut, "/api/v1/admin/settings/", callerID, []byte(`{
 		"updates": {
@@ -408,7 +410,7 @@ func TestSettings_TransactionalAuditFailureRollsBackEveryMutation(t *testing.T) 
 			q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
 			q.rows = tc.seed
 			q.outboxErr = errors.New("audit-SENTINEL")
-			h := NewPlatformSettingsHandler(q)
+			h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 			h.SetRunTx(fakeSettingsRunTx(q))
 			w := httptest.NewRecorder()
 
@@ -430,7 +432,7 @@ func TestSettings_CacheInvalidatesOnlyAfterTransactionalCommit(t *testing.T) {
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
 	q.rows["feature.catalog"] = sqlc.PlatformSetting{Key: "feature.catalog", Value: json.RawMessage(`true`)}
 	cache := NewSettingsCache(q, time.Hour)
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 	h.SetRunTx(fakeSettingsRunTx(q))
 	h.SetCache(cache)
 	if !cache.BoolValue(context.Background(), "feature.catalog", false) {
@@ -458,7 +460,7 @@ func TestSettings_CacheInvalidatesOnlyAfterTransactionalCommit(t *testing.T) {
 func TestSettings_TransactionalAuditOmitsConfigurationValues(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 	h.SetRunTx(fakeSettingsRunTx(q))
 	secretLikeValue := "internal-only-SENTINEL"
 	r := withURLParam(authedRequest(http.MethodPut, "/api/v1/admin/settings/banner.login_text/", callerID, []byte(`{"value":"`+secretLikeValue+`"}`)), "key", "banner.login_text")
@@ -479,7 +481,7 @@ func TestCharlieFeatureDisableQuiescesBeforePersistingFalse(t *testing.T) {
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
 	q.rows["feature.charlie"] = sqlc.PlatformSetting{Key: "feature.charlie", Value: json.RawMessage("true")}
 	called := false
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 	h.SetCharlieLifecycle(fakeCharlieSettingsLifecycle{disable: func(ctx context.Context, actor string) error {
 		called = true
 		row, err := q.GetPlatformSetting(ctx, "feature.charlie")
@@ -506,7 +508,7 @@ func TestCharlieFeatureDisableQuiescesBeforePersistingFalse(t *testing.T) {
 func TestCharlieFeatureEnableRollsBackWhenRuntimeRestoreFails(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 	h.SetCharlieLifecycle(fakeCharlieSettingsLifecycle{enable: func(context.Context, string) error {
 		return errors.New("resume failed")
 	}})
@@ -525,7 +527,7 @@ func TestCharlieFeatureEnableAuditFailurePersistsNoFeatureState(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
 	q.auditErr = errors.New("database-SENTINEL")
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 	resumeCalls := 0
 	h.SetCharlieLifecycle(fakeCharlieSettingsLifecycle{enable: func(context.Context, string) error {
 		resumeCalls++
@@ -545,7 +547,7 @@ func TestCharlieFeatureEnableAuditFailurePersistsNoFeatureState(t *testing.T) {
 func TestSettings_GetSessionTimeoutReturnsEffectiveDefault(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 	req := withURLParam(
 		authedRequest(http.MethodGet, "/api/v1/admin/settings/session.timeout_minutes/", callerID, nil),
 		"key", sessionpolicy.SettingKey,
@@ -563,15 +565,15 @@ func TestSettings_GetSessionTimeoutReturnsEffectiveDefault(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if string(body.Data.Value) != "60" || body.Data.Default != float64(60) || !body.Data.IsDefault {
-		t.Fatalf("effective session default = value:%s default:%v is_default:%t, want 60/60/true", body.Data.Value, body.Data.Default, body.Data.IsDefault)
+	if string(body.Data.Value) != "15" || body.Data.Default != float64(15) || !body.Data.IsDefault {
+		t.Fatalf("effective session default = value:%s default:%v is_default:%t, want 15/15/true", body.Data.Value, body.Data.Default, body.Data.IsDefault)
 	}
 }
 
 func TestSettings_RejectsUnknownKey(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 
 	// PUT to an unknown key → 404 unknown_key.
 	put := withURLParam(
@@ -591,7 +593,7 @@ func TestSettings_RejectsUnknownKey(t *testing.T) {
 func TestSettings_RejectsBadType(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 
 	// feature.catalog is a bool — pushing "yes" should be rejected.
 	put := withURLParam(
@@ -633,7 +635,7 @@ func TestSettings_RejectsBadType(t *testing.T) {
 func TestSettings_RequiresSuperuser(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: false})
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 
 	get := authedRequest(http.MethodGet, "/api/v1/admin/settings/", callerID, nil)
 	w := httptest.NewRecorder()
@@ -649,7 +651,7 @@ func TestSettings_PublicBrandingNoSecrets(t *testing.T) {
 	// reader must NOT include the telemetry row.
 	q.rows["telemetry.endpoint"] = sqlc.PlatformSetting{Key: "telemetry.endpoint", Value: []byte(`"https://evil.example/leak"`)}
 	q.rows["branding.product_name"] = sqlc.PlatformSetting{Key: "branding.product_name", Value: []byte(`"Megacorp"`)}
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 
 	// PRE-AUTH — no user in context.
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/branding/", nil)
@@ -682,7 +684,7 @@ func TestSettings_PublicBannerStripsTelemetry(t *testing.T) {
 	q.rows["banner.login_text"] = sqlc.PlatformSetting{Key: "banner.login_text", Value: []byte(`"For authorized use only."`)}
 	q.rows["telemetry.endpoint"] = sqlc.PlatformSetting{Key: "telemetry.endpoint", Value: []byte(`"https://evil/"`)}
 	q.rows["feature.catalog"] = sqlc.PlatformSetting{Key: "feature.catalog", Value: []byte(`false`)}
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/banner/", nil)
 	w := httptest.NewRecorder()
@@ -709,7 +711,7 @@ func TestSettings_FeaturesReturnsOnlyFeatureBooleans(t *testing.T) {
 	q.rows["feature.catalog"] = sqlc.PlatformSetting{Key: "feature.catalog", Value: []byte(`false`)}
 	q.rows["telemetry.endpoint"] = sqlc.PlatformSetting{Key: "telemetry.endpoint", Value: []byte(`"https://telemetry.example"`)}
 	q.rows["branding.product_name"] = sqlc.PlatformSetting{Key: "branding.product_name", Value: []byte(`"Megacorp"`)}
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 
 	req := authedRequest(http.MethodGet, "/api/v1/settings/features/", callerID, nil)
 	w := httptest.NewRecorder()
@@ -740,9 +742,6 @@ func TestSettings_FeaturesReturnsOnlyFeatureBooleans(t *testing.T) {
 	}
 	if !flags["feature.shared_grafana"] {
 		t.Fatalf("feature.shared_grafana default = false, want true")
-	}
-	if flags["feature.fleet_grafana"] != flags["feature.shared_grafana"] {
-		t.Fatalf("deprecated Grafana alias diverged: %+v", flags)
 	}
 	if flags["feature.hosted_loki"] {
 		t.Fatalf("feature.hosted_loki default = true, want fail-closed false")
@@ -833,7 +832,7 @@ func TestFeatureGate_CacheHit(t *testing.T) {
 	q := newFakeSettingsQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
 	q.rows["feature.catalog"] = sqlc.PlatformSetting{Key: "feature.catalog", Value: []byte(`true`)}
 	cache := NewSettingsCache(q, 30*1000_000_000)
-	h := NewPlatformSettingsHandler(q)
+	h := wirePlatformSettingsMutationFixture(NewPlatformSettingsHandler(q), q)
 	h.SetCache(cache)
 	mw := featureGateForTest("feature.catalog", cache)
 

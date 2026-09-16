@@ -8,18 +8,34 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
+
+func newTestStreamTicketHandler(store *auth.StreamTicketStore) *StreamTicketHandler {
+	return &StreamTicketHandler{store: store}
+}
+
+func TestStreamTicketConstructorRejectsPartialSecurityWiring(t *testing.T) {
+	if handler, err := NewStreamTicketHandler(auth.NewStreamTicketStore(time.Minute), nil, nil); err == nil || handler != nil {
+		t.Fatalf("partial stream ticket handler constructed: handler=%v err=%v", handler, err)
+	}
+}
+
+func (h *StreamTicketHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
+	h.authz.SetAuthorization(engine, querier)
+}
 
 func TestStreamTicketHandler_CreateEventsTicket(t *testing.T) {
 	store := auth.NewStreamTicketStore(time.Minute)
-	h := NewStreamTicketHandler(store)
+	h := newTestStreamTicketHandler(store)
 	userID := uuid.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/streams/tickets/", bytes.NewBufferString(`{"stream_type":"events"}`))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID.String()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: userID.String()}))
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)
@@ -46,9 +62,9 @@ func TestStreamTicketHandler_CreateEventsTicket(t *testing.T) {
 }
 
 func TestStreamTicketHandler_ClusterStreamRequiresClusterID(t *testing.T) {
-	h := NewStreamTicketHandler(auth.NewStreamTicketStore(time.Minute))
+	h := newTestStreamTicketHandler(auth.NewStreamTicketStore(time.Minute))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/streams/tickets/", bytes.NewBufferString(`{"stream_type":"logs"}`))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	w := httptest.NewRecorder()
 
 	h.Create(w, req)

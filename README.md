@@ -177,7 +177,31 @@ For local development:
 
 ```bash
 make dev
+cd frontend
+npm ci
+npm run dev
 ```
+
+`make dev` starts Postgres, Redis, migrations, the Go server on port 8001,
+and the worker. Vite serves the operator console on port 3000 and proxies API
+and WebSocket traffic to the Go server. Use `make dev-full` when the
+containerized frontend is preferable to the Vite development server.
+
+### Verification scopes
+
+| Command | What it proves | Requirements / exclusions |
+|---|---|---|
+| `make verify-enterprise VERIFY_SCOPE=backend` | Go formatting, build, vet, unit/race tests, architecture and generated-document contracts. | Go and the tools checked by the script; not stateful failure qualification. |
+| `make verify-enterprise VERIFY_SCOPE=frontend` | TypeScript, zero-warning lint, unit behavior tests, dependency audit and production bundle budgets. | Node 22 and `npm ci`; no browser or live-cluster acceptance. |
+| `make verify-enterprise VERIFY_SCOPE=helm` | Chart lint/render, release artifacts and deployment contracts. | Helm and the script's deployment-tool prerequisites; no live installation. |
+| `make verify-enterprise VERIFY_SCOPE=api-contract` | OpenAPI quality, route/request coverage and generated-client freshness. | Go and Node; focused contract diagnostics. |
+| `make verify-enterprise VERIFY_SCOPE=all` | All static backend, frontend and Helm scopes. | Does **not** substitute for the stateful/browser lanes below. |
+| `make verify-all` | Static scopes plus PostgreSQL and worker integration, restart/outage recovery (including race variants), tunnel HA, database failover, Playwright and live-browser qualification. | Docker, browser binaries and the lane-specific cluster/credential prerequisites; destructive lanes require disposable targets. |
+
+The enterprise script records the source-tree fingerprint, tool versions and
+per-command results under `artifacts/`. A green static scope is not a measured
+scale result or proof of production restore, accessibility or live acceptance.
+See [workflow responsibilities](.github/workflows/README.md) for CI ownership.
 
 For a Kubernetes install, use an exact published chart version. The chart ships
 no key material in any profile, so generate the JWT signing key and the Fernet
@@ -268,6 +292,8 @@ Typical first workflows:
 - [Secret handling policy](docs/secret-handling-policy.md)
 - [Threat model](docs/threat-model.md)
 - [Operator runbooks](docs/runbooks/README.md)
+- [Configuration reference](docs/configuration.md)
+- [astro CLI reference](docs/cli.md)
 - [OpenAPI specification](docs/openapi.yaml)
 
 ## License

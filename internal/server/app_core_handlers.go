@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	deliveryprovider "github.com/alphabravocompany/astronomer-go/internal/delivery/provider"
@@ -16,7 +16,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
-	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
 )
 
 func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
@@ -27,6 +26,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	hub := tunnel.NewHubWithValidator(logger, queries)
 	hub.SetDeliveryStateProvider(deliveryprovider.New(queries, encryptor))
 	deliveryStatusIngester := deliverystatus.NewIngester(deliverystatus.NewSQLRunner(database.Pool()))
+	deliveryStatusIngester.SetLogger(logger)
 	hub.SetDeliveryStatusSink(deliveryStatusIngester)
 	hub.SetPublisher(busPublisherAdapter{bus: bus})
 	// Cross-pod tunnel proxy fallback. Each pod publishes "I own this
@@ -37,7 +37,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	// without the locator every cluster-shell/image-scan/k8s-proxy
 	// request that lands on the non-owning pod 503s.
 	var locatorReadinessErr string
-	podIP := strings.TrimSpace(os.Getenv("ASTRONOMER_POD_IP"))
+	podIP := strings.TrimSpace(cfg.PodIP)
 	if podIP != "" && cfg.RedisURL != "" {
 		addr := podIP + ":8000"
 		if loc, lerr := tunnel.NewLocatorFromAsynqRedisURL(cfg.RedisURL, addr, logger); lerr != nil {
@@ -55,8 +55,8 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 		logger.Error("tunnel locator MISCONFIGURED (L19): /readyz will fail until ASTRONOMER_POD_IP is set",
 			"server_replicas", cfg.ServerReplicas)
 	}
-	// A4 / M5+L13: one shared per-IP connect FAILURE limiter feeds both the hub
-	// WS path and the tunnel2 /connect path (cross-path IP view). The limiter
+	// A4 / M5+L13: the per-IP connect FAILURE limiter protects the agent hub
+	// WebSocket path. The limiter
 	// counts failed CONNECT validations and resets to zero on every success, so
 	// a healthy fleet behind one egress IP is never throttled. The janitor is
 	// started later on reconcileCtx (alongside the other background loops).
@@ -66,18 +66,16 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 		nil,
 	)
 	hub.SetConnectLimiter(connLimiter, time.Duration(cfg.TunnelConnectClockSkewMinutes)*time.Minute)
-	remoteServer := tunnel2.NewRemoteServer(logger, queries)
-	remoteServer.SetConnectLimiter(connLimiter)
 	requester := handler.NewTunnelK8sRequester(hub)
 	// Cross-pod fallback for server-internal tunnel calls (shell open,
-	// project reconciler, etc.). Same PSK both sides — derived from the
-	// shared encryption key so all replicas agree without extra config.
-	requester.SetInternalPSK(tunnel.DerivePSK(cfg.EncryptionKey))
+	// project reconciler, etc.). The dedicated internal PSK is independent of
+	// the Fernet credential-encryption key.
+	requester.SetInternalPSK(cfg.InternalPSK)
 	helmRequester := handler.NewTunnelHelmRequester(hub)
 	// Same cross-pod PSK plumbing as the k8s requester: enables the
 	// helm op to reverse-proxy to whichever sibling owns the WS when
 	// the local hub doesn't (required for multi-replica catalog ops).
-	helmRequester.SetInternalPSK(tunnel.DerivePSK(cfg.EncryptionKey))
+	helmRequester.SetInternalPSK(cfg.InternalPSK)
 	monitoringHandler := handler.NewMonitoringHandlerWithDeps(queries, requester, helmRequester)
 	monitoringHandler.SetRunTx(sqlcMutationTxRunner[handler.MonitoringMutationTx](database))
 	monitoringHandler.SetLogger(logger)
@@ -90,14 +88,11 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	monitoringHandler.SetGrafanaTickets(grafanaTickets)
 	monitoringHandler.SetUserLookup(queries)
 	monitoringHandler.SetServerURL(cfg.ServerURL)
-	monitoringHandler.SetGrafanaProxyImage(os.Getenv("ASTRONOMER_SERVER_IMAGE"))
+	monitoringHandler.SetGrafanaProxyImage(cfg.ServerImage)
 	monitoringHandler.SetGrafanaExpose(handler.GrafanaExpose{
-		GatewayClass:      os.Getenv("ASTRONOMER_GATEWAY_CLASS"),
-		IngressClass:      os.Getenv("ASTRONOMER_INGRESS_CLASS"),
-		GatewayName:       os.Getenv("ASTRONOMER_GATEWAY_NAME"),
-		PlatformNamespace: os.Getenv("POD_NAMESPACE"),
-		TLSIssuerName:     os.Getenv("ASTRONOMER_TLS_ISSUER"),
-		TLSIssuerKind:     os.Getenv("ASTRONOMER_TLS_ISSUER_KIND"),
+		GatewayClass: cfg.GatewayClass, IngressClass: cfg.IngressClass,
+		GatewayName: cfg.GatewayName, PlatformNamespace: cfg.PodNamespace,
+		TLSIssuerName: cfg.TLSIssuerName, TLSIssuerKind: cfg.TLSIssuerKind,
 	})
 	grafanaSessionTTL := newSessionTimeoutResolver(queries, logger)
 	monitoringHandler.SetSessionTTL(func(ctx context.Context) time.Duration {
@@ -158,7 +153,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	// wired here so the network-access page works against a real server and
 	// its network_access.changed publisher has a bus.
 	apiserverAllowlistHandler := handler.NewApiserverAllowlistHandler(queries)
-	apiserverAllowlistHandler.SetAuditor(queries)
+	apiserverAllowlistHandler.SetAstronomerEgress(allowlist.ParseAstronomerEgress(cfg.TunnelEgressCIDRs))
 	apiserverAllowlistHandler.SetEventBus(bus)
 	apiserverAllowlistHandler.SetRunTx(sqlcMutationTxRunner[handler.ApiserverAllowlistMutationTx](database))
 	workloadHandler := handler.NewWorkloadHandlerWithDeps(queries, requester)
@@ -187,7 +182,7 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	anomalyHandler := handler.NewAnomalyHandler(queries)
 	anomalyHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	// Handler-side result filtering must be enabled TOGETHER with the list gate
-	// (below via deps.NamespaceScopedRBAC): the gate admits scoped users, the
+	// (below via deps.ClusterResources.NamespaceScopedRBAC): the gate admits scoped users, the
 	// handler filters their results. Enabling one without the other would leak.
 	workloadHandler.SetNamespaceScopedRBAC(cfg.NamespaceScopedRBACEnabled)
 	warnInertProjectBindings(ctx, queries, cfg.NamespaceScopedRBACEnabled, logger)
@@ -196,7 +191,6 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	c.deliveryStatusIngester = deliveryStatusIngester
 	c.locatorReadinessErr = locatorReadinessErr
 	c.connLimiter = connLimiter
-	c.remoteServer = remoteServer
 	c.requester = requester
 	c.helmRequester = helmRequester
 	c.monitoringHandler = monitoringHandler

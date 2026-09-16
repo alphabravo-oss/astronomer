@@ -47,6 +47,7 @@ func (runtime CoreRuntime) ValidateTunnel() error {
 		{name: "queries", value: runtime.Deps.Queries},
 		{name: "leader", value: runtime.Deps.Leader},
 		{name: "k8s_requester", value: runtime.Deps.K8s},
+		{name: "k8s_capability_checker", value: k8sCapabilityChecker(runtime.Deps.K8s)},
 		{name: "resource_decryptor", value: runtime.Deps.ResourceDecryptor},
 	})
 }
@@ -108,6 +109,7 @@ func ValidateTunnelRuntime(features TunnelRuntimeFeatures, coreRuntime CoreRunti
 		{name: "runtime.queries", value: coreRuntime.Deps.Queries},
 		{name: "runtime.leader", value: coreRuntime.Deps.Leader},
 		{name: "runtime.k8s_requester", value: coreRuntime.Deps.K8s},
+		{name: "runtime.k8s_capability_checker", value: k8sCapabilityChecker(coreRuntime.Deps.K8s)},
 		{name: "runtime.resource_decryptor", value: coreRuntime.Deps.ResourceDecryptor},
 		{name: "security_ingest.queries", value: securityRuntime.Deps.Queries},
 		{name: "security_ingest.k8s_fetcher", value: securityRuntime.Deps.K8s},
@@ -171,6 +173,11 @@ func ValidateTunnelRuntime(features TunnelRuntimeFeatures, coreRuntime CoreRunti
 	}
 
 	return validateRequiredRuntimeDependencies("tunnel worker", required)
+}
+
+func k8sCapabilityChecker(requester K8sRequester) K8sCapabilityChecker {
+	checker, _ := requester.(K8sCapabilityChecker)
+	return checker
 }
 
 func validateRequiredRuntimeDependencies(owner string, dependencies []requiredRuntimeDependency) error {

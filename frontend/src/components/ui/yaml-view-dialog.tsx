@@ -1,12 +1,10 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import {
   useK8sGetYaml,
   useK8sApplyYaml,
   useK8sDryRunYaml,
   useResourceSchema,
-} from "@/lib/hooks";
+} from "@/lib/hooks/kubernetes-proxy";
 import { YamlEditor } from "@/components/ui/yaml-editor";
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
@@ -15,7 +13,7 @@ import {
 } from "@/components/resources/guided-resource-form";
 import { Loader2, Pencil, Eye, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import * as apiClient from "@/lib/api";
+import { k8sGetYaml } from "@/lib/api/kubernetes-proxy";
 import type { ResourceType } from "@/lib/api/resources";
 import type { PermissionDecision } from "@/lib/permissions";
 import { toastWarning } from "@/lib/toast";
@@ -130,7 +128,16 @@ export function resourceTypeFromK8sPath(
  * Embeddable YAML view/edit/dry-run panel. Used both as the body of YamlViewDialog
  * and as the YAML tab of ResourceDetail.
  */
-export function YamlPanel({
+export function YamlPanel(props: YamlPanelProps) {
+  return props.active === false ? null : (
+    <ActiveYamlPanel
+      key={`${props.clusterId}:${props.k8sPath}:${!!props.editMode}`}
+      {...props}
+    />
+  );
+}
+
+function ActiveYamlPanel({
   clusterId,
   k8sPath,
   allowEdit = true,
@@ -140,7 +147,7 @@ export function YamlPanel({
 }: YamlPanelProps) {
   const [editMode, setEditMode] = useState(initialEditMode);
   const [editorMode, setEditorMode] = useState<"guided" | "yaml">("yaml");
-  const [editedYaml, setEditedYaml] = useState("");
+  const [yamlDraft, setEditedYaml] = useState<string>();
   const [guidedManifest, setGuidedManifest] = useState<KubernetesManifest>({});
   const [guidedValid, setGuidedValid] = useState(false);
   const [preview, setPreview] = useState<YamlApplyPreviewModel | null>(null);
@@ -160,37 +167,14 @@ export function YamlPanel({
   const applyYaml = useK8sApplyYaml();
   const dryRunYaml = useK8sDryRunYaml();
 
-  // Read the current edit mode through a ref inside the sync effect so the
-  // effect stays keyed on [yaml] only. A background refetch (refetchOnWindowFocus
-  // after an alt-tab, or a k8s.all cache invalidation from any mutation) delivers
-  // a new server YAML string; without this guard the effect would overwrite the
-  // editor and silently discard the operator's in-progress edits.
-  const editModeRef = useRef(editMode);
-  editModeRef.current = editMode;
-
-  // Seed the editor from fetched YAML, but never while the operator is editing.
-  useEffect(() => {
-    if (yaml && !editModeRef.current) {
-      setEditedYaml(yaml);
-      setPreview(null);
-      void import("js-yaml").then((yamlModule) => {
-        const parsed = yamlModule.load(yaml);
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          setGuidedManifest(parsed as KubernetesManifest);
-        }
-      });
-    }
-  }, [yaml]);
-
-  // Reset state when (re)activated
-  useEffect(() => {
-    if (active) {
-      setEditMode(initialEditMode);
-      setEditorMode("yaml");
-      setPreview(null);
-      refetch();
-    }
-  }, [active, initialEditMode, refetch]);
+  // Only user edits are local state; query refreshes never overwrite a draft.
+  const editedYaml = yamlDraft ?? yaml ?? "";
+  const changeEditMode = (editing: boolean) => {
+    setEditedYaml(editing ? (yaml ?? "") : undefined);
+    setPreview(null);
+    setEditorMode("yaml");
+    setEditMode(editing);
+  };
 
   const handleSave = (yamlStr: string) => {
     if (!preview || preview.previewFor !== yamlStr) {
@@ -206,8 +190,7 @@ export function YamlPanel({
 
   const finishApply = () => {
     refetch();
-    setEditMode(false);
-    setPreview(null);
+    changeEditMode(false);
   };
 
   const forceApply = () => {
@@ -229,7 +212,6 @@ export function YamlPanel({
     const next = yamlModule.dump(guidedManifest, {
       lineWidth: 100,
       noRefs: true,
-      noCompatMode: true,
     });
     setEditedYaml(next);
     return next;
@@ -275,7 +257,7 @@ export function YamlPanel({
     try {
       const [yamlModule, latestYaml, normalizedObject] = await Promise.all([
         import("js-yaml"),
-        apiClient.k8sGetYaml(clusterId, k8sPath),
+        k8sGetYaml(clusterId, k8sPath),
         dryRunYaml.mutateAsync({ clusterId, path: k8sPath, yaml: yamlStr }),
       ]);
       const normalizedYaml = yamlModule.dump(normalizedObject, {
@@ -307,24 +289,24 @@ export function YamlPanel({
             Managed fields are omitted from YAML. Normal apply preserves other
             field managers and reports ownership conflicts.
           </p>
-          <div className="flex items-center bg-muted rounded p-0.5">
+          <div className="flex items-center bg-muted rounded-sm p-0.5">
             <button
-              onClick={() => setEditMode(false)}
+              onClick={() => changeEditMode(false)}
               className={cn(
-                "inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                "inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium transition-colors",
                 !editMode
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Eye className="h-3 w-3" /> View
             </button>
             <button
-              onClick={() => setEditMode(true)}
+              onClick={() => changeEditMode(true)}
               className={cn(
-                "inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                "inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium transition-colors",
                 editMode
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -347,7 +329,7 @@ export function YamlPanel({
               aria-selected={editorMode === item}
               onClick={() => void changeEditorMode(item)}
               className={cn(
-                "rounded px-2.5 py-1 text-xs font-medium capitalize",
+                "rounded-sm px-2.5 py-1 text-xs font-medium capitalize",
                 editorMode === item
                   ? "bg-muted text-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -464,7 +446,7 @@ export function YamlPanel({
                       </span>
                     )}
                   </span>
-                  </div>
+                </div>
                 {forceConflictPermission?.allowed && (
                   <button
                     type="button"

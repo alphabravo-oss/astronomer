@@ -2,23 +2,25 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { PrincipalPicker } from "@/components/rbac/principal-picker";
 import { cn } from "@/lib/utils";
 import { toastError } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   useClusterRoles,
+  useApplyProjectRoleTemplate,
   useCreateAccessBinding,
   useGlobalRoles,
   useProjectRoles,
+  useRoleTemplates,
 } from "@/lib/hooks/rbac";
-import { useClusters, useProjects } from "@/lib/hooks";
-import { useUsers } from "@/lib/hooks/user-settings";
+import { useClusters } from "@/lib/hooks/clusters";
+import { useProjects } from "@/lib/hooks/projects";
 import {
   clusterLabel,
   isValidNamespace,
   projectLabel,
   roleTitle,
-  userLabel,
 } from "./-utils";
 
 export function CreateClusterBindingModal({
@@ -26,15 +28,15 @@ export function CreateClusterBindingModal({
 }: {
   onClose: () => void;
 }) {
-  const { data: usersData } = useUsers({ pageSize: 200 });
   const { data: globalRoles } = useGlobalRoles();
   const { data: clusterRoles } = useClusterRoles();
   const { data: projectRoles } = useProjectRoles();
+  const { data: templates } = useRoleTemplates();
   const { data: clustersData } = useClusters({ pageSize: 200 });
   const { data: projectsData } = useProjects({ pageSize: 200 });
   const createBinding = useCreateAccessBinding();
+  const applyTemplate = useApplyProjectRoleTemplate();
 
-  const users = usersData?.data || [];
   const clusters = clustersData?.data || [];
   const projects = projectsData?.data || [];
 
@@ -70,14 +72,22 @@ export function CreateClusterBindingModal({
     },
     onSubmit: async ({ value }) => {
       try {
-        await createBinding.mutateAsync({
-          scope: value.scope,
-          user_id: value.userId,
-          role_id: value.roleId,
-          cluster_id: value.clusterId || undefined,
-          project_id: value.projectId || undefined,
-          namespace: value.namespace.trim() || undefined,
-        });
+        if (value.scope === "project" && value.roleId.startsWith("template:")) {
+          await applyTemplate.mutateAsync({
+            projectId: value.projectId,
+            templateName: value.roleId.slice("template:".length),
+            userId: value.userId,
+          });
+        } else {
+          await createBinding.mutateAsync({
+            scope: value.scope,
+            user_id: value.userId,
+            role_id: value.roleId,
+            cluster_id: value.clusterId || undefined,
+            project_id: value.projectId || undefined,
+            namespace: value.namespace.trim() || undefined,
+          });
+        }
         onClose();
       } catch {
         // Error handled by mutation
@@ -118,7 +128,7 @@ export function CreateClusterBindingModal({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            loading={createBinding.isPending}
+            loading={createBinding.isPending || applyTemplate.isPending}
             disabled={!canSubmit}
             onClick={() => void form.handleSubmit()}
           >
@@ -164,21 +174,17 @@ export function CreateClusterBindingModal({
         </label>
         <form.Field name="userId">
           {(field) => (
-            <Select
-              id="field-b53e75b3-131"
+            <PrincipalPicker
               value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-            >
-              <option value="">Select a user…</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {userLabel(u)}
-                </option>
-              ))}
-            </Select>
+              onChange={field.handleChange}
+            />
           )}
         </form.Field>
+        <p className="text-xs text-muted-foreground">
+          External identities are verified with their provider before the
+          binding is created. “Pending sign-in” access activates on first SSO
+          login.
+        </p>
       </div>
 
       <div className="space-y-1.5">
@@ -202,6 +208,23 @@ export function CreateClusterBindingModal({
                   {roleTitle(r)}
                 </option>
               ))}
+              {scope === "project" &&
+                (templates ?? []).filter(
+                  (template) => template.scope === "project",
+                ).length > 0 && (
+                  <optgroup label="Curated templates">
+                    {(templates ?? [])
+                      .filter((template) => template.scope === "project")
+                      .map((template) => (
+                        <option
+                          key={template.name}
+                          value={`template:${template.name}`}
+                        >
+                          {template.displayName} ({template.riskLevel} risk)
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
             </Select>
           )}
         </form.Field>
@@ -236,12 +259,7 @@ export function CreateClusterBindingModal({
           </div>
 
           <div className="space-y-1.5">
-            <label
-              className="text-sm font-medium text-foreground"
-              htmlFor="field-b53e75b3-193"
-            >
-              Namespace
-            </label>
+            <label htmlFor="field-b53e75b3-193">Namespace</label>
             <form.Field name="namespace">
               {(field) => (
                 <Input

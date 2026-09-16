@@ -182,7 +182,6 @@ Only the csv format is supported server-side today.`,
 
 func newAuditActivityCmd() *cobra.Command {
 	var limit int
-	var legacy bool
 	cmd := &cobra.Command{
 		Use:   "activity",
 		Short: "Show the recent activity feed",
@@ -190,16 +189,6 @@ func newAuditActivityCmd() *cobra.Command {
 			client, err := newAstroClient(cmd)
 			if err != nil {
 				return err
-			}
-			if legacy {
-				resp, err := client.GetActivityFeedLegacyWithResponse(cmd.Context())
-				if err != nil {
-					return err
-				}
-				if resp.JSON200 == nil {
-					return sdkStatusError("activity feed (legacy)", resp.StatusCode(), resp.Body)
-				}
-				return renderSDK(cmd, resp.JSON200)
 			}
 			params := &astroclient.GetActivityParams{}
 			if cmd.Flags().Changed("limit") {
@@ -216,7 +205,6 @@ func newAuditActivityCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 0, "max number of activity entries")
-	cmd.Flags().BoolVar(&legacy, "legacy", false, "use the legacy activity feed endpoint")
 	return cmd
 }
 

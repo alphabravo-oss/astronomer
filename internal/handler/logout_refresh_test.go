@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +23,7 @@ func TestLogout_InvalidatesRefreshTokenViaCutoff(t *testing.T) {
 	rev := newRecordingRevocationQuerier()
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetRevocationQuerier(rev)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, revocations: rev})
 
 	token, err := jwtMgr.GenerateAccessToken(user.ID)
 	if err != nil {
@@ -30,7 +32,7 @@ func TestLogout_InvalidatesRefreshTokenViaCutoff(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", strings.NewReader(""))
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-Forwarded-Proto", "https")
+	req.TLS = &tls.ConnectionState{}
 	req = setAuthUser(req, user.ID.String())
 	rec := httptest.NewRecorder()
 

@@ -1,10 +1,8 @@
-"use client";
-
 // Migration 065 / sprint 17 — in-browser kubectl shell.
 //
-// Renders a full-page terminal wired to a kubectl_sessions row.
-// On mount: POST to /shell/sessions/, open WebSocket, stream stdin/stdout.
-// On unmount: POST close (best-effort) so the in-cluster pod is torn down.
+// Renders the audited terminal used by the global console drawer.
+// On Connect: POST to /shell/sessions/, open WebSocket, stream stdin/stdout.
+// On tab close: POST close (best-effort) so the in-cluster pod is torn down.
 //
 // Status bar shows session age, time since last input, and time until
 // idle expiry. A second pane shows the operator's own recorded
@@ -39,24 +37,42 @@ import { wsBase } from "@/lib/env";
 import { cn } from "@/lib/utils";
 import { StatusBadge as UiStatusBadge } from "@/components/ui/status-badge";
 
-type Status =
+export type ClusterShellStatus =
   "idle" | "opening" | "connecting" | "connected" | "disconnected" | "error";
 
 interface ClusterShellProps {
   clusterId: string;
+  visible?: boolean;
+  onStatusChange?: (status: ClusterShellStatus) => void;
 }
 
-export function ClusterShell({ clusterId }: ClusterShellProps) {
-  const { ref, write } = useTerminal();
+export function ClusterShell({
+  clusterId,
+  visible = true,
+  onStatusChange,
+}: ClusterShellProps) {
+  const { ref, write, focus } = useTerminal();
   const wsRef = useRef<WebSocket | null>(null);
   const sessionRef = useRef<ShellSession | null>(null);
+  const openAttemptRef = useRef<{ cancelled: boolean } | null>(null);
+  const streamAttemptRef = useRef<{ cancelled: boolean } | null>(null);
   const readyRef = useRef(false);
 
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<ClusterShellStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [session, setSession] = useState<ShellSession | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [commands, setCommands] = useState<RecordedCommand[]>([]);
+
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [onStatusChange, status]);
+
+  useEffect(() => {
+    if (!visible || !readyRef.current) return;
+    const frame = requestAnimationFrame(() => focus());
+    return () => cancelAnimationFrame(frame);
+  }, [focus, visible]);
 
   // 1s ticker drives the "session age" + "auto-expires in" status-bar copy.
   useEffect(() => {
@@ -90,89 +106,30 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
     };
   }, [clusterId, session, status]);
 
-  // Explicit Connect handler — fires when the operator clicks "Connect"
-  // (previously this ran automatically on mount, which surfaced a flood
-  // of WebSocket reconnect attempts whenever auth / network failed and
-  // gave operators no way to bail out before a session was provisioned
-  // on the cluster).
-  const handleConnect = useCallback(async () => {
-    if (
-      status === "opening" ||
-      status === "connecting" ||
-      status === "connected"
-    ) {
-      return; // already in-flight
-    }
-    setStatus("opening");
-    setErrorMsg("");
-    try {
-      const info = await openShellSession(clusterId);
-      setSession(info);
-      sessionRef.current = info;
-      // If wterm's onReady already fired before this resolves, kick the
-      // WebSocket immediately; otherwise handleReady will pick it up
-      // when the core is up.
-      if (readyRef.current) {
-        connectWS(info);
-      }
-      setStatus("connecting");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setStatus("error");
-      setErrorMsg(msg);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clusterId, status]);
-
-  // Explicit Disconnect handler — closes the WS and tears down the
-  // pod-side session. Best-effort; reaper will catch any miss.
-  const handleDisconnect = useCallback(async () => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      try {
-        ws.close(1000, "client requested disconnect");
-      } catch {
-        /* ignore */
-      }
-    }
-    wsRef.current = null;
-    const s = sessionRef.current;
-    sessionRef.current = null;
-    setStatus("disconnected");
-    if (s) {
-      await closeShellSession(clusterId, s.id).catch(() => {});
-    }
-  }, [clusterId]);
-
-  // Unmount cleanup: if a session is still live, close it server-side
-  // so the cluster-side pod is reaped immediately instead of waiting
-  // for idleTimeout. Same fire-and-forget semantics as Disconnect.
-  useEffect(() => {
-    return () => {
-      try {
-        wsRef.current?.close();
-      } catch {
-        /* ignore */
-      }
-      if (sessionRef.current) {
-        closeShellSession(clusterId, sessionRef.current.id).catch(() => {});
-      }
-    };
-  }, [clusterId]);
-
   const connectWS = useCallback(
     (info: ShellSession) => {
+      if (streamAttemptRef.current) {
+        streamAttemptRef.current.cancelled = true;
+      }
+      const attempt = { cancelled: false };
+      streamAttemptRef.current = attempt;
       createStreamTicket("shell", info.clusterId)
         .then(({ ticket }) => {
+          if (attempt.cancelled) return;
           const ticketQuery = `?ticket=${encodeURIComponent(ticket)}`;
           const wsUrl = `${wsBase()}/clusters/${info.clusterId}/shell/sessions/${info.id}/${ticketQuery}`;
           const ws = new WebSocket(wsUrl);
           wsRef.current = ws;
           ws.onopen = () => {
+            if (attempt.cancelled) {
+              ws.close(1000, "shell tab closed");
+              return;
+            }
             setStatus("connected");
             ws.send(JSON.stringify({ type: "resize", cols: 80, rows: 24 }));
           };
           ws.onmessage = (event) => {
+            if (attempt.cancelled) return;
             try {
               const data = JSON.parse(event.data);
               if (
@@ -201,21 +158,123 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
             }
           };
           ws.onerror = () => {
+            if (attempt.cancelled) return;
             setStatus("error");
             setErrorMsg("WebSocket error");
           };
           ws.onclose = () => {
+            if (attempt.cancelled) return;
             setStatus("disconnected");
             write("\r\n\x1b[33mConnection closed\x1b[0m\r\n");
           };
         })
         .catch((error: Error) => {
+          if (attempt.cancelled) return;
           setStatus("error");
           setErrorMsg(error.message || "Failed to create stream ticket");
         });
     },
     [write],
   );
+
+  // Explicit Connect handler — fires when the operator clicks "Connect"
+  // (previously this ran automatically on mount, which surfaced a flood
+  // of WebSocket reconnect attempts whenever auth / network failed and
+  // gave operators no way to bail out before a session was provisioned
+  // on the cluster).
+  const handleConnect = useCallback(async () => {
+    if (
+      status === "opening" ||
+      status === "connecting" ||
+      status === "connected"
+    ) {
+      return; // already in-flight
+    }
+    if (openAttemptRef.current) {
+      openAttemptRef.current.cancelled = true;
+    }
+    const attempt = { cancelled: false };
+    openAttemptRef.current = attempt;
+    setStatus("opening");
+    setErrorMsg("");
+    try {
+      const priorSession = sessionRef.current;
+      sessionRef.current = null;
+      setSession(null);
+      setCommands([]);
+      if (priorSession) {
+        await closeShellSession(clusterId, priorSession.id).catch(() => {});
+      }
+      if (attempt.cancelled) return;
+      const info = await openShellSession(clusterId);
+      if (attempt.cancelled) {
+        await closeShellSession(clusterId, info.id).catch(() => {});
+        return;
+      }
+      setSession(info);
+      sessionRef.current = info;
+      // If wterm's onReady already fired before this resolves, kick the
+      // WebSocket immediately; otherwise handleReady will pick it up
+      // when the core is up.
+      if (readyRef.current) {
+        connectWS(info);
+      }
+      setStatus("connecting");
+    } catch (err: unknown) {
+      if (attempt.cancelled) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus("error");
+      setErrorMsg(msg);
+    }
+  }, [clusterId, connectWS, status]);
+
+  // Explicit Disconnect handler — closes the WS and tears down the
+  // pod-side session. Best-effort; reaper will catch any miss.
+  const handleDisconnect = useCallback(async () => {
+    if (openAttemptRef.current) {
+      openAttemptRef.current.cancelled = true;
+    }
+    if (streamAttemptRef.current) {
+      streamAttemptRef.current.cancelled = true;
+    }
+    const ws = wsRef.current;
+    if (ws && ws.readyState !== WebSocket.CLOSED) {
+      try {
+        ws.close(1000, "client requested disconnect");
+      } catch {
+        /* ignore */
+      }
+    }
+    wsRef.current = null;
+    const s = sessionRef.current;
+    sessionRef.current = null;
+    setStatus("disconnected");
+    if (s) {
+      await closeShellSession(clusterId, s.id).catch(() => {});
+    }
+  }, [clusterId]);
+
+  // Unmount cleanup: if a session is still live, close it server-side
+  // so the cluster-side pod is reaped immediately instead of waiting
+  // for idleTimeout. Same fire-and-forget semantics as Disconnect.
+  useEffect(() => {
+    return () => {
+      if (openAttemptRef.current) {
+        openAttemptRef.current.cancelled = true;
+      }
+      if (streamAttemptRef.current) {
+        streamAttemptRef.current.cancelled = true;
+      }
+      try {
+        wsRef.current?.close();
+      } catch {
+        /* ignore */
+      }
+      if (sessionRef.current) {
+        closeShellSession(clusterId, sessionRef.current.id).catch(() => {});
+      }
+    };
+  }, [clusterId]);
 
   // Fires once wterm's WASM core is initialized and ready to accept writes.
   const handleReady = useCallback(
@@ -227,6 +286,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
       input?.removeAttribute("aria-hidden");
       input?.setAttribute("aria-label", "Cluster terminal input");
       readyRef.current = true;
+      if (visible) focus();
       write(`\x1b[36mOpening shell on cluster ${clusterId}\x1b[0m\r\n`);
       if (sessionRef.current) {
         const info = sessionRef.current;
@@ -236,7 +296,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
         connectWS(info);
       }
     },
-    [clusterId, write, connectWS],
+    [clusterId, connectWS, focus, visible, write],
   );
 
   // Operator keystrokes → ws stdin.
@@ -287,13 +347,13 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-2 border-b bg-background gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-background p-2">
         <div className="flex items-center gap-2 text-sm">
           <TerminalIcon className="h-4 w-4" />
           <span className="font-medium">Cluster shell</span>
           <ShellStatusBadge status={status} />
         </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="hidden items-center gap-3 text-xs text-muted-foreground md:flex">
           {session && isLive ? (
             <>
               <span>Session age: {formatDuration(sessionAgeSeconds)}</span>
@@ -346,7 +406,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
       </div>
 
       {errorMsg ? (
-        <div className="m-3 rounded border border-status-error bg-status-error/10 p-3 text-sm flex items-start gap-2">
+        <div className="m-3 rounded-sm border border-status-error bg-status-error/10 p-3 text-sm flex items-start gap-2">
           <AlertCircle className="h-4 w-4 text-status-error mt-0.5 shrink-0" />
           <div>
             <div className="font-medium">Failed to open shell</div>
@@ -356,9 +416,9 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
       ) : null}
 
       <div className="flex-1 flex min-h-0">
-        <div className="flex-1 bg-black min-h-0 relative">
+        <div className="flex-1 bg-black text-white min-h-0 relative">
           {status === "opening" && (
-            <div className="absolute top-0 left-0 right-0 flex items-center gap-2 p-4 text-sm text-muted-foreground bg-black/70 z-10">
+            <div className="absolute top-0 left-0 right-0 flex items-center gap-2 p-4 text-sm text-zinc-300 bg-black/70 z-10">
               <Loader2 className="h-4 w-4 animate-spin" />
               Preparing ephemeral debug pod...
             </div>
@@ -366,14 +426,14 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
           {status === "idle" && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center max-w-sm pointer-events-auto">
-                <TerminalIcon className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
-                <p className="text-sm font-medium text-foreground">
+                <TerminalIcon className="h-8 w-8 mx-auto text-zinc-400 mb-3" />
+                <p className="text-sm font-medium text-white">
                   No active session
                 </p>
-                <p className="text-xs text-muted-foreground mt-1.5 mb-4">
+                <p className="text-xs text-zinc-300 mt-1.5 mb-4">
                   Clicking <strong>Connect</strong> spins up an ephemeral
                   kubectl pod in
-                  <code className="mx-1 px-1 rounded bg-muted font-mono">
+                  <code className="mx-1 px-1 rounded-sm bg-zinc-800 text-white font-mono">
                     kube-system
                   </code>
                   , opens a shell into it, and records every command line you
@@ -432,9 +492,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
               "h-full w-full",
               !(isLive || isOpening) && "pointer-events-none opacity-0",
             )}
-            {...(!(isLive || isOpening)
-              ? { inert: "" as unknown as undefined }
-              : {})}
+            inert={!(isLive || isOpening)}
           >
             <Terminal
               ref={ref}
@@ -450,7 +508,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
             />
           </div>
         </div>
-        <div className="w-72 border-l bg-background overflow-y-auto p-3">
+        <div className="hidden w-72 overflow-y-auto border-l bg-background p-3 lg:block">
           <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-2">
             <RefreshCw className="h-3 w-3" />
             Recorded commands ({commands.length})
@@ -486,7 +544,7 @@ export function ClusterShell({ clusterId }: ClusterShellProps) {
   );
 }
 
-function ShellStatusBadge({ status }: { status: Status }) {
+function ShellStatusBadge({ status }: { status: ClusterShellStatus }) {
   const badgeStatus =
     status === "opening"
       ? "connecting"

@@ -22,6 +22,14 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    Link: RouterLinkStub,
+  };
+});
+
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastApiError: vi.fn(),
@@ -32,15 +40,8 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 // The real Link needs a RouterProvider; these tests assert page content.
-vi.mock("@/lib/link", () => ({
-  Link: ({ href, children, ...rest }: React.ComponentProps<"a">) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
 
-vi.mock("@/lib/hooks", () => ({
+vi.mock("@/lib/hooks/clusters", () => ({
   useClusters: vi.fn(),
   useCluster: vi.fn(),
   useFeatureFlags: vi.fn(() => ({
@@ -82,7 +83,7 @@ import {
   type MonitoringStackStatusBase,
   type MonitoringStackTarget,
 } from "@/lib/api/monitoring-stack";
-import { useCluster, useClusters, useFeatureFlags } from "@/lib/hooks";
+import { useCluster, useClusters, useFeatureFlags } from "@/lib/hooks/clusters";
 import { useB2StorageLocations } from "@/components/backups/hooks";
 import { useAuthStore } from "@/lib/store";
 import { SharedMonitoringStacksPage } from "@/components/monitoring/shared-stacks-page";

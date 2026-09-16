@@ -1,20 +1,23 @@
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/gitops/new — create a new GitOps source.
  * Reused for edit via the [id] page; this is the create-only entrypoint.
  */
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { useAppForm, useStore } from "@/lib/form";
+import { FormShell } from "@/components/ui/form-shell";
 import { useCreateGitOpsSource } from "@/components/settings/hooks";
 import type { GitOpsSourceWriteRequest } from "@/lib/api/gitops";
 
 function GitOpsForm() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const create = useCreateGitOpsSource();
 
   const form = useAppForm({
@@ -32,7 +35,7 @@ function GitOpsForm() {
     } as GitOpsSourceWriteRequest,
     onSubmit: async ({ value }) => {
       const row = await create.mutateAsync(value);
-      router.push(`/dashboard/settings/gitops/${row.id}`);
+      void navigate({ to: `/dashboard/settings/gitops/${row.id}` });
     },
   });
   // Cross-field UI state: auth input disables on mode none, interval input on
@@ -43,7 +46,7 @@ function GitOpsForm() {
   const pathPrefix = useStore(form.store, (s) => s.values.path_prefix);
 
   return (
-    <form
+    <FormShell
       onSubmit={(e) => {
         e.preventDefault();
         void form.handleSubmit();
@@ -59,13 +62,13 @@ function GitOpsForm() {
         </label>
         <form.Field name="name">
           {(field) => (
-            <input
+            <Input
               id="field-bf605de5-54"
               required
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
-              className="w-full h-9 px-3 rounded border bg-background text-sm"
+              className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
               placeholder="platform-clusters"
             />
           )}
@@ -80,13 +83,13 @@ function GitOpsForm() {
         </label>
         <form.Field name="repo_url">
           {(field) => (
-            <input
+            <Input
               id="field-bf605de5-69"
               required
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
-              className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+              className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
               placeholder="https://github.com/example/clusters.git"
             />
           )}
@@ -102,12 +105,12 @@ function GitOpsForm() {
           </label>
           <form.Field name="branch">
             {(field) => (
-              <input
+              <Input
                 id="field-bf605de5-85"
                 value={field.state.value ?? ""}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+                className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
               />
             )}
           </form.Field>
@@ -121,12 +124,12 @@ function GitOpsForm() {
           </label>
           <form.Field name="path_prefix">
             {(field) => (
-              <input
+              <Input
                 id="field-bf605de5-98"
                 value={field.state.value ?? ""}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded border bg-background text-sm font-mono"
+                className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
               />
             )}
           </form.Field>
@@ -142,7 +145,7 @@ function GitOpsForm() {
           </label>
           <form.Field name="auth_mode">
             {(field) => (
-              <select
+              <Select
                 id="field-bf605de5-113"
                 value={field.state.value}
                 onChange={(e) =>
@@ -151,12 +154,12 @@ function GitOpsForm() {
                   )
                 }
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded border bg-background text-sm"
+                className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
               >
                 <option value="none">None (public repo)</option>
                 <option value="https_token">HTTPS token</option>
                 <option value="ssh_key">SSH key</option>
-              </select>
+              </Select>
             )}
           </form.Field>
         </div>
@@ -169,14 +172,14 @@ function GitOpsForm() {
           </label>
           <form.Field name="auth">
             {(field) => (
-              <input
+              <Input
                 id="field-bf605de5-130"
                 type="password"
                 value={field.state.value ?? ""}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 disabled={authMode === "none"}
-                className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
+                className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
                 placeholder={
                   authMode === "none" ? "(not required)" : "paste secret"
                 }
@@ -195,18 +198,18 @@ function GitOpsForm() {
           </label>
           <form.Field name="sync_mode">
             {(field) => (
-              <select
+              <Select
                 id="field-bf605de5-148"
                 value={field.state.value}
                 onChange={(e) =>
                   field.handleChange(e.target.value as "manual" | "interval")
                 }
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded border bg-background text-sm"
+                className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
               >
                 <option value="interval">Interval</option>
                 <option value="manual">Manual only</option>
-              </select>
+              </Select>
             )}
           </form.Field>
         </div>
@@ -219,7 +222,7 @@ function GitOpsForm() {
           </label>
           <form.Field name="sync_interval_seconds">
             {(field) => (
-              <input
+              <Input
                 id="field-bf605de5-164"
                 type="number"
                 min={30}
@@ -227,7 +230,7 @@ function GitOpsForm() {
                 onChange={(e) => field.handleChange(Number(e.target.value))}
                 onBlur={field.handleBlur}
                 disabled={syncMode === "manual"}
-                className="w-full h-9 px-3 rounded border bg-background text-sm font-mono disabled:opacity-50"
+                className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono disabled:opacity-50"
               />
             )}
           </form.Field>
@@ -241,7 +244,7 @@ function GitOpsForm() {
           </label>
           <form.Field name="on_delete">
             {(field) => (
-              <select
+              <Select
                 id="field-bf605de5-180"
                 value={field.state.value}
                 onChange={(e) =>
@@ -250,12 +253,12 @@ function GitOpsForm() {
                   )
                 }
                 onBlur={field.handleBlur}
-                className="w-full h-9 px-3 rounded border bg-background text-sm"
+                className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
               >
                 <option value="log">Log only (safe)</option>
                 <option value="tombstone">Tombstone (24h grace)</option>
                 <option value="decommission">Immediate decommission</option>
-              </select>
+              </Select>
             )}
           </form.Field>
         </div>
@@ -270,7 +273,7 @@ function GitOpsForm() {
       <div className="flex justify-end gap-2 pt-2">
         <ActionButton
           type="button"
-          onClick={() => router.push("/dashboard/settings/gitops")}
+          onClick={() => void navigate({ to: "/dashboard/settings/gitops" })}
         >
           Cancel
         </ActionButton>
@@ -284,7 +287,7 @@ function GitOpsForm() {
           Create source
         </ActionButton>
       </div>
-    </form>
+    </FormShell>
   );
 }
 
@@ -292,13 +295,13 @@ function NewGitOpsSourcePage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings/gitops"
+        <RouterLink
+          to="/dashboard/settings/gitops"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to GitOps sources
-        </Link>
+        </RouterLink>
         <PageHeader eyebrow="Settings · GitOps" title="New GitOps source" />
         <GitOpsForm />
       </PageShell>

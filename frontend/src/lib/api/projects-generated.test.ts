@@ -1,16 +1,19 @@
 import {
+  getClustersByClusterIdProjects,
   getProjects,
   postProjects,
   postProjectsByIdOwnershipTakeover,
 } from "@/lib/api/generated/client";
 import {
   createProject,
+  getClusterProjects,
   getProjects as listProjects,
   takeoverProjectOwnership,
 } from "./projects";
 
 vi.mock("@/lib/api/generated/client", () => ({
   deleteProjectsById: vi.fn(),
+  getClustersByClusterIdProjects: vi.fn(),
   getProjects: vi.fn(),
   getProjectsById: vi.fn(),
   postProjects: vi.fn(),
@@ -44,18 +47,26 @@ describe("generated projects API", () => {
     const signal = new AbortController().signal;
     vi.mocked(getProjects).mockResolvedValueOnce({
       data: [projectWire],
-      count: 21,
-      next: "/next",
-      previous: null,
+      pagination: {
+        total: 21,
+        limit: 20,
+        offset: 20,
+        has_more: false,
+        next_offset: null,
+      },
     });
 
     await expect(
       listProjects({ page: 2, pageSize: 20 }, { signal }),
     ).resolves.toEqual(
       expect.objectContaining({
-        total: 21,
-        page: 2,
-        totalPages: 2,
+        pagination: {
+          total: 21,
+          limit: 20,
+          offset: 20,
+          has_more: false,
+          next_offset: null,
+        },
         data: [
           expect.objectContaining({
             displayName: "Production",
@@ -69,6 +80,32 @@ describe("generated projects API", () => {
     expect(getProjects).toHaveBeenCalledWith({
       query: { limit: 20, offset: 20 },
       signal,
+    });
+  });
+
+  it("sends bounded cluster project search through the generated operation", async () => {
+    vi.mocked(getClustersByClusterIdProjects).mockResolvedValueOnce({
+      data: [projectWire],
+      pagination: {
+        total: 1,
+        limit: 50,
+        offset: 200,
+        has_more: false,
+        next_offset: null,
+      },
+    });
+
+    await expect(
+      getClusterProjects("cluster-1", {
+        page: 5,
+        pageSize: 50,
+        search: " production ",
+      }),
+    ).resolves.toMatchObject({ data: [{ id: projectWire.id }] });
+    expect(getClustersByClusterIdProjects).toHaveBeenCalledWith({
+      path: { cluster_id: "cluster-1" },
+      query: { limit: 50, offset: 200, search: "production" },
+      signal: undefined,
     });
   });
 

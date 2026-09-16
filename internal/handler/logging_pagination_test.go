@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // CountOutputsByCluster / CountPipelinesByCluster complete the loggingFakeQuerier
@@ -56,11 +56,11 @@ func TestListOutputs_ClusterScopedTotal(t *testing.T) {
 	}
 
 	resp := doListOutputs(t, h, clusterA)
-	if resp.Count != 2 {
-		t.Fatalf("cluster A outputs total = %d, want 2 (global count leaked)", resp.Count)
+	if *resp.Pagination.Total != 2 {
+		t.Fatalf("cluster A outputs total = %d, want 2 (global count leaked)", *resp.Pagination.Total)
 	}
-	if resp.Next != nil {
-		t.Fatalf("cluster A outputs advertised a next page (%q) despite only 2 rows", *resp.Next)
+	if resp.Pagination.NextOffset != nil {
+		t.Fatalf("cluster A outputs advertised a next page (%d) despite only 2 rows", *resp.Pagination.NextOffset)
 	}
 }
 
@@ -78,11 +78,11 @@ func TestListPipelines_ClusterScopedTotal(t *testing.T) {
 	}
 
 	resp := doListPipelines(t, h, clusterA)
-	if resp.Count != 2 {
-		t.Fatalf("cluster A pipelines total = %d, want 2 (global count leaked)", resp.Count)
+	if *resp.Pagination.Total != 2 {
+		t.Fatalf("cluster A pipelines total = %d, want 2 (global count leaked)", *resp.Pagination.Total)
 	}
-	if resp.Next != nil {
-		t.Fatalf("cluster A pipelines advertised a next page (%q) despite only 2 rows", *resp.Next)
+	if resp.Pagination.NextOffset != nil {
+		t.Fatalf("cluster A pipelines advertised a next page (%d) despite only 2 rows", *resp.Pagination.NextOffset)
 	}
 }
 
@@ -99,8 +99,8 @@ func TestListOutputs_FleetWide(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ListOutputs(rec, httptest.NewRequest(http.MethodGet, "/api/v1/logging/outputs/", nil))
 	resp := decodePaginated(t, rec) // fails if not 200
-	if resp.Count != 3 {
-		t.Fatalf("fleet-wide outputs total = %d, want 3", resp.Count)
+	if *resp.Pagination.Total != 3 {
+		t.Fatalf("fleet-wide outputs total = %d, want 3", *resp.Pagination.Total)
 	}
 }
 
@@ -113,8 +113,8 @@ func TestListPipelines_FleetWide(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ListPipelines(rec, httptest.NewRequest(http.MethodGet, "/api/v1/logging/pipelines/", nil))
 	resp := decodePaginated(t, rec) // fails if not 200
-	if resp.Count != 2 {
-		t.Fatalf("fleet-wide pipelines total = %d, want 2", resp.Count)
+	if *resp.Pagination.Total != 2 {
+		t.Fatalf("fleet-wide pipelines total = %d, want 2", *resp.Pagination.Total)
 	}
 }
 
@@ -145,7 +145,7 @@ func seedPipeline(t *testing.T, q *loggingFakeQuerier, clusterID uuid.UUID) {
 	}
 }
 
-func doListOutputs(t *testing.T, h *LoggingHandler, clusterID uuid.UUID) paginatedResponse {
+func doListOutputs(t *testing.T, h *LoggingHandler, clusterID uuid.UUID) paging.Response[json.RawMessage] {
 	t.Helper()
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("cluster_id", clusterID.String())
@@ -156,7 +156,7 @@ func doListOutputs(t *testing.T, h *LoggingHandler, clusterID uuid.UUID) paginat
 	return decodePaginated(t, rec)
 }
 
-func doListPipelines(t *testing.T, h *LoggingHandler, clusterID uuid.UUID) paginatedResponse {
+func doListPipelines(t *testing.T, h *LoggingHandler, clusterID uuid.UUID) paging.Response[json.RawMessage] {
 	t.Helper()
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("cluster_id", clusterID.String())
@@ -167,12 +167,12 @@ func doListPipelines(t *testing.T, h *LoggingHandler, clusterID uuid.UUID) pagin
 	return decodePaginated(t, rec)
 }
 
-func decodePaginated(t *testing.T, rec *httptest.ResponseRecorder) paginatedResponse {
+func decodePaginated(t *testing.T, rec *httptest.ResponseRecorder) paging.Response[json.RawMessage] {
 	t.Helper()
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	var resp paginatedResponse
+	var resp paging.Response[json.RawMessage]
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

@@ -601,10 +601,12 @@ func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegi
 	}
 	headSHA := head.Hash().String()
 
-	prefix := strings.TrimPrefix(src.PathPrefix, "/")
-	walkRoot := dir
-	if prefix != "" {
-		walkRoot = filepath.Join(dir, prefix)
+	walkRoot, err := gitops.ResolvePathPrefix(dir, src.PathPrefix)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil, fmt.Errorf("walk root unreadable (check path_prefix %q): %w", src.PathPrefix, err)
+		}
+		return "", nil, fmt.Errorf("invalid path_prefix %q: %w", src.PathPrefix, err)
 	}
 	// A non-existent / unreadable / non-directory walkRoot must be a hard
 	// sync error — NOT silently interpreted as "all docs deleted" (H10).
@@ -619,6 +621,11 @@ func (runtime GitOpsRuntime) walkSource(ctx context.Context, src sqlc.GitopsRegi
 	walkErr := filepath.WalkDir(walkRoot, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("walk %s: %w", p, err)
+		}
+		// Never follow repository-controlled symlinks. A YAML symlink can read
+		// arbitrary worker-pod files even when path_prefix itself is contained.
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
 		}
 		if d.IsDir() {
 			// Skip .git always

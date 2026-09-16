@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { createRouter, type ErrorComponentProps } from "@tanstack/react-router";
+import { errorDigest, errorMessage } from "@/lib/error-message";
 import { routeTree } from "./routeTree.gen";
 
 /**
@@ -15,10 +16,7 @@ function RootErrorPanel({ error, reset }: ErrorComponentProps) {
 
   // Next.js attached a `digest` ref to server-thrown errors; keep reading it
   // defensively for anything that still tags one on.
-  const digest =
-    "digest" in error
-      ? String((error as { digest?: string }).digest ?? "")
-      : "";
+  const digest = errorDigest(error);
 
   return (
     <div
@@ -38,7 +36,7 @@ function RootErrorPanel({ error, reset }: ErrorComponentProps) {
           Something went wrong
         </h1>
         <p style={{ fontSize: 14, color: "#9ca3af", margin: "0 0 4px" }}>
-          {error.message || "The application failed to load."}
+          {errorMessage(error, "The application failed to load.")}
         </p>
         {digest && (
           <p

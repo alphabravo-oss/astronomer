@@ -226,12 +226,13 @@ func TestImageVulnHandler_PerReportCVEs_PaginatesAndFilters(t *testing.T) {
 	}
 	body := decodeJSON(t, rec)
 	data := body["data"].(map[string]any)
-	vulns := data["vulnerabilities"].([]any)
+	page := data["vulnerabilities"].(map[string]any)
+	vulns := page["data"].([]any)
 	if len(vulns) != 2 {
 		t.Fatalf("expected 2 HIGH cves, got %d", len(vulns))
 	}
-	if data["vulnerability_total"].(float64) != 2 {
-		t.Fatalf("expected vulnerability_total=2")
+	if page["pagination"].(map[string]any)["total"].(float64) != 2 {
+		t.Fatalf("expected pagination.total=2")
 	}
 
 	// Pagination: limit=1 offset=1 over the unfiltered 7 → 1 item, total 7.
@@ -246,10 +247,11 @@ func TestImageVulnHandler_PerReportCVEs_PaginatesAndFilters(t *testing.T) {
 	}
 	body = decodeJSON(t, rec)
 	data = body["data"].(map[string]any)
-	if vulns := data["vulnerabilities"].([]any); len(vulns) != 1 {
+	page = data["vulnerabilities"].(map[string]any)
+	if vulns := page["data"].([]any); len(vulns) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(vulns))
 	}
-	if data["vulnerability_total"].(float64) != 7 {
+	if page["pagination"].(map[string]any)["total"].(float64) != 7 {
 		t.Fatalf("expected total=7")
 	}
 }

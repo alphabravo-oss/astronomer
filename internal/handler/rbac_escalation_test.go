@@ -15,7 +15,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
-// fakeCallerBindings is a middleware.RBACQuerier that returns a fixed set of
+// fakeCallerBindings is a rbac.BindingQuerier that returns a fixed set of
 // bindings per user ID, letting the escalation guard resolve the caller's own
 // effective permissions without a database.
 type fakeCallerBindings struct {
@@ -78,7 +78,7 @@ func TestCreateGlobalRoleBinding_BlocksPrivilegeEscalation(t *testing.T) {
 		superuser.String(): {{UserID: superuser.String(), IsSuperuser: true}},
 	}}
 
-	h := NewRBACHandler(q)
+	h := wireRBACMutationFixture(NewRBACHandler(q), q)
 	h.SetAuthorization(engine, bindings)
 
 	post := func(caller, target uuid.UUID, roleID uuid.UUID) *httptest.ResponseRecorder {
@@ -137,7 +137,7 @@ func TestCreateClusterAndProjectRoleBinding_BlockEscalation(t *testing.T) {
 		lowPriv.String(): {{UserID: lowPriv.String(), RoleRules: []rbac.Rule{{Resource: "rbac", Verbs: []string{"create"}}}}},
 	}}
 
-	h := NewRBACHandler(q)
+	h := wireRBACMutationFixture(NewRBACHandler(q), q)
 	h.SetAuthorization(engine, bindings)
 
 	clusterBody := []byte(fmt.Sprintf(`{"user_id":"%s","role_id":"%s","cluster_id":"%s"}`, lowPriv, clusterRole.ID, clusterID))
@@ -232,7 +232,7 @@ func TestUpdateRoleRulesBlocksPrivilegeEscalation(t *testing.T) {
 		}}},
 	}}
 
-	h := NewRBACHandler(q)
+	h := wireRBACMutationFixture(NewRBACHandler(q), q)
 	h.SetAuthorization(engine, bindings)
 
 	escalation := `{"name":"delegated-rbac","rules":[{"resource":"*","verbs":["*"]}]}`
@@ -290,7 +290,7 @@ func TestBuiltinRoleWritesAreRejected(t *testing.T) {
 		superuser.String(): {{UserID: superuser.String(), IsSuperuser: true}},
 	}}
 
-	h := NewRBACHandler(q)
+	h := wireRBACMutationFixture(NewRBACHandler(q), q)
 	h.SetAuthorization(engine, bindings)
 
 	rec := putRole(t, h.UpdateGlobalRole, superuser, administrator.ID, `{"name":"Administrator","rules":[{"resource":"users","verbs":["read"]}]}`)
@@ -312,52 +312,28 @@ func TestBuiltinRoleWritesAreRejected(t *testing.T) {
 	}
 }
 
-// TestCreatedRolesAreNeverBuiltin closes the primitive the freeze would
-// otherwise hand out. is_builtin used to be a cosmetic, client-settable field;
-// now it makes a row permanently un-editable and un-deletable through the API,
-// so honouring it from a create body would let anyone holding rbac:create plant
-// roles nobody — superuser included — can ever remove, and would let a stray
-// flag in an operator's payload brick a role. is_builtin is migration-owned:
-// the key is accepted and ignored, and the resulting row stays fully mutable.
-func TestCreatedRolesAreNeverBuiltin(t *testing.T) {
+// Built-in ownership is migration-controlled and is not part of the role
+// creation contract. Strict request decoding rejects attempts to set it.
+func TestCreateRoleRejectsBuiltinField(t *testing.T) {
 	q := newFakeRBACAuditQuerier()
 	caller := uuid.New()
 	bindings := &fakeCallerBindings{byUser: map[string][]rbac.RoleBinding{
 		caller.String(): {{UserID: caller.String(), IsSuperuser: true}},
 	}}
 
-	h := NewRBACHandler(q)
+	h := wireRBACMutationFixture(NewRBACHandler(q), q)
 	h.SetAuthorization(rbac.NewEngine(), bindings)
 
 	body := []byte(`{"name":"planted","is_builtin":true,"rules":[{"resource":"users","verbs":["read"]}]}`)
 	rec := httptest.NewRecorder()
 	h.CreateGlobalRole(rec, authedRequest(http.MethodPost, "/api/v1/rbac/global-roles/", caller, body))
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create: status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("create: status = %d, want 400; body=%s", rec.Code, rec.Body.String())
 	}
-
-	var planted uuid.UUID
-	for id, role := range q.globalRoles {
+	for _, role := range q.globalRoles {
 		if role.Name == "planted" {
-			planted = id
-			if role.IsBuiltin {
-				t.Fatal("is_builtin:true from the request body was honoured; the row is now un-editable and un-deletable")
-			}
+			t.Fatal("role was created from a request containing a server-owned field")
 		}
-	}
-	if planted == uuid.Nil {
-		t.Fatal("created role not found")
-	}
-
-	// The row must still be administrable — that is the whole point.
-	if rec := putRole(t, h.UpdateGlobalRole, caller, planted, `{"name":"planted","rules":[{"resource":"users","verbs":["read","list"]}]}`); rec.Code != http.StatusOK {
-		t.Fatalf("update: status = %d, want 200; body=%s", rec.Code, rec.Body.String())
-	}
-	if rec := deleteRole(t, h.DeleteGlobalRole, caller, planted); rec.Code != http.StatusNoContent {
-		t.Fatalf("delete: status = %d, want 204; body=%s", rec.Code, rec.Body.String())
-	}
-	if _, ok := q.globalRoles[planted]; ok {
-		t.Fatal("role survived delete")
 	}
 }
 
@@ -399,7 +375,7 @@ func TestRoleWriteGuardPreservesShippedRoleAdministration(t *testing.T) {
 		}}},
 	}}
 
-	h := NewRBACHandler(q)
+	h := wireRBACMutationFixture(NewRBACHandler(q), q)
 	h.SetAuthorization(engine, bindings)
 
 	// Administrator edits a custom role to anything.

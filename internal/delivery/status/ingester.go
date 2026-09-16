@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -37,7 +38,7 @@ type Transaction interface {
 	CreateClusterDeploymentEvent(context.Context, sqlc.CreateClusterDeploymentEventParams) (sqlc.ClusterDeploymentEvent, error)
 	CreateDeliveryRolloutEvent(context.Context, sqlc.CreateDeliveryRolloutEventParams) (sqlc.DeliveryRolloutEvent, error)
 	UpsertTaskOutbox(context.Context, sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)
-	UpsertDeliveryControllerInventory(context.Context, sqlc.UpsertDeliveryControllerInventoryParams) (sqlc.DeliveryControllerInventory, error)
+	AcceptDeliveryStatusInventory(context.Context, sqlc.AcceptDeliveryStatusInventoryParams) (sqlc.AcceptDeliveryStatusInventoryRow, error)
 	FinalizeDeliveryTargetDeletionIfComplete(context.Context, uuid.UUID) (sqlc.DeliveryTarget, error)
 	AcknowledgeDeliveryAssignmentSnapshot(context.Context, sqlc.AcknowledgeDeliveryAssignmentSnapshotParams) (sqlc.DeliveryAssignmentReceipt, error)
 }
@@ -80,6 +81,7 @@ type ReadyReconciler interface {
 type Ingester struct {
 	runner Runner
 	ready  ReadyReconciler
+	log    *slog.Logger
 }
 
 func NewIngester(runner Runner) *Ingester { return &Ingester{runner: runner} }
@@ -87,6 +89,12 @@ func NewIngester(runner Runner) *Ingester { return &Ingester{runner: runner} }
 func (i *Ingester) SetReadyReconciler(reconciler ReadyReconciler) {
 	if i != nil {
 		i.ready = reconciler
+	}
+}
+
+func (i *Ingester) SetLogger(logger *slog.Logger) {
+	if i != nil {
+		i.log = logger
 	}
 }
 
@@ -133,7 +141,7 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 		components, _ := json.Marshal(payload.ControllerInventory.Components)
 		apiVersions, _ := json.Marshal(payload.ControllerInventory.APIVersions)
 		compatibilityResult := compatibility.Evaluate(payload.ControllerInventory)
-		if _, err := tx.UpsertDeliveryControllerInventory(ctx, sqlc.UpsertDeliveryControllerInventoryParams{
+		accepted, err := tx.AcceptDeliveryStatusInventory(ctx, sqlc.AcceptDeliveryStatusInventoryParams{
 			ClusterID: authenticatedCluster, AgentVersion: payload.ControllerInventory.AgentVersion,
 			FluxVersion: payload.ControllerInventory.FluxVersion,
 			Components:  components, ApiVersions: apiVersions,
@@ -141,8 +149,19 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			KubernetesVersion:  payload.ControllerInventory.KubernetesVersion,
 			Ready:              payload.ControllerInventory.Ready, CompatibilityStatus: string(compatibilityResult.Status),
 			ErrorCode: compatibilityResult.Code, ObservedAt: timestamp(time.Now().UTC()),
-		}); err != nil {
+			StatusDigest: payload.StatusDigest, AgentSessionID: sessionID, AgentSequence: payload.SessionSequence,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			statusResults = append(statusResults, "replay_rejected")
+			return nil
+		}
+		if err != nil {
 			return fmt.Errorf("persist delivery controller inventory: %w", err)
+		}
+		semanticChanged := accepted.StatusChanged
+		if !semanticChanged {
+			statusResults = append(statusResults, "coalesced")
+			return nil
 		}
 		if systemTx, ok := tx.(systemInventoryTransaction); ok {
 			observedAt := time.Now().UTC()
@@ -297,7 +316,17 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 			// The next periodic status retries failures. Status itself is already
 			// durably accepted and must not be converted into an agent protocol
 			// failure by baseline provisioning.
-			_ = i.ready.Reconcile(ctx, authenticatedCluster)
+			if err := i.ready.Reconcile(ctx, authenticatedCluster); err != nil {
+				deliverymetrics.ObserveWorker("status", "failure")
+				logger := i.log
+				if logger == nil {
+					logger = slog.Default()
+				}
+				logger.WarnContext(ctx, "post-commit delivery readiness reconciliation failed",
+					"cluster_id", authenticatedCluster, "error", err)
+			} else {
+				deliverymetrics.ObserveWorker("status", "success")
+			}
 		}
 	}
 	return finalErr

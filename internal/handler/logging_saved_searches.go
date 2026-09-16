@@ -221,7 +221,7 @@ func (h *LoggingHandler) ListSavedSearches(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *LoggingHandler) CreateSavedSearch(w http.ResponseWriter, r *http.Request) {
-	queries, ok := h.savedSearchQueries(w, r)
+	_, ok := h.savedSearchQueries(w, r)
 	if !ok {
 		return
 	}
@@ -256,11 +256,10 @@ func (h *LoggingHandler) CreateSavedSearch(w http.ResponseWriter, r *http.Reques
 		OutputID: outputID, OwnerUserID: ownerID, Name: req.Name, QueryText: req.Query,
 		Namespaces: req.Namespaces, ResultLimit: req.Limit, Direction: req.Direction, LiveTail: req.LiveTail,
 	}
-	row, err := executeLoggingMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q LoggingMutationTx) (sqlc.LoggingSavedSearch, error) {
 			return q.CreateLoggingSavedSearch(r.Context(), params)
 		},
-		func() (sqlc.LoggingSavedSearch, error) { return queries.CreateLoggingSavedSearch(r.Context(), params) },
 		loggingSavedSearchAuditEvent("logging.saved_search.create", http.StatusCreated),
 	)
 	if err != nil {
@@ -315,11 +314,10 @@ func (h *LoggingHandler) UpdateSavedSearch(w http.ResponseWriter, r *http.Reques
 		ID: id, OwnerUserID: ownerID, Name: req.Name, QueryText: req.Query,
 		Namespaces: req.Namespaces, ResultLimit: req.Limit, Direction: req.Direction, LiveTail: req.LiveTail,
 	}
-	row, err := executeLoggingMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q LoggingMutationTx) (sqlc.LoggingSavedSearch, error) {
 			return q.UpdateLoggingSavedSearch(r.Context(), params)
 		},
-		func() (sqlc.LoggingSavedSearch, error) { return queries.UpdateLoggingSavedSearch(r.Context(), params) },
 		loggingSavedSearchAuditEvent("logging.saved_search.update", http.StatusOK),
 	)
 	if err != nil {
@@ -360,7 +358,7 @@ func (h *LoggingHandler) DeleteSavedSearch(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	params := sqlc.DeleteLoggingSavedSearchParams{ID: id, OwnerUserID: ownerID}
-	_, err = executeLoggingMutation(r, h,
+	_, err = executeMutation(r, h.runTx,
 		func(q LoggingMutationTx) (sqlc.LoggingSavedSearch, error) {
 			row, getErr := q.GetLoggingSavedSearchForOwner(r.Context(), sqlc.GetLoggingSavedSearchForOwnerParams{ID: id, OwnerUserID: ownerID})
 			if getErr != nil {
@@ -371,13 +369,6 @@ func (h *LoggingHandler) DeleteSavedSearch(w http.ResponseWriter, r *http.Reques
 				deleteErr = pgx.ErrNoRows
 			}
 			return row, deleteErr
-		},
-		func() (sqlc.LoggingSavedSearch, error) {
-			deleted, deleteErr := queries.DeleteLoggingSavedSearch(r.Context(), params)
-			if deleteErr == nil && deleted != 1 {
-				deleteErr = pgx.ErrNoRows
-			}
-			return existing, deleteErr
 		},
 		loggingSavedSearchAuditEvent("logging.saved_search.delete", http.StatusNoContent),
 	)
@@ -392,10 +383,10 @@ func (h *LoggingHandler) DeleteSavedSearch(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func loggingSavedSearchAuditEvent(action string, status int) func(sqlc.LoggingSavedSearch) clusterAuditEvent {
-	return func(row sqlc.LoggingSavedSearch) clusterAuditEvent {
+func loggingSavedSearchAuditEvent(action string, status int) func(sqlc.LoggingSavedSearch) mutationAuditEvent {
+	return func(row sqlc.LoggingSavedSearch) mutationAuditEvent {
 		digest := sha256.Sum256([]byte(row.QueryText))
-		return clusterAuditEvent{
+		return mutationAuditEvent{
 			action: action, resourceType: "logging_saved_search", resourceID: row.ID.String(), resourceName: row.Name, status: status,
 			detail: map[string]any{
 				"output_id": row.OutputID.String(), "query_sha256": fmt.Sprintf("%x", digest[:]),

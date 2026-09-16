@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { useParams, useRouter } from "@/lib/navigation";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/operator-table";
+import { useNavigate } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
 import { useState } from "react";
-import { useNodeDetail, useNodeOperation } from "@/lib/hooks";
-import * as apiClient from "@/lib/api";
+import { useNodeDetail, useNodeOperation } from "@/lib/hooks/clusters";
+import type { NodeTaintRequest } from "@/lib/api/nodes";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
+import { QueryStates } from "@/components/ui/query-states";
 import { ResourceActions } from "@/components/workloads/resource-actions";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import { usePermissionDecision } from "@/lib/permission-hooks";
@@ -25,7 +26,6 @@ import type {
   NodeDetailCondition,
 } from "@/types";
 import {
-  Loader2,
   ArrowLeft,
   Cpu,
   MemoryStick,
@@ -218,7 +218,7 @@ const taintColumns: Column<NodeTaint>[] = [
     accessor: (row) => (
       <span
         className={cn(
-          "px-1.5 py-0.5 rounded text-2xs",
+          "px-1.5 py-0.5 rounded-sm text-2xs",
           row.effect === "NoSchedule"
             ? "bg-status-warning/10 text-status-warning"
             : row.effect === "NoExecute"
@@ -385,21 +385,22 @@ function ConditionAlert({ label, ok }: { label: string; ok: boolean }) {
 // ── Main Page ──
 
 function NodeDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const clusterId = params.id as string;
-  const nodeName = params.nodeName as string;
+  const params = Route.useParams();
+  const navigate = useNavigate();
+  const clusterId = params.id;
+  const nodeName = params.nodeName;
   const [activeTab, setActiveTab] = useTabParam<TabId>(
     TABS.map((t) => t.id),
     "overview",
   );
 
-  const { data: node, isLoading, refetch } = useNodeDetail(clusterId, nodeName);
+  const nodeQuery = useNodeDetail(clusterId, nodeName);
+  const { data: node, isLoading, refetch } = nodeQuery;
   const nodeOperation = useNodeOperation();
   const [showYaml, setShowYaml] = useState(false);
   const [showDrain, setShowDrain] = useState(false);
   const [showAddTaint, setShowAddTaint] = useState(false);
-  const [newTaint, setNewTaint] = useState<apiClient.NodeTaintRequest>({
+  const [newTaint, setNewTaint] = useState<NodeTaintRequest>({
     key: "",
     value: "",
     effect: "NoSchedule",
@@ -653,11 +654,20 @@ function NodeDetailPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || nodeQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={nodeQuery}
+        permission="nodes:read"
+        notFound={
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <Server className="h-8 w-8 mb-3" />
+            <p>Node not found</p>
+          </div>
+        }
+      >
+        {() => null}
+      </QueryStates>
     );
   }
 
@@ -690,7 +700,9 @@ function NodeDetailPage() {
       <div className="flex items-start gap-4">
         <button
           type="button"
-          onClick={() => router.push(`/dashboard/clusters/${clusterId}/nodes`)}
+          onClick={() =>
+            void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
+          }
           aria-label="Back to nodes"
           className="mt-1 p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
         >
@@ -703,7 +715,7 @@ function NodeDetailPage() {
             </h1>
             <StatusBadge status={node.status} />
             {node.unschedulable && (
-              <span className="px-2 py-0.5 rounded text-2xs bg-status-warning/10 text-status-warning font-medium">
+              <span className="px-2 py-0.5 rounded-sm text-2xs bg-status-warning/10 text-status-warning font-medium">
                 Unschedulable
               </span>
             )}
@@ -716,7 +728,7 @@ function NodeDetailPage() {
         </div>
 
         {/* Node Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setShowYaml(true)}
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-sm font-medium
@@ -763,7 +775,7 @@ function NodeDetailPage() {
             kind="Node"
             name={nodeName}
             onDeleted={() =>
-              router.push(`/dashboard/clusters/${clusterId}/nodes`)
+              void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
             }
           />
         </div>
@@ -852,7 +864,7 @@ function NodeDetailPage() {
                     key={`${addr.type}-${addr.address}`}
                     className="flex items-center gap-2"
                   >
-                    <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground min-w-[80px] text-center">
+                    <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground min-w-[80px] text-center">
                       {addr.type}
                     </span>
                     <span className="text-xs font-mono text-foreground">
@@ -878,7 +890,7 @@ function NodeDetailPage() {
                 onClick={() => setShowAddLabel(true)}
                 disabled={nodeActionPending || !nodeUpdateDecision.allowed}
                 title={nodeUpdateBlockedReason}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium
                   text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-3 w-3" /> Add
@@ -888,7 +900,7 @@ function NodeDetailPage() {
               {Object.entries(node.labels).map(([k, v]) => (
                 <span
                   key={k}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-2xs bg-muted text-muted-foreground font-mono group"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-2xs bg-muted text-muted-foreground font-mono group"
                 >
                   <span className="text-foreground">{k}</span>
                   {v && <span>= {v}</span>}
@@ -921,7 +933,7 @@ function NodeDetailPage() {
                 onClick={() => setShowAddAnnotation(true)}
                 disabled={nodeActionPending || !nodeUpdateDecision.allowed}
                 title={nodeUpdateBlockedReason}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium
                   text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-3 w-3" /> Add
@@ -931,7 +943,7 @@ function NodeDetailPage() {
               {Object.entries(node.annotations).map(([k, v]) => (
                 <span
                   key={k}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-2xs bg-muted text-muted-foreground font-mono group"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-2xs bg-muted text-muted-foreground font-mono group"
                 >
                   <span className="text-foreground">{k}</span>
                   {v && <span>= {v}</span>}
@@ -956,7 +968,11 @@ function NodeDetailPage() {
           columns={podColumns}
           keyExtractor={(r) => `${r.namespace}/${r.name}`}
           searchPlaceholder="Search pods..."
-          emptyMessage="No pods running on this node"
+          emptyState={{
+            title: "No pods running on this node",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
         />
       )}
 
@@ -965,7 +981,11 @@ function NodeDetailPage() {
           data={node.conditions}
           columns={conditionColumns}
           keyExtractor={(r) => r.type}
-          emptyMessage="No conditions reported"
+          emptyState={{
+            title: "No conditions reported",
+            description:
+              "New observations will appear here as they are reported.",
+          }}
         />
       )}
 
@@ -1006,7 +1026,7 @@ function NodeDetailPage() {
               onClick={() => setShowAddTaint(true)}
               disabled={nodeActionPending || !nodeUpdateDecision.allowed}
               title={nodeUpdateBlockedReason}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" /> Add Taint
@@ -1024,7 +1044,7 @@ function NodeDetailPage() {
                     onClick={() => handleRemoveTaint(row)}
                     disabled={nodeActionPending || !nodeUpdateDecision.allowed}
                     title={nodeUpdateBlockedReason}
-                    className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                    className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -1034,7 +1054,11 @@ function NodeDetailPage() {
               },
             ]}
             keyExtractor={(r) => `${r.key}-${r.effect}`}
-            emptyMessage="No taints on this node"
+            emptyState={{
+              title: "No taints on this node",
+              description:
+                "Resources will appear here when they are available in this scope.",
+            }}
           />
         </div>
       )}
@@ -1045,7 +1069,11 @@ function NodeDetailPage() {
           columns={imageColumns}
           keyExtractor={(r) => r.name}
           searchPlaceholder="Search images..."
-          emptyMessage="No images cached on this node"
+          emptyState={{
+            title: "No images cached on this node",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
         />
       )}
 
@@ -1055,7 +1083,11 @@ function NodeDetailPage() {
           columns={eventColumns}
           keyExtractor={(r) => `${r.reason}-${r.lastTimestamp}`}
           searchPlaceholder="Search events..."
-          emptyMessage="No events for this node"
+          emptyState={{
+            title: "No events for this node",
+            description:
+              "New observations will appear here as they are reported.",
+          }}
         />
       )}
 
@@ -1166,8 +1198,7 @@ function NodeDetailPage() {
               onChange={(e) =>
                 setNewTaint({
                   ...newTaint,
-                  effect: e.target
-                    .value as apiClient.NodeTaintRequest["effect"],
+                  effect: e.target.value as NodeTaintRequest["effect"],
                 })
               }
               className="h-8"

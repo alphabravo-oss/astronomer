@@ -49,10 +49,10 @@
 # values-production.yaml
 postgres:
   pool:
-    maxConns: 50          # default 25
+    maxConns: 50          # server default 25; worker derives concurrency + headroom
     minConns: 10          # default 5
 ```
-Then `helm upgrade` (or Argo sync). Watch the empty-acquire rate go
+Then run `helm upgrade` (or reconcile the owning Flux object). Watch the empty-acquire rate go
 to zero before declaring done.
 
 ### Kill stuck Postgres connections (immediate)

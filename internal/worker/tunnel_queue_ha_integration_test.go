@@ -275,7 +275,7 @@ func TestTunnelQueueHAHelperProcess(t *testing.T) {
 		}
 	} else if role == "standalone" {
 		var err error
-		w, err = NewWorker(redisURL, testLogger(), testStandaloneRuntime())
+		w, err = NewWorker(redisURL, 32, testLogger(), testStandaloneRuntime())
 		if err != nil {
 			t.Fatal(err)
 		}

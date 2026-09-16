@@ -1,4 +1,4 @@
-.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet run verify verify-enterprise check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check charlie-contract-generate charlie-contract-check \
+.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
@@ -21,6 +21,7 @@ SQLC         ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 # Pinned golangci-lint — mirrors the sqlc pinned-tool pattern. Kept in sync with
 # the default in scripts/check-go-lint.sh, which is what CI actually invokes.
 GOLANGCI_LINT_VERSION ?= v2.12.2
+GOVULNCHECK_VERSION   ?= v1.8.0
 
 # Pinned oapi-codegen (Go SDK generator) — mirrors the sqlc pinned-tool pattern.
 OAPI_CODEGEN_VERSION ?= v2.5.0
@@ -134,6 +135,9 @@ fmt: ## Format Go source files
 vet: ## Vet Go source files
 	go vet ./...
 
+vulncheck: ## Scan reachable Go code with the pinned govulncheck release
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
 openapi-embed: ## Sync the served spec asset from the source-of-truth docs/openapi.yaml
 	cp docs/openapi.yaml internal/handler/assets/openapi.yaml
 
@@ -155,6 +159,23 @@ verify: ## Run the focused API contract gate used by CI
 VERIFY_SCOPE ?= all
 verify-enterprise: ## Run enterprise verification (VERIFY_SCOPE=all|backend|frontend|helm)
 	./scripts/verify-enterprise.sh $(VERIFY_SCOPE)
+
+verify-all: ## Run static, stateful, race, failover, and browser qualification lanes
+	$(MAKE) verify-enterprise VERIFY_SCOPE=all
+	$(MAKE) test-postgres-integration
+	POSTGRES_INTEGRATION_RACE=1 $(MAKE) test-postgres-integration
+	$(MAKE) test-worker-runtime-integration
+	WORKER_INTEGRATION_RACE=1 $(MAKE) test-worker-runtime-integration
+	$(MAKE) test-process-restart-qualification
+	PROCESS_RESTART_QUALIFICATION_RACE=1 $(MAKE) test-process-restart-qualification
+	$(MAKE) test-redis-outage-recovery
+	REDIS_OUTAGE_RECOVERY_RACE=1 $(MAKE) test-redis-outage-recovery
+	$(MAKE) test-postgres-outage-qualification
+	POSTGRES_OUTAGE_QUALIFICATION_RACE=1 $(MAKE) test-postgres-outage-qualification
+	./scripts/test-tunnel-queue-ha.sh
+	$(MAKE) test-postgres-failover-certification
+	cd frontend && npm run test:e2e && npm run test:e2e:smoke && npm run test:e2e:visual
+	$(MAKE) test-live-browser
 
 docs-check: ## Validate current documentation links, classification, and terminology
 	node scripts/check-docs.mjs
@@ -190,6 +211,23 @@ error-codes: ## Regenerate docs/error-codes.md from internal/handler/apierror/co
 
 error-codes-check: ## Fail if docs/error-codes.md is stale vs the apierror catalog
 	node scripts/error-code-docs.mjs --check
+
+cli-docs: ## Regenerate the astro CLI reference from the Cobra command tree
+	node scripts/generate-cli-docs.mjs --write
+
+cli-docs-check: ## Fail if docs/cli.md is stale vs the Cobra command tree
+	node scripts/generate-cli-docs.mjs
+
+.PHONY: install-hooks
+install-hooks: ## Enable the index-aware frontend formatting pre-commit hook
+	git config core.hooksPath .githooks
+
+config-docs: ## Regenerate the configuration reference and environment example
+	node scripts/generate-config-docs.mjs --write
+
+config-docs-check: ## Check configuration docs, environment example and generator tests
+	node scripts/generate-config-docs.mjs
+	node --test scripts/generate-config-docs.test.mjs
 
 sqlc-generate: ## Generate sqlc code
 	$(SQLC) generate
@@ -235,7 +273,7 @@ docker-build-worker: ## Build worker image
 docker-build-migrate: ## Build migrate (golang-migrate + SQL files) image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.migrate -t $(IMG_MIGRATE) .
 
-docker-build-frontend: ## Build frontend (Next.js dashboard) image from frontend/
+docker-build-frontend: ## Build frontend (Vite dashboard) image from frontend/
 	docker build $(DOCKER_BUILD_ARGS) -f frontend/Dockerfile -t $(IMG_FRONTEND) frontend
 
 docker-build-shell: ## Build astronomer-shell (in-cluster kubectl shell pod) image
@@ -329,8 +367,11 @@ k8s-delete: ## Delete the raw manifests in deploy/k8s/
 clean: ## Remove build artifacts
 	rm -rf bin/
 
-dev: ## Start dev environment (docker compose)
+dev: ## Start backend dependencies for local Vite development
 	docker compose -f deploy/docker-compose.yml up -d
+
+dev-full: ## Start backend and containerized frontend
+	docker compose -f deploy/docker-compose.yml --profile frontend up -d
 
 dev-down: ## Stop dev environment
 	docker compose -f deploy/docker-compose.yml down

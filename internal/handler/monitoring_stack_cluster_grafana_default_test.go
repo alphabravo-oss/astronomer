@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 func TestMonitoringStackPayloadOmitsGrafanaWhenFleetHealthyAndNotConfigured(t *testing.T) {
@@ -26,7 +27,7 @@ func TestMonitoringStackPayloadOmitsGrafanaWhenFleetHealthyAndNotConfigured(t *t
 		rc := chi.NewRouteContext()
 		rc.URLParams.Add("id", stackTestClusterID)
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
-		req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 			ID: uuid.NewString(), AuthMethod: "jwt",
 		}))
 		h.PreviewStack(rec, req)

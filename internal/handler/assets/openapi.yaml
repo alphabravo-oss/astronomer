@@ -42,11 +42,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Alias of bearerJWT; session JWT or personal API token.
-    gitOpsWebhookSecret:
+    gitHubWebhookSignature:
       type: apiKey
       in: header
-      name: X-Astronomer-Webhook-Secret
-      description: Shared secret configured for external Git provider push hooks.
+      name: X-Hub-Signature-256
+      description: GitHub HMAC-SHA256 signature computed over the unmodified request body with this source's dedicated secret.
   parameters:
     Limit:
       name: limit
@@ -72,12 +72,30 @@ components:
       required: true
       description: Required stable caller key used to replay a committed durable mutation without duplicating intent.
       schema: {type: string, minLength: 1, maxLength: 128}
+    PositiveFencingGeneration:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong entity tag containing the current positive fencing generation.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    DesiredGeneration:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong entity tag containing the current desired generation.
+      schema: {type: string, pattern: '^"[0-9]+"$'}
     MonitoringManagementClusterID:
       name: clusterId
       in: query
       required: false
       description: Management-cluster target; used when managementClusterId is omitted from the request body.
       schema: {type: string, format: uuid}
+  requestBodies:
+    DeliveryAction:
+      description: Optional reason attached to a delivery rollout or deployment transition.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}
   schemas:
     CharlieOnboardingRequest:
       type: object
@@ -551,7 +569,7 @@ components:
     CharlieAdminTriggerRule:
       type: object
       additionalProperties: false
-      required: [name, source_type, enabled, severities, scopes, cooldown_seconds, grace_period_seconds, flap_window_seconds, flap_count, fleet_threshold_percent, suppressed, maximum_attempts, dead_letter_enabled, mode_ceiling]
+      required: [name, source_type, enabled, severities, scopes, cooldown_seconds, grace_period_seconds, flap_window_seconds, flap_count, estate_threshold_percent, suppressed, maximum_attempts, dead_letter_enabled, mode_ceiling]
       properties:
         id: {type: string, format: uuid}
         name: {type: string, minLength: 1, maxLength: 128}
@@ -564,7 +582,6 @@ components:
         flap_window_seconds: {type: integer, format: int32, minimum: 1}
         flap_count: {type: integer, format: int32, minimum: 1}
         estate_threshold_percent: {type: integer, format: int32, minimum: 0, maximum: 100}
-        fleet_threshold_percent: {type: integer, format: int32, minimum: 0, maximum: 100, deprecated: true, description: Deprecated compatibility alias for estate_threshold_percent.}
         minimum_agent_version: {type: string, maxLength: 64}
         suppressed: {type: boolean}
         maximum_attempts: {type: integer, format: int32, minimum: 1}
@@ -1095,13 +1112,13 @@ components:
         data: {$ref: '#/components/schemas/LoggingOperation'}
     LoggingOutputPage:
       allOf:
-        - {$ref: '#/components/schemas/PaginatedEnvelope'}
+        - {$ref: '#/components/schemas/PageEnvelope'}
         - type: object
           properties:
             data: {type: array, items: {$ref: '#/components/schemas/LoggingOutput'}}
     LoggingPipelinePage:
       allOf:
-        - {$ref: '#/components/schemas/PaginatedEnvelope'}
+        - {$ref: '#/components/schemas/PageEnvelope'}
         - type: object
           properties:
             data: {type: array, items: {$ref: '#/components/schemas/LoggingPipeline'}}
@@ -1288,10 +1305,6 @@ components:
         profile:
           type: string
           description: Installed ClusterScanProfile name; omitted to select the newest compatible distribution profile.
-        scan_type:
-          type: string
-          deprecated: true
-          description: Compatibility alias for profile.
     CISProfile:
       type: object
       additionalProperties: false
@@ -1349,7 +1362,7 @@ components:
         data: {$ref: '#/components/schemas/CISScan'}
     CISScanListEnvelope:
       allOf:
-        - {$ref: '#/components/schemas/PaginatedEnvelope'}
+        - {$ref: '#/components/schemas/PageEnvelope'}
         - type: object
           properties:
             data: {type: array, items: {$ref: '#/components/schemas/CISScan'}}
@@ -1686,7 +1699,7 @@ components:
         data: {$ref: '#/components/schemas/MonitoringOperation'}
     MonitoringOperationPage:
       allOf:
-        - {$ref: '#/components/schemas/PaginatedEnvelope'}
+        - {$ref: '#/components/schemas/PageEnvelope'}
         - type: object
           properties:
             data: {type: array, items: {$ref: '#/components/schemas/MonitoringOperation'}}
@@ -1725,12 +1738,16 @@ components:
     MonitoringBackendPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/MonitoringBackend'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitoringBackend'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     MonitoringMetricsEnvelope:
       type: object
       additionalProperties: false
@@ -1903,10 +1920,12 @@ components:
         on_delete: {type: string, enum: [log, tombstone, decommission]}
         enabled: {type: boolean}
         allow_mass_decommission: {type: boolean}
+        webhook_provider: {type: string, enum: ['', github], description: Empty disables inbound webhooks; GitHub uses X-Hub-Signature-256.}
+        webhook_secret: {type: string, minLength: 32, writeOnly: true}
     GitOpsSource:
       type: object
       additionalProperties: false
-      required: [id, name, repo_url, branch, path_prefix, auth_mode, auth, auth_configured, sync_mode, sync_interval_seconds, on_delete, enabled, allow_mass_decommission, created_at, updated_at]
+      required: [id, name, repo_url, branch, path_prefix, auth_mode, auth, auth_configured, sync_mode, sync_interval_seconds, on_delete, enabled, allow_mass_decommission, webhook_provider, webhook_configured, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
@@ -1924,6 +1943,8 @@ components:
         last_error: {type: string}
         enabled: {type: boolean}
         allow_mass_decommission: {type: boolean}
+        webhook_provider: {type: string, enum: ['', github]}
+        webhook_configured: {type: boolean}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     GitOpsSourceEnvelope:
@@ -2688,9 +2709,10 @@ components:
     NativeRBACRuleListEnvelope:
       type: object
       additionalProperties: false
-      required: [data]
+      required: [data, pagination]
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/NativeRBACRule'}}
+        pagination: {$ref: '#/components/schemas/PaginationMetadata'}
     GrafanaTicketRedeemRequest:
       type: object
       additionalProperties: false
@@ -2717,23 +2739,27 @@ components:
     SCIMToken:
       type: object
       additionalProperties: false
-      required: [id, name, prefix, last_used_at, created_at]
+      required: [id, name, prefix, last_used_at, created_at, expires_at, revoked_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
         prefix: {type: string}
         last_used_at: {type: string, format: date-time, nullable: true}
         created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time, nullable: true}
     SCIMTokenCreated:
       type: object
       additionalProperties: false
-      required: [id, name, prefix, last_used_at, created_at, token]
+      required: [id, name, prefix, last_used_at, created_at, expires_at, revoked_at, token]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
         prefix: {type: string}
         last_used_at: {type: string, format: date-time, nullable: true}
         created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time, nullable: true}
         token:
           type: string
           description: Plaintext bearer token, returned only on create.
@@ -2996,14 +3022,27 @@ components:
     ImageVulnerabilityReportDetail:
       type: object
       additionalProperties: false
-      required: [report, vulnerabilities, vulnerability_total, severity_filter, limit, offset]
+      required:
+        - report
+        - vulnerabilities
+        - severity_filter
       properties:
-        report: {$ref: '#/components/schemas/ImageVulnerabilityReport'}
-        vulnerabilities: {type: array, items: {$ref: '#/components/schemas/ImageVulnerability'}}
-        vulnerability_total: {type: integer, format: int64, minimum: 0}
-        severity_filter: {type: string}
-        limit: {type: integer, minimum: 1, maximum: 500}
-        offset: {type: integer, minimum: 0}
+        report:
+          $ref: '#/components/schemas/ImageVulnerabilityReport'
+        vulnerabilities:
+          type: object
+          required:
+            - data
+            - pagination
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ImageVulnerability'
+            pagination:
+              $ref: '#/components/schemas/PaginationMetadata'
+        severity_filter:
+          type: string
     ImageVulnerabilityReportDetailEnvelope:
       type: object
       additionalProperties: false
@@ -3698,14 +3737,16 @@ components:
     GroupMappingListEnvelope:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
         data:
           type: array
-          items: {$ref: '#/components/schemas/GroupMapping'}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+          items:
+            $ref: '#/components/schemas/GroupMapping'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     RouteResponseEnvelope:
       type: object
       description: |
@@ -3713,6 +3754,40 @@ components:
         contracts. Domain operations may return either an enveloped payload or
         a documented bare object while fields are promoted additively into a
         named component schema.
+      additionalProperties: true
+    MaintenanceWindowRequest:
+      type: object
+      additionalProperties: false
+      required: [name, cron_open]
+      properties:
+        name: {type: string, minLength: 1}
+        description: {type: string}
+        mode: {type: string, enum: [blackout, permitted], default: blackout}
+        cron_open:
+          type: string
+          minLength: 1
+          description: Five-field cron expression for the start of each window.
+        duration_minutes: {type: integer, minimum: 1, maximum: 10080, default: 60}
+        timezone: {type: string, default: UTC, description: IANA time-zone name.}
+        cluster_selector: {type: object, additionalProperties: {type: string}}
+        operation_types: {type: array, items: {type: string}}
+        on_block: {type: string, enum: [refuse, defer], default: refuse}
+        enabled: {type: boolean}
+    PlatformDefaultClusterTemplateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        template_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Template to make the platform default; null or omission clears the default.
+    RouteMutationRequest:
+      type: object
+      description: |
+        Provisional typed boundary for a newly synchronized mutation route.
+        Domain-specific request fields replace this component before the route
+        contract is promoted out of provisional status.
       additionalProperties: true
     KubernetesProxyResponse:
       type: object
@@ -3866,48 +3941,68 @@ components:
     MirroredIngressClassPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/MirroredIngressClass'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MirroredIngressClass'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     MirroredGatewayClassPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/MirroredGatewayClass'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MirroredGatewayClass'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     MirroredNetworkPolicyPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/MirroredNetworkPolicy'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MirroredNetworkPolicy'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     MirroredResourceQuotaPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/MirroredResourceQuota'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MirroredResourceQuota'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     MirroredLimitRangePage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/MirroredLimitRange'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MirroredLimitRange'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     ErrorEnvelope:
       type: object
       description: Standard error envelope.
@@ -3927,40 +4022,18 @@ components:
             - message
       required:
         - error
-    PaginatedEnvelope:
+    PageEnvelope:
       type: object
-      description: DRF-style paginated list envelope. `data` is the page of items.
-      properties:
-        data:
-          type: array
-          items: {}
-        count:
-          type: integer
-          format: int64
-          description: Total number of items across all pages.
-        next:
-          type: string
-          nullable: true
-          description: URL of the next page, or null on the last page.
-        previous:
-          type: string
-          nullable: true
-          description: URL of the previous page, or null on the first page.
-      required:
-        - data
-        - count
-        - next
-        - previous
-    ListEnvelope:
-      type: object
-      description: Forward-looking list envelope with explicit pagination metadata.
+      description: Canonical collection page. Exact total is omitted when unknown.
       properties:
         data:
           type: array
           items: {}
         pagination:
           $ref: '#/components/schemas/PaginationMetadata'
-      required: [data, pagination]
+      required:
+        - data
+        - pagination
     LoginRequest:
       type: object
       required:
@@ -4061,6 +4134,52 @@ components:
           type: boolean
         roles:
           $ref: '#/components/schemas/AuthUserRoles'
+    UserPreferences:
+      type: object
+      additionalProperties: false
+      required: [theme, table_density, landing_route, time_format, favorites]
+      properties:
+        theme:
+          type: string
+          enum: [light, dark, system]
+        table_density:
+          type: string
+          enum: [compact, comfortable]
+        landing_route:
+          type: string
+          enum:
+            - /dashboard
+            - /dashboard/clusters
+            - /dashboard/projects
+            - /dashboard/workloads
+            - /dashboard/delivery
+            - /dashboard/monitoring
+            - /dashboard/alerting
+            - /dashboard/security
+            - /dashboard/audit
+        time_format:
+          type: string
+          enum: [locale, 12h, 24h]
+        favorites:
+          type: array
+          maxItems: 12
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - /dashboard
+              - /dashboard/clusters
+              - /dashboard/projects
+              - /dashboard/workloads
+              - /dashboard/delivery
+              - /dashboard/monitoring
+              - /dashboard/alerting
+              - /dashboard/logging
+              - /dashboard/security
+              - /dashboard/rbac
+              - /dashboard/audit
+              - /dashboard/tools
+              - /dashboard/extensions
     StreamTicketRequest:
       type: object
       additionalProperties: false
@@ -4083,6 +4202,95 @@ components:
         expires_at:
           type: string
           format: date-time
+    SupportBundleOperation:
+      type: object
+      additionalProperties: false
+      required: [id, status, attempt_count, size, expires_at, created_at, updated_at, status_url]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        attempt_count: {type: integer, format: int32, minimum: 0}
+        error_code: {type: string}
+        filename: {type: string}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        size: {type: integer, format: int64, minimum: 0, maximum: 67108864}
+        expires_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        status_url: {type: string, format: uri-reference}
+        download_url: {type: string, format: uri-reference}
+    AgentResourceValues:
+      type: object
+      additionalProperties: false
+      properties:
+        cpu: {type: string, maxLength: 32, example: 250m}
+        memory: {type: string, maxLength: 32, example: 256Mi}
+    AgentResources:
+      type: object
+      additionalProperties: false
+      properties:
+        requests: {$ref: '#/components/schemas/AgentResourceValues'}
+        limits: {$ref: '#/components/schemas/AgentResourceValues'}
+    AgentProxy:
+      type: object
+      additionalProperties: false
+      description: Standard proxy variables. URLs cannot contain embedded credentials, queries, or fragments.
+      properties:
+        http_proxy: {type: string, format: uri, maxLength: 2048}
+        https_proxy: {type: string, format: uri, maxLength: 2048}
+        no_proxy: {type: string, maxLength: 4096}
+    AgentToleration:
+      type: object
+      additionalProperties: false
+      required: [key]
+      properties:
+        key: {type: string, minLength: 1, maxLength: 253}
+        operator: {type: string, enum: [Equal, Exists], default: Equal}
+        value: {type: string, maxLength: 253}
+        effect: {type: string, enum: ['', NoSchedule, PreferNoSchedule, NoExecute]}
+        toleration_seconds: {type: integer, format: int64, minimum: 0, maximum: 604800}
+    AgentNodeSelectorRequirement:
+      type: object
+      additionalProperties: false
+      required: [key, operator]
+      properties:
+        key: {type: string, minLength: 1, maxLength: 253}
+        operator: {type: string, enum: [In, NotIn, Exists, DoesNotExist, Gt, Lt]}
+        values: {type: array, maxItems: 32, items: {type: string, maxLength: 63}}
+    AgentNodeSelectorTerm:
+      type: object
+      additionalProperties: false
+      properties:
+        match_expressions: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/AgentNodeSelectorRequirement'}}
+        match_fields: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/AgentNodeSelectorRequirement'}}
+    AgentPreferredNodeSelectorTerm:
+      type: object
+      additionalProperties: false
+      required: [weight, preference]
+      properties:
+        weight: {type: integer, format: int32, minimum: 1, maximum: 100}
+        preference: {$ref: '#/components/schemas/AgentNodeSelectorTerm'}
+    AgentNodeAffinity:
+      type: object
+      additionalProperties: false
+      properties:
+        required: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/AgentNodeSelectorTerm'}}
+        preferred: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/AgentPreferredNodeSelectorTerm'}}
+    AgentAffinity:
+      type: object
+      additionalProperties: false
+      properties:
+        node: {$ref: '#/components/schemas/AgentNodeAffinity'}
+    AgentOverrides:
+      type: object
+      additionalProperties: false
+      description: Bounded per-cluster agent PodSpec customization. Platform-owned Linux placement and security settings remain immutable.
+      properties:
+        tolerations: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/AgentToleration'}}
+        affinity: {$ref: '#/components/schemas/AgentAffinity'}
+        resources: {$ref: '#/components/schemas/AgentResources'}
+        proxy: {$ref: '#/components/schemas/AgentProxy'}
     Cluster:
       type: object
       additionalProperties: false
@@ -4090,6 +4298,10 @@ components:
         - id
         - name
         - display_name
+        - badge_text
+        - badge_color
+        - agent_overrides
+        - agent_overrides_digest
         - description
         - status
         - api_server_url
@@ -4130,6 +4342,20 @@ components:
           description: RFC-1123 cluster slug
         display_name:
           type: string
+        badge_text:
+          type: string
+          maxLength: 24
+          description: Optional short environment or purpose marker displayed beside the cluster name.
+        badge_color:
+          type: string
+          enum: ['', slate, blue, green, amber, red, purple]
+          description: Validated semantic color token. Empty when badge_text is empty.
+        agent_overrides:
+          $ref: '#/components/schemas/AgentOverrides'
+        agent_overrides_digest:
+          type: string
+          pattern: '^sha256:[a-f0-9]{64}$'
+          description: Canonical digest included in generated manifests and agent upgrade plans.
         description:
           type: string
         status:
@@ -4252,6 +4478,14 @@ components:
           description: RFC-1123 slug; must be lowercase + hyphens
         display_name:
           type: string
+        badge_text:
+          type: string
+          maxLength: 24
+        badge_color:
+          type: string
+          enum: ['', slate, blue, green, amber, red, purple]
+        agent_overrides:
+          $ref: '#/components/schemas/AgentOverrides'
         description:
           type: string
         environment:
@@ -4507,12 +4741,16 @@ components:
     KubectlRecordedCommandPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/KubectlRecordedCommand'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/KubectlRecordedCommand'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     OwnershipTransferResponse:
       type: object
       additionalProperties: false
@@ -4542,10 +4780,6 @@ components:
           type: boolean
         feature.shared_grafana:
           type: boolean
-        feature.fleet_grafana:
-          type: boolean
-          deprecated: true
-          description: Deprecated compatibility alias for feature.shared_grafana.
         feature.hosted_loki:
           type: boolean
         feature.security:
@@ -4904,12 +5138,27 @@ components:
     ClusterAgentResponse:
       type: object
       additionalProperties: false
-      required: [summary, items, limit, offset]
+      required:
+        - summary
+        - data
+        - pagination
       properties:
         summary:
           type: object
           additionalProperties: false
-          required: [total_clusters, connected, degraded, disconnected, versions, profiles, statuses, compatibility, server_version, minimum_supported_agent_version, minimum_compatible_agent_version, generated_at]
+          required:
+            - total_clusters
+            - connected
+            - degraded
+            - disconnected
+            - versions
+            - profiles
+            - statuses
+            - compatibility
+            - server_version
+            - minimum_supported_agent_version
+            - minimum_compatible_agent_version
+            - generated_at
           properties:
             total_clusters:
               type: integer
@@ -4946,14 +5195,12 @@ components:
             generated_at:
               type: string
               format: date-time
-        items:
+        data:
           type: array
           items:
             $ref: '#/components/schemas/ClusterAgentItem'
-        limit:
-          type: integer
-        offset:
-          type: integer
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     AgentConnectionDiagnostic:
       type: object
       additionalProperties: false
@@ -5144,7 +5391,7 @@ components:
     AgentUpgradePlan:
       type: object
       additionalProperties: false
-      required: [cluster_id, cluster_name, target_version, target_image, privilege_profile, strategy, batch_size, max_unavailable, ready, preflight_checks, steps, post_upgrade_health_checks, validation, rollback]
+      required: [cluster_id, cluster_name, target_version, target_image, privilege_profile, agent_overrides, configuration_digest, plan_digest, strategy, batch_size, max_unavailable, ready, preflight_checks, steps, post_upgrade_health_checks, validation, rollback]
       properties:
         cluster_id:
           type: string
@@ -5163,6 +5410,14 @@ components:
           type: string
         privilege_profile:
           type: string
+        agent_overrides:
+          $ref: '#/components/schemas/AgentOverrides'
+        configuration_digest:
+          type: string
+          pattern: '^sha256:[a-f0-9]{64}$'
+        plan_digest:
+          type: string
+          pattern: '^sha256:[a-f0-9]{64}$'
         strategy:
           type: string
           default: agent_self_rollout
@@ -5257,16 +5512,16 @@ components:
     AgentLifecycleOperationsResponse:
       type: object
       additionalProperties: false
-      required: [items, limit, offset]
+      required:
+        - data
+        - pagination
       properties:
-        items:
+        data:
           type: array
           items:
             $ref: '#/components/schemas/AgentLifecycleOperation'
-        limit:
-          type: integer
-        offset:
-          type: integer
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     AgentUpgradeOperationResponse:
       type: object
       additionalProperties: false
@@ -5437,20 +5692,16 @@ components:
     PaginatedClusters:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
         data:
           type: array
           items:
             $ref: '#/components/schemas/Cluster'
-        count:
-          type: integer
-        next:
-          type: string
-          nullable: true
-        previous:
-          type: string
-          nullable: true
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     SnapshotSpec:
       type: object
       properties:
@@ -6294,6 +6545,9 @@ components:
         repo_url: {type: string, format: uri}
         namespace: {type: string}
         order: {type: integer}
+        release_name: {type: string}
+        version: {type: string}
+        values_key: {type: string}
     ToolFormField:
       type: object
       additionalProperties: false
@@ -6377,14 +6631,16 @@ components:
     ClusterToolPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous]
+      required:
+        - data
+        - pagination
       properties:
         data:
           type: array
-          items: {$ref: '#/components/schemas/ClusterTool'}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
+          items:
+            $ref: '#/components/schemas/ClusterTool'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     ToolActionRequest:
       type: object
       additionalProperties: false
@@ -6414,6 +6670,7 @@ components:
             properties:
               chart_name: {type: string}
               chart_version: {type: string}
+              release_name: {type: string}
               namespace: {type: string}
               values_yaml: {type: string}
         preset: {type: string}
@@ -6436,7 +6693,7 @@ components:
         id: {type: string, format: uuid}
         targetType: {type: string}
         targetKey: {type: string}
-        operationType: {type: string, enum: [install, upgrade, uninstall, adopt]}
+        operationType: {type: string, enum: [install, upgrade, uninstall, adopt, rollback]}
         status: {type: string, enum: [pending, running, completed, failed, superseded]}
         attemptCount: {type: integer, minimum: 0}
         startedAt: {type: string, format: date-time, nullable: true}
@@ -6922,6 +7179,57 @@ components:
           type: array
           items:
             type: object
+    PrincipalSearchItem:
+      type: object
+      required: [kind, email, username, display_name]
+      properties:
+        kind: {type: string, enum: [local, pending, external]}
+        user_id: {type: string, format: uuid}
+        principal_id: {type: string, format: uuid}
+        connector_id: {type: string, format: uuid}
+        connector_name: {type: string}
+        connector_type: {type: string}
+        subject: {type: string}
+        email: {type: string, format: email}
+        username: {type: string}
+        display_name: {type: string}
+    PrincipalConnectorStatus:
+      type: object
+      required: [connector_id, connector_name, connector_type, supported]
+      properties:
+        connector_id: {type: string, format: uuid}
+        connector_name: {type: string}
+        connector_type: {type: string}
+        supported: {type: boolean}
+        error: {type: string}
+    PrincipalSearchResponse:
+      type: object
+      required: [principals, connectors]
+      properties:
+        principals:
+          type: array
+          items: {$ref: '#/components/schemas/PrincipalSearchItem'}
+        connectors:
+          type: array
+          items: {$ref: '#/components/schemas/PrincipalConnectorStatus'}
+    PrincipalMaterializeRequest:
+      type: object
+      additionalProperties: false
+      required: [connector_id, subject]
+      properties:
+        connector_id: {type: string, format: uuid}
+        subject: {type: string, minLength: 1, maxLength: 512}
+    PrincipalMaterialized:
+      type: object
+      required: [id, user_id, kind, connector_id, email, username, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        kind: {type: string, enum: [pending]}
+        connector_id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        username: {type: string}
+        display_name: {type: string}
     RBACRole:
       type: object
       additionalProperties: true
@@ -6953,6 +7261,15 @@ components:
         updated_at:
           type: string
           format: date-time
+        source_template:
+          type: string
+          nullable: true
+          description: Catalog template backing an immutable materialized role.
+        source_digest:
+          type: string
+          nullable: true
+          pattern: '^[a-f0-9]{64}$'
+          description: SHA-256 digest of the effective materialized rules.
     RBACRoleRequest:
       type: object
       additionalProperties: false
@@ -6982,6 +7299,20 @@ components:
           enum: [global, cluster, project]
           deprecated: true
           description: Deprecated compatibility field; scope is selected by the role collection path.
+    RBACApplyProjectTemplateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - template_name
+        - user_id
+      properties:
+        template_name:
+          type: string
+          description: Name of a project-scope template from the RBAC catalog.
+        user_id:
+          type: string
+          format: uuid
+          description: Existing local user identity to bind. SSO users become available after first login.
     RBACGlobalRoleBinding:
       type: object
       additionalProperties: true
@@ -7371,6 +7702,17 @@ components:
             - global
             - cluster
             - project
+        risk_level:
+          type: string
+          enum: [low, medium, high, critical]
+        inherits:
+          type: array
+          items:
+            type: string
+        system_managed:
+          type: boolean
+        category:
+          type: string
         rules:
           type: array
           items:
@@ -7533,10 +7875,6 @@ components:
           type: string
         runtime_secret_name:
           type: string
-        configmap_name:
-          type: string
-          deprecated: true
-          description: Compatibility alias of runtime_secret_name; never identifies a credential-bearing ConfigMap.
         public_clients:
           type: array
           items:
@@ -7599,9 +7937,6 @@ components:
           type: string
         runtime_secret_name:
           type: string
-        configmap_name:
-          type: string
-          deprecated: true
         public_clients:
           type: array
           items:
@@ -8195,9 +8530,6 @@ components:
         detail:
           description: Raw JSON detail payload.
           nullable: true
-        details:
-          description: Duplicate of detail (back-compat alias).
-          nullable: true
         actor_auth_method:
           type: string
         http_method:
@@ -8233,6 +8565,24 @@ components:
           type: string
           format: date-time
           description: Mirrors created_at; audit rows are append-only.
+    AuditExportOperation:
+      type: object
+      additionalProperties: false
+      required: [id, status, attempt_count, size, expires_at, created_at, updated_at, status_url]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [pending, running, retrying, failed, succeeded]}
+        attempt_count: {type: integer, format: int32, minimum: 0}
+        error_code: {type: string}
+        filename: {type: string}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        size: {type: integer, format: int64, minimum: 0}
+        expires_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        status_url: {type: string}
+        download_url: {type: string}
     NodeSummary:
       type: object
       additionalProperties: true
@@ -8580,6 +8930,23 @@ components:
           type: string
           description: creationTimestamp from metadata
       additionalProperties: true
+    ResourceCounts:
+      type: object
+      additionalProperties: false
+      required: [counts]
+      properties:
+        counts:
+          type: object
+          description: Counts keyed by authorized Kubernetes resource type. Unauthorized types are omitted.
+          additionalProperties:
+            type: integer
+            format: int64
+            minimum: 0
+        unavailable:
+          type: object
+          description: Authorized resource types whose metadata-only Kubernetes list failed. Values are intentionally non-sensitive.
+          additionalProperties:
+            type: string
     ResourceSearchResult:
       type: object
       description: Cross-cluster search payload (the value of `data`).
@@ -8950,7 +9317,7 @@ components:
       required: [limit, offset, has_more, next_offset]
       properties:
         total: {type: integer, format: int64, minimum: 0}
-        limit: {type: integer, minimum: 1, maximum: 200}
+        limit: {type: integer, minimum: 1}
         offset: {type: integer, minimum: 0}
         has_more: {type: boolean}
         next_offset: {type: integer, minimum: 0, nullable: true}
@@ -9281,6 +9648,10 @@ components:
       description: Partial cluster update. Omitted fields are preserved by an atomic row-locked merge; explicit empty strings or objects clear the corresponding field.
       properties:
         display_name: {type: string}
+        badge_text: {type: string, maxLength: 24}
+        badge_color: {type: string, enum: ['', slate, blue, green, amber, red, purple]}
+        agent_overrides:
+          $ref: '#/components/schemas/AgentOverrides'
         description: {type: string}
         environment: {type: string}
         region: {type: string}
@@ -9490,11 +9861,12 @@ components:
     DeliveryVersionIdentity:
       type: object
       additionalProperties: false
-      required: [bundle_version_id, spec_digest, source]
+      required: [bundle_version_id, spec_digest, source, overrides]
       properties:
         bundle_version_id: {type: string, format: uuid}
         spec_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
         source: {$ref: '#/components/schemas/DeliveryResolvedSource'}
+        overrides: {$ref: '#/components/schemas/DeliveryTargetOverrides'}
     DeliveryApprovalBinding:
       type: object
       additionalProperties: false
@@ -9540,6 +9912,18 @@ components:
         message: {type: string}
         observed_generation: {type: integer, format: int64, minimum: 0}
         last_transition_time: {type: string, format: date-time}
+    DeliveryTargetOverrides:
+      type: object
+      description: Bounded renderer-specific customization frozen into every rollout and assignment.
+      additionalProperties: false
+      properties:
+        helm_values:
+          type: object
+          additionalProperties: true
+        patches:
+          type: array
+          maxItems: 16
+          items: {type: string, minLength: 1, maxLength: 16384}
     DeliveryTargetWrite:
       type: object
       additionalProperties: false
@@ -9553,6 +9937,7 @@ components:
         rollout_policy: {$ref: '#/components/schemas/DeliveryRolloutPolicyInput'}
         reconciliation_policy: {$ref: '#/components/schemas/DeliveryReconciliationPolicyInput'}
         maintenance_window_policy: {type: object, additionalProperties: true}
+        overrides: {$ref: '#/components/schemas/DeliveryTargetOverrides'}
         suspended: {type: boolean}
     DeliveryTargetPatch:
       type: object
@@ -9565,6 +9950,7 @@ components:
         rollout_policy: {$ref: '#/components/schemas/DeliveryRolloutPolicyInput'}
         reconciliation_policy: {$ref: '#/components/schemas/DeliveryReconciliationPolicyInput'}
         maintenance_window_policy: {type: object, additionalProperties: true}
+        overrides: {$ref: '#/components/schemas/DeliveryTargetOverrides'}
         suspended: {type: boolean}
     DeliveryRolloutStart:
       type: object
@@ -9680,13 +10066,16 @@ components:
     DeliverySourcePage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/DeliverySource'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliverySource'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     DeliveryBundleWrite:
       type: object
       additionalProperties: false
@@ -9752,23 +10141,29 @@ components:
     DeliveryBundlePage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/DeliveryBundle'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryBundle'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     DeliveryBundleVersionPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/DeliveryBundleVersion'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryBundleVersion'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     DeliverySourceVerify:
       type: object
       additionalProperties: false
@@ -9780,7 +10175,7 @@ components:
     DeliveryTarget:
       type: object
       additionalProperties: false
-      required: [id, project_id, name, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_at, updated_at]
+      required: [id, project_id, name, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, overrides, override_digest, suspended, generation, resource_version, deletion_state, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         project_id: {type: string, format: uuid}
@@ -9791,6 +10186,8 @@ components:
         rollout_policy: {$ref: '#/components/schemas/DeliveryRolloutPolicy'}
         reconciliation_policy: {$ref: '#/components/schemas/DeliveryReconciliationPolicy'}
         maintenance_window_policy: {type: object, additionalProperties: true}
+        overrides: {$ref: '#/components/schemas/DeliveryTargetOverrides'}
+        override_digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
         suspended: {type: boolean}
         generation: {type: integer, format: int64, minimum: 1}
         resource_version: {type: integer, format: int64, minimum: 1}
@@ -9806,13 +10203,16 @@ components:
     DeliveryTargetPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/DeliveryTarget'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryTarget'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     DeliveryTargetDeletion:
       type: object
       additionalProperties: false
@@ -9986,33 +10386,42 @@ components:
     DeliveryRolloutPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/DeliveryRollout'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryRollout'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     DeliveryRolloutClusterPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/DeliveryRolloutCluster'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryRolloutCluster'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     DeliveryRolloutEventPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/DeliveryRolloutEvent'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryRolloutEvent'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     DeliveryRolloutDetail:
       type: object
       additionalProperties: false
@@ -10113,23 +10522,29 @@ components:
     ClusterDeploymentPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/ClusterDeployment'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterDeployment'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     ClusterDeploymentEventPage:
       type: object
       additionalProperties: false
-      required: [data, count, next, previous, total_known]
+      required:
+        - data
+        - pagination
       properties:
-        data: {type: array, items: {$ref: '#/components/schemas/ClusterDeploymentEvent'}}
-        count: {type: integer, format: int64, minimum: 0}
-        next: {type: string, nullable: true}
-        previous: {type: string, nullable: true}
-        total_known: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterDeploymentEvent'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
     ClusterDeploymentDetail:
       type: object
       additionalProperties: false
@@ -10447,45 +10862,23 @@ components:
         queue: {type: string}
         dlq: {type: array, items: {$ref: '#/components/schemas/AdminQueueDLQEntryWire'}}
         count: {type: integer}
-  x-delivery-rollout-action: &delivery-rollout-action
-    tags: [Delivery]
-    summary: Apply a CAS-protected typed rollout transition
-    x-rbac: delivery_rollouts:update
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
-      - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
-      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
-    requestBody:
-      content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}}}
-    responses:
-      '202':
-        description: Transition, durable event, and worker wake-up committed
-        headers:
-          Location: {description: Existing rollout status resource, schema: {type: string}}
-          Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer}}
-        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryAsyncOperationReceiptEnvelope'}}}
-      '412': {description: Stale fencing generation}
-      '428': {description: If-Match required}
-  x-delivery-deployment-action: &delivery-deployment-action
-    tags: [Delivery]
-    summary: Apply a CAS-protected deployment reconcile or suspend intent
-    x-rbac: delivery_deployments:update
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
-      - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
-      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
-    requestBody:
-      content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}}}
-    responses:
-      '202':
-        description: Deployment generation and durable event committed
-        headers:
-          Location: {description: Existing deployment status resource, schema: {type: string}}
-          Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer}}
-        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryAsyncOperationReceiptEnvelope'}}}
-      '412': {description: Stale desired generation}
-      '428': {description: If-Match required}
   responses:
+    AuditExportAccepted:
+      description: Durable audit export operation accepted.
+      headers:
+        Location: {description: Exact export operation status resource, schema: {type: string, format: uri-reference}}
+        Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer, minimum: 1}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AuditExportOperation'}
+    DeliveryActionAccepted:
+      description: Delivery transition, durable event, and worker wake-up committed.
+      headers:
+        Location: {description: Existing delivery status resource, schema: {type: string, format: uri-reference}}
+        Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer, minimum: 1}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/DeliveryAsyncOperationReceiptEnvelope'}
     BadRequest:
       description: Request validation failed
       content:
@@ -10564,6 +10957,505 @@ tags:
   - name: Delivery
     description: Flux-native targets, authoritative placement, rollouts, deployments, and compatibility
 paths:
+  /internal/tunnel/k8s/{cluster_id}/capabilities/{capability}:
+    get:
+      operationId: internalTunnelK8sCapability
+      tags:
+        - Platform
+      summary: Read an agent's admitted capability from its owning server replica
+      description: |
+        Server-internal endpoint used by a non-owner server replica to query the
+        immutable capability set admitted when the target agent connected. The
+        lookup never sends a message to the agent and is mounted outside the JWT
+        chain. The caller signs the path with the dedicated internal PSK; the
+        PSK itself is never transmitted.
+      x-astronomer-route-class: internal
+      x-astronomer-rbac: "server-internal only; reports the immutable CONNECT admission set and sends no agent message"
+      x-astronomer-auth: "short-lived path-bound HMAC envelope using the dedicated internal PSK plus sibling-source marker"
+      security: []
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: capability
+          in: path
+          required: true
+          schema: {type: string, minLength: 1}
+        - name: X-Astronomer-Internal-Source
+          in: header
+          required: true
+          schema: {type: string, enum: [sibling-server-pod]}
+        - name: X-Astronomer-Internal-Timestamp
+          in: header
+          required: true
+          schema: {type: string}
+        - name: X-Astronomer-Internal-Nonce
+          in: header
+          required: true
+          schema: {type: string, minLength: 1}
+        - name: X-Astronomer-Internal-Signature
+          in: header
+          required: true
+          schema: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: The locally owned agent is connected and its admission set was queried.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [supported]
+                properties:
+                  supported: {type: boolean}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/deferred-operations:
+    get:
+      operationId: getAdminDeferredOperations
+      tags: [DeferredOperations]
+      summary: "Read admin/deferred-operations"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/deferred-operations/{id}/cancel:
+    post:
+      operationId: postAdminDeferredOperationsByIdCancel
+      tags: [DeferredOperations]
+      summary: "Create or execute admin/deferred-operations/{id}/cancel"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/maintenance-windows:
+    get:
+      operationId: getAdminMaintenanceWindows
+      tags: [MaintenanceWindows]
+      summary: "Read admin/maintenance-windows"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: postAdminMaintenanceWindows
+      tags: [MaintenanceWindows]
+      summary: "Create or execute admin/maintenance-windows"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MaintenanceWindowRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/maintenance-windows/{id}:
+    delete:
+      operationId: deleteAdminMaintenanceWindowsById
+      tags: [MaintenanceWindows]
+      summary: "Delete admin/maintenance-windows/{id}"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '204':
+          description: Resource deleted or already absent
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    get:
+      operationId: getAdminMaintenanceWindowsById
+      tags: [MaintenanceWindows]
+      summary: "Read admin/maintenance-windows/{id}"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: putAdminMaintenanceWindowsById
+      tags: [MaintenanceWindows]
+      summary: "Replace admin/maintenance-windows/{id}"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MaintenanceWindowRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/maintenance-windows/active:
+    get:
+      operationId: getAdminMaintenanceWindowsActive
+      tags: [MaintenanceWindows]
+      summary: "Read admin/maintenance-windows/active"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/platform-settings/default-cluster-template:
+    get:
+      operationId: getAdminPlatformSettingsDefaultClusterTemplate
+      tags: [PlatformSettings]
+      summary: "Read admin/platform-settings/default-cluster-template"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: putAdminPlatformSettingsDefaultClusterTemplate
+      tags: [PlatformSettings]
+      summary: "Replace admin/platform-settings/default-cluster-template"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlatformDefaultClusterTemplateRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/platform-settings/default-cluster-template/coverage:
+    get:
+      operationId: getAdminPlatformSettingsDefaultClusterTemplateCoverage
+      tags: [PlatformSettings]
+      summary: "Read admin/platform-settings/default-cluster-template/coverage"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/admin/platform-settings/default-cluster-template/reapply/{cluster_id}:
+    post:
+      operationId: postAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId
+      tags: [PlatformSettings]
+      summary: "Create or execute admin/platform-settings/default-cluster-template/reapply/{cluster_id}"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: cluster_id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/auth/callback/{provider}:
+    get:
+      operationId: getAuthCallbackByProvider
+      tags: [Auth]
+      summary: "Read auth/callback/{provider}"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: provider, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/auth/login/{provider}:
+    get:
+      operationId: getAuthLoginByProvider
+      tags: [Auth]
+      summary: "Read auth/login/{provider}"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: provider, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/events/stream:
+    get:
+      operationId: getEventsStream
+      tags: [Events]
+      summary: "Read events/stream"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: stream
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/license:
+    get:
+      operationId: getLicense
+      tags: [License]
+      summary: "Read license"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/platform/health-summary:
+    get:
+      operationId: getPlatformHealthSummary
+      tags: [Platform]
+      summary: "Read platform/health-summary"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/audit/exports/:
+    post:
+      operationId: createAuditExport
+      tags: [Audit]
+      summary: Create a durable audit CSV export
+      description: Creates an idempotent background export using the same filters and 31-day maximum range as the bounded CSV download endpoint.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "audit_logs:read or audit_logs:list"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+        - {name: format, in: query, schema: {type: string, enum: [csv], default: csv}}
+        - {name: user_id, in: query, schema: {type: string, format: uuid}}
+        - {name: actor, in: query, schema: {type: string}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: audience, in: query, schema: {type: string, enum: [people, system, all]}}
+        - {name: resource_type, in: query, schema: {type: string}}
+        - {name: resource_id, in: query, schema: {type: string}}
+        - {name: resource_name, in: query, schema: {type: string}}
+        - {name: target, in: query, schema: {type: string}}
+        - {name: action, in: query, schema: {type: string}}
+        - {name: action_class, in: query, schema: {type: string}}
+        - {name: result, in: query, schema: {type: string, enum: [success, failure, error]}}
+        - {name: source, in: query, schema: {type: string}}
+        - {name: correlation_id, in: query, schema: {type: string}}
+        - {name: request_id, in: query, schema: {type: string}}
+        - {name: cluster_id, in: query, schema: {type: string}}
+        - {name: project_id, in: query, schema: {type: string}}
+        - {name: status_code, in: query, schema: {type: integer, minimum: 0, maximum: 599}}
+        - {name: from, in: query, required: true, schema: {type: string, format: date-time}}
+        - {name: to, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        '202': {$ref: '#/components/responses/AuditExportAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/audit/exports/{id}:
+    get:
+      operationId: getAuditExportsById
+      tags: [Audit]
+      summary: Get a durable audit export operation
+      description: Returns status and artifact metadata for an oversized audit CSV export owned by the caller.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Durable audit export status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditExportOperation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/audit/exports/{id}/download:
+    get:
+      operationId: getAuditExportsByIdDownload
+      tags: [Audit]
+      summary: "Read audit/exports/{id}/download"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: download
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Completed audit CSV artifact.
+          content:
+            text/csv:
+              schema: {type: string, format: binary}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/admin/task-outbox/dead:
     get:
       operationId: getAdminTaskOutboxDead
@@ -10845,7 +11737,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - {$ref: '#/components/schemas/PaginatedEnvelope'}
+                  - {$ref: '#/components/schemas/PageEnvelope'}
                   - type: object
                     properties:
                       data: {type: array, items: {$ref: '#/components/schemas/TaskOutboxEntryWire'}}
@@ -10905,72 +11797,113 @@ paths:
   /api/v1/clusters/{cluster_id}/control-plane-snapshots/:
     get:
       operationId: listControlPlaneSnapshots
-      tags: [Clusters]
+      tags:
+        - Clusters
       summary: List control-plane snapshot intents
       x-astronomer-route-class: public-api
       x-astronomer-auth: bearer-or-session
       x-astronomer-rbac: clusters:read
       parameters:
-        - {name: cluster_id, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
-        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - name: cluster_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: Snapshot page
           content:
             application/json:
               schema:
-                allOf:
-                  - {$ref: '#/components/schemas/DataEnvelope'}
-                  - type: object
-                    properties:
-                      data:
-                        type: object
-                        required: [items, total, limit, offset]
-                        properties:
-                          items: {type: array, items: {$ref: '#/components/schemas/ControlPlaneSnapshotWire'}}
-                          total: {type: integer, format: int64}
-                          limit: {type: integer}
-                          offset: {type: integer}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ControlPlaneSnapshotWire'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       operationId: createControlPlaneSnapshot
-      tags: [Clusters]
+      tags:
+        - Clusters
       summary: Queue a control-plane snapshot
       x-astronomer-operation-status-path: /api/v1/clusters/{cluster_id}/control-plane-snapshots/{id}/
       x-astronomer-route-class: public-api
       x-astronomer-auth: bearer-or-session
       x-astronomer-rbac: clusters:update
       parameters:
-        - {name: cluster_id, in: path, required: true, schema: {type: string, format: uuid}}
-        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+        - name: cluster_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/RequiredIdempotencyKey'
       requestBody:
         required: false
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/CreateControlPlaneSnapshotRequestWire'}
+            schema:
+              $ref: '#/components/schemas/CreateControlPlaneSnapshotRequestWire'
       responses:
         '202':
           description: Durable snapshot intent accepted
           headers:
-            Location: {description: Exact snapshot status resource, schema: {type: string, format: uri-reference}}
-            Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer, minimum: 1}}
+            Location:
+              description: Exact snapshot status resource
+              schema:
+                type: string
+                format: uri-reference
+            Retry-After:
+              description: Suggested polling delay in seconds
+              schema:
+                type: integer
+                minimum: 1
           content:
             application/json:
               schema:
                 allOf:
-                  - {$ref: '#/components/schemas/DataEnvelope'}
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - type: object
                     properties:
-                      data: {$ref: '#/components/schemas/ControlPlaneSnapshotWire'}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '409': {$ref: '#/components/responses/Conflict'}
+                      data:
+                        $ref: '#/components/schemas/ControlPlaneSnapshotWire'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/v1/clusters/{cluster_id}/control-plane-snapshots/{id}/:
     get:
       operationId: getControlPlaneSnapshot
@@ -12298,81 +13231,6 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
-  /api/v1/alerts/rules/{id}/disable:
-    post:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      operationId: postAlertsRulesByIdDisable
-      tags: [Alerts]
-      summary: "Create or execute alerts/rules/{id}/disable"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
-      x-astronomer-route-class: compatibility-alias
-      deprecated: true
-      x-astronomer-sunset: '2027-08-23'
-      x-astronomer-successor: '/api/v1/alerting/rules/{id}/disable'
-      parameters:
-        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
-      responses:
-        '200':
-          description: Disabled alert rule
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/AlertRuleEnvelope'}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '503': {$ref: '#/components/responses/ServiceUnavailable'}
-  /api/v1/alerts/rules/{id}/enable:
-    post:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      operationId: postAlertsRulesByIdEnable
-      tags: [Alerts]
-      summary: "Create or execute alerts/rules/{id}/enable"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
-      x-astronomer-route-class: compatibility-alias
-      deprecated: true
-      x-astronomer-sunset: '2027-08-23'
-      x-astronomer-successor: '/api/v1/alerting/rules/{id}/enable'
-      parameters:
-        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
-      responses:
-        '200':
-          description: Enabled alert rule
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/AlertRuleEnvelope'}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '503': {$ref: '#/components/responses/ServiceUnavailable'}
-  /api/v1/alerts/silences/{id}/expire:
-    post:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      operationId: postAlertsSilencesByIdExpire
-      tags: [Alerts]
-      summary: "Create or execute alerts/silences/{id}/expire"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
-      x-astronomer-route-class: compatibility-alias
-      deprecated: true
-      x-astronomer-sunset: '2027-08-23'
-      x-astronomer-successor: '/api/v1/alerting/silences/{id}/expire'
-      parameters:
-        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
-      responses:
-        '200':
-          description: Expired alert silence
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/AlertSilenceEnvelope'}
-        '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '404': {$ref: '#/components/responses/NotFound'}
-        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/anomaly-baselines:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -12481,7 +13339,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - {$ref: '#/components/schemas/PaginatedEnvelope'}
+                  - {$ref: '#/components/schemas/PageEnvelope'}
                   - properties:
                       data:
                         type: array
@@ -13252,7 +14110,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - {$ref: '#/components/schemas/ListEnvelope'}
+                  - {$ref: '#/components/schemas/PageEnvelope'}
                   - properties:
                       data:
                         type: array
@@ -14016,19 +14874,28 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/gitops/sources/{id}/webhook:
     post:
-      x-astronomer-auth: "gitops-webhook-secret"
-      x-astronomer-rbac: "external-shared-secret"
+      x-astronomer-auth: "source-specific GitHub HMAC-SHA256"
+      x-astronomer-rbac: "external-source-signature"
       security:
-        - gitOpsWebhookSecret: []
+        - gitHubWebhookSignature: []
       operationId: postGitopsSourcesByIdWebhook
       x-astronomer-async-202-exception:
         reason: trusted_webhook_ingest
       tags: [Gitops]
       summary: "Create or execute gitops/sources/{id}/webhook"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      description: Validates the source-specific X-Hub-Signature-256 over the raw body, requires a unique X-GitHub-Delivery within the 24-hour replay window, accepts push events only, rate-limits by trusted client IP, and durably queues one sync.
       x-astronomer-route-class: public-api
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+        - {name: X-GitHub-Delivery, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: X-GitHub-Event, in: header, required: true, schema: {type: string, enum: [push]}}
+        - {name: X-Hub-Signature-256, in: header, required: true, schema: {type: string, pattern: '^sha256=[a-fA-F0-9]{64}$'}}
+      x-astronomer-request-schema-status: polymorphic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true, maxProperties: 10000}
       responses:
         '202':
           description: GitOps source sync durably queued
@@ -14039,6 +14906,9 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {description: Webhook payload exceeds the 1 MiB limit}
+        '429': {description: Webhook request rate limit exceeded}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/logging/controller/status:
     get:
@@ -14954,7 +15824,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - {$ref: '#/components/schemas/PaginatedEnvelope'}
+                  - {$ref: '#/components/schemas/PageEnvelope'}
                   - type: object
                     properties:
                       data: {type: array, items: {$ref: '#/components/schemas/ClusterSecurityPolicy'}}
@@ -15175,7 +16045,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - {$ref: '#/components/schemas/PaginatedEnvelope'}
+                  - {$ref: '#/components/schemas/PageEnvelope'}
                   - type: object
                     properties:
                       data: {type: array, items: {$ref: '#/components/schemas/PodSecurityTemplate'}}
@@ -16249,25 +17119,82 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
-  /api/v1/support-bundle:
+  /api/v1/support-bundles:
+    post:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "superuser"
+      operationId: createSupportBundle
+      tags: [SupportBundle]
+      summary: Queue a redacted support-bundle collection
+      description: Persists a durable operation and tunnel-worker task. Collection never executes on the HTTP request thread.
+      x-astronomer-route-class: public-api
+      x-astronomer-operation-status-path: /api/v1/support-bundles/{id}
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      responses:
+        '202':
+          description: Durable operation accepted or idempotently replayed
+          headers: *durable-polling-headers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/DataEnvelope'}
+                  - properties:
+                      data: {$ref: '#/components/schemas/SupportBundleOperation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/support-bundles/{id}:
     get:
       x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      operationId: getSupportBundle
+      x-astronomer-rbac: "superuser"
+      operationId: getSupportBundleOperation
       tags: [SupportBundle]
-      summary: "Read support-bundle"
-      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
-      x-astronomer-route-class: download
+      summary: Read durable support-bundle status
+      x-astronomer-route-class: public-api
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
       responses:
         '200':
-          description: Audited download payload
+          description: Current durable operation state
           content:
-            application/octet-stream:
-              schema: {type: string, format: binary}
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/DataEnvelope'}
+                  - properties:
+                      data: {$ref: '#/components/schemas/SupportBundleOperation'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/support-bundles/{id}/download:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "superuser"
+      operationId: downloadSupportBundle
+      tags: [SupportBundle]
+      summary: Download a completed redacted support bundle
+      description: Available only while the succeeded artifact is inside its 24-hour retention window.
+      x-astronomer-route-class: download
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Audited ZIP download
+          content:
+            application/zip:
+              schema: {type: string, format: binary}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410':
+          description: Artifact retention window has elapsed
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/tools/{slug}:
     get:
@@ -16392,6 +17319,41 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/tools/{slug}/rollback:
+    post:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "handler-and-route-policy"
+      operationId: postToolsBySlugRollback
+      tags: [Tools]
+      summary: Roll back the latest tool install or upgrade in reverse release order
+      x-astronomer-route-class: public-api
+      parameters:
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+        - {name: slug, in: path, required: true, schema: {type: string, minLength: 1}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ToolUninstallRequest'}
+      responses:
+        '202':
+          description: Reverse release operation accepted.
+          headers:
+            Location: {description: Pollable operation URL, schema: {type: string}}
+            Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer, minimum: 1}}
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/DataEnvelope'}
+                  - properties:
+                      data: {$ref: '#/components/schemas/ToolOperation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/tools/{slug}/uninstall:
     delete:
       x-astronomer-auth: "bearer-or-session"
@@ -16501,7 +17463,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - {$ref: '#/components/schemas/ListEnvelope'}
+                  - {$ref: '#/components/schemas/PageEnvelope'}
                   - properties:
                       data:
                         type: array
@@ -17038,41 +18000,77 @@ paths:
           description: Paginated rollout timeline
           content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutEventPage'}}}
   /api/v1/delivery/rollouts/{id}/pause/:
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
     post:
       x-astronomer-auth: "bearer-or-session"
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-route-class: public-api
-      <<: *delivery-rollout-action
       operationId: postDeliveryRolloutsByIdPause
+      tags: [Delivery]
+      summary: Pause a rollout at its current fencing generation
+      x-rbac: delivery_rollouts:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/PositiveFencingGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody: {$ref: '#/components/requestBodies/DeliveryAction'}
+      responses:
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
+        '412': {description: Stale fencing generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/rollouts/{id}/resume/:
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
     post:
       x-astronomer-auth: "bearer-or-session"
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-route-class: public-api
-      <<: *delivery-rollout-action
       operationId: postDeliveryRolloutsByIdResume
+      tags: [Delivery]
+      summary: Resume a paused rollout at its current fencing generation
+      x-rbac: delivery_rollouts:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/PositiveFencingGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody: {$ref: '#/components/requestBodies/DeliveryAction'}
+      responses:
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
+        '412': {description: Stale fencing generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/rollouts/{id}/abort/:
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
     post:
       x-astronomer-auth: "bearer-or-session"
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-route-class: public-api
-      <<: *delivery-rollout-action
       operationId: postDeliveryRolloutsByIdAbort
+      tags: [Delivery]
+      summary: Abort a rollout at its current fencing generation
+      x-rbac: delivery_rollouts:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/PositiveFencingGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody: {$ref: '#/components/requestBodies/DeliveryAction'}
+      responses:
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
+        '412': {description: Stale fencing generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/rollouts/{id}/retry/:
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
     post:
       x-astronomer-auth: "bearer-or-session"
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-route-class: public-api
-      <<: *delivery-rollout-action
       operationId: postDeliveryRolloutsByIdRetry
+      tags: [Delivery]
+      summary: Retry a failed rollout at its current fencing generation
+      x-rbac: delivery_rollouts:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/PositiveFencingGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody: {$ref: '#/components/requestBodies/DeliveryAction'}
+      responses:
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
+        '412': {description: Stale fencing generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/rollouts/{id}/rollback/:
     post:
       x-astronomer-auth: "browser JWT or projects:write API token; strong fencing-generation If-Match and idempotency middleware"
@@ -17083,18 +18081,13 @@ paths:
       x-rbac: delivery_rollbacks:rollback
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
-        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
-      requestBody:
-        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutAction'}}}
+        - {$ref: '#/components/parameters/PositiveFencingGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody: {$ref: '#/components/requestBodies/DeliveryAction'}
       responses:
-        '202':
-          description: Rollback transition and outbox intent committed
-          headers:
-            Location: {description: Existing rollout status resource, schema: {type: string}}
-            Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer}}
-          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryAsyncOperationReceiptEnvelope'}}}
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
         '412': {description: Stale fencing generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/rollouts/{id}/approve/:
     post:
       x-astronomer-auth: "browser JWT or projects:write API token; strong fencing-generation If-Match and idempotency middleware"
@@ -17105,19 +18098,15 @@ paths:
       x-rbac: delivery_approvals:approve
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
-        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {$ref: '#/components/parameters/PositiveFencingGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryRolloutApproval'}}}
       responses:
-        '202':
-          description: Approval decision, event, and wake-up intent committed
-          headers:
-            Location: {description: Existing rollout status resource, schema: {type: string}}
-            Retry-After: {description: Suggested polling delay in seconds, schema: {type: integer}}
-          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryAsyncOperationReceiptEnvelope'}}}
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
         '412': {description: Stale fencing generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/deployments/:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -17169,32 +18158,59 @@ paths:
           description: Paginated deployment events
           content: {application/json: {schema: {$ref: '#/components/schemas/ClusterDeploymentEventPage'}}}
   /api/v1/delivery/deployments/{id}/reconcile/:
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
     post:
       x-astronomer-auth: "browser JWT or projects:write API token; strong desired-generation If-Match and idempotency middleware"
       x-astronomer-rbac: "delivery_deployments:update on the normalized project scope"
       x-astronomer-route-class: public-api
-      <<: *delivery-deployment-action
       operationId: postDeliveryDeploymentsByIdReconcile
+      tags: [Delivery]
+      summary: Reconcile a deployment at its current desired generation
+      x-rbac: delivery_deployments:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/DesiredGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody: {$ref: '#/components/requestBodies/DeliveryAction'}
+      responses:
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
+        '412': {description: Stale desired generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/deployments/{id}/suspend/:
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
     post:
       x-astronomer-auth: "browser JWT or projects:write API token; strong desired-generation If-Match and idempotency middleware"
       x-astronomer-rbac: "delivery_deployments:update on the normalized project scope"
       x-astronomer-route-class: public-api
-      <<: *delivery-deployment-action
       operationId: postDeliveryDeploymentsByIdSuspend
+      tags: [Delivery]
+      summary: Suspend a deployment at its current desired generation
+      x-rbac: delivery_deployments:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/DesiredGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody: {$ref: '#/components/requestBodies/DeliveryAction'}
+      responses:
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
+        '412': {description: Stale desired generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/deployments/{id}/resume/:
-    parameters:
-      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
     post:
       x-astronomer-auth: "bearer-or-session"
       x-astronomer-rbac: "handler-and-route-policy"
       x-astronomer-route-class: public-api
-      <<: *delivery-deployment-action
       operationId: postDeliveryDeploymentsByIdResume
+      tags: [Delivery]
+      summary: Resume a deployment at its current desired generation
+      x-rbac: delivery_deployments:update
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/DesiredGeneration'}
+        - {$ref: '#/components/parameters/RequiredIdempotencyKey'}
+      requestBody: {$ref: '#/components/requestBodies/DeliveryAction'}
+      responses:
+        '202': {$ref: '#/components/responses/DeliveryActionAccepted'}
+        '412': {description: Stale desired generation}
+        '428': {description: If-Match required}
   /api/v1/delivery/clusters/{clusterId}/inventory/:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -17225,25 +18241,6 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/DeliverySystemCompatibilityEnvelope'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
-  /api/v1/delivery/fleet/:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "delivery_inventory:read"
-      x-astronomer-route-class: compatibility-alias
-      deprecated: true
-      x-astronomer-sunset: '2027-08-23'
-      x-astronomer-successor: '/api/v1/delivery/estate/'
-      operationId: getDeliveryFleetLegacy
-      tags: [Delivery]
-      summary: Get the estate-wide Flux delivery scoreboard (deprecated path)
-      description: Response-compatible alias retained for v1 clients during the published terminology migration window.
-      responses:
-        '200':
-          description: Estate tiles, per-cluster rows, attention, and distributions
-          content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryEstateEnvelope'}}}
-        '401': {$ref: '#/components/responses/Unauthorized'}
-        '403': {$ref: '#/components/responses/Forbidden'}
-        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/delivery/estate/:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -17672,6 +18669,60 @@ paths:
                     $ref: '#/components/schemas/User'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/me/preferences/:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "authenticated current user"
+      x-astronomer-route-class: public-api
+      operationId: getAuthMePreferences
+      tags: [Auth]
+      summary: Get current user's console preferences
+      responses:
+        '200':
+          description: Complete typed preference document, including defaults.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserPreferences'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    put:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "authenticated current user"
+      x-astronomer-route-class: public-api
+      operationId: putAuthMePreferences
+      tags: [Auth]
+      summary: Replace current user's console preferences
+      description: Unknown keys and unregistered routes or values are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPreferences'
+      responses:
+        '200':
+          description: Stored preference document.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UserPreferences'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/auth/logout/:
     post:
       x-astronomer-auth: "bearer-or-session"
@@ -17867,7 +18918,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties: {data: {type: array, items: {$ref: '#/components/schemas/BackupDrillResult'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -18669,8 +19720,8 @@ paths:
                     type: integer
   /api/v1/cluster-agents/:
     get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
       x-astronomer-route-class: public-api
       operationId: getClusterAgents
       tags:
@@ -18694,10 +19745,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/ClusterAgentResponse'
+                $ref: '#/components/schemas/ClusterAgentResponse'
   /api/v1/cluster-agents/{cluster_id}/:
     parameters:
       - name: cluster_id
@@ -18793,8 +19841,8 @@ paths:
           type: string
           format: uuid
     get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
       x-astronomer-route-class: public-api
       operationId: getClusterAgentsByClusterIdOperations
       tags:
@@ -18818,10 +19866,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/AgentLifecycleOperationsResponse'
+                $ref: '#/components/schemas/AgentLifecycleOperationsResponse'
   /api/v1/cluster-agents/{cluster_id}/self-test/:
     parameters:
       - name: cluster_id
@@ -18923,26 +19968,6 @@ paths:
                     $ref: '#/components/schemas/AgentUpgradeOperationResponse'
         '409':
           description: Upgrade plan is blocked
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-  /api/v1/activity/:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      operationId: getActivityLegacy
-      deprecated: true
-      x-astronomer-route-class: compatibility-alias
-      x-astronomer-sunset: '2027-08-23'
-      x-astronomer-successor: '/api/v1/activity'
-      tags:
-        - Clusters
-      summary: Recent platform activity
-      responses:
-        '200':
-          description: Activity feed
           content:
             application/json:
               schema:
@@ -19780,8 +20805,9 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/VulnImage'
-                  count:
-                    type: integer
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
+                required: [data, pagination]
   /api/v1/clusters/{id}/shell/sessions/:
     parameters:
       - name: id
@@ -20467,47 +21493,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/clusters/{id}/generate_kubeconfig:
-    post:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "clusters:read; route returns scoped cluster access material"
-      operationId: postClustersByIdGenerateKubeconfigLegacy
-      deprecated: true
-      x-astronomer-route-class: compatibility-alias
-      x-astronomer-sunset: '2027-08-23'
-      x-astronomer-successor: '/api/v1/clusters/{id}/generate-kubeconfig'
-      summary: Generate a proxy kubeconfig (YAML download, underscore alias)
-      tags:
-        - clusters
-      security:
-        - bearerJWT: []
-      description: Legacy alias for generate-kubeconfig. Issues a one-hour, read-only API token and returns a YAML kubeconfig whose server is the audited Astronomer proxy. Fails closed if the revocable credential cannot be persisted.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Short-lived read-only kubeconfig YAML routed through the Astronomer proxy. Response headers identify proxy mode and credential expiry.
-          content:
-            application/x-yaml:
-              schema:
-                type: string
-        '404':
-          description: Cluster not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '503':
-          description: Short-lived credential issuer unavailable
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/clusters/{id}/generate-direct-kubeconfig:
     post:
       x-astronomer-auth: "bearer/session auth + CSRF write gate"
@@ -20622,35 +21607,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/clusters/{id}/kubeconfig:
-    get:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "clusters:read; returns only the scoped Astronomer proxy preview"
-      x-astronomer-route-class: compatibility-alias
-      deprecated: true
-      x-astronomer-sunset: '2027-08-23'
-      x-astronomer-successor: '/api/v1/clusters/{id}/kubeconfig-preview'
-      operationId: getClustersByIdKubeconfigLegacy
-      summary: Preview a proxy kubeconfig (deprecated direct-access path)
-      tags: [clusters]
-      security: [{bearerJWT: []}]
-      description: The legacy path is response-compatible but no longer returns portable member-cluster credentials. It returns the audited Astronomer proxy preview and advertises its successor and sunset in response headers.
-      parameters:
-        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
-      responses:
-        '200':
-          description: Proxy kubeconfig object.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties: {data: {type: object}}
-        '404':
-          description: Cluster not found or proxy preview unavailable
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
   /api/v1/clusters/{id}/kubeconfig-preview:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -20973,93 +21929,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/clusters/{id}/v2/pods:
-    get:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "clusters:read"
-      x-astronomer-route-class: public-api
-      operationId: remoteV2ListPods
-      summary: List pods via the v2 remotedialer tunnel (non-production demo)
-      description: |
-        Demonstration endpoint (remoteV2PodsHandler) proving the new
-        remotedialer-based tunnel end-to-end: builds a client-go clientset whose
-        transport is dialed through the agent WebSocket and lists pods in the
-        requested namespace. Hard-gated OUT of production builds.
-
-        Auth: bearer JWT/API-token; requires `clusters:read` RBAC.
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          description: Cluster UUID.
-        - name: namespace
-          in: query
-          required: false
-          schema:
-            type: string
-            default: default
-          description: Namespace to list pods in (defaults to "default").
-      responses:
-        '200':
-          description: Pod summary list (not enveloped — raw object).
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  cluster_id:
-                    type: string
-                  namespace:
-                    type: string
-                  count:
-                    type: integer
-                  pods:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                        namespace:
-                          type: string
-                        phase:
-                          type: string
-                        node:
-                          type: string
-                required:
-                  - cluster_id
-                  - namespace
-                  - count
-                  - pods
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '502':
-          description: Pod list failed upstream.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-        '503':
-          description: Agent not connected / transport build failed.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
   /api/v1/register/{token}:
     get:
       x-astronomer-auth: "registration token in path is the credential"
@@ -21207,7 +22076,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -21909,7 +22778,7 @@ paths:
         - clusters
       security:
         - bearerJWT: []
-      description: clusters:read RBAC. Returns {items:[...]} (not the paginated envelope).
+      description: clusters:read RBAC. Returns the canonical data/pagination envelope with look-ahead continuation and no fabricated total.
       responses:
         '200':
           description: Registry configs.
@@ -22273,16 +23142,16 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        type: object
-                        properties:
-                          items:
-                            type: array
-                            items:
-                              $ref: '#/components/schemas/AllowlistSnapshotResponse'
+                type: object
+                additionalProperties: false
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AllowlistSnapshotResponse'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
   /api/v1/clusters/{cluster_id}/service-mesh:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -22405,7 +23274,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -23351,7 +24220,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -23547,51 +24416,12 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
                         items:
                           $ref: '#/components/schemas/RestoreOperationResponse'
-        '500':
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/backups/runs:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: public-api
-      operationId: getBackupsRuns
-      summary: List backup runs (alias of GET /api/v1/backups)
-      tags:
-        - cluster-snapshots-backups
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 20
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 0
-      responses:
-        '200':
-          description: Paginated backups (same shape as GET /api/v1/backups).
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
-                  - properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/BackupResponse'
         '500':
           $ref: '#/components/responses/ErrorResponse'
   /api/v1/backups/schedules:
@@ -23625,7 +24455,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -23831,7 +24661,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -23965,250 +24795,13 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
         '500':
           $ref: '#/components/responses/ErrorResponse'
-  /api/v1/backups/storage/{id}/test:
-    post:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "backups:update"
-      x-astronomer-route-class: public-api
-      operationId: postBackupsStorageByIdTest
-      summary: Test a storage config connection
-      description: |
-        Issues an authenticated S3 list-objects probe against the bucket. Always returns 200 with {success, message}; success=false when the probe fails.
-      tags:
-        - cluster-snapshots-backups
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Probe result.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/StorageTestResult'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '500':
-          $ref: '#/components/responses/ErrorResponse'
   /api/v1/backups/storage/{id}/test-connection:
     post:
       x-astronomer-auth: "bearer/session auth"
       x-astronomer-rbac: "backups:update"
       x-astronomer-route-class: public-api
       operationId: postBackupsStorageByIdTestConnection
-      summary: Test a storage config connection (alias of /test)
-      tags:
-        - cluster-snapshots-backups
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Probe result.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/StorageTestResult'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-        '500':
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/backups/storage-configs:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: public-api
-      operationId: getBackupsStorageConfigs
-      summary: List backup storage configs (alias of /storage)
-      tags:
-        - cluster-snapshots-backups
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 20
-        - name: offset
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 0
-      responses:
-        '200':
-          description: Paginated storage configs.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
-                  - properties:
-                      data:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/BackupStorageConfigResponse'
-        '500':
-          $ref: '#/components/responses/ErrorResponse'
-    post:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "backups:create"
-      x-astronomer-route-class: public-api
-      operationId: postBackupsStorageConfigs
-      summary: Create a backup storage config (alias of /storage)
-      tags:
-        - cluster-snapshots-backups
-      security:
-        - bearerJWT: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BackupStorageConfigRequest'
-      responses:
-        '201':
-          description: Storage config created.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/BackupStorageConfigResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '500':
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/backups/storage-configs/{id}:
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: public-api
-      operationId: getBackupsStorageConfigsById
-      summary: Get a backup storage config (alias of /storage/{id})
-      tags:
-        - cluster-snapshots-backups
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: The storage config.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/BackupStorageConfigResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-    put:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "backups:update"
-      x-astronomer-route-class: public-api
-      operationId: putBackupsStorageConfigsById
-      summary: Update a backup storage config (alias of /storage/{id})
-      tags:
-        - cluster-snapshots-backups
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BackupStorageConfigRequest'
-      responses:
-        '200':
-          description: Storage config updated.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/BackupStorageConfigResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '500':
-          $ref: '#/components/responses/ErrorResponse'
-    delete:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "backups:delete"
-      x-astronomer-route-class: public-api
-      operationId: deleteBackupsStorageConfigsById
-      summary: Delete a backup storage config (alias of /storage/{id})
-      tags:
-        - cluster-snapshots-backups
-      security:
-        - bearerJWT: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Storage config deleted.
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '500':
-          $ref: '#/components/responses/ErrorResponse'
-  /api/v1/backups/storage-configs/{id}/test-connection:
-    post:
-      x-astronomer-auth: "bearer/session auth"
-      x-astronomer-rbac: "backups:update"
-      x-astronomer-route-class: public-api
-      operationId: postBackupsStorageConfigsByIdTestConnection
-      summary: Test a storage config connection (alias of /storage/{id}/test)
+      summary: Test a storage config connection
       tags:
         - cluster-snapshots-backups
       security:
@@ -24284,7 +24877,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -24555,7 +25148,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -24592,7 +25185,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -24692,7 +25285,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -25083,7 +25676,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/ListEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - type: object
                     properties:
                       data:
@@ -25264,7 +25857,7 @@ paths:
               schema:
                 oneOf:
                   - allOf:
-                      - $ref: '#/components/schemas/PaginatedEnvelope'
+                      - $ref: '#/components/schemas/PageEnvelope'
                       - properties:
                           data:
                             type: array
@@ -25679,7 +26272,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -25777,6 +26370,12 @@ paths:
             default: 0
             minimum: 0
           description: Row offset into the result set.
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Case-insensitive substring match across project name, display name, and description.
       responses:
         '200':
           description: Paginated page of projects.
@@ -25784,7 +26383,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -26263,11 +26862,13 @@ paths:
                   - properties:
                       data:
                         type: object
+                        required: [results, errors, project_cap]
                         properties:
                           results:
                             type: array
                             items:
                               type: object
+                              required: [cluster_id, cluster_name, namespace, used, hard, allocation]
                               properties:
                                 cluster_id:
                                   type: string
@@ -26284,10 +26885,45 @@ paths:
                                   type: object
                                   additionalProperties: true
                                   description: ResourceQuota status.hard (falls back to spec.hard) key/value pairs.
+                                allocation:
+                                  type: object
+                                  description: Deterministic share of the project-wide cap applied to this namespace.
+                                  required: [cpu, memory, pods]
+                                  properties:
+                                    cpu: {type: string, description: Kubernetes CPU quantity; empty means unbounded.}
+                                    memory: {type: string, description: Kubernetes memory quantity; empty means unbounded.}
+                                    pods: {type: integer, format: int32, description: Pod count; zero means unbounded.}
+                          project_cap:
+                            type: object
+                            description: Project cap totals and deterministic namespace allocation state. Remaining is unallocated capacity, not live usage.
+                            required: [total, allocated, remaining]
+                            properties:
+                              total:
+                                type: object
+                                required: [cpu, memory, pods]
+                                properties:
+                                  cpu: {type: string}
+                                  memory: {type: string}
+                                  pods: {type: integer, format: int32}
+                              allocated:
+                                type: object
+                                required: [cpu, memory, pods]
+                                properties:
+                                  cpu: {type: string}
+                                  memory: {type: string}
+                                  pods: {type: integer, format: int32}
+                              remaining:
+                                type: object
+                                required: [cpu, memory, pods]
+                                properties:
+                                  cpu: {type: string}
+                                  memory: {type: string}
+                                  pods: {type: integer, format: int32}
                           errors:
                             type: array
                             items:
                               type: object
+                              required: [cluster_id, cluster_name, namespace, error]
                               properties:
                                 cluster_id:
                                   type: string
@@ -26517,6 +27153,12 @@ paths:
             type: integer
             default: 0
             minimum: 0
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Case-insensitive substring match across project name, display name, and description.
       responses:
         '200':
           description: Paginated page of projects on the cluster.
@@ -26524,7 +27166,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -27385,7 +28027,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -27651,7 +28293,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -27917,7 +28559,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -29135,6 +29777,91 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/rbac/principals:
+    get:
+      operationId: getRbacPrincipals
+      tags: [rbac]
+      summary: Search local and discoverable external principals
+      description: Searches active local and pending identities plus enabled external connectors that expose a safe directory API. Connector capability and failures are returned explicitly. Requires both `rbac:read` and `users:read`.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "rbac:read and users:read"
+      x-astronomer-auth: "bearer-or-session"
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: {type: string, minLength: 3, maxLength: 128}
+      responses:
+        '200':
+          description: Principal results and per-connector discovery status.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/PrincipalSearchResponse'}
+        '400':
+          description: Invalid search query
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '403':
+          description: Missing RBAC or users read permission
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '429':
+          description: Search rate limit exceeded
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+  /api/v1/rbac/principals/materialize:
+    post:
+      operationId: postRbacPrincipalsMaterialize
+      tags: [rbac]
+      summary: Materialize a verified external principal
+      description: Re-resolves the immutable upstream subject, then atomically creates or reuses its local identity so a binding can be granted before first login. Requires `rbac:write`, `rbac:create`, and `users:create`.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "rbac:create and users:create"
+      x-astronomer-auth: "bearer-or-session"
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PrincipalMaterializeRequest'}
+      responses:
+        '201':
+          description: Verified principal materialized as a pending identity.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/PrincipalMaterialized'}
+        '400':
+          description: Invalid request
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '401':
+          description: Authentication required
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '403':
+          description: Missing RBAC write/create or users create permission
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '404':
+          description: Connector not found or disabled
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '422':
+          description: Connector does not support safe principal discovery
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '429':
+          description: Search rate limit exceeded
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+        '502':
+          description: Upstream principal verification failed
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
   /api/v1/rbac/my-roles:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -29490,6 +30217,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/projects/{id}/apply-rbac-template:
+    post:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "global rbac:create plus no-escalation rule check at target project"
+      x-astronomer-route-class: public-api
+      operationId: postProjectsByIdApplyRbacTemplate
+      summary: Apply a project RBAC role template to a user
+      description: >-
+        Materializes the template's effective rules as an immutable,
+        digest-addressed project role and binds it to an existing local user.
+        Repeated or concurrent requests converge on the same role and binding.
+        The mutation and sanitized audit intent commit atomically. This endpoint
+        does not search external identity providers; federated users become
+        selectable after their first successful login creates the local user.
+      tags:
+        - rbac
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RBACApplyProjectTemplateRequest'
+      responses:
+        '200':
+          description: Existing or newly materialized role binding.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/RBACProjectRoleBinding'
+        '400':
+          description: Invalid project, user, or request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Missing permission or template rules would escalate privileges.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Template, user, or project not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Template is not valid for project scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Catalog, authorization, or transactional audit unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /api/v1/rbac/templates/{name}:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -29813,7 +30618,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -30635,7 +31440,7 @@ paths:
       x-astronomer-route-class: public-api
       operationId: putAuthDexSettings
       summary: Upsert Dex singleton settings
-      description: Upserts the Dex settings row. `issuer_url` is required. For bundled Dex, this endpoint binds only issuer and target cluster; namespace, chart release, Deployment, Service, and runtime Secret are immutable chart-derived identity. Operator-managed Dex may set the custom identity fields. The deprecated `configmap_name` request alias is accepted for one compatibility release but never causes a ConfigMap write.
+      description: Upserts the Dex settings row. `issuer_url` is required. For bundled Dex, this endpoint binds only issuer and target cluster; namespace, chart release, Deployment, Service, and runtime Secret are immutable chart-derived identity. Operator-managed Dex may set the custom identity fields.
       tags:
         - auth
       security:
@@ -30823,6 +31628,10 @@ paths:
       x-astronomer-route-class: public-api
       operationId: getUsers
       summary: List users
+      description: >-
+        Paginated local user directory. The optional search term matches
+        username, email, and display name server-side. External IdP directory
+        discovery is not supported; federated identities appear after first login.
       tags:
         - users-settings
       security:
@@ -30840,6 +31649,13 @@ paths:
           schema:
             type: integer
             default: 0
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive substring match over username, email, and display name.
+          schema:
+            type: string
+            maxLength: 200
       responses:
         '200':
           description: Paginated list of users. Each item is the UI-shaped user object (not the full User schema).
@@ -30847,7 +31663,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -31310,6 +32126,12 @@ paths:
                 name:
                   type: string
                   description: Operator-facing label for the token.
+                expires_in_days:
+                  type: integer
+                  minimum: 1
+                  maximum: 365
+                  default: 90
+                  description: Token lifetime in days.
       responses:
         '201':
           description: Token created. The plaintext `token` is shown only here.
@@ -31456,23 +32278,14 @@ paths:
               properties:
                 platformName:
                   type: string
-                  nullable: true
-                platform_name:
-                  type: string
-                  nullable: true
-                  description: Snake-case alias for platformName.
                 agentHeartbeatInterval:
                   type: integer
-                  nullable: true
                 defaultSessionTimeout:
                   type: integer
-                  nullable: true
                 enableAuditLogging:
                   type: boolean
-                  nullable: true
                 metricsCollection:
                   type: boolean
-                  nullable: true
       responses:
         '200':
           description: Updated general settings.
@@ -31516,7 +32329,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -31677,7 +32490,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -32912,13 +33725,14 @@ paths:
           $ref: '#/components/responses/Forbidden'
   /api/v1/admin/emails:
     get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
       x-astronomer-route-class: public-api
       operationId: adminEmailsList
       summary: List email-message delivery audit rows
-      description: |
-        Paginated metadata-only view of the outbound email audit log (no message bodies). Superuser-gated inside the handler. Returns a custom `{data:{items,total,limit,offset}}` object (not the DRF paginated envelope).
+      description: >
+        Paginated metadata-only view of the outbound email audit log (no message bodies). Superuser-gated inside the
+        handler. Returns a custom `{data:{items,total,limit,offset}}` object (not the DRF paginated envelope).
       tags:
         - platform-admin-settings
       security:
@@ -32945,50 +33759,44 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        type: object
-                        properties:
-                          items:
-                            type: array
-                            items:
-                              type: object
-                              properties:
-                                id:
-                                  type: string
-                                  format: uuid
-                                to_address:
-                                  type: string
-                                subject:
-                                  type: string
-                                template:
-                                  type: string
-                                status:
-                                  type: string
-                                attempts:
-                                  type: integer
-                                last_error:
-                                  type: string
-                                sent_at:
-                                  type: string
-                                  format: date-time
-                                  nullable: true
-                                created_at:
-                                  type: string
-                                  format: date-time
-                                user_id:
-                                  type: string
-                                  format: uuid
-                                  nullable: true
-                          total:
-                            type: integer
-                            format: int64
-                          limit:
-                            type: integer
-                          offset:
-                            type: integer
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        to_address:
+                          type: string
+                        subject:
+                          type: string
+                        template:
+                          type: string
+                        status:
+                          type: string
+                        attempts:
+                          type: integer
+                        last_error:
+                          type: string
+                        sent_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        created_at:
+                          type: string
+                          format: date-time
+                        user_id:
+                          type: string
+                          format: uuid
+                          nullable: true
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -33545,7 +34353,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -34295,13 +35103,14 @@ paths:
           type: string
           format: uuid
     get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: bearer-or-session
+      x-astronomer-rbac: handler-and-route-policy
       x-astronomer-route-class: public-api
       operationId: adminWebhookDeliveries
       summary: List delivery history for a webhook subscription
-      description: |
-        Paginated delivery audit view for the subscription. Superuser-gated. Returns a custom `{data:{items,total,limit,offset}}` object (not the DRF paginated envelope).
+      description: >
+        Paginated delivery audit view for the subscription. Superuser-gated. Returns a custom
+        `{data:{items,total,limit,offset}}` object (not the DRF paginated envelope).
       tags:
         - platform-admin-settings
       security:
@@ -34328,23 +35137,17 @@ paths:
           content:
             application/json:
               schema:
-                allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
-                  - properties:
-                      data:
-                        type: object
-                        properties:
-                          items:
-                            type: array
-                            items:
-                              $ref: '#/components/schemas/WebhookDelivery'
-                          total:
-                            type: integer
-                            format: int64
-                          limit:
-                            type: integer
-                          offset:
-                            type: integer
+                type: object
+                required:
+                  - data
+                  - pagination
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMetadata'
         '400':
           description: Invalid subscription id.
           content:
@@ -34693,7 +35496,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - type: object
                     properties:
                       data:
@@ -34732,7 +35535,7 @@ paths:
       x-astronomer-route-class: download
       summary: Export audit log entries as CSV
       description: |
-        Streams matching audit log entries as a CSV attachment (filename audit_log_export.csv). Accepts the same filters as the list endpoint. Only format=csv is supported; the `since` cursor is not supported for export. The response is a CSV stream, not the JSON data envelope.
+        Streams matching audit log entries as a CSV attachment when the bounded result contains at most 100,000 rows. For larger results, create a durable operation with POST `/api/v1/audit/exports/`, poll its status resource, and download the completed artifact. Accepts the same filters as the list endpoint. Only format=csv is supported; the `since` cursor is not supported for export.
       tags:
         - audit
       operationId: exportAuditLogs
@@ -34884,6 +35687,20 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '403':
           description: Caller lacks audit_logs read or list permission.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413':
+          description: The export exceeds the synchronous row limit; the Link header identifies the durable creation endpoint.
+          headers:
+            Link: {description: Durable audit export creation endpoint, schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Durable export runtime is unavailable.
           content:
             application/json:
               schema:
@@ -35158,6 +35975,22 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 0
+          description: Page size (defaults to 20, capped at 200).
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          description: Row offset into the authorized namespace set.
       responses:
         '200':
           description: Namespace summaries
@@ -35165,7 +35998,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -35278,7 +36111,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -36263,6 +37096,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /api/v1/clusters/{cluster_id}/resource-counts:
+    get:
+      x-astronomer-auth: "bearer/session auth"
+      x-astronomer-rbac: "per-resource list permission, including namespace scope"
+      x-astronomer-route-class: proxy
+      operationId: countClusterResources
+      summary: Count authorized Kubernetes resources without returning object bodies
+      description: Requests metadata-only Kubernetes list representations with a one-item limit and returns exact counts from remainingItemCount. Authorization is evaluated independently for every requested type; namespace-confined callers are queried only inside authorized namespaces. Unsupported metadata negotiation is reported as unavailable rather than falling back to full objects.
+      tags:
+        - resources-explorer
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: resources
+          in: query
+          required: true
+          description: Comma-separated resource types; deduplicated and capped at 16.
+          schema: {type: string}
+        - name: namespace
+          in: query
+          required: false
+          description: Optional comma-separated namespace filter, intersected with the caller's authorized namespaces.
+          schema: {type: string}
+      responses:
+        '200':
+          description: Authorized resource counts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - type: object
+                    properties:
+                      data: {$ref: '#/components/schemas/ResourceCounts'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/clusters/{cluster_id}/resources/generic/{resource_type}:
     get:
       x-astronomer-auth: "bearer/session auth"
@@ -36654,7 +37528,7 @@ paths:
       x-astronomer-route-class: public-api
       operationId: searchResourcesAcrossClusters
       summary: Cross-cluster resource search (fan-out)
-      description: Fans a single list query out across every active cluster the caller is authorized to list the requested type on, merges results with a bounded top-K heap, and returns them along with per-cluster errors and counts under `data`. The endpoint is per-user rate limited. The `name` filter is applied client-side after merge; `label`/`field` selectors are passed verbatim to Kubernetes. The per-cluster limit is NOT pushed down — every cluster's full list is fetched and the global `limit` is applied after merge.
+      description: Pages across every active cluster the caller is authorized to list the requested type on, fans out through a bounded worker pool under a fleet-wide deadline, merges results with a bounded top-K heap, and returns partial failures and counts under `data`. The endpoint is per-user rate limited. The `name` filter is applied to each cluster response before merge; `label`/`field` selectors are passed verbatim to Kubernetes. The global `limit` is pushed into every Kubernetes list request to bound tunnel response size, and `truncated` is true when Kubernetes reports a continuation, the global top-K drops matches, or any cluster cannot be searched.
       tags:
         - resources-explorer
       security:
@@ -36715,7 +37589,7 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Max items returned across all clusters after merge. Default 100, values above 1000 are clamped to 1000, non-positive values reset to 100.
+          description: Max items returned across all clusters after merge and the list limit pushed into every cluster request. Default 100, values above 1000 are clamped to 1000, non-positive values reset to 100.
           schema:
             type: integer
             default: 100
@@ -38209,179 +39083,6 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '503':
           description: Service proxy not configured or upstream error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /api/v1/connect/{cluster_id}:
-    parameters:
-      - name: cluster_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-        description: |
-          Cluster UUID. Also accepted via `?cluster_id=` query or the
-          `X-Cluster-ID` header (the header is preferred).
-    description: |
-      WebSocket reverse-tunnel endpoint for cluster agents
-      (tunnel2.RemoteServer.ServeHTTP, remotedialer-based). The agent connects
-      and HTTP-Upgrades to a persistent WebSocket; the management server then
-      dials in-cluster services back through it. Authorization: a cluster
-      registration token presented as `Authorization: Bearer <token>`, whose
-      `cluster_id` MUST match the requested cluster. This is an agent-only
-      endpoint, not a user API. Registered outside the request-timeout group
-      because the connection is long-lived. CONNECT accepted but not
-      representable in OpenAPI.
-    get:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: stream
-      operationId: tunnelConnectGet
-      summary: Agent reverse-tunnel WebSocket upgrade
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: Switching Protocols — WebSocket tunnel established.
-        '401':
-          description: Missing/invalid registration token or cluster mismatch.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    head:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: stream
-      operationId: tunnelConnectHead
-      summary: Agent reverse-tunnel WebSocket upgrade
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: Switching Protocols — WebSocket tunnel established.
-        '401':
-          description: Missing/invalid registration token or cluster mismatch.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    options:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: stream
-      operationId: tunnelConnectOptions
-      summary: Agent reverse-tunnel WebSocket upgrade
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: Switching Protocols — WebSocket tunnel established.
-        '401':
-          description: Missing/invalid registration token or cluster mismatch.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    post:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: stream
-      operationId: tunnelConnectPost
-      summary: Agent reverse-tunnel WebSocket upgrade
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: Switching Protocols — WebSocket tunnel established.
-        '401':
-          description: Missing/invalid registration token or cluster mismatch.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    put:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: stream
-      operationId: tunnelConnectPut
-      summary: Agent reverse-tunnel WebSocket upgrade
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: Switching Protocols — WebSocket tunnel established.
-        '401':
-          description: Missing/invalid registration token or cluster mismatch.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    patch:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: stream
-      operationId: tunnelConnectPatch
-      summary: Agent reverse-tunnel WebSocket upgrade
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: Switching Protocols — WebSocket tunnel established.
-        '401':
-          description: Missing/invalid registration token or cluster mismatch.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    delete:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: stream
-      operationId: tunnelConnectDelete
-      summary: Agent reverse-tunnel WebSocket upgrade
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: Switching Protocols — WebSocket tunnel established.
-        '401':
-          description: Missing/invalid registration token or cluster mismatch.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-    trace:
-      x-astronomer-auth: "bearer-or-session"
-      x-astronomer-rbac: "handler-and-route-policy"
-      x-astronomer-route-class: stream
-      operationId: tunnelConnectTrace
-      summary: Agent reverse-tunnel WebSocket upgrade
-      tags:
-        - Platform
-      security:
-        - bearerJWT: []
-      responses:
-        '101':
-          description: Switching Protocols — WebSocket tunnel established.
-        '401':
-          description: Missing/invalid registration token or cluster mismatch.
           content:
             application/json:
               schema:

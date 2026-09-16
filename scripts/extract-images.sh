@@ -13,7 +13,7 @@
 # Example line: postgres:16-alpine
 #
 # The script renders the chart twice:
-#   1) default values (dev / first-touch)
+#   1) base values plus the explicit local-development profile
 #   2) production-like optional components (Dex, management backup with a
 #      dummy S3 target + key wrap, management logging) so air-gapped prod
 #      installs don't miss dex / pgdump-s3 / fluent-bit.
@@ -66,18 +66,26 @@ extract_images() {
         | sed -E 's/^image: //; s/^"//; s/"$//'
 }
 
-# Default (dev) render — covers server/worker/migrate/frontend/postgres/
-# redis/shell/busybox and anything else on by default.
-dev_images="$(extract_images -f "$CHART_DIR/values.yaml")"
+# Explicit development render — covers server/worker/migrate/frontend/
+# postgres/redis/shell/busybox and anything else enabled for local use. The
+# base profile is intentionally production-safe and therefore cannot render
+# without real external-service, TLS, and artifact inputs.
+dev_images="$(
+    extract_images \
+        -f "$CHART_DIR/values.yaml" \
+        -f "$CHART_DIR/values-dev.yaml"
+)"
 
-# Production-like optional components. These stay off in values.yaml so a
-# laptop install doesn't pull them, but values-production.yaml (or an
-# operator --set) turns them on. Backup/restore images stay out of this
-# public inventory: the default pgdump-s3 image is a private company
-# package and cannot be digest-resolved by the public release runner.
+# Production-like optional components, rendered under the explicit development
+# profile because image discovery does not have an operator's production
+# infrastructure inputs. These stay off in values.yaml, but production values
+# (or operator overrides) turn them on. Backup/restore images stay out of this
+# public inventory: the default pgdump-s3 image is a private company package
+# and cannot be digest-resolved by the public release runner.
 prod_like_images="$(
     extract_images \
         -f "$CHART_DIR/values.yaml" \
+        -f "$CHART_DIR/values-dev.yaml" \
         --set dex.enabled=true \
         --set managementLogging.enabled=true \
         --set managementLogging.endpoint=http://loki.observability.svc:3100

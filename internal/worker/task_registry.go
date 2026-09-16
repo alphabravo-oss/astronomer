@@ -105,6 +105,8 @@ var taskDescriptors = []TaskDescriptor{
 	descriptor(TaskOwnerWorker, TypeEnforceAuditLogRetention, tasks.HandleEnforceAuditLogRetention),
 	runtimeBoundDescriptor(descriptor(TaskOwnerWorker, TypeAuditOutboxDispatch, rejectUnboundRuntimeTask)),
 	descriptor(TaskOwnerWorker, tasks.ApiserverAuditRetentionType, tasks.HandleApiserverAuditRetention),
+	descriptor(TaskOwnerWorker, tasks.AgentConnectionRetentionType, tasks.HandleAgentConnectionRetention),
+	descriptor(TaskOwnerWorker, tasks.InactiveUserRetentionType, tasks.HandleInactiveUserRetention),
 	descriptor(TaskOwnerWorker, tasks.ClusterTombstoneRetentionType, tasks.HandleClusterTombstoneRetention),
 	optionalDescriptor("managementBackup.enabled", descriptor(TaskOwnerWorker, tasks.ManagementBackupReconcileType, tasks.HandleManagementBackupReconcile)),
 	optionalDescriptor("managementBackup.enabled", descriptor(TaskOwnerWorker, tasks.ManagementBackupOperationType, tasks.HandleManagementBackupOperation)),
@@ -171,6 +173,10 @@ var taskDescriptors = []TaskDescriptor{
 	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, TypeClusterDecommissionAll, rejectUnboundRuntimeTask, CapabilityTunnel)),
 	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.DexOperationType, rejectUnboundRuntimeTask, CapabilityTunnel, CapabilityEncryption)),
 	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.DexOperationRecoveryType, rejectUnboundRuntimeTask, CapabilityTunnel)),
+	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.SupportBundleOperationType, rejectUnboundRuntimeTask, CapabilityTunnel)),
+	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.SupportBundleRecoveryType, rejectUnboundRuntimeTask, CapabilityTunnel)),
+	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.AuditExportOperationType, rejectUnboundRuntimeTask, CapabilityTunnel)),
+	runtimeBoundDescriptor(descriptor(TaskOwnerTunnel, tasks.AuditExportRecoveryType, rejectUnboundRuntimeTask, CapabilityTunnel)),
 }
 
 type ScheduledTaskSpec struct {
@@ -191,6 +197,8 @@ func scheduled(owner TaskOwner, taskType, cron, description string) ScheduledTas
 
 var scheduledTaskSpecs = []ScheduledTaskSpec{
 	scheduled(TaskOwnerTunnel, tasks.DexOperationRecoveryType, "@every 2m", "recover durable Dex operations after queue loss"),
+	scheduled(TaskOwnerTunnel, tasks.SupportBundleRecoveryType, "@every 2m", "recover durable support bundle operations after queue loss"),
+	scheduled(TaskOwnerTunnel, tasks.AuditExportRecoveryType, "@every 2m", "recover durable audit export operations after queue loss"),
 	scheduled(TaskOwnerWorker, TypeHealthCheck, "@every 60s", "cluster health check"),
 	scheduled(TaskOwnerWorker, tasks.ClusterConditionReconcileType, "@every 30s", "cluster-condition remediation"),
 	scheduled(TaskOwnerWorker, TypeAlertEvaluation, "@every 60s", "alert rule evaluation"),
@@ -207,6 +215,8 @@ var scheduledTaskSpecs = []ScheduledTaskSpec{
 	scheduled(TaskOwnerWorker, TypeEnforceAuditLogRetention, "30 1 * * *", "enforce audit-log retention"),
 	scheduled(TaskOwnerWorker, TypeAuditOutboxDispatch, "@every 2s", "durable audit-intent dispatch"),
 	scheduled(TaskOwnerWorker, tasks.ApiserverAuditRetentionType, "45 1 * * *", "enforce API-server audit retention"),
+	scheduled(TaskOwnerWorker, tasks.AgentConnectionRetentionType, "15 5 * * *", "agent connection history retention"),
+	scheduled(TaskOwnerWorker, tasks.InactiveUserRetentionType, "30 5 * * *", "inactive human-user retention"),
 	scheduled(TaskOwnerWorker, TypeChartRecommendationsRecompute, "30 3 * * *", "chart recommendations recompute"),
 	scheduled(TaskOwnerWorker, tasks.RefreshGroupSyncMetricsType, "@every 5m", "refresh group-sync binding gauge"),
 	scheduled(TaskOwnerWorker, tasks.AgentUpgradeStuckSweepType, "@every 5m", "fail stuck agent upgrades"),

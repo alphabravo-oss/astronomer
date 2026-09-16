@@ -1,7 +1,7 @@
 // Package handler — SCIM provisioning-token admin surface.
 //
 // The /scim/v2/* provisioning chain (scim.go) authenticates with a static
-// bearer token whose SHA-256 hash lives in scim_tokens (migration 114).
+// bearer token whose SHA-256 hash and lifecycle live in scim_tokens.
 // This file is the operator-facing way to MINT, list, and revoke those
 // tokens. Without it an operator has to hand-seed a hashed row in the DB.
 //
@@ -15,7 +15,7 @@
 // The plaintext astro_scim_<random> token is shown exactly once in the
 // create response; only its hash is persisted (auth.HashSCIMToken). List
 // and the create response otherwise expose only metadata — id, name,
-// display prefix, last-used / created timestamps — never the secret.
+// display prefix, lifecycle timestamps — never the secret.
 package handler
 
 import (
@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -38,7 +39,7 @@ type SCIMTokenAdminQuerier interface {
 	UserByIDQuerier
 	CreateSCIMToken(ctx context.Context, arg sqlc.CreateSCIMTokenParams) (sqlc.ScimToken, error)
 	ListSCIMTokens(ctx context.Context) ([]sqlc.ScimToken, error)
-	DeleteSCIMToken(ctx context.Context, id uuid.UUID) error
+	RevokeSCIMToken(ctx context.Context, id uuid.UUID) (int64, error)
 }
 
 // SCIMTokenAdminHandler owns the /admin/scim-tokens/* surface.
@@ -61,6 +62,8 @@ type scimTokenMeta struct {
 	Prefix     string  `json:"prefix"`
 	LastUsedAt *string `json:"last_used_at"`
 	CreatedAt  string  `json:"created_at"`
+	ExpiresAt  string  `json:"expires_at"`
+	RevokedAt  *string `json:"revoked_at"`
 }
 
 func toSCIMTokenMeta(t sqlc.ScimToken) scimTokenMeta {
@@ -69,10 +72,15 @@ func toSCIMTokenMeta(t sqlc.ScimToken) scimTokenMeta {
 		Name:      t.Name,
 		Prefix:    t.Prefix,
 		CreatedAt: t.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		ExpiresAt: t.ExpiresAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 	}
 	if t.LastUsedAt.Valid {
 		s := t.LastUsedAt.Time.UTC().Format("2006-01-02T15:04:05Z07:00")
 		out.LastUsedAt = &s
+	}
+	if t.RevokedAt.Valid {
+		s := t.RevokedAt.Time.UTC().Format("2006-01-02T15:04:05Z07:00")
+		out.RevokedAt = &s
 	}
 	return out
 }
@@ -90,7 +98,8 @@ func (h *SCIMTokenAdminHandler) superuser(w http.ResponseWriter, r *http.Request
 
 // openapi:request-operation postAdminScimTokens
 type createSCIMTokenRequest struct {
-	Name string `json:"name"`
+	Name          string `json:"name"`
+	ExpiresInDays int    `json:"expires_in_days"`
 }
 
 // Create mints a fresh SCIM provisioning token. The plaintext is returned
@@ -110,6 +119,13 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "name is required")
 		return
 	}
+	if req.ExpiresInDays == 0 {
+		req.ExpiresInDays = 90
+	}
+	if req.ExpiresInDays < 1 || req.ExpiresInDays > 365 {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "expires_in_days must be between 1 and 365")
+		return
+	}
 
 	token, err := auth.GenerateSCIMToken()
 	if err != nil {
@@ -121,6 +137,7 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Name:      req.Name,
 		TokenHash: auth.HashSCIMToken(token),
 		Prefix:    auth.SCIMTokenDisplayPrefix(token),
+		ExpiresAt: time.Now().UTC().AddDate(0, 0, req.ExpiresInDays),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
@@ -169,8 +186,13 @@ func (h *SCIMTokenAdminHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid token id")
 		return
 	}
-	if err := h.queries.DeleteSCIMToken(r.Context(), id); err != nil {
+	changed, err := h.queries.RevokeSCIMToken(r.Context(), id)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		return
+	}
+	if changed == 0 {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SCIM token not found or already revoked")
 		return
 	}
 

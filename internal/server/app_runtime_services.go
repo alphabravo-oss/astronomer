@@ -7,7 +7,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
-	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
 
@@ -19,7 +18,6 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		_ = runtimeTasks.project.HandleProjectReconcileAll(projectCtx, nil)
 	}()
 
-	livemetrics.New(c.bus, c.queries, c.clusterHandler.MetricsProvider(), logger).Start(foundation.ctx)
 	tunnel.StartConnectionMetricsReporter(foundation.ctx, c.queries, logger)
 	if localCluster, err := bootstrapLocalCluster(foundation.ctx, logger, c.queries); err != nil {
 		logger.Warn("local cluster bootstrap failed", "error", err)
@@ -29,8 +27,13 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 			logger.Warn("local agent start failed", "error", err)
 		}
 	}
-	startClusterProbeReconciler(foundation.ctx, logger, c.queries, c.requester)
-	if err := startCRDController(foundation.ctx, logger, cfg, c.queries); err != nil {
+	if err := startCRDController(
+		foundation.ctx,
+		logger,
+		cfg,
+		c.queries,
+		sqlcMutationTxRunner[crdClusterDecommissionMutationTx](c.database),
+	); err != nil {
 		return err
 	}
 	kickFirstBootCatalogSync(foundation.ctx, logger, c.queries, c.queue)

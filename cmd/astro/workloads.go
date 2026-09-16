@@ -212,14 +212,8 @@ func newWorkloadsDeleteCmd() *cobra.Command {
 				return err
 			}
 			if !yes {
-				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "About to delete %s %s/%s on cluster %s.\nProceed? [y/N] ", args[1], args[2], args[3], args[0]); err != nil {
+				if err := confirmAction(cmd, fmt.Sprintf("About to delete %s %s/%s on cluster %s.\nProceed?", args[1], args[2], args[3], args[0])); err != nil {
 					return err
-				}
-				var ans string
-				_, _ = fmt.Scanln(&ans)
-				ans = strings.ToLower(strings.TrimSpace(ans))
-				if ans != "y" && ans != "yes" {
-					return fmt.Errorf("aborted")
 				}
 			}
 			resp, err := client.DeleteClustersByClusterIdWorkloadsByKindByNamespaceByNameWithResponse(
@@ -401,14 +395,8 @@ func newWorkloadsPodDeleteCmd() *cobra.Command {
 				return err
 			}
 			if !yes {
-				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "About to delete pod %s/%s on cluster %s.\nProceed? [y/N] ", args[1], args[2], args[0]); err != nil {
+				if err := confirmAction(cmd, fmt.Sprintf("About to delete pod %s/%s on cluster %s.\nProceed?", args[1], args[2], args[0])); err != nil {
 					return err
-				}
-				var ans string
-				_, _ = fmt.Scanln(&ans)
-				ans = strings.ToLower(strings.TrimSpace(ans))
-				if ans != "y" && ans != "yes" {
-					return fmt.Errorf("aborted")
 				}
 			}
 			params := &astroclient.DeleteWorkloadsPodsByClusterIdByNamespaceByPodParams{IdempotencyKey: uuid.NewString()}

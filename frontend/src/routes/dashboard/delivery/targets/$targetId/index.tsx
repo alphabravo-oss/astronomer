@@ -1,4 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FormShell } from "@/components/ui/form-shell";
+import { Select } from "@/components/ui/select";
+import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,11 +17,13 @@ import {
   Rocket,
   Trash2,
 } from "lucide-react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -39,30 +45,36 @@ import {
   getDeliveryTarget,
   orphanDeliveryTarget,
   previewDeliveryTarget,
-  startDeliveryRollout,
   updateDeliveryTarget,
-  type AmountType,
   type DeliveryTarget,
-  type DriftPolicy,
   type PlacementDecision,
   type PlacementPreview,
+} from "@/lib/api/delivery-targets";
+import type { DriftPolicy } from "@/lib/api/delivery-bundles";
+import {
+  startDeliveryRollout,
+  type AmountType,
   type RolloutFailureAction,
   type RolloutStrategyRequest,
   type RolloutStrategyType,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-rollouts";
 import {
   placementFormDefaults,
   placementFromForm,
   placementHasSelector,
 } from "@/components/delivery/target-form";
+import {
+  TargetOverridesEditor,
+  targetOverridesFromForm,
+} from "@/components/delivery/target-overrides-editor";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can, isSuperuser } from "@/lib/permissions";
-import { useParams, useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { toastSuccess } from "@/lib/toast";
 
 export function TargetDetailPage() {
-  const { targetId } = useParams<{ targetId: string }>();
+  const { targetId } = useParams({ strict: false }) as { targetId: string };
   const { projectId, projects, projectQuery, setProjectId, listHref } =
     useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
@@ -81,7 +93,7 @@ export function TargetDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [orphaning, setOrphaning] = useState(false);
   const client = useQueryClient();
-  const router = useRouter();
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: queryKeys.delivery.target(projectId, targetId),
     queryFn: ({ signal }) => getDeliveryTarget(projectId, targetId, signal),
@@ -148,7 +160,7 @@ export function TargetDetailPage() {
         queryKey: queryKeys.delivery.targetsAll(projectId),
       });
       toastSuccess("Target deletion started");
-      router.push(withProjectQuery(listHref("targets"), projectId));
+      void navigate({ to: withProjectQuery(listHref("targets"), projectId) });
     },
   });
   const orphanMutation = useMutation({
@@ -166,10 +178,45 @@ export function TargetDetailPage() {
         queryKey: queryKeys.delivery.targetsAll(projectId),
       });
       toastSuccess("Target marked orphaned");
-      router.push(withProjectQuery(listHref("targets"), projectId));
+      void navigate({ to: withProjectQuery(listHref("targets"), projectId) });
     },
   });
   const target = query.data?.data;
+  if (allowed && projectId && (query.isLoading || query.isError || !target)) {
+    return (
+      <DeliveryShell
+        projectId={projectId}
+        projects={projects}
+        setProjectId={setProjectId}
+      >
+        <DeliveryProjectGate
+          projectId={projectId}
+          loading={projectQuery.isLoading}
+          error={projectQuery.isError}
+          projectsCount={projects.length}
+          permission="delivery_targets:read"
+          allowed={allowed}
+          onRetry={() => void projectQuery.refetch()}
+        >
+          <PageShell>
+            <QueryStates
+              query={query}
+              permission="delivery_targets:read"
+              notFound={
+                <EmptyState
+                  icon={AlertTriangle}
+                  title="Target not found"
+                  description="This delivery target no longer exists or is outside the selected project."
+                />
+              }
+            >
+              {() => null}
+            </QueryStates>
+          </PageShell>
+        </DeliveryProjectGate>
+      </DeliveryShell>
+    );
+  }
   return (
     <DeliveryShell
       projectId={projectId}
@@ -186,12 +233,12 @@ export function TargetDetailPage() {
         onRetry={() => void projectQuery.refetch()}
       >
         <PageShell>
-          <Link
-            href={withProjectQuery(listHref("targets"), projectId)}
+          <RouterLink
+            to={withProjectQuery(listHref("targets"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Targets
-          </Link>
+          </RouterLink>
           <PageHeader
             eyebrow="Delivery target"
             title={target?.name ?? "Target"}
@@ -476,7 +523,11 @@ function PreviewPanel({
         keyExtractor={(row) => row.clusterId}
         searchable={false}
         pageSize={Math.max(preview.decisions.length, 1)}
-        emptyMessage="No clusters were evaluated"
+        emptyState={{
+          title: "No clusters were evaluated",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
       />
       <div
         className="flex flex-col gap-3 border-t border-border pt-3 text-sm sm:flex-row sm:items-center sm:justify-between"
@@ -591,6 +642,7 @@ function TargetEditDialog({
           drift,
         },
         maintenance_window_policy: maintenanceWindowPolicy,
+        overrides: targetOverridesFromForm(form),
       });
     } catch (error) {
       setFormError(
@@ -607,10 +659,10 @@ function TargetEditDialog({
       onClose={onClose}
       subtitle="Saving changes increments the target generation. Run a new authoritative preview before launching."
     >
-      <form className="space-y-5" onSubmit={submit}>
+      <FormShell className="space-y-5" onSubmit={submit}>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Description">
-            <input
+            <Input
               name="description"
               maxLength={4096}
               defaultValue={target.description ?? ""}
@@ -618,7 +670,7 @@ function TargetEditDialog({
             />
           </Field>
           <Field label="Immutable bundle version ID">
-            <input
+            <Input
               name="bundle_version_id"
               required
               defaultValue={target.bundleVersionId}
@@ -631,7 +683,7 @@ function TargetEditDialog({
             Placement selector
           </legend>
           <label className="flex items-center gap-2 text-sm font-medium text-status-warning">
-            <input
+            <Input
               type="checkbox"
               checked={allClusters}
               onChange={(event) => setAllClusters(event.target.checked)}
@@ -641,28 +693,28 @@ function TargetEditDialog({
           {!allClusters && (
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Explicit cluster IDs (comma-separated)">
-                <textarea
+                <Textarea
                   name="cluster_ids"
                   defaultValue={defaults.clusterIds}
                   className={textareaClass}
                 />
               </Field>
               <Field label="Cluster group IDs (comma-separated)">
-                <textarea
+                <Textarea
                   name="group_ids"
                   defaultValue={defaults.groupIds}
                   className={textareaClass}
                 />
               </Field>
               <Field label="Match labels (one key=value per line)">
-                <textarea
+                <Textarea
                   name="labels"
                   defaultValue={defaults.labels}
                   className={textareaClass}
                 />
               </Field>
               <Field label="Expressions (one per line)">
-                <textarea
+                <Textarea
                   name="expressions"
                   defaultValue={defaults.expressions}
                   className={textareaClass}
@@ -671,7 +723,7 @@ function TargetEditDialog({
             </div>
           )}
           <Field label="Exclude cluster IDs (comma-separated)">
-            <textarea
+            <Textarea
               name="exclude_ids"
               defaultValue={defaults.excludeIds}
               className={textareaClass}
@@ -681,7 +733,7 @@ function TargetEditDialog({
         <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-3">
           <legend className="px-1 text-sm font-medium">Reconciliation</legend>
           <Field label="Interval">
-            <input
+            <Input
               name="interval"
               required
               defaultValue={target.reconciliationPolicy.interval}
@@ -689,7 +741,7 @@ function TargetEditDialog({
             />
           </Field>
           <Field label="Retry interval">
-            <input
+            <Input
               name="retry_interval"
               required
               defaultValue={target.reconciliationPolicy.retryInterval}
@@ -697,7 +749,7 @@ function TargetEditDialog({
             />
           </Field>
           <Field label="Timeout">
-            <input
+            <Input
               name="timeout"
               required
               defaultValue={target.reconciliationPolicy.timeout}
@@ -705,7 +757,7 @@ function TargetEditDialog({
             />
           </Field>
           <Field label="Drift">
-            <select
+            <Select
               value={drift}
               onChange={(event) => setDrift(event.target.value as DriftPolicy)}
               className={inputClass}
@@ -713,10 +765,10 @@ function TargetEditDialog({
               <option value="repair">Detect and repair</option>
               <option value="detect">Detect only</option>
               <option value="ignore">Ignore</option>
-            </select>
+            </Select>
           </Field>
           <label className="flex items-center gap-2 text-sm">
-            <input
+            <Input
               name="prune"
               type="checkbox"
               defaultChecked={target.reconciliationPolicy.prune}
@@ -724,7 +776,7 @@ function TargetEditDialog({
             Prune removed objects
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input
+            <Input
               name="wait"
               type="checkbox"
               defaultChecked={target.reconciliationPolicy.wait}
@@ -732,9 +784,16 @@ function TargetEditDialog({
             Wait for health
           </label>
         </fieldset>
+        <TargetOverridesEditor
+          value={{
+            helm_values: target.overrides.helmValues,
+            patches: target.overrides.patches,
+          }}
+          digest={target.overrideDigest}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Maintenance policy (JSON object)">
-            <textarea
+            <Textarea
               name="maintenance"
               defaultValue={JSON.stringify(
                 target.maintenanceWindowPolicy,
@@ -746,7 +805,7 @@ function TargetEditDialog({
             />
           </Field>
           <label className="flex items-center gap-2 pt-8 text-sm">
-            <input
+            <Input
               name="approval_required"
               type="checkbox"
               defaultChecked={target.rolloutPolicy.approvalRequired}
@@ -769,7 +828,7 @@ function TargetEditDialog({
             {mutation.isPending ? "Saving…" : "Save and require new preview"}
           </button>
         </div>
-      </form>
+      </FormShell>
     </ModalShell>
   );
 }
@@ -786,7 +845,7 @@ function LaunchDialog({
   onClose: () => void;
 }) {
   const client = useQueryClient();
-  const router = useRouter();
+  const navigate = useNavigate();
   const { entityHref } = useDeliveryWorkspace();
   const [strategyType, setStrategyType] =
     useState<RolloutStrategyType>("rolling");
@@ -814,7 +873,7 @@ function LaunchDialog({
       });
       toastSuccess("Rollout launched");
       onClose();
-      router.push(entityHref("rollouts", rollout.id));
+      void navigate({ to: entityHref("rollouts", rollout.id) });
     },
   });
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -888,7 +947,7 @@ function LaunchDialog({
       onClose={onClose}
       subtitle="This action freezes placement, immutable bundle revision, strategy, budgets, and the previous known-good version."
     >
-      <form className="space-y-5" onSubmit={submit}>
+      <FormShell className="space-y-5" onSubmit={submit}>
         <div className="grid gap-3 rounded-md border border-border bg-muted/20 p-4 sm:grid-cols-3">
           <Detail label="Bundle version" value={preview.bundleVersionId} mono />
           <Detail label="Selected clusters" value={preview.selectedCount} />
@@ -896,7 +955,7 @@ function LaunchDialog({
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Strategy">
-            <select
+            <Select
               value={strategyType}
               onChange={(e) =>
                 setStrategyType(e.target.value as RolloutStrategyType)
@@ -907,10 +966,10 @@ function LaunchDialog({
               <option value="rolling">Rolling</option>
               <option value="canary">Canary</option>
               <option value="partitioned">Partitioned cohorts</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Maximum concurrent">
-            <input
+            <Input
               name="max_concurrent"
               required
               type="number"
@@ -920,14 +979,14 @@ function LaunchDialog({
             />
           </Field>
           <Field label="Stable shuffle seed (optional)">
-            <input name="shuffle_seed" maxLength={128} className={inputClass} />
+            <Input name="shuffle_seed" maxLength={128} className={inputClass} />
           </Field>
         </div>
         <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-3">
           <legend className="px-1 text-sm font-medium">Safety budgets</legend>
           <Field label="Maximum unavailable">
             <div className="flex gap-2">
-              <select
+              <Select
                 value={maxUnavailableType}
                 onChange={(e) =>
                   setMaxUnavailableType(e.target.value as AmountType)
@@ -936,8 +995,8 @@ function LaunchDialog({
               >
                 <option value="count">Count</option>
                 <option value="percent">Percent</option>
-              </select>
-              <input
+              </Select>
+              <Input
                 name="max_unavailable"
                 required
                 type="number"
@@ -949,15 +1008,15 @@ function LaunchDialog({
           </Field>
           <Field label="Failure threshold">
             <div className="flex gap-2">
-              <select
+              <Select
                 value={failureType}
                 onChange={(e) => setFailureType(e.target.value as AmountType)}
                 className={inputClass}
               >
                 <option value="count">Count</option>
                 <option value="percent">Percent</option>
-              </select>
-              <input
+              </Select>
+              <Input
                 name="failure_threshold"
                 required
                 type="number"
@@ -968,7 +1027,7 @@ function LaunchDialog({
             </div>
           </Field>
           <Field label="On failure">
-            <select
+            <Select
               value={onFailure}
               onChange={(e) =>
                 setOnFailure(e.target.value as RolloutFailureAction)
@@ -978,10 +1037,10 @@ function LaunchDialog({
               <option value="pause">Pause</option>
               <option value="abort">Abort</option>
               <option value="rollback">Roll back known-good version</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Minimum ready">
-            <input
+            <Input
               name="min_ready"
               required
               defaultValue="30s"
@@ -989,7 +1048,7 @@ function LaunchDialog({
             />
           </Field>
           <Field label="Progress deadline">
-            <input
+            <Input
               name="deadline"
               required
               defaultValue="30m"
@@ -997,7 +1056,7 @@ function LaunchDialog({
             />
           </Field>
           <label className="flex items-center gap-2 pt-7 text-sm">
-            <input name="respect_windows" type="checkbox" defaultChecked />{" "}
+            <Input name="respect_windows" type="checkbox" defaultChecked />{" "}
             Respect maintenance windows
           </label>
         </fieldset>
@@ -1005,15 +1064,15 @@ function LaunchDialog({
           <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-3">
             <legend className="px-1 text-sm font-medium">Canary cohort</legend>
             <Field label="Explicit canary cluster IDs (optional)">
-              <input name="canary_ids" className={inputClass} />
+              <Input name="canary_ids" className={inputClass} />
             </Field>
             <Field label="Canary size if not explicit">
               <div className="flex gap-2">
-                <select name="canary_size_type" className={inputClass}>
+                <Select name="canary_size_type" className={inputClass}>
                   <option value="count">Count</option>
                   <option value="percent">Percent</option>
-                </select>
-                <input
+                </Select>
+                <Input
                   name="canary_size"
                   type="number"
                   min={1}
@@ -1023,7 +1082,7 @@ function LaunchDialog({
               </div>
             </Field>
             <Field label="Soak">
-              <input
+              <Input
                 name="canary_soak"
                 required
                 defaultValue="5m"
@@ -1031,7 +1090,7 @@ function LaunchDialog({
               />
             </Field>
             <label className="flex items-center gap-2 text-sm">
-              <input
+              <Input
                 name="approval_after_canary"
                 type="checkbox"
                 defaultChecked
@@ -1042,7 +1101,7 @@ function LaunchDialog({
         )}
         {strategyType === "partitioned" && (
           <Field label="Ordered partition definitions (JSON array)">
-            <textarea
+            <Textarea
               name="partitions"
               required
               className={textareaClass}
@@ -1058,7 +1117,7 @@ function LaunchDialog({
         )}
         {preview.requiresAllConfirmation && (
           <label className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error/10 p-3 text-sm">
-            <input name="confirm_all" type="checkbox" className="mt-1" />
+            <Input name="confirm_all" type="checkbox" className="mt-1" />
             <span>
               <strong>Confirm all eligible project clusters.</strong> This broad
               placement is intentionally protected by enhanced confirmation.
@@ -1080,7 +1139,7 @@ function LaunchDialog({
             {mutation.isPending ? "Launching…" : "Launch frozen rollout"}
           </button>
         </div>
-      </form>
+      </FormShell>
     </ModalShell>
   );
 }
@@ -1110,7 +1169,7 @@ function Field({
   );
 }
 function DeliveryTargetDetailRedirect() {
-  const { targetId } = useParams<{ targetId: string }>();
+  const { targetId } = useParams({ strict: false }) as { targetId: string };
   return (
     <RedirectDeliveryDetail tab="targets" id={targetId}>
       <TargetDetailPage />

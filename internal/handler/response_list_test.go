@@ -4,10 +4,20 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
+
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
-func TestNewPaginationEmitsOnlyExactTotals(t *testing.T) {
-	exact := NewPagination(11, 5, 5, 5)
+func exactPageTotal(t *testing.T, metadata paging.Metadata) int64 {
+	t.Helper()
+	if metadata.Total == nil {
+		t.Fatal("expected exact pagination.total")
+	}
+	return *metadata.Total
+}
+
+func TestPaginationEmitsOnlyExactTotals(t *testing.T) {
+	exact := paging.Exact(11, 5, 5, 5)
 	if exact.Total == nil || *exact.Total != 11 {
 		t.Fatalf("exact total = %v, want 11", exact.Total)
 	}
@@ -15,13 +25,13 @@ func TestNewPaginationEmitsOnlyExactTotals(t *testing.T) {
 		t.Fatalf("exact next page metadata = %+v", exact)
 	}
 
-	unknown := NewPaginationFromPage(5, 0, 5)
+	unknown := paging.FromPage(5, 0, 5)
 	if unknown.Total != nil {
 		t.Fatalf("unknown total = %v, want omitted", *unknown.Total)
 	}
 
 	recorder := httptest.NewRecorder()
-	RespondList(recorder, []string{"one"}, unknown)
+	paging.Write(recorder, []string{"one"}, unknown)
 	var body map[string]json.RawMessage
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
@@ -35,8 +45,8 @@ func TestNewPaginationEmitsOnlyExactTotals(t *testing.T) {
 	}
 }
 
-func TestNewPaginationLastPageHasNoNextOffset(t *testing.T) {
-	pagination := NewPagination(7, 5, 5, 2)
+func TestPaginationLastPageHasNoNextOffset(t *testing.T) {
+	pagination := paging.Exact(7, 5, 5, 2)
 	if pagination.HasMore || pagination.NextOffset != nil {
 		t.Fatalf("last page metadata = %+v", pagination)
 	}

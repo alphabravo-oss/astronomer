@@ -17,7 +17,7 @@ const clusterSweepConcurrency = 16
 // fanOutClusters invokes fn for every cluster with bounded concurrency and a
 // per-cluster timeout. A failed or unavailable cluster must not block the
 // remaining clusters; fn owns its own error logging.
-func fanOutClusters(ctx context.Context, clusters []sqlc.Cluster, perCluster time.Duration, fn func(context.Context, sqlc.Cluster)) {
+func fanOutClusters[T any](ctx context.Context, clusters []T, perCluster time.Duration, fn func(context.Context, T)) {
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(clusterSweepConcurrency)
 	for _, cluster := range clusters {

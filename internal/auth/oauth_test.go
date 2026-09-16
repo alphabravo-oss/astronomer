@@ -236,6 +236,11 @@ func TestFetchOIDCUserInfoFromIDToken(t *testing.T) {
 		"family_name":        "Smith",
 		"picture":            "https://example.com/avatar.png",
 		"groups":             []string{"devops", "platform"},
+		"sub":                "dex-user-id",
+		"federated_claims": map[string]any{
+			"connector_id": "employees",
+			"user_id":      "ldap-entry-42",
+		},
 	}
 	payload, err := json.Marshal(claims)
 	if err != nil {
@@ -258,5 +263,8 @@ func TestFetchOIDCUserInfoFromIDToken(t *testing.T) {
 	}
 	if len(info.Groups) != 2 || info.Groups[0] != "devops" {
 		t.Fatalf("unexpected OIDC groups: %#v", info.Groups)
+	}
+	if info.ConnectorID != "employees" || info.Subject != "ldap-entry-42" {
+		t.Fatalf("unexpected federated identity coordinates: %#v", info)
 	}
 }

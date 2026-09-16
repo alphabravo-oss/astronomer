@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+public/
+src/types/openapi.generated.ts
+src/lib/api/generated/
+src/routeTree.gen.ts
+package-lock.json

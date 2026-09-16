@@ -40,7 +40,16 @@ function auditPage(offset: number, limit: number) {
       source: "web",
     });
   }
-  return { data, count: TOTAL };
+  return {
+    data,
+    pagination: {
+      total: TOTAL,
+      limit,
+      offset,
+      has_more: end < TOTAL,
+      next_offset: end < TOTAL ? end : null,
+    },
+  };
 }
 
 async function mockApi(page: Page) {
@@ -91,7 +100,7 @@ test("DataTable server-side: audit paginates via per-page offset requests (B4)",
   await expect(page.getByText("action.0", { exact: true })).toBeVisible();
 
   // Page 2 → a fresh request with offset=50 → different rows.
-  await page.getByRole("button", { name: "2" }).click();
+  await page.getByRole("button", { name: "Page 2" }).click();
   await expect(page.getByText("Showing 51-100 of 125")).toBeVisible();
   await expect(page.getByText("action.50", { exact: true })).toBeVisible();
   await expect(page.getByText("action.0", { exact: true })).toHaveCount(0);

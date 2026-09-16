@@ -2,10 +2,14 @@ package handler
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/operationstate"
@@ -14,16 +18,28 @@ import (
 const operationSupersededMessage = "superseded by newer operation for target"
 const operationRetryInvalidStateMessage = "Only failed or superseded operations can be retried"
 
+var operationClaimFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{
+	Namespace: "astronomer",
+	Subsystem: "operations",
+	Name:      "claim_failures_total",
+	Help:      "Total database failures while atomically claiming durable operations; expected compare-and-swap misses are excluded.",
+})
+
+func init() {
+	prometheus.MustRegister(operationClaimFailuresTotal)
+}
+
 type operationRunnerConfig[T any] struct {
-	ID              func(T) uuid.UUID
-	TargetKey       func(T) string
-	Status          func(T) string
-	ShouldSupersede func(T, time.Time) bool
-	IsFreshRunning  func(T, time.Time) bool
-	Supersede       func(context.Context, T)
-	MarkRunning     func(context.Context, T) (T, error)
-	Claimed         func(T) claimedOp
-	Now             func() time.Time
+	ID               func(T) uuid.UUID
+	TargetKey        func(T) string
+	Status           func(T) string
+	ShouldSupersede  func(T, time.Time) bool
+	IsFreshRunning   func(T, time.Time) bool
+	Supersede        func(context.Context, T)
+	MarkRunning      func(context.Context, T) (T, error)
+	MarkRunningError func(context.Context, T, error)
+	Claimed          func(T) claimedOp
+	Now              func() time.Time
 }
 
 type operationStatusSummaryConfig[T any] struct {
@@ -82,6 +98,16 @@ func claimLatestOperations[T any](ctx context.Context, ops []T, cfg operationRun
 		}
 		running, err := cfg.MarkRunning(ctx, op)
 		if err != nil {
+			// A zero-row CAS is expected when a sibling replica won the claim.
+			// Every other error is infrastructure failure and must be observable.
+			if !errors.Is(err, pgx.ErrNoRows) {
+				operationClaimFailuresTotal.Inc()
+				if cfg.MarkRunningError != nil {
+					cfg.MarkRunningError(ctx, op, err)
+				} else {
+					slog.Default().WarnContext(ctx, "mark operation running failed", "operation_id", cfg.ID(op), "error", err)
+				}
+			}
 			continue
 		}
 		claimed = append(claimed, cfg.Claimed(running))

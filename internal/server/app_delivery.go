@@ -46,19 +46,19 @@ func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *con
 		database.Close()
 		return err
 	}
-	deliveryRolloutController.RequireTransactionalAudit()
+
 	deliveryDeploymentController, err := deliverydeployment.NewPostgresController(database.Pool(), nil)
 	if err != nil {
 		database.Close()
 		return err
 	}
-	deliveryDeploymentController.RequireTransactionalAudit()
+
 	deliverySystemRolloutService, err := systemrollout.New(database.Pool())
 	if err != nil {
 		database.Close()
 		return err
 	}
-	deliverySystemRolloutService.RequireTransactionalAudit()
+
 	deliveryTargetHandler := deliveryhandler.NewTargetHandler(queries, deliveryPlanningStore, bus)
 	deliveryTargetHandler.SetPlatformScopeChecker(queries)
 	deliveryTargetHandler.SetRunTx(sqlcMutationTxRunner[deliveryhandler.TargetMutationTx](database))
@@ -67,9 +67,9 @@ func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *con
 	deliveryBundleHandler := deliveryhandler.NewBundleHandler(queries)
 	deliveryBundleHandler.SetRunTx(sqlcMutationTxRunner[deliveryhandler.BundleMutationTx](database))
 	deliveryRolloutHandler := deliveryhandler.NewRolloutHandler(queries, deliveryPlanner, deliveryRolloutController, bus)
-	deliveryRolloutHandler.EnableTransactionalPlannerAudit()
-	deliverySystemRolloutHandler := deliveryhandler.NewSystemRolloutHandler(deliverySystemRolloutService, queries, bus)
-	deliverySystemRolloutHandler.EnableTransactionalAudit()
+
+	deliverySystemRolloutHandler := deliveryhandler.NewSystemRolloutHandler(deliverySystemRolloutService, bus)
+
 	kubectlShell, kubectlSessionReapRuntime := kubectlShellComponents(queries, rbacQuerier, rbacEngine, requester, cfg, logger, taskLeader)
 	c.deliveryPlanningStore = deliveryPlanningStore
 	c.deliveryRolloutController = deliveryRolloutController

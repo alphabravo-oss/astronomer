@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "@/lib/link";
-import { usePathname, useRouter, useSearchParams } from "@/lib/navigation";
-import { useClusters, useProjects } from "@/lib/hooks";
+import { useEffect, useMemo, type ReactNode } from "react";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate, useLocation } from "@tanstack/react-router";
+import { useClusters } from "@/lib/hooks/clusters";
+import { useProjects } from "@/lib/hooks/projects";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   EmptyState,
@@ -11,6 +12,8 @@ import {
 } from "@/components/ui/empty-state";
 import { ArrowLeft, FolderKanban, PackageOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pageRowCount } from "@/lib/api/pagination";
+import type { PaginatedResponse } from "@/types";
 
 export type DeliveryListTab =
   "sources" | "bundles" | "targets" | "rollouts" | "deployments";
@@ -60,9 +63,10 @@ export function projectBoundToCluster(
 
 export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
   const projects = useProjects({ pageSize: 200 });
-  const pathname = usePathname();
-  const search = useSearchParams();
-  const router = useRouter();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const searchStr = useLocation({ select: (location) => location.searchStr });
+  const search = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
+  const navigate = useNavigate();
   const clusterId = opts?.clusterId;
   const rows = useMemo(() => {
     const all = projects.data?.data ?? [];
@@ -82,8 +86,8 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
     if (requested || rows.length !== 1) return;
     const next = new URLSearchParams(search);
     next.set("project", rows[0].id);
-    router.replace(`${pathname}?${next.toString()}`);
-  }, [pathname, requested, router, rows, search]);
+    void navigate({ to: `${pathname}?${next.toString()}`, replace: true });
+  }, [pathname, requested, navigate, rows, search]);
 
   const setProjectId = (id: string) => {
     const next = new URLSearchParams(search);
@@ -92,14 +96,17 @@ export function useDeliveryProjectScope(opts?: { clusterId?: string }) {
     next.delete("page");
     next.delete("version_page");
     next.delete("cluster_page");
-    router.replace(`${pathname}${next.size ? `?${next.toString()}` : ""}`);
+    void navigate({
+      to: `${pathname}${next.size ? `?${next.toString()}` : ""}`,
+      replace: true,
+    });
   };
 
   return { projectId, projects: rows, projectQuery: projects, setProjectId };
 }
 
 export function useDeliveryWorkspace() {
-  const pathname = usePathname();
+  const pathname = useLocation({ select: (location) => location.pathname });
   const clusterMatch = pathname.match(
     /^\/dashboard\/clusters\/([^/]+)\/delivery/,
   );
@@ -134,22 +141,25 @@ function resolveDeliveryCluster(
 
 export function RedirectDeliveryList({ tab }: { tab: DeliveryListTab }) {
   const { projectId, projects, projectQuery } = useDeliveryProjectScope();
-  const search = useSearchParams();
+  const search = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
   const searchKey = search.toString();
-  const router = useRouter();
+  const navigate = useNavigate();
   useEffect(() => {
     if (projectQuery.isLoading) return;
     const { project, clusterId } = resolveDeliveryCluster(projectId, projects);
     const next = new URLSearchParams(searchKey);
     if (project?.id) next.set("project", project.id);
     if (clusterId) {
-      router.replace(
-        `${clusterDeliveryPath(clusterId, tab)}${next.size ? `?${next.toString()}` : ""}`,
-      );
+      void navigate({
+        to: `${clusterDeliveryPath(clusterId, tab)}${next.size ? `?${next.toString()}` : ""}`,
+        replace: true,
+      });
       return;
     }
-    router.replace("/dashboard/delivery");
-  }, [projectId, projectQuery.isLoading, projects, router, searchKey, tab]);
+    void navigate({ to: "/dashboard/delivery", replace: true });
+  }, [projectId, projectQuery.isLoading, projects, navigate, searchKey, tab]);
   return <LoadingState title="Opening cluster delivery" />;
 }
 
@@ -163,21 +173,34 @@ export function RedirectDeliveryDetail({
   children: ReactNode;
 }) {
   const { projectId, projects, projectQuery } = useDeliveryProjectScope();
-  const search = useSearchParams();
+  const search = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
   const searchKey = search.toString();
-  const router = useRouter();
-  const [redirecting, setRedirecting] = useState(false);
+  const navigate = useNavigate();
+  const redirecting =
+    !projectQuery.isLoading &&
+    !!id &&
+    !!resolveDeliveryCluster(projectId, projects).clusterId;
   useEffect(() => {
     if (projectQuery.isLoading || !id) return;
     const { project, clusterId } = resolveDeliveryCluster(projectId, projects);
     if (!clusterId) return;
     const next = new URLSearchParams(searchKey);
     if (project?.id) next.set("project", project.id);
-    setRedirecting(true);
-    router.replace(
-      `${clusterDeliveryPath(clusterId, tab)}/${encodeURIComponent(id)}${next.size ? `?${next.toString()}` : ""}`,
-    );
-  }, [id, projectId, projectQuery.isLoading, projects, router, searchKey, tab]);
+    void navigate({
+      to: `${clusterDeliveryPath(clusterId, tab)}/${encodeURIComponent(id)}${next.size ? `?${next.toString()}` : ""}`,
+      replace: true,
+    });
+  }, [
+    id,
+    projectId,
+    projectQuery.isLoading,
+    projects,
+    navigate,
+    searchKey,
+    tab,
+  ]);
   if (projectQuery.isLoading || redirecting) {
     return <LoadingState title="Opening cluster delivery" />;
   }
@@ -185,43 +208,36 @@ export function RedirectDeliveryDetail({
 }
 
 export function useDeliveryPageIndex(parameter = "page") {
-  const pathname = usePathname();
-  const search = useSearchParams();
-  const router = useRouter();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const search = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
+  const navigate = useNavigate();
   const parsed = Number(search.get(parameter) ?? "0");
   const pageIndex = Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
   const setPageIndex = (nextPage: number) => {
     const next = new URLSearchParams(search);
     if (nextPage > 0) next.set(parameter, String(nextPage));
     else next.delete(parameter);
-    router.replace(`${pathname}${next.size ? `?${next.toString()}` : ""}`);
+    void navigate({
+      to: `${pathname}${next.size ? `?${next.toString()}` : ""}`,
+      replace: true,
+    });
   };
   return [pageIndex, setPageIndex] as const;
 }
 
 /**
  * React Table needs a row count to enable its next-page control. Most delivery
- * endpoints return an exact total, but append-only bundle-version history can
- * intentionally return `totalKnown: false`. In that case expose only the
- * smallest count proven by the current page and its next link; this enables
+ * endpoints return an exact total, but append-only history can intentionally
+ * omit it. In that case expose only the smallest count proven by the current
+ * page and `has_more`; this enables
  * one safe server fetch without pretending the browser knows the full total.
  */
 export function deliveryPageRowCount(
-  page:
-    | {
-        data: unknown[];
-        count: number;
-        next: string | null;
-        totalKnown: boolean;
-      }
-    | undefined,
-  pageIndex: number,
-  pageSize: number,
+  page: PaginatedResponse<unknown> | undefined,
 ): number {
-  if (!page) return 0;
-  if (page.totalKnown) return page.count;
-  const observed = pageIndex * pageSize + page.data.length;
-  return observed + (page.next ? 1 : 0);
+  return pageRowCount(page);
 }
 
 export function deliveryProjectLabel(
@@ -270,13 +286,13 @@ export function DeliveryShell({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <Link
-          href="/dashboard/delivery"
+        <RouterLink
+          to="/dashboard/delivery"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to delivery fleet
-        </Link>
+        </RouterLink>
         {showProjectSelect ? (
           <label className="flex min-w-64 items-center gap-2 text-sm">
             <FolderKanban
@@ -451,6 +467,6 @@ export const secondaryButton =
 export const dangerButton =
   "inline-flex h-9 items-center justify-center gap-2 rounded-md bg-status-error px-4 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 export const inputClass =
-  "h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
+  "h-9 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";
 export const textareaClass =
-  "min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
+  "min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-ring";

@@ -2,6 +2,8 @@
 // Astronomer Platform Types
 // ============================================================
 
+import type { OpenAPIComponents } from "@/types/openapi.generated";
+
 // --- API Response Types ---
 
 export interface APIResponse<T> {
@@ -12,14 +14,11 @@ export interface APIResponse<T> {
 
 export interface PaginatedResponse<T> {
   data: T[];
-  total: number;
-  count?: number;
-  next?: string | null;
-  previous?: string | null;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  pagination: PaginationMetadata;
 }
+
+export type PaginationMetadata =
+  OpenAPIComponents["schemas"]["PaginationMetadata"];
 
 export interface APIError {
   message: string;

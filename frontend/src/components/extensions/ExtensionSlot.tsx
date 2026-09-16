@@ -1,4 +1,3 @@
-"use client";
 
 // §HostMounts — ExtensionSlot: the ONE integration point a host page adds per
 // mount location. `<ExtensionSlot point="clusterTab" context={{clusterId}} />`
@@ -96,7 +95,7 @@ function MountPlaceholder({ mount }: { mount: ExtensionMount }) {
         <span className="text-sm font-medium text-foreground">
           {mount.label || mount.displayName || mount.extension}
         </span>
-        <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
           {tier === 2 ? "iframe" : "widget"}
         </span>
       </div>

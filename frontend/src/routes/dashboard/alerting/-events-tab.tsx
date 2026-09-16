@@ -27,7 +27,7 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded capitalize font-medium",
+            "text-xs px-2 py-0.5 rounded-sm capitalize font-medium",
             statusBgColor(row.severity),
           )}
         >
@@ -135,7 +135,11 @@ export function EventsTab({ clusterId }: { clusterId?: string } = {}) {
       loading={isLoading}
       isError={isError}
       onRetry={() => refetch()}
-      emptyMessage="No active alerts"
+      emptyState={{
+        title: "No active alerts",
+        description:
+          "There are no active items requiring attention in this scope.",
+      }}
     />
   );
 }

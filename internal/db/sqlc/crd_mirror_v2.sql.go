@@ -13,6 +13,115 @@ import (
 	"github.com/google/uuid"
 )
 
+const countMirroredGatewayClasses = `-- name: CountMirroredGatewayClasses :one
+SELECT count(*) FROM mirrored_gateway_classes WHERE cluster_id = $1
+`
+
+func (q *Queries) CountMirroredGatewayClasses(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMirroredGatewayClasses, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countMirroredIngressClasses = `-- name: CountMirroredIngressClasses :one
+SELECT count(*) FROM mirrored_ingress_classes WHERE cluster_id = $1
+`
+
+func (q *Queries) CountMirroredIngressClasses(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMirroredIngressClasses, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countMirroredLimitRanges = `-- name: CountMirroredLimitRanges :one
+SELECT count(*) FROM mirrored_limit_ranges WHERE cluster_id = $1
+`
+
+func (q *Queries) CountMirroredLimitRanges(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMirroredLimitRanges, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countMirroredLimitRangesByNamespace = `-- name: CountMirroredLimitRangesByNamespace :one
+SELECT count(*)
+FROM mirrored_limit_ranges
+WHERE cluster_id = $1 AND namespace = $2
+`
+
+type CountMirroredLimitRangesByNamespaceParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+}
+
+func (q *Queries) CountMirroredLimitRangesByNamespace(ctx context.Context, arg CountMirroredLimitRangesByNamespaceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMirroredLimitRangesByNamespace, arg.ClusterID, arg.Namespace)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countMirroredNetworkPolicies = `-- name: CountMirroredNetworkPolicies :one
+SELECT count(*) FROM mirrored_network_policies WHERE cluster_id = $1
+`
+
+func (q *Queries) CountMirroredNetworkPolicies(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMirroredNetworkPolicies, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countMirroredNetworkPoliciesByNamespace = `-- name: CountMirroredNetworkPoliciesByNamespace :one
+SELECT count(*)
+FROM mirrored_network_policies
+WHERE cluster_id = $1 AND namespace = $2
+`
+
+type CountMirroredNetworkPoliciesByNamespaceParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+}
+
+func (q *Queries) CountMirroredNetworkPoliciesByNamespace(ctx context.Context, arg CountMirroredNetworkPoliciesByNamespaceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMirroredNetworkPoliciesByNamespace, arg.ClusterID, arg.Namespace)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countMirroredResourceQuotas = `-- name: CountMirroredResourceQuotas :one
+SELECT count(*) FROM mirrored_resource_quotas WHERE cluster_id = $1
+`
+
+func (q *Queries) CountMirroredResourceQuotas(ctx context.Context, clusterID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countMirroredResourceQuotas, clusterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countMirroredResourceQuotasByNamespace = `-- name: CountMirroredResourceQuotasByNamespace :one
+SELECT count(*)
+FROM mirrored_resource_quotas
+WHERE cluster_id = $1 AND namespace = $2
+`
+
+type CountMirroredResourceQuotasByNamespaceParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+}
+
+func (q *Queries) CountMirroredResourceQuotasByNamespace(ctx context.Context, arg CountMirroredResourceQuotasByNamespaceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMirroredResourceQuotasByNamespace, arg.ClusterID, arg.Namespace)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteMirroredGatewayClass = `-- name: DeleteMirroredGatewayClass :exec
 DELETE FROM mirrored_gateway_classes WHERE cluster_id = $1 AND name = $2
 `
@@ -96,13 +205,20 @@ SELECT id, cluster_id, name, controller_name, description, parameters,
 FROM mirrored_gateway_classes
 WHERE cluster_id = $1
 ORDER BY name ASC
+LIMIT $3 OFFSET $2
 `
+
+type ListMirroredGatewayClassesParams struct {
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
 
 // ---------------------------------------------------------------------
 // mirrored_gateway_classes
 // ---------------------------------------------------------------------
-func (q *Queries) ListMirroredGatewayClasses(ctx context.Context, clusterID uuid.UUID) ([]MirroredGatewayClass, error) {
-	rows, err := q.db.Query(ctx, listMirroredGatewayClasses, clusterID)
+func (q *Queries) ListMirroredGatewayClasses(ctx context.Context, arg ListMirroredGatewayClassesParams) ([]MirroredGatewayClass, error) {
+	rows, err := q.db.Query(ctx, listMirroredGatewayClasses, arg.ClusterID, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +258,14 @@ SELECT id, cluster_id, name, controller, parameters, is_default,
 FROM mirrored_ingress_classes
 WHERE cluster_id = $1
 ORDER BY name ASC
+LIMIT $3 OFFSET $2
 `
+
+type ListMirroredIngressClassesParams struct {
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
 
 // Migration 069 — CRD-mirror v2 queries.
 //
@@ -157,8 +280,8 @@ ORDER BY name ASC
 // ---------------------------------------------------------------------
 // mirrored_ingress_classes
 // ---------------------------------------------------------------------
-func (q *Queries) ListMirroredIngressClasses(ctx context.Context, clusterID uuid.UUID) ([]MirroredIngressClass, error) {
-	rows, err := q.db.Query(ctx, listMirroredIngressClasses, clusterID)
+func (q *Queries) ListMirroredIngressClasses(ctx context.Context, arg ListMirroredIngressClassesParams) ([]MirroredIngressClass, error) {
+	rows, err := q.db.Query(ctx, listMirroredIngressClasses, arg.ClusterID, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -196,13 +319,20 @@ SELECT id, cluster_id, namespace, name, limits,
 FROM mirrored_limit_ranges
 WHERE cluster_id = $1
 ORDER BY namespace ASC, name ASC
+LIMIT $3 OFFSET $2
 `
+
+type ListMirroredLimitRangesParams struct {
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
 
 // ---------------------------------------------------------------------
 // mirrored_limit_ranges
 // ---------------------------------------------------------------------
-func (q *Queries) ListMirroredLimitRanges(ctx context.Context, clusterID uuid.UUID) ([]MirroredLimitRange, error) {
-	rows, err := q.db.Query(ctx, listMirroredLimitRanges, clusterID)
+func (q *Queries) ListMirroredLimitRanges(ctx context.Context, arg ListMirroredLimitRangesParams) ([]MirroredLimitRange, error) {
+	rows, err := q.db.Query(ctx, listMirroredLimitRanges, arg.ClusterID, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -238,15 +368,23 @@ SELECT id, cluster_id, namespace, name, limits,
 FROM mirrored_limit_ranges
 WHERE cluster_id = $1 AND namespace = $2
 ORDER BY name ASC
+LIMIT $4 OFFSET $3
 `
 
 type ListMirroredLimitRangesByNamespaceParams struct {
-	ClusterID uuid.UUID `json:"cluster_id"`
-	Namespace string    `json:"namespace"`
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	Namespace   string    `json:"namespace"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
 }
 
 func (q *Queries) ListMirroredLimitRangesByNamespace(ctx context.Context, arg ListMirroredLimitRangesByNamespaceParams) ([]MirroredLimitRange, error) {
-	rows, err := q.db.Query(ctx, listMirroredLimitRangesByNamespace, arg.ClusterID, arg.Namespace)
+	rows, err := q.db.Query(ctx, listMirroredLimitRangesByNamespace,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.QueryOffset,
+		arg.QueryLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -284,13 +422,20 @@ SELECT id, cluster_id, namespace, name, pod_selector, policy_types,
 FROM mirrored_network_policies
 WHERE cluster_id = $1
 ORDER BY namespace ASC, name ASC
+LIMIT $3 OFFSET $2
 `
+
+type ListMirroredNetworkPoliciesParams struct {
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
 
 // ---------------------------------------------------------------------
 // mirrored_network_policies
 // ---------------------------------------------------------------------
-func (q *Queries) ListMirroredNetworkPolicies(ctx context.Context, clusterID uuid.UUID) ([]MirroredNetworkPolicy, error) {
-	rows, err := q.db.Query(ctx, listMirroredNetworkPolicies, clusterID)
+func (q *Queries) ListMirroredNetworkPolicies(ctx context.Context, arg ListMirroredNetworkPoliciesParams) ([]MirroredNetworkPolicy, error) {
+	rows, err := q.db.Query(ctx, listMirroredNetworkPolicies, arg.ClusterID, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -331,15 +476,23 @@ SELECT id, cluster_id, namespace, name, pod_selector, policy_types,
 FROM mirrored_network_policies
 WHERE cluster_id = $1 AND namespace = $2
 ORDER BY name ASC
+LIMIT $4 OFFSET $3
 `
 
 type ListMirroredNetworkPoliciesByNamespaceParams struct {
-	ClusterID uuid.UUID `json:"cluster_id"`
-	Namespace string    `json:"namespace"`
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	Namespace   string    `json:"namespace"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
 }
 
 func (q *Queries) ListMirroredNetworkPoliciesByNamespace(ctx context.Context, arg ListMirroredNetworkPoliciesByNamespaceParams) ([]MirroredNetworkPolicy, error) {
-	rows, err := q.db.Query(ctx, listMirroredNetworkPoliciesByNamespace, arg.ClusterID, arg.Namespace)
+	rows, err := q.db.Query(ctx, listMirroredNetworkPoliciesByNamespace,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.QueryOffset,
+		arg.QueryLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -380,13 +533,20 @@ SELECT id, cluster_id, namespace, name, hard, used, scopes,
 FROM mirrored_resource_quotas
 WHERE cluster_id = $1
 ORDER BY namespace ASC, name ASC
+LIMIT $3 OFFSET $2
 `
+
+type ListMirroredResourceQuotasParams struct {
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
 
 // ---------------------------------------------------------------------
 // mirrored_resource_quotas
 // ---------------------------------------------------------------------
-func (q *Queries) ListMirroredResourceQuotas(ctx context.Context, clusterID uuid.UUID) ([]MirroredResourceQuota, error) {
-	rows, err := q.db.Query(ctx, listMirroredResourceQuotas, clusterID)
+func (q *Queries) ListMirroredResourceQuotas(ctx context.Context, arg ListMirroredResourceQuotasParams) ([]MirroredResourceQuota, error) {
+	rows, err := q.db.Query(ctx, listMirroredResourceQuotas, arg.ClusterID, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -424,15 +584,23 @@ SELECT id, cluster_id, namespace, name, hard, used, scopes,
 FROM mirrored_resource_quotas
 WHERE cluster_id = $1 AND namespace = $2
 ORDER BY name ASC
+LIMIT $4 OFFSET $3
 `
 
 type ListMirroredResourceQuotasByNamespaceParams struct {
-	ClusterID uuid.UUID `json:"cluster_id"`
-	Namespace string    `json:"namespace"`
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	Namespace   string    `json:"namespace"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
 }
 
 func (q *Queries) ListMirroredResourceQuotasByNamespace(ctx context.Context, arg ListMirroredResourceQuotasByNamespaceParams) ([]MirroredResourceQuota, error) {
-	rows, err := q.db.Query(ctx, listMirroredResourceQuotasByNamespace, arg.ClusterID, arg.Namespace)
+	rows, err := q.db.Query(ctx, listMirroredResourceQuotasByNamespace,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.QueryOffset,
+		arg.QueryLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

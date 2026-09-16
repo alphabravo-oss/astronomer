@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * "Restore from this Backup" modal. Surfaced both from the runs table on
@@ -13,7 +12,7 @@
  */
 
 import { useState } from "react";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Plus, X } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -31,7 +30,7 @@ interface MappingRow {
 }
 
 export function RestoreModal({ backup, onClose }: RestoreModalProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const create = useB2CreateRestore();
   const sourceNamespaces = (backup.includedNamespaces ?? []) as string[];
 
@@ -82,7 +81,7 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
       });
       onClose();
       if (restore?.id) {
-        router.push(`/dashboard/backups/restores/${restore.id}`);
+        void navigate({ to: `/dashboard/backups/restores/${restore.id}` });
       }
     } catch {
       /* error toast handled in hook */
@@ -144,7 +143,7 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
                   key={ns}
                   onClick={() => toggleNamespace(ns)}
                   type="button"
-                  className={`text-xs px-2 py-1 rounded font-mono transition-colors ${
+                  className={`text-xs px-2 py-1 rounded-sm font-mono transition-colors ${
                     on
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:text-foreground"
@@ -204,7 +203,7 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
               }
               placeholder="prod"
               className="flex-1 h-8 px-3 rounded-md border border-border bg-background text-sm font-mono
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
             />
             <span className="text-muted-foreground">→</span>
             <input
@@ -219,7 +218,7 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
               }
               placeholder="prod-restored"
               className="flex-1 h-8 px-3 rounded-md border border-border bg-background text-sm font-mono
-                    placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
             />
             <button
               type="button"
@@ -239,7 +238,7 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
           type="checkbox"
           checked={restorePVs}
           onChange={(e) => setRestorePVs(e.target.checked)}
-          className="rounded border-border text-primary focus:ring-ring"
+          className="rounded-sm border-border text-primary focus:ring-ring"
         />
         <span className="text-sm text-foreground">
           Restore PersistentVolumes
@@ -257,7 +256,7 @@ export function RestoreModal({ backup, onClose }: RestoreModalProps) {
           onChange={(e) => setConfirmText(e.target.value)}
           placeholder={backup.name}
           className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm font-mono
-                placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
       </div>
     </ModalShell>

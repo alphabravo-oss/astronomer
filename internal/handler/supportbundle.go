@@ -8,42 +8,28 @@
 //     keys, kubeconfigs, credential-shaped strings) is replaced with a
 //     redaction marker.
 //
-//  2. The bundle MUST stream — we don't want to buffer 10MB of pod logs in
-//     RAM. Everything writes directly to an archive/zip.Writer that wraps
-//     the response writer.
+//  2. Collection runs only as a durable tunnel-worker operation. Section
+//     writers stream into a hard-bounded artifact buffer; HTTP handlers only
+//     accept, poll, or download an already completed artifact.
 package handler
 
 import (
-	"archive/zip"
-	"bufio"
 	"context"
-	"crypto/x509"
-	"encoding/json"
-	"encoding/pem"
-	"errors"
-	"fmt"
-	"log/slog"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/redaction"
-	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
 // SupportBundleQuerier is the slice of sqlc Queries that the bundle reads.
 type SupportBundleQuerier interface {
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
+	ListClusterLivenessForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.ClusterLiveness, error)
 	ListUsers(ctx context.Context, arg sqlc.ListUsersParams) ([]sqlc.User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
@@ -52,7 +38,7 @@ type SupportBundleQuerier interface {
 	// last-seen + cluster_id are exactly what an
 	// L3 engineer needs when triaging a "why are these clusters offline?"
 	// question.
-	ListActiveConnections(ctx context.Context) ([]sqlc.AgentConnection, error)
+	ListActiveConnections(ctx context.Context, limit int32) ([]sqlc.AgentConnection, error)
 }
 
 // supportBundleCharlieQuerier is optional so Charlie remains entirely absent
@@ -88,15 +74,43 @@ type SupportBundleDBPooler interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// SupportBundleHandler wraps the GET /api/v1/support-bundle/ endpoint.
+type SupportBundleOperationStore interface {
+	GetSupportBundleOperation(context.Context, uuid.UUID) (sqlc.GetSupportBundleOperationRow, error)
+	GetSupportBundleArtifact(context.Context, uuid.UUID) (sqlc.GetSupportBundleArtifactRow, error)
+}
+
+// SupportBundleMutationTx is the transaction-bound surface for accepting a
+// generation request. The operation, tunnel-queue task intent, and audit intent
+// are one PostgreSQL commit decision.
+type SupportBundleMutationTx interface {
+	CreateSupportBundleOperation(context.Context, sqlc.CreateSupportBundleOperationParams) (sqlc.CreateSupportBundleOperationRow, error)
+	audit.OutboxQuerier
+}
+
+type supportBundleRunTxFunc func(context.Context, func(SupportBundleMutationTx) error) error
+
+// SupportBundleHandler exposes durable support-bundle operations and owns the
+// reusable generator executed by the tunnel worker.
 type SupportBundleHandler struct {
-	queries   SupportBundleQuerier
-	k8s       kubernetes.Interface
-	namespace string
+	queries    SupportBundleQuerier
+	operations SupportBundleOperationStore
+	k8s        kubernetes.Interface
+	namespace  string
 	// Optional, wired via setters; nil-safe section writers degrade
 	// gracefully when these are absent.
 	inspector SupportBundleAsynqInspector
 	db        SupportBundleDBPooler
+	runTx     supportBundleRunTxFunc
+}
+
+func (h *SupportBundleHandler) SetRunTx(runTx supportBundleRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *SupportBundleHandler) TransactionalMutationWired() bool {
+	return h != nil && h.operations != nil && h.runTx != nil
 }
 
 // SetAsynqInspector wires the asynq queue inspector. Enables the
@@ -120,810 +134,31 @@ func (h *SupportBundleHandler) SetDBPool(pool SupportBundleDBPooler) {
 // NewSupportBundleHandler returns a handler. k8sClient and namespace are
 // optional: when nil/empty, pod-state and pod-logs sections are skipped
 // and the bundle just contains DB-derived sections.
-func NewSupportBundleHandler(queries SupportBundleQuerier, k8sClient kubernetes.Interface, namespace string) *SupportBundleHandler {
+func NewSupportBundleHandler(queries SupportBundleQuerier, operations SupportBundleOperationStore, k8sClient kubernetes.Interface, namespace string) *SupportBundleHandler {
 	return &SupportBundleHandler{
-		queries:   queries,
-		k8s:       k8sClient,
-		namespace: namespace,
+		queries:    queries,
+		operations: operations,
+		k8s:        k8sClient,
+		namespace:  namespace,
 	}
 }
 
-// Download streams the bundle as a zip. Only superusers can call it: it
-// surfaces audit-log entries and platform internals that aren't safe to
-// share with non-admins.
-func (h *SupportBundleHandler) Download(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
-		StoreUnavailableMessage: "Support bundle store not configured",
-		ForbiddenMessage:        "Support bundle download requires superuser privileges",
-	}); !ok {
-		return
-	}
-
-	// Read-only superuser endpoint that exposes platform internals — leave
-	// an explicit audit trail. The mutating-HTTP audit middleware skips
-	// GET, so this trail wouldn't otherwise exist.
-	recordAudit(r, h.queries, "admin.support_bundle.downloaded",
-		"platform", "", "support-bundle", nil)
-
-	filename := fmt.Sprintf("astronomer-support-bundle-%s.zip",
-		time.Now().UTC().Format("20060102-150405"))
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
-
-	zw := zip.NewWriter(w)
-
-	// Each writer is best-effort: a per-section failure shouldn't doom the
-	// whole bundle. We collect errors into a manifest file at the end so the
-	// caller can see what's missing.
-	collected := newSectionLog()
-
-	h.writeMeta(r.Context(), zw, collected)
-	h.writePlatformConfig(r.Context(), zw, collected)
-	h.writeClusters(r.Context(), zw, collected)
-	h.writeUsers(r.Context(), zw, collected)
-	h.writeAuditLog(r.Context(), zw, collected)
-	h.writeAuditPipelineHealth(r.Context(), zw, collected)
-	h.writePods(r.Context(), zw, collected)
-	h.writePodLogs(r.Context(), zw, collected)
-	// Extra context an L3 engineer needs without
-	// shell access to the cluster:
-	h.writeEvents(r.Context(), zw, collected)
-	h.writeHelmRelease(r.Context(), zw, collected)
-	h.writeNetworkPolicies(r.Context(), zw, collected)
-	h.writeIngressCertificates(r.Context(), zw, collected)
-	h.writeSchemaMigrations(r.Context(), zw, collected)
-	h.writeAsynqQueues(r.Context(), zw, collected)
-	h.writeAgentConnections(r.Context(), zw, collected)
-	h.writeCharlieStatus(r.Context(), zw, collected)
-	h.writeReadme(zw, collected)
-	if err := zw.Close(); err != nil {
-		slog.Warn("failed to finish support bundle", "error", err)
-	}
+type SupportBundleOperationResponse struct {
+	ID           string     `json:"id"`
+	Status       string     `json:"status"`
+	AttemptCount int32      `json:"attempt_count"`
+	ErrorCode    string     `json:"error_code,omitempty"`
+	Filename     string     `json:"filename,omitempty"`
+	SHA256       string     `json:"sha256,omitempty"`
+	Size         int64      `json:"size"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	CompletedAt  *time.Time `json:"completed_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	StatusURL    string     `json:"status_url"`
+	DownloadURL  string     `json:"download_url,omitempty"`
 }
 
-func (h *SupportBundleHandler) writeAuditPipelineHealth(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	queries, ok := h.queries.(supportBundleAuditOutboxQuerier)
-	if !ok {
-		log.skipped("audit-pipeline-health.json", "transactional audit outbox health is not wired")
-		return
-	}
-	health, err := queries.GetAuditOutboxHealth(ctx)
-	if err != nil {
-		log.section("audit-pipeline-health.json", err)
-		return
-	}
-	state := "healthy"
-	if health.DeadCount > 0 {
-		state = "degraded"
-	} else if health.PendingCount > 0 {
-		state = "draining"
-	}
-	payload := map[string]any{
-		"state":             state,
-		"pending_count":     health.PendingCount,
-		"dead_count":        health.DeadCount,
-		"delivered_count":   health.DeliveredCount,
-		"oldest_pending_at": health.OldestPendingAt,
-		"last_delivered_at": health.LastDeliveredAt,
-	}
-	log.section("audit-pipeline-health.json", writeBundleJSON(zw, "audit-pipeline-health.json", payload))
-}
-
-func (h *SupportBundleHandler) writeCharlieStatus(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	queries, ok := h.queries.(supportBundleCharlieQuerier)
-	if !ok {
-		log.skipped("charlie-status.json", "Charlie metadata store not wired")
-		return
-	}
-	connection, err := queries.GetLatestCharlieConnection(ctx)
-	if errors.Is(err, pgx.ErrNoRows) {
-		log.skipped("charlie-status.json", "Charlie has never been configured")
-		return
-	}
-	if err != nil {
-		log.section("charlie-status.json", err)
-		return
-	}
-	rules, rulesErr := queries.ListCharlieTriggerRules(ctx, connection.ID)
-	findings, findingsErr := queries.ListCharlieFindings(ctx, sqlc.ListCharlieFindingsParams{
-		ConnectionID: connection.ID, PageLimit: 500,
-	})
-	ruleSummary := make([]map[string]any, 0, len(rules))
-	if rulesErr == nil {
-		for _, rule := range rules {
-			ruleSummary = append(ruleSummary, map[string]any{
-				"name": rule.Name, "category": rule.Category, "enabled": rule.Enabled,
-				"minimum_severity": rule.MinimumSeverity, "window_seconds": rule.WindowSeconds,
-				"cooldown_seconds": rule.CooldownSeconds, "mode_ceiling": rule.ModeCeiling,
-			})
-		}
-	}
-	findingCounts := map[string]int{}
-	if findingsErr == nil {
-		for _, finding := range findings {
-			findingCounts[finding.Status+":"+finding.Severity]++
-		}
-	}
-	payload := map[string]any{
-		"configured": true, "active": connection.Active,
-		"emergency_disabled": connection.EmergencyDisabled,
-		"requested_mode":     connection.RequestedMode, "verified_mode": connection.VerifiedMode,
-		"verified_mode_revision": connection.VerifiedModeRevision,
-		"onboarding_state":       connection.OnboardingState, "health_state": connection.HealthState,
-		"last_error_code":                   connection.LastErrorCode,
-		"agent_protocol_version":            connection.AgentProtocolVersion,
-		"chart_version":                     connection.ChartVersion,
-		"leader_present":                    strings.TrimSpace(connection.LeaderInstanceID) != "",
-		"fencing_epoch":                     connection.FencingEpoch,
-		"last_verified_at":                  timestamptzString(connection.LastVerifiedAt),
-		"last_connected_at":                 timestamptzString(connection.LastConnectedAt),
-		"last_rotated_at":                   timestamptzString(connection.LastRotatedAt),
-		"certificate_expires_at":            timeString(connection.CertificateExpiresAt),
-		"enrollment_credentials_expires_at": timeString(connection.EnrollmentCredentialsExpiresAt),
-		"artifact_credential_expires_at":    timeString(connection.ArtifactCredentialExpiresAt),
-		"onboarding_package_expires_at":     timeString(connection.OnboardingPackageExpiresAt),
-		"trigger_rules":                     ruleSummary, "finding_counts": findingCounts,
-	}
-	if rulesErr != nil {
-		payload["trigger_rules_status"] = "unavailable"
-	}
-	if findingsErr != nil {
-		payload["finding_counts_status"] = "unavailable"
-	}
-	log.section("charlie-status.json", writeBundleJSON(zw, "charlie-status.json", payload))
-}
-
-func timeString(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-	return value.UTC().Format(time.RFC3339)
-}
-
-// ── individual section writers ──────────────────────────────────────────
-
-func (h *SupportBundleHandler) writeMeta(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	type meta struct {
-		GeneratedAt   string `json:"generated_at"`
-		ServerVersion string `json:"server_version"`
-		ServerCommit  string `json:"server_commit"`
-		ServerBuilt   string `json:"server_built"`
-		Namespace     string `json:"release_namespace"`
-	}
-	m := meta{
-		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
-		ServerVersion: version.Version,
-		ServerCommit:  version.GitCommit,
-		ServerBuilt:   version.BuildDate,
-		Namespace:     h.namespace,
-	}
-	log.section("meta.json", writeBundleJSON(zw, "meta.json", m))
-}
-
-func (h *SupportBundleHandler) writePlatformConfig(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	cfg, err := h.queries.GetPlatformConfig(ctx)
-	if err != nil {
-		log.section("platform-config.json", err)
-		return
-	}
-	log.section("platform-config.json", writeBundleJSON(zw, "platform-config.json", cfg))
-}
-
-func (h *SupportBundleHandler) writeClusters(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	rows, err := h.queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
-	if err != nil {
-		log.section("clusters.json", err)
-		return
-	}
-	redacted := make([]map[string]any, 0, len(rows))
-	for _, c := range rows {
-		// CaCertificate is technically public but it's bulky and rarely
-		// useful for triage; replace with a length-tagged placeholder.
-		entry := map[string]any{
-			"id":                 c.ID.String(),
-			"name":               c.Name,
-			"display_name":       c.DisplayName,
-			"description":        c.Description,
-			"status":             c.Status,
-			"api_server_url":     c.ApiServerUrl,
-			"ca_certificate":     redaction.ByteCount(c.CaCertificate),
-			"environment":        c.Environment,
-			"region":             c.Region,
-			"provider":           c.Provider,
-			"distribution":       c.Distribution,
-			"agent_version":      c.AgentVersion,
-			"kubernetes_version": c.KubernetesVersion,
-			"node_count":         c.NodeCount,
-			"created_at":         c.CreatedAt,
-			"updated_at":         c.UpdatedAt,
-		}
-		if c.LastHeartbeat.Valid {
-			entry["last_heartbeat"] = c.LastHeartbeat.Time
-		}
-		redacted = append(redacted, entry)
-	}
-	log.section("clusters.json", writeBundleJSON(zw, "clusters.json", redacted))
-}
-
-func (h *SupportBundleHandler) writeUsers(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	users, err := h.queries.ListUsers(ctx, sqlc.ListUsersParams{Limit: 500, Offset: 0})
-	if err != nil {
-		log.section("users.json", err)
-		return
-	}
-	redacted := make([]map[string]any, 0, len(users))
-	for _, u := range users {
-		entry := map[string]any{
-			"id":                   u.ID.String(),
-			"username":             u.Username,
-			"email":                u.Email,
-			"first_name":           u.FirstName,
-			"last_name":            u.LastName,
-			"is_active":            u.IsActive,
-			"is_staff":             u.IsStaff,
-			"is_superuser":         u.IsSuperuser,
-			"must_change_password": u.MustChangePassword,
-			"password":             "[redacted bcrypt hash]",
-			"date_joined":          u.DateJoined,
-			"created_at":           u.CreatedAt,
-		}
-		if u.LastLogin.Valid {
-			entry["last_login"] = u.LastLogin.Time
-		}
-		redacted = append(redacted, entry)
-	}
-	log.section("users.json", writeBundleJSON(zw, "users.json", redacted))
-}
-
-func (h *SupportBundleHandler) writeAuditLog(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	rows, err := h.queries.ListAuditLogV1(ctx, sqlc.ListAuditLogsParams{Limit: 500, Offset: 0})
-	if err != nil {
-		log.section("audit-log-recent.json", err)
-		return
-	}
-	log.section("audit-log-recent.json", writeBundleJSON(zw, "audit-log-recent.json", rows))
-}
-
-func (h *SupportBundleHandler) writePods(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	if h.k8s == nil || h.namespace == "" {
-		log.skipped("pods.json", "k8s client not wired")
-		return
-	}
-	listCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	pods, err := h.k8s.CoreV1().Pods(h.namespace).List(listCtx, metav1.ListOptions{})
-	if err != nil {
-		log.section("pods.json", err)
-		return
-	}
-	out := make([]map[string]any, 0, len(pods.Items))
-	for _, p := range pods.Items {
-		out = append(out, map[string]any{
-			"name":               p.Name,
-			"phase":              string(p.Status.Phase),
-			"node":               p.Spec.NodeName,
-			"start_time":         p.Status.StartTime,
-			"container_statuses": summarizeContainers(p.Status.ContainerStatuses),
-			"creation_timestamp": p.CreationTimestamp,
-		})
-	}
-	log.section("pods.json", writeBundleJSON(zw, "pods.json", out))
-}
-
-func (h *SupportBundleHandler) writePodLogs(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	if h.k8s == nil || h.namespace == "" {
-		log.skipped("pod-logs/", "k8s client not wired")
-		return
-	}
-	listCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	pods, err := h.k8s.CoreV1().Pods(h.namespace).List(listCtx, metav1.ListOptions{})
-	cancel()
-	if err != nil {
-		log.section("pod-logs/", err)
-		return
-	}
-	tailLines := int64(200)
-	for _, p := range pods.Items {
-		for _, c := range p.Spec.Containers {
-			name := fmt.Sprintf("pod-logs/%s_%s.log", p.Name, c.Name)
-			logsCtx, lcancel := context.WithTimeout(ctx, 15*time.Second)
-			rc, err := h.k8s.CoreV1().Pods(h.namespace).GetLogs(p.Name, &corev1.PodLogOptions{
-				Container: c.Name,
-				TailLines: &tailLines,
-			}).Stream(logsCtx)
-			if err != nil {
-				log.section(name, err)
-				lcancel()
-				continue
-			}
-			fw, err := zw.Create(name)
-			if err != nil {
-				_ = rc.Close()
-				lcancel()
-				log.section(name, err)
-				continue
-			}
-			copyErr := writeRedactedLogStream(fw, rc)
-			_ = rc.Close()
-			lcancel()
-			log.section(name, copyErr)
-		}
-	}
-}
-
-// writeEvents captures the namespace's k8s Events for the last 24h or so
-// (k8s default retention is 1h-ish but we'll grab whatever's there). One
-// of the things support engineers ask for first when something's broken.
-func (h *SupportBundleHandler) writeEvents(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	if h.k8s == nil || h.namespace == "" {
-		log.skipped("events.json", "k8s client not wired")
-		return
-	}
-	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	events, err := h.k8s.CoreV1().Events(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
-	if err != nil {
-		log.section("events.json", err)
-		return
-	}
-	out := make([]map[string]any, 0, len(events.Items))
-	for _, e := range events.Items {
-		out = append(out, map[string]any{
-			"type":            e.Type,
-			"reason":          e.Reason,
-			"message":         e.Message,
-			"object_kind":     e.InvolvedObject.Kind,
-			"object_name":     e.InvolvedObject.Name,
-			"first_timestamp": e.FirstTimestamp,
-			"last_timestamp":  e.LastTimestamp,
-			"count":           e.Count,
-		})
-	}
-	log.section("events.json", writeBundleJSON(zw, "events.json", out))
-}
-
-// writeHelmRelease snapshots the chart's helm release secret (kind
-// helm.sh/release.v1) so support engineers can see exactly what
-// values + manifest version the install is running. We strip the binary
-// blob (the compressed JSON release payload itself is large + opaque)
-// and surface the labels which carry version + status.
-func (h *SupportBundleHandler) writeHelmRelease(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	if h.k8s == nil || h.namespace == "" {
-		log.skipped("helm-releases.json", "k8s client not wired")
-		return
-	}
-	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	secrets, err := h.k8s.CoreV1().Secrets(h.namespace).List(lctx, metav1.ListOptions{
-		FieldSelector: "type=helm.sh/release.v1",
-	})
-	if err != nil {
-		log.section("helm-releases.json", err)
-		return
-	}
-	out := make([]map[string]any, 0, len(secrets.Items))
-	for _, s := range secrets.Items {
-		entry := map[string]any{
-			"name":            s.Name,
-			"created":         s.CreationTimestamp,
-			"labels":          s.Labels,
-			"data_size_bytes": sumSecretBytes(s),
-		}
-		out = append(out, entry)
-	}
-	log.section("helm-releases.json", writeBundleJSON(zw, "helm-releases.json", out))
-}
-
-// writeNetworkPolicies captures the management namespace's current
-// isolation posture without including full rule bodies. It is meant to
-// answer whether default-deny and explicit egress/ingress policies exist.
-func (h *SupportBundleHandler) writeNetworkPolicies(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	if h.k8s == nil || h.namespace == "" {
-		log.skipped("networkpolicies.json", "k8s client not wired")
-		return
-	}
-	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	policies, err := h.k8s.NetworkingV1().NetworkPolicies(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
-	if err != nil {
-		log.section("networkpolicies.json", err)
-		return
-	}
-	out := make([]map[string]any, 0, len(policies.Items))
-	for _, p := range policies.Items {
-		out = append(out, summarizeNetworkPolicy(p))
-	}
-	log.section("networkpolicies.json", writeBundleJSON(zw, "networkpolicies.json", out))
-}
-
-// writeIngressCertificates summarizes externally reachable ingress hosts and
-// TLS certificate validity from Kubernetes Secret metadata/cert public data.
-// It never writes tls.key or raw certificate PEM bytes.
-func (h *SupportBundleHandler) writeIngressCertificates(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	if h.k8s == nil || h.namespace == "" {
-		log.skipped("ingress-certificates.json", "k8s client not wired")
-		return
-	}
-	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	ingresses, err := h.k8s.NetworkingV1().Ingresses(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
-	if err != nil {
-		log.section("ingress-certificates.json", err)
-		return
-	}
-	secrets, err := h.k8s.CoreV1().Secrets(h.namespace).List(lctx, metav1.ListOptions{Limit: 500})
-	if err != nil {
-		log.section("ingress-certificates.json", err)
-		return
-	}
-	tlsSecrets := map[string]corev1.Secret{}
-	for _, s := range secrets.Items {
-		if s.Type == corev1.SecretTypeTLS {
-			tlsSecrets[s.Name] = s
-		}
-	}
-
-	secretRefs := map[string]bool{}
-	ingressOut := make([]map[string]any, 0, len(ingresses.Items))
-	for _, ing := range ingresses.Items {
-		entry := summarizeIngress(ing)
-		for _, name := range ingressTLSSecretNames(ing) {
-			secretRefs[name] = true
-		}
-		ingressOut = append(ingressOut, entry)
-	}
-	certOut := make([]map[string]any, 0, len(secretRefs))
-	for name := range secretRefs {
-		secret, ok := tlsSecrets[name]
-		if !ok {
-			certOut = append(certOut, map[string]any{
-				"name":    name,
-				"present": false,
-			})
-			continue
-		}
-		certOut = append(certOut, summarizeTLSSecret(secret))
-	}
-	payload := map[string]any{
-		"ingresses":    ingressOut,
-		"certificates": certOut,
-	}
-	log.section("ingress-certificates.json", writeBundleJSON(zw, "ingress-certificates.json", payload))
-}
-
-// writeSchemaMigrations surfaces the migrate-binary state table. The dirty
-// flag is what an L3 engineer needs to see when a release is stuck on
-// migration recovery — same signal the preflight Job surfaces.
-func (h *SupportBundleHandler) writeSchemaMigrations(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	if h.db == nil {
-		log.skipped("schema-migrations.json", "db pool not wired")
-		return
-	}
-	lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	var version int64
-	var dirty bool
-	err := h.db.QueryRow(lctx, "SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty)
-	if err != nil {
-		log.section("schema-migrations.json", err)
-		return
-	}
-	payload := map[string]any{"version": version, "dirty": dirty}
-	log.section("schema-migrations.json", writeBundleJSON(zw, "schema-migrations.json", payload))
-}
-
-// writeAsynqQueues captures live queue depth + the last batch of dead-
-// letter task IDs. The DLQ is the single most useful artifact when
-// triaging "why isn't my install reconciling".
-func (h *SupportBundleHandler) writeAsynqQueues(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	if h.inspector == nil {
-		log.skipped("asynq-queues.json", "asynq inspector not wired")
-		return
-	}
-	queues, err := h.inspector.Queues()
-	if err != nil {
-		log.section("asynq-queues.json", err)
-		return
-	}
-	out := map[string]any{}
-	for _, q := range queues {
-		info, ierr := h.inspector.GetQueueInfo(q)
-		if ierr != nil {
-			out[q] = map[string]any{"error": ierr.Error()}
-			continue
-		}
-		queueOut := map[string]any{
-			"size":      info.Size,
-			"active":    info.Active,
-			"pending":   info.Pending,
-			"scheduled": info.Scheduled,
-			"retry":     info.Retry,
-			"archived":  info.Archived,
-			"completed": info.Completed,
-		}
-		// First 50 DLQ entries — full task payloads can contain secrets,
-		// so we just surface IDs + types + last error.
-		archived, aerr := h.inspector.ListArchivedTasks(q, asynq.PageSize(50))
-		if aerr == nil {
-			dlq := make([]map[string]any, 0, len(archived))
-			for _, t := range archived {
-				dlq = append(dlq, map[string]any{
-					"id":             t.ID,
-					"type":           t.Type,
-					"retried":        t.Retried,
-					"last_err":       t.LastErr,
-					"last_failed_at": t.LastFailedAt,
-				})
-			}
-			queueOut["archived_tasks"] = dlq
-		}
-		out[q] = queueOut
-	}
-	log.section("asynq-queues.json", writeBundleJSON(zw, "asynq-queues.json", out))
-}
-
-// writeAgentConnections snapshots the active rows from agent_connections.
-// Each row carries cluster_id + last_ping_at, which is what an engineer
-// needs to answer "why does the dashboard say this cluster is offline?".
-// IP addresses are kept; tokens are redacted (they're not stored on this
-// table anyway, but defense in depth).
-func (h *SupportBundleHandler) writeAgentConnections(ctx context.Context, zw *zip.Writer, log *sectionLog) {
-	lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	rows, err := h.queries.ListActiveConnections(lctx)
-	if err != nil {
-		log.section("agent-connections.json", err)
-		return
-	}
-	out := make([]map[string]any, 0, len(rows))
-	for _, c := range rows {
-		out = append(out, map[string]any{
-			"id":              c.ID.String(),
-			"cluster_id":      c.ClusterID.String(),
-			"agent_id":        c.AgentID,
-			"agent_version":   c.AgentVersion,
-			"status":          c.Status,
-			"connected_at":    c.ConnectedAt,
-			"last_ping":       c.LastPing,
-			"disconnected_at": c.DisconnectedAt,
-		})
-	}
-	log.section("agent-connections.json", writeBundleJSON(zw, "agent-connections.json", out))
-}
-
-func (h *SupportBundleHandler) writeReadme(zw *zip.Writer, log *sectionLog) {
-	var b strings.Builder
-	b.WriteString("Astronomer support bundle\n")
-	b.WriteString("=========================\n\n")
-	fmt.Fprintf(&b, "Generated: %s\n", time.Now().UTC().Format(time.RFC3339))
-	fmt.Fprintf(&b, "Server:    %s (%s)\n\n", version.Version, version.GitCommit)
-	b.WriteString("Contents:\n")
-	for _, line := range log.lines {
-		b.WriteString("  - " + line + "\n")
-	}
-	b.WriteString("\nRedactions:\n")
-	b.WriteString("  - sensitive JSON keys and credential-shaped values → [redacted]\n")
-	b.WriteString("  - private keys and kubeconfig-shaped values → [redacted private key] / [redacted kubeconfig]\n")
-	b.WriteString("  - sensitive pod log lines → [redacted sensitive log line]\n")
-	b.WriteString("\nThis bundle may still contain other sensitive information " +
-		"(emails, resource names, and non-secret operational metadata).\n")
-	b.WriteString("Share only with people authorized to triage this install.\n")
-	fw, err := zw.Create("README.txt")
-	if err == nil {
-		_, _ = fw.Write([]byte(b.String()))
-	}
-}
-
-// ── helpers ────────────────────────────────────────────────────────────
-
-type sectionLog struct {
-	lines []string
-}
-
-func newSectionLog() *sectionLog { return &sectionLog{} }
-
-func (s *sectionLog) section(name string, err error) {
-	if err == nil {
-		s.lines = append(s.lines, name+"  OK")
-		return
-	}
-	s.lines = append(s.lines, name+"  FAILED: "+err.Error())
-}
-
-func (s *sectionLog) skipped(name, reason string) {
-	s.lines = append(s.lines, name+"  SKIPPED: "+reason)
-}
-
-func writeBundleJSON(zw *zip.Writer, name string, payload any) error {
-	fw, err := zw.Create(name)
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(fw)
-	enc.SetIndent("", "  ")
-	return enc.Encode(redaction.Payload(payload))
-}
-
-func writeRedactedLogStream(dst interface{ Write([]byte) (int, error) }, src interface{ Read([]byte) (int, error) }) error {
-	scanner := bufio.NewScanner(src)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		if _, err := fmt.Fprintln(dst, redaction.SensitiveLine(scanner.Text())); err != nil {
-			return err
-		}
-	}
-	return scanner.Err()
-}
-
-func timestamptzString(value pgtype.Timestamptz) any {
-	if !value.Valid {
-		return nil
-	}
-	return value.Time.UTC().Format(time.RFC3339)
-}
-
-// sumSecretBytes is a cheap "how big is this helm release blob" probe for
-// the helm-releases.json section. We don't include the actual data —
-// helm releases are compressed JSON manifests that can run to hundreds
-// of kilobytes and would balloon the bundle.
-func sumSecretBytes(s corev1.Secret) int {
-	total := 0
-	for _, v := range s.Data {
-		total += len(v)
-	}
-	return total
-}
-
-func summarizeContainers(statuses []corev1.ContainerStatus) []map[string]any {
-	out := make([]map[string]any, 0, len(statuses))
-	for _, cs := range statuses {
-		entry := map[string]any{
-			"name":          cs.Name,
-			"image":         cs.Image,
-			"ready":         cs.Ready,
-			"restart_count": cs.RestartCount,
-		}
-		if cs.State.Waiting != nil {
-			entry["state"] = "Waiting"
-			entry["reason"] = cs.State.Waiting.Reason
-		} else if cs.State.Running != nil {
-			entry["state"] = "Running"
-			entry["started_at"] = cs.State.Running.StartedAt
-		} else if cs.State.Terminated != nil {
-			entry["state"] = "Terminated"
-			entry["reason"] = cs.State.Terminated.Reason
-			entry["exit_code"] = cs.State.Terminated.ExitCode
-		}
-		out = append(out, entry)
-	}
-	return out
-}
-
-func summarizeNetworkPolicy(policy networkingv1.NetworkPolicy) map[string]any {
-	entry := map[string]any{
-		"name":               policy.Name,
-		"namespace":          policy.Namespace,
-		"created":            policy.CreationTimestamp,
-		"pod_selector":       policy.Spec.PodSelector.MatchLabels,
-		"policy_types":       networkPolicyTypes(policy.Spec.PolicyTypes),
-		"ingress_rule_count": len(policy.Spec.Ingress),
-		"egress_rule_count":  len(policy.Spec.Egress),
-	}
-	if policy.Spec.PodSelector.MatchExpressions != nil {
-		entry["pod_selector_match_expressions"] = len(policy.Spec.PodSelector.MatchExpressions)
-	}
-	return entry
-}
-
-func networkPolicyTypes(types []networkingv1.PolicyType) []string {
-	out := make([]string, 0, len(types))
-	for _, policyType := range types {
-		out = append(out, string(policyType))
-	}
-	return out
-}
-
-func summarizeIngress(ing networkingv1.Ingress) map[string]any {
-	hosts := make([]string, 0)
-	for _, rule := range ing.Spec.Rules {
-		if rule.Host != "" {
-			hosts = append(hosts, rule.Host)
-		}
-	}
-	entry := map[string]any{
-		"name":        ing.Name,
-		"namespace":   ing.Namespace,
-		"class_name":  ingressClassName(ing),
-		"hosts":       hosts,
-		"tls_secrets": ingressTLSSecretNames(ing),
-		"addresses":   ingressLoadBalancerAddresses(ing),
-		"created":     ing.CreationTimestamp,
-	}
-	return entry
-}
-
-func ingressClassName(ing networkingv1.Ingress) string {
-	if ing.Spec.IngressClassName == nil {
-		return ""
-	}
-	return *ing.Spec.IngressClassName
-}
-
-func ingressTLSSecretNames(ing networkingv1.Ingress) []string {
-	out := make([]string, 0, len(ing.Spec.TLS))
-	seen := map[string]bool{}
-	for _, tls := range ing.Spec.TLS {
-		if tls.SecretName == "" || seen[tls.SecretName] {
-			continue
-		}
-		out = append(out, tls.SecretName)
-		seen[tls.SecretName] = true
-	}
-	return out
-}
-
-func ingressLoadBalancerAddresses(ing networkingv1.Ingress) []string {
-	out := make([]string, 0, len(ing.Status.LoadBalancer.Ingress))
-	for _, lb := range ing.Status.LoadBalancer.Ingress {
-		if lb.Hostname != "" {
-			out = append(out, lb.Hostname)
-			continue
-		}
-		if lb.IP != "" {
-			out = append(out, lb.IP)
-		}
-	}
-	return out
-}
-
-func summarizeTLSSecret(secret corev1.Secret) map[string]any {
-	entry := map[string]any{
-		"name":    secret.Name,
-		"present": true,
-		"type":    string(secret.Type),
-		"created": secret.CreationTimestamp,
-	}
-	certs, err := parseCertificateSummaries(secret.Data[corev1.TLSCertKey])
-	if err != nil {
-		entry["parse_error"] = err.Error()
-		return entry
-	}
-	entry["certificates"] = certs
-	return entry
-}
-
-func parseCertificateSummaries(raw []byte) ([]map[string]any, error) {
-	if len(raw) == 0 {
-		return nil, fmt.Errorf("tls.crt missing")
-	}
-	out := make([]map[string]any, 0, 1)
-	rest := raw
-	for {
-		block, remaining := pem.Decode(rest)
-		if block == nil {
-			break
-		}
-		rest = remaining
-		if block.Type != "CERTIFICATE" {
-			continue
-		}
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, map[string]any{
-			"subject":    cert.Subject.String(),
-			"issuer":     cert.Issuer.String(),
-			"dns_names":  cert.DNSNames,
-			"not_before": cert.NotBefore.UTC().Format(time.RFC3339),
-			"not_after":  cert.NotAfter.UTC().Format(time.RFC3339),
-			"is_expired": time.Now().After(cert.NotAfter),
-			"serial":     fmt.Sprintf("%X", cert.SerialNumber),
-		})
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("no PEM certificate blocks found")
-	}
-	return out, nil
-}
+// Create accepts a durable generation request. There is deliberately no
+// synchronous fallback: collection may enumerate pods, logs, events, and Helm
+// state and therefore only runs in the bounded tunnel worker.

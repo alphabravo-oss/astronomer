@@ -30,6 +30,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -41,7 +43,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // ── metrics ───────────────────────────────────────────────────────────
@@ -478,7 +479,7 @@ func parseUUID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
 }
 
 func callerUUID(r *http.Request) uuid.UUID {
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok {
 		return uuid.Nil
 	}

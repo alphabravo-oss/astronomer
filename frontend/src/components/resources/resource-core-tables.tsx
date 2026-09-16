@@ -3,23 +3,19 @@ import {
   useClusterEvents,
   useClusterNamespaces,
   useClusterNodes,
+  useClusterPods,
   useDeletePod,
   useNodeOperation,
-  useK8sDelete,
-} from "@/lib/hooks";
-import * as apiClient from "@/lib/api";
-import { useLiveQuery } from "@tanstack/react-db";
-import {
-  k8sCollection,
-  podRowFromRaw,
-  type RawPod,
-} from "@/lib/db/collections";
-import { useRouter } from "@/lib/navigation";
+} from "@/lib/hooks/clusters";
+import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
+import { k8sCreate } from "@/lib/api/kubernetes-proxy";
+import { useNavigate } from "@tanstack/react-router";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
 import { ActionButton } from "@/components/ui/action-button";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
@@ -61,7 +57,7 @@ import { OperationPartialError } from "@/lib/api/operation-polling";
 
 export function NodesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNodes(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const nodeOperation = useNodeOperation();
   const permissions = useClusterResourcePermissions(clusterId, "nodes");
   const [yamlTarget, setYamlTarget] = useState<{
@@ -199,19 +195,27 @@ export function NodesTable({ clusterId }: { clusterId: string }) {
           ? `Node operation ${nodeOperation.operationState.phase}`
           : ""}
       </p>
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="nodes"
         data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         searchPlaceholder="Search nodes..."
         loading={isLoading}
-        emptyMessage="No nodes found"
+        emptyState={{
+          title: "No nodes found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
         onRowClick={(row) => {
           if (!permissions.read.allowed) {
             toastPermissionDenied(permissions.read);
             return;
           }
-          router.push(`/dashboard/clusters/${clusterId}/nodes/${row.name}`);
+          void navigate({
+            to: `/dashboard/clusters/${clusterId}/nodes/${row.name}`,
+          });
         }}
       />
 
@@ -246,7 +250,7 @@ export function NodesTable({ clusterId }: { clusterId: string }) {
 
 export function NamespacesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNamespaces(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const k8sDeleteMut = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, "namespaces");
   const [yamlTarget, setYamlTarget] = useState<{
@@ -256,8 +260,6 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
   const [deleteTarget, setDeleteTarget] = useState<Namespace | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newNsName, setNewNsName] = useState("");
-  const k8sCreate = apiClient.k8sCreate;
-
   const handleCreateNamespace = async () => {
     if (!permissions.create.allowed) {
       toastPermissionDenied(permissions.create);
@@ -347,19 +349,26 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
         </ActionButton>
       </div>
 
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="namespaces"
         data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           "namespaces",
           permissions.read,
         )}
         searchPlaceholder="Search namespaces..."
         loading={isLoading}
-        emptyMessage="No namespaces found"
+        emptyState={{
+          title: "No namespaces found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        namespaceAccessor={(row) => row.name}
       />
 
       {yamlTarget && (
@@ -459,32 +468,30 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
 export function EventsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterEvents(clusterId, { limit: 200 });
   return (
-    <DataTable
+    <ExplorerDataTable
+      clusterId={clusterId}
+      resourceType="events"
       data={data || []}
       columns={eventColumns}
       keyExtractor={(r) => r.id}
       searchPlaceholder="Search events..."
       loading={isLoading}
-      emptyMessage="No events found"
+      emptyState={{
+        title: "No events found",
+        description: "New observations will appear here as they are reported.",
+      }}
+      namespaceAccessor={(row) => row.involvedObject.namespace}
     />
   );
 }
 
 export function PodsTable({ clusterId }: { clusterId: string }) {
-  const router = useRouter();
-  // Live pods collection (P4.7): raw pod objects seeded by a list and folded
-  // from the pods SSE watch, shaped into display rows client-side. Deletes and
-  // restarts land as watch frames, so no invalidation plumbing is needed.
-  const pods = k8sCollection<RawPod>({ clusterId, source: { kind: "pods" } });
-  const live = useLiveQuery(
-    (q) => q.from({ p: pods.collection }),
-    [pods.collection],
-  );
-  const data = useMemo(
-    () => (live.data ?? []).map((p) => podRowFromRaw(clusterId, p)),
-    [live.data, clusterId],
-  );
-  const isLoading = !live.isReady;
+  const navigate = useNavigate();
+  // Pod changes are routed by the shared SSE dispatcher to this Query key;
+  // the hook polls only while the dashboard event stream is unavailable.
+  const podsQuery = useClusterPods(clusterId);
+  const data = podsQuery.data ?? [];
+  const isLoading = podsQuery.isLoading;
   const deletePod = useDeletePod();
   const permissions = useClusterResourcePermissions(clusterId, "pods");
 
@@ -607,14 +614,25 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
           ? `Pod deletion ${deletePod.operationState.phase}`
           : ""}
       </p>
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="pods"
         data={data}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search pods..."
         loading={isLoading}
-        emptyMessage="No pods found"
-        onRowClick={makeRowClick(router, clusterId, "pods", permissions.read)}
+        emptyState={{
+          title: "No pods found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        onRowClick={makeRowClick(navigate, clusterId, "pods", permissions.read)}
+        bulkDelete={{
+          path: (row) => k8sResourcePath("pods", row.name, row.namespace),
+          label: (row) => `${row.namespace}/${row.name}`,
+          noun: "pod",
+        }}
       />
 
       <ConfirmDialog

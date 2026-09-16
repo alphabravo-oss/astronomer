@@ -4,6 +4,14 @@
   "description": "Executable dependency-direction rules for the Go control plane and TypeScript frontend. Rules apply recursively to production source files; test-only route imports are excluded explicitly.",
   "go": [
     {
+      "name": "request-context-is-a-leaf-contract",
+      "root": "internal/reqctx",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/"
+      ],
+      "rationale": "Request identity and route scope are shared transport primitives and cannot depend on domain logic, persistence, middleware, or router composition."
+    },
+    {
       "name": "public-packages-do-not-import-internal-code",
       "root": "pkg",
       "forbidden_prefixes": [
@@ -42,10 +50,28 @@
       "forbidden_prefixes": [
         "github.com/alphabravocompany/astronomer-go/internal/server"
       ],
-      "allowed_prefixes": [
-        "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+      "exclude_suffixes": ["_test.go"],
+      "rationale": "Request identity, browser session policy, and RBAC contracts are domain-owned. Handlers cannot import middleware, router, or server composition packages."
+    },
+    {
+      "name": "catalog-domain-does-not-depend-on-http-delivery",
+      "root": "internal/catalog",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/handler",
+        "github.com/alphabravocompany/astronomer-go/internal/server"
       ],
-      "rationale": "Handlers may use the shared request-context contract during its extraction, but cannot import router or server composition packages."
+      "exclude_suffixes": ["_test.go"],
+      "rationale": "Catalog policy and orchestration are reusable by HTTP handlers and workers; they cannot depend on HTTP delivery or router composition."
+    },
+    {
+      "name": "projects-domain-does-not-depend-on-http-delivery",
+      "root": "internal/projects",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/handler",
+        "github.com/alphabravocompany/astronomer-go/internal/server"
+      ],
+      "exclude_suffixes": ["_test.go"],
+      "rationale": "Project policy, namespace lifecycle planning, and worker runtime composition are shared domain concerns and cannot depend on HTTP delivery or router composition."
     }
   ],
   "frontend": [
@@ -79,6 +105,18 @@
       "forbidden_prefixes": ["@/routes"],
       "exclude_suffixes": [".test.ts", ".test.tsx"],
       "rationale": "Libraries and query hooks sit below route composition in the frontend dependency graph."
+    }
+  ],
+  "forbidden_imports": [
+    {
+      "name": "frontend-server-state-uses-tanstack-query-only",
+      "imports": [
+        "@tanstack/db",
+        "@tanstack/react-db",
+        "@tanstack/store",
+        "@tanstack/react-store"
+      ],
+      "rationale": "TanStack Query is the sole frontend server-state cache; app-owned browser state uses React primitives."
     }
   ]
 }

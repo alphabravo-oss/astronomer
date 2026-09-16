@@ -12,6 +12,7 @@ func prodBase() *Config {
 		Env:                                "production",
 		SecretKey:                          "a-real-unique-secret",
 		EncryptionKey:                      "a-real-unique-encryption-key",
+		InternalPSK:                        "a-dedicated-internal-signing-key-with-32-chars",
 		DatabaseURL:                        "postgres://u:p@db/astronomer?sslmode=require",
 		DexBundledEnabled:                  true,
 		AuthLocalPasswordOnly:              false,
@@ -55,6 +56,52 @@ func TestValidateProductionSecurity_WorkerRefusesEmptyOrDevKey(t *testing.T) {
 	if err := ValidateProductionSecurity(badEnc, false); err == nil ||
 		!strings.Contains(err.Error(), "could not initialize encryptor") {
 		t.Fatalf("expected encryptor-init failure to be rejected, got %v", err)
+	}
+}
+
+func TestValidateProductionSecurity_RequiresDedicatedInternalPSK(t *testing.T) {
+	cfg := prodBase()
+	cfg.InternalPSK = ""
+	if err := ValidateProductionSecurity(cfg, true); err == nil ||
+		!strings.Contains(err.Error(), "astronomer_internal_psk") {
+		t.Fatalf("expected dedicated internal PSK validation error, got %v", err)
+	}
+}
+
+func TestValidateProductionSecurity_InternalPSKRotationWindow(t *testing.T) {
+	cfg := prodBase()
+	cfg.InternalPSKPrevious = "previous-dedicated-internal-signing-key-with-32-chars"
+	if err := ValidateProductionSecurity(cfg, true); err != nil {
+		t.Fatalf("valid rotation key rejected: %v", err)
+	}
+
+	for name, previous := range map[string]string{
+		"too short": "short",
+		"same key":  cfg.InternalPSK,
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := *cfg
+			candidate.InternalPSKPrevious = previous
+			if err := ValidateProductionSecurity(&candidate, true); err == nil ||
+				!strings.Contains(err.Error(), "astronomer_internal_psk_previous") {
+				t.Fatalf("invalid previous key accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateProductionSecurity_InternalPSKMustBeDedicated(t *testing.T) {
+	for name, key := range map[string]func(*Config) string{
+		"JWT signing key": func(cfg *Config) string { return cfg.SecretKey },
+		"Fernet key":      func(cfg *Config) string { return cfg.EncryptionKey },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := prodBase()
+			cfg.InternalPSK = key(cfg)
+			if err := ValidateProductionSecurity(cfg, true); err == nil || !strings.Contains(err.Error(), "must be independent") {
+				t.Fatalf("reused internal key accepted: %v", err)
+			}
+		})
 	}
 }
 

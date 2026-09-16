@@ -10,8 +10,6 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"math/big"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -79,6 +77,10 @@ func (f *fakeSupportBundleQuerier) ListClusters(context.Context, sqlc.ListCluste
 	}}, nil
 }
 
+func (f *fakeSupportBundleQuerier) ListClusterLivenessForClusters(context.Context, []uuid.UUID) ([]sqlc.ClusterLiveness, error) {
+	return nil, nil
+}
+
 func (f *fakeSupportBundleQuerier) ListUsers(context.Context, sqlc.ListUsersParams) ([]sqlc.User, error) {
 	return []sqlc.User{{
 		ID:          f.user.ID,
@@ -121,7 +123,7 @@ func (f *fakeSupportBundleQuerier) ListAuditLogV1(context.Context, sqlc.ListAudi
 	}}, nil
 }
 
-func (f *fakeSupportBundleQuerier) ListActiveConnections(context.Context) ([]sqlc.AgentConnection, error) {
+func (f *fakeSupportBundleQuerier) ListActiveConnections(context.Context, int32) ([]sqlc.AgentConnection, error) {
 	now := time.Now().UTC()
 	return []sqlc.AgentConnection{{
 		ID:           uuid.New(),
@@ -139,21 +141,17 @@ func (f *fakeSupportBundleQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.
 	return nil
 }
 
-func TestSupportBundleDownloadRedactsSensitiveValues(t *testing.T) {
+func TestSupportBundleGenerateRedactsSensitiveValues(t *testing.T) {
 	userID := uuid.New()
 	q := &fakeSupportBundleQuerier{
 		user: sqlc.User{ID: userID, Email: "admin@example.com", Username: "admin@example.com", IsActive: true, IsSuperuser: true},
 	}
-	h := NewSupportBundleHandler(q, nil, "")
-	req := withAuth(httptest.NewRequest(http.MethodGet, "/api/v1/support-bundle/", nil), userID)
-	rec := httptest.NewRecorder()
-
-	h.Download(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	h := NewSupportBundleHandler(q, nil, nil, "")
+	var artifact bytes.Buffer
+	if err := h.Generate(context.Background(), &artifact); err != nil {
+		t.Fatalf("Generate: %v", err)
 	}
-	files := readZipFiles(t, rec.Body.Bytes())
+	files := readZipFiles(t, artifact.Bytes())
 	combined := strings.Join(mapValues(files), "\n")
 	for _, leaked := range []string{
 		"plain-ca-certificate",
@@ -174,9 +172,6 @@ func TestSupportBundleDownloadRedactsSensitiveValues(t *testing.T) {
 	}
 	if !strings.Contains(combined, "[redacted]") {
 		t.Fatalf("support bundle did not contain redaction markers:\n%s", combined)
-	}
-	if len(q.audits) != 1 || q.audits[0].Action != "admin.support_bundle.downloaded" {
-		t.Fatalf("support bundle audit rows = %#v", q.audits)
 	}
 }
 
@@ -200,11 +195,12 @@ func TestSupportBundleCharlieSectionIsLocalMetadataOnly(t *testing.T) {
 		rules:    []sqlc.CharlieTriggerRule{{Name: "agent_disconnected", Category: "cluster_agents", Enabled: true, MinimumSeverity: "warning", WindowSeconds: 300, CooldownSeconds: 1800, ModeCeiling: "read_only"}},
 		findings: []sqlc.CharlieFinding{{Status: "open", Severity: "high", Title: canary, Summary: canary, CharlieFindingID: canary}},
 	}
-	h := NewSupportBundleHandler(q, nil, "")
-	req := withAuth(httptest.NewRequest(http.MethodGet, "/api/v1/support-bundle/", nil), userID)
-	rec := httptest.NewRecorder()
-	h.Download(rec, req)
-	files := readZipFiles(t, rec.Body.Bytes())
+	h := NewSupportBundleHandler(q, nil, nil, "")
+	var artifact bytes.Buffer
+	if err := h.Generate(context.Background(), &artifact); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	files := readZipFiles(t, artifact.Bytes())
 	status := string(files["charlie-status.json"])
 	if !strings.Contains(status, `"requested_mode": "approval"`) || !strings.Contains(status, `"open:high": 1`) || !strings.Contains(status, expiresAt.Format(time.RFC3339)) {
 		t.Fatalf("Charlie support status missing bounded operational metadata: %s", status)
@@ -228,11 +224,12 @@ func TestSupportBundleIncludesContentFreeAuditPipelineHealth(t *testing.T) {
 			LastDeliveredAt: time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC),
 		},
 	}
-	h := NewSupportBundleHandler(q, nil, "")
-	req := withAuth(httptest.NewRequest(http.MethodGet, "/api/v1/support-bundle/", nil), userID)
-	rec := httptest.NewRecorder()
-	h.Download(rec, req)
-	files := readZipFiles(t, rec.Body.Bytes())
+	h := NewSupportBundleHandler(q, nil, nil, "")
+	var artifact bytes.Buffer
+	if err := h.Generate(context.Background(), &artifact); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	files := readZipFiles(t, artifact.Bytes())
 	payload := string(files["audit-pipeline-health.json"])
 	for _, want := range []string{`"state": "degraded"`, `"pending_count": 2`, `"dead_count": 1`, `"delivered_count": 99`} {
 		if !strings.Contains(payload, want) {
@@ -244,7 +241,7 @@ func TestSupportBundleIncludesContentFreeAuditPipelineHealth(t *testing.T) {
 	}
 }
 
-func TestSupportBundleDownloadIncludesOperationalSummaries(t *testing.T) {
+func TestSupportBundleGenerateIncludesOperationalSummaries(t *testing.T) {
 	userID := uuid.New()
 	namespace := "astronomer"
 	className := "nginx"
@@ -287,16 +284,12 @@ func TestSupportBundleDownloadIncludesOperationalSummaries(t *testing.T) {
 	q := &fakeSupportBundleQuerier{
 		user: sqlc.User{ID: userID, Email: "admin@example.com", Username: "admin@example.com", IsActive: true, IsSuperuser: true},
 	}
-	h := NewSupportBundleHandler(q, k8s, namespace)
-	req := withAuth(httptest.NewRequest(http.MethodGet, "/api/v1/support-bundle/", nil), userID)
-	rec := httptest.NewRecorder()
-
-	h.Download(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	h := NewSupportBundleHandler(q, nil, k8s, namespace)
+	var artifact bytes.Buffer
+	if err := h.Generate(context.Background(), &artifact); err != nil {
+		t.Fatalf("Generate: %v", err)
 	}
-	files := readZipFiles(t, rec.Body.Bytes())
+	files := readZipFiles(t, artifact.Bytes())
 	networkPolicies := string(files["networkpolicies.json"])
 	if !strings.Contains(networkPolicies, "astronomer-default-deny") || !strings.Contains(networkPolicies, "Ingress") || !strings.Contains(networkPolicies, "Egress") {
 		t.Fatalf("network policy summary missing expected content:\n%s", networkPolicies)

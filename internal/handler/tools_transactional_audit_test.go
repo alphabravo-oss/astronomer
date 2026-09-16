@@ -68,16 +68,12 @@ func TestToolOperationAndAuditCommitTogether(t *testing.T) {
 			})
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/tools/loki/install/", nil)
 
-			_, err := executeToolMutation(request, h,
+			_, err := executeMutation(request, h.runTx,
 				func(q ToolMutationTx) (sqlc.ToolOperation, error) {
 					return createToolOperation(request.Context(), q, "tool_installation", "cluster/loki", "install", toolOperationEnvelope{ClusterID: uuid.NewString(), ToolSlug: "loki"}, sqlc.CreateToolOperationParams{}.CreatedByID)
 				},
-				func() (sqlc.ToolOperation, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.ToolOperation{}, nil
-				},
-				func(op sqlc.ToolOperation) clusterAuditEvent {
-					return clusterAuditEvent{action: "tool.install", resourceType: "tool", resourceID: "loki", status: http.StatusAccepted, detail: map[string]any{"operation_id": op.ID.String()}}
+				func(op sqlc.ToolOperation) mutationAuditEvent {
+					return mutationAuditEvent{action: "tool.install", resourceType: "tool", resourceID: "loki", status: http.StatusAccepted, detail: map[string]any{"operation_id": op.ID.String()}}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)

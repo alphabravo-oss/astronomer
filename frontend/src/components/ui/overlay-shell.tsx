@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +10,12 @@ interface OverlayShellProps {
   rootClassName?: string;
   backdropClassName?: string;
   closeOnBackdrop?: boolean;
+}
+
+interface OverlayBackdropProps {
+  onClose: () => void;
+  className?: string;
+  ariaLabel?: string;
 }
 
 const placementClass: Record<OverlayPlacement, string> = {
@@ -32,6 +36,24 @@ function getFocusable(container: HTMLElement) {
   return Array.from(
     container.querySelectorAll<HTMLElement>(focusableSelector),
   ).filter((element) => !element.getAttribute("aria-hidden"));
+}
+
+export function OverlayBackdrop({
+  onClose,
+  className,
+  ariaLabel = "Close overlay",
+}: OverlayBackdropProps) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      className={cn(
+        "fixed inset-0 z-40 border-0 bg-black/50 p-0 backdrop-blur-xs",
+        className,
+      )}
+      onClick={onClose}
+    />
+  );
 }
 
 export function OverlayShell({
@@ -130,7 +152,7 @@ export function OverlayShell({
         aria-hidden="true"
         tabIndex={-1}
         className={cn(
-          "absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-sm",
+          "absolute inset-0 border-0 bg-black/50 p-0 backdrop-blur-xs",
           backdropClassName,
         )}
         onClick={closeOnBackdrop ? onClose : undefined}

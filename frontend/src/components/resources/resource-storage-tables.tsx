@@ -5,13 +5,14 @@ import {
   usePersistentVolumeClaims,
   usePersistentVolumes,
   useStorageClasses,
-} from "@/lib/hooks";
-import { useRouter } from "@/lib/navigation";
+} from "@/lib/hooks/kubernetes-resources";
+import { useNavigate } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import {
   pvColumns,
@@ -40,7 +41,7 @@ import { Code, Pencil, Plus, Trash2 } from "lucide-react";
 
 export function PVsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = usePersistentVolumes(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const deletePv = useDeletePV();
   const permissions = useClusterResourcePermissions(
     clusterId,
@@ -109,19 +110,30 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="persistentvolumes"
         data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           "persistentvolumes",
           permissions.read,
         )}
         searchPlaceholder="Search persistent volumes..."
         loading={isLoading}
-        emptyMessage="No persistent volumes found"
+        emptyState={{
+          title: "No persistent volumes found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        bulkDelete={{
+          path: (row) => k8sResourcePath("persistentvolumes", row.name),
+          label: (row) => row.name,
+          noun: "persistent volume",
+        }}
       />
       {yamlTarget && (
         <YamlViewDialog
@@ -160,7 +172,7 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
 }
 export function PVCsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = usePersistentVolumeClaims(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const deletePvc = useDeletePVC();
   const permissions = useClusterResourcePermissions(
     clusterId,
@@ -249,19 +261,31 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
           Create PVC
         </ActionButton>
       </div>
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="persistentvolumeclaims"
         data={data || []}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           "persistentvolumeclaims",
           permissions.read,
         )}
         searchPlaceholder="Search PVCs..."
         loading={isLoading}
-        emptyMessage="No persistent volume claims found"
+        emptyState={{
+          title: "No persistent volume claims found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        bulkDelete={{
+          path: (row) =>
+            k8sResourcePath("persistentvolumeclaims", row.name, row.namespace),
+          label: (row) => `${row.namespace}/${row.name}`,
+          noun: "persistent volume claim",
+        }}
       />
       {yamlTarget && (
         <YamlViewDialog
@@ -312,7 +336,7 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
 
 export function StorageClassesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useStorageClasses(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const permissions = useClusterResourcePermissions(
     clusterId,
     "storageclasses",
@@ -336,7 +360,7 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
               name={row.name}
             />
             {row.isDefault && (
-              <span className="px-1.5 py-0.5 rounded text-2xs bg-status-info/10 text-status-info">
+              <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-status-info/10 text-status-info">
                 default
               </span>
             )}
@@ -376,19 +400,25 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="storageclasses"
         data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           "storageclasses",
           permissions.read,
         )}
         searchPlaceholder="Search storage classes..."
         loading={isLoading}
-        emptyMessage="No storage classes found"
+        emptyState={{
+          title: "No storage classes found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
       />
       {yamlTarget && (
         <YamlViewDialog

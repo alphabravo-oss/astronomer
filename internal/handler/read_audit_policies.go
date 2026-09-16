@@ -51,33 +51,6 @@ type ReadAuditPolicyMutationTx interface {
 
 type readAuditPolicyRunTxFunc func(context.Context, func(ReadAuditPolicyMutationTx) error) error
 
-func executeReadAuditPolicyMutation(r *http.Request, h *ReadAuditPolicyHandler, mutate func(ReadAuditPolicyQuerier) (sqlc.ReadAuditPolicy, error), describe func(sqlc.ReadAuditPolicy) clusterAuditEvent) (sqlc.ReadAuditPolicy, error) {
-	if h.runTx != nil {
-		var row sqlc.ReadAuditPolicy
-		err := h.runTx(r.Context(), func(q ReadAuditPolicyMutationTx) error {
-			var mutationErr error
-			row, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(row)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return row, err
-	}
-	row, err := mutate(h.queries)
-	if err != nil {
-		return sqlc.ReadAuditPolicy{}, err
-	}
-	event := describe(row)
-	writer := any(h.audit)
-	if h.audit == nil {
-		writer = h.queries
-	}
-	recordAudit(r, writer, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return row, nil
-}
-
 // CacheInvalidator is the optional callback fired after every write so
 // the PolicyEvaluator's 30s TTL doesn't gate operator changes. Wire it
 // at construction time; nil is fine in tests.
@@ -247,8 +220,8 @@ func (h *ReadAuditPolicyHandler) Create(w http.ResponseWriter, r *http.Request) 
 	}
 
 	createdBy := currentUserPGUUID(r)
-	row, err := executeReadAuditPolicyMutation(r, h,
-		func(q ReadAuditPolicyQuerier) (sqlc.ReadAuditPolicy, error) {
+	row, err := executeMutation(r, h.runTx,
+		func(q ReadAuditPolicyMutationTx) (sqlc.ReadAuditPolicy, error) {
 			return q.CreateReadAuditPolicy(r.Context(), sqlc.CreateReadAuditPolicyParams{
 				Name: req.Name, Description: req.Description, PathPattern: req.PathPattern,
 				Verbs: req.Verbs, SampleRate: sample, Enabled: enabled, CreatedBy: createdBy,
@@ -321,8 +294,8 @@ func (h *ReadAuditPolicyHandler) Update(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	row, err := executeReadAuditPolicyMutation(r, h,
-		func(q ReadAuditPolicyQuerier) (sqlc.ReadAuditPolicy, error) {
+	row, err := executeMutation(r, h.runTx,
+		func(q ReadAuditPolicyMutationTx) (sqlc.ReadAuditPolicy, error) {
 			existing, getErr := q.GetReadAuditPolicy(r.Context(), id)
 			if getErr != nil {
 				return sqlc.ReadAuditPolicy{}, getErr
@@ -375,8 +348,8 @@ func (h *ReadAuditPolicyHandler) Delete(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid policy id")
 		return
 	}
-	_, err = executeReadAuditPolicyMutation(r, h,
-		func(q ReadAuditPolicyQuerier) (sqlc.ReadAuditPolicy, error) {
+	_, err = executeMutation(r, h.runTx,
+		func(q ReadAuditPolicyMutationTx) (sqlc.ReadAuditPolicy, error) {
 			existing, getErr := q.GetReadAuditPolicy(r.Context(), id)
 			if getErr != nil {
 				return sqlc.ReadAuditPolicy{}, getErr
@@ -399,9 +372,9 @@ func (h *ReadAuditPolicyHandler) Delete(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func readAuditPolicyEvent(action string, status int) func(sqlc.ReadAuditPolicy) clusterAuditEvent {
-	return func(row sqlc.ReadAuditPolicy) clusterAuditEvent {
-		return clusterAuditEvent{
+func readAuditPolicyEvent(action string, status int) func(sqlc.ReadAuditPolicy) mutationAuditEvent {
+	return func(row sqlc.ReadAuditPolicy) mutationAuditEvent {
+		return mutationAuditEvent{
 			action: action, resourceType: "read_audit_policy", resourceID: row.ID.String(), resourceName: row.Name, status: status,
 			detail: map[string]any{"path_pattern": row.PathPattern, "verbs": row.Verbs, "sample_rate": row.SampleRate, "enabled": row.Enabled},
 		}

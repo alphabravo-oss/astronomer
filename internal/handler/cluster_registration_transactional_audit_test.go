@@ -12,12 +12,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 func cloneRegistrationRecords(source map[uuid.UUID]*sqlc.ClusterRegistrationRecord) map[uuid.UUID]*sqlc.ClusterRegistrationRecord {
@@ -62,7 +63,7 @@ func transactionalRegistrationFixture(t *testing.T, phase registration.Phase, au
 
 func authenticatedRegistrationRequest(method, target string, callerID uuid.UUID, body string) *http.Request {
 	request := httptest.NewRequest(method, target, strings.NewReader(body))
-	return request.WithContext(middleware.SetAuthenticatedUserForTest(request.Context(), &middleware.AuthenticatedUser{
+	return request.WithContext(reqctx.WithUser(request.Context(), &reqctx.User{
 		ID: callerID.String(), AuthMethod: "jwt",
 	}))
 }

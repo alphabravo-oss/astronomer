@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -61,14 +62,10 @@ func TestBackupStateAndAuditCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/backups/", nil)
 			params := sqlc.CreateBackupParams{Name: "production", StorageID: uuid.New(), BackupType: "full", Status: "pending"}
 
-			_, err := executeBackupMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q BackupMutationTx) (sqlc.Backup, error) { return q.CreateBackup(r.Context(), params) },
-				func() (sqlc.Backup, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.Backup{}, nil
-				},
-				func(row sqlc.Backup) clusterAuditEvent {
-					return clusterAuditEvent{action: "backup.create", resourceType: "backup", resourceID: row.ID.String(), status: http.StatusCreated}
+				func(row sqlc.Backup) mutationAuditEvent {
+					return mutationAuditEvent{action: "backup.create", resourceType: "backup", resourceID: row.ID.String(), status: http.StatusCreated}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -81,41 +78,46 @@ func TestBackupStateAndAuditCommitTogether(t *testing.T) {
 }
 
 func TestEveryBackupMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("backups.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	paths, err := filepath.Glob("backups*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]bool{
 		"CreateStorageConfig": false, "DeleteStorageConfig": false, "UpdateStorageConfig": false,
 		"CreateBackup": false, "DeleteBackup": false, "CreateSchedule": false,
-		"DeleteSchedule": false, "UpdateSchedule": false, "TriggerSchedule": false, "CreateRestore": false,
+		"DeleteSchedule": false, "UpdateSchedule": false, "TriggerSchedule": false, "CreateRestoreByBackup": false,
 	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
 		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if _, tracked := want[fn.Name.Name]; !tracked {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
+					want[fn.Name.Name] = true
+				}
 				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeBackupMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
+			})
+		}
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeBackupMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

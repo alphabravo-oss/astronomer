@@ -107,6 +107,13 @@ INSERT INTO jwt_revocations (jti, user_id, expires_at, reason)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (jti) DO NOTHING;
 
+-- name: ConsumeJWTChallenge :execrows
+-- Purpose tokens are one-shot credentials. The primary key on jti makes the
+-- insert an atomic consume operation across every server replica.
+INSERT INTO jwt_revocations (jti, user_id, expires_at, reason)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (jti) DO NOTHING;
+
 -- name: IsJWTRevoked :one
 SELECT EXISTS (SELECT 1 FROM jwt_revocations WHERE jti = $1) AS revoked;
 

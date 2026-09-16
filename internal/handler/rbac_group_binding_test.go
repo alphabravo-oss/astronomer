@@ -56,7 +56,7 @@ func TestCreateBinding_RejectsGroupScopedBindings(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			q := newFakeRBACAuditQuerier()
-			h := NewRBACHandler(q)
+			h := wireRBACMutationFixture(NewRBACHandler(q), q)
 
 			req := authedRequest(http.MethodPost, tc.path, callerID, tc.body)
 			rec := httptest.NewRecorder()
@@ -81,7 +81,7 @@ func TestCreateGlobalBinding_UserBindingStillSucceeds(t *testing.T) {
 	roleID := uuid.New()
 
 	q := newFakeRBACAuditQuerier()
-	h := NewRBACHandler(q)
+	h := wireRBACMutationFixture(NewRBACHandler(q), q)
 
 	body := []byte(fmt.Sprintf(`{"user_id":"%s","role_id":"%s"}`, userID, roleID))
 	req := authedRequest(http.MethodPost, "/api/v1/rbac/global-role-bindings/", callerID, body)

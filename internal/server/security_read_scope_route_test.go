@@ -89,9 +89,7 @@ func newSecurityReadScopeRouter(t *testing.T, bindings []rbac.RoleBinding, scan 
 	rbacQueries := routeSecurityRBACQuerier{bindings: bindings}
 	security := handler.NewSecurityHandler(routeScopedSecurityQuerier{scan: scan})
 	security.SetAuthorization(engine, rbacQueries)
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT: jwtManager, RBACEngine: engine, RBACQueries: rbacQueries, Security: security,
-	}), token
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtManager, RBACEngine: engine, RBACQueries: rbacQueries}, AdminPlatform: AdminPlatformDependencies{Security: security}}), token
 }
 
 func TestSecurityReadRouteAuthorizationPersonas(t *testing.T) {

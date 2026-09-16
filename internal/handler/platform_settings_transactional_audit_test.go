@@ -39,7 +39,7 @@ func TestEveryPlatformSettingsMutationUsesTransactionalExecutor(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executePlatformSettingsMutation" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 				want[fn.Name.Name] = true
 			}
 			return true
@@ -47,7 +47,7 @@ func TestEveryPlatformSettingsMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executePlatformSettingsMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

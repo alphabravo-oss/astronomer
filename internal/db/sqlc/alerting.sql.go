@@ -861,7 +861,7 @@ func (q *Queries) ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid
 
 const listClustersByIDs = `-- name: ListClustersByIDs :many
 
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE id = ANY($1::uuid[])
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters WHERE id = ANY($1::uuid[])
 `
 
 // Cluster lookups (alerting)
@@ -891,7 +891,6 @@ func (q *Queries) ListClustersByIDs(ctx context.Context, ids []uuid.UUID) ([]Clu
 			&i.Annotations,
 			&i.Distribution,
 			&i.AgentVersion,
-			&i.LastHeartbeat,
 			&i.KubernetesVersion,
 			&i.NodeCount,
 			&i.CreatedByID,
@@ -911,6 +910,9 @@ func (q *Queries) ListClustersByIDs(ctx context.Context, ids []uuid.UUID) ([]Clu
 			&i.ExternalRefNamespace,
 			&i.ExternalRefName,
 			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
 		); err != nil {
 			return nil, err
 		}

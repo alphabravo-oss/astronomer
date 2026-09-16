@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Ban, Check, Pause, Play, RotateCcw, X } from "lucide-react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import {
   OperationTimeline,
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/operation-timeline";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { AuditReasonForm } from "@/components/delivery/audit-reason-form";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -18,9 +19,9 @@ import {
   DetailGrid,
   ErrorMessage,
   RedirectDeliveryDetail,
+  deliveryPageRowCount,
   primaryButton,
   secondaryButton,
-  textareaClass,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
   withProjectQuery,
@@ -34,11 +35,11 @@ import {
   rolloutIsTerminal,
   type DeliveryRolloutCluster,
   type DeliveryRolloutEvent,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-rollouts";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
-import { useParams } from "@/lib/navigation";
+
 import { formatRelativeTime } from "@/lib/utils";
 import { liveFallback } from "@/lib/live/status-store";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
@@ -47,7 +48,7 @@ import { toastSuccess } from "@/lib/toast";
 type RolloutAction = "pause" | "resume" | "abort" | "retry" | "rollback";
 
 export function RolloutDetailPage() {
-  const { rolloutId } = useParams<{ rolloutId: string }>();
+  const { rolloutId } = useParams({ strict: false }) as { rolloutId: string };
   const { projectId, projects, projectQuery, setProjectId, listHref } =
     useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
@@ -184,12 +185,12 @@ export function RolloutDetailPage() {
         onRetry={() => void projectQuery.refetch()}
       >
         <PageShell>
-          <Link
-            href={withProjectQuery(listHref("rollouts"), projectId)}
+          <RouterLink
+            to={withProjectQuery(listHref("rollouts"), projectId)}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Rollouts
-          </Link>
+          </RouterLink>
           <PageHeader
             eyebrow="Rollout"
             title={rollout?.id ?? "Rollout"}
@@ -307,11 +308,16 @@ export function RolloutDetailPage() {
               keyExtractor={(row) => row.id}
               loading={clusters.isLoading}
               isError={clusters.isError}
+              error={clusters.error}
               onRetry={() => void clusters.refetch()}
               searchable={false}
-              emptyMessage="No cluster assignments"
+              emptyState={{
+                title: "No cluster assignments",
+                description:
+                  "Resources will appear here when they are available in this scope.",
+              }}
               serverSide={{
-                rowCount: clusters.data?.count ?? 0,
+                rowCount: deliveryPageRowCount(clusters.data),
                 pagination: { pageIndex: clusterPage, pageSize },
                 onPaginationChange: (next) => setClusterPage(next.pageIndex),
               }}
@@ -320,7 +326,7 @@ export function RolloutDetailPage() {
           <PageSection title="Timeline">
             <OperationTimeline
               header="Rollout events"
-              headerMeta={`${events.data?.count ?? 0} events`}
+              headerMeta={`${deliveryPageRowCount(events.data)} events`}
               steps={(events.data?.data ?? []).map(eventStep)}
             />
           </PageSection>
@@ -389,41 +395,13 @@ function RolloutActionDialog({
       onClose={onClose}
       subtitle="This is a compare-and-swap action against the current fencing generation."
     >
-      <form
-        className="space-y-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          mutation.mutate(
-            String(
-              new FormData(event.currentTarget).get("reason") ?? "",
-            ).trim(),
-          );
-        }}
-      >
-        <label className="block space-y-1.5 text-sm">
-          <span className="font-medium">Audit reason code</span>
-          <textarea
-            name="reason"
-            required
-            maxLength={96}
-            className={textareaClass}
-            placeholder={`${action}_requested`}
-          />
-        </label>
-        {mutation.isError && <ErrorMessage error={mutation.error} />}
-        <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className={primaryButton}
-            disabled={mutation.isPending}
-          >
-            Confirm {action}
-          </button>
-        </div>
-      </form>
+      <AuditReasonForm
+        action={action}
+        onSubmit={(reason) => mutation.mutate(reason)}
+        pending={mutation.isPending}
+        error={mutation.error}
+        onClose={onClose}
+      />
     </ModalShell>
   );
 }
@@ -530,7 +508,7 @@ function actionIcon(action: RolloutAction) {
   return <RotateCcw className="h-4 w-4" />;
 }
 function DeliveryRolloutDetailRedirect() {
-  const { rolloutId } = useParams<{ rolloutId: string }>();
+  const { rolloutId } = useParams({ strict: false }) as { rolloutId: string };
   return (
     <RedirectDeliveryDetail tab="rollouts" id={rolloutId}>
       <RolloutDetailPage />

@@ -26,10 +26,9 @@ func (q *ensureAdminFakeQuerier) CreateBootstrapAdmin(_ context.Context, arg sql
 }
 
 func TestEnsureBootstrapAdminUsesDefaultIdentity(t *testing.T) {
-	t.Setenv(bootstrapPasswordEnv, "test-password")
 	q := &ensureAdminFakeQuerier{}
 
-	if err := EnsureBootstrapAdmin(context.Background(), q, slog.Default()); err != nil {
+	if err := EnsureBootstrapAdmin(context.Background(), q, BootstrapAdminConfig{Password: "test-password"}, slog.Default()); err != nil {
 		t.Fatalf("EnsureBootstrapAdmin returned error: %v", err)
 	}
 
@@ -45,12 +44,11 @@ func TestEnsureBootstrapAdminUsesDefaultIdentity(t *testing.T) {
 }
 
 func TestEnsureBootstrapAdminUsesConfiguredIdentity(t *testing.T) {
-	t.Setenv(bootstrapPasswordEnv, "test-password")
-	t.Setenv(bootstrapUsernameEnv, "root")
-	t.Setenv(bootstrapEmailEnv, "admin@alphabravo.io")
 	q := &ensureAdminFakeQuerier{}
 
-	if err := EnsureBootstrapAdmin(context.Background(), q, slog.Default()); err != nil {
+	if err := EnsureBootstrapAdmin(context.Background(), q, BootstrapAdminConfig{
+		Password: "test-password", Username: "root", Email: "admin@alphabravo.io",
+	}, slog.Default()); err != nil {
 		t.Fatalf("EnsureBootstrapAdmin returned error: %v", err)
 	}
 

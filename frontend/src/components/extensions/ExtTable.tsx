@@ -1,4 +1,3 @@
-"use client";
 
 // §Schema Tier-1 — table renderer. First-party, TEXT-ONLY: every cell value is
 // run through a closed-enum formatter and placed in a text node, never

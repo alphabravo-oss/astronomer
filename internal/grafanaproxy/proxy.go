@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -19,7 +18,8 @@ const (
 	proxyBodyLimit = 10 << 20 // 10 MiB
 )
 
-// Config is env-driven. The process must not require Redis or ASTRONOMER_SECRET_KEY.
+// Config is resolved by the executable bootstrap. The proxy must not require
+// Redis or ASTRONOMER_SECRET_KEY.
 type Config struct {
 	ListenAddr    string
 	Upstream      *url.URL
@@ -39,12 +39,12 @@ type redeemResult struct {
 	ClusterIDs []string `json:"clusterIds,omitempty"`
 }
 
-func ConfigFromEnv() (Config, error) {
-	upstreamRaw := strings.TrimSpace(os.Getenv("GRAFANA_UPSTREAM"))
-	astro := strings.TrimRight(strings.TrimSpace(os.Getenv("ASTRONOMER_URL")), "/")
-	host := strings.TrimSpace(os.Getenv("GRAFANA_HOST"))
-	key := strings.TrimSpace(os.Getenv("GRAFANA_PROXY_KEY"))
-	listen := strings.TrimSpace(os.Getenv("LISTEN_ADDR"))
+func ParseConfig(listen, upstreamRaw, astronomerURL, host, key string) (Config, error) {
+	upstreamRaw = strings.TrimSpace(upstreamRaw)
+	astro := strings.TrimRight(strings.TrimSpace(astronomerURL), "/")
+	host = strings.TrimSpace(host)
+	key = strings.TrimSpace(key)
+	listen = strings.TrimSpace(listen)
 	if listen == "" {
 		listen = ":8080"
 	}
@@ -67,11 +67,7 @@ func ConfigFromEnv() (Config, error) {
 	}, nil
 }
 
-func Run() error {
-	cfg, err := ConfigFromEnv()
-	if err != nil {
-		return err
-	}
+func Run(cfg Config) error {
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           New(cfg),

@@ -26,15 +26,22 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // Build-time defaults. All overridable via flags.
 const (
-	defaultServer   = "http://localhost:8080"
+	defaultServer   = "http://localhost:8001"
 	defaultClusters = 50
 	defaultRPS      = 100
 	defaultDuration = 5 * time.Minute
 	defaultOut      = "loadtest-report.md"
+	// Synthetic agents exercise the production compatibility gate, so their
+	// identity must be a strict semver accepted by the current release. A label
+	// such as "loadtest" upgrades the WebSocket but is rejected before CONNECT
+	// readiness, making every estate profile hang in its ramp-up phase.
+	syntheticAgentVersion = "1.1.0"
 
 	heartbeatInterval  = 30 * time.Second
 	metricsScrape      = 15 * time.Second
@@ -44,6 +51,7 @@ const (
 
 type config struct {
 	server            string
+	metricsServer     string
 	clusters          int
 	rps               int
 	duration          time.Duration
@@ -93,6 +101,7 @@ func main() {
 func parseFlags() *config {
 	cfg := &config{}
 	flag.StringVar(&cfg.server, "server", envOr("LOADTEST_SERVER", defaultServer), "management-plane base URL")
+	flag.StringVar(&cfg.metricsServer, "metrics-server", envOr("LOADTEST_METRICS_SERVER", ""), "Prometheus metrics base URL (defaults to -server)")
 	flag.IntVar(&cfg.clusters, "clusters", envOrInt("LOADTEST_CLUSTERS", defaultClusters), "number of synthetic agents to spawn")
 	flag.IntVar(&cfg.rps, "rps", envOrInt("LOADTEST_RPS", defaultRPS), "aggregate HTTP request rate (per second)")
 	flag.DurationVar(&cfg.duration, "duration", envOrDuration("LOADTEST_DURATION", defaultDuration), "how long to run")
@@ -106,6 +115,9 @@ func parseFlags() *config {
 	flag.BoolVar(&cfg.certification, "certification", envOrBool("LOADTEST_CERTIFICATION", false), "require reproducibility metadata and passing day-2 drill evidence")
 	flag.BoolVar(&cfg.validateDrills, "validate-drill-evidence", false, "validate configured drill evidence provenance without running a load test")
 	flag.Parse()
+	if strings.TrimSpace(cfg.metricsServer) == "" {
+		cfg.metricsServer = cfg.server
+	}
 	if cfg.profilePath != "" {
 		profile, err := loadScaleProfile(cfg.profilePath)
 		if err != nil {
@@ -282,28 +294,20 @@ func run(cfg *config, log *slog.Logger) error {
 	// 4. Spawn synthetic agents. Each agent dials the WS and behaves like a
 	//    real agent. They keep running until ctx is cancelled.
 	var agentWG sync.WaitGroup
-	agents := make([]*syntheticAgent, 0, cfg.clusters)
 	if !cfg.skipAgents {
-		agents = make([]*syntheticAgent, cfg.clusters)
-		sem := make(chan struct{}, registrationConcur)
+		agents := make([]*syntheticAgent, cfg.clusters)
 		for i := 0; i < cfg.clusters; i++ {
-			i := i
 			agents[i] = newSyntheticAgent(cfg.server, agentCredentials[i], log, rec, cfg.resources)
-			agentWG.Add(1)
-			go func() {
-				defer agentWG.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				agents[i].Run(ctx)
-			}()
 		}
 		log.Info("spawning synthetic agents", "count", cfg.clusters)
 		readyCtx, readyCancel := context.WithTimeout(ctx, 30*time.Minute)
-		if err := waitForSyntheticAgents(readyCtx, agents); err != nil {
-			readyCancel()
+		err := runSyntheticAgentRamp(readyCtx, ctx, agents, registrationConcur, &agentWG, func(ctx context.Context, agent *syntheticAgent) {
+			agent.Run(ctx)
+		})
+		readyCancel()
+		if err != nil {
 			return fmt.Errorf("wait for synthetic agents: %w", err)
 		}
-		readyCancel()
 		log.Info("all synthetic agents connected", "count", cfg.clusters)
 		if cfg.reconnectStorm.Enabled {
 			go scheduleReconnectStorm(ctx, agents, cfg.reconnectStorm, cfg.duration, log)
@@ -339,7 +343,7 @@ func run(cfg *config, log *slog.Logger) error {
 	workloadWG.Add(1)
 	go func() {
 		defer workloadWG.Done()
-		scrapeMetricsLoop(workloadCtx, cfg.server, adminToken, rec, log)
+		scrapeMetricsLoop(workloadCtx, cfg.metricsServer, adminToken, rec, log)
 	}()
 
 	// Wait for the workload window. Then stop agents.
@@ -365,7 +369,7 @@ func run(cfg *config, log *slog.Logger) error {
 	//    after the workload stops.
 	finalCtx, finalCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer finalCancel()
-	if err := scrapeOnce(finalCtx, cfg.server, adminToken, rec); err != nil {
+	if err := scrapeOnce(finalCtx, cfg.metricsServer, adminToken, rec); err != nil {
 		log.Warn("final scrape failed", "error", err)
 	}
 
@@ -545,10 +549,14 @@ func (sa *syntheticAgent) connectAndServe(ctx context.Context) error {
 
 	// CONNECT
 	connectPayload, _ := json.Marshal(map[string]any{
-		"cluster_id":    sa.clusterID,
-		"agent_id":      sa.agentID,
-		"agent_version": "loadtest",
-		"token":         connectToken,
+		"cluster_id":                sa.clusterID,
+		"agent_id":                  sa.agentID,
+		"agent_version":             syntheticAgentVersion,
+		"tunnel_protocol_version":   protocol.TunnelProtocolVersion,
+		"heartbeat_schema_version":  protocol.HeartbeatSchemaVersion,
+		"delivery_protocol_version": protocol.DeliveryProtocolVersion,
+		"capabilities":              syntheticConnectCapabilities(),
+		"token":                     connectToken,
 	})
 	connectMsg := tunnelMessage{
 		Type:      "CONNECT",
@@ -630,6 +638,14 @@ func (sa *syntheticAgent) connectAndServe(ctx context.Context) error {
 	}
 }
 
+func syntheticConnectCapabilities() []string {
+	// The load driver serves both ordinary GETs and streaming list/watch
+	// requests. Keep the delivery admission contract sourced from the canonical
+	// protocol package, then advertise the read capability its canned responder
+	// actually implements.
+	return append(protocol.RequiredConnectCapabilities(), "watch")
+}
+
 func (sa *syntheticAgent) acceptAgentCredential(agentToken string) error {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
@@ -661,6 +677,7 @@ func (sa *syntheticAgent) heartbeatLoop(ctx context.Context) {
 
 func (sa *syntheticAgent) sendHeartbeat(ctx context.Context) {
 	payload, _ := json.Marshal(map[string]any{
+		"schema_version":       protocol.HeartbeatSchemaVersion,
 		"timestamp":            time.Now().UTC().Format(time.RFC3339),
 		"kubernetes_version":   "v1.30.0",
 		"distribution":         "loadtest",
@@ -668,7 +685,7 @@ func (sa *syntheticAgent) sendHeartbeat(ctx context.Context) {
 		"pod_count":            42,
 		"cpu_usage_percent":    12.5,
 		"memory_usage_percent": 30.0,
-		"agent_version":        "loadtest",
+		"agent_version":        syntheticAgentVersion,
 	})
 	msg := tunnelMessage{
 		Type:      "HEARTBEAT",

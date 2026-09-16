@@ -131,11 +131,19 @@ func (tx *postgresPlanningTransaction) LoadSnapshotForUpdate(ctx context.Context
 	if err := decodeStrict(row.SourceSpec, &source); err != nil {
 		return PlanningSnapshot{}, fail(CodeInvariant, "bundle.source_spec", "stored source snapshot is invalid")
 	}
-	specDigest, err := model.ParseDigest(row.SpecDigest)
+	bundleSpecDigest, err := model.ParseDigest(row.SpecDigest)
 	if err != nil {
 		return PlanningSnapshot{}, &Error{Code: CodeInvariant, Field: "bundle.spec_digest", Cause: err}
 	}
-	desired := VersionIdentity{BundleVersionID: row.BundleVersionID, SpecDigest: specDigest, Source: source}
+	var overrides model.TargetOverrides
+	if err := decodeStrict(row.Overrides, &overrides); err != nil {
+		return PlanningSnapshot{}, fail(CodeInvariant, "target.overrides", "stored overrides are invalid")
+	}
+	effectiveDigest, err := effectiveTargetSpecDigest(bundleSpecDigest, overrides)
+	if err != nil {
+		return PlanningSnapshot{}, &Error{Code: CodeInvariant, Field: "target.overrides", Cause: err}
+	}
+	desired := VersionIdentity{BundleVersionID: row.BundleVersionID, SpecDigest: effectiveDigest, Source: source, Overrides: overrides}
 	if err := desired.Validate(); err != nil {
 		return PlanningSnapshot{}, &Error{Code: CodeInvariant, Field: "bundle", Cause: err}
 	}
@@ -149,9 +157,13 @@ func (tx *postgresPlanningTransaction) LoadSnapshotForUpdate(ctx context.Context
 	allowedProjects = uniqueUUIDs(allowedProjects)
 	candidateRows, err := tx.queries.ListDeliveryPlanningCandidates(ctx, sqlc.ListDeliveryPlanningCandidatesParams{
 		TargetID: targetID, ProjectIds: allowedProjects, OwnerProjectID: row.ProjectID,
+		QueryLimit: MaxRolloutClusters + 1,
 	})
 	if err != nil {
 		return PlanningSnapshot{}, fmt.Errorf("load delivery planning candidates: %w", err)
+	}
+	if len(candidateRows) > MaxRolloutClusters {
+		return PlanningSnapshot{}, fail(CodeInvalidInput, "placement", fmt.Sprintf("selects more than %d clusters", MaxRolloutClusters))
 	}
 	candidates := make([]placement.Candidate, 0, len(candidateRows))
 	previous := make(map[uuid.UUID]PreviousDeployment)
@@ -187,8 +199,14 @@ func (tx *postgresPlanningTransaction) LoadSnapshotForUpdate(ctx context.Context
 			if decodeErr := decodeStrict(candidateRow.PreviousSourceSpec, &previousSource); decodeErr != nil {
 				return PlanningSnapshot{}, fail(CodeInvariant, "previous.source_spec", "stored source snapshot is invalid")
 			}
+			var previousOverrides model.TargetOverrides
+			if len(candidateRow.PreviousOverrides) != 0 {
+				if decodeErr := decodeStrict(candidateRow.PreviousOverrides, &previousOverrides); decodeErr != nil {
+					return PlanningSnapshot{}, fail(CodeInvariant, "previous.overrides", "stored overrides are invalid")
+				}
+			}
 			previous[candidateRow.ClusterID] = PreviousDeployment{
-				Version:    VersionIdentity{BundleVersionID: candidateRow.PreviousBundleVersionID.Bytes, SpecDigest: previousDigest, Source: previousSource},
+				Version:    VersionIdentity{BundleVersionID: candidateRow.PreviousBundleVersionID.Bytes, SpecDigest: previousDigest, Source: previousSource, Overrides: previousOverrides},
 				Generation: candidateRow.PreviousGeneration.Int64,
 			}
 		}
@@ -222,11 +240,17 @@ func (tx *postgresPlanningTransaction) InsertRollout(ctx context.Context, plan F
 	}
 	strategyJSON, _ := json.Marshal(plan.Strategy)
 	approvalJSON, _ := json.Marshal(plan.Approval)
+	overrideDigest, err := plan.Desired.Overrides.CanonicalDigest()
+	if err != nil {
+		return fmt.Errorf("digest frozen target overrides: %w", err)
+	}
 	placementJSON, _ := json.Marshal(struct {
-		Digest   model.Digest     `json:"digest"`
-		Cohorts  []Cohort         `json:"cohorts"`
-		Clusters []PlannedCluster `json:"clusters"`
-	}{plan.PlacementDigest, plan.Cohorts, plan.Clusters})
+		Digest         model.Digest          `json:"digest"`
+		OverrideDigest model.Digest          `json:"override_digest"`
+		Overrides      model.TargetOverrides `json:"overrides"`
+		Cohorts        []Cohort              `json:"cohorts"`
+		Clusters       []PlannedCluster      `json:"clusters"`
+	}{plan.PlacementDigest, overrideDigest, plan.Desired.Overrides, plan.Cohorts, plan.Clusters})
 	fromVersion := commonPreviousVersion(plan.Clusters)
 	initiatedBy := pgtype.UUID{}
 	if actorID, parseErr := uuid.Parse(plan.Actor); parseErr == nil {
@@ -333,6 +357,13 @@ func uniqueUUIDs(input []uuid.UUID) []uuid.UUID {
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].String() < result[j].String() })
 	return result
+}
+
+func effectiveTargetSpecDigest(bundle model.Digest, overrides model.TargetOverrides) (model.Digest, error) {
+	return model.CanonicalDigest(struct {
+		Bundle    model.Digest          `json:"bundle_spec_digest"`
+		Overrides model.TargetOverrides `json:"overrides"`
+	}{Bundle: bundle, Overrides: overrides})
 }
 
 func deliveryCapabilities(fluxVersion string, raw json.RawMessage) (map[string]string, error) {

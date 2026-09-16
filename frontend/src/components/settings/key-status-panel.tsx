@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * Read-only encryption/JWT key-status surface (F-05). Operators poll this
@@ -9,7 +8,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { KeyRound, RefreshCw, Loader2 } from "lucide-react";
-import { getKeyStatus } from "@/lib/api";
+import { getKeyStatus } from "@/lib/api/admin-security";
 import { queryKeys } from "@/lib/query-keys";
 import { formatDate } from "@/lib/utils";
 import { ErrorState } from "@/components/ui/empty-state";

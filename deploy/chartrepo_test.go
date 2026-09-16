@@ -95,6 +95,7 @@ func TestAstronomerChartArchiveRendersOffline(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("helm", "template", "astronomer", archive,
+		"--set", "config.env=development",
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
 		"--set", "secrets.existingSecret=core-credentials")
 	cmd.Env = append(os.Environ(), "HELM_REPOSITORY_CACHE="+t.TempDir(), "HELM_REPOSITORY_CONFIG="+filepath.Join(t.TempDir(), "repositories.yaml"))

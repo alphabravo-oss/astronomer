@@ -64,9 +64,9 @@ kubectl -n astronomer rollout status deployment/astronomer-server
 ```bash
 kubectl -n astronomer rollout undo deployment/astronomer-server
 ```
-For Argo-managed installs, sync to the prior Git commit via the Argo
-CD UI instead so the manifest in Git is consistent with the running
-state.
+For Flux-managed installs, revert the desired state in Git and wait for the
+owning Kustomization or HelmRelease to report `Ready=True` so Git remains
+consistent with the running state.
 
 ## Verify
 

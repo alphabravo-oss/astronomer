@@ -2,11 +2,11 @@ package server
 
 import (
 	"fmt"
-	"os"
 
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 )
@@ -22,14 +22,14 @@ func validateManagementBackupStartup(enabled bool, executor managementBackupRead
 	return nil
 }
 
-func newManagementBackupHandler(enabled bool, queries handler.AdminDrillQuerier, database *db.DB, encryptor *auth.Encryptor, localK8s kubernetes.Interface, namespace string) *handler.AdminDrillHandler {
+func newManagementBackupHandler(cfg *config.Config, queries handler.AdminDrillQuerier, database *db.DB, encryptor *auth.Encryptor, localK8s kubernetes.Interface, namespace string) *handler.AdminDrillHandler {
 	h := handler.NewAdminDrillHandler(queries)
-	h.SetManagementBackupEnabled(enabled)
+	h.SetManagementBackupEnabled(cfg.ManagementBackupEnabled)
 	h.SetRunTx(sqlcMutationTxRunner[handler.ManagementBackupMutationTx](database))
 	h.SetEncryptor(encryptor)
-	h.SetBackupRuntime(os.Getenv("MANAGEMENT_BACKUP_IMAGE"), os.Getenv("MANAGEMENT_BACKUP_SERVICE_ACCOUNT"))
+	h.SetBackupRuntime(cfg.ManagementBackupImage, cfg.ManagementBackupServiceAccount)
 	if localK8s != nil && namespace != "" {
-		h.SetKubernetes(localK8s, namespace, os.Getenv("RELEASE_NAME"))
+		h.SetKubernetes(localK8s, namespace, cfg.ReleaseName)
 	}
 	return h
 }

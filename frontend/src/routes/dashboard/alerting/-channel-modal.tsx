@@ -223,12 +223,12 @@ export function NotificationChannelModal({ onClose }: { onClose: () => void }) {
       <label className="flex items-center gap-2 cursor-pointer">
         <form.Field name="enabled">
           {(field) => (
-            <input
+            <Input
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}
               onBlur={field.handleBlur}
-              className="rounded border-border text-primary focus:ring-ring"
+              className="rounded-sm border-border text-primary focus:ring-ring"
             />
           )}
         </form.Field>

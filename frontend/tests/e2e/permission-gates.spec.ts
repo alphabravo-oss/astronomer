@@ -3,10 +3,29 @@
  */
 import { test, expect } from "@playwright/test";
 
-import { authMeWire } from "./helpers/auth";
+import { authMeWire, seedAuth } from "./helpers/auth";
+
+const readOnlyUser = {
+  id: "u1",
+  username: "reader",
+  email: "reader@example.com",
+  displayName: "Read Only",
+  isSuperuser: false,
+  enabled: true,
+  roles: {
+    global: [
+      {
+        roleName: "reader",
+        roleRules: [{ resource: "clusters", verbs: ["read", "list"] }],
+      },
+    ],
+    cluster: [],
+    project: [],
+  },
+};
 
 test.describe("permission-gated UI", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ context, page }) => {
     // Minimal mock of /auth/me as a non-superuser with no write grants.
     await page.route("**/api/v1/**", async (route) => {
       const url = route.request().url();
@@ -20,26 +39,7 @@ test.describe("permission-gated UI", () => {
           contentType: "application/json",
           body: JSON.stringify({
             status: 200,
-            data: authMeWire({
-              id: "u1",
-              username: "reader",
-              email: "reader@example.com",
-              displayName: "Read Only",
-              isSuperuser: false,
-              enabled: true,
-              roles: {
-                global: [
-                  {
-                    roleName: "reader",
-                    roleRules: [
-                      { resource: "clusters", verbs: ["read", "list"] },
-                    ],
-                  },
-                ],
-                cluster: [],
-                project: [],
-              },
-            }),
+            data: authMeWire(readOnlyUser),
           }),
         });
         return;
@@ -58,6 +58,7 @@ test.describe("permission-gated UI", () => {
         body: JSON.stringify({ data: [] }),
       });
     });
+    await seedAuth(context, page, readOnlyUser);
   });
 
   test("global backups URL redirects away from Velero console", async ({

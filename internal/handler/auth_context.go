@@ -3,11 +3,11 @@ package handler
 import (
 	"net/http"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func currentUserUUID(r *http.Request) pgtype.UUID {
-	return middleware.AuthenticatedUserUUID(r.Context())
+	return reqctx.UserUUID(r.Context())
 }

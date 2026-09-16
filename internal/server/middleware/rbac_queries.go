@@ -64,6 +64,12 @@ func (q *SQLCRBACQuerier) Cache() *RBACCache {
 	return q.cache
 }
 
+// RBACCacheEnabled implements rbac.CacheStatus without exposing the concrete
+// cache type to handlers and other domain packages.
+func (q *SQLCRBACQuerier) RBACCacheEnabled() bool {
+	return q != nil && q.cache != nil
+}
+
 // Invalidate drops the cache entry for userID. Safe on nil receivers and on
 // querier instances constructed without a cache (no-op). Callers should
 // invoke this after any successful binding/role mutation; see the call sites

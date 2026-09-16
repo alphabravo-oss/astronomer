@@ -298,14 +298,8 @@ func newUsersDeleteCmd() *cobra.Command {
 				return err
 			}
 			if !yes {
-				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "About to delete user %s. Proceed? [y/N] ", args[0]); err != nil {
+				if err := confirmAction(cmd, fmt.Sprintf("About to delete user %s. Proceed?", args[0])); err != nil {
 					return err
-				}
-				var resp string
-				_, _ = fmt.Scanln(&resp)
-				resp = strings.ToLower(strings.TrimSpace(resp))
-				if resp != "y" && resp != "yes" {
-					return fmt.Errorf("aborted")
 				}
 			}
 			client, err := newAstroClient(cmd)

@@ -39,7 +39,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -66,7 +66,6 @@ type GatekeeperConstraintsHandler struct {
 	queries   GatekeeperConstraintQuerier
 	requester K8sRequester
 	authz     authorizationSupport
-	audit     any
 	runTx     gatekeeperConstraintRunTxFunc
 }
 
@@ -79,13 +78,8 @@ func NewGatekeeperConstraintsHandler(queries GatekeeperConstraintQuerier, reques
 
 // SetAuthorization wires the RBAC engine + binding querier used to fail-closed
 // gate create/delete at the handler layer (in addition to route middleware).
-func (h *GatekeeperConstraintsHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+func (h *GatekeeperConstraintsHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
 	h.authz.SetAuthorization(engine, querier)
-}
-
-// SetAuditWriter wires the audit-log writer used to record create/delete.
-func (h *GatekeeperConstraintsHandler) SetAuditWriter(audit any) {
-	h.audit = audit
 }
 
 func (h *GatekeeperConstraintsHandler) SetRunTx(runTx gatekeeperConstraintRunTxFunc) {
@@ -123,7 +117,7 @@ type ConstraintYAMLRequest struct {
 
 // ListConstraints handles GET /api/v1/clusters/{id}/gatekeeper/constraints/.
 func (h *GatekeeperConstraintsHandler) ListConstraints(w http.ResponseWriter, r *http.Request) {
-	clusterID, ok := h.clusterID(w, r)
+	clusterID, ok := parseClusterIDParam(w, r, "id")
 	if !ok {
 		return
 	}
@@ -211,7 +205,7 @@ func constraintEnforcementAction(document []byte) string {
 
 // ValidateConstraint handles POST …/constraints/validate/ — no apply.
 func (h *GatekeeperConstraintsHandler) ValidateConstraint(w http.ResponseWriter, r *http.Request) {
-	clusterID, ok := h.clusterID(w, r)
+	clusterID, ok := parseClusterIDParam(w, r, "id")
 	if !ok {
 		return
 	}
@@ -233,7 +227,7 @@ func (h *GatekeeperConstraintsHandler) ValidateConstraint(w http.ResponseWriter,
 
 // CreateConstraint handles POST …/constraints/ — validate and queue desired state.
 func (h *GatekeeperConstraintsHandler) CreateConstraint(w http.ResponseWriter, r *http.Request) {
-	clusterID, ok := h.clusterID(w, r)
+	clusterID, ok := parseClusterIDParam(w, r, "id")
 	if !ok {
 		return
 	}
@@ -275,56 +269,52 @@ func (h *GatekeeperConstraintsHandler) CreateConstraint(w http.ResponseWriter, r
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode Gatekeeper constraint request")
 		return
 	}
-	if h.runTx != nil {
-		receipt := ConstraintValidationResponse{Valid: true, Errors: []string{}, Applied: false, Name: manifest.Name, Kind: manifest.Kind}
-		err := h.runTx(r.Context(), func(q GatekeeperConstraintMutationTx) error {
-			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
-			if !ok {
-				return errors.New("Gatekeeper idempotency store is not configured")
-			}
-			_, stored, replay, claimErr := claimOperationReceipt[ConstraintValidationResponse](r.Context(), idemQ, "gatekeeper_constraint_creates", digest)
-			if claimErr != nil {
-				return claimErr
-			}
-			if replay {
-				receipt = stored
-				return nil
-			}
-			var mutationErr error
-			row, mutationErr := q.UpsertAuthoredConstraint(r.Context(), params)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			taskRow, mutationErr := enqueueGatekeeperConstraintReconcile(r, q, row)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			receipt.Status, receipt.TaskID = row.SyncStatus, taskRow.ID.String()
-			if auditErr := recordAuditOutbox(r, q, "gatekeeper.constraint.create", "gatekeeper_constraint", clusterID.String()+"/"+manifest.Name, manifest.Name, http.StatusAccepted, map[string]any{
-				"cluster_id": clusterID.String(), "kind": manifest.Kind,
-				"generation": row.Generation, "task_id": taskRow.ID.String(),
-			}); auditErr != nil {
-				return auditErr
-			}
-			return attachOperationReceipt(r.Context(), idemQ, "gatekeeper_constraint_creates", row.ID, digest, receipt)
-		})
-		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint create request")
-			return
+	receipt := ConstraintValidationResponse{Valid: true, Errors: []string{}, Applied: false, Name: manifest.Name, Kind: manifest.Kind}
+	err = h.runTx(r.Context(), func(q GatekeeperConstraintMutationTx) error {
+		idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+		if !ok {
+			return errors.New("Gatekeeper idempotency store is not configured")
 		}
-		if err != nil {
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to queue Gatekeeper constraint")
-			return
+		_, stored, replay, claimErr := claimOperationReceipt[ConstraintValidationResponse](r.Context(), idemQ, "gatekeeper_constraint_creates", digest)
+		if claimErr != nil {
+			return claimErr
 		}
-		RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", receipt)
+		if replay {
+			receipt = stored
+			return nil
+		}
+		var mutationErr error
+		row, mutationErr := q.UpsertAuthoredConstraint(r.Context(), params)
+		if mutationErr != nil {
+			return mutationErr
+		}
+		taskRow, mutationErr := enqueueGatekeeperConstraintReconcile(r, q, row)
+		if mutationErr != nil {
+			return mutationErr
+		}
+		receipt.Status, receipt.TaskID = row.SyncStatus, taskRow.ID.String()
+		if auditErr := recordAuditOutbox(r, q, "gatekeeper.constraint.create", "gatekeeper_constraint", clusterID.String()+"/"+manifest.Name, manifest.Name, http.StatusAccepted, map[string]any{
+			"cluster_id": clusterID.String(), "kind": manifest.Kind,
+			"generation": row.Generation, "task_id": taskRow.ID.String(),
+		}); auditErr != nil {
+			return auditErr
+		}
+		return attachOperationReceipt(r.Context(), idemQ, "gatekeeper_constraint_creates", row.ID, digest, receipt)
+	})
+	if errors.Is(err, errOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint create request")
 		return
 	}
-
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to queue Gatekeeper constraint")
+		return
+	}
+	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", receipt)
 }
 
 // DeleteConstraint handles DELETE …/constraints/{name}/.
 func (h *GatekeeperConstraintsHandler) DeleteConstraint(w http.ResponseWriter, r *http.Request) {
-	clusterID, ok := h.clusterID(w, r)
+	clusterID, ok := parseClusterIDParam(w, r, "id")
 	if !ok {
 		return
 	}
@@ -356,57 +346,54 @@ func (h *GatekeeperConstraintsHandler) DeleteConstraint(w http.ResponseWriter, r
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.EncodeError, "Failed to encode Gatekeeper constraint delete request")
 		return
 	}
-	if h.runTx != nil {
-		receipt := GatekeeperConstraintMutationResponse{Name: name}
-		err := h.runTx(r.Context(), func(q GatekeeperConstraintMutationTx) error {
-			idemQ, ok := q.(resourceOperationIdempotencyQuerier)
-			if !ok {
-				return errors.New("Gatekeeper idempotency store is not configured")
-			}
-			_, stored, replay, claimErr := claimOperationReceipt[GatekeeperConstraintMutationResponse](r.Context(), idemQ, "gatekeeper_constraint_deletes", digest)
-			if claimErr != nil {
-				return claimErr
-			}
-			if replay {
-				receipt = stored
-				return nil
-			}
-			locked, lockErr := q.GetAuthoredConstraintByNameForUpdate(r.Context(), sqlc.GetAuthoredConstraintByNameForUpdateParams(getParams))
-			if lockErr != nil {
-				return lockErr
-			}
-			authored, lockErr := q.MarkAuthoredConstraintDeleted(r.Context(), sqlc.MarkAuthoredConstraintDeletedParams(getParams))
-			if lockErr != nil {
-				return lockErr
-			}
-			taskRow, lockErr := enqueueGatekeeperConstraintReconcile(r, q, authored)
-			if lockErr != nil {
-				return lockErr
-			}
-			receipt.Status, receipt.TaskID = authored.SyncStatus, taskRow.ID.String()
-			if auditErr := recordAuditOutbox(r, q, "gatekeeper.constraint.delete", "gatekeeper_constraint", clusterID.String()+"/"+name, name, http.StatusAccepted, map[string]any{
-				"cluster_id": clusterID.String(), "kind": locked.Kind,
-				"generation": authored.Generation, "task_id": taskRow.ID.String(),
-			}); auditErr != nil {
-				return auditErr
-			}
-			return attachOperationReceipt(r.Context(), idemQ, "gatekeeper_constraint_deletes", authored.ID, digest, receipt)
-		})
-		if errors.Is(err, errOperationIdempotencyConflict) {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint delete request")
-			return
+	receipt := GatekeeperConstraintMutationResponse{Name: name}
+	err = h.runTx(r.Context(), func(q GatekeeperConstraintMutationTx) error {
+		idemQ, ok := q.(resourceOperationIdempotencyQuerier)
+		if !ok {
+			return errors.New("Gatekeeper idempotency store is not configured")
 		}
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Authored constraint not found")
-				return
-			}
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to queue Gatekeeper constraint deletion")
-			return
+		_, stored, replay, claimErr := claimOperationReceipt[GatekeeperConstraintMutationResponse](r.Context(), idemQ, "gatekeeper_constraint_deletes", digest)
+		if claimErr != nil {
+			return claimErr
 		}
-		RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", receipt)
+		if replay {
+			receipt = stored
+			return nil
+		}
+		locked, lockErr := q.GetAuthoredConstraintByNameForUpdate(r.Context(), sqlc.GetAuthoredConstraintByNameForUpdateParams(getParams))
+		if lockErr != nil {
+			return lockErr
+		}
+		authored, lockErr := q.MarkAuthoredConstraintDeleted(r.Context(), sqlc.MarkAuthoredConstraintDeletedParams(getParams))
+		if lockErr != nil {
+			return lockErr
+		}
+		taskRow, lockErr := enqueueGatekeeperConstraintReconcile(r, q, authored)
+		if lockErr != nil {
+			return lockErr
+		}
+		receipt.Status, receipt.TaskID = authored.SyncStatus, taskRow.ID.String()
+		if auditErr := recordAuditOutbox(r, q, "gatekeeper.constraint.delete", "gatekeeper_constraint", clusterID.String()+"/"+name, name, http.StatusAccepted, map[string]any{
+			"cluster_id": clusterID.String(), "kind": locked.Kind,
+			"generation": authored.Generation, "task_id": taskRow.ID.String(),
+		}); auditErr != nil {
+			return auditErr
+		}
+		return attachOperationReceipt(r.Context(), idemQ, "gatekeeper_constraint_deletes", authored.ID, digest, receipt)
+	})
+	if errors.Is(err, errOperationIdempotencyConflict) {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different Gatekeeper constraint delete request")
 		return
 	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Authored constraint not found")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to queue Gatekeeper constraint deletion")
+		return
+	}
+	RespondAcceptedOperation(w, "/api/v1/clusters/"+clusterID.String()+"/gatekeeper/constraints/", receipt)
 }
 
 func enqueueGatekeeperConstraintReconcile(r *http.Request, q tasks.TaskOutboxWriter, row sqlc.AuthoredConstraint) (sqlc.TaskOutbox, error) {
@@ -414,7 +401,7 @@ func enqueueGatekeeperConstraintReconcile(r *http.Request, q tasks.TaskOutboxWri
 	if err != nil {
 		return sqlc.TaskOutbox{}, err
 	}
-	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), middleware.GetCorrelationID(r.Context()))
+	payload := observability.EnrichTaskPayload(r.Context(), task.Payload(), reqctx.CorrelationID(r.Context()))
 	task = asynq.NewTask(task.Type(), payload, asynq.MaxRetry(5))
 	return tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
 		DedupeKey: fmt.Sprintf("gatekeeper_constraint:%s:%s:%d", row.ClusterID, row.Name, row.Generation),
@@ -424,16 +411,6 @@ func enqueueGatekeeperConstraintReconcile(r *http.Request, q tasks.TaskOutboxWri
 }
 
 const gatekeeperConstraintReconcileTimeout = 2 * time.Minute
-
-// clusterID parses and validates the {id} path param.
-func (h *GatekeeperConstraintsHandler) clusterID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
-		return uuid.UUID{}, false
-	}
-	return id, true
-}
 
 // violationCount fetches a Constraint instance's status.totalViolations from
 // the cluster. Returns ok=false (and omits the count) for ConstraintTemplates,

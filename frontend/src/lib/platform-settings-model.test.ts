@@ -6,6 +6,20 @@ import {
 } from "./platform-settings-model";
 
 describe("platform settings form model", () => {
+  it("round-trips operator governance settings through canonical API keys", () => {
+    const updated = hydratePlatformSettings([
+      { key: "users.inactive_retention_days", value: 30 },
+      { key: "audit.read_tier", value: "incident" },
+    ]);
+    expect(updated.governance).toEqual({
+      inactiveRetentionDays: 30,
+      readAuditTier: "incident",
+    });
+    expect(diffPlatformSettings(PLATFORM_SETTINGS_DEFAULTS, updated)).toEqual({
+      "users.inactive_retention_days": 30,
+      "audit.read_tier": "incident",
+    });
+  });
   it("hydrates the backend's canonical banner and minute-based token keys", () => {
     const hydrated = hydratePlatformSettings([
       { key: "banner.login_text", value: "Authorized users only" },

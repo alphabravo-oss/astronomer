@@ -6,6 +6,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // evaluateGlobalRuleClusters must report allFailed ONLY when a non-empty fleet
@@ -20,10 +21,11 @@ func TestEvaluateGlobalRuleClusters_AllFailedInvariant(t *testing.T) {
 	health := func(_ context.Context, _ sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
 		return sqlc.ClusterHealthStatus{}, false
 	}
+	heartbeat := func(sqlc.Cluster) pgtype.Timestamptz { return pgtype.Timestamptz{} }
 
 	// Non-empty fleet, evals succeed (non-triggering) -> out non-empty, allFailed false.
 	clusters := []sqlc.Cluster{{ID: uuid.New(), Name: "a"}, {ID: uuid.New(), Name: "b"}}
-	out, allFailed := evaluateGlobalRuleClusters(context.Background(), rule, map[string]any{}, clusters, health)
+	out, allFailed := evaluateGlobalRuleClusters(context.Background(), rule, map[string]any{}, clusters, health, heartbeat)
 	if len(out) == 0 {
 		t.Fatal("expected non-empty evaluations for a succeeding fleet")
 	}
@@ -32,7 +34,7 @@ func TestEvaluateGlobalRuleClusters_AllFailedInvariant(t *testing.T) {
 	}
 
 	// Empty fleet -> no evaluations, allFailed false (this is the resolve-all case).
-	out2, allFailed2 := evaluateGlobalRuleClusters(context.Background(), rule, map[string]any{}, nil, health)
+	out2, allFailed2 := evaluateGlobalRuleClusters(context.Background(), rule, map[string]any{}, nil, health, heartbeat)
 	if len(out2) != 0 || allFailed2 {
 		t.Fatalf("empty fleet must yield (0 evals, allFailed=false); got (%d, %v)", len(out2), allFailed2)
 	}

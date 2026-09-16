@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -73,16 +74,12 @@ func TestAlertingStateAndAuditCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/alerting/channels/", nil)
 			params := sqlc.CreateNotificationChannelParams{Name: "production", ChannelType: "slack", Configuration: []byte(`{}`), Enabled: true}
 
-			_, err := executeAlertingMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q AlertingMutationTx) (sqlc.NotificationChannel, error) {
 					return q.CreateNotificationChannel(r.Context(), params)
 				},
-				func() (sqlc.NotificationChannel, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.NotificationChannel{}, nil
-				},
-				func(row sqlc.NotificationChannel) clusterAuditEvent {
-					return clusterAuditEvent{action: "alert.channel.create", resourceType: "notification_channel", resourceID: row.ID.String(), status: http.StatusCreated}
+				func(row sqlc.NotificationChannel) mutationAuditEvent {
+					return mutationAuditEvent{action: "alert.channel.create", resourceType: "notification_channel", resourceID: row.ID.String(), status: http.StatusCreated}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -123,17 +120,13 @@ func TestAlertingTaskOutboxAndAuditCommitTogether(t *testing.T) {
 			}
 			channel := sqlc.NotificationChannel{ID: uuid.New(), Name: "test", ChannelType: "slack"}
 
-			_, err = executeAlertingMutation(r, h,
+			_, err = executeMutation(r, h.runTx,
 				func(q AlertingMutationTx) (sqlc.NotificationChannel, error) {
 					_, enqueueErr := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{DedupeKey: uuid.NewString()})
 					return channel, enqueueErr
 				},
-				func() (sqlc.NotificationChannel, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.NotificationChannel{}, nil
-				},
-				func(row sqlc.NotificationChannel) clusterAuditEvent {
-					return clusterAuditEvent{action: "alert.channel.test", resourceType: "notification_channel", resourceID: row.ID.String(), status: http.StatusOK}
+				func(row sqlc.NotificationChannel) mutationAuditEvent {
+					return mutationAuditEvent{action: "alert.channel.test", resourceType: "notification_channel", resourceID: row.ID.String(), status: http.StatusOK}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -146,11 +139,7 @@ func TestAlertingTaskOutboxAndAuditCommitTogether(t *testing.T) {
 }
 
 func TestEveryAlertingMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("alerting.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	paths, err := filepath.Glob("alerting*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,28 +150,37 @@ func TestEveryAlertingMutationUsesTransactionalExecutor(t *testing.T) {
 		"CreateSilence": false, "ExpireSilence": false, "DeleteSilence": false,
 		"CreateInhibition": false, "UpdateInhibition": false, "DeleteInhibition": false,
 	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
 		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if _, tracked := want[fn.Name.Name]; !tracked {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
+					want[fn.Name.Name] = true
+				}
 				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeAlertingMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
+			})
+		}
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeAlertingMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

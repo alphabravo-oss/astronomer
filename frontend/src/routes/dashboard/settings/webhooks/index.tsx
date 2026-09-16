@@ -7,8 +7,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * status / time come from the backend joined to the subscription row.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Plus, Trash2, Webhook } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -50,7 +50,7 @@ function EnabledToggle({ row }: { row: WebhookSubscriptionView }) {
 }
 
 function WebhooksList() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data, isLoading } = useWebhooks();
   const del = useDeleteWebhook();
   const [confirmDelete, setConfirmDelete] =
@@ -109,7 +109,7 @@ function WebhooksList() {
             e.stopPropagation();
             setConfirmDelete(row);
           }}
-          className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+          className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
           title="Delete webhook"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -126,9 +126,12 @@ function WebhooksList() {
         keyExtractor={(row) => row.id}
         loading={isLoading}
         onRowClick={(row) =>
-          router.push(`/dashboard/settings/webhooks/${row.id}`)
+          void navigate({ to: `/dashboard/settings/webhooks/${row.id}` })
         }
-        emptyMessage="No webhooks configured"
+        emptyState={{
+          title: "No webhooks configured",
+          description: "Create the first item to configure this feature.",
+        }}
         searchPlaceholder="Search webhooks..."
       />
       <ConfirmDialog
@@ -149,17 +152,17 @@ function WebhooksList() {
 }
 
 function WebhooksPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Webhooks"
           title="Webhooks"
@@ -168,7 +171,9 @@ function WebhooksPage() {
             <ActionButton
               intent="primary"
               icon={<Plus className="h-4 w-4" />}
-              onClick={() => router.push("/dashboard/settings/webhooks/new")}
+              onClick={() =>
+                void navigate({ to: "/dashboard/settings/webhooks/new" })
+              }
             >
               New webhook
             </ActionButton>

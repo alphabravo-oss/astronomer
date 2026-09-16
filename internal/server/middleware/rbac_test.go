@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
@@ -80,7 +82,7 @@ func TestRBAC_AdminAccessGranted(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "/clusters", nil)
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), Email: "admin@test.com",
 	})
 	req = req.WithContext(ctx)
@@ -110,7 +112,7 @@ func TestRBAC_ReadOnlyAccessRead(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/clusters/123", nil)
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), Email: "viewer@test.com",
 	})
 	req = req.WithContext(ctx)
@@ -140,7 +142,7 @@ func TestRBAC_ReadOnlyAccessWriteDenied(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "/clusters", nil)
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), Email: "viewer@test.com",
 	})
 	req = req.WithContext(ctx)
@@ -210,7 +212,7 @@ func TestRBAC_ClusterScopedCorrectCluster(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/clusters/%s/workloads", clusterID), nil)
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), Email: "cluster-admin@test.com",
 	})
 	req = req.WithContext(ctx)
@@ -248,7 +250,7 @@ func TestRBAC_NamespaceScopedBindingFromRouteParam(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/clusters/%s/workloads/deployments/payments/api", clusterID), nil)
-	req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), Email: "operator@test.com",
 	}))
 	req = setupChiRequest(req, map[string]string{"cluster_id": clusterID.String(), "namespace": "payments"})
@@ -286,7 +288,7 @@ func TestRBAC_NamespaceScopedBindingDeniesWrongOrMissingNamespace(t *testing.T) 
 		{"cluster_id": clusterID.String()},
 	} {
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/clusters/%s/workloads", clusterID), nil)
-		req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 			ID: uuid.New().String(), Email: "operator@test.com",
 		}))
 		req = setupChiRequest(req, params)
@@ -324,7 +326,7 @@ func TestRBAC_NamespaceScopedBindingFromQueryParam(t *testing.T) {
 
 	newReq := func() *http.Request {
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/clusters/%s/resources/generic/configmaps?namespace=payments", clusterID), nil)
-		req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 			ID: uuid.New().String(), Email: "operator@test.com",
 		}))
 		return setupChiRequest(req, map[string]string{"cluster_id": clusterID.String()})
@@ -359,7 +361,7 @@ func TestRBAC_ClusterScopedWrongCluster(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/clusters/%s/workloads", wrongClusterID), nil)
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.New().String(), Email: "cluster-admin@test.com",
 	})
 	req = req.WithContext(ctx)

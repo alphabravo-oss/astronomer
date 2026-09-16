@@ -1,11 +1,13 @@
 import {
   deleteProjectsById,
+  getClustersByClusterIdProjects,
   getProjects as getProjectsOperation,
   getProjectsById,
   postProjects,
   postProjectsByIdOwnershipTakeover,
   putProjectsById,
 } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
 import type { OwnershipTransferResult } from "@/lib/api/ownership";
 import type { PaginatedResponse, Project } from "@/types";
 import type {
@@ -17,6 +19,12 @@ import type {
 
 export interface ProjectRequestOptions {
   signal?: AbortSignal;
+}
+
+export interface ProjectListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
 }
 
 function requireData<T>(data: T | undefined, operation: string): T {
@@ -96,28 +104,47 @@ function mapOwnershipTransfer(
 }
 
 export async function getProjects(
-  params?: { page?: number; pageSize?: number },
+  params?: ProjectListParams,
   options: ProjectRequestOptions = {},
 ): Promise<PaginatedResponse<Project>> {
   const pageSize = params?.pageSize ?? 20;
   const page = Math.max(1, params?.page ?? 1);
+  const search = params?.search?.trim();
   const response = await getProjectsOperation({
     query: {
       limit: pageSize,
       offset: (page - 1) * pageSize,
+      ...(search ? { search } : {}),
     },
     signal: options.signal,
   });
-  return {
-    data: (response.data ?? []).map(mapProject),
-    total: response.count,
-    count: response.count,
-    next: response.next,
-    previous: response.previous,
-    page,
-    pageSize,
-    totalPages: pageSize > 0 ? Math.ceil(response.count / pageSize) : 0,
-  };
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapProject,
+  );
+}
+
+export async function getClusterProjects(
+  clusterId: string,
+  params?: ProjectListParams,
+  options: ProjectRequestOptions = {},
+): Promise<PaginatedResponse<Project>> {
+  const pageSize = params?.pageSize ?? 20;
+  const page = Math.max(1, params?.page ?? 1);
+  const search = params?.search?.trim();
+  const response = await getClustersByClusterIdProjects({
+    path: { cluster_id: clusterId },
+    query: {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      ...(search ? { search } : {}),
+    },
+    signal: options.signal,
+  });
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapProject,
+  );
 }
 
 export async function getProject(

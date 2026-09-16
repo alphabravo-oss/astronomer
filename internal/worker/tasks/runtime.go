@@ -38,6 +38,13 @@ type K8sRequester interface {
 	Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error)
 }
 
+// K8sCapabilityChecker exposes the current agent's CONNECT-time admission set
+// without sending an operation to that agent. Mutation reconcilers use this to
+// fail closed before issuing work that a least-privilege agent cannot perform.
+type K8sCapabilityChecker interface {
+	SupportsCapability(ctx context.Context, clusterID, capability string) (bool, error)
+}
+
 type LeaderElector interface {
 	TryLeader(ctx context.Context, jobName string) (release func(), held bool, err error)
 }
@@ -45,6 +52,8 @@ type LeaderElector interface {
 type RuntimeQuerier interface {
 	// Cluster registration token cleanup.
 	DeleteExpiredRegistrationTokens(ctx context.Context) (int64, error)
+	// Agent connection history retention.
+	PruneAgentConnectionHistoryBefore(ctx context.Context, cutoff time.Time) (int64, error)
 	// Alert event retention cleanup.
 	DeleteAlertEventsOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 	// Velero Backup CR identity tracking (Phase B2).
@@ -65,17 +74,23 @@ type RuntimeQuerier interface {
 	UpdateRestoreOperationFailed(ctx context.Context, arg sqlc.UpdateRestoreOperationFailedParams) error
 
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
+	ListClustersByIDs(ctx context.Context, ids []uuid.UUID) ([]sqlc.Cluster, error)
 	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
+	GetClusterLiveness(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterLiveness, error)
+	ListClusterLivenessForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.ClusterLiveness, error)
+	GetClusterHealthTarget(ctx context.Context, clusterID uuid.UUID) (sqlc.GetClusterHealthTargetRow, error)
+	ListClusterHealthTargets(ctx context.Context, arg sqlc.ListClusterHealthTargetsParams) ([]sqlc.ListClusterHealthTargetsRow, error)
 	UpdateClusterStatus(ctx context.Context, arg sqlc.UpdateClusterStatusParams) error
 	UpdateClusterStatusOnHeartbeat(ctx context.Context, arg sqlc.UpdateClusterStatusOnHeartbeatParams) (int64, error)
 	UpsertClusterHealthStatus(ctx context.Context, arg sqlc.UpsertClusterHealthStatusParams) (sqlc.ClusterHealthStatus, error)
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterHealthStatus, error)
+	ListClusterHealthStatusesForClusters(ctx context.Context, clusterIDs []uuid.UUID) ([]sqlc.ClusterHealthStatus, error)
 	UpsertClusterCondition(ctx context.Context, arg sqlc.UpsertClusterConditionParams) (sqlc.ClusterCondition, error)
 	ListClusterConditions(ctx context.Context, clusterID uuid.UUID) ([]sqlc.ClusterCondition, error)
 	// Sprint 086 — remediation reconciler. Reads False conditions
 	// fleet-wide, writes attempt rows, and re-issues registration
 	// tokens for the Connected=False remedy path.
-	ListClusterConditionsByStatus(ctx context.Context, status string) ([]sqlc.ClusterCondition, error)
+	ListClusterConditionsByStatus(ctx context.Context, arg sqlc.ListClusterConditionsByStatusParams) ([]sqlc.ClusterCondition, error)
 	GetLatestClusterConditionRemediation(ctx context.Context, arg sqlc.GetLatestClusterConditionRemediationParams) (sqlc.ClusterConditionRemediationAttempt, error)
 	GetLatestNonSkipClusterConditionRemediation(ctx context.Context, arg sqlc.GetLatestNonSkipClusterConditionRemediationParams) (sqlc.ClusterConditionRemediationAttempt, error)
 	InsertClusterConditionRemediation(ctx context.Context, arg sqlc.InsertClusterConditionRemediationParams) (sqlc.ClusterConditionRemediationAttempt, error)
@@ -140,19 +155,20 @@ type RuntimeQuerier interface {
 }
 
 type RuntimeDependencies struct {
-	Queries                 RuntimeQuerier
-	ManagementBackup        ManagementBackupExecutor
-	HTTPClient              *http.Client
-	Log                     *slog.Logger
-	AgentImageRepo          string
-	AgentImageTag           string
-	SystemArtifactURL       string
-	SystemArtifactDigest    string
-	SystemOIDCIssuer        string
-	SystemOIDCIdentity      string
-	PlatformName            string
-	ServerURL               string
-	AuditLogRetentionMonths int
+	Queries                   RuntimeQuerier
+	ManagementBackup          ManagementBackupExecutor
+	HTTPClient                *http.Client
+	Log                       *slog.Logger
+	AgentImageRepo            string
+	AgentImageTag             string
+	SystemArtifactURL         string
+	SystemArtifactDigest      string
+	SystemOIDCIssuer          string
+	SystemOIDCIdentity        string
+	PlatformName              string
+	ChartRecommendationPolicy catalog.RecommendationPolicy
+	ServerURL                 string
+	AuditLogRetentionMonths   int
 	// ClusterTombstoneRetentionDays is how long decommissioned cluster rows
 	// (tombstones) are kept before the retention sweep hard-deletes them.
 	// Mirrors cfg.ClusterTombstoneRetentionDays; defaults to 90 when unset.
@@ -351,6 +367,21 @@ func runtimeLogger(ctx context.Context) *slog.Logger {
 
 func runPeriodicTaskWithLeader(ctx context.Context, jobName string, fn func() error) error {
 	return runPeriodicTaskWithLeaderUsing(ctx, runtimeDependencies(ctx).Leader, runtimeLogger(ctx), jobName, fn)
+}
+
+// runPeriodicTaskWithRowLeases runs a horizontally distributable sweep. The
+// caller must acquire a durable lease for each row before doing work; unlike a
+// global advisory lock, those leases let duplicate scheduler deliveries be
+// consumed safely by different worker replicas instead of forcing the fleet
+// through one process. This wrapper owns only metrics and skip semantics.
+func runPeriodicTaskWithRowLeases(_ context.Context, jobName string, fn func() error) error {
+	start := time.Now()
+	err := fn()
+	observability.RecordReconcilerRun(jobName, reconcilerStatusFor(err), start)
+	if errors.Is(err, ErrPeriodicTaskSkipped) {
+		return nil
+	}
+	return err
 }
 
 func runPeriodicTaskWithLeaderUsing(ctx context.Context, elector LeaderElector, log *slog.Logger, jobName string, fn func() error) error {

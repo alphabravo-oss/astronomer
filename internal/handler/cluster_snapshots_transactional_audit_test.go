@@ -267,11 +267,7 @@ func TestClusterSnapshotScheduleCRUDRollsBackMandatoryAudit(t *testing.T) {
 }
 
 func TestEveryClusterSnapshotMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("cluster_snapshots.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	paths, err := filepath.Glob("cluster_snapshots*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,28 +275,37 @@ func TestEveryClusterSnapshotMutationUsesTransactionalExecutor(t *testing.T) {
 		"CreateSnapshot": false, "DeleteSnapshot": false, "CreateRestore": false,
 		"CreateSchedule": false, "UpdateSchedule": false, "DeleteSchedule": false,
 	}
-	for _, declaration := range file.Decls {
-		fn, ok := declaration.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
 		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
+		for _, declaration := range file.Decls {
+			fn, ok := declaration.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if _, tracked := want[fn.Name.Name]; !tracked {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
+					want[fn.Name.Name] = true
+				}
 				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeClusterSnapshotMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
+			})
+		}
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeClusterSnapshotMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

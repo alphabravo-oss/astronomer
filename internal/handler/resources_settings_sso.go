@@ -5,19 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 var ssoProviderSlugPattern = regexp.MustCompile(`[^a-z0-9]+`)
@@ -56,69 +55,45 @@ func (h *ResourceHandler) GetGeneralSettings(w http.ResponseWriter, r *http.Requ
 // has a backing column today, the others are echoed back unchanged.
 // openapi:request-operation putSettingsGeneral
 type UpdateGeneralSettingsRequest struct {
-	PlatformName           *string `json:"platformName"`
-	PlatformNameSnake      *string `json:"platform_name"`
-	AgentHeartbeatInterval *int    `json:"agentHeartbeatInterval"`
-	DefaultSessionTimeout  *int    `json:"defaultSessionTimeout"`
-	EnableAuditLogging     *bool   `json:"enableAuditLogging"`
-	MetricsCollection      *bool   `json:"metricsCollection"`
+	PlatformName           *string `json:"platformName,omitempty"`
+	AgentHeartbeatInterval *int    `json:"agentHeartbeatInterval,omitempty"`
+	DefaultSessionTimeout  *int    `json:"defaultSessionTimeout,omitempty"`
+	EnableAuditLogging     *bool   `json:"enableAuditLogging,omitempty"`
+	MetricsCollection      *bool   `json:"metricsCollection,omitempty"`
 }
 
 func (h *ResourceHandler) UpdateGeneralSettings(w http.ResponseWriter, r *http.Request) {
 	var req UpdateGeneralSettingsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeStrictJSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	if h.runTx != nil {
-		var cfg sqlc.PlatformConfiguration
-		err := h.runTx(r.Context(), func(q ResourceSettingsMutationTx) error {
-			current, err := q.GetPlatformConfigForUpdate(r.Context())
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			cfg, err = q.UpsertPlatformConfig(r.Context(), generalSettingsUpdateParams(current, req))
-			if err != nil {
-				return err
-			}
-			return recordAuditOutbox(r, q, "settings.general.update", "platform_settings", fmt.Sprintf("%d", cfg.ID), cfg.PlatformName, http.StatusOK, map[string]any{
-				"platform_name":     cfg.PlatformName,
-				"telemetry_enabled": cfg.TelemetryEnabled,
-			})
-		})
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "settings transaction runner is not configured")
+		return
+	}
+	var cfg sqlc.PlatformConfiguration
+	err := h.runTx(r.Context(), func(q ResourceSettingsMutationTx) error {
+		current, err := q.GetPlatformConfigForUpdate(r.Context())
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		cfg, err = q.UpsertPlatformConfig(r.Context(), generalSettingsUpdateParams(current, req))
 		if err != nil {
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SettingsError, "Failed to update platform settings")
-			return
+			return err
 		}
-		// Keep every process-local settings read behind the commit boundary.
-		// General settings currently use platform_configuration, but flushing
-		// here prevents a future mirrored setting from observing stale state.
-		if h.settingsCache != nil {
-			h.settingsCache.Flush()
-		}
-		respondGeneralSettingsUpdate(w, req, cfg)
-		return
-	}
-
-	var current sqlc.PlatformConfiguration
-	if h.queries != nil {
-		if cfg, err := h.queries.GetPlatformConfig(r.Context()); err == nil {
-			current = cfg
-		}
-	}
-	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SettingsError, "settings store not configured")
-		return
-	}
-	cfg, err := h.queries.UpsertPlatformConfig(r.Context(), generalSettingsUpdateParams(current, req))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SettingsError, "Failed to update platform settings")
-		return
-	}
-	recordAudit(r, h.queries, "settings.general.update", "platform_settings", fmt.Sprintf("%d", cfg.ID), cfg.PlatformName, map[string]any{
-		"platform_name":     cfg.PlatformName,
-		"telemetry_enabled": cfg.TelemetryEnabled,
+		return recordAuditOutbox(r, q, "settings.general.update", "platform_settings", fmt.Sprintf("%d", cfg.ID), cfg.PlatformName, http.StatusOK, map[string]any{
+			"platform_name":     cfg.PlatformName,
+			"telemetry_enabled": cfg.TelemetryEnabled,
+		})
 	})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.SettingsError, "Failed to update platform settings")
+		return
+	}
+	if h.settingsCache != nil {
+		h.settingsCache.Flush()
+	}
 	respondGeneralSettingsUpdate(w, req, cfg)
 }
 
@@ -130,8 +105,6 @@ func generalSettingsUpdateParams(current sqlc.PlatformConfiguration, req UpdateG
 	}
 	if req.PlatformName != nil && *req.PlatformName != "" {
 		platformName = *req.PlatformName
-	} else if req.PlatformNameSnake != nil && *req.PlatformNameSnake != "" {
-		platformName = *req.PlatformNameSnake
 	}
 	if req.MetricsCollection != nil {
 		telemetry = *req.MetricsCollection
@@ -255,7 +228,7 @@ func (h *ResourceHandler) registerSSOProvider(ctx context.Context, providerKey, 
 
 func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Request) {
 	if h.sso == nil {
-		RespondList(w, []any{}, NewPagination(0, 0, 0, 0))
+		paging.Write(w, []any{}, paging.Exact(0, 0, 0, 0))
 		return
 	}
 	rows, err := h.sso.GetEnabledSSOProviders(r.Context())
@@ -268,7 +241,7 @@ func (h *ResourceHandler) ListSSOProviders(w http.ResponseWriter, r *http.Reques
 		items = append(items, ssoConfigurationToResponse(row))
 	}
 	// GetEnabledSSOProviders returns every enabled provider unpaginated.
-	RespondList(w, items, NewPagination(len(items), len(items), 0, len(items)))
+	paging.Write(w, items, paging.Exact(len(items), len(items), 0, len(items)))
 }
 
 // openapi:request-operation postSettingsSso
@@ -305,7 +278,7 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var req SSOProviderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+	if err := decodeStrictJSONBody(r, &req); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
@@ -346,16 +319,9 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Provider key must be 16 characters or fewer")
 		return
 	}
-	// Production re-checks under the provider-key transaction lock below.
-	// Keep this direct check only for narrow fakes that do not wire runTx.
 	if h.runTx == nil {
-		if _, err := h.sso.GetSSOConfigurationByProvider(r.Context(), providerKey); err == nil {
-			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "An SSO provider with this key already exists")
-			return
-		} else if !errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOError, "Failed to check SSO provider")
-			return
-		}
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "SSO settings transaction runner is not configured")
+		return
 	}
 
 	issuerURL := normalizeOIDCIssuerURL(req.Config.MetadataURL)
@@ -396,30 +362,14 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 		AutoCreateUsers:       autoCreateUsers,
 		DefaultGlobalRoleID:   pgtype.UUID{},
 	}
-	var created sqlc.SsoConfiguration
-	if h.runTx != nil {
-		created, err = h.createSSOProviderTx(r, params)
-	} else {
-		created, err = h.sso.CreateSSOConfiguration(r.Context(), params)
-	}
+	created, err := h.createSSOProviderTx(r, params)
 	if err != nil {
 		if errors.Is(err, errSSOProviderConflict) || isUniqueViolation(err) {
 			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "An SSO provider with this key already exists")
 			return
 		}
-		if h.runTx != nil {
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create SSO provider")
-			return
-		}
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create SSO provider")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create SSO provider")
 		return
-	}
-	if h.runTx == nil {
-		recordAudit(r, h.queries, "sso.provider.create", "sso_provider", created.ID.String(), created.DisplayName, map[string]any{
-			"provider": providerKey,
-			"type":     ssoProviderType(created),
-			"enabled":  created.IsEnabled,
-		})
 	}
 
 	// Registration is an in-memory/network side effect and must not run until
@@ -429,13 +379,9 @@ func (h *ResourceHandler) CreateSSOProvider(w http.ResponseWriter, r *http.Reque
 			if h.ssoMgr.HasProvider(providerKey) {
 				h.ssoMgr.RemoveProvider(providerKey)
 			}
-			if h.runTx != nil {
-				if compensateErr := h.compensateSSOCreate(r, created); compensateErr != nil {
-					RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RegistrationError, "SSO provider was saved but runtime activation failed; operator repair is required")
-					return
-				}
-			} else {
-				_ = h.sso.DeleteSSOConfiguration(r.Context(), created.ID)
+			if compensateErr := h.compensateSSOCreate(r, created); compensateErr != nil {
+				RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RegistrationError, "SSO provider was saved but runtime activation failed; operator repair is required")
+				return
 			}
 			RespondRequestError(w, r, http.StatusBadGateway, apierror.RegistrationError, "SSO provider runtime activation failed; the saved configuration was removed")
 			return
@@ -457,34 +403,18 @@ func (h *ResourceHandler) DeleteSSOProvider(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var existing sqlc.SsoConfiguration
-	if h.runTx != nil {
-		existing, err = h.deleteSSOProviderTx(r, id)
-		if errors.Is(err, errSSOProviderNotFound) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SSO provider not found")
-			return
-		}
-		if err != nil {
-			respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete SSO provider")
-			return
-		}
-	} else {
-		existing, err = h.sso.GetSSOConfigurationByID(r.Context(), id)
-		if errors.Is(err, pgx.ErrNoRows) {
-			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SSO provider not found")
-			return
-		}
-		if err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.SSOError, "Failed to load SSO provider")
-			return
-		}
-		if err := h.sso.DeleteSSOConfiguration(r.Context(), id); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete SSO provider")
-			return
-		}
-		recordAudit(r, h.queries, "sso.provider.delete", "sso_provider", existing.ID.String(), existing.DisplayName, map[string]any{
-			"provider": existing.Provider,
-			"type":     ssoProviderType(existing),
-		})
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "SSO settings transaction runner is not configured")
+		return
+	}
+	existing, err = h.deleteSSOProviderTx(r, id)
+	if errors.Is(err, errSSOProviderNotFound) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "SSO provider not found")
+		return
+	}
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete SSO provider")
+		return
 	}
 	// Runtime removal follows the committed delete. RemoveProvider is
 	// intentionally idempotent and cannot fail.

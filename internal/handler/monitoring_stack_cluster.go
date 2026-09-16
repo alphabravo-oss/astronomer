@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -71,9 +70,8 @@ func (h *MonitoringHandler) GetClusterConfig(w http.ResponseWriter, r *http.Requ
 		RespondJSON(w, http.StatusOK, map[string]any{})
 		return
 	}
-	clusterID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	cfg, err := h.queries.GetClusterMonitoringConfig(r.Context(), clusterID)
@@ -93,9 +91,8 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
 		return
 	}
-	clusterID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	var req UpdateClusterMonitoringConfigRequest
@@ -150,15 +147,12 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		LastHealthyAt:           nullableNow(req.Status == "healthy"),
 		CreatedByID:             currentUserUUID(r),
 	}
-	clusterCfg, err := executeMonitoringMutation(r, h,
+	clusterCfg, err := executeMutation(r, h.runTx,
 		func(q MonitoringMutationTx) (sqlc.ClusterMonitoringConfig, error) {
 			return q.UpsertClusterMonitoringConfig(r.Context(), params)
 		},
-		func() (sqlc.ClusterMonitoringConfig, error) {
-			return h.queries.UpsertClusterMonitoringConfig(r.Context(), params)
-		},
-		func(clusterCfg sqlc.ClusterMonitoringConfig) clusterAuditEvent {
-			return clusterAuditEvent{action: "monitoring.cluster_config.update", resourceType: "cluster_monitoring_config", resourceID: clusterCfg.ClusterID.String(), resourceName: clusterCfg.PrometheusReleaseName, status: http.StatusOK, detail: map[string]any{
+		func(clusterCfg sqlc.ClusterMonitoringConfig) mutationAuditEvent {
+			return mutationAuditEvent{action: "monitoring.cluster_config.update", resourceType: "cluster_monitoring_config", resourceID: clusterCfg.ClusterID.String(), resourceName: clusterCfg.PrometheusReleaseName, status: http.StatusOK, detail: map[string]any{
 				"backendId": clusterCfg.BackendID.String(), "stackNamespace": clusterCfg.StackNamespace, "status": clusterCfg.Status,
 			}}
 		})
@@ -170,7 +164,12 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 }
 
 func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbRead)
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbRead)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
@@ -192,21 +191,15 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 
 func (h *MonitoringHandler) stageClusterStackMutation(r *http.Request, clusterID string, req MonitoringStackRequest, values map[string]any, desiredStatus, operationType, auditAction string) (sqlc.MonitoringOperation, error) {
 	opContext := withOperationIdempotency(r, "monitoring")
-	op, err := executeMonitoringMutation(r, h,
+	op, err := executeMutation(r, h.runTx,
 		func(q MonitoringMutationTx) (sqlc.MonitoringOperation, error) {
 			if persistErr := persistStackConfigWith(r.Context(), q, clusterID, req, desiredStatus); persistErr != nil {
 				return sqlc.MonitoringOperation{}, persistErr
 			}
 			return createClusterStackOperationWith(opContext, h, q, currentUserUUID(r), operationType, clusterID, req, values)
 		},
-		func() (sqlc.MonitoringOperation, error) {
-			if persistErr := persistStackConfigWith(r.Context(), h.queries, clusterID, req, desiredStatus); persistErr != nil {
-				return sqlc.MonitoringOperation{}, persistErr
-			}
-			return createClusterStackOperationWith(opContext, h, h.queries, currentUserUUID(r), operationType, clusterID, req, values)
-		},
-		func(op sqlc.MonitoringOperation) clusterAuditEvent {
-			return clusterAuditEvent{action: auditAction, resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: req.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
+		func(op sqlc.MonitoringOperation) mutationAuditEvent {
+			return mutationAuditEvent{action: auditAction, resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: req.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
 				"namespace": req.Namespace, "operationId": op.ID.String(),
 			}}
 		})
@@ -217,7 +210,12 @@ func (h *MonitoringHandler) stageClusterStackMutation(r *http.Request, clusterID
 }
 
 func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbCreate)
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbCreate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
@@ -231,7 +229,12 @@ func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbUpdate)
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbUpdate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
@@ -259,7 +262,12 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbUpdate)
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbUpdate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
@@ -281,15 +289,15 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "helm requester not configured")
 		return
 	}
-	clusterID := chi.URLParam(r, "id")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterUUID := id
+	clusterID := id.String()
 	cfg, _, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
-		return
-	}
-	clusterUUID, parseErr := uuid.Parse(clusterID)
-	if parseErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	configParams := sqlc.UpsertClusterMonitoringConfigParams{
@@ -306,21 +314,15 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 		Namespace:   cfg.StackNamespace,
 	}
 	opContext := withOperationIdempotency(r, "monitoring")
-	op, err := executeMonitoringMutation(r, h,
+	op, err := executeMutation(r, h.runTx,
 		func(q MonitoringMutationTx) (sqlc.MonitoringOperation, error) {
 			if _, updateErr := q.UpsertClusterMonitoringConfig(r.Context(), configParams); updateErr != nil {
 				return sqlc.MonitoringOperation{}, updateErr
 			}
 			return createClusterStackOperationWith(opContext, h, q, currentUserUUID(r), "uninstall", clusterID, opReq, nil)
 		},
-		func() (sqlc.MonitoringOperation, error) {
-			if _, updateErr := h.queries.UpsertClusterMonitoringConfig(r.Context(), configParams); updateErr != nil {
-				return sqlc.MonitoringOperation{}, updateErr
-			}
-			return createClusterStackOperationWith(opContext, h, h.queries, currentUserUUID(r), "uninstall", clusterID, opReq, nil)
-		},
-		func(op sqlc.MonitoringOperation) clusterAuditEvent {
-			return clusterAuditEvent{action: "monitoring.stack.uninstall", resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: cfg.PrometheusReleaseName, status: http.StatusAccepted, detail: map[string]any{
+		func(op sqlc.MonitoringOperation) mutationAuditEvent {
+			return mutationAuditEvent{action: "monitoring.stack.uninstall", resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: cfg.PrometheusReleaseName, status: http.StatusAccepted, detail: map[string]any{
 				"namespace": cfg.StackNamespace, "operationId": op.ID.String(),
 			}}
 		})
@@ -333,7 +335,11 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *MonitoringHandler) GetStackStatus(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "id")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
 	cfg, ok, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -416,8 +422,7 @@ func clusterMonitoringConfigResponse(cfg sqlc.ClusterMonitoringConfig) map[strin
 // It is not decoration: clusterStorageConfigAuthorizer uses it to reproduce
 // exactly which callers could dereference a fleet-wide storage config back when
 // these routes were a global check.
-func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.Request, routeVerb rbac.Verb) (string, MonitoringStackRequest, map[string]any, error) {
-	clusterID := chi.URLParam(r, "id")
+func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.Request, clusterID string, routeVerb rbac.Verb) (string, MonitoringStackRequest, map[string]any, error) {
 	var req MonitoringStackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
 		return "", MonitoringStackRequest{}, nil, fmt.Errorf("invalid JSON body")

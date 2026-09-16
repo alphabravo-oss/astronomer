@@ -301,6 +301,14 @@ func (h *MonitoringHandler) sharedGrafanaHelmValues(req SharedGrafanaRequest, ba
 				"csrf_trusted_origins": csrfOrigins,
 			},
 		},
+		"envValueFrom": map[string]any{
+			"LOKI_QUERY_KEY": map[string]any{
+				"secretKeyRef": map[string]any{
+					"key":  "key",
+					"name": lokiQuerySecretName,
+				},
+			},
+		},
 		"extraObjects": extra,
 		"extraConfigmapMounts": []any{
 			grafanaClusterFolderProvidersMount(),
@@ -347,6 +355,7 @@ func grafanaProxyExtraObjects(req SharedGrafanaRequest, proxyImage, serverURL st
 	}
 	objects := []any{
 		grafanaProxyKeySecret(ns),
+		grafanaLokiQueryKeySecret(ns),
 		grafanaProxyDeployment(ns, release, svcName, labels, proxyImage, upstream, astroURL, host),
 		grafanaProxyService(ns, svcName, labels),
 		grafanaLockdownNetworkPolicy(ns, release, labels),
@@ -365,6 +374,27 @@ func grafanaProxyExtraObjects(req SharedGrafanaRequest, proxyImage, serverURL st
 	}
 	objects = append(objects, grafanaProxyIngress(ns, svcName, host, expose.IngressClass))
 	return objects
+}
+
+func grafanaLokiQueryKeySecret(namespace string) map[string]any {
+	// The Grafana release owns this credential because only the Grafana pod
+	// needs its plaintext value. loki-auth mounts it read-only and reloads the
+	// projected file; when Grafana is absent, queries fail closed while pushes
+	// continue to work.
+	lookup := `{{ $s := lookup "v1" "Secret" .Release.Namespace "` + lokiQuerySecretName + `" }}{{ if and $s $s.data }}{{ index $s.data "key" | b64dec }}{{ else }}{{ randAlphaNum 48 }}{{ end }}`
+	return map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Secret",
+		"metadata": map[string]any{
+			"name":      lokiQuerySecretName,
+			"namespace": namespace,
+			"annotations": map[string]any{
+				"helm.sh/resource-policy": "keep",
+			},
+		},
+		"type":       "Opaque",
+		"stringData": map[string]any{"key": lookup},
+	}
 }
 
 func grafanaProxyKeySecret(namespace string) map[string]any {

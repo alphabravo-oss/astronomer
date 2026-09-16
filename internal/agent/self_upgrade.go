@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -24,6 +25,7 @@ import (
 )
 
 const agentUpgradeOperationAnnotation = "astronomer.io/agent-upgrade-operation"
+const agentConfigurationDigestAnnotation = "management.astronomer.io/agent-configuration-digest"
 
 const (
 	defaultPreflightTimeout    = 3 * time.Minute
@@ -235,6 +237,19 @@ func (h *SelfUpgradeHandler) startAgentUpgrade(ctx context.Context, payload prot
 	if agentContainerIndex(deploy) < 0 {
 		return out, fmt.Errorf("deployment %s/%s has no containers", namespace, deploymentName)
 	}
+	overrides := agenttemplate.AgentOverrides{}
+	if len(payload.AgentOverrides) > 0 {
+		if err := json.Unmarshal(payload.AgentOverrides, &overrides); err != nil {
+			return out, fmt.Errorf("rejected agent_overrides: %w", err)
+		}
+	}
+	configurationDigest, err := overrides.Digest()
+	if err != nil {
+		return out, fmt.Errorf("rejected agent_overrides: %w", err)
+	}
+	if payload.ConfigurationDigest != "" && payload.ConfigurationDigest != configurationDigest {
+		return out, fmt.Errorf("agent_overrides digest mismatch")
+	}
 	// A command redelivered for an operation the watchdog already gave a
 	// terminal verdict on must NOT re-attempt the rollout. The server re-claims
 	// operations stuck in `running` every 5 minutes, so without this an upgrade
@@ -278,6 +293,9 @@ func (h *SelfUpgradeHandler) startAgentUpgrade(ctx context.Context, payload prot
 	// pull is a permanent outage, so the rollback image is verified too
 	// whenever it is not the image already running here.
 	template := deploy.Spec.Template.Spec
+	if err := overrides.ApplyToPodSpec(&template, agentContainerIndex(deploy)); err != nil {
+		return out, fmt.Errorf("apply agent_overrides to preflight: %w", err)
+	}
 	if err := h.verifyImagePullable(ctx, namespace, targetImage, payload.OperationID, "target", template); err != nil {
 		return out, err
 	}
@@ -302,7 +320,7 @@ func (h *SelfUpgradeHandler) startAgentUpgrade(ctx context.Context, payload prot
 	}
 
 	// Step 4 — commit.
-	if err := h.patchAgentDeployment(ctx, namespace, deploymentName, targetImage, payload.OperationID); err != nil {
+	if err := h.patchAgentDeployment(ctx, namespace, deploymentName, targetImage, payload.OperationID, overrides, configurationDigest); err != nil {
 		return out, err
 	}
 	h.log.Info("agent self-upgrade rollout started",
@@ -419,7 +437,7 @@ func (h *SelfUpgradeHandler) replaceFinishedWatchdogJob(ctx context.Context, nam
 	}
 }
 
-func (h *SelfUpgradeHandler) patchAgentDeployment(ctx context.Context, namespace, deploymentName, targetImage, operationID string) error {
+func (h *SelfUpgradeHandler) patchAgentDeployment(ctx context.Context, namespace, deploymentName, targetImage, operationID string, overrides agenttemplate.AgentOverrides, configurationDigest string) error {
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		deploy, err := h.client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 		if err != nil {
@@ -431,10 +449,14 @@ func (h *SelfUpgradeHandler) patchAgentDeployment(ctx context.Context, namespace
 			return fmt.Errorf("deployment %s/%s has no containers", namespace, deploymentName)
 		}
 		next.Spec.Template.Spec.Containers[containerIndex].Image = targetImage
+		if err := overrides.ApplyToPodSpec(&next.Spec.Template.Spec, containerIndex); err != nil {
+			return err
+		}
 		if next.Spec.Template.Annotations == nil {
 			next.Spec.Template.Annotations = map[string]string{}
 		}
 		next.Spec.Template.Annotations[agentUpgradeOperationAnnotation] = operationID
+		next.Spec.Template.Annotations[agentConfigurationDigestAnnotation] = configurationDigest
 		// Clear any verdict from a previous operation so the replacement agent
 		// does not report a stale rollback as this operation's outcome.
 		delete(next.Annotations, agentUpgradeStatusAnnotation)

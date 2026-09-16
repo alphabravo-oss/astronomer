@@ -1,3 +1,4 @@
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Rocket } from "lucide-react";
@@ -7,6 +8,7 @@ import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
   RedirectDeliveryList,
+  deliveryPageRowCount,
   inputClass,
   useDeliveryWorkspace,
 } from "@/components/delivery/shared";
@@ -15,11 +17,11 @@ import {
   rolloutIsTerminal,
   type DeliveryRollout,
   type RolloutState,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-rollouts";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
-import { useRouter, useSearchParams } from "@/lib/navigation";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
@@ -48,8 +50,10 @@ export function RolloutsPage() {
     type: "project",
     id: projectId,
   });
-  const search = useSearchParams();
-  const router = useRouter();
+  const search = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
+  const navigate = useNavigate();
   const stateValue = search.get("state") ?? "";
   const state = states.includes(stateValue as RolloutState)
     ? (stateValue as RolloutState)
@@ -67,7 +71,10 @@ export function RolloutsPage() {
     else next.delete("state");
     if (nextPage) next.set("page", String(nextPage));
     else next.delete("page");
-    router.replace(`${listHref("rollouts")}?${next.toString()}`);
+    void navigate({
+      to: `${listHref("rollouts")}?${next.toString()}`,
+      replace: true,
+    });
   };
   const query = useQuery({
     queryKey: queryKeys.delivery.rollouts(projectId, params),
@@ -123,7 +130,7 @@ export function RolloutsPage() {
           <p className="text-sm tabular-nums">
             {row.readyClusters}/{row.totalClusters} ready
           </p>
-          <div className="mt-1 h-1.5 overflow-hidden rounded bg-muted">
+          <div className="mt-1 h-1.5 overflow-hidden rounded-sm bg-muted">
             <div
               className="h-full bg-status-success"
               style={{
@@ -171,11 +178,19 @@ export function RolloutsPage() {
           keyExtractor={(row) => row.id}
           loading={query.isLoading}
           isError={query.isError}
+          error={query.error}
+          permission="delivery_rollouts:list"
           onRetry={() => void query.refetch()}
           searchable={false}
-          emptyMessage="No rollouts match this filter"
+          filtersActive={!!state}
+          onClearFilters={() => setFilters("")}
+          emptyState={{
+            title: "No rollouts yet",
+            description:
+              "Create a rollout from a component bundle to deliver it to the selected targets.",
+          }}
           toolbar={
-            <select
+            <Select
               aria-label="Rollout state"
               value={state ?? ""}
               onChange={(e) => setFilters(e.target.value)}
@@ -187,11 +202,13 @@ export function RolloutsPage() {
                   {value.replaceAll("_", " ")}
                 </option>
               ))}
-            </select>
+            </Select>
           }
-          onRowClick={(row) => router.push(entityHref("rollouts", row.id))}
+          onRowClick={(row) =>
+            void navigate({ to: entityHref("rollouts", row.id) })
+          }
           serverSide={{
-            rowCount: query.data?.count ?? 0,
+            rowCount: deliveryPageRowCount(query.data),
             pagination: { pageIndex, pageSize },
             onPaginationChange: (next) =>
               setFilters(state ?? "", next.pageIndex),

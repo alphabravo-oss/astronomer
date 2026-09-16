@@ -12,9 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
@@ -22,7 +19,10 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type TargetQueries interface {
@@ -71,32 +71,6 @@ func (h *TargetHandler) SetRunTx(runTx targetRunTxFunc) {
 
 func (h *TargetHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-func executeTargetMutation[T any](r *http.Request, h *TargetHandler, mutate func(TargetMutationTx) (T, error), fallback func() (T, error), describe func(T) deliveryAuditEvent) (T, error) {
-	var zero T
-	if h == nil {
-		return zero, errors.New("delivery target handler is nil")
-	}
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q TargetMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			return recordAuditOutbox(r, q, describe(result))
-		})
-		return result, err
-	}
-	result, err := fallback()
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
-
 func (h *TargetHandler) SetPlatformScopeChecker(checker PlatformScopeChecker) {
 	if h != nil {
 		h.platform = checker
@@ -121,6 +95,7 @@ type targetRequest struct {
 	RolloutPolicy           rolloutPolicy              `json:"rollout_policy"`
 	ReconciliationPolicy    model.ReconciliationPolicy `json:"reconciliation_policy"`
 	MaintenanceWindowPolicy json.RawMessage            `json:"maintenance_window_policy,omitempty"`
+	Overrides               model.TargetOverrides      `json:"overrides"`
 	Suspended               bool                       `json:"suspended"`
 }
 
@@ -133,6 +108,7 @@ type updateTargetRequest struct {
 	RolloutPolicy           *rolloutPolicy              `json:"rollout_policy,omitempty"`
 	ReconciliationPolicy    *model.ReconciliationPolicy `json:"reconciliation_policy,omitempty"`
 	MaintenanceWindowPolicy json.RawMessage             `json:"maintenance_window_policy,omitempty"`
+	Overrides               *model.TargetOverrides      `json:"overrides,omitempty"`
 	Suspended               *bool                       `json:"suspended,omitempty"`
 }
 
@@ -146,6 +122,8 @@ type targetResponse struct {
 	RolloutPolicy           rolloutPolicy              `json:"rollout_policy"`
 	ReconciliationPolicy    model.ReconciliationPolicy `json:"reconciliation_policy"`
 	MaintenanceWindowPolicy json.RawMessage            `json:"maintenance_window_policy"`
+	Overrides               model.TargetOverrides      `json:"overrides"`
+	OverrideDigest          model.Digest               `json:"override_digest"`
 	Suspended               bool                       `json:"suspended"`
 	Generation              int64                      `json:"generation"`
 	ResourceVersion         int64                      `json:"resource_version"`
@@ -172,7 +150,7 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 	if name := strings.TrimSpace(r.URL.Query().Get("name")); name != "" {
 		row, err := h.queries.GetDeliveryTargetByName(r.Context(), sqlc.GetDeliveryTargetByNameParams{ProjectID: projectID, Name: name})
 		if errors.Is(err, pgx.ErrNoRows) {
-			respondPage(w, r, []targetResponse{}, 0, limit, offset, false, true)
+			paging.Write(w, []targetResponse{}, paging.Exact(0, int(limit), int(offset), 0))
 			return
 		}
 		if err != nil {
@@ -185,7 +163,7 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		setEntityTag(w, row.ResourceVersion)
-		respondPage(w, r, []targetResponse{item}, 1, limit, offset, false, true)
+		paging.Write(w, []targetResponse{item}, paging.Exact(1, int(limit), int(offset), 1))
 		return
 	}
 	rows, err := h.queries.ListDeliveryTargets(r.Context(), sqlc.ListDeliveryTargetsParams{ProjectID: projectID, QueryLimit: limit, QueryOffset: offset})
@@ -207,7 +185,7 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	respondPage(w, r, items, total, limit, offset, int64(offset)+int64(len(items)) < total, true)
+	paging.Write(w, items, paging.Exact(total, int(limit), int(offset), len(items)))
 }
 
 func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -245,19 +223,29 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	overrides, err := request.Overrides.Canonical()
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	overridesJSON, _ := json.Marshal(overrides)
+	if err := h.requireTargetOverridesCompatible(r.Context(), projectID, request.BundleVersionID, overrides); err != nil {
+		respondTargetBundleError(w, err)
+		return
+	}
+	actor := reqctx.UserUUID(r.Context())
 	params := sqlc.CreateDeliveryTargetParams{
 		ProjectID: projectID, Name: request.Name, Description: request.Description,
 		BundleVersionID: request.BundleVersionID, Placement: placementJSON,
 		RolloutPolicy: rolloutJSON, ReconciliationPolicy: reconcileJSON,
 		MaintenanceWindowPolicy: maintenanceJSON, Suspended: request.Suspended,
+		Overrides: overridesJSON,
 		CreatedBy: actor, UpdatedBy: actor,
 	}
-	row, err := executeTargetMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q TargetMutationTx) (sqlc.DeliveryTarget, error) {
 			return q.CreateDeliveryTarget(r.Context(), params)
 		},
-		func() (sqlc.DeliveryTarget, error) { return h.queries.CreateDeliveryTarget(r.Context(), params) },
 		func(row sqlc.DeliveryTarget) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.target.created", resourceType: "delivery_target", resourceID: row.ID.String(), resourceName: row.Name,
@@ -359,14 +347,18 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Description: merged.Description, BundleVersionID: merged.BundleVersionID,
 		Placement: placementJSON, RolloutPolicy: rolloutJSON,
 		ReconciliationPolicy: reconcileJSON, MaintenanceWindowPolicy: merged.MaintenanceWindowPolicy,
-		Suspended: merged.Suspended, UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()),
+		Overrides: mustJSON(merged.Overrides),
+		Suspended: merged.Suspended, UpdatedBy: reqctx.UserUUID(r.Context()),
 		ID: targetID, ProjectID: projectID, ExpectedResourceVersion: expected,
 	}
-	row, err := executeTargetMutation(r, h,
+	if err := h.requireTargetOverridesCompatible(r.Context(), projectID, merged.BundleVersionID, merged.Overrides); err != nil {
+		respondTargetBundleError(w, err)
+		return
+	}
+	row, err := executeMutation(r, h.runTx,
 		func(q TargetMutationTx) (sqlc.DeliveryTarget, error) {
 			return q.UpdateDeliveryTargetCAS(r.Context(), params)
 		},
-		func() (sqlc.DeliveryTarget, error) { return h.queries.UpdateDeliveryTargetCAS(r.Context(), params) },
 		func(row sqlc.DeliveryTarget) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.target.updated", resourceType: "delivery_target", resourceID: row.ID.String(), resourceName: row.Name,
@@ -410,10 +402,10 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := sqlc.RequestDeliveryTargetDeletionCASParams{
-		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: targetID, ProjectID: projectID,
+		UpdatedBy: reqctx.UserUUID(r.Context()), ID: targetID, ProjectID: projectID,
 		ExpectedResourceVersion: expected,
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	actor := reqctx.UserUUID(r.Context())
 	if !actor.Valid || uuid.UUID(actor.Bytes) == uuid.Nil {
 		respondError(w, http.StatusUnauthorized, "authentication_required", "authenticated actor is required")
 		return
@@ -494,15 +486,12 @@ func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := sqlc.MarkDeliveryTargetOrphanedParams{
-		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: targetID, ProjectID: projectID,
+		UpdatedBy: reqctx.UserUUID(r.Context()), ID: targetID, ProjectID: projectID,
 		ExpectedResourceVersion: expected,
 	}
-	row, err := executeTargetMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q TargetMutationTx) (sqlc.MarkDeliveryTargetOrphanedRow, error) {
 			return q.MarkDeliveryTargetOrphaned(r.Context(), params)
-		},
-		func() (sqlc.MarkDeliveryTargetOrphanedRow, error) {
-			return h.queries.MarkDeliveryTargetOrphaned(r.Context(), params)
 		},
 		func(row sqlc.MarkDeliveryTargetOrphanedRow) deliveryAuditEvent {
 			return deliveryAuditEvent{
@@ -522,7 +511,7 @@ func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
 }
 
 func targetChangedFields(request updateTargetRequest) []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 8)
 	if request.Description != nil {
 		fields = append(fields, "description")
 	}
@@ -540,6 +529,9 @@ func targetChangedFields(request updateTargetRequest) []string {
 	}
 	if request.MaintenanceWindowPolicy != nil {
 		fields = append(fields, "maintenance_window_policy")
+	}
+	if request.Overrides != nil {
+		fields = append(fields, "overrides")
 	}
 	if request.Suspended != nil {
 		fields = append(fields, "suspended")
@@ -663,8 +655,39 @@ func validateTargetRequest(request targetRequest) error {
 	if err := request.ReconciliationPolicy.Validate(); err != nil {
 		return err
 	}
+	if err := request.Overrides.Validate(); err != nil {
+		return err
+	}
 	_, err := canonicalJSONObject(request.MaintenanceWindowPolicy)
 	return err
+}
+
+func mustJSON(value any) json.RawMessage {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return encoded
+}
+
+func (h *TargetHandler) requireTargetOverridesCompatible(ctx context.Context, projectID, versionID uuid.UUID, overrides model.TargetOverrides) error {
+	row, err := h.queries.GetComponentBundleVersion(ctx, sqlc.GetComponentBundleVersionParams{ID: versionID, ProjectID: projectID})
+	if err != nil {
+		return err
+	}
+	switch model.RendererKind(row.Renderer) {
+	case model.RendererHelm:
+		if len(overrides.Patches) > 0 {
+			return errors.New("Kubernetes patches require a kustomize bundle")
+		}
+	case model.RendererKustomize:
+		if len(overrides.HelmValues) > 0 {
+			return errors.New("Helm values require a helm bundle")
+		}
+	default:
+		return errors.New("bundle renderer does not support target overrides")
+	}
+	return nil
 }
 
 func (h *TargetHandler) requireReadyBundle(ctx context.Context, projectID, versionID uuid.UUID) error {
@@ -676,7 +699,7 @@ func (h *TargetHandler) requireReadyBundle(ctx context.Context, projectID, versi
 		return errBundleNotReady
 	}
 	if row.Scope == string(model.ScopePlatform) {
-		actor := middleware.AuthenticatedUserUUID(ctx)
+		actor := reqctx.UserUUID(ctx)
 		if !actor.Valid || h.platform == nil {
 			return errPlatformScopeForbidden
 		}
@@ -708,6 +731,7 @@ func targetFromRow(row sqlc.DeliveryTarget) (targetResponse, error) {
 	var placementValue model.Placement
 	var rolloutValue rolloutPolicy
 	var reconciliation model.ReconciliationPolicy
+	var overrides model.TargetOverrides
 	if err := decodeStrictJSON(row.Placement, &placementValue); err != nil {
 		return targetResponse{}, err
 	}
@@ -715,6 +739,13 @@ func targetFromRow(row sqlc.DeliveryTarget) (targetResponse, error) {
 		return targetResponse{}, err
 	}
 	if err := decodeStrictJSON(row.ReconciliationPolicy, &reconciliation); err != nil {
+		return targetResponse{}, err
+	}
+	if err := decodeStrictJSON(row.Overrides, &overrides); err != nil {
+		return targetResponse{}, err
+	}
+	overrideDigest, err := overrides.CanonicalDigest()
+	if err != nil {
 		return targetResponse{}, err
 	}
 	maintenance, err := canonicalJSONObject(row.MaintenanceWindowPolicy)
@@ -725,6 +756,7 @@ func targetFromRow(row sqlc.DeliveryTarget) (targetResponse, error) {
 		ID: row.ID, ProjectID: row.ProjectID, Name: row.Name, Description: row.Description,
 		BundleVersionID: row.BundleVersionID, Placement: placementValue, RolloutPolicy: rolloutValue,
 		ReconciliationPolicy: reconciliation, MaintenanceWindowPolicy: maintenance,
+		Overrides: overrides, OverrideDigest: overrideDigest,
 		Suspended: row.Suspended, Generation: row.Generation, ResourceVersion: row.ResourceVersion,
 		DeletionState: row.DeletionState, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}, nil
@@ -750,6 +782,9 @@ func mergeTargetUpdate(current sqlc.DeliveryTarget, request updateTargetRequest)
 	if request.ReconciliationPolicy != nil {
 		merged.ReconciliationPolicy = *request.ReconciliationPolicy
 	}
+	if request.Overrides != nil {
+		merged.Overrides = *request.Overrides
+	}
 	if request.MaintenanceWindowPolicy != nil {
 		merged.MaintenanceWindowPolicy, err = canonicalJSONObject(request.MaintenanceWindowPolicy)
 		if err != nil {
@@ -769,6 +804,9 @@ func mergeTargetUpdate(current sqlc.DeliveryTarget, request updateTargetRequest)
 		return targetResponse{}, err
 	}
 	if err := merged.ReconciliationPolicy.Validate(); err != nil {
+		return targetResponse{}, err
+	}
+	if err := merged.Overrides.Validate(); err != nil {
 		return targetResponse{}, err
 	}
 	return merged, nil
@@ -847,6 +885,8 @@ func respondRolloutError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, asyncop.ErrConflict):
 		respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+	case rollout.HasCode(err, rollout.CodeStaleFence):
+		respondError(w, http.StatusPreconditionFailed, string(rollout.CodeStaleFence), err.Error())
 	case rollout.HasCode(err, rollout.CodePreviewStale), rollout.HasCode(err, rollout.CodeTargetChanged), rollout.HasCode(err, rollout.CodeIdempotencyConflict):
 		respondError(w, http.StatusConflict, string(extractRolloutCode(err)), err.Error())
 	case rollout.HasCode(err, rollout.CodeInvalidInput), rollout.HasCode(err, rollout.CodeNoClusters), rollout.HasCode(err, rollout.CodeInvalidCohorts):

@@ -1,7 +1,6 @@
 package allowlist
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
@@ -129,9 +128,8 @@ func TestValidateCIDRs_StopsAtFirstBad(t *testing.T) {
 	}
 }
 
-func TestAstronomerEgressFromEnv(t *testing.T) {
-	t.Setenv("ASTRONOMER_TUNNEL_EGRESS_CIDRS", "  54.10.0.0/16 ,  bad-cidr , 192.168.0.0/16  ")
-	got := AstronomerEgressFromEnv()
+func TestParseAstronomerEgress(t *testing.T) {
+	got := ParseAstronomerEgress("  54.10.0.0/16 ,  bad-cidr , 192.168.0.0/16  ")
 	if len(got) != 2 {
 		t.Fatalf("expected 2 valid entries, got %v", got)
 	}
@@ -140,9 +138,8 @@ func TestAstronomerEgressFromEnv(t *testing.T) {
 	}
 }
 
-func TestAstronomerEgressFromEnv_Unset(t *testing.T) {
-	_ = os.Unsetenv("ASTRONOMER_TUNNEL_EGRESS_CIDRS")
-	got := AstronomerEgressFromEnv()
+func TestParseAstronomerEgressEmpty(t *testing.T) {
+	got := ParseAstronomerEgress("")
 	if len(got) != 0 {
 		t.Fatalf("expected empty slice, got %v", got)
 	}

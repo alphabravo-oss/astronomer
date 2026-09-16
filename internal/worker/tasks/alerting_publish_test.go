@@ -22,7 +22,7 @@ func alertingPublishSubscribe(t *testing.T, bus *events.Bus) <-chan events.Event
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	return bus.Subscribe(ctx)
+	return bus.Subscribe(ctx, events.AcceptAll)
 }
 
 func alertingPublishReceive(t *testing.T, ch <-chan events.Event) map[string]any {

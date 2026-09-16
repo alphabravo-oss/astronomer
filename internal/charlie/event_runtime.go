@@ -45,7 +45,9 @@ func NewEventRuntime(bus *events.Bus, queries eventRuntimeQueries, active func()
 		return nil, err
 	}
 	runtime := &EventRuntime{bus: bus, queries: queries, ingestor: ingestor, active: active, now: time.Now,
-		ticker: newRuntimeTicker, subscribe: bus.Subscribe}
+		ticker: newRuntimeTicker, subscribe: func(ctx context.Context) <-chan events.Event {
+			return bus.Subscribe(ctx, events.AcceptAll)
+		}}
 	if sweepQueries, ok := queries.(triggerSweepQueries); ok {
 		runtime.sweeper = NewTriggerSweeper(sweepQueries, ingestor, active)
 	}

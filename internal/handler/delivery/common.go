@@ -11,13 +11,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 const (
@@ -37,14 +38,6 @@ type errorEnvelope struct {
 
 type dataEnvelope struct {
 	Data any `json:"data"`
-}
-
-type pageEnvelope struct {
-	Data       any     `json:"data"`
-	Count      int64   `json:"count"`
-	Next       *string `json:"next"`
-	Previous   *string `json:"previous"`
-	TotalKnown bool    `json:"total_known"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -97,40 +90,6 @@ type deliveryAuditEvent struct {
 	detail       map[string]any
 }
 
-// recordAudit is the compatibility fallback for narrow unit-test fakes. The
-// production mutation path uses recordAuditOutbox through a transaction-bound
-// query set. Delivery callers must never put credentials, source URLs,
-// rendered values/manifests, Secret names, or raw controller messages in
-// detail.
-func recordAudit(r *http.Request, queries any, action, resourceType, resourceID, resourceName string, detail map[string]any) {
-	if r == nil || queries == nil {
-		return
-	}
-	writer, ok := queries.(audit.Querier)
-	if !ok || writer == nil {
-		return
-	}
-	user, _ := middleware.GetAuthenticatedUser(r.Context())
-	authMethod := ""
-	if user != nil {
-		authMethod = user.AuthMethod
-	}
-	audit.Record(r.Context(), writer, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
-		Request:         r,
-		Source:          "service",
-		CorrelationID:   middleware.GetCorrelationID(r.Context()),
-		UserID:          middleware.AuthenticatedUserUUID(r.Context()),
-		ActorAuthMethod: authMethod,
-		Action:          action,
-		ResourceType:    resourceType,
-		ResourceID:      resourceID,
-		ResourceName:    resourceName,
-		RequestID:       middleware.GetRequestID(r.Context()),
-		IPAddress:       middleware.RemoteIPAddr(r),
-		Detail:          detail,
-	}))
-}
-
 func recordAuditOutbox(r *http.Request, q audit.OutboxQuerier, event deliveryAuditEvent) error {
 	intent := newAuditIntent(r, event, "")
 	if q == nil || intent.IsZero() {
@@ -146,11 +105,11 @@ func newAuditIntent(r *http.Request, event deliveryAuditEvent, stableKey string)
 	if r == nil {
 		return audit.Intent{}
 	}
-	requestID := middleware.GetRequestID(r.Context())
+	requestID := reqctx.RequestID(r.Context())
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
-	user, _ := middleware.GetAuthenticatedUser(r.Context())
+	user, _ := reqctx.AuthenticatedUser(r.Context())
 	authMethod := ""
 	if user != nil {
 		authMethod = user.AuthMethod
@@ -160,11 +119,11 @@ func newAuditIntent(r *http.Request, event deliveryAuditEvent, stableKey string)
 		dedupeKey = audit.MutationDedupeKey(stableKey, event.action, event.resourceType, event.resourceID)
 	}
 	return audit.Intent{Event: audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
-		Request: r, Source: "service", CorrelationID: middleware.GetCorrelationID(r.Context()),
-		UserID: middleware.AuthenticatedUserUUID(r.Context()), ActorAuthMethod: authMethod,
+		Request: r, Source: "service", CorrelationID: reqctx.CorrelationID(r.Context()),
+		UserID: reqctx.UserUUID(r.Context()), ActorAuthMethod: authMethod,
 		Action: event.action, ResourceType: event.resourceType, ResourceID: event.resourceID,
 		ResourceName: event.resourceName, StatusCode: event.status, RequestID: requestID,
-		IPAddress: middleware.RemoteIPAddr(r), Detail: event.detail,
+		IPAddress: reqctx.ClientIP(r), Detail: event.detail,
 	}), DedupeKey: dedupeKey}
 }
 
@@ -266,34 +225,10 @@ func boundedQueryInteger(values url.Values, name string, fallback, minimum, maxi
 	return parsed, nil
 }
 
-func respondPage(w http.ResponseWriter, r *http.Request, items any, count int64, limit, offset int32, hasMore bool, totalKnown bool) {
-	response := pageEnvelope{Data: items, Count: count, TotalKnown: totalKnown}
-	if hasMore {
-		next := pageLink(r, limit, offset+limit)
-		response.Next = &next
-	}
-	if offset > 0 {
-		previousOffset := offset - limit
-		if previousOffset < 0 {
-			previousOffset = 0
-		}
-		previous := pageLink(r, limit, previousOffset)
-		response.Previous = &previous
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
 func respondAcceptedOperation(w http.ResponseWriter, location string, payload any) {
 	w.Header().Set("Location", location)
 	w.Header().Set("Retry-After", "2")
 	respondData(w, http.StatusAccepted, payload)
-}
-
-func pageLink(r *http.Request, limit, offset int32) string {
-	query := r.URL.Query()
-	query.Set("limit", strconv.FormatInt(int64(limit), 10))
-	query.Set("offset", strconv.FormatInt(int64(offset), 10))
-	return r.URL.Path + "?" + query.Encode()
 }
 
 func validateIdempotencyKey(r *http.Request) error {

@@ -137,14 +137,14 @@ func TestToolSendHelmRawResolvesVaultAtExecution(t *testing.T) {
 	stub := &captureHelmStub{}
 	h := NewToolHandlerWithHelm(nil, stub)
 
-	if _, err := h.sendHelmRaw(context.Background(), toolOperationEnvelope{ClusterID: "cid", ValuesYAML: "server:\n  insecure: true\n"}, protocol.MsgHelmInstall); err != nil {
+	if _, err := h.sendHelmRaw(context.Background(), toolReleaseExecution{ClusterID: "cid", ValuesYAML: "server:\n  insecure: true\n"}, protocol.MsgHelmInstall); err != nil {
 		t.Fatalf("sendHelmRaw(plain): %v", err)
 	}
 	if _, ok := stub.lastValues["server"].(map[string]any); !ok {
 		t.Fatalf("plain values not forwarded to helm: %#v", stub.lastValues)
 	}
 
-	if _, err := h.sendHelmRaw(context.Background(), toolOperationEnvelope{ClusterID: "cid", ValuesYAML: "password: ${vault://prod/secret/db#password}\n"}, protocol.MsgHelmInstall); err == nil {
+	if _, err := h.sendHelmRaw(context.Background(), toolReleaseExecution{ClusterID: "cid", ValuesYAML: "password: ${vault://prod/secret/db#password}\n"}, protocol.MsgHelmInstall); err == nil {
 		t.Fatal("expected error resolving vault marker with no resolver configured")
 	}
 }
@@ -152,6 +152,9 @@ func TestToolSendHelmRawResolvesVaultAtExecution(t *testing.T) {
 func TestCatalogInstallKeepsVaultMarkerInPayload(t *testing.T) {
 	q, clusterID, projectID, versionID := newInstalledCatalogAuditQuerier()
 	h := NewCatalogHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(CatalogMutationTx) error) error {
+		return fn(q)
+	})
 
 	const marker = "${vault://prod/secret/db#password}"
 	body, _ := json.Marshal(map[string]any{
@@ -192,6 +195,9 @@ func TestCatalogInstallKeepsVaultMarkerInPayload(t *testing.T) {
 func TestRollbackAcceptsTargetRevision(t *testing.T) {
 	q, clusterID, _, _ := newInstalledCatalogAuditQuerier()
 	h := NewCatalogHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(CatalogMutationTx) error) error {
+		return fn(q)
+	})
 
 	instID := uuid.New()
 	q.installations[instID] = sqlc.InstalledChart{

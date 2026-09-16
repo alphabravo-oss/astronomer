@@ -147,8 +147,15 @@ func (c *SettingsCache) IntValue(ctx context.Context, key string, fallback int) 
 // cached as `hasValue=false` for the same TTL so a missing row
 // doesn't generate per-request DB traffic either.
 func (c *SettingsCache) lookup(ctx context.Context, key string) (json.RawMessage, bool) {
+	raw, ok, _ := c.lookupWithError(ctx, key)
+	return raw, ok
+}
+
+// lookupWithError distinguishes a missing override from unavailable storage.
+// Security-sensitive readers must not treat a database error as a reset.
+func (c *SettingsCache) lookupWithError(ctx context.Context, key string) (json.RawMessage, bool, error) {
 	if c == nil {
-		return nil, false
+		return nil, false, errors.New("settings cache is unavailable")
 	}
 	now := time.Now()
 	c.mu.RLock()
@@ -156,19 +163,16 @@ func (c *SettingsCache) lookup(ctx context.Context, key string) (json.RawMessage
 	c.mu.RUnlock()
 	if ok && entry.expires.After(now) {
 		if !entry.hasValue {
-			return nil, false
+			return nil, false, nil
 		}
-		return entry.value, true
+		return entry.value, true, nil
 	}
 	// Either no entry or expired. Refresh under a write lock —
 	// duplicate refreshes are tolerable (the DB read is cheap and the
 	// alternative is a contended singleflight that isn't worth the
 	// code for this cache's tiny footprint).
 	if c.reader == nil {
-		c.mu.Lock()
-		c.entries[key] = cacheEntry{expires: now.Add(c.ttl)}
-		c.mu.Unlock()
-		return nil, false
+		return nil, false, errors.New("settings reader is unavailable")
 	}
 	row, err := c.reader.GetPlatformSetting(ctx, key)
 	if err != nil {
@@ -176,13 +180,31 @@ func (c *SettingsCache) lookup(ctx context.Context, key string) (json.RawMessage
 			c.mu.Lock()
 			c.entries[key] = cacheEntry{expires: now.Add(c.ttl)}
 			c.mu.Unlock()
+			return nil, false, nil
 		}
 		// Other errors: do NOT cache — next request will retry. The
 		// caller is expected to use the fallback in this case.
-		return nil, false
+		return nil, false, err
 	}
 	c.mu.Lock()
 	c.entries[key] = cacheEntry{value: row.Value, hasValue: true, expires: now.Add(c.ttl)}
 	c.mu.Unlock()
-	return row.Value, true
+	return row.Value, true, nil
+}
+
+// StringValueWithError uses the default only for an absent override. A failed
+// refresh or malformed stored value is returned to the caller explicitly.
+func (c *SettingsCache) StringValueWithError(ctx context.Context, key, defaultValue string) (string, error) {
+	raw, ok, err := c.lookupWithError(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return defaultValue, nil
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", err
+	}
+	return value, nil
 }

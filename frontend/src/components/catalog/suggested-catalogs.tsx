@@ -1,4 +1,3 @@
-"use client";
 
 import { useMemo, useState } from "react";
 import { Package, Check, Plus, AlertTriangle } from "lucide-react";
@@ -84,7 +83,7 @@ export function SuggestedCatalogs({
               className="rounded-lg border border-border p-4 flex flex-col gap-3 bg-card"
             >
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center">
+                <div className="shrink-0 h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center">
                   <Package className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -92,7 +91,7 @@ export function SuggestedCatalogs({
                     <p className="font-medium text-foreground text-sm truncate">
                       {catalog.displayName}
                     </p>
-                    <span className="text-2xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono">
+                    <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground uppercase font-mono">
                       {catalog.repoType}
                     </span>
                   </div>
@@ -196,7 +195,7 @@ function DhiConfirmModal({
       <p className="text-sm text-muted-foreground">
         This catalog requires a paid Docker Hardened Images subscription. Pulls
         will fail without credentials configured in{" "}
-        <code className="font-mono text-xs px-1 py-0.5 rounded bg-muted">
+        <code className="font-mono text-xs px-1 py-0.5 rounded-sm bg-muted">
           auth_config
         </code>
         .

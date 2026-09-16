@@ -60,7 +60,7 @@ var (
 )
 
 type clusterConnectionStatusLister interface {
-	ListClusterConnectionStatus(ctx context.Context) ([]sqlc.ListClusterConnectionStatusRow, error)
+	ListClusterConnectionStatus(ctx context.Context, arg sqlc.ListClusterConnectionStatusParams) ([]sqlc.ListClusterConnectionStatusRow, error)
 }
 
 func registerConnectionMetrics() {
@@ -86,7 +86,10 @@ func recordAgentReconnect(clusterID string) {
 func updateConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now time.Time) {
 	agentConnectionsGauge.Reset()
 	agentLastSeenSecondsGauge.Reset()
+	appendConnectionMetrics(rows, now)
+}
 
+func appendConnectionMetrics(rows []sqlc.ListClusterConnectionStatusRow, now time.Time) {
 	for _, row := range rows {
 		clusterID := row.ClusterID.String()
 		connected := 0.0
@@ -119,14 +122,25 @@ func StartConnectionMetricsReporter(ctx context.Context, lister clusterConnectio
 	registerConnectionMetrics()
 
 	record := func() {
-		rows, err := lister.ListClusterConnectionStatus(ctx)
-		if err != nil {
-			if log != nil {
-				log.Warn("failed to collect agent connection metrics", "error", err)
+		const pageSize int32 = 500
+		now := time.Now().UTC()
+		agentConnectionsGauge.Reset()
+		agentLastSeenSecondsGauge.Reset()
+		for offset := int32(0); ; offset += pageSize {
+			rows, err := lister.ListClusterConnectionStatus(ctx, sqlc.ListClusterConnectionStatusParams{
+				QueryLimit: pageSize, QueryOffset: offset,
+			})
+			if err != nil {
+				if log != nil {
+					log.Warn("failed to collect agent connection metrics", "error", err, "offset", offset)
+				}
+				return
 			}
-			return
+			appendConnectionMetrics(rows, now)
+			if len(rows) < int(pageSize) {
+				break
+			}
 		}
-		updateConnectionMetrics(rows, time.Now().UTC())
 	}
 
 	record()

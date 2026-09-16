@@ -10,13 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type stubWorkloadRBACQuerier struct {
@@ -85,9 +87,35 @@ func (q *workloadMutationQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.C
 	return nil
 }
 
+func (q *workloadMutationQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	q.audits = append(q.audits, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{}, nil
+}
+
+func (q *workloadMutationQuerier) UpsertTaskOutbox(_ context.Context, _ sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	return sqlc.TaskOutbox{}, nil
+}
+
+func (q *workloadMutationQuerier) CreateWorkloadOperationIdempotent(ctx context.Context, arg sqlc.CreateWorkloadOperationIdempotentParams) (sqlc.WorkloadOperation, error) {
+	return q.CreateWorkloadOperation(ctx, sqlc.CreateWorkloadOperationParams{
+		TargetType: arg.TargetType, TargetKey: arg.TargetKey, OperationType: arg.OperationType,
+		Payload: arg.Payload, Status: arg.Status, CreatedByID: arg.CreatedByID,
+	})
+}
+
+func (q *workloadMutationQuerier) RequeueWorkloadOperation(_ context.Context, id uuid.UUID) (sqlc.WorkloadOperation, error) {
+	for _, op := range q.operations {
+		if op.ID == id {
+			return op, nil
+		}
+	}
+	return sqlc.WorkloadOperation{}, errors.New("operation not found")
+}
+
 func TestWorkloadMutationsAreAudited(t *testing.T) {
 	q := &workloadMutationQuerier{}
 	h := NewWorkloadHandlerWithDeps(q, nil)
+	h.SetRunTx(func(_ context.Context, fn func(WorkloadMutationTx) error) error { return fn(q) })
 	clusterID := uuid.NewString()
 
 	scaleReq := workloadRouteRequest(http.MethodPatch, "/scale/", map[string]string{
@@ -192,7 +220,7 @@ func TestRetryWorkloadOperationDeniedWithoutClusterUpdate(t *testing.T) {
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", op.ID.String())
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rc)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: uuid.NewString()})
+	ctx = reqctx.WithUser(ctx, &reqctx.User{ID: uuid.NewString()})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 
@@ -317,8 +345,8 @@ func TestGetWorkloadOperationReceiptCreatorAPITokenStillNeedsWriteScope(t *testi
 		ClusterID: clusterID.String(), Namespace: "default", RoleRules: []rbac.Rule{{Resource: "pods", Verbs: []string{"delete"}}},
 	}}})
 	req := workloadOperationReceiptRequest(op.ID, creatorID)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: creatorID.String(), AuthMethod: "api_token"})
-	ctx = middleware.SetAuthenticatedAPITokenForTest(ctx, &sqlc.ApiToken{Scopes: json.RawMessage(`["read"]`)})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: creatorID.String(), AuthMethod: "api_token"})
+	ctx = auth.WithAuthenticatedAPIToken(ctx, &sqlc.ApiToken{Scopes: json.RawMessage(`["read"]`)})
 	rec := httptest.NewRecorder()
 	h.GetOperation(rec, req.WithContext(ctx))
 	if rec.Code != http.StatusForbidden {
@@ -331,6 +359,6 @@ func workloadOperationReceiptRequest(operationID, callerID uuid.UUID) *http.Requ
 	routeContext := chi.NewRouteContext()
 	routeContext.URLParams.Add("id", operationID.String())
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, routeContext)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: callerID.String()})
+	ctx = reqctx.WithUser(ctx, &reqctx.User{ID: callerID.String()})
 	return req.WithContext(ctx)
 }

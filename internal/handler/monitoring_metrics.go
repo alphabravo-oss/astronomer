@@ -18,7 +18,11 @@ import (
 )
 
 func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 		return
@@ -35,7 +39,11 @@ func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, valid := parseClusterID(w, r)
+	if !valid {
+		return
+	}
+	clusterID := clusterUUID.String()
 	name := chi.URLParam(r, "name")
 	namespace := chi.URLParam(r, "namespace")
 	kind := chi.URLParam(r, "kind")
@@ -58,10 +66,15 @@ func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) 
 	// Accept either {cluster_id} or {id} so this real-series handler can serve
 	// the cluster-detail metrics route (which uses {id}) as well as the
 	// top-level /clusters/{cluster_id}/metrics route, without a param mismatch.
-	clusterID := chi.URLParam(r, "cluster_id")
-	if clusterID == "" {
-		clusterID = chi.URLParam(r, "id")
+	param := "cluster_id"
+	if chi.URLParam(r, param) == "" {
+		param = "id"
 	}
+	clusterUUID, ok := parseClusterIDParam(w, r, param)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	if r.URL.Path == "/api/v1/clusters/"+clusterID+"/metrics/summary/" {
 		if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
@@ -663,7 +676,11 @@ func (h *MonitoringHandler) LegacyMetricsQuery(w http.ResponseWriter, r *http.Re
 
 // LegacyClusterOverview proxies GET /api/v1/monitoring/metrics/cluster-overview/{cluster_id}/.
 func (h *MonitoringHandler) LegacyClusterOverview(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err == nil && ok {
 		RespondJSON(w, http.StatusOK, map[string]any{"status": "success", "data": summary})
 		return
@@ -678,7 +695,11 @@ func (h *MonitoringHandler) LegacyClusterOverview(w http.ResponseWriter, r *http
 
 // LegacyWorkloadMetrics proxies GET /api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}/.
 func (h *MonitoringHandler) LegacyWorkloadMetrics(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, valid := parseClusterID(w, r)
+	if !valid {
+		return
+	}
+	clusterID := clusterUUID.String()
 	namespace := chi.URLParam(r, "namespace")
 	workload := chi.URLParam(r, "workload")
 	if data, ok, err := h.realWorkloadMetrics(r.Context(), clusterID, "", namespace, workload, r.URL.Query().Get("range")); err == nil && ok {
@@ -698,7 +719,11 @@ func (h *MonitoringHandler) LegacyWorkloadMetrics(w http.ResponseWriter, r *http
 // Prometheus/Thanos backend when one is configured, falling back to the node's
 // advertised capacity (plus metrics-server usage when wired) otherwise.
 func (h *MonitoringHandler) LegacyNodeMetrics(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, valid := parseClusterID(w, r)
+	if !valid {
+		return
+	}
+	clusterID := clusterUUID.String()
 	node := chi.URLParam(r, "node")
 	if summary, ok, err := h.realNodeSummary(r.Context(), clusterID, node); err == nil && ok {
 		RespondJSON(w, http.StatusOK, map[string]any{"status": "success", "data": summary})

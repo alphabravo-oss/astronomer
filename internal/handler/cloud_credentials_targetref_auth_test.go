@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,47 +14,49 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// nsAuthFakeQuerier extends the base cloud-credential fake with the
-// project_namespaces surface so the handler's target_ref ownership
-// authorization is exercised (the production *sqlc.Queries implements
-// ListProjectNamespaces; the base fake deliberately does not, so this
-// wrapper drives the enforced path).
-type nsAuthFakeQuerier struct {
+type unavailableNamespaceCloudQuerier struct {
 	*fakeCloudCredQuerier
-	namespaces []sqlc.ProjectNamespace
 }
 
-func (f *nsAuthFakeQuerier) ListProjectNamespaces(_ context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error) {
-	out := []sqlc.ProjectNamespace{}
-	for _, ns := range f.namespaces {
-		if ns.ProjectID == projectID {
-			out = append(out, ns)
-		}
+func (q *unavailableNamespaceCloudQuerier) ListProjectNamespaces(context.Context, uuid.UUID) ([]sqlc.ProjectNamespace, error) {
+	return nil, errors.New("namespace store unavailable")
+}
+
+func TestCloudCreds_TargetRefsFailClosedWhenOwnershipStoreIsUnavailable(t *testing.T) {
+	projectID, clusterID := uuid.New(), uuid.New()
+	base := newFakeCloudCredQuerier()
+	base.clusterOK[clusterID] = true
+	h := NewCloudCredentialHandler(&unavailableNamespaceCloudQuerier{fakeCloudCredQuerier: base})
+
+	_, err := h.canonicaliseTargetRefs(context.Background(), projectID, []TargetRef{{ClusterID: clusterID, Namespace: "apps"}}, "aws-prod")
+	if err == nil || !strings.Contains(err.Error(), "failed to verify target namespace ownership") {
+		t.Fatalf("error=%v, want fail-closed ownership lookup error", err)
 	}
-	return out, nil
 }
 
 // newNSAuthHandler wires a handler whose querier authorizes target_refs
 // against project_namespaces. Returns the handler, the querier, the
 // project id, and a cluster id that EXISTS but whose namespaces the project
 // does NOT own (the cross-tenant victim cluster).
-func newNSAuthHandler(t *testing.T) (*CloudCredentialHandler, *nsAuthFakeQuerier, uuid.UUID, uuid.UUID) {
+func newNSAuthHandler(t *testing.T) (*CloudCredentialHandler, *fakeCloudCredQuerier, uuid.UUID, uuid.UUID) {
 	t.Helper()
-	base := newFakeCloudCredQuerier()
-	q := &nsAuthFakeQuerier{fakeCloudCredQuerier: base}
+	q := newFakeCloudCredQuerier()
 	pid := uuid.New()
 	victimCluster := uuid.New()
-	base.projectOK[pid] = true
+	q.projectOK[pid] = true
 	// The victim cluster exists (imported by some other project) so the
 	// existence check passes — only the ownership check should stop it.
-	base.clusterOK[victimCluster] = true
+	q.clusterOK[victimCluster] = true
 	enc, err := auth.NewEncryptor(testKey(t))
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
 	h := NewCloudCredentialHandler(q)
 	h.SetEncryptor(enc)
-	h.SetEnqueuer(&fakeCloudCredEnqueuer{})
+	h.SetAuditor(q)
+	h.SetRunTx(func(_ context.Context, fn func(CloudCredentialMutationTx) error) error {
+		return fn(q)
+	})
 	return h, q, pid, victimCluster
 }
 

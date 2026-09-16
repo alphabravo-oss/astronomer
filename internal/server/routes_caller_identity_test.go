@@ -82,12 +82,7 @@ func TestK8sProxyPayloadIdentityIgnoresSpoofedIdentityHeaders(t *testing.T) {
 	hub := tunnel.NewHub(slog.Default())
 	hub.RegisterAgentForTest(clusterID.String())
 	agentCh := hub.OutboundForTest(clusterID.String())
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: clusterWideListBindings(clusterID, rbac.ResourcePods)},
-		Proxy:       tunnel.NewProxyHandler(hub, slog.Default()),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: clusterWideListBindings(clusterID, rbac.ResourcePods)}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(hub, slog.Default())}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/pods", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -136,12 +131,7 @@ func TestK8sProxyPayloadCarriesNoImpersonationHeaders(t *testing.T) {
 	hub := tunnel.NewHub(slog.Default())
 	hub.RegisterAgentForTest(clusterID.String())
 	agentCh := hub.OutboundForTest(clusterID.String())
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: clusterWideListBindings(clusterID, rbac.ResourcePods)},
-		Proxy:       tunnel.NewProxyHandler(hub, slog.Default()),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: clusterWideListBindings(clusterID, rbac.ResourcePods)}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(hub, slog.Default())}})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/pods", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 

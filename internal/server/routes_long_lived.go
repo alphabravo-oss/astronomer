@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
@@ -15,19 +14,18 @@ import (
 // sit outside the bounded REST timeout group.
 func registerLongLivedRoutes(
 	r chi.Router,
-	cfg *config.Config,
 	deps RouterDependencies,
 	rateLimit func(appmiddleware.APIRateLimitClass) func(http.Handler) http.Handler,
 ) {
-	if deps.Hub != nil {
-		r.Get("/api/v1/ws/agent/tunnel/{cluster_id}/", deps.Hub.HandleWebSocket)
+	if deps.StreamingInternal.Hub != nil {
+		r.Get("/api/v1/ws/agent/tunnel/{cluster_id}/", deps.StreamingInternal.Hub.HandleWebSocket)
 	}
-	if deps.EventStream != nil {
+	if deps.StreamingInternal.EventStream != nil {
 		// SSE event stream — keeps a long-lived response open so register
 		// outside the /api/v1 Timeout middleware group.
-		r.Get("/api/v1/events/stream/", deps.EventStream.Stream)
+		r.Get("/api/v1/events/stream/", deps.StreamingInternal.EventStream.Stream)
 	}
-	if deps.Workloads != nil {
+	if deps.ClusterResources.Workloads != nil {
 		// Live pod watch SSE stream — streams ADDED/MODIFIED/DELETED events
 		// through the agent tunnel instead of the UI polling the pod list.
 		// Long-lived, so register outside the /api/v1 Timeout middleware group
@@ -45,71 +43,50 @@ func registerLongLivedRoutes(
 		// namespace outside their allow-set; a cluster-wide/superuser caller passes
 		// the plain check and watches everything unfiltered.
 		r.With(
-			requireStreamTicketOrAuth(deps.JWT, deps.AuthQueries, deps.StreamTicketStore, iauth.StreamKindLogs, "cluster_id"),
-			requireListPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbRead, deps.NamespaceScopedRBAC),
-		).Get("/api/v1/clusters/{cluster_id}/pods/watch/", deps.Workloads.WatchPods)
+			requireStreamTicketOrAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries, deps.StreamingInternal.StreamTicketStore, iauth.StreamKindLogs, "cluster_id"),
+			requireListPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourcePods, rbac.VerbRead, deps.ClusterResources.NamespaceScopedRBAC),
+		).Get("/api/v1/clusters/{cluster_id}/pods/watch/", deps.ClusterResources.Workloads.WatchPods)
 	}
-	if deps.RemoteServer != nil {
-		// remotedialer hijacks the connection for a WS upgrade, so this MUST
-		// be registered outside the /api/v1 group that applies a Timeout
-		// middleware (the same reason the legacy ws/agent/tunnel route lives
-		// out here).
-		// A4 / M5: pre-upgrade per-IP failure-limiter gate (shared with the hub
-		// connect path) so an over-threshold IP gets a clean 429 before
-		// remotedialer hijacks the connection. Middleware on an existing route
-		// does NOT change the route pattern.
-		r.With(deps.RemoteServer.RateLimitMiddleware()).
-			HandleFunc("/api/v1/connect/{cluster_id}/", deps.RemoteServer.ServeHTTP)
-		// Demonstration endpoint — proves the new tunnel works end-to-end by
-		// listing pods through a stock client-go clientset whose transport is
-		// dialed through remotedialer. Real handlers will follow once the
-		// migration is verified. Keep it out of production so demo-only
-		// cluster data surfaces cannot linger as a supported API.
-		if !isProductionConfig(cfg) {
-			r.With(
-				requireAuth(deps.JWT, deps.AuthQueries),
-				requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead),
-			).Get("/api/v1/clusters/{id}/v2/pods/", remoteV2PodsHandler(cfg, deps))
-		}
-	}
-	if deps.Proxy != nil {
+	if deps.StreamingInternal.Proxy != nil {
 		// k8s passthrough is the most common loop-DoS target — any
 		// authenticated user can fire arbitrary list calls. Token bucket
 		// is sized so a normal UI burst (clicking through tabs) passes;
 		// a runaway loop trips within ~20 requests.
 		r.With(
+			canonicalK8sProxyPath,
 			rateLimit(appmiddleware.ClassK8sProxy),
-			requireAuth(deps.JWT, deps.AuthQueries),
+			requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries),
 			requireK8sProxyScope(),
-			requireK8sProxyPermission(deps.RBACEngine, deps.RBACQueries, deps.NativeAuthz, deps.NamespaceScopedRBAC),
-			auditK8sProxySecretReads(deps.AuditWriter),
-			auditK8sProxyMutations(deps.AuditWriter),
+			requireK8sProxyPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, deps.ClusterResources.NativeAuthz, deps.ClusterResources.NamespaceScopedRBAC),
+			auditK8sProxySecretReads(deps.CoreAuth.AuditWriter),
+			auditK8sProxyMutations(deps.CoreAuth.AuditWriter),
 		).
-			HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)
+			HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.StreamingInternal.Proxy.HandleK8sProxy)
 	}
-	if deps.InternalK8s != nil {
+	if deps.StreamingInternal.InternalK8s != nil {
 		// Cross-pod fallback for the server-internal K8sRequester.
 		// PSK-protected so non-sibling callers 403 — mounted outside the
 		// JWT auth chain because sibling pods don't carry user JWTs.
-		r.Post("/internal/tunnel/k8s/{cluster_id}", deps.InternalK8s.Handle)
+		r.Post("/internal/tunnel/k8s/{cluster_id}", deps.StreamingInternal.InternalK8s.Handle)
+		r.Get("/internal/tunnel/k8s/{cluster_id}/capabilities/{capability}", deps.StreamingInternal.InternalK8s.HandleCapability)
 	}
-	if deps.InternalHelm != nil {
+	if deps.StreamingInternal.InternalHelm != nil {
 		// Cross-pod fallback for the server-internal HelmRequester.
 		// Same PSK + outside-JWT-chain contract as the K8s counterpart.
 		// Required for catalog install/upgrade/uninstall to work when
 		// the request lands on a replica that doesn't own the WS.
-		r.Post("/internal/tunnel/helm/{cluster_id}", deps.InternalHelm.Handle)
+		r.Post("/internal/tunnel/helm/{cluster_id}", deps.StreamingInternal.InternalHelm.Handle)
 	}
-	if deps.Exec != nil {
+	if deps.StreamingInternal.Exec != nil {
 		// Exec session opens hold a goroutine + WS connection until the
 		// shell exits. Limit new-session opens so a misbehaving caller
 		// can't spawn arbitrary parallel terminals.
 		r.With(rateLimit(appmiddleware.ClassExecLogs)).
-			Get("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", deps.Exec.HandleExec)
+			Get("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", deps.StreamingInternal.Exec.HandleExec)
 	}
-	if deps.Logs != nil {
+	if deps.StreamingInternal.Logs != nil {
 		r.With(rateLimit(appmiddleware.ClassExecLogs)).
-			Get("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", deps.Logs.HandleLogs)
+			Get("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", deps.StreamingInternal.Logs.HandleLogs)
 	}
 
 	// Kubectl shell WS handshake — session-aware front door that
@@ -123,9 +100,9 @@ func registerLongLivedRoutes(
 	// before the Upgrade handshake but Firefox does not, and several
 	// corporate proxies strip Upgrade headers across redirects, so the
 	// shell route now terminates the WS here.
-	if deps.KubectlShell != nil {
+	if deps.StreamingInternal.KubectlShell != nil {
 		r.With(rateLimit(appmiddleware.ClassExecLogs)).
-			Get("/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}/", deps.KubectlShell.HandleWS)
+			Get("/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}/", deps.StreamingInternal.KubectlShell.HandleWS)
 	}
 
 }

@@ -1,10 +1,9 @@
 import { useAppForm, useStore } from "@/lib/form";
 import {
   useCreateLoggingPipeline,
-  useClusters,
-  useClusterNamespaces,
   useLoggingOutputs,
-} from "@/lib/hooks";
+} from "@/lib/hooks/logging";
+import { useClusters, useClusterNamespaces } from "@/lib/hooks/clusters";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -231,7 +230,7 @@ export function CreatePipelineModal({
                   type="button"
                   onClick={() => toggleNamespace(ns.name)}
                   className={cn(
-                    "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                    "px-2.5 py-1 rounded-sm text-xs font-medium transition-colors",
                     form.namespaces.includes(ns.name)
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:text-foreground",
@@ -284,7 +283,7 @@ export function CreatePipelineModal({
             {Object.entries(form.labels).map(([k, v]) => (
               <span
                 key={k}
-                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
               >
                 {k}={v}
                 <button
@@ -315,13 +314,13 @@ export function CreatePipelineModal({
             outputList.map((output) => (
               <label
                 key={output.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent cursor-pointer"
+                className="flex items-center gap-2 px-2 py-1.5 rounded-sm text-sm hover:bg-accent cursor-pointer"
               >
-                <input
+                <Input
                   type="checkbox"
                   checked={form.outputIds.includes(output.id)}
                   onChange={() => toggleOutput(output.id)}
-                  className="rounded border-border text-primary focus:ring-ring"
+                  className="rounded-sm border-border text-primary focus:ring-ring"
                 />
                 <span className="text-foreground">{output.name}</span>
                 <span className="text-xs text-muted-foreground capitalize">
@@ -336,12 +335,12 @@ export function CreatePipelineModal({
       <label className="flex items-center gap-2 cursor-pointer">
         <pipelineForm.Field name="enabled">
           {(field) => (
-            <input
+            <Input
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}
               onBlur={field.handleBlur}
-              className="rounded border-border text-primary focus:ring-ring"
+              className="rounded-sm border-border text-primary focus:ring-ring"
             />
           )}
         </pipelineForm.Field>

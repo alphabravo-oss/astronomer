@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,7 +22,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/registration"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeRegistrationQuerier is a tiny in-memory backing store for the
@@ -48,26 +49,6 @@ func (f *fakeRegistrationQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.
 	}
 	f.audits = append(f.audits, arg)
 	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
-}
-
-type fakeRegistrationTaskOutbox struct {
-	mu   sync.Mutex
-	args []sqlc.UpsertTaskOutboxParams
-}
-
-func (f *fakeRegistrationTaskOutbox) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.args = append(f.args, arg)
-	return sqlc.TaskOutbox{}, nil
-}
-
-func (f *fakeRegistrationTaskOutbox) all() []sqlc.UpsertTaskOutboxParams {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := make([]sqlc.UpsertTaskOutboxParams, len(f.args))
-	copy(out, f.args)
-	return out
 }
 
 func newFakeRegQuerier() *fakeRegistrationQuerier {
@@ -268,6 +249,9 @@ func setupHandler(t *testing.T) (*ClusterRegistrationHandler, *fakeRegistrationQ
 	}
 	bus := events.NewBus()
 	h := NewClusterRegistrationHandler(q, bus)
+	h.SetRunTx(func(_ context.Context, fn func(ClusterRegistrationMutationTx) error) error {
+		return fn(q)
+	})
 	return h, q, id
 }
 
@@ -378,7 +362,7 @@ func TestRegistrationWizard_SuperuserRequiredOnCancel(t *testing.T) {
 	q.users[regularUserID] = sqlc.User{ID: regularUserID, IsSuperuser: false}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+id.String()+"/registration/cancel/", nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:    regularUserID.String(),
 		Email: "user@example.com",
 	})
@@ -393,7 +377,7 @@ func TestRegistrationWizard_SuperuserRequiredOnCancel(t *testing.T) {
 	adminID := uuid.New()
 	q.users[adminID] = sqlc.User{ID: adminID, IsSuperuser: true}
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+id.String()+"/registration/cancel/", nil)
-	ctx = middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx = reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:    adminID.String(),
 		Email: "admin@example.com",
 	})

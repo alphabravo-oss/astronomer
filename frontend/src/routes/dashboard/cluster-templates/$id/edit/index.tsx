@@ -4,16 +4,13 @@ import { createFileRoute } from "@tanstack/react-router";
  * form used by the create page.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { useParams, useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import {
-  ErrorState,
-  LoadingState,
-  PermissionState,
-} from "@/components/ui/empty-state";
+import { PermissionState, StatePanel } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { extractApiErrorMessage } from "@/lib/api/errors";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import {
   useClusterTemplate,
   useUpdateClusterTemplate,
@@ -23,39 +20,51 @@ import { TemplateForm } from "@/components/projects/cluster-templates/template-f
 import { PageHeader, PageShell } from "@/components/ui/page";
 
 function ClusterTemplateEditPage() {
-  const params = useParams();
-  const id = params.id as string;
-  const router = useRouter();
+  const params = Route.useParams();
+  const id = params.id;
+  const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const canWrite = canWriteClusterTemplates(user);
 
-  const { data: template, isLoading } = useClusterTemplate(id);
+  const templateQuery = useClusterTemplate(id);
   const updateMutation = useUpdateClusterTemplate();
   const [serverError, setServerError] = useState<string | null>(null);
 
-  if (isLoading) {
+  if (
+    templateQuery.isLoading ||
+    templateQuery.isError ||
+    templateQuery.data === undefined
+  ) {
     return (
-      <LoadingState title="Loading cluster template" className="h-32 py-0" />
+      <QueryStates
+        query={templateQuery}
+        loadingTitle="Loading onboarding bundle"
+        permission="cluster_templates:read"
+        errorTitle="Failed to load onboarding bundle"
+        notFound={
+          <StatePanel
+            title="Bundle not found"
+            description="The onboarding bundle may have been deleted or is outside your access scope."
+            actionLabel="Back to bundles"
+            actionHref="/dashboard/cluster-templates"
+          />
+        }
+      >
+        {null}
+      </QueryStates>
     );
   }
-  if (!template) {
-    return (
-      <ErrorState
-        title="Template not found"
-        description="The requested cluster template does not exist or is no longer available."
-      />
-    );
-  }
+  const template = templateQuery.data;
 
   return (
     <PageShell>
-      <Link
-        href={`/dashboard/cluster-templates/${id}`}
+      <RouterLink
+        to="/dashboard/cluster-templates/$id" params={{ id }}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to bundle
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Onboarding Bundles · Edit"
@@ -86,7 +95,7 @@ function ClusterTemplateEditPage() {
           description: template.description,
           spec: template.spec,
         }}
-        onCancel={() => router.push(`/dashboard/cluster-templates/${id}`)}
+        onCancel={() => void navigate({ to: `/dashboard/cluster-templates/${id}` })}
         onSubmit={async (body) => {
           if (!canWrite) {
             setServerError(
@@ -97,7 +106,7 @@ function ClusterTemplateEditPage() {
           setServerError(null);
           try {
             await updateMutation.mutateAsync({ id, body });
-            router.push(`/dashboard/cluster-templates/${id}`);
+            void navigate({ to: `/dashboard/cluster-templates/${id}` });
           } catch (err) {
             const msg =
               extractApiErrorMessage(err) ?? "Failed to update template.";

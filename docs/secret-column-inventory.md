@@ -22,6 +22,7 @@ unclassified column fails CI.
 | `cluster_registry_configs.registry_password_encrypted` | Fernet ciphertext | Complete cluster registry password. |
 | `project_registry_credentials.registry_credential_encrypted` | Fernet ciphertext | Complete project registry credential. |
 | `delivery_sources.credential_encrypted` | Fernet ciphertext | Complete write-only delivery-source credential map. |
+| `gitops_registration_sources.webhook_secret_encrypted` | Fernet ciphertext | Per-source GitHub webhook HMAC secret; write-only and never logged. |
 | `dex_operations.payload_encrypted` | Fernet ciphertext | Durable, bounded Dex SSO-finalization input; never returned or logged. |
 | `api_tokens.token_hash` | Password-style token hash | Plaintext is returned once. |
 | `cluster_registration_tokens.token_hash` | Token hash | Registration authentication uses only the hash. |
@@ -41,6 +42,11 @@ unclassified column fails CI.
 `logging_outputs.configuration` is not a secret column. System (`is_system`) Loki rows store only `host`, `port`, `tls`, `tenant_id`, and `labels`. The member copy lives in Secret `astronomer-loki-ingest-token` (mounted via fluent-bit Helm `extraVolumes` / `extraVolumeMounts`); the ConfigMap references `bearer_token_file` only. Plaintext is loaded at apply time from `loki_ingest_tokens.token_encrypted` and is never stored in JSONB or returned by list/get.
 
 ## References and non-secret metadata
+
+`installed_charts.drift_claim_token`, `project_namespaces.reconcile_claim_token`,
+and `cluster_decommissions.decommission_claim_token` are short-lived random
+ownership nonces used only to fence distributed worker writes. They grant no
+API authority and are cleared when the claimed work completes or is released.
 
 | Column family | Classification |
 | --- | --- |

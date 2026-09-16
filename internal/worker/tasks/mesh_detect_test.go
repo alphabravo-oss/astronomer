@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -226,6 +228,11 @@ func TestWorker_NoOpForUnhealthyCluster(t *testing.T) {
 func TestWorker_DetectAndUpsert_RecordsMeshFlip(t *testing.T) {
 	q, r, runtime := setupMeshDeps(t)
 	clusterID := uuid.New()
+	bus := events.NewBus()
+	runtime.Deps.Bus = bus
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changed := bus.Subscribe(ctx, events.AcceptAll)
 	// Seed a prior detection of "linkerd" so this run's "istio"
 	// result counts as a flip — verifies the prior-vs-new branch
 	// of DetectAndUpsert is wired (we can't easily assert gauges
@@ -242,6 +249,15 @@ func TestWorker_DetectAndUpsert_RecordsMeshFlip(t *testing.T) {
 	}
 	if got := q.upserts[0].DetectedMesh; got != "istio" {
 		t.Errorf("detected_mesh = %q, want istio", got)
+	}
+	select {
+	case event := <-changed:
+		payload, ok := event.Data.(map[string]any)
+		if event.Type != events.TypeServiceMeshChanged || !ok || payload["cluster_id"] != clusterID.String() {
+			t.Fatalf("event=%+v, want cluster-scoped service_mesh.changed", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service_mesh.changed")
 	}
 }
 

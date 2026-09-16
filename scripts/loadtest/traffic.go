@@ -64,6 +64,53 @@ func waitForSyntheticAgents(ctx context.Context, agents []*syntheticAgent) error
 	return nil
 }
 
+// runSyntheticAgentRamp starts agents in bounded handshake batches and waits
+// for the entire estate to become ready. rampCtx bounds both acquiring a slot
+// and waiting for readiness; lifetimeCtx keeps successfully connected agents
+// alive for the subsequent workload window.
+func runSyntheticAgentRamp(
+	rampCtx context.Context,
+	lifetimeCtx context.Context,
+	agents []*syntheticAgent,
+	concurrency int,
+	agentWG *sync.WaitGroup,
+	runAgent func(context.Context, *syntheticAgent),
+) error {
+	if concurrency < 1 {
+		return fmt.Errorf("agent ramp concurrency must be >= 1, got %d", concurrency)
+	}
+	if runAgent == nil {
+		return fmt.Errorf("agent ramp runner is required")
+	}
+
+	sem := make(chan struct{}, concurrency)
+	for _, agent := range agents {
+		if err := rampCtx.Err(); err != nil {
+			return err
+		}
+		select {
+		case sem <- struct{}{}:
+		case <-rampCtx.Done():
+			return rampCtx.Err()
+		}
+
+		agentWG.Add(1)
+		go func() {
+			defer agentWG.Done()
+			runAgent(lifetimeCtx, agent)
+		}()
+		go func() {
+			select {
+			case <-agent.ready:
+			case <-rampCtx.Done():
+			}
+			<-sem
+		}()
+	}
+
+	return waitForSyntheticAgents(rampCtx, agents)
+}
+
 // emitSyntheticStateEvents drives the profile's estate-wide eventsPerSecond
 // declaration over the same authenticated tunnels used by the synthetic
 // agents. The rate is global (not multiplied by cluster count) and successful

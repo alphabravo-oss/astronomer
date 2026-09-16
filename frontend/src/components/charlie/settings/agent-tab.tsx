@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { queryKeys } from "@/lib/query-keys";
 import { formatRelativeTime } from "@/lib/utils";
+import { liveFallback } from "@/lib/live/status-store";
 import { getCharlieAgent } from "@/lib/api/charlie-admin";
 import { Meta, Section, Unavailable } from "./shared";
 
@@ -20,7 +21,7 @@ export function AgentTab() {
     queryKey: queryKeys.charlie.adminAgent,
     queryFn: ({ signal }) => getCharlieAgent(signal),
     retry: false,
-    refetchInterval: 15000,
+    refetchInterval: liveFallback(15_000),
   });
   if (q.isLoading)
     return (

@@ -72,7 +72,7 @@ func (t *Tap) Start(ctx context.Context) {
 	if t == nil || t.q == nil || t.bus == nil {
 		return
 	}
-	ch := t.bus.Subscribe(ctx)
+	ch := t.bus.Subscribe(ctx, events.AcceptAll)
 	go t.run(ctx, ch)
 }
 

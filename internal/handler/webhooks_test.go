@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,7 +21,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeWebhookQuerier is a hand-rolled minimal implementation of
@@ -247,7 +248,7 @@ func authedWebhookRequest(method, target string, callerID uuid.UUID, body []byte
 	} else {
 		r = httptest.NewRequest(method, target, bytes.NewReader(body))
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 		ID:         callerID.String(),
 		AuthMethod: "jwt",
 	})
@@ -276,7 +277,7 @@ func newWebhookTestHandler(t *testing.T, q WebhookQuerier) *WebhookHandler {
 	if err != nil {
 		t.Fatalf("encryptor: %v", err)
 	}
-	return NewWebhookHandler(q, enc, nil)
+	return wireWebhookMutationFixture(NewWebhookHandler(q, enc, nil), q)
 }
 
 func TestWebhooksHandler_CRUD(t *testing.T) {

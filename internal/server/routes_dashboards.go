@@ -16,10 +16,10 @@ func registerDashboardRoutes(r chi.Router, deps RouterDependencies) {
 	// cluster automatically gets its widgets (no separate
 	// dashboards:read role needed). The global endpoint requires
 	// auth only — anyone logged in can see the platform overview.
-	if deps.Dashboards != nil {
-		r.Get("/dashboards/global/", deps.Dashboards.RenderGlobal)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/dashboards/clusters/{id}/", deps.Dashboards.RenderCluster)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/dashboards/projects/{id}/", deps.Dashboards.RenderProject)
+	if deps.AdminPlatform.Dashboards != nil {
+		r.Get("/dashboards/global/", deps.AdminPlatform.Dashboards.RenderGlobal)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/dashboards/clusters/{id}/", deps.AdminPlatform.Dashboards.RenderCluster)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/dashboards/projects/{id}/", deps.AdminPlatform.Dashboards.RenderProject)
 	}
 
 }

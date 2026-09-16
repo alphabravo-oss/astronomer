@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -11,7 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 // rfc1123Subdomain is the RFC-1123 label/name shape Kubernetes (and Rancher)
@@ -74,7 +76,7 @@ type fieldError struct {
 // step fails; callers should simply return. On success it returns (value, true)
 // and writes nothing.
 func decodeAndValidate[T any](w http.ResponseWriter, r *http.Request, out *T) bool {
-	if err := json.NewDecoder(r.Body).Decode(out); err != nil {
+	if err := decodeStrictJSONBody(r, out); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return false
 	}
@@ -84,6 +86,30 @@ func decodeAndValidate[T any](w http.ResponseWriter, r *http.Request, out *T) bo
 		return false
 	}
 	return true
+}
+
+// decodeStrictJSONBody is the single JSON request decoder for typed handlers.
+// Unknown fields and trailing JSON are rejected so misspelled or retired
+// request fields cannot be silently ignored.
+func decodeStrictJSONBody(r *http.Request, out any) error {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	return ensureJSONEOF(decoder)
+}
+
+func ensureJSONEOF(decoder *json.Decoder) error {
+	var extra any
+	err := decoder.Decode(&extra)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	if err == nil {
+		return errors.New("request body must contain exactly one JSON value")
+	}
+	return err
 }
 
 // writeValidationError renders a validator.ValidationErrors as the uniform 422
@@ -111,7 +137,7 @@ func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
 		"fields":  fields,
 	}
 	if r != nil {
-		if requestID := middleware.GetRequestID(r.Context()); requestID != "" {
+		if requestID := reqctx.RequestID(r.Context()); requestID != "" {
 			errObj["request_id"] = requestID
 		}
 	}

@@ -8,7 +8,7 @@
 // here (see the design doc: "Tier is derived, not authored").
 
 import { useQuery } from "@tanstack/react-query";
-import { getFeatureFlags } from "@/lib/api";
+import { getFeatureFlags } from "@/lib/api/feature-flags";
 import { queryKeys } from "@/lib/query-keys";
 import * as extensionsApi from "@/lib/api/extensions";
 import type {

@@ -12,6 +12,7 @@ export type ToolCategory =
   | "networking"
   | "observability"
   | "security"
+  | "storage"
   | "other";
 
 export type ClusterTool = Omit<

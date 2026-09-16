@@ -15,12 +15,13 @@ import (
 
 const claimProjectNamespaceReconcile = `-- name: ClaimProjectNamespaceReconcile :one
 UPDATE project_namespaces
-SET    locked_until = $4
+SET    locked_until = $4,
+       reconcile_claim_token = $5
 WHERE  project_id = $1
   AND  cluster_id = $2
   AND  namespace  = $3
   AND  (locked_until IS NULL OR locked_until < now())
-RETURNING project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at
+RETURNING project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at, reconcile_claim_token
 `
 
 type ClaimProjectNamespaceReconcileParams struct {
@@ -28,6 +29,7 @@ type ClaimProjectNamespaceReconcileParams struct {
 	ClusterID   uuid.UUID          `json:"cluster_id"`
 	Namespace   string             `json:"namespace"`
 	LockedUntil pgtype.Timestamptz `json:"locked_until"`
+	ClaimToken  pgtype.UUID        `json:"claim_token"`
 }
 
 // Atomically bump the lease so other workers SKIP this row for the given TTL.
@@ -38,6 +40,7 @@ func (q *Queries) ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimP
 		arg.ClusterID,
 		arg.Namespace,
 		arg.LockedUntil,
+		arg.ClaimToken,
 	)
 	var i ProjectNamespace
 	err := row.Scan(
@@ -49,6 +52,7 @@ func (q *Queries) ClaimProjectNamespaceReconcile(ctx context.Context, arg ClaimP
 		&i.LockedUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReconcileClaimToken,
 	)
 	return i, err
 }
@@ -75,21 +79,70 @@ func (q *Queries) CountProjectsByCluster(ctx context.Context, clusterID uuid.UUI
 	return count, err
 }
 
+const countProjectsByClusterFiltered = `-- name: CountProjectsByClusterFiltered :one
+SELECT count(*) FROM projects
+WHERE cluster_id = $1
+  AND (
+    $2::text = ''
+    OR name ILIKE '%' || $2 || '%'
+    OR display_name ILIKE '%' || $2 || '%'
+    OR description ILIKE '%' || $2 || '%'
+  )
+`
+
+type CountProjectsByClusterFilteredParams struct {
+	ClusterID    uuid.UUID `json:"cluster_id"`
+	FilterSearch string    `json:"filter_search"`
+}
+
+func (q *Queries) CountProjectsByClusterFiltered(ctx context.Context, arg CountProjectsByClusterFilteredParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProjectsByClusterFiltered, arg.ClusterID, arg.FilterSearch)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countProjectsFiltered = `-- name: CountProjectsFiltered :one
+SELECT count(*) FROM projects
+WHERE (
+    $1::text = ''
+    OR name ILIKE '%' || $1 || '%'
+    OR display_name ILIKE '%' || $1 || '%'
+    OR description ILIKE '%' || $1 || '%'
+)
+`
+
+func (q *Queries) CountProjectsFiltered(ctx context.Context, filterSearch string) (int64, error) {
+	row := q.db.QueryRow(ctx, countProjectsFiltered, filterSearch)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countProjectsForScopes = `-- name: CountProjectsForScopes :one
 SELECT count(*) FROM projects
-WHERE id = ANY($1::uuid[])
-   OR cluster_id = ANY($2::uuid[])
+WHERE (
+    id = ANY($1::uuid[])
+    OR cluster_id = ANY($2::uuid[])
+)
+AND (
+    $3::text = ''
+    OR name ILIKE '%' || $3 || '%'
+    OR display_name ILIKE '%' || $3 || '%'
+    OR description ILIKE '%' || $3 || '%'
+)
 `
 
 type CountProjectsForScopesParams struct {
-	ProjectIds []uuid.UUID `json:"project_ids"`
-	ClusterIds []uuid.UUID `json:"cluster_ids"`
+	ProjectIds   []uuid.UUID `json:"project_ids"`
+	ClusterIds   []uuid.UUID `json:"cluster_ids"`
+	FilterSearch string      `json:"filter_search"`
 }
 
 // Total for a ListProjectsForScopes page; predicate MUST match it exactly (see
 // CountClustersForScopes).
 func (q *Queries) CountProjectsForScopes(ctx context.Context, arg CountProjectsForScopesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countProjectsForScopes, arg.ProjectIds, arg.ClusterIds)
+	row := q.db.QueryRow(ctx, countProjectsForScopes, arg.ProjectIds, arg.ClusterIds, arg.FilterSearch)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -190,6 +243,22 @@ type DeleteProjectNamespaceParams struct {
 
 func (q *Queries) DeleteProjectNamespace(ctx context.Context, arg DeleteProjectNamespaceParams) error {
 	_, err := q.db.Exec(ctx, deleteProjectNamespace, arg.ProjectID, arg.ClusterID, arg.Namespace)
+	return err
+}
+
+const deleteProjectResourceQuotaAllocation = `-- name: DeleteProjectResourceQuotaAllocation :exec
+DELETE FROM project_resource_quota_allocations
+WHERE project_id = $1 AND cluster_id = $2 AND namespace = $3
+`
+
+type DeleteProjectResourceQuotaAllocationParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+}
+
+func (q *Queries) DeleteProjectResourceQuotaAllocation(ctx context.Context, arg DeleteProjectResourceQuotaAllocationParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectResourceQuotaAllocation, arg.ProjectID, arg.ClusterID, arg.Namespace)
 	return err
 }
 
@@ -314,7 +383,7 @@ func (q *Queries) GetProjectByNameAndCluster(ctx context.Context, arg GetProject
 }
 
 const listAllProjectNamespaces = `-- name: ListAllProjectNamespaces :many
-SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at FROM project_namespaces
+SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at, reconcile_claim_token FROM project_namespaces
 ORDER BY project_id, cluster_id, namespace
 `
 
@@ -336,6 +405,7 @@ func (q *Queries) ListAllProjectNamespaces(ctx context.Context) ([]ProjectNamesp
 			&i.LockedUntil,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReconcileClaimToken,
 		); err != nil {
 			return nil, err
 		}
@@ -348,7 +418,7 @@ func (q *Queries) ListAllProjectNamespaces(ctx context.Context) ([]ProjectNamesp
 }
 
 const listProjectNamespaces = `-- name: ListProjectNamespaces :many
-SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at FROM project_namespaces
+SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at, reconcile_claim_token FROM project_namespaces
 WHERE project_id = $1
 ORDER BY namespace ASC
 `
@@ -371,6 +441,41 @@ func (q *Queries) ListProjectNamespaces(ctx context.Context, projectID uuid.UUID
 			&i.LockedUntil,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ReconcileClaimToken,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectResourceQuotaAllocations = `-- name: ListProjectResourceQuotaAllocations :many
+SELECT project_id, cluster_id, namespace, cpu_limit, memory_limit, pod_count, applied_at FROM project_resource_quota_allocations
+WHERE project_id = $1
+ORDER BY cluster_id, namespace
+`
+
+func (q *Queries) ListProjectResourceQuotaAllocations(ctx context.Context, projectID uuid.UUID) ([]ProjectResourceQuotaAllocation, error) {
+	rows, err := q.db.Query(ctx, listProjectResourceQuotaAllocations, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProjectResourceQuotaAllocation{}
+	for rows.Next() {
+		var i ProjectResourceQuotaAllocation
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.ClusterID,
+			&i.Namespace,
+			&i.CpuLimit,
+			&i.MemoryLimit,
+			&i.PodCount,
+			&i.AppliedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -383,16 +488,25 @@ func (q *Queries) ListProjectNamespaces(ctx context.Context, projectID uuid.UUID
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects
+WHERE (
+    $1::text = ''
+    OR name ILIKE '%' || $1 || '%'
+    OR display_name ILIKE '%' || $1 || '%'
+    OR description ILIKE '%' || $1 || '%'
+)
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $2
 `
 
 type ListProjectsParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	FilterSearch string `json:"filter_search"`
+	QueryOffset  int32  `json:"query_offset"`
+	QueryLimit   int32  `json:"query_limit"`
 }
 
 func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error) {
-	rows, err := q.db.Query(ctx, listProjects, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listProjects, arg.FilterSearch, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -438,85 +552,29 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]P
 }
 
 const listProjectsByCluster = `-- name: ListProjectsByCluster :many
-SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
-`
-
-type ListProjectsByClusterParams struct {
-	ClusterID uuid.UUID `json:"cluster_id"`
-	Limit     int32     `json:"limit"`
-	Offset    int32     `json:"offset"`
-}
-
-func (q *Queries) ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error) {
-	rows, err := q.db.Query(ctx, listProjectsByCluster, arg.ClusterID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Project{}
-	for rows.Next() {
-		var i Project
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.DisplayName,
-			&i.Description,
-			&i.ClusterID,
-			&i.Namespaces,
-			&i.ResourceQuota,
-			&i.CreatedByID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.LimitRange,
-			&i.NetworkPolicyMode,
-			&i.PodSecurityProfile,
-			&i.ResourceQuotaCpuLimit,
-			&i.ResourceQuotaMemoryLimit,
-			&i.ResourceQuotaPodCount,
-			&i.QuotaPlan,
-			&i.QuotaOverrides,
-			&i.DefaultVaultConnectionID,
-			&i.ManagedBy,
-			&i.ExternalRefApiVersion,
-			&i.ExternalRefKind,
-			&i.ExternalRefNamespace,
-			&i.ExternalRefName,
-			&i.ObservedGeneration,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProjectsForScopes = `-- name: ListProjectsForScopes :many
 SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects
-WHERE id = ANY($1::uuid[])
-   OR cluster_id = ANY($2::uuid[])
+WHERE cluster_id = $1
+  AND (
+    $2::text = ''
+    OR name ILIKE '%' || $2 || '%'
+    OR display_name ILIKE '%' || $2 || '%'
+    OR description ILIKE '%' || $2 || '%'
+  )
 ORDER BY created_at DESC
 LIMIT $4 OFFSET $3
 `
 
-type ListProjectsForScopesParams struct {
-	ProjectIds  []uuid.UUID `json:"project_ids"`
-	ClusterIds  []uuid.UUID `json:"cluster_ids"`
-	QueryOffset int32       `json:"query_offset"`
-	QueryLimit  int32       `json:"query_limit"`
+type ListProjectsByClusterParams struct {
+	ClusterID    uuid.UUID `json:"cluster_id"`
+	FilterSearch string    `json:"filter_search"`
+	QueryOffset  int32     `json:"query_offset"`
+	QueryLimit   int32     `json:"query_limit"`
 }
 
-// Scope-filtered ListProjects: the projects the caller is bound to directly,
-// plus every project on a cluster they hold the grant over WITHOUT a namespace
-// narrowing (a Cluster Owner sees their cluster's projects; a caller confined to
-// one namespace of that cluster does not — see rbac.NarrowedClustersExcluded).
-// Same ordering as ListProjects.
-func (q *Queries) ListProjectsForScopes(ctx context.Context, arg ListProjectsForScopesParams) ([]Project, error) {
-	rows, err := q.db.Query(ctx, listProjectsForScopes,
-		arg.ProjectIds,
-		arg.ClusterIds,
+func (q *Queries) ListProjectsByCluster(ctx context.Context, arg ListProjectsByClusterParams) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsByCluster,
+		arg.ClusterID,
+		arg.FilterSearch,
 		arg.QueryOffset,
 		arg.QueryLimit,
 	)
@@ -564,32 +622,120 @@ func (q *Queries) ListProjectsForScopes(ctx context.Context, arg ListProjectsFor
 	return items, nil
 }
 
-const markProjectNamespaceReconciled = `-- name: MarkProjectNamespaceReconciled :exec
+const listProjectsForScopes = `-- name: ListProjectsForScopes :many
+SELECT id, name, display_name, description, cluster_id, namespaces, resource_quota, created_by_id, created_at, updated_at, limit_range, network_policy_mode, pod_security_profile, resource_quota_cpu_limit, resource_quota_memory_limit, resource_quota_pod_count, quota_plan, quota_overrides, default_vault_connection_id, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM projects
+WHERE (
+    id = ANY($1::uuid[])
+    OR cluster_id = ANY($2::uuid[])
+)
+AND (
+    $3::text = ''
+    OR name ILIKE '%' || $3 || '%'
+    OR display_name ILIKE '%' || $3 || '%'
+    OR description ILIKE '%' || $3 || '%'
+)
+ORDER BY created_at DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListProjectsForScopesParams struct {
+	ProjectIds   []uuid.UUID `json:"project_ids"`
+	ClusterIds   []uuid.UUID `json:"cluster_ids"`
+	FilterSearch string      `json:"filter_search"`
+	QueryOffset  int32       `json:"query_offset"`
+	QueryLimit   int32       `json:"query_limit"`
+}
+
+// Scope-filtered ListProjects: the projects the caller is bound to directly,
+// plus every project on a cluster they hold the grant over WITHOUT a namespace
+// narrowing (a Cluster Owner sees their cluster's projects; a caller confined to
+// one namespace of that cluster does not — see rbac.NarrowedClustersExcluded).
+// Same ordering as ListProjects.
+func (q *Queries) ListProjectsForScopes(ctx context.Context, arg ListProjectsForScopesParams) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsForScopes,
+		arg.ProjectIds,
+		arg.ClusterIds,
+		arg.FilterSearch,
+		arg.QueryOffset,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Project{}
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.ClusterID,
+			&i.Namespaces,
+			&i.ResourceQuota,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LimitRange,
+			&i.NetworkPolicyMode,
+			&i.PodSecurityProfile,
+			&i.ResourceQuotaCpuLimit,
+			&i.ResourceQuotaMemoryLimit,
+			&i.ResourceQuotaPodCount,
+			&i.QuotaPlan,
+			&i.QuotaOverrides,
+			&i.DefaultVaultConnectionID,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markProjectNamespaceReconciled = `-- name: MarkProjectNamespaceReconciled :execrows
 UPDATE project_namespaces
 SET    last_reconciled_at   = now(),
        last_reconcile_error = $4,
        locked_until         = NULL,
+       reconcile_claim_token = NULL,
        updated_at           = now()
 WHERE  project_id = $1
   AND  cluster_id = $2
   AND  namespace  = $3
+  AND  reconcile_claim_token = $5
 `
 
 type MarkProjectNamespaceReconciledParams struct {
-	ProjectID          uuid.UUID `json:"project_id"`
-	ClusterID          uuid.UUID `json:"cluster_id"`
-	Namespace          string    `json:"namespace"`
-	LastReconcileError string    `json:"last_reconcile_error"`
+	ProjectID          uuid.UUID   `json:"project_id"`
+	ClusterID          uuid.UUID   `json:"cluster_id"`
+	Namespace          string      `json:"namespace"`
+	LastReconcileError string      `json:"last_reconcile_error"`
+	ClaimToken         pgtype.UUID `json:"claim_token"`
 }
 
-func (q *Queries) MarkProjectNamespaceReconciled(ctx context.Context, arg MarkProjectNamespaceReconciledParams) error {
-	_, err := q.db.Exec(ctx, markProjectNamespaceReconciled,
+func (q *Queries) MarkProjectNamespaceReconciled(ctx context.Context, arg MarkProjectNamespaceReconciledParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markProjectNamespaceReconciled,
 		arg.ProjectID,
 		arg.ClusterID,
 		arg.Namespace,
 		arg.LastReconcileError,
+		arg.ClaimToken,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateProject = `-- name: UpdateProject :one
@@ -738,7 +884,7 @@ INSERT INTO project_namespaces (project_id, cluster_id, namespace)
 VALUES ($1, $2, $3)
 ON CONFLICT (project_id, cluster_id, namespace) DO UPDATE
     SET updated_at = now()
-RETURNING project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at
+RETURNING project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at, reconcile_claim_token
 `
 
 type UpsertProjectNamespaceParams struct {
@@ -759,6 +905,51 @@ func (q *Queries) UpsertProjectNamespace(ctx context.Context, arg UpsertProjectN
 		&i.LockedUntil,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ReconcileClaimToken,
+	)
+	return i, err
+}
+
+const upsertProjectResourceQuotaAllocation = `-- name: UpsertProjectResourceQuotaAllocation :one
+INSERT INTO project_resource_quota_allocations (
+    project_id, cluster_id, namespace, cpu_limit, memory_limit, pod_count
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (project_id, cluster_id, namespace) DO UPDATE SET
+    cpu_limit = EXCLUDED.cpu_limit,
+    memory_limit = EXCLUDED.memory_limit,
+    pod_count = EXCLUDED.pod_count,
+    applied_at = now()
+RETURNING project_id, cluster_id, namespace, cpu_limit, memory_limit, pod_count, applied_at
+`
+
+type UpsertProjectResourceQuotaAllocationParams struct {
+	ProjectID   uuid.UUID `json:"project_id"`
+	ClusterID   uuid.UUID `json:"cluster_id"`
+	Namespace   string    `json:"namespace"`
+	CpuLimit    string    `json:"cpu_limit"`
+	MemoryLimit string    `json:"memory_limit"`
+	PodCount    int32     `json:"pod_count"`
+}
+
+func (q *Queries) UpsertProjectResourceQuotaAllocation(ctx context.Context, arg UpsertProjectResourceQuotaAllocationParams) (ProjectResourceQuotaAllocation, error) {
+	row := q.db.QueryRow(ctx, upsertProjectResourceQuotaAllocation,
+		arg.ProjectID,
+		arg.ClusterID,
+		arg.Namespace,
+		arg.CpuLimit,
+		arg.MemoryLimit,
+		arg.PodCount,
+	)
+	var i ProjectResourceQuotaAllocation
+	err := row.Scan(
+		&i.ProjectID,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.CpuLimit,
+		&i.MemoryLimit,
+		&i.PodCount,
+		&i.AppliedAt,
 	)
 	return i, err
 }

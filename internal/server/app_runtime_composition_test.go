@@ -67,4 +67,24 @@ func TestProductionRuntimeCompositionStaysBoundedAndOrdered(t *testing.T) {
 		}
 		previous = position
 	}
+
+	// Fleet-wide loops must live inside startRuntimeFoundation's
+	// leader-controlled reconciler group, never in the per-replica services
+	// phase. Otherwise every API pod duplicates full-fleet scans and probes.
+	foundation, err := os.ReadFile(filepath.Join(directory, "app_runtime_foundation.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	services, err := os.ReadFile(filepath.Join(directory, "app_runtime_services.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range []string{"livemetrics.New", "startClusterProbeReconciler"} {
+		if !strings.Contains(string(foundation), call) {
+			t.Errorf("leader-controlled runtime foundation is missing %s", call)
+		}
+		if strings.Contains(string(services), call) {
+			t.Errorf("per-replica runtime services still starts fleet-wide loop %s", call)
+		}
+	}
 }

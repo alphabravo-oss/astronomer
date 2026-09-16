@@ -22,8 +22,9 @@ import (
 type fakeDecommQuerier struct {
 	mu sync.Mutex
 
-	cluster sqlc.Cluster
-	row     sqlc.ClusterDecommission
+	cluster  sqlc.Cluster
+	liveness sqlc.ClusterLiveness
+	row      sqlc.ClusterDecommission
 
 	// Per-phase error injection. The reconciler calls into these methods in
 	// order; set the corresponding `*Err` to a non-nil error to simulate
@@ -79,12 +80,19 @@ func (f *fakeDecommQuerier) bump(name string) {
 	f.calls[name]++
 }
 
-func (f *fakeDecommQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
-	f.bump("GetClusterByID")
+func (f *fakeDecommQuerier) GetClusterByIDIncludingDecommissioned(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
+	f.bump("GetClusterByIDIncludingDecommissioned")
 	if id != f.cluster.ID {
 		return sqlc.Cluster{}, errNoRows
 	}
 	return f.cluster, nil
+}
+
+func (f *fakeDecommQuerier) GetClusterLiveness(_ context.Context, clusterID uuid.UUID) (sqlc.ClusterLiveness, error) {
+	if clusterID != f.cluster.ID {
+		return sqlc.ClusterLiveness{}, errNoRows
+	}
+	return f.liveness, nil
 }
 
 func (f *fakeDecommQuerier) GetClusterDecommissionByID(_ context.Context, _ uuid.UUID) (sqlc.ClusterDecommission, error) {
@@ -101,7 +109,7 @@ func (f *fakeDecommQuerier) GetLatestClusterDecommissionByCluster(_ context.Cont
 	return f.row, nil
 }
 
-func (f *fakeDecommQuerier) MarkClusterDecommissionRunning(_ context.Context, _ sqlc.MarkClusterDecommissionRunningParams) (sqlc.ClusterDecommission, error) {
+func (f *fakeDecommQuerier) MarkClusterDecommissionRunning(_ context.Context, arg sqlc.MarkClusterDecommissionRunningParams) (sqlc.ClusterDecommission, error) {
 	f.bump("MarkClusterDecommissionRunning")
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -110,18 +118,43 @@ func (f *fakeDecommQuerier) MarkClusterDecommissionRunning(_ context.Context, _ 
 	}
 	f.row.Status = "running"
 	f.row.Attempts++
+	f.row.DecommissionClaimToken = arg.ClaimToken
 	if !f.row.StartedAt.Valid {
 		f.row.StartedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	}
 	return f.row, nil
 }
 
-func (f *fakeDecommQuerier) ReleaseClusterDecommissionClaim(_ context.Context, _ uuid.UUID) error {
+func (f *fakeDecommQuerier) ClaimPendingClusterDecommissions(_ context.Context, arg sqlc.ClaimPendingClusterDecommissionsParams) ([]sqlc.ClusterDecommission, error) {
+	f.bump("ClaimPendingClusterDecommissions")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.row.Status = "running"
+	f.row.Attempts++
+	f.row.DecommissionClaimToken = arg.ClaimToken
+	return []sqlc.ClusterDecommission{f.row}, nil
+}
+
+func (f *fakeDecommQuerier) RenewClusterDecommissionClaim(_ context.Context, arg sqlc.RenewClusterDecommissionClaimParams) (int64, error) {
+	f.bump("RenewClusterDecommissionClaim")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.row.DecommissionClaimToken != arg.ClaimToken || f.row.Status != "running" {
+		return 0, nil
+	}
+	return 1, nil
+}
+
+func (f *fakeDecommQuerier) ReleaseClusterDecommissionClaim(_ context.Context, arg sqlc.ReleaseClusterDecommissionClaimParams) (int64, error) {
 	f.bump("ReleaseClusterDecommissionClaim")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.row.DecommissionClaimToken != arg.ClaimToken || f.row.Status != "running" {
+		return 0, nil
+	}
 	f.row.Status = "pending"
-	return nil
+	f.row.DecommissionClaimToken = pgtype.UUID{}
+	return 1, nil
 }
 
 func (f *fakeDecommQuerier) UpdateClusterDecommissionPhases(_ context.Context, arg sqlc.UpdateClusterDecommissionPhasesParams) (sqlc.ClusterDecommission, error) {
@@ -131,6 +164,9 @@ func (f *fakeDecommQuerier) UpdateClusterDecommissionPhases(_ context.Context, a
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.row.DecommissionClaimToken != arg.ClaimToken || f.row.Status != "running" {
+		return sqlc.ClusterDecommission{}, errNoRows
+	}
 	f.row.Phases = arg.Phases
 	return f.row, nil
 }
@@ -139,7 +175,11 @@ func (f *fakeDecommQuerier) MarkClusterDecommissionSucceeded(_ context.Context, 
 	f.bump("MarkClusterDecommissionSucceeded")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.row.DecommissionClaimToken != arg.ClaimToken || f.row.Status != "running" {
+		return sqlc.ClusterDecommission{}, errNoRows
+	}
 	f.row.Status = "succeeded"
+	f.row.DecommissionClaimToken = pgtype.UUID{}
 	f.row.Phases = arg.Phases
 	f.row.CompletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	return f.row, nil
@@ -149,16 +189,15 @@ func (f *fakeDecommQuerier) MarkClusterDecommissionFailed(_ context.Context, arg
 	f.bump("MarkClusterDecommissionFailed")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.row.DecommissionClaimToken != arg.ClaimToken || f.row.Status != "running" {
+		return sqlc.ClusterDecommission{}, errNoRows
+	}
 	f.row.Status = "failed"
+	f.row.DecommissionClaimToken = pgtype.UUID{}
 	f.row.LastError = arg.LastError
 	f.row.Phases = arg.Phases
 	f.row.CompletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
 	return f.row, nil
-}
-
-func (f *fakeDecommQuerier) ListPendingClusterDecommissions(_ context.Context, _ int32) ([]sqlc.ClusterDecommission, error) {
-	f.bump("ListPendingClusterDecommissions")
-	return nil, nil
 }
 
 func (f *fakeDecommQuerier) DeleteClusterRegistrationTokensByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
@@ -597,6 +636,7 @@ func TestVeleroOrphanAuditEmitted(t *testing.T) {
 	}
 	if found == nil {
 		t.Fatalf("expected velero_orphan audit row, got %d rows", len(q.audit))
+		return
 	}
 	if !strings.Contains(string(found.Detail), "default-bsl") || !strings.Contains(string(found.Detail), "dr-bsl") {
 		t.Errorf("orphan audit detail missing BSL names: %s", found.Detail)
@@ -729,6 +769,44 @@ func TestReentryAfterSucceeded_NoOp(t *testing.T) {
 	}
 }
 
+func TestClusterDecommissionCheckpointDBFailurePropagates(t *testing.T) {
+	q := newFakeDecommQuerier()
+	q.updatePhasesErr = errors.New("database unavailable")
+	deps := ClusterDecommissionDeps{
+		Queries: q,
+		Tunnel:  &fakeTunnel{connected: true, ack: &protocol.DecommissionAckPayload{}},
+	}
+
+	err := runClusterDecommission(context.Background(), deps, q.row.ID)
+	if err == nil || !strings.Contains(err.Error(), "database unavailable") {
+		t.Fatalf("checkpoint database failure = %v, want propagated error", err)
+	}
+	if q.calls["MarkClusterDecommissionFailed"] != 0 {
+		t.Fatal("checkpoint infrastructure failure must remain retryable, not become a terminal phase failure")
+	}
+}
+
+func TestStaleDecommissionOwnerCannotReleaseReplacementClaim(t *testing.T) {
+	q := newFakeDecommQuerier()
+	staleToken := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	replacementToken := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	q.row.Status = "running"
+	q.row.DecommissionClaimToken = replacementToken
+
+	rows, err := q.ReleaseClusterDecommissionClaim(context.Background(), sqlc.ReleaseClusterDecommissionClaimParams{
+		ID: q.row.ID, ClaimToken: staleToken,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows != 0 {
+		t.Fatalf("stale release affected %d rows, want 0", rows)
+	}
+	if q.row.Status != "running" || q.row.DecommissionClaimToken != replacementToken {
+		t.Fatal("stale owner changed the replacement owner's claim")
+	}
+}
+
 // TestPhaseRestart_SkipsCompletedPhases: when a previous run completed
 // phase 1 but failed on phase 2, the next attempt should NOT re-do phase 1.
 // This is the idempotency contract for after-crash resumption.
@@ -791,7 +869,15 @@ func TestPersistFailure_WrapsAuditDeleteCleanly(t *testing.T) {
 	// via the existing fake; assert that persistFailure returns nil under
 	// normal conditions (the documented contract: don't propagate to asynq
 	// retry).
-	err := persistFailure(context.Background(), q, q.row.ID, phasesMap{}, "test failure")
+	ctx := context.Background()
+	claimToken := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	if _, err := q.MarkClusterDecommissionRunning(ctx, sqlc.MarkClusterDecommissionRunningParams{
+		ID: q.row.ID, ClaimToken: claimToken, LeaseTtlSeconds: decommissionLeaseTTLSeconds,
+	}); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	_, lease := startClusterDecommissionLease(ctx, q, q.row.ID, claimToken)
+	err := persistFailure(ctx, q, lease, q.row.ID, claimToken, phasesMap{}, "test failure")
 	if err != nil {
 		t.Errorf("expected nil from persistFailure on healthy DB, got %v", err)
 	}
@@ -911,7 +997,7 @@ func TestGoneFastPath_StaleHeartbeatAdvances(t *testing.T) {
 	// wall-clock nor the attempt-cap backstop can be what advances it.
 	q.row.Attempts = decommissionGoneMinAttempts - 1
 	q.cluster.Status = "disconnected"
-	q.cluster.LastHeartbeat = pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Minute), Valid: true}
+	q.liveness.LastHeartbeat = pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Minute), Valid: true}
 	tun := &fakeTunnel{connected: false, disconnected: true}
 	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
 
@@ -943,7 +1029,7 @@ func TestGoneFastPath_FreshHeartbeatWaits(t *testing.T) {
 	q := newFakeDecommQuerier()
 	q.row.Attempts = decommissionGoneMinAttempts - 1 // bumped to the floor on claim
 	q.cluster.Status = "active"
-	q.cluster.LastHeartbeat = pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Second), Valid: true}
+	q.liveness.LastHeartbeat = pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Second), Valid: true}
 	tun := &fakeTunnel{connected: false}
 	deps := ClusterDecommissionDeps{Queries: q, Tunnel: tun, TunnelWait: 10 * time.Millisecond}
 
@@ -966,7 +1052,7 @@ func TestGoneFastPath_FreshHeartbeatWaits(t *testing.T) {
 	qf.row.Force = true
 	qf.row.Attempts = 0
 	qf.cluster.Status = "active"
-	qf.cluster.LastHeartbeat = pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	qf.liveness.LastHeartbeat = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	tunf := &fakeTunnel{connected: false, disconnected: true}
 	depsf := ClusterDecommissionDeps{Queries: qf, Tunnel: tunf, TunnelWait: 10 * time.Millisecond}
 	if err := runClusterDecommission(context.Background(), depsf, qf.row.ID); err != nil {
@@ -984,17 +1070,18 @@ func TestGoneFastPath_FreshHeartbeatWaits(t *testing.T) {
 // the FIX B fast-path.
 func TestClusterDefinitivelyGone_Thresholds(t *testing.T) {
 	cases := []struct {
-		name    string
-		cluster sqlc.Cluster
-		want    bool
+		name          string
+		cluster       sqlc.Cluster
+		lastHeartbeat pgtype.Timestamptz
+		want          bool
 	}{
-		{"status_disconnected", sqlc.Cluster{Status: "disconnected", LastHeartbeat: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, true},
-		{"heartbeat_never", sqlc.Cluster{Status: "active"}, true},
-		{"heartbeat_stale", sqlc.Cluster{Status: "active", LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true}}, true},
-		{"heartbeat_fresh", sqlc.Cluster{Status: "active", LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Second), Valid: true}}, false},
+		{"status_disconnected", sqlc.Cluster{Status: "disconnected"}, pgtype.Timestamptz{Time: time.Now(), Valid: true}, true},
+		{"heartbeat_never", sqlc.Cluster{Status: "active"}, pgtype.Timestamptz{}, true},
+		{"heartbeat_stale", sqlc.Cluster{Status: "active"}, pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true}, true},
+		{"heartbeat_fresh", sqlc.Cluster{Status: "active"}, pgtype.Timestamptz{Time: time.Now().Add(-10 * time.Second), Valid: true}, false},
 	}
 	for _, tc := range cases {
-		if got := clusterDefinitivelyGone(tc.cluster); got != tc.want {
+		if got := clusterDefinitivelyGone(tc.cluster, tc.lastHeartbeat); got != tc.want {
 			t.Errorf("%s: clusterDefinitivelyGone = %v, want %v", tc.name, got, tc.want)
 		}
 	}

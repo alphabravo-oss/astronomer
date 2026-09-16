@@ -1,13 +1,15 @@
-// Route files are the eslint-exempted surface for direct router imports.
+import { Input } from "@/components/ui/input";
+import { FormShell } from "@/components/ui/form-shell";
+// Route files are the eslint-exempted surface for direct navigate imports.
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { sanitizeReturnTo } from "@/lib/auth/session";
 import {
   Orbit,
-  Github,
-  Chrome,
+  GitFork,
+  Globe,
   KeyRound,
   Eye,
   EyeOff,
@@ -17,7 +19,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
-import { useSSOProviders } from "@/lib/hooks";
+import { useSSOProviders } from "@/lib/hooks/user-settings";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   loginWithCredentialsChallengeAware,
@@ -36,7 +38,7 @@ export const Route = createFileRoute("/auth/login/")({
 });
 
 function LoginPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   // returnTo round-trips the deep link the auth guard (or the api.ts 401
   // handler) captured; sanitizeReturnTo guards against open redirects (D3).
   const { returnTo } = Route.useSearch();
@@ -56,6 +58,7 @@ function LoginPage() {
     (provider) => provider.enabled,
   );
 
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
     defaultValues: { email: "", password: "" },
     validators: {
@@ -70,6 +73,7 @@ function LoginPage() {
     onSubmitInvalid: () =>
       toastError("Please enter your email address and password"),
     onSubmit: async ({ value }) => {
+      setSubmissionError(null);
       try {
         const result = await loginWithCredentialsChallengeAware(
           value.email,
@@ -80,8 +84,13 @@ function LoginPage() {
           return;
         }
         login(result.user);
-        router.push(sanitizeReturnTo(returnTo));
+        void navigate({ to: sanitizeReturnTo(returnTo) });
       } catch (error) {
+        setSubmissionError(
+          error instanceof Error
+            ? error.message
+            : "The request failed. Try again.",
+        );
         toastApiError("", error, "Login failed");
       }
     },
@@ -94,13 +103,13 @@ function LoginPage() {
     user: User,
   ) => {
     login(user);
-    router.push(sanitizeReturnTo(returnTo));
+    void navigate({ to: sanitizeReturnTo(returnTo) });
   };
 
   const handleSSO = async (provider: string) => {
     setSsoLoading(provider);
     try {
-      window.location.href = `/api/v1/auth/login/${provider}/`;
+      window.location.assign(`/api/v1/auth/login/${provider}/`);
     } catch {
       toastError(`Failed to initiate ${provider} login`);
       setSsoLoading(null);
@@ -110,9 +119,9 @@ function LoginPage() {
   const providerIcon = (type: SSOProvider["type"]) => {
     switch (type) {
       case "github":
-        return <Github className="h-4 w-4" />;
+        return <GitFork className="h-4 w-4" />;
       case "google":
-        return <Chrome className="h-4 w-4" />;
+        return <Globe className="h-4 w-4" />;
       default:
         return <KeyRound className="h-4 w-4" />;
     }
@@ -121,7 +130,7 @@ function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left panel - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex-col justify-between p-12 overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-950 flex-col justify-between p-12 overflow-hidden">
         {/* Background pattern */}
         <div className="absolute inset-0 opacity-[0.03]">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -150,7 +159,7 @@ function LoginPage() {
 
         <div className="relative">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
               <Orbit className="h-5 w-5 text-white" />
             </div>
             <div className="flex flex-col">
@@ -210,7 +219,7 @@ function LoginPage() {
         <div className="w-full max-w-sm space-y-8">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 justify-center">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
               <Orbit className="h-5 w-5 text-white" />
             </div>
             <div className="flex flex-col">
@@ -280,13 +289,16 @@ function LoginPage() {
 
           {/* Login Form */}
           {!challenge && (
-            <form
+            <FormShell
               onSubmit={(e) => {
                 e.preventDefault();
                 void form.handleSubmit();
               }}
               className="space-y-4"
             >
+              <form.AppForm>
+                <form.FormErrorSummary serverError={submissionError} />
+              </form.AppForm>
               <form.Field name="email">
                 {(field) => (
                   <div className="space-y-1.5">
@@ -296,7 +308,8 @@ function LoginPage() {
                     >
                       Email
                     </label>
-                    <input
+                    <Input
+                      name={field.name}
                       id="identifier"
                       type="email"
                       value={field.state.value}
@@ -305,7 +318,7 @@ function LoginPage() {
                       placeholder="you@example.com"
                       className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm
                       text-foreground placeholder:text-muted-foreground
-                      focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
+                      focus:outline-hidden focus:ring-2 focus:ring-ring focus:border-transparent
                       transition-colors"
                       autoComplete="email"
                       data-initial-focus
@@ -324,7 +337,8 @@ function LoginPage() {
                       Password
                     </label>
                     <div className="relative">
-                      <input
+                      <Input
+                        name={field.name}
                         id="password"
                         type={showPassword ? "text" : "password"}
                         value={field.state.value}
@@ -333,15 +347,17 @@ function LoginPage() {
                         placeholder="Enter your password"
                         className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm
                         text-foreground placeholder:text-muted-foreground
-                        focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
+                        focus:outline-hidden focus:ring-2 focus:ring-ring focus:border-transparent
                         transition-colors"
                         autoComplete="current-password"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                        className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        aria-label={
+                          showPassword ? "Hide password" : "Show password"
+                        }
+                        className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       >
                         {showPassword ? (
                           <EyeOff className="h-4 w-4" />
@@ -367,14 +383,14 @@ function LoginPage() {
               </ActionButton>
 
               <div className="text-center">
-                <Link
-                  href="/auth/login/forgot-password"
+                <RouterLink
+                  to="/auth/login/forgot-password"
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Forgot your password?
-                </Link>
+                </RouterLink>
               </div>
-            </form>
+            </FormShell>
           )}
 
           <p className="text-xs text-center text-muted-foreground">
@@ -411,6 +427,7 @@ function TotpChallengeForm({
 }) {
   const [useRecovery, setUseRecovery] = useState(false);
 
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
     defaultValues: { code: "" },
     validators: {
@@ -423,6 +440,7 @@ function TotpChallengeForm({
           : undefined,
     },
     onSubmit: async ({ value }) => {
+      setSubmissionError(null);
       try {
         const data = await verifyTotpChallenge(
           challenge.challengeToken,
@@ -430,6 +448,9 @@ function TotpChallengeForm({
         );
         onSuccess(data.token, data.refresh, data.user);
       } catch (err) {
+        setSubmissionError(
+          err instanceof Error ? err.message : "The request failed. Try again.",
+        );
         toastApiError("", err, "Invalid code");
       }
     },
@@ -441,7 +462,7 @@ function TotpChallengeForm({
     return (
       <div className="rounded-lg border border-status-warning/40 bg-status-warning/10 p-4 space-y-3">
         <div className="flex items-start gap-3">
-          <Shield className="h-5 w-5 text-status-warning flex-shrink-0 mt-0.5" />
+          <Shield className="h-5 w-5 text-status-warning shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-foreground">
               2FA setup is required
@@ -455,7 +476,7 @@ function TotpChallengeForm({
         <div className="flex items-center gap-2">
           <button
             onClick={onCancel}
-            className="inline-flex items-center gap-1 h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="inline-flex items-center gap-1 h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
@@ -464,7 +485,7 @@ function TotpChallengeForm({
             onClick={() => {
               window.location.href = `/dashboard/account/security#enroll=${encodeURIComponent(challenge.challengeToken)}`;
             }}
-            className="flex-1 inline-flex items-center justify-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
+            className="flex-1 inline-flex items-center justify-center gap-2 h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90"
           >
             Set up 2FA now
             <ArrowRight className="h-4 w-4" />
@@ -475,15 +496,18 @@ function TotpChallengeForm({
   }
 
   return (
-    <form
+    <FormShell
       onSubmit={(e) => {
         e.preventDefault();
         void form.handleSubmit();
       }}
       className="space-y-4"
     >
+      <form.AppForm>
+        <form.FormErrorSummary serverError={submissionError} />
+      </form.AppForm>
       <div className="flex items-start gap-3 p-3 rounded-md border border-border bg-card">
-        <Shield className="h-4 w-4 text-foreground flex-shrink-0 mt-0.5" />
+        <Shield className="h-4 w-4 text-foreground shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground">
           Enter the {useRecovery ? "recovery code" : "six-digit code"} from your
           authenticator.
@@ -496,7 +520,8 @@ function TotpChallengeForm({
         <form.Field name="code">
           {(field) =>
             useRecovery ? (
-              <input
+              <Input
+                name={field.name}
                 type="text"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value.trim())}
@@ -504,10 +529,11 @@ function TotpChallengeForm({
                 placeholder="xxxx-xxxx-xxxx"
                 data-initial-focus
                 autoComplete="off"
-                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
             ) : (
-              <input
+              <Input
+                name={field.name}
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
@@ -522,7 +548,7 @@ function TotpChallengeForm({
                 }
                 onBlur={field.handleBlur}
                 placeholder="123 456"
-                className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
             )
           }
@@ -558,6 +584,6 @@ function TotpChallengeForm({
           {useRecovery ? "Use authenticator code" : "Use recovery code instead"}
         </button>
       </div>
-    </form>
+    </FormShell>
   );
 }

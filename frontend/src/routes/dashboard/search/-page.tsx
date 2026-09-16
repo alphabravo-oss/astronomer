@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "@/lib/navigation";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import {
@@ -11,14 +11,15 @@ import {
   Loader2,
   X,
 } from "lucide-react";
-import {
-  searchResources,
-  type SearchableResourceType,
-  type SearchResultRow,
-} from "@/lib/api";
+import { searchResources } from "@/lib/api/resource-search";
+import type {
+  SearchableResourceType,
+  SearchResultRow,
+} from "@/lib/api/resource-search";
 import { detailHref } from "@/lib/k8s-paths";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { DataTableQueryError } from "@/components/ui/data-table-query-error";
 import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
@@ -47,12 +48,9 @@ export const SEARCHABLE_TYPES: {
   { value: "nodes", label: "Nodes" },
 ];
 
-// searchResultHref resolves the in-app destination for a clicked search
-// result. Pods and other workload kinds land on their dedicated workload
-// detail; nodes/namespaces on their list/detail pages; everything else
-// (Services, Ingresses, ConfigMaps, Secrets, PVCs, ...) deep-links the
-// generic per-cluster detail route via `detailHref`, falling back to the
-// resource list when the row carries no name.
+// searchResultHref resolves every Kubernetes object to the canonical explorer
+// detail. Workload-specific pod/log/metrics tabs live there too, so operators
+// no longer see two competing detail screens for the same object.
 export function searchResultHref(
   resourceType: SearchableResourceType,
   cid: string,
@@ -61,15 +59,12 @@ export function searchResultHref(
 ): string {
   switch (resourceType) {
     case "pods":
-      return `/dashboard/clusters/${cid}/workloads/pods/${ns}/${name}`;
     case "deployments":
     case "statefulsets":
     case "daemonsets":
     case "jobs":
-    case "cronjobs": {
-      const kind = resourceType.replace(/s$/, "");
-      return `/dashboard/clusters/${cid}/workloads/${kind.toLowerCase()}/${ns}/${name}`;
-    }
+    case "cronjobs":
+      return detailHref(cid, resourceType, ns || undefined, name);
     case "nodes":
       return `/dashboard/clusters/${cid}/nodes/${name}`;
     case "namespaces":
@@ -84,16 +79,39 @@ export function searchResultHref(
   }
 }
 
-export function SearchPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+export const WORKLOAD_TYPES = SEARCHABLE_TYPES.filter(({ value }) =>
+  [
+    "pods",
+    "deployments",
+    "statefulsets",
+    "daemonsets",
+    "jobs",
+    "cronjobs",
+  ].includes(value),
+);
+
+export function SearchPage({
+  title = "Global Search",
+  description = "Search Kubernetes resources across every connected cluster",
+  resourceTypes = SEARCHABLE_TYPES,
+}: {
+  title?: string;
+  description?: string;
+  resourceTypes?: typeof SEARCHABLE_TYPES;
+} = {}) {
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const searchParams = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
 
   // Initialize state from URL query params so a user can deep-link a
   // search (the topbar input populates `?name=...`). Keeping URL as the
   // source of truth on first mount also makes browser back/forward
   // restore the previous search.
   const [resourceType, setResourceType] = useState<SearchableResourceType>(
-    (searchParams.get("type") as SearchableResourceType) || "pods",
+    resourceTypes.find(({ value }) => value === searchParams.get("type"))
+      ?.value ?? resourceTypes[0].value,
   );
   const [namespace, setNamespace] = useState(
     searchParams.get("namespace") || "",
@@ -120,11 +138,17 @@ export function SearchPage() {
     if (debouncedName) params.set("name", debouncedName);
     const qs = params.toString();
     window.history.replaceState(
-      {},
+      window.history.state,
       "",
-      `/dashboard/search${qs ? `?${qs}` : ""}`,
+      `${pathname}${qs ? `?${qs}` : ""}`,
     );
-  }, [resourceType, debouncedNamespace, debouncedLabel, debouncedName]);
+  }, [
+    pathname,
+    resourceType,
+    debouncedNamespace,
+    debouncedLabel,
+    debouncedName,
+  ]);
 
   const queryKey = useMemo(
     () =>
@@ -138,16 +162,19 @@ export function SearchPage() {
     [resourceType, debouncedNamespace, debouncedLabel, debouncedName],
   );
 
-  const { data, isLoading, isFetching, error } = useQuery({
+  const query = useQuery({
     queryKey,
     queryFn: ({ signal }) =>
-      searchResources({
-        type: resourceType,
-        namespace: debouncedNamespace || undefined,
-        label: debouncedLabel || undefined,
-        name: debouncedName || undefined,
-        limit: 500,
-      }, signal),
+      searchResources(
+        {
+          type: resourceType,
+          namespace: debouncedNamespace || undefined,
+          label: debouncedLabel || undefined,
+          name: debouncedName || undefined,
+          limit: 500,
+        },
+        signal,
+      ),
     // 10s stale window — fan-out searches are relatively expensive and
     // the SSE invalidation below picks up real changes faster.
     staleTime: 10_000,
@@ -162,6 +189,7 @@ export function SearchPage() {
     [["resources-search"]],
   );
 
+  const data = query.data;
   const results: SearchResultRow[] = data?.results || [];
   const errors = data?.errors || [];
   const clustersQueried = data?.clustersQueried ?? 0;
@@ -173,7 +201,7 @@ export function SearchPage() {
       header: "Cluster",
       accessor: (row) => (
         <div className="flex items-center gap-2">
-          <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          <Server className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <span className="font-medium text-foreground truncate">
             {row.clusterName}
           </span>
@@ -203,7 +231,7 @@ export function SearchPage() {
       key: "type",
       header: "Type",
       accessor: (row) => (
-        <span className="px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+        <span className="px-2 py-0.5 rounded-sm text-xs font-medium bg-muted text-muted-foreground">
           {row.type || resourceType}
         </span>
       ),
@@ -236,19 +264,16 @@ export function SearchPage() {
     if (!cid) return;
     const ns = (row.namespace as string) || "";
     const name = (row.name as string) || "";
-    router.push(searchResultHref(resourceType, cid, ns, name));
+    void navigate({ to: searchResultHref(resourceType, cid, ns, name) });
   };
 
-  const isEmpty = !isLoading && results.length === 0 && !error;
+  const isEmpty = !query.isLoading && results.length === 0 && !query.isError;
 
   return (
     <PageShell className="space-y-4">
       {/* Sticky search bar */}
-      <div className="sticky top-0 z-10 -mx-6 px-6 py-4 bg-background/95 backdrop-blur-sm border-b border-border">
-        <PageHeader
-          title="Global Search"
-          description="Search Kubernetes resources across every connected cluster"
-        />
+      <div className="sticky top-0 z-10 -mx-6 px-6 py-4 bg-background/95 backdrop-blur-xs border-b border-border">
+        <PageHeader title={title} description={description} />
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-12 gap-2">
           {/* Type selector */}
@@ -258,9 +283,9 @@ export function SearchPage() {
             onChange={(e) =>
               setResourceType(e.target.value as SearchableResourceType)
             }
-            className="md:col-span-2"
+            containerClassName="md:col-span-2"
           >
-            {SEARCHABLE_TYPES.map((t) => (
+            {resourceTypes.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
               </option>
@@ -310,13 +335,13 @@ export function SearchPage() {
 
         {/* Status line */}
         <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-          {isFetching && (
+          {query.isFetching && (
             <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3 w-3 animate-spin" />
               Searching...
             </span>
           )}
-          {!isFetching && data && (
+          {!query.isFetching && data && (
             <span>
               {results.length} {results.length === 1 ? "result" : "results"}{" "}
               from {clustersQueried}{" "}
@@ -348,7 +373,7 @@ export function SearchPage() {
                 key={err.cluster_id}
                 className="flex items-start gap-2 text-xs"
               >
-                <AlertTriangle className="h-3.5 w-3.5 text-status-warning flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="h-3.5 w-3.5 text-status-warning shrink-0 mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-foreground">
                     {err.cluster_name}
@@ -365,14 +390,12 @@ export function SearchPage() {
 
       {/* Results */}
       <div>
-        {error ? (
-          <div className="flex items-center gap-3 p-4 rounded-lg border border-status-error/30 bg-status-error/5 text-sm">
-            <AlertTriangle className="h-4 w-4 text-status-error" />
-            <span className="text-foreground">
-              Search failed:{" "}
-              {error instanceof Error ? error.message : "unknown error"}
-            </span>
-          </div>
+        {query.isError ? (
+          <DataTableQueryError
+            error={query.error}
+            onRetry={() => void query.refetch()}
+            permission="resources:search"
+          />
         ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Search className="h-10 w-10 text-muted-foreground/40 mb-3" />
@@ -394,8 +417,12 @@ export function SearchPage() {
             }
             onRowClick={handleRowClick}
             searchPlaceholder="Filter results..."
-            loading={isLoading}
-            emptyMessage="No resources match your query"
+            loading={query.isLoading}
+            emptyState={{
+              title: "No resources available",
+              description:
+                "Resources will appear here when they are available in this scope.",
+            }}
           />
         )}
       </div>

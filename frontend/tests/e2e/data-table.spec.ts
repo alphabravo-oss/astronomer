@@ -25,7 +25,16 @@ function apiResponse<T>(data: T) {
   return { status: 200, data };
 }
 function paginated<T>(data: T[]) {
-  return { data, total: data.length, page: 1, pageSize: 100, totalPages: 1 };
+  return {
+    data,
+    pagination: {
+      total: data.length,
+      limit: 100,
+      offset: 0,
+      has_more: false,
+      next_offset: null,
+    },
+  };
 }
 
 // 25 clusters → exceeds the default pageSize of 20 so pagination engages.
@@ -34,7 +43,7 @@ const clusters = Array.from({ length: 25 }, (_, i) => {
   return {
     id: `cluster-${n}`,
     name: `cluster-${n}`,
-    displayName: `Cluster ${n}`,
+    display_name: `Cluster ${n}`,
     description: "",
     status: i % 2 === 0 ? "active" : "inactive",
     health: {
@@ -46,23 +55,18 @@ const clusters = Array.from({ length: 25 }, (_, i) => {
     environment: "production",
     region: "us-east-1",
     distribution: "eks",
-    kubernetesVersion: "1.30",
-    nodeCount: 3,
-    podCount: 42,
-    namespaceCount: 8,
-    cpuCapacity: 24,
-    cpuUsage: 6,
-    cpuPercentage: 25,
-    memoryCapacity: 96,
-    memoryUsage: 32,
-    memoryPercentage: 33,
+    kubernetes_version: "1.30",
+    node_count: 3,
+    pod_count: 42,
+    cpu_percentage: 25,
+    memory_percentage: 33,
     labels: {},
     annotations: {},
-    agentVersion: "e2e",
-    lastHeartbeat: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    isLocal: false,
+    agent_version: "e2e",
+    last_heartbeat: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    is_local: false,
   };
 });
 
@@ -117,7 +121,7 @@ test("DataTable: paginates, searches, and sorts the clusters list", async ({
 
   // Navigate to page 2 — clears the desc sort first to keep assertions simple.
   await nameHeader.click(); // back to asc
-  await page.getByRole("button", { name: "2", exact: true }).click();
+  await page.getByRole("button", { name: "Page 2", exact: true }).click();
   await expect(page.getByText("Showing 21-25 of 25")).toBeVisible();
   await expect(firstBodyRow(page)).toContainText("Cluster 21");
 });

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -34,25 +35,28 @@ type recordedEvent struct {
 }
 
 type recordingValidator struct {
-	mu                  sync.Mutex
-	tokenClusterID      string
-	tokenErr            error
-	clusterAgentToken   sqlc.ClusterAgentToken
-	clusterAgentErr     error
-	upsertArgs          []sqlc.UpsertClusterHealthStatusParams
-	upsertErr           error
-	updateHeartbeatArgs []sqlc.UpdateClusterHeartbeatParams
-	updateHeartbeatErr  error
-	createConnArgs      []sqlc.CreateAgentConnectionParams
-	updateConnArgs      []sqlc.UpdateAgentConnectionStatusParams
-	pingIDs             []uuid.UUID
-	upsertAgentArgs     []sqlc.UpsertClusterAgentTokenParams
-	rotateAgentArgs     []sqlc.RotateClusterAgentTokenParams
-	clearedPreviousIDs  []uuid.UUID
-	touchedAgentIDs     []uuid.UUID
-	touchedMetricsIDs   []uuid.UUID
-	adoptedAgentIDs     []uuid.UUID
-	markedRegIDs        []uuid.UUID
+	mu                       sync.Mutex
+	tokenClusterID           string
+	tokenErr                 error
+	clusterAgentToken        sqlc.ClusterAgentToken
+	clusterAgentErr          error
+	upsertArgs               []sqlc.UpsertClusterHealthStatusParams
+	upsertErr                error
+	recordHeartbeatArgs      []sqlc.RecordAgentHeartbeatParams
+	recordHeartbeatErr       error
+	heartbeatCommandsPending bool
+	createConnArgs           []sqlc.CreateAgentConnectionParams
+	replaceConnCalls         int
+	replaceConnErrs          []error
+	updateConnArgs           []sqlc.UpdateAgentConnectionStatusParams
+	pingIDs                  []uuid.UUID
+	upsertAgentArgs          []sqlc.UpsertClusterAgentTokenParams
+	rotateAgentArgs          []sqlc.RotateClusterAgentTokenParams
+	clearedPreviousIDs       []uuid.UUID
+	touchedAgentIDs          []uuid.UUID
+	touchedMetricsIDs        []uuid.UUID
+	adoptedAgentIDs          []uuid.UUID
+	markedRegIDs             []uuid.UUID
 	// A3 gate-test knobs.
 	regTokenCreatedAt   time.Time
 	byClusterIDForce    *sqlc.ClusterAgentToken
@@ -60,6 +64,7 @@ type recordingValidator struct {
 	disconnectClusters  []uuid.UUID
 	pendingOp           *sqlc.AgentLifecycleOperation
 	claimErr            error
+	claimCalls          int
 	completedOps        []sqlc.CompleteAgentLifecycleOperationParams
 	markSucceededArgs   []sqlc.MarkRunningAgentUpgradeSucceededByVersionParams
 	auditRows           []sqlc.CreateAuditLogV1Params
@@ -181,18 +186,18 @@ func (r *recordingValidator) ClearPreviousClusterAgentTokenHash(_ context.Contex
 	return nil
 }
 
-func (r *recordingValidator) UpdateClusterHeartbeat(_ context.Context, arg sqlc.UpdateClusterHeartbeatParams) error {
+func (r *recordingValidator) RecordAgentHeartbeat(_ context.Context, arg sqlc.RecordAgentHeartbeatParams) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.updateHeartbeatArgs = append(r.updateHeartbeatArgs, arg)
-	return r.updateHeartbeatErr
+	r.recordHeartbeatArgs = append(r.recordHeartbeatArgs, arg)
+	return r.heartbeatCommandsPending, r.recordHeartbeatErr
 }
 
-func (r *recordingValidator) SnapshotHeartbeatArgs() []sqlc.UpdateClusterHeartbeatParams {
+func (r *recordingValidator) SnapshotHeartbeatArgs() []sqlc.RecordAgentHeartbeatParams {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]sqlc.UpdateClusterHeartbeatParams, len(r.updateHeartbeatArgs))
-	copy(out, r.updateHeartbeatArgs)
+	out := make([]sqlc.RecordAgentHeartbeatParams, len(r.recordHeartbeatArgs))
+	copy(out, r.recordHeartbeatArgs)
 	return out
 }
 
@@ -225,6 +230,44 @@ func (r *recordingValidator) CreateAgentConnection(_ context.Context, arg sqlc.C
 	return sqlc.AgentConnection{ID: uuid.New(), ClusterID: arg.ClusterID, AgentID: arg.AgentID, SessionID: arg.SessionID, Status: arg.Status}, nil
 }
 
+func (r *recordingValidator) ReplaceActiveAgentConnection(_ context.Context, arg sqlc.ReplaceActiveAgentConnectionParams) (sqlc.AgentConnection, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.replaceConnCalls++
+	if len(r.replaceConnErrs) > 0 {
+		err := r.replaceConnErrs[0]
+		r.replaceConnErrs = r.replaceConnErrs[1:]
+		return sqlc.AgentConnection{}, err
+	}
+	r.disconnectClusters = append(r.disconnectClusters, arg.ClusterID)
+	r.createConnArgs = append(r.createConnArgs, sqlc.CreateAgentConnectionParams{
+		ClusterID: arg.ClusterID, AgentID: arg.AgentID, SessionID: arg.SessionID,
+		Status: "connected", ChannelName: arg.ChannelName, PodName: arg.PodName,
+		NodeName: arg.NodeName, AgentVersion: arg.AgentVersion,
+	})
+	return sqlc.AgentConnection{ID: uuid.New(), ClusterID: arg.ClusterID, AgentID: arg.AgentID, SessionID: arg.SessionID, Status: "connected"}, nil
+}
+
+func TestPersistConnectRetriesOneActiveSessionConflict(t *testing.T) {
+	validator := &recordingValidator{replaceConnErrs: []error{&pgconn.PgError{
+		Code: "23505", ConstraintName: "agent_connections_one_active_per_cluster",
+	}}}
+	hub := NewHubWithValidator(slog.Default(), validator)
+	agent := &AgentConnection{ClusterID: uuid.NewString(), AgentID: "agent", SessionID: "session"}
+
+	hub.persistConnect(context.Background(), agent)
+
+	validator.mu.Lock()
+	calls := validator.replaceConnCalls
+	validator.mu.Unlock()
+	if calls != 2 {
+		t.Fatalf("replace calls = %d, want 2", calls)
+	}
+	if agent.DBID == uuid.Nil {
+		t.Fatal("connection was not persisted after transient uniqueness conflict")
+	}
+}
+
 func (r *recordingValidator) UpdateAgentConnectionStatus(_ context.Context, arg sqlc.UpdateAgentConnectionStatusParams) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -249,6 +292,7 @@ func (r *recordingValidator) UpdateAgentConnectionPing(_ context.Context, id uui
 func (r *recordingValidator) ClaimPendingAgentLifecycleOperation(context.Context, uuid.UUID) (sqlc.AgentLifecycleOperation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.claimCalls++
 	if r.claimErr != nil {
 		return sqlc.AgentLifecycleOperation{}, r.claimErr
 	}
@@ -258,6 +302,12 @@ func (r *recordingValidator) ClaimPendingAgentLifecycleOperation(context.Context
 	op := *r.pendingOp
 	r.pendingOp = nil
 	return op, nil
+}
+
+func (r *recordingValidator) SnapshotClaimCalls() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.claimCalls
 }
 
 func (r *recordingValidator) CompleteAgentLifecycleOperation(_ context.Context, arg sqlc.CompleteAgentLifecycleOperationParams) (sqlc.AgentLifecycleOperation, error) {
@@ -387,6 +437,7 @@ func TestHandleHeartbeatClaimsPendingAgentUpgrade(t *testing.T) {
 	clusterID := uuid.New()
 	opID := uuid.New()
 	validator := &recordingValidator{
+		heartbeatCommandsPending: true,
 		pendingOp: &sqlc.AgentLifecycleOperation{
 			ID:            opID,
 			ClusterID:     clusterID,
@@ -449,11 +500,15 @@ func TestHandleHeartbeatPersistsSchemaVersionAndPublishes(t *testing.T) {
 	h.handleHeartbeat(conn, &protocol.Message{Type: protocol.MsgHeartbeat, Payload: body})
 
 	upserts := validator.SnapshotUpserts()
-	if len(upserts) != 1 {
-		t.Fatalf("health upserts = %d, want 1", len(upserts))
+	if len(upserts) != 0 {
+		t.Fatalf("legacy health upserts = %d, want 0", len(upserts))
 	}
 	var conditions map[string]any
-	if err := json.Unmarshal(upserts[0].Conditions, &conditions); err != nil {
+	heartbeats := validator.SnapshotHeartbeatArgs()
+	if len(heartbeats) != 1 {
+		t.Fatalf("atomic heartbeat writes = %d, want 1", len(heartbeats))
+	}
+	if err := json.Unmarshal(heartbeats[0].Conditions, &conditions); err != nil {
 		t.Fatalf("decode conditions: %v", err)
 	}
 	if conditions["heartbeat_schema_version"] != float64(protocol.HeartbeatSchemaVersion) {
@@ -482,6 +537,12 @@ func TestHandleHeartbeatPersistsSchemaVersionAndPublishes(t *testing.T) {
 	}
 	if got, ok := data["enabled_features"].([]string); !ok || len(got) != 3 {
 		t.Fatalf("event enabled_features = %#v", data["enabled_features"])
+	}
+	if got := validator.SnapshotClaimCalls(); got != 0 {
+		t.Fatalf("idle heartbeat lifecycle claims = %d, want 0", got)
+	}
+	if got := validator.SnapshotMarkSucceededArgs(); len(got) != 0 {
+		t.Fatalf("idle heartbeat upgrade reconciliations = %+v, want none", got)
 	}
 }
 
@@ -517,7 +578,7 @@ func TestHandleAgentUpgradeResultCompletesOperation(t *testing.T) {
 func TestUpgradeAckDoesNotTerminateOperation(t *testing.T) {
 	clusterID := uuid.New()
 	opID := uuid.New()
-	validator := &recordingValidator{}
+	validator := &recordingValidator{heartbeatCommandsPending: true}
 	h := NewHubWithValidator(slog.Default(), validator)
 	conn := &AgentConnection{ClusterID: clusterID.String()}
 
@@ -613,6 +674,7 @@ func TestAgentUpgradeDispatchCarriesRollbackImageFromOperationSpec(t *testing.T)
 	opID := uuid.New()
 	spec := []byte(`{"plan":{"rollback_image":"example.com/astronomer-agent:v1.0.0"}}`)
 	validator := &recordingValidator{
+		heartbeatCommandsPending: true,
 		pendingOp: &sqlc.AgentLifecycleOperation{
 			ID:            opID,
 			ClusterID:     clusterID,
@@ -944,6 +1006,12 @@ func TestHandleMetricsPublishesClusterMetricsAndPersistsHealth(t *testing.T) {
 	if data["pod_count"] != 17 {
 		t.Fatalf("expected pod_count=17, got %v", data["pod_count"])
 	}
+	if _, ok := data["nodes"]; ok {
+		t.Fatal("cluster.metrics SSE payload must not embed per-node snapshots")
+	}
+	if _, ok := data["namespaces"]; ok {
+		t.Fatal("cluster.metrics SSE payload must not embed per-namespace snapshots")
+	}
 }
 
 // TestHandleMetricsTouchesSampleOnlyWhenAvailable proves the M13 write point:
@@ -1016,7 +1084,7 @@ func TestHandleMetricsInvalidPayloadDoesNotPersistOrPublish(t *testing.T) {
 
 // TestHandleHeartbeatDegradedAdvancesLivenessAndSurfacesCondition proves the
 // H11/L11 fix at the handler boundary: a degraded/minimal beat (empty inventory
-// + DegradedReasons) still calls UpdateClusterHeartbeat (liveness advances) and
+// + DegradedReasons) still calls RecordAgentHeartbeat (liveness advances) and
 // surfaces connected=true + degraded=true, while passing the empty inventory
 // values straight through so the keep-last-good SQL preserves prior columns.
 func TestHandleHeartbeatDegradedAdvancesLivenessAndSurfacesCondition(t *testing.T) {
@@ -1035,18 +1103,14 @@ func TestHandleHeartbeatDegradedAdvancesLivenessAndSurfacesCondition(t *testing.
 
 	hbArgs := validator.SnapshotHeartbeatArgs()
 	if len(hbArgs) != 1 {
-		t.Fatalf("UpdateClusterHeartbeat calls = %d, want 1 (liveness must advance on degraded beat)", len(hbArgs))
+		t.Fatalf("RecordAgentHeartbeat calls = %d, want 1 (liveness must advance on degraded beat)", len(hbArgs))
 	}
 	if hbArgs[0].KubernetesVersion != "" || hbArgs[0].NodeCount != 0 {
 		t.Fatalf("degraded beat should carry empty inventory for keep-last-good, got %+v", hbArgs[0])
 	}
 
-	upserts := validator.SnapshotUpserts()
-	if len(upserts) != 1 {
-		t.Fatalf("health upserts = %d, want 1", len(upserts))
-	}
 	var conditions map[string]any
-	if err := json.Unmarshal(upserts[0].Conditions, &conditions); err != nil {
+	if err := json.Unmarshal(hbArgs[0].Conditions, &conditions); err != nil {
 		t.Fatalf("decode conditions: %v", err)
 	}
 	if conditions["connected"] != true {
@@ -1076,18 +1140,14 @@ func TestHandleHeartbeatFullBeatUpdatesInventory(t *testing.T) {
 
 	hbArgs := validator.SnapshotHeartbeatArgs()
 	if len(hbArgs) != 1 {
-		t.Fatalf("UpdateClusterHeartbeat calls = %d, want 1", len(hbArgs))
+		t.Fatalf("RecordAgentHeartbeat calls = %d, want 1", len(hbArgs))
 	}
 	if hbArgs[0].KubernetesVersion != "v1.30.2" || hbArgs[0].NodeCount != 3 || hbArgs[0].Distribution != "k3s" {
 		t.Fatalf("full beat should carry real inventory, got %+v", hbArgs[0])
 	}
 
-	upserts := validator.SnapshotUpserts()
-	if len(upserts) != 1 {
-		t.Fatalf("health upserts = %d, want 1", len(upserts))
-	}
 	var conditions map[string]any
-	if err := json.Unmarshal(upserts[0].Conditions, &conditions); err != nil {
+	if err := json.Unmarshal(hbArgs[0].Conditions, &conditions); err != nil {
 		t.Fatalf("decode conditions: %v", err)
 	}
 	if conditions["degraded"] != false {

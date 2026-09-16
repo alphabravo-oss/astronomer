@@ -1,16 +1,20 @@
 import * as generated from "@/lib/api/generated/client";
+import { actOnClusterDeployment } from "@/lib/api/delivery-deployments";
 import {
-  actOnClusterDeployment,
   createDeliverySource,
-  createDeliveryTarget,
-  getDeliveryEstate,
   listDeliverySources,
-  previewDeliveryTarget,
-  startDeliveryRollout,
   type CreateDeliverySourceRequest,
+} from "@/lib/api/delivery-sources";
+import {
+  createDeliveryTarget,
+  previewDeliveryTarget,
   type DeliveryTargetRequest,
+} from "@/lib/api/delivery-targets";
+import {
+  startDeliveryRollout,
   type RolloutStrategyRequest,
-} from "./delivery";
+} from "@/lib/api/delivery-rollouts";
+import { getDeliveryEstate } from "@/lib/api/delivery-system";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
   const actual =
@@ -43,10 +47,13 @@ describe("delivery generated API boundary", () => {
   it("passes project filters and cancellation to the generated list operation", async () => {
     vi.mocked(generated.getDeliverySources).mockResolvedValueOnce({
       data: [],
-      count: 0,
-      next: null,
-      previous: null,
-      total_known: true,
+      pagination: {
+        total: 0,
+        limit: 25,
+        offset: 50,
+        has_more: false,
+        next_offset: null,
+      },
     });
     const controller = new AbortController();
 
@@ -162,6 +169,7 @@ describe("delivery generated API boundary", () => {
                 "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             },
           },
+          overrides: {},
         },
         placement_digest:
           "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",

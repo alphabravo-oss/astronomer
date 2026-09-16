@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { mapHelmRepository } from "@/lib/api/catalog";
 import type { HelmRepository } from "@/types";
 import { RepositoriesTable } from "./-repositories-table";
@@ -112,5 +112,37 @@ describe("catalog Repositories table", () => {
       <RepositoriesTable repos={legacy} onSync={vi.fn()} onDelete={vi.fn()} />,
     );
     expect(within(rowFor("bitnami")).getByText("0")).toBeInTheDocument();
+  });
+
+  it("requires the exact repository name before destructive deletion", () => {
+    const onDelete = vi.fn();
+    render(
+      <RepositoriesTable
+        repos={repos}
+        onSync={vi.fn()}
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.click(
+      within(rowFor("bitnami")).getByTitle("Delete repository"),
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Delete repository" });
+    expect(dialog).toHaveTextContent(
+      "Existing Helm releases are not uninstalled.",
+    );
+    const confirmButton = within(dialog).getByRole("button", {
+      name: "Delete",
+    });
+    expect(confirmButton).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByPlaceholderText("bitnami"), {
+      target: { value: "bitnami" },
+    });
+    fireEvent.click(confirmButton);
+
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(onDelete).toHaveBeenCalledWith("repo-1");
   });
 });

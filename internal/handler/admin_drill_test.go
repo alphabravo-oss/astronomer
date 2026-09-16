@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeDrillQuerier is the minimal AdminDrillQuerier the tests need.
@@ -110,10 +110,10 @@ func (f *fakeDrillQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAudi
 }
 
 // makeRequest is a tiny shorthand: builds a GET request with the given
-// authenticated user injected via SetAuthenticatedUserForTest.
+// authenticated user injected via reqctx.WithUser.
 func makeRequest(target string, callerID uuid.UUID) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, target, nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         callerID.String(),
 		AuthMethod: "jwt",
 	})
@@ -252,14 +252,14 @@ func TestBackupDrillHandler_ListHistory(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	var payload struct {
-		Data  []BackupDrillResult `json:"data"`
-		Count int64               `json:"count"`
+		Data       []BackupDrillResult `json:"data"`
+		Pagination paging.Metadata     `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if payload.Count != 2 {
-		t.Fatalf("count = %d, want 2", payload.Count)
+	if exactPageTotal(t, payload.Pagination) != 2 {
+		t.Fatalf("count = %d, want 2", exactPageTotal(t, payload.Pagination))
 	}
 	if len(payload.Data) != 2 {
 		t.Fatalf("len(data) = %d, want 2", len(payload.Data))

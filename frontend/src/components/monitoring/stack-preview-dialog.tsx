@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * Rendered-Helm-values preview for a monitoring stack.

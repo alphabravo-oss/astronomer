@@ -3,7 +3,7 @@ import type { ElementType } from "react";
 import { useState } from "react";
 import { AlertTriangle, Ban, Bell, Plus, VolumeX } from "lucide-react";
 import { useTabParam } from "@/lib/use-tab-param";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { TabStrip, TabsContent } from "@/components/ui/tabs";
@@ -37,12 +37,12 @@ function AlertingPage() {
         description="Estate inbox and routing. Alert rules are defined on each cluster."
         actions={
           <>
-            <Link
-              href="/dashboard/alerting/baselines"
+            <RouterLink
+              to="/dashboard/alerting/baselines"
               className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
             >
               Anomaly Baselines
-            </Link>
+            </RouterLink>
             {activeTab === "channels" && (
               <ActionButton
                 intent="primary"

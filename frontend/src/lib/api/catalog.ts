@@ -5,6 +5,7 @@ import {
   getCatalogCharts,
   getCatalogChartsByIdVersions,
   getCatalogInstalled,
+  getCatalogOperationsById,
   getCatalogRecommendationsPopular,
   getCatalogRecommendationsSimilarByChartId,
   getCatalogRepositories,
@@ -43,6 +44,14 @@ export type ChartRatingAggregate = CamelizeKeys<
   OpenAPIComponents["schemas"]["ChartRatingAggregate"]
 >;
 export type ChartScore = CamelizeKeys<ChartRecommendationWire>;
+export type CatalogOperation = OpenAPIComponents["schemas"]["CatalogOperation"] & {
+  events?: Schemas["CatalogOperationEvent"][];
+};
+
+export interface CatalogInstallationReceipt {
+  installation: InstalledChart;
+  operation: CatalogOperation;
+}
 
 const CATALOG_PAGE_LIMIT = 200;
 const CHART_CATEGORIES = new Set<HelmChartCategory>([
@@ -299,7 +308,7 @@ export interface InstallHelmChartRequest {
 
 export async function installHelmChart(
   data: InstallHelmChartRequest,
-): Promise<InstalledChart> {
+): Promise<CatalogInstallationReceipt> {
   const payload = requireData(
     await postCatalogInstalled({
       headerParams: idempotencyHeaderParams(),
@@ -307,7 +316,15 @@ export async function installHelmChart(
     }),
     "installHelmChart",
   );
-  return mapInstalledChart(payload.installation);
+  return {
+    installation: mapInstalledChart(payload.installation),
+    operation: payload.operation,
+  };
+}
+
+/** Detail is the only catalog endpoint that exposes persisted stage events. */
+export async function getCatalogOperation(id: string): Promise<CatalogOperation> {
+  return getCatalogOperationsById({ path: { id } });
 }
 
 export async function upgradeInstalledChart(

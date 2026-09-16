@@ -29,7 +29,7 @@ func TestSCIMPrivilegedUserProtected(t *testing.T) {
 			"bob":   {ID: bobID, Username: "bob", Email: "bob@example.com", IsActive: true},
 		},
 	}
-	h := NewSCIMHandler(q)
+	h := newTestSCIMHandler(q)
 
 	assertForbidden := func(t *testing.T, name string, rec *httptest.ResponseRecorder) {
 		t.Helper()

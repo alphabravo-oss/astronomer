@@ -142,7 +142,7 @@ func (t *BusTap) Start(ctx context.Context) {
 		return
 	}
 	if t.bus != nil {
-		ch := t.bus.Subscribe(ctx)
+		ch := t.bus.Subscribe(ctx, events.AcceptAll)
 		go t.runBus(ctx, ch)
 	}
 	go t.runInserter(ctx)

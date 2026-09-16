@@ -56,7 +56,11 @@ const modeAllowedSummary: Record<CharlieMode, string[]> = {
 };
 
 type ModeTransitionPhase =
-  "idle" | "applying" | "verifying" | "ready" | "failed";
+  | "idle"
+  | "applying"
+  | "verifying"
+  | "ready"
+  | "failed";
 
 type ModeTransitionState = {
   phase: ModeTransitionPhase;
@@ -138,23 +142,29 @@ export function ModeTab() {
     retry: false,
   });
 
-  // After apply, poll until both mode ceiling and agent replicas are ready.
-  useEffect(() => {
-    if (transition.phase !== "verifying" || !transition.target) return;
-    const mode = q.data;
-    if (!mode) return;
-    const target = transition.target;
-    if (mode.authoritative !== target || mode.requested !== target) return;
-    if (!charlieModeWorkReady(mode, agentQ.data)) return;
-    setTransition((prev) => ({
-      ...prev,
+  // Reconcile query state before painting; effects only notify external systems.
+  if (
+    transition.phase === "verifying" &&
+    transition.target &&
+    q.data &&
+    q.data.authoritative === transition.target &&
+    q.data.requested === transition.target &&
+    charlieModeWorkReady(q.data, agentQ.data)
+  ) {
+    setTransition({
+      ...transition,
       phase: "ready",
-      message: `${productModeLabel[target]} is live. Both product-agent replicas report the verified ceiling.`,
-    }));
-    toastSuccess(`Charlie is ready in ${productModeLabel[target]} mode`);
+      message: `${productModeLabel[transition.target]} is live. Both product-agent replicas report the verified ceiling.`,
+    });
+  }
+  useEffect(() => {
+    if (transition.phase !== "ready" || !transition.target) return;
+    toastSuccess(
+      `Charlie is ready in ${productModeLabel[transition.target]} mode`,
+    );
     void qc.invalidateQueries({ queryKey: queryKeys.charlie.adminConnection });
     void qc.invalidateQueries({ queryKey: queryKeys.charlie.overview });
-  }, [transition.phase, transition.target, q.data, agentQ.data, qc]);
+  }, [transition.phase, transition.target, qc]);
 
   // Safety timeout so "verifying" never hangs forever in the UI.
   useEffect(() => {
@@ -201,9 +211,6 @@ export function ModeTab() {
           message: `${productModeLabel[v.authoritative]} is live and product agents report the verified ceiling.`,
           startedAt: prev.startedAt,
         }));
-        toastSuccess(
-          `Charlie is ready in ${productModeLabel[v.authoritative]} mode`,
-        );
         return;
       }
       setTransition((prev) => ({

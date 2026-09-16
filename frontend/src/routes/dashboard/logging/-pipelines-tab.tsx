@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLoggingPipelines, queryKeys } from "@/lib/hooks";
-import { deleteLoggingPipeline, updateLoggingPipeline } from "@/lib/api";
+import { useLoggingPipelines } from "@/lib/hooks/logging";
+import { queryKeys } from "@/lib/query-keys";
+import {
+  deleteLoggingPipeline,
+  updateLoggingPipeline,
+} from "@/lib/api/logging";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatRelativeTime, cn } from "@/lib/utils";
@@ -93,14 +97,14 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
             row.namespaces.slice(0, 3).map((ns) => (
               <span
                 key={ns}
-                className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+                className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
               >
                 {ns}
               </span>
             ))
           )}
           {row.namespaces.length > 3 && (
-            <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+            <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
               +{row.namespaces.length - 3}
             </span>
           )}
@@ -157,7 +161,7 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete pipeline"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -178,7 +182,10 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
         loading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
-        emptyMessage="No logging pipelines configured"
+        emptyState={{
+          title: "No logging pipelines configured",
+          description: "Create the first item to configure this feature.",
+        }}
       />
 
       <ConfirmDialog

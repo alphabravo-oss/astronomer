@@ -1,8 +1,6 @@
-"use client";
-
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 import { previewToolInstall } from "@/lib/api/tools";
 import { queryKeys } from "@/lib/query-keys";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -14,6 +12,7 @@ import { permissionDeniedReason } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { ClusterTool, ToolFormField } from "@/types";
 import { toastWarning } from "@/lib/toast";
+import { previewToolFieldValues } from "./tool-values";
 
 interface ToolInstallModalProps {
   tool: ClusterTool;
@@ -26,14 +25,6 @@ interface ToolInstallModalProps {
 }
 
 const EMPTY_TOOL_FIELDS: ToolFormField[] = [];
-
-// Chart value presets, offered at install time. Kept in sync with the cluster
-// `environment` values the backend accepts as a preset key.
-const PRESET_OPTIONS = [
-  { value: "development", label: "Development" },
-  { value: "staging", label: "Staging" },
-  { value: "production", label: "Production" },
-];
 
 // setPath writes value into a nested object at a dot-path, creating intermediate
 // objects as needed: setPath({}, "a.b.c", 1) => { a: { b: { c: 1 } } }.
@@ -111,15 +102,18 @@ export function ToolInstallModal({
   // reading as a per-tool environment switch instead of "which chart values to
   // install with". `preset` seeds it from the cluster's environment. The chart
   // preview below keys on this, so switching presets re-previews live.
-  const [selectedPreset, setSelectedPreset] = useState(preset);
+  const presetNames = Object.keys(tool.presets);
+  const [selectedPreset, setSelectedPreset] = useState(() =>
+    presetNames.includes(preset)
+      ? preset
+      : presetNames.includes("default")
+        ? "default"
+        : (presetNames[0] ?? ""),
+  );
 
-  // Form state: path -> string value, seeded from schema defaults.
-  const [values, setValues] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const f of fields)
-      if (f.default !== undefined) init[f.path] = f.default;
-    return init;
-  });
+  // Only operator edits override the selected preset. Schema display defaults
+  // must never silently replace development/production sizing.
+  const [values, setValues] = useState<Record<string, string>>({});
   const [yamlText, setYamlText] = useState("");
 
   // Chart metadata (name/version/namespace) for the header.
@@ -131,7 +125,11 @@ export function ToolInstallModal({
         preset: selectedPreset,
       }),
   });
-  const chart = preview?.charts?.[0];
+  const charts = preview?.charts ?? [];
+  const presetValues = useMemo(
+    () => previewToolFieldValues(preview?.charts ?? [], tool, fields),
+    [preview?.charts, tool, fields],
+  );
 
   const groups = useMemo(() => groupFields(fields), [fields]);
 
@@ -171,12 +169,18 @@ export function ToolInstallModal({
       bodyClassName="flex-1 overflow-y-auto"
       footerClassName="bg-muted/30"
       headerActions={
-        chart ? (
-          <p className="text-xs text-muted-foreground font-mono">
-            {chart.chartName}
-            {chart.chartVersion ? `@${chart.chartVersion}` : ""} ·{" "}
-            {chart.namespace}
-          </p>
+        charts.length ? (
+          <ol
+            aria-label="Release installation order"
+            className="text-xs text-muted-foreground font-mono space-y-1"
+          >
+            {charts.map((chart, index) => (
+              <li key={`${chart.namespace}/${chart.chartName}`}>
+                {index + 1}. {chart.releaseName ?? chart.chartName} ·{" "}
+                {chart.chartName}@{chart.chartVersion} · {chart.namespace}
+              </li>
+            ))}
+          </ol>
         ) : undefined
       }
       footer={
@@ -226,9 +230,11 @@ export function ToolInstallModal({
           value={selectedPreset}
           onChange={(e) => setSelectedPreset(e.target.value)}
         >
-          {PRESET_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
+          {(presetNames.length ? presetNames : [""]).map((name) => (
+            <option key={name} value={name}>
+              {name
+                ? name.charAt(0).toUpperCase() + name.slice(1)
+                : "Chart defaults"}
             </option>
           ))}
         </Select>
@@ -255,7 +261,9 @@ export function ToolInstallModal({
                   <FormFieldRow
                     key={f.path}
                     field={f}
-                    value={values[f.path] ?? ""}
+                    value={
+                      values[f.path] ?? presetValues[f.path] ?? f.default ?? ""
+                    }
                     classValue={
                       f.storageClassPath
                         ? (values[f.storageClassPath] ?? "")
@@ -297,7 +305,7 @@ export function ToolInstallModal({
               "# e.g.\nreplicas: 2\nresources:\n  requests:\n    cpu: 100m"
             }
             className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono
-              placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-none"
           />
         </div>
       )}
@@ -318,10 +326,13 @@ function FormFieldRow({
   onChange: (v: string) => void;
   onClassChange: (v: string) => void;
 }) {
+  const inputId = useId();
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_220px] items-center gap-3">
+    <div className="grid sm:grid-cols-[minmax(0,1fr)_220px] items-center gap-3">
       <div>
-        <label className="text-sm text-foreground">{field.label}</label>
+        <label htmlFor={inputId} className="text-sm text-foreground">
+          {field.label}
+        </label>
         {field.help && (
           <p className="text-xs text-muted-foreground mt-0.5">{field.help}</p>
         )}
@@ -332,10 +343,12 @@ function FormFieldRow({
       {field.type === "boolean" ? (
         <label className="inline-flex items-center gap-2 justify-self-end cursor-pointer">
           <input
+            id={inputId}
+            aria-label={field.label}
             type="checkbox"
             checked={value === "true"}
             onChange={(e) => onChange(e.target.checked ? "true" : "false")}
-            className="h-4 w-4 rounded border-border"
+            className="h-4 w-4 rounded-sm border-border"
           />
           <span className="text-xs text-muted-foreground">
             {value === "true" ? "Enabled" : "Disabled"}
@@ -343,6 +356,7 @@ function FormFieldRow({
         </label>
       ) : field.type === "select" ? (
         <Select
+          id={inputId}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="h-8"
@@ -356,12 +370,14 @@ function FormFieldRow({
       ) : field.type === "storage" ? (
         <div className="flex gap-2">
           <Input
+            id={inputId}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={field.placeholder || "10Gi"}
             className="h-8 w-24"
           />
           <Input
+            aria-label={`${field.label} storage class`}
             value={classValue}
             onChange={(e) => onClassChange(e.target.value)}
             placeholder="storageClass"
@@ -370,6 +386,7 @@ function FormFieldRow({
         </div>
       ) : (
         <Input
+          id={inputId}
           type={field.type === "number" ? "number" : "text"}
           value={value}
           onChange={(e) => onChange(e.target.value)}

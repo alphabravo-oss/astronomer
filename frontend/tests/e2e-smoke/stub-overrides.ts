@@ -143,9 +143,23 @@ export const overrides: StubOverride[] = [
     method: "GET",
     path: "/api/v1/cloud-credentials/providers",
     body: {
-      data: [
-        { provider: "aws", display_name: "AWS", description: "", fields: [] },
-      ],
+      data: {
+        items: [
+          {
+            name: "aws",
+            display_name: "Amazon Web Services",
+            required_keys: ["access_key_id", "secret_access_key"],
+            optional_keys: ["region", "session_token", "assume_role_arn"],
+            secret_keys: [
+              "access_key_id",
+              "secret_access_key",
+              "session_token",
+            ],
+            secret_shape: {},
+            allow_unknown_keys: false,
+          },
+        ],
+      },
     },
   },
   {
@@ -195,8 +209,12 @@ export const overrides: StubOverride[] = [
         spec: {
           environment: "development",
           tools: [],
-          labels: [],
-          default_project: {},
+          labels: {},
+          default_project: {
+            name: "smoke-project",
+            pod_security_profile: "baseline",
+            network_policy_mode: "isolated",
+          },
           registration_policy: {
             require_approval: false,
             token_rotation_days: 90,
@@ -248,8 +266,8 @@ export const overrides: StubOverride[] = [
     },
   },
   {
-    // Spec documents a flat `event_filters` shape here, but the client
-    // consumes `filters.events` — emit what the client (and Go handler) use.
+    // The generated boundary maps the server's flat event_filters field into
+    // the nested form view model.
     method: "GET",
     path: `/api/v1/admin/webhooks/${SMOKE_CLUSTER_ID}`,
     body: {
@@ -260,7 +278,7 @@ export const overrides: StubOverride[] = [
         template: "generic",
         secret: "",
         enabled: true,
-        filters: { events: [] },
+        event_filters: [],
         created_at: now,
         updated_at: now,
       },

@@ -7,9 +7,10 @@ import { createFileRoute } from "@tanstack/react-router";
  * boundary in `handleSave`. Enforcement is the only enum; everything else is
  * an integer cap.
  */
-import { useEffect, useId, useState } from "react";
-import { Link } from "@/lib/link";
-import { useParams, useRouter } from "@/lib/navigation";
+import { useId, useState } from "react";
+import { useDraft } from "@/lib/hooks/use-draft";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Gauge, Loader2, Save, Trash2 } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
@@ -77,15 +78,11 @@ function NumberField({
 }
 
 function QuotaPlanForm({ initial }: { initial: QuotaPlanView }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const update = useUpdateQuotaPlan();
   const del = useDeleteQuotaPlan();
-  const [form, setForm] = useState<QuotaPlanView>(initial);
+  const [form, setForm] = useDraft(initial);
   const [confirmDelete, setConfirmDelete] = useState(false);
-
-  useEffect(() => {
-    setForm(initial);
-  }, [initial]);
 
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
 
@@ -172,9 +169,7 @@ function QuotaPlanForm({ initial }: { initial: QuotaPlanView }) {
           <NumberField
             label="Max namespaces per project"
             value={form.maxNamespacesPerProject}
-            onChange={(v) =>
-              setForm({ ...form, maxNamespacesPerProject: v })
-            }
+            onChange={(v) => setForm({ ...form, maxNamespacesPerProject: v })}
           />
           <NumberField
             label="Max members per project"
@@ -212,7 +207,7 @@ function QuotaPlanForm({ initial }: { initial: QuotaPlanView }) {
         </p>
       </div>
 
-      <div className="flex items-center justify-between sticky bottom-4 z-10 rounded-xl border border-border bg-popover/80 backdrop-blur p-3 shadow-sm">
+      <div className="flex items-center justify-between sticky bottom-4 z-10 rounded-xl border border-border bg-popover/80 backdrop-blur-sm p-3 shadow-xs">
         <ActionButton
           intent="destructive"
           icon={<Trash2 className="h-3.5 w-3.5" />}
@@ -241,7 +236,7 @@ function QuotaPlanForm({ initial }: { initial: QuotaPlanView }) {
         onClose={() => setConfirmDelete(false)}
         onConfirm={async () => {
           await del.mutateAsync(form.name);
-          router.push("/dashboard/settings/quotas");
+          void navigate({ to: "/dashboard/settings/quotas" });
         }}
         title="Delete quota plan?"
         description={`Deleting "${form.name}" only works if no tenant is currently bound to this plan.`}
@@ -253,7 +248,7 @@ function QuotaPlanForm({ initial }: { initial: QuotaPlanView }) {
 }
 
 function QuotaPlanInner() {
-  const params = useParams<{ name: string }>();
+  const params = Route.useParams();
   const name = params?.name ? decodeURIComponent(params.name) : undefined;
   const { data, isLoading, error } = useQuotaPlan(name);
 
@@ -283,13 +278,13 @@ function QuotaPlanDetailPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings/quotas"
+        <RouterLink
+          to="/dashboard/settings/quotas"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to quotas
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Quota plan"
           title={

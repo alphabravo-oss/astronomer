@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -45,7 +46,7 @@ func TestDeriveCallerScope(t *testing.T) {
 		if !s.Determined || !s.AllNamespaces || !s.Superuser {
 			t.Fatalf("superuser scope = %+v", s)
 		}
-		if s.Verbs != rw {
+		if !s.Verbs.Read || !s.Verbs.Update || !s.Verbs.Delete {
 			t.Fatalf("superuser verbs = %+v, want %+v", s.Verbs, rw)
 		}
 		// §7 invariant 5: superuser scopes are never impersonated.
@@ -169,20 +170,49 @@ func TestDeriveCallerScope_ProjectExpansion(t *testing.T) {
 	})
 }
 
-// TestShellScopeEnabled_FlagCollapse guards §4.3: shell caller-scoping turns
-// on when the master namespace_scoped_rbac switch is on, without needing the
-// legacy feature.shell_scope_to_caller platform setting.
-func TestShellScopeEnabled_FlagCollapse(t *testing.T) {
-	t.Run("namespace-scoped RBAC on enables scoping with no feature reader", func(t *testing.T) {
-		h := &KubectlShellHandler{NamespaceScopedRBAC: true}
-		if !h.shellScopeEnabled(context.Background()) {
-			t.Fatal("NamespaceScopedRBAC=true must enable shell scoping")
+func TestShellScopeMissingAuthorizationFailsClosed(t *testing.T) {
+	h := &KubectlShellHandler{}
+	if _, ok := h.deriveScopeForCaller(context.Background(), uuid.New(), uuid.New(), kubectl.EffectiveVerbs{Read: true}); ok {
+		t.Fatal("missing authorization must deny caller scope")
+	}
+}
+
+func TestCallerShellManifestExactResourceGrants(t *testing.T) {
+	cluster, caller := uuid.New(), uuid.New()
+	for _, verb := range []string{"read", "list", "watch"} {
+		t.Run(verb, func(t *testing.T) {
+			bindings := []rbac.RoleBinding{{ClusterID: cluster.String(), RoleRules: []rbac.Rule{
+				{Resource: "clusters", Verbs: []string{"update"}},
+				{Resource: "secrets", Verbs: []string{verb}},
+			}}}
+			scope := deriveCallerScope(rbac.NewEngine(), bindings, cluster, caller, kubectl.EffectiveVerbs{Read: true, ReadSecrets: true})
+			var manifest struct {
+				Rules []struct{ Resources, Verbs []string }
+			}
+			if err := json.Unmarshal(kubectl.ClusterRoleManifest(kubectl.NewNames(), scope.Verbs), &manifest); err != nil {
+				t.Fatal(err)
+			}
+			want := verb
+			if want == "read" {
+				want = "get"
+			}
+			if len(manifest.Rules) != 1 || len(manifest.Rules[0].Resources) != 1 || manifest.Rules[0].Resources[0] != "secrets" || len(manifest.Rules[0].Verbs) != 1 || manifest.Rules[0].Verbs[0] != want {
+				t.Fatalf("grant secrets:%s emitted broader rules: %+v", verb, manifest.Rules)
+			}
+		})
+	}
+	t.Run("namespace grants cannot cross-contaminate", func(t *testing.T) {
+		bindings := []rbac.RoleBinding{
+			{ClusterID: cluster.String(), Namespace: "a", RoleRules: []rbac.Rule{{Resource: "secrets", Verbs: []string{"read"}}}},
+			{ClusterID: cluster.String(), Namespace: "b", RoleRules: []rbac.Rule{{Resource: "pods", Verbs: []string{"list"}}}},
 		}
-	})
-	t.Run("both off keeps scoping off", func(t *testing.T) {
-		h := &KubectlShellHandler{}
-		if h.shellScopeEnabled(context.Background()) {
-			t.Fatal("with both switches off, scoping must stay off")
+		scope := deriveCallerScope(rbac.NewEngine(), bindings, cluster, caller, kubectl.EffectiveVerbs{Read: true, ReadSecrets: true})
+		var manifest struct{ Rules []any }
+		if err := json.Unmarshal(kubectl.ClusterRoleManifest(kubectl.NewNames(), scope.Verbs), &manifest); err != nil {
+			t.Fatal(err)
+		}
+		if len(manifest.Rules) != 0 {
+			t.Fatalf("cross-namespace intersection must deny unmatched grants: %+v", manifest.Rules)
 		}
 	})
 }

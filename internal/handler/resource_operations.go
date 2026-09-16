@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -19,7 +21,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
@@ -65,7 +66,7 @@ func (h *ResourceHandler) SetResourceMutationRunTx(runTx resourceMutationRunTxFu
 // SetAuthorization wires the live caller-binding lookup used by durable
 // receipt polling. It is mandatory: authenticated requests fail closed when
 // this support is absent.
-func (h *ResourceHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+func (h *ResourceHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
 	if h != nil {
 		h.authz.SetAuthorization(engine, querier)
 	}
@@ -264,9 +265,8 @@ func (h *ResourceHandler) GetResourceOperation(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load resource operation")
 		return
 	}
-	clusterID, parseErr := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if parseErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return
 	}
 	if operation.ClusterID != clusterID {
@@ -274,7 +274,7 @@ func (h *ResourceHandler) GetResourceOperation(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Resource operation not found")
 		return
 	}
-	if _, ok := middleware.GetAuthenticatedUser(r.Context()); !ok {
+	if _, ok := reqctx.AuthenticatedUser(r.Context()); !ok {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
 	}

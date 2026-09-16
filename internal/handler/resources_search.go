@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
+	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // resourcesSearchMaxConcurrency caps how many clusters we hit in parallel for
@@ -35,8 +35,11 @@ const resourcesSearchPerClusterTimeout = 5 * time.Second
 // hints. The cap protects against runaway responses when somebody passes
 // limit=10000000.
 const (
-	resourcesSearchDefaultLimit = 100
-	resourcesSearchMaxLimit     = 1000
+	resourcesSearchDefaultLimit  = 100
+	resourcesSearchMaxLimit      = 1000
+	resourcesSearchFleetPageSize = 250
+	resourcesSearchMaxErrors     = 100
+	resourcesSearchTimeout       = 15 * time.Second
 )
 
 // ResourcesSearchHandler fans a single resource-list query out across every
@@ -52,6 +55,10 @@ type ResourcesSearchHandler struct {
 	queries   ResourcesSearchQuerier
 	authz     authorizationSupport
 	audit     any
+	// Timeouts are overrideable by package tests; production uses the bounded
+	// defaults above.
+	requestTimeout    time.Duration
+	perClusterTimeout time.Duration
 }
 
 // ResourcesSearchQuerier is the minimal slice of sqlc.Queries the search
@@ -68,7 +75,7 @@ func NewResourcesSearchHandler(queries ResourcesSearchQuerier, requester K8sRequ
 	return &ResourcesSearchHandler{queries: queries, requester: requester}
 }
 
-func (h *ResourcesSearchHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+func (h *ResourcesSearchHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
 	h.authz.SetAuthorization(engine, querier)
 }
 
@@ -156,6 +163,13 @@ type searchClusterError struct {
 	Error       string `json:"error"`
 }
 
+type searchClusterResult struct {
+	cluster   sqlc.Cluster
+	items     []map[string]any
+	err       error
+	truncated bool
+}
+
 // Search handles GET /api/v1/resources/search/.
 //
 // Query parameters:
@@ -175,6 +189,7 @@ type searchClusterError struct {
 //	    "clusters_failed":  M
 //	} }
 func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
 	if h == nil || h.queries == nil || h.requester == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.SearchUnavailable, "Cross-cluster search is not configured")
 		return
@@ -204,20 +219,22 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 	if limit > resourcesSearchMaxLimit {
 		limit = resourcesSearchMaxLimit
 	}
+	requestTimeout := h.requestTimeout
+	if requestTimeout <= 0 {
+		requestTimeout = resourcesSearchTimeout
+	}
+	searchCtx, cancelSearch := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancelSearch()
 
-	// Step 1: list active clusters. We page through with a generous LIMIT
-	// — search across thousands of clusters is out of scope for now, and
-	// the front-end's cap is well below 1k.
-	clusters, err := h.queries.ListClustersByStatus(r.Context(), sqlc.ListClustersByStatusParams{
-		Status:      "active",
-		QueryOffset: 0,
-		QueryLimit:  1000,
-	})
+	// Step 1: page the complete active fleet. A fixed first-page cap silently
+	// hid clusters at scale and made authorization/results depend on creation
+	// order.
+	clusters, err := h.listActiveClusters(searchCtx)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListClustersFailed, "Failed to list active clusters")
 		return
 	}
-	clusters, authErr := h.authorizedSearchClusters(r.Context(), clusters, def.rbacResource)
+	clusters, authErr := h.authorizedSearchClusters(searchCtx, clusters, def.rbacResource)
 	if authErr != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return
@@ -229,7 +246,7 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 
 	// Build the per-cluster k8s path once (it's identical for every cluster
 	// because the namespace + selectors are shared).
-	path := buildSearchPath(def, namespace, labelSelector, fieldSelector)
+	path := buildSearchPath(def, namespace, labelSelector, fieldSelector, limit)
 	if resourceType == "secrets" {
 		recordAudit(r, h.audit, "cluster.secret.read", "cluster", "*", "secrets", map[string]any{
 			"scope":               "cross_cluster_search",
@@ -244,62 +261,37 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	// Step 2: fan out. errgroup with SetLimit caps concurrency at 16; the
-	// per-cluster context timeout means a single slow cluster cannot hold
-	// up the whole response.
-	type clusterResult struct {
-		items []map[string]any
-		err   *searchClusterError
-	}
-	results := make([]clusterResult, len(clusters))
+	// Step 2: bounded worker fan-out. Results stream directly into the global
+	// top-K heap below instead of retaining one response slice per cluster.
+	// The fleet deadline bounds total latency independently of fleet size;
+	// every started cluster also gets a tighter timeout.
+	resultStream := h.searchClusters(searchCtx, clusters, resourceType, path, nameFilter, limit)
 
-	g, gctx := errgroup.WithContext(r.Context())
-	g.SetLimit(resourcesSearchMaxConcurrency)
-
-	for i, c := range clusters {
-		i, c := i, c // capture loop vars
-		g.Go(func() error {
-			ctx, cancel := context.WithTimeout(gctx, resourcesSearchPerClusterTimeout)
-			defer cancel()
-
-			items, err := h.queryCluster(ctx, c, resourceType, path)
-			if err != nil {
-				results[i] = clusterResult{
-					err: &searchClusterError{
-						ClusterID:   c.ID.String(),
-						ClusterName: clusterDisplayName(c),
-						Error:       err.Error(),
-					},
-				}
-				return nil // never bubble — partial failure is expected
-			}
-			results[i] = clusterResult{items: items}
-			return nil
-		})
-	}
-	_ = g.Wait() // we never return errors from the goroutines
-
-	// Step 3: stream-merge with a bounded top-K max-heap.
-	// Holding every cluster's full list in memory
-	// then sort-truncating to `limit` is O(N) memory and O(N log N)
-	// time. Using a max-heap of size `limit` keeps only the K smallest
-	// items in (cluster_name, namespace, name) order — O(limit) memory
-	// and O(N log limit) time. Fairness invariant from the previous
-	// design is preserved: every item from every cluster is still
-	// considered, so a popular cluster cannot starve the tail (which
-	// would be the failure mode of pushing `limit=N` per cluster).
+	// Step 3: stream-merge with a bounded top-K max-heap. Each Kubernetes
+	// request receives the global limit as a server-side list bound, and this
+	// heap keeps only the globally smallest K rows.
 	topK := newSearchTopKHeap(limit)
 	errs := make([]searchClusterError, 0)
-	failed := 0
-	for i, c := range clusters {
-		if results[i].err != nil {
-			errs = append(errs, *results[i].err)
+	omittedErrors := 0
+	failed, attempted, matches := 0, 0, 0
+	truncated := false
+	for result := range resultStream {
+		attempted++
+		if result.err != nil {
 			failed++
+			if !appendSearchError(&errs, searchClusterError{
+				ClusterID:   result.cluster.ID.String(),
+				ClusterName: clusterDisplayName(result.cluster),
+				Error:       result.err.Error(),
+			}) {
+				omittedErrors++
+			}
 			continue
 		}
-		clusterID := c.ID.String()
-		clusterName := clusterDisplayName(c)
-		for _, item := range results[i].items {
+		truncated = truncated || result.truncated
+		clusterID := result.cluster.ID.String()
+		clusterName := clusterDisplayName(result.cluster)
+		for _, item := range result.items {
 			// Make sure cluster_id / cluster_name are present even if the
 			// underlying flatten helper already set them (resources.go does
 			// for some types; we overwrite to guarantee consistency).
@@ -309,24 +301,133 @@ func (h *ResourcesSearchHandler) Search(w http.ResponseWriter, r *http.Request) 
 			// that camelizes snake_case keys; explicit keys avoid surprises.
 			item["clusterId"] = clusterID
 			item["clusterName"] = clusterName
-			if nameFilter != "" {
-				if !strings.Contains(strings.ToLower(stringValueAny(item, "name")), nameFilter) {
-					continue
-				}
-			}
+			matches++
 			topK.push(item)
 		}
 	}
+	// The dispatcher stops feeding new work at the fleet deadline. Account for
+	// clusters that never started without manufacturing an unbounded error
+	// array; clusters_failed remains exact and the final aggregate error makes
+	// the omission explicit.
+	skipped := len(clusters) - attempted
+	if skipped > 0 {
+		failed += skipped
+		if !appendSearchError(&errs, searchClusterError{
+			ClusterID:   "*",
+			ClusterName: "remaining clusters",
+			Error:       fmt.Sprintf("fleet search deadline reached before %d cluster queries started", skipped),
+		}) {
+			omittedErrors += skipped
+		}
+	}
+	if omittedErrors > 0 {
+		errs[len(errs)-1] = searchClusterError{
+			ClusterID:   "*",
+			ClusterName: "additional failures",
+			Error:       fmt.Sprintf("%d additional cluster failures omitted", omittedErrors+1),
+		}
+	}
+	truncated = truncated || failed > 0 || matches > limit
+	sort.Slice(errs, func(i, j int) bool {
+		if errs[i].ClusterName == errs[j].ClusterName {
+			return errs[i].ClusterID < errs[j].ClusterID
+		}
+		return errs[i].ClusterName < errs[j].ClusterName
+	})
 	merged := topK.sorted()
+	outcome := "complete"
+	if truncated {
+		outcome = "partial"
+	}
+	observability.RecordResourceSearch(outcome, attempted, failed, startedAt)
 
 	RespondJSON(w, http.StatusOK, map[string]any{
 		"results":          merged,
 		"errors":           errs,
-		"clusters_queried": len(clusters),
+		"clusters_queried": attempted,
 		"clusters_failed":  failed,
 		"type":             resourceType,
-		"truncated":        false,
+		"truncated":        truncated,
 	})
+}
+
+func (h *ResourcesSearchHandler) listActiveClusters(ctx context.Context) ([]sqlc.Cluster, error) {
+	clusters := make([]sqlc.Cluster, 0, resourcesSearchFleetPageSize)
+	for offset := int32(0); ; offset += resourcesSearchFleetPageSize {
+		page, err := h.queries.ListClustersByStatus(ctx, sqlc.ListClustersByStatusParams{
+			Status:      "active",
+			QueryOffset: offset,
+			QueryLimit:  resourcesSearchFleetPageSize,
+		})
+		if err != nil {
+			return nil, err
+		}
+		clusters = append(clusters, page...)
+		if len(page) < int(resourcesSearchFleetPageSize) {
+			return clusters, nil
+		}
+	}
+}
+
+// searchClusters fans out through a fixed worker pool and streams completed
+// responses back to the caller. Once the fleet context expires, the producer
+// stops scheduling clusters that have not started; in-flight request contexts
+// are cancelled by the same deadline.
+func (h *ResourcesSearchHandler) searchClusters(
+	ctx context.Context,
+	clusters []sqlc.Cluster,
+	resourceType, path, nameFilter string,
+	limit int,
+) <-chan searchClusterResult {
+	results := make(chan searchClusterResult)
+	jobs := make(chan sqlc.Cluster)
+	workerCount := min(resourcesSearchMaxConcurrency, len(clusters))
+	perClusterTimeout := h.clusterTimeout()
+
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for cluster := range jobs {
+				clusterCtx, cancel := context.WithTimeout(ctx, perClusterTimeout)
+				items, truncated, err := h.queryCluster(clusterCtx, cluster, resourceType, path, nameFilter, limit)
+				cancel()
+				results <- searchClusterResult{cluster: cluster, items: items, err: err, truncated: truncated}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, cluster := range clusters {
+			select {
+			case jobs <- cluster:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	go func() {
+		workers.Wait()
+		close(results)
+	}()
+	return results
+}
+
+func (h *ResourcesSearchHandler) clusterTimeout() time.Duration {
+	if h.perClusterTimeout > 0 {
+		return h.perClusterTimeout
+	}
+	return resourcesSearchPerClusterTimeout
+}
+
+func appendSearchError(errors *[]searchClusterError, entry searchClusterError) bool {
+	if len(*errors) >= resourcesSearchMaxErrors {
+		return false
+	}
+	*errors = append(*errors, entry)
+	return true
 }
 
 // authorizedSearchClusters narrows the candidate cluster set to those where
@@ -357,63 +458,81 @@ func (h *ResourcesSearchHandler) authorizedSearchClusters(ctx context.Context, c
 // returns flattened items. It reuses the existing flatten helpers from
 // resources.go so search results match the per-cluster list shape — the
 // frontend can render either with the same column definitions.
-func (h *ResourcesSearchHandler) queryCluster(ctx context.Context, c sqlc.Cluster, resourceType, path string) ([]map[string]any, error) {
+func (h *ResourcesSearchHandler) queryCluster(
+	ctx context.Context,
+	c sqlc.Cluster,
+	resourceType, path, nameFilter string,
+	limit int,
+) ([]map[string]any, bool, error) {
 	resp, err := h.requester.Do(ctx, c.ID.String(), http.MethodGet, path, nil, requestHeaders(""))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := ensureSuccess(resp); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var payload map[string]any
 	if err := parseJSONResponse(resp, &payload); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// Use the existing per-cluster flatten path. resources.go has two flatten
 	// helpers — flattenNamedResources for the "fancy" types (services,
 	// ingresses, ...) and flattenGenericResources for the rest. The map below
 	// picks the one that produces the richest UI-ready row.
 	clusterID := c.ID.String()
+	var items []map[string]any
 	switch resourceType {
 	case "services", "ingresses", "persistentvolumeclaims":
-		return flattenNamedResources(clusterID, resourceType, payload), nil
+		items = flattenNamedResources(clusterID, resourceType, payload)
 	case "configmaps", "secrets", "jobs", "cronjobs":
-		return flattenGenericResources(clusterID, resourceType, payload), nil
+		items = flattenGenericResources(clusterID, resourceType, payload)
 	case "pods":
-		return flattenSearchPods(clusterID, payload), nil
+		items = flattenSearchPods(clusterID, payload)
 	case "namespaces":
-		return flattenSearchNamespaces(clusterID, payload), nil
+		items = flattenSearchNamespaces(clusterID, payload)
 	case "nodes":
-		return flattenSearchNodes(clusterID, payload), nil
+		items = flattenSearchNodes(clusterID, payload)
 	case "deployments", "statefulsets", "daemonsets":
-		return flattenSearchWorkloads(clusterID, resourceType, payload), nil
+		items = flattenSearchWorkloads(clusterID, resourceType, payload)
 	default:
 		// Fallback: bare metadata-level shape. Used for the long tail of
 		// types in searchResourceDefs that don't have a richer flatten
 		// helper (events, endpoints, replicasets, networkpolicies,
 		// gateway-api kinds, persistent volumes, storage classes, ...).
 		// The frontend renders these with the generic name/namespace columns.
-		out := make([]map[string]any, 0)
+		items = make([]map[string]any, 0)
 		for _, item := range objectItems(payload) {
-			out = append(out, flattenGeneric(clusterID, item))
+			items = append(items, flattenGeneric(clusterID, item))
 		}
-		return out, nil
 	}
+
+	filtered := items[:0]
+	for _, item := range items {
+		if nameFilter != "" && !strings.Contains(strings.ToLower(stringValueAny(item, "name")), nameFilter) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	truncated := kubernetesListHasMore(payload)
+	if len(filtered) > limit {
+		filtered = filtered[:limit]
+		truncated = true
+	}
+	return filtered, truncated, nil
 }
 
 // buildSearchPath assembles the k8s API path with optional namespace and
-// labelSelector / fieldSelector query params. We deliberately do NOT pass
-// the limit through to the agent — every cluster's list comes back in full
-// and we apply the global cap after merge so a popular cluster doesn't
-// crowd out tail clusters with smaller result sets.
-func buildSearchPath(def searchResourceDef, namespace, label, field string) string {
+// labelSelector / fieldSelector query params. The global result cap is also
+// pushed into every Kubernetes List call, bounding each tunnel response.
+func buildSearchPath(def searchResourceDef, namespace, label, field string, limit int) string {
 	var p string
 	if def.namespaced && namespace != "" {
-		p = fmt.Sprintf("%s/namespaces/%s/%s", def.apiBase, namespace, def.plural)
+		p = fmt.Sprintf("%s/namespaces/%s/%s", def.apiBase, url.PathEscape(namespace), def.plural)
 	} else {
 		p = fmt.Sprintf("%s/%s", def.apiBase, def.plural)
 	}
 	q := url.Values{}
+	q.Set("limit", fmt.Sprint(limit))
 	if label != "" {
 		q.Set("labelSelector", label)
 	}
@@ -424,6 +543,12 @@ func buildSearchPath(def searchResourceDef, namespace, label, field string) stri
 		p += "?" + enc
 	}
 	return p
+}
+
+func kubernetesListHasMore(payload map[string]any) bool {
+	metadata, _ := payload["metadata"].(map[string]any)
+	continuation, _ := metadata["continue"].(string)
+	return continuation != ""
 }
 
 // flattenSearchPods produces a UI-ready row for each pod. Mirrors podToMap

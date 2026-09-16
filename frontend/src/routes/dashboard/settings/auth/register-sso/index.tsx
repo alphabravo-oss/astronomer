@@ -13,9 +13,9 @@ import { createFileRoute } from "@tanstack/react-router";
  *     Dex; if you flip the client to public, leave blank)
  *   - Display name (text on the login button)
  */
-import { useEffect, useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { useState } from "react";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink, ShieldCheck } from "lucide-react";
 import {
   isDexRuntimeApplied,
@@ -27,28 +27,26 @@ import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
 
 function RegisterAsSSOPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data: settings } = useDexSettings();
   const registerMutation = useRegisterDexAsSSO();
 
-  const [clientId, setClientId] = useState("astronomer");
+  const [clientIdDraft, setClientId] = useState<string>();
   const [clientSecret, setClientSecret] = useState("");
-  const [displayName, setDisplayName] = useState("Sign in with Dex");
+  const [displayNameDraft, setDisplayName] = useState<string>();
   const [success, setSuccess] = useState<{
     provider: string;
     issuerUrl: string;
   } | null>(null);
   const [staged, setStaged] = useState(false);
 
-  useEffect(() => {
-    if (success) return; // don't snap state back after a successful submit
-    if (settings?.publicClients?.[0]?.id) {
-      setClientId(settings.publicClients[0].id);
-    }
-    if (settings?.publicClients?.[0]?.name) {
-      setDisplayName(`Sign in with ${settings.publicClients[0].name}`);
-    }
-  }, [settings, success]);
+  const defaultClient = settings?.publicClients?.[0];
+  const clientId = clientIdDraft ?? defaultClient?.id ?? "astronomer";
+  const displayName =
+    displayNameDraft ??
+    (defaultClient?.name
+      ? `Sign in with ${defaultClient.name}`
+      : "Sign in with Dex");
 
   const handleSubmit = async () => {
     try {
@@ -76,13 +74,13 @@ function RegisterAsSSOPage() {
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/settings/auth"
+      <RouterLink
+        to="/dashboard/settings/auth"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to Auth
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Auth · Register SSO"
@@ -92,20 +90,20 @@ function RegisterAsSSOPage() {
 
       {!issuerConfigured && (
         <div className="rounded-lg border border-status-warning/40 bg-status-warning/5 p-3 flex items-start gap-2">
-          <ShieldCheck className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
+          <ShieldCheck className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
           <div className="text-xs text-status-warning/90 space-y-1">
             <p className="font-medium">Issuer URL not set.</p>
             <p>
               Configure Dex settings before registering it as SSO — the SSO row
               needs to know where to discover OIDC metadata.
             </p>
-            <Link
-              href="/dashboard/settings/auth/settings"
+            <RouterLink
+              to="/dashboard/settings/auth/settings"
               className="inline-flex items-center gap-1 underline hover:no-underline"
             >
               Open Dex Settings
               <ExternalLink className="h-3 w-3" />
-            </Link>
+            </RouterLink>
           </div>
         </div>
       )}
@@ -120,12 +118,12 @@ function RegisterAsSSOPage() {
             registration. Verification is reported only after the Secret-mounted
             Deployment is healthy.
           </p>
-          <Link
-            href="/dashboard/settings/auth/settings"
+          <RouterLink
+            to="/dashboard/settings/auth/settings"
             className="underline hover:no-underline"
           >
             Open Dex Settings
-          </Link>
+          </RouterLink>
         </div>
       )}
 
@@ -150,7 +148,7 @@ function RegisterAsSSOPage() {
           </p>
           <div className="flex items-center gap-2 pt-2">
             <ActionButton
-              onClick={() => router.push("/dashboard/settings/auth")}
+              onClick={() => void navigate({ to: "/dashboard/settings/auth" })}
             >
               Back to Auth
             </ActionButton>
@@ -206,19 +204,19 @@ function RegisterAsSSOPage() {
               users in, the same secret must be present in Dex&apos;s{" "}
               <span className="font-mono">staticClients</span> config —
               configure it under{" "}
-              <Link
-                href="/dashboard/settings/auth/settings"
+              <RouterLink
+                to="/dashboard/settings/auth/settings"
                 className="underline hover:no-underline"
               >
                 Dex Settings
-              </Link>{" "}
+              </RouterLink>{" "}
               and Apply.
             </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <ActionButton
-              onClick={() => router.push("/dashboard/settings/auth")}
+              onClick={() => void navigate({ to: "/dashboard/settings/auth" })}
             >
               Cancel
             </ActionButton>

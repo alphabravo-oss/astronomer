@@ -14,6 +14,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumeJWTChallenge = `-- name: ConsumeJWTChallenge :execrows
+INSERT INTO jwt_revocations (jti, user_id, expires_at, reason)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (jti) DO NOTHING
+`
+
+type ConsumeJWTChallengeParams struct {
+	Jti       string    `json:"jti"`
+	UserID    uuid.UUID `json:"user_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Reason    string    `json:"reason"`
+}
+
+// Purpose tokens are one-shot credentials. The primary key on jti makes the
+// insert an atomic consume operation across every server replica.
+func (q *Queries) ConsumeJWTChallenge(ctx context.Context, arg ConsumeJWTChallengeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeJWTChallenge,
+		arg.Jti,
+		arg.UserID,
+		arg.ExpiresAt,
+		arg.Reason,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActiveUnmigratedSSORows = `-- name: CountActiveUnmigratedSSORows :one
 SELECT count(*) FROM sso_configurations
 WHERE is_enabled = true AND migrated_to_dex_at IS NULL

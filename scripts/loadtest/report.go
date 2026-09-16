@@ -184,6 +184,22 @@ func (r *report) evaluate() {
 	if lag := peakValue(r.rec.scrapeSeries["event_relay_lag_seconds"]); lag > r.thresh.eventLagMaxSeconds {
 		r.Reasons = append(r.Reasons, fmt.Sprintf("event relay lag %.1fs exceeded %.1fs", lag, r.thresh.eventLagMaxSeconds))
 	}
+	totalRequests, failedRequests := 0, 0
+	for name, count := range r.rec.httpCount {
+		totalRequests += count
+		failedRequests += r.rec.httpErrors[name]
+		for status, statusCount := range r.rec.httpStatus[name] {
+			if status < 200 || status >= 300 {
+				failedRequests += statusCount
+			}
+		}
+	}
+	if totalRequests > 0 {
+		if ratio := float64(failedRequests) / float64(totalRequests); ratio > r.thresh.httpErrorRatioMax {
+			r.Reasons = append(r.Reasons,
+				fmt.Sprintf("HTTP failure ratio %.6f exceeded %.6f (%d/%d)", ratio, r.thresh.httpErrorRatioMax, failedRequests, totalRequests))
+		}
+	}
 	if r.cfg.certification {
 		if r.cfg.skipAgents || len(r.cfg.fixtureClusterIDs) == 0 {
 			r.Reasons = append(r.Reasons, "certification requires provisioned connected fixture clusters")
@@ -193,21 +209,8 @@ func (r *report) evaluate() {
 				r.Reasons = append(r.Reasons, "required scenario has no samples: "+scenario.name)
 			}
 		}
-		totalRequests, failedRequests := 0, 0
-		for name, count := range r.rec.httpCount {
-			totalRequests += count
-			failedRequests += r.rec.httpErrors[name]
-			for status, statusCount := range r.rec.httpStatus[name] {
-				if status < 200 || status >= 300 {
-					failedRequests += statusCount
-				}
-			}
-		}
 		if totalRequests == 0 {
 			r.Reasons = append(r.Reasons, "certification produced zero HTTP requests")
-		} else if ratio := float64(failedRequests) / float64(totalRequests); ratio > r.thresh.httpErrorRatioMax {
-			r.Reasons = append(r.Reasons,
-				fmt.Sprintf("HTTP failure ratio %.6f exceeded %.6f (%d/%d)", ratio, r.thresh.httpErrorRatioMax, failedRequests, totalRequests))
 		}
 		observed := time.Duration(0)
 		if !r.rec.startedAt.IsZero() && !r.rec.endedAt.IsZero() {
@@ -495,7 +498,9 @@ func (r *report) WriteFile(path string) error {
 	fmt.Fprintf(&sb, "| Deployment cardinality | %d | %d |\n", r.cfg.resources.DeploymentsPerCluster, r.rec.resourceCardinality["DeploymentList"])
 	fmt.Fprintf(&sb, "| Service cardinality | %d | %d |\n", r.cfg.resources.ServicesPerCluster, r.rec.resourceCardinality["ServiceList"])
 	fmt.Fprintf(&sb, "| State events / second | %d | %d total |\n", r.cfg.resources.EventsPerSecond, r.rec.stateEventsEmitted)
-	fmt.Fprintf(&sb, "| Mandatory audit attempted | %d | %d |\n", r.cfg.mandatoryAudit.MaxOperations, r.rec.auditConservation.Attempted)
+	auditTarget := mandatoryAuditTargetOperations(r.cfg.duration, r.cfg.mandatoryAudit.RatePerSecond)
+	fmt.Fprintf(&sb, "| Mandatory audit attempts (target; safety cap) | %d; %d | %d |\n",
+		auditTarget, r.cfg.mandatoryAudit.MaxOperations, r.rec.auditConservation.Attempted)
 	fmt.Fprintf(&sb, "| Mandatory audit accepted/intents/canonical | equal | %d/%d/%d |\n",
 		r.rec.auditConservation.Accepted, r.rec.auditConservation.IntentsObserved, r.rec.auditConservation.CanonicalRows)
 	fmt.Fprintf(&sb, "| Mandatory audit rejected/duplicate/lost | 0/0/0 | %d/%d/%d |\n",
@@ -848,7 +853,10 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 	}
 	conservation := map[string]any{
 		"run_id": r.rec.auditConservation.RunID, "attempted": r.rec.auditConservation.Attempted,
-		"accepted": r.rec.auditConservation.Accepted, "rejected": r.rec.auditConservation.Rejected,
+		"rate_per_second":       r.cfg.mandatoryAudit.RatePerSecond,
+		"target_operations":     mandatoryAuditTargetOperations(r.cfg.duration, r.cfg.mandatoryAudit.RatePerSecond),
+		"safety_cap_operations": r.cfg.mandatoryAudit.MaxOperations,
+		"accepted":              r.rec.auditConservation.Accepted, "rejected": r.rec.auditConservation.Rejected,
 		"intents_observed": r.rec.auditConservation.IntentsObserved, "canonical_rows": r.rec.auditConservation.CanonicalRows,
 		"duplicates": r.rec.auditConservation.Duplicates, "lost": r.rec.auditConservation.Lost,
 		"reconciled":          r.rec.auditConservation.Reconciled,

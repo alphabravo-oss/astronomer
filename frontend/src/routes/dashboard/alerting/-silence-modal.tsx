@@ -143,7 +143,7 @@ export function SilenceModal({ onClose }: { onClose: () => void }) {
             {Object.entries(form.matchers).map(([k, v]) => (
               <span
                 key={k}
-                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+                className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
               >
                 {k}={v}
                 <button

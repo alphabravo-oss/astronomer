@@ -12,7 +12,7 @@ import "strings"
 //   - resources/pods is the heaviest endpoint (routes through the agent
 //     tunnel) — 25% gives us meaningful pressure on the WS path without
 //     letting agent-side serialization dominate the run
-//   - audit-logs / admin/queues exercise the worker + Asynq paths
+//   - audit / admin/queues exercise the durable audit + Asynq paths
 type scenario struct {
 	name   string
 	path   string
@@ -35,7 +35,7 @@ func defaultScenarios() []scenario {
 		{name: "cluster_services", path: "/api/v1/clusters/{cluster_id}/k8s/api/v1/services", weight: 0.05},
 		{name: "cluster_events", path: "/api/v1/clusters/{cluster_id}/k8s/api/v1/events", weight: 0.05},
 		{name: "project_list", path: "/api/v1/projects/", weight: 0.10},
-		{name: "audit_logs", path: "/api/v1/audit-logs/", weight: 0.10},
+		{name: "audit_logs", path: "/api/v1/audit/", weight: 0.10},
 		{name: "admin_queues", path: "/api/v1/admin/queues/", weight: 0.05},
 		{name: "auth_me", path: "/api/v1/auth/me/", weight: 0.20},
 	}

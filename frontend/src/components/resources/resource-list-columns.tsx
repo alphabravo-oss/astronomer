@@ -44,7 +44,7 @@ const nodeColumns: Column<ClusterNode>[] = [
         {row.roles.map((role) => (
           <span
             key={role}
-            className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground"
+            className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground"
           >
             {role}
           </span>
@@ -390,7 +390,7 @@ const serviceColumns: Column<K8sService>[] = [
     key: "type",
     header: "Type",
     accessor: (row) => (
-      <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">
+      <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.type}
       </span>
     ),
@@ -516,7 +516,7 @@ const networkPolicyColumns: Column<NetworkPolicy>[] = [
         {row.policyTypes?.map((t) => (
           <span
             key={t}
-            className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground"
+            className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground"
           >
             {t}
           </span>
@@ -687,7 +687,7 @@ const storageClassColumns: Column<StorageClass>[] = [
           {row.name}
         </span>
         {row.isDefault && (
-          <span className="px-1.5 py-0.5 rounded text-2xs bg-status-info/10 text-status-info">
+          <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-status-info/10 text-status-info">
             default
           </span>
         )}

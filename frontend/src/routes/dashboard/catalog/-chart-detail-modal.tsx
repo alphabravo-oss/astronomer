@@ -49,8 +49,7 @@ export function ChartDetailModal({
     <ModalShell
       title={chart.displayName || chart.name}
       subtitle={
-        chart.repositoryName ||
-        `Repository ${chart.repositoryId.slice(0, 8)}`
+        chart.repositoryName || `Repository ${chart.repositoryId.slice(0, 8)}`
       }
       onClose={onClose}
       size="lg"
@@ -81,7 +80,7 @@ export function ChartDetailModal({
         {chart.keywords.map((kw) => (
           <span
             key={kw}
-            className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground"
+            className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground"
           >
             {kw}
           </span>
@@ -104,7 +103,7 @@ export function ChartDetailModal({
             id="field-5b7ae739-81"
             value={selectedVersionId || versions?.[0]?.id || ""}
             onChange={(e) => setSelectedVersionId(e.target.value)}
-            className="w-48"
+            containerClassName="w-48"
           >
             {(versions || []).map((v) => (
               <option key={v.id} value={v.id}>

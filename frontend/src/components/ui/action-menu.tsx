@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useRef, useEffect, useLayoutEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { MoreHorizontal } from "lucide-react";
@@ -38,9 +36,11 @@ export function ActionMenu({
 }: ActionMenuProps) {
   const [open, setOpen] = useState(false);
   const menuId = useId();
-  const [coords, setCoords] = useState<{ top: number; left: number } | null>(
-    null,
-  );
+  const [coords, setCoords] = useState<{
+    top: number;
+    left: number;
+    flipUp: boolean;
+  } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -84,7 +84,7 @@ export function ActionMenu({
     if (left < 8) left = 8;
     if (left + MENU_WIDTH > window.innerWidth - 8)
       left = window.innerWidth - MENU_WIDTH - 8;
-    setCoords({ top, left });
+    setCoords({ top, left, flipUp });
   }, [open]);
 
   const handleToggle = (e: React.MouseEvent) => {
@@ -102,7 +102,7 @@ export function ActionMenu({
         aria-expanded={open}
         aria-haspopup="menu"
         aria-controls={open ? menuId : undefined}
-        className="inline-flex items-center justify-center h-7 w-7 rounded
+        className="inline-flex items-center justify-center h-7 w-7 rounded-sm
           text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
       >
         <MoreHorizontal className="h-4 w-4" />
@@ -121,11 +121,7 @@ export function ActionMenu({
               top: coords.top,
               left: coords.left,
               width: MENU_WIDTH,
-              transform:
-                coords.top <
-                (buttonRef.current?.getBoundingClientRect().top ?? 0)
-                  ? "translateY(-100%)"
-                  : undefined,
+              transform: coords.flipUp ? "translateY(-100%)" : undefined,
             }}
             className="rounded-md border border-border bg-popover p-1 shadow-lg z-popover"
           >
@@ -147,7 +143,7 @@ export function ActionMenu({
                   disabled={item.disabled}
                   title={item.disabledReason}
                   className={cn(
-                    "w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-colors whitespace-nowrap",
+                    "w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs transition-colors whitespace-nowrap",
                     item.disabled && "opacity-50 cursor-not-allowed",
                     item.variant === "destructive"
                       ? "text-status-error hover:bg-status-error/10"
@@ -155,7 +151,7 @@ export function ActionMenu({
                   )}
                 >
                   {item.icon && (
-                    <span className="flex-shrink-0">{item.icon}</span>
+                    <span className="shrink-0">{item.icon}</span>
                   )}
                   {item.label}
                 </button>

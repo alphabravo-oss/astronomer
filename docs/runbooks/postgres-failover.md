@@ -40,7 +40,7 @@ reconnects within `healthCheckPeriod` (default 30s).
 
 Follow the cluster manager's promote procedure, then update
 `postgres.external.dsn` in the chart values to point at the new
-primary. `helm upgrade` (or Argo sync) re-rolls the pods so they pick
+primary. `helm upgrade` (or reconciling the owning Flux object) re-rolls the pods so they pick
 up the new DSN.
 
 ### Failover during a migration

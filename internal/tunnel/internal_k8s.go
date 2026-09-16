@@ -12,19 +12,15 @@
 // Sibling pods call it (via TunnelK8sRequester's cross-pod fallback)
 // instead of duplicating the HTTP-proxy code path.
 //
-// Auth: a PSK header. Both server pods read the same shared secret from
-// the operator-provided ASTRONOMER_ENCRYPTION_KEY env var (which is
-// already a shared secret across all pods via the platform's Helm
-// secret). Requests without the matching PSK get 401 — outside callers
-// can't reach this endpoint even if NetworkPolicy is misconfigured.
+// Auth: a short-lived HMAC envelope over the request path, body, cluster,
+// nonce and originating user. Every server replica reads the same dedicated
+// ASTRONOMER_INTERNAL_PSK; the Fernet key is never reused for this purpose.
 
 package tunnel
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -39,11 +35,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
-
-// InternalPSKHeader is the request header the sibling pod fills with
-// the shared-secret PSK. Pods derive the PSK from the encryption key so
-// no extra plumbing is required to share it.
-const InternalPSKHeader = "X-Astronomer-Internal-PSK"
 
 // InternalSourceHeader is a second, defense-in-depth signal that the
 // request originated from a sibling server pod's cross-pod requester
@@ -103,27 +94,14 @@ func hasSiblingSourceSignal(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(InternalSourceValue)) == 1
 }
 
-// DerivePSK returns the PSK pods include in cross-pod internal requests.
-// SHA-256 over the encryption-key bytes namespaced with a literal so
-// the raw key is never sent on the wire and rotating the key rotates
-// the PSK. Empty key returns "" — callers treat that as "internal
-// endpoint disabled" and fall through to 503.
-func DerivePSK(encryptionKey string) string {
-	if encryptionKey == "" {
-		return ""
-	}
-	h := sha256.Sum256([]byte("astronomer:internal:tunnel:k8s:v1:" + encryptionKey))
-	return base64.StdEncoding.EncodeToString(h[:])
-}
-
 // InternalK8sHandler is the receiver-side of the cross-pod K8sRequest
 // fallback. Mount it OUTSIDE the JWT auth middleware (it does its own
 // PSK check) and BEFORE any rate limiter (server-internal traffic
 // shouldn't share user quotas).
 type InternalK8sHandler struct {
-	hub *Hub
-	psk string
-	log *slog.Logger
+	hub  *Hub
+	auth *internalRequestAuthenticator
+	log  *slog.Logger
 	// audit is the optional audit-log writer. When set, every mutating
 	// request forwarded through this internal door emits a
 	// cluster.k8s_proxy.forwarded row attributed to the originating user
@@ -131,6 +109,13 @@ type InternalK8sHandler struct {
 	// proxy's attribution. nil leaves the door functional but unaudited —
 	// used only by narrow tests; production wires it via SetAuditWriter.
 	audit any
+}
+
+// InternalAgentCapabilityResponse is the authenticated sibling-RPC response
+// used to make capability-aware reconciliation decisions on a server replica
+// that does not own the target agent's WebSocket.
+type InternalAgentCapabilityResponse struct {
+	Supported bool `json:"supported"`
 }
 
 // SetAuditWriter wires the audit-log writer used to record a
@@ -150,11 +135,43 @@ func (h *InternalK8sHandler) SetAuditWriter(w any) {
 // key. Such deployments are single-replica by design (the chart's
 // production defaults wire the key) so the disable doesn't regress
 // real users.
-func NewInternalK8sHandler(hub *Hub, psk string, log *slog.Logger) *InternalK8sHandler {
+func NewInternalK8sHandler(hub *Hub, keys InternalRequestKeyring, log *slog.Logger) *InternalK8sHandler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &InternalK8sHandler{hub: hub, psk: psk, log: log}
+	return &InternalK8sHandler{hub: hub, auth: newInternalRequestAuthenticator(keys, internalAudienceK8s), log: log}
+}
+
+// HandleCapability reports whether the locally-owned agent advertised one
+// CONNECT-time capability. It never sends a message to the agent. The endpoint
+// uses the same short-lived, path-bound sibling authentication as Handle so a
+// non-owner replica can make the decision before attempting a mutation.
+func (h *InternalK8sHandler) HandleCapability(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.hub == nil || !h.auth.enabled() {
+		http.Error(w, `{"error":"internal endpoint disabled"}`, http.StatusServiceUnavailable)
+		return
+	}
+	if !hasSiblingSourceSignal(r) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+	clusterID := chi.URLParam(r, "cluster_id")
+	capability := strings.TrimSpace(chi.URLParam(r, "capability"))
+	if clusterID == "" || capability == "" {
+		http.Error(w, `{"error":"cluster_id and capability are required"}`, http.StatusBadRequest)
+		return
+	}
+	if !h.auth.verify(r, clusterID, nil) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+	supported, connected := h.hub.SupportsAgentCapability(clusterID, capability)
+	if !connected {
+		http.Error(w, `{"error":"Cluster agent not connected"}`, http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(InternalAgentCapabilityResponse{Supported: supported})
 }
 
 // Handle is POST /internal/tunnel/k8s/{cluster_id}. Body is a
@@ -162,7 +179,7 @@ func NewInternalK8sHandler(hub *Hub, psk string, log *slog.Logger) *InternalK8sH
 // JSON-encoded protocol.K8sResponsePayload. Errors land as RFC-7807-ish
 // JSON {"error": "..."} with the matching HTTP status.
 func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
-	if h == nil || h.psk == "" {
+	if h == nil || !h.auth.enabled() {
 		http.Error(w, `{"error":"internal endpoint disabled"}`, http.StatusServiceUnavailable)
 		return
 	}
@@ -176,11 +193,6 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
-	got := r.Header.Get(InternalPSKHeader)
-	if subtle.ConstantTimeCompare([]byte(got), []byte(h.psk)) != 1 {
-		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
-		return
-	}
 	clusterID := chi.URLParam(r, "cluster_id")
 	if clusterID == "" {
 		http.Error(w, `{"error":"cluster_id is required"}`, http.StatusBadRequest)
@@ -190,6 +202,10 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	if err != nil {
 		http.Error(w, `{"error":"read body"}`, http.StatusBadRequest)
+		return
+	}
+	if !h.auth.verify(r, clusterID, bodyBytes) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
 	var payload protocol.K8sRequestPayload
@@ -238,6 +254,10 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now().UTC(),
 		Payload:   out,
 	}); err != nil {
+		if errors.Is(err, ErrAgentCapabilityUnsupported) {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusPreconditionFailed)
+			return
+		}
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
 		return
 	}

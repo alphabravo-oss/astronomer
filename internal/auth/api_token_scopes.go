@@ -215,21 +215,6 @@ func IPAllowed(nets []*net.IPNet, remote net.IP) bool {
 	return false
 }
 
-// RemoteIPForRequest returns the client IP already established in RemoteAddr.
-// The server's TrustedRealIP middleware may rewrite it, but only when the
-// immediate peer belongs to an operator-configured proxy CIDR. Reading
-// forwarding headers here would let an untrusted client bypass token CIDRs.
-func RemoteIPForRequest(r *http.Request) net.IP {
-	if r == nil {
-		return nil
-	}
-	host := strings.TrimSpace(r.RemoteAddr)
-	if parsed, _, err := net.SplitHostPort(host); err == nil {
-		host = parsed
-	}
-	return net.ParseIP(host)
-}
-
 // cidrParseError mirrors net.ParseError shape so callers can switch on
 // .Error() the same way; kept private because the package doesn't
 // need a richer type today.

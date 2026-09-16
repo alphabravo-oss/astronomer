@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -45,6 +46,8 @@ func (f *fakeSCIMTokenAdminQuerier) CreateSCIMToken(_ context.Context, arg sqlc.
 		Name:      arg.Name,
 		TokenHash: arg.TokenHash,
 		Prefix:    arg.Prefix,
+		ExpiresAt: arg.ExpiresAt,
+		CreatedAt: time.Now(),
 	}
 	f.rows[row.ID] = row
 	return row, nil
@@ -60,11 +63,17 @@ func (f *fakeSCIMTokenAdminQuerier) ListSCIMTokens(_ context.Context) ([]sqlc.Sc
 	return out, nil
 }
 
-func (f *fakeSCIMTokenAdminQuerier) DeleteSCIMToken(_ context.Context, id uuid.UUID) error {
+func (f *fakeSCIMTokenAdminQuerier) RevokeSCIMToken(_ context.Context, id uuid.UUID) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	delete(f.rows, id)
-	return nil
+	row, ok := f.rows[id]
+	if !ok || row.RevokedAt.Valid {
+		return 0, nil
+	}
+	row.RevokedAt.Valid = true
+	row.RevokedAt.Time = time.Now()
+	f.rows[id] = row
+	return 1, nil
 }
 
 func TestSCIMTokenAdmin_CreateReturnsPlaintextOnceAndListNeverLeaks(t *testing.T) {
@@ -176,7 +185,7 @@ func TestSCIMTokenAdmin_DeleteRevokes(t *testing.T) {
 	}
 
 	rows, _ := q.ListSCIMTokens(context.Background())
-	if len(rows) != 0 {
-		t.Fatalf("after delete: %d rows remain, want 0", len(rows))
+	if len(rows) != 1 || !rows[0].RevokedAt.Valid {
+		t.Fatalf("after revoke: rows=%+v, want one revoked row", rows)
 	}
 }

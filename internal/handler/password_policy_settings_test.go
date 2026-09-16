@@ -14,6 +14,7 @@ import (
 func TestCreateUser_PasswordPolicyMinLengthFromSettings(t *testing.T) {
 	q := &createUserTrackingQuerier{}
 	h := NewResourceHandlerWithQueries(q, nil)
+	wireCreateUserTestTx(h, q)
 
 	// Seed settings cache with password.min_length=16 (JSON number).
 	reader := newFakeSettingsQuerier(sqlc.User{})
@@ -40,6 +41,7 @@ func TestCreateUser_PasswordPolicyMinLengthFromSettings(t *testing.T) {
 func TestCreateUser_DefaultPasswordPolicyWhenNoSettings(t *testing.T) {
 	q := &createUserTrackingQuerier{}
 	h := NewResourceHandlerWithQueries(q, nil)
+	wireCreateUserTestTx(h, q)
 	body := `{"email":"a@example.com","username":"alice","password":"ValidPassw01"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()

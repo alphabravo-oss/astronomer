@@ -6,8 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const DefaultAuditLogCountLimit int32 = 100_001
 
 // AuditLogFilterParams is the composable audit-log search input used by the
 // operator audit page. Empty fields are ignored.
@@ -34,9 +37,13 @@ type AuditLogFilterParams struct {
 	HasTo         bool        `json:"has_to"`
 	Q             string      `json:"q"`
 	// Audience is people (default from the UI), system, or all.
-	Audience string `json:"audience"`
-	Limit    int32  `json:"limit"`
-	Offset   int32  `json:"offset"`
+	Audience   string    `json:"audience"`
+	Limit      int32     `json:"limit"`
+	Offset     int32     `json:"offset"`
+	CountLimit int32     `json:"count_limit"`
+	HasBefore  bool      `json:"has_before"`
+	BeforeTime time.Time `json:"before_time"`
+	BeforeID   uuid.UUID `json:"before_id"`
 }
 
 // Keep in sync with audit.PeopleActivitySQL / SystemActivitySQL / EffectiveClassSQL.
@@ -67,28 +74,114 @@ const auditLogV1SelectColumns = `
 a.id, a.created_at, a.schema_version, a.source, a.correlation_id, a.user_id, a.actor_auth_method, a.action, a.resource_type, a.resource_id, a.resource_name, a.http_method, a.path, a.status_code, a.duration_ms, a.request_id, a.ip_address, a.user_agent, a.detail, a.action_class
 `
 
-// ListAuditLogV1Filtered returns audit rows matching every supplied filter.
-func (q *Queries) ListAuditLogV1Filtered(ctx context.Context, arg AuditLogFilterParams) ([]AuditLog, error) {
+// These expressions intentionally mirror the pg_trgm expression indexes in
+// migration 030. The indexed prefilter narrows candidates; the field-specific
+// predicates alongside it retain the exact pre-index search semantics.
+const auditSearchDocumentSQL = `lower(
+	coalesce(a.action, '') || ' ' ||
+	coalesce(a.resource_type, '') || ' ' ||
+	coalesce(a.resource_id, '') || ' ' ||
+	coalesce(a.resource_name, '') || ' ' ||
+	coalesce(a.path, '') || ' ' ||
+	coalesce(a.actor_auth_method, '')
+)`
+
+const auditSourceDocumentSQL = `lower(
+	coalesce(a.source, '') || ' ' ||
+	coalesce(a.user_agent, '')
+)`
+
+// AuditLogPage is one bounded audit result page. Interactive audit browsing
+// deliberately omits an exact total: counting the growing evidence table on
+// every request turns pagination chrome into the dominant database workload.
+type AuditLogPage struct {
+	Logs    []AuditLog
+	HasMore bool
+}
+
+// ListAuditLogV1FilteredPage fetches one extra row to prove continuation. It
+// never scans or materializes the full match set merely to compute a total.
+func (q *Queries) ListAuditLogV1FilteredPage(ctx context.Context, arg AuditLogFilterParams) (AuditLogPage, error) {
+	query, args, limit := buildAuditLogV1PageQuery(arg)
+	rows, err := q.listAuditLogV1Rows(ctx, query, args...)
+	if err != nil {
+		return AuditLogPage{}, err
+	}
+	page := AuditLogPage{Logs: rows, HasMore: len(rows) > int(limit)}
+	if page.HasMore {
+		page.Logs = page.Logs[:limit]
+	}
+	return page, nil
+}
+
+func buildAuditLogV1PageQuery(arg AuditLogFilterParams) (string, []any, int32) {
 	where, args := buildAuditLogV1FilterWhere(arg)
-	args = append(args, arg.Limit, arg.Offset)
+	limit := arg.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	args = append(args, limit+1, arg.Offset)
 	query := fmt.Sprintf(`
 SELECT %s
 FROM audit_log AS a
 %s
-ORDER BY a.created_at DESC
+ORDER BY a.created_at DESC, a.id DESC
 LIMIT $%d OFFSET $%d
 `, auditLogV1SelectColumns, where, len(args)-1, len(args))
+	return query, args, limit
+}
+
+// ListAuditLogV1Filtered returns only the rows for non-HTTP consumers that do
+// not need pagination metadata.
+func (q *Queries) ListAuditLogV1Filtered(ctx context.Context, arg AuditLogFilterParams) ([]AuditLog, error) {
+	page, err := q.ListAuditLogV1FilteredPage(ctx, arg)
+	return page.Logs, err
+}
+
+// ListAuditLogV1FilteredKeyset returns a stable descending export page. The
+// cursor is exclusive, so rows sharing a timestamp cannot be duplicated or
+// skipped between pages.
+func (q *Queries) ListAuditLogV1FilteredKeyset(ctx context.Context, arg AuditLogFilterParams) ([]AuditLog, error) {
+	where, args := buildAuditLogV1FilterWhere(arg)
+	if arg.HasBefore {
+		args = append(args, arg.BeforeTime, arg.BeforeID)
+		cursor := fmt.Sprintf("(a.created_at, a.id) < ($%d, $%d)", len(args)-1, len(args))
+		if where == "" {
+			where = "WHERE " + cursor
+		} else {
+			where += "\n  AND " + cursor
+		}
+	}
+	args = append(args, arg.Limit)
+	query := fmt.Sprintf(`
+SELECT %s
+FROM audit_log AS a
+%s
+ORDER BY a.created_at DESC, a.id DESC
+LIMIT $%d
+`, auditLogV1SelectColumns, where, len(args))
 	return q.listAuditLogV1Rows(ctx, query, args...)
 }
 
-// CountAuditLogV1Filtered counts audit rows matching every supplied filter.
+// CountAuditLogV1Filtered counts up to CountLimit matching rows. Bounded counts
+// keep an interactive audit search from turning into an unbounded second scan
+// of the partitioned evidence table merely to render pagination chrome.
 func (q *Queries) CountAuditLogV1Filtered(ctx context.Context, arg AuditLogFilterParams) (int64, error) {
 	where, args := buildAuditLogV1FilterWhere(arg)
+	countLimit := arg.CountLimit
+	if countLimit <= 0 || countLimit > DefaultAuditLogCountLimit {
+		countLimit = DefaultAuditLogCountLimit
+	}
+	args = append(args, countLimit)
 	query := fmt.Sprintf(`
 SELECT count(*)
-FROM audit_log AS a
-%s
-`, where)
+FROM (
+	SELECT 1
+	FROM audit_log AS a
+	%s
+	LIMIT $%d
+) AS matches
+`, where, len(args))
 	row := q.db.QueryRow(ctx, query, args...)
 	var n int64
 	err := row.Scan(&n)
@@ -116,8 +209,8 @@ func buildAuditLogV1FilterWhere(arg AuditLogFilterParams) (string, []any) {
 	if actor := strings.TrimSpace(arg.Actor); actor != "" {
 		pattern := "%" + strings.ToLower(actor) + "%"
 		add(`(
+			(`+auditSearchDocumentSQL+` LIKE $%d AND lower(a.actor_auth_method) LIKE $%d) OR
 			lower(a.user_id::text) LIKE $%d OR
-			lower(a.actor_auth_method) LIKE $%d OR
 			EXISTS (
 				SELECT 1
 				FROM users u
@@ -133,13 +226,15 @@ func buildAuditLogV1FilterWhere(arg AuditLogFilterParams) (string, []any) {
 	if q := strings.TrimSpace(arg.Q); q != "" {
 		pattern := "%" + strings.ToLower(q) + "%"
 		add(`(
-			lower(a.action) LIKE $%d OR
-			lower(a.resource_type) LIKE $%d OR
-			lower(a.resource_id) LIKE $%d OR
-			lower(a.resource_name) LIKE $%d OR
-			lower(a.path) LIKE $%d OR
+			(`+auditSearchDocumentSQL+` LIKE $%d AND (
+				lower(a.action) LIKE $%d OR
+				lower(a.resource_type) LIKE $%d OR
+				lower(a.resource_id) LIKE $%d OR
+				lower(a.resource_name) LIKE $%d OR
+				lower(a.path) LIKE $%d OR
+				lower(a.actor_auth_method) LIKE $%d
+			)) OR
 			lower(a.user_id::text) LIKE $%d OR
-			lower(a.actor_auth_method) LIKE $%d OR
 			EXISTS (
 				SELECT 1
 				FROM users u
@@ -157,12 +252,12 @@ func buildAuditLogV1FilterWhere(arg AuditLogFilterParams) (string, []any) {
 	addText("resource_name", strings.TrimSpace(arg.ResourceName))
 	if target := strings.TrimSpace(arg.Target); target != "" {
 		pattern := "%" + strings.ToLower(target) + "%"
-		add(`(
+		add(`(`+auditSearchDocumentSQL+` LIKE $%d AND (
 			lower(a.resource_type) LIKE $%d OR
 			lower(a.resource_id) LIKE $%d OR
 			lower(a.resource_name) LIKE $%d OR
 			lower(a.path) LIKE $%d
-		)`, pattern)
+		))`, pattern)
 	}
 	addText("action", strings.TrimSpace(arg.Action))
 	if cls := strings.TrimSpace(arg.ActionClass); cls != "" {
@@ -187,30 +282,29 @@ func buildAuditLogV1FilterWhere(arg AuditLogFilterParams) (string, []any) {
 	}
 	if source := strings.TrimSpace(arg.Source); source != "" {
 		pattern := "%" + strings.ToLower(source) + "%"
-		add(`(
+		add(`((`+auditSourceDocumentSQL+` LIKE $%d AND (
 			lower(a.source) LIKE $%d OR
-			lower(a.ip_address::text) LIKE $%d OR
 			lower(a.user_agent) LIKE $%d
-		)`, pattern)
+		)) OR lower(a.ip_address::text) LIKE $%d)`, pattern)
 	}
 	addText("correlation_id", strings.TrimSpace(arg.CorrelationID))
 	addText("request_id", strings.TrimSpace(arg.RequestID))
 	if clusterID := strings.TrimSpace(arg.ClusterID); clusterID != "" {
 		add(`(
 			(a.resource_type = 'cluster' AND (a.resource_id = $%d OR a.resource_name = $%d)) OR
-			a.detail->>'cluster_id' = $%d OR
-			a.detail->>'clusterId' = $%d OR
-			a.detail->>'cluster' = $%d OR
-			a.detail->>'cluster_name' = $%d
+			a.detail @> jsonb_build_object('cluster_id', $%d::text) OR
+			a.detail @> jsonb_build_object('clusterId', $%d::text) OR
+			a.detail @> jsonb_build_object('cluster', $%d::text) OR
+			a.detail @> jsonb_build_object('cluster_name', $%d::text)
 		)`, clusterID)
 	}
 	if projectID := strings.TrimSpace(arg.ProjectID); projectID != "" {
 		add(`(
 			(a.resource_type = 'project' AND (a.resource_id = $%d OR a.resource_name = $%d)) OR
-			a.detail->>'project_id' = $%d OR
-			a.detail->>'projectId' = $%d OR
-			a.detail->>'project' = $%d OR
-			a.detail->>'project_name' = $%d
+			a.detail @> jsonb_build_object('project_id', $%d::text) OR
+			a.detail @> jsonb_build_object('projectId', $%d::text) OR
+			a.detail @> jsonb_build_object('project', $%d::text) OR
+			a.detail @> jsonb_build_object('project_name', $%d::text)
 		)`, projectID)
 	}
 	if arg.HasFrom {

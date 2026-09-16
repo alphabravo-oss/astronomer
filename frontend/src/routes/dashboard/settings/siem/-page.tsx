@@ -8,7 +8,7 @@
  * server-side; SettingsAuthGate mirrors that in the UI.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   ArrowLeft,
@@ -92,7 +92,7 @@ function SIEMForwardersList() {
       key: "transport",
       header: "Transport",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {transportLabel(row.transport)}
         </span>
       ),
@@ -108,7 +108,7 @@ function SIEMForwardersList() {
             {row.eventFilters.slice(0, 3).map((f) => (
               <span
                 key={f}
-                className="text-2xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+                className="text-2xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
               >
                 {f}
               </span>
@@ -152,7 +152,7 @@ function SIEMForwardersList() {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setStatusTarget(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="View status"
           >
             <Activity className="h-3.5 w-3.5" />
@@ -160,7 +160,7 @@ function SIEMForwardersList() {
           <button
             onClick={() => test.mutate(row.id)}
             disabled={test.isPending}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
             title="Send test event"
           >
             <Send className="h-3.5 w-3.5" />
@@ -170,14 +170,14 @@ function SIEMForwardersList() {
               setEditing(row);
               setShowModal(true);
             }}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Edit forwarder"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete forwarder"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -210,7 +210,10 @@ function SIEMForwardersList() {
         isError={isError}
         onRetry={() => refetch()}
         searchPlaceholder="Search forwarders..."
-        emptyMessage="No SIEM forwarders configured"
+        emptyState={{
+          title: "No SIEM forwarders configured",
+          description: "Create the first item to configure this feature.",
+        }}
       />
 
       {showModal && (
@@ -595,12 +598,12 @@ function SIEMForwarderModal({
         <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
           <form.Field name="enabled">
             {(field) => (
-              <input
+              <Input
                 type="checkbox"
                 checked={field.state.value}
                 onChange={(e) => field.handleChange(e.target.checked)}
                 onBlur={field.handleBlur}
-                className="h-4 w-4 rounded border-border"
+                className="h-4 w-4 rounded-sm border-border"
               />
             )}
           </form.Field>
@@ -609,12 +612,12 @@ function SIEMForwarderModal({
         <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
           <form.Field name="tlsSkipVerify">
             {(field) => (
-              <input
+              <Input
                 type="checkbox"
                 checked={field.state.value}
                 onChange={(e) => field.handleChange(e.target.checked)}
                 onBlur={field.handleBlur}
-                className="h-4 w-4 rounded border-border"
+                className="h-4 w-4 rounded-sm border-border"
               />
             )}
           </form.Field>
@@ -702,7 +705,7 @@ function SIEMStatusDrawer({
               </span>
             </div>
             <div className="flex items-start justify-between gap-4">
-              <span className="text-muted-foreground flex-shrink-0">
+              <span className="text-muted-foreground shrink-0">
                 Last error
               </span>
               <span
@@ -722,13 +725,13 @@ export default function SIEMForwardersPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · SIEM"
           title="SIEM Forwarders"

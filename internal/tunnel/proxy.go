@@ -441,8 +441,13 @@ func k8sProxyResponseHeaderAllowed(name string) bool {
 
 // buildK8sRequestPayload constructs a K8sRequestPayload from an HTTP request.
 func buildK8sRequestPayload(r *http.Request) (*protocol.K8sRequestPayload, error) {
-	// Extract the K8s path: everything after /k8s/ in the URL.
-	path := extractK8sPath(r.URL.Path)
+	// Authorization, auditing, and forwarding consume the same validated
+	// path. The route middleware stores it in context; direct callers run the
+	// same strict validator here.
+	path, err := CanonicalK8sProxyPath(r)
+	if err != nil {
+		return nil, err
+	}
 
 	// Include query string if present.
 	if r.URL.RawQuery != "" {

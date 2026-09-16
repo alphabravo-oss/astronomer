@@ -12,6 +12,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/spf13/cobra"
 )
 
@@ -29,11 +30,6 @@ type clusterRow struct {
 	IsLocal           bool    `json:"is_local"`
 	LastHeartbeat     *string `json:"last_heartbeat"`
 	RegistrationPhase string  `json:"registration_phase"`
-}
-
-type clusterList struct {
-	Data  []clusterRow `json:"data"`
-	Count int          `json:"count"`
 }
 
 type singleCluster struct {
@@ -86,7 +82,7 @@ func newClusterListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var lst clusterList
+			var lst pagination.Response[clusterRow]
 			if err := client.Do(cmd.Context(), "GET", "/api/v1/clusters/", nil, &lst); err != nil {
 				return err
 			}
@@ -193,14 +189,8 @@ func newClusterDeleteCmd() *cobra.Command {
 				return err
 			}
 			if !yes {
-				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "About to decommission cluster %s. The underlying Kubernetes cluster is NOT destroyed.\nProceed? [y/N] ", args[0]); err != nil {
+				if err := confirmAction(cmd, fmt.Sprintf("About to decommission cluster %s. The underlying Kubernetes cluster is NOT destroyed.\nProceed?", args[0])); err != nil {
 					return err
-				}
-				var resp string
-				_, _ = fmt.Scanln(&resp)
-				resp = strings.ToLower(strings.TrimSpace(resp))
-				if resp != "y" && resp != "yes" {
-					return fmt.Errorf("aborted")
 				}
 			}
 			// Server-side trailing-slash middleware accepts either form

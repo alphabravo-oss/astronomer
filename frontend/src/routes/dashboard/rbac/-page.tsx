@@ -8,20 +8,27 @@ import {
   useGlobalRoleBindings,
   useProjectRoleBindings,
   useDeleteAccessBinding,
+  useDeleteRole,
 } from "@/lib/hooks/rbac";
 import {
   useUsers,
   useDeleteUser,
   useResetUserPassword,
 } from "@/lib/hooks/user-settings";
-import { useClusters, useProjects } from "@/lib/hooks";
+import { useClusters } from "@/lib/hooks/clusters";
+import { useProjects } from "@/lib/hooks/projects";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { TabStrip, TabsContent } from "@/components/ui/tabs";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { RoleEditor } from "@/components/rbac/role-editor";
+import {
+  RoleEditor,
+  type EditableRole,
+  type RoleEditorMode,
+} from "@/components/rbac/role-editor";
 import { Plus, Shield, Users, Key, Lock, ListChecks } from "lucide-react";
 import type { AccessBinding, User } from "@/types";
+import type { RoleScope } from "@/lib/api/rbac";
 import { ClusterRolesTab, GlobalRolesTab, ProjectRolesTab } from "./-roles-tab";
 import { UsersTab } from "./-users-tab";
 import { BindingsTab } from "./-bindings-tab";
@@ -32,7 +39,36 @@ import {
   ResetPasswordResultModal,
 } from "./-user-modal";
 import { CreateClusterBindingModal } from "./-binding-modal";
-import { bindingTarget, roleTitle, toAccessBinding } from "./-utils";
+import {
+  bindingTarget,
+  roleTitle,
+  toAccessBinding,
+  type RoleLike,
+} from "./-utils";
+
+type RoleEditorState = {
+  mode: RoleEditorMode;
+  scope: RoleScope;
+  role?: EditableRole;
+};
+
+type ConcreteRole = RoleLike & { id: string };
+type DeleteRoleTarget = { scope: RoleScope; role: ConcreteRole };
+
+function editableRole(scope: RoleScope, role: ConcreteRole): EditableRole {
+  return {
+    id: role.id,
+    name: role.name,
+    displayName: roleTitle(role),
+    description: role.description ?? "",
+    scope,
+    rules: (role.rules ?? []).map((rule) => ({
+      resource: rule.resource ?? rule.resources?.[0] ?? "",
+      verbs: rule.verbs,
+      api_groups: rule.apiGroups ?? rule.api_groups,
+    })),
+  };
+}
 
 export { adminUserHref, isUserLocked, isValidNamespace } from "./-utils";
 
@@ -64,7 +100,10 @@ const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
 
 export default function RBACPage() {
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "global-roles");
-  const [showRoleEditor, setShowRoleEditor] = useState(false);
+  const [roleEditorState, setRoleEditorState] =
+    useState<RoleEditorState | null>(null);
+  const [deleteRoleTarget, setDeleteRoleTarget] =
+    useState<DeleteRoleTarget | null>(null);
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [resetPasswordResult, setResetPasswordResult] = useState<{
@@ -129,6 +168,7 @@ export default function RBACPage() {
   const deleteUser = useDeleteUser();
   const resetPassword = useResetUserPassword();
   const deleteBinding = useDeleteAccessBinding();
+  const deleteRole = useDeleteRole();
 
   const clusters = clustersData?.data || [];
   const projects = projectsData?.data || [];
@@ -189,6 +229,31 @@ export default function RBACPage() {
     setDeleteUserTarget(null);
   };
 
+  const confirmDeleteRole = async () => {
+    if (!deleteRoleTarget) return;
+    try {
+      await deleteRole.mutateAsync({
+        scope: deleteRoleTarget.scope,
+        id: deleteRoleTarget.role.id,
+      });
+      setDeleteRoleTarget(null);
+    } catch {
+      // Error handled by mutation; leave the dialog open for retry.
+    }
+  };
+
+  const roleActions = (scope: RoleScope) => ({
+    onEdit: (role: ConcreteRole) =>
+      setRoleEditorState({ mode: "edit", scope, role: editableRole(scope, role) }),
+    onDuplicate: (role: ConcreteRole) =>
+      setRoleEditorState({
+        mode: "duplicate",
+        scope,
+        role: editableRole(scope, role),
+      }),
+    onDelete: (role: ConcreteRole) => setDeleteRoleTarget({ scope, role }),
+  });
+
   const confirmResetPassword = async () => {
     if (!resetPasswordTarget) return;
     try {
@@ -227,7 +292,9 @@ export default function RBACPage() {
         <ActionButton
           intent="primary"
           icon={<Plus className="h-4 w-4" />}
-          onClick={() => setShowRoleEditor(true)}
+          onClick={() =>
+            setRoleEditorState({ mode: "create", scope: createRoleScope })
+          }
         >
           Create Role
         </ActionButton>
@@ -261,6 +328,7 @@ export default function RBACPage() {
             loading={globalLoading}
             isError={globalError}
             onRetry={() => refetchGlobal()}
+            {...roleActions("global")}
           />
         )}
 
@@ -270,6 +338,7 @@ export default function RBACPage() {
             loading={clusterLoading}
             isError={clusterError}
             onRetry={() => refetchCluster()}
+            {...roleActions("cluster")}
           />
         )}
 
@@ -279,6 +348,7 @@ export default function RBACPage() {
             loading={projectLoading}
             isError={projectError}
             onRetry={() => refetchProject()}
+            {...roleActions("project")}
           />
         )}
 
@@ -325,10 +395,13 @@ export default function RBACPage() {
         {activeTab === "effective" && <EffectiveTab />}
       </TabsContent>
 
-      {showRoleEditor && (
+      {roleEditorState && (
         <RoleEditor
-          onClose={() => setShowRoleEditor(false)}
-          defaultScope={createRoleScope}
+          key={`${roleEditorState.mode}-${roleEditorState.scope}-${roleEditorState.role?.id ?? "new"}`}
+          onClose={() => setRoleEditorState(null)}
+          mode={roleEditorState.mode}
+          defaultScope={roleEditorState.scope}
+          initialRole={roleEditorState.role}
         />
       )}
 
@@ -355,6 +428,17 @@ export default function RBACPage() {
           onClose={() => setResetPasswordResult(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteRoleTarget}
+        onClose={() => setDeleteRoleTarget(null)}
+        onConfirm={confirmDeleteRole}
+        title="Delete Role"
+        description={`Delete custom role "${deleteRoleTarget ? roleTitle(deleteRoleTarget.role) : ""}"? Existing bindings to it will also be removed.`}
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleteRole.isPending}
+      />
 
       <ConfirmDialog
         open={!!deleteUserTarget}

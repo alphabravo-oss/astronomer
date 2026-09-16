@@ -1,5 +1,3 @@
-"use client";
-
 // PodTerminal — exec-into-pod terminal pane.
 //
 // Terminal backend: wterm (@wterm/react) — Zig→WASM core with DOM-native
@@ -21,7 +19,10 @@ import { createStreamTicket } from "@/lib/api/auth";
 import { wsBase } from "@/lib/env";
 
 export type TerminalConnectionStatus =
-  "connecting" | "connected" | "disconnected" | "error";
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error";
 
 // PodTerminalActions is a tiny imperative API the host can call. Used by
 // the window-manager exec tab to focus the terminal when its tab becomes
@@ -89,12 +90,16 @@ export function PodTerminal({
   }, [status, onStatusChange]);
 
   const connectWebSocket = useCallback(() => {
+    if (connectAttemptRef.current) connectAttemptRef.current.cancelled = true;
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
     const wsHost = wsBase();
 
     const attempt = { cancelled: false };
     connectAttemptRef.current = attempt;
 
-    setStatus("connecting");
     createStreamTicket("exec", clusterId)
       .then(({ ticket }) => {
         // Cleanup already ran while the ticket was in flight — don't open a
@@ -106,6 +111,7 @@ export function PodTerminal({
         wsRef.current = ws;
 
         ws.onopen = () => {
+          if (attempt.cancelled) return;
           setStatus("connected");
           ws.send(
             JSON.stringify({
@@ -154,11 +160,13 @@ export function PodTerminal({
         };
 
         ws.onerror = () => {
+          if (attempt.cancelled) return;
           setStatus("error");
           write("\r\n\x1b[31mWebSocket connection error\x1b[0m\r\n");
         };
 
         ws.onclose = (event) => {
+          if (attempt.cancelled) return;
           setStatus("disconnected");
           const reason =
             event.reason || (event.code === 1006 ? "connection lost" : "");
@@ -260,6 +268,7 @@ export function PodTerminal({
   }, []);
 
   const handleReconnect = () => {
+    setStatus("connecting");
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -273,6 +282,7 @@ export function PodTerminal({
 
   const handleContainerChange = (containerName: string) => {
     setSelectedContainer(containerName);
+    setStatus("connecting");
     setShowContainerDropdown(false);
   };
 
@@ -322,7 +332,7 @@ export function PodTerminal({
                   onClick={() =>
                     setShowContainerDropdown(!showContainerDropdown)
                   }
-                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded border border-border text-xs
+                  className="inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border border-border text-xs
                   text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 >
                   <span className="font-mono">{selectedContainer}</span>
@@ -336,7 +346,7 @@ export function PodTerminal({
                         key={c}
                         onClick={() => handleContainerChange(c)}
                         className={cn(
-                          "w-full flex items-center px-2.5 py-1.5 rounded text-xs text-left transition-colors font-mono",
+                          "w-full flex items-center px-2.5 py-1.5 rounded-sm text-xs text-left transition-colors font-mono",
                           c === selectedContainer
                             ? "bg-accent text-foreground"
                             : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -354,7 +364,7 @@ export function PodTerminal({
           <div className="flex items-center gap-1">
             <button
               onClick={handleReconnect}
-              className="inline-flex items-center gap-1 h-6 px-2 rounded text-xs
+              className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Reconnect"
             >
@@ -365,7 +375,7 @@ export function PodTerminal({
             {onClose && (
               <button
                 onClick={onClose}
-                className="inline-flex items-center justify-center h-6 w-6 rounded
+                className="inline-flex items-center justify-center h-6 w-6 rounded-sm
                 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                 title="Close terminal"
               >

@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
@@ -112,8 +113,11 @@ type JWTManager struct {
 	// freshly-revoked token must be rejected on its next use.
 	cacheMu          sync.RWMutex
 	cacheTTL         time.Duration
+	cacheMaxEntries  int
 	cache            map[string]validationCacheEntry
 	cacheCoordinator cacheinvalidate.Broadcaster
+	validationGroup  singleflight.Group
+	identityGroup    singleflight.Group
 }
 
 // JWTValidationCacheTTL is the default TTL for the "this JTI is still
@@ -121,11 +125,38 @@ type JWTManager struct {
 // cache hit becomes visible within seconds. The cache key is the JTI;
 // negative outcomes are never cached so a revoke takes effect on the
 // next request.
-const JWTValidationCacheTTL = 30 * time.Second
+const (
+	JWTValidationCacheTTL        = 30 * time.Second
+	JWTValidationCacheMaxEntries = 10_000
+)
 
 type validationCacheEntry struct {
-	expiresAt time.Time
-	userID    uuid.UUID
+	expiresAt   time.Time
+	userID      uuid.UUID
+	identity    SessionIdentity
+	hasIdentity bool
+}
+
+// SessionIdentity is the non-sensitive user projection authentication needs
+// after a JWT has passed signature, expiry, and revocation validation. It is
+// kept in the same short-lived, bounded, cross-replica-invalidated cache as the
+// positive revocation verdict. This avoids rereading the users row on every
+// request while preserving the existing immediate invalidation path for user
+// deactivation, deletion, password reset, force logout, and SCIM suspension.
+// Password hashes, lockout state, and other user fields never enter the cache.
+type SessionIdentity struct {
+	UserID             uuid.UUID
+	Email              string
+	Username           string
+	FirstName          string
+	LastName           string
+	IsActive           bool
+	IsStaff            bool
+	IsSuperuser        bool
+	MustChangePassword bool
+	DateJoined         time.Time
+	LastLogin          time.Time
+	HasLastLogin       bool
 }
 
 // NewJWTManager creates a new JWT manager. secretKey is a comma-separated
@@ -163,6 +194,7 @@ func NewJWTManager(secretKey string, accessLifetimeMinutes int) (*JWTManager, er
 		accessTokenLifetime:  time.Duration(accessLifetimeMinutes) * time.Minute,
 		refreshTokenLifetime: 7 * 24 * time.Hour, // 7 days
 		cacheTTL:             JWTValidationCacheTTL,
+		cacheMaxEntries:      JWTValidationCacheMaxEntries,
 		cache:                make(map[string]validationCacheEntry),
 	}, nil
 }
@@ -212,6 +244,19 @@ func (m *JWTManager) SetValidationCacheTTL(d time.Duration) {
 	m.cacheMu.Lock()
 	m.cacheTTL = d
 	m.cache = make(map[string]validationCacheEntry) // drop stale entries
+	m.cacheMu.Unlock()
+}
+
+// SetValidationCacheMaxEntries bounds the positive-verdict cache. Values below
+// one disable positive caching. Production uses JWTValidationCacheMaxEntries;
+// the setter keeps capacity behavior deterministic in tests.
+func (m *JWTManager) SetValidationCacheMaxEntries(maxEntries int) {
+	if m == nil {
+		return
+	}
+	m.cacheMu.Lock()
+	m.cacheMaxEntries = maxEntries
+	m.cache = make(map[string]validationCacheEntry)
 	m.cacheMu.Unlock()
 }
 
@@ -458,7 +503,28 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 	if jti != "" && m.cacheHit(jti) {
 		return nil
 	}
+	if jti != "" {
+		result := m.validationGroup.DoChan(jti, func() (any, error) {
+			// A request may have populated the cache while this call waited for
+			// the per-JTI flight. Recheck before touching PostgreSQL.
+			if m.cacheHit(jti) {
+				return nil, nil
+			}
+			resolveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+			defer cancel()
+			return nil, m.checkRevocationsUncached(resolveCtx, claims, checker, jti)
+		})
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case resolved := <-result:
+			return resolved.Err
+		}
+	}
+	return m.checkRevocationsUncached(ctx, claims, checker, jti)
+}
 
+func (m *JWTManager) checkRevocationsUncached(ctx context.Context, claims *Claims, checker RevocationChecker, jti string) error {
 	if jti != "" {
 		revoked, err := checker.IsJWTRevoked(ctx, jti)
 		if err != nil {
@@ -487,22 +553,12 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 	return nil
 }
 
-func (m *JWTManager) securityCacheUnhealthy() bool {
-	if m == nil {
-		return true
-	}
-	m.cacheMu.RLock()
-	coordinator := m.cacheCoordinator
-	m.cacheMu.RUnlock()
-	return coordinator != nil && !coordinator.Healthy()
-}
-
 func (m *JWTManager) cacheHit(jti string) bool {
-	m.cacheMu.RLock()
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
 	entry, ok := m.cache[jti]
 	ttl := m.cacheTTL
 	coordinator := m.cacheCoordinator
-	m.cacheMu.RUnlock()
 	if coordinator != nil && !coordinator.Healthy() {
 		cacheinvalidate.RecordBypass("jwt", "coordinator_unhealthy")
 		return false
@@ -511,7 +567,7 @@ func (m *JWTManager) cacheHit(jti string) bool {
 		return false
 	}
 	if time.Now().After(entry.expiresAt) {
-		// Lazy eviction; the next put or invalidate will replace it.
+		delete(m.cache, jti)
 		return false
 	}
 	return true
@@ -520,10 +576,138 @@ func (m *JWTManager) cacheHit(jti string) bool {
 func (m *JWTManager) cachePut(jti string, userID uuid.UUID) {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
-	if m.cacheTTL <= 0 || (m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy()) {
+	if m.cacheTTL <= 0 || m.cacheMaxEntries <= 0 || (m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy()) {
 		return
 	}
-	m.cache[jti] = validationCacheEntry{expiresAt: time.Now().Add(m.cacheTTL), userID: userID}
+	now := time.Now()
+	if len(m.cache) >= m.cacheMaxEntries {
+		m.evictCacheEntryLocked(now)
+	}
+	m.cache[jti] = validationCacheEntry{expiresAt: now.Add(m.cacheTTL), userID: userID}
+}
+
+// CachedSessionIdentity returns the user projection previously resolved for a
+// validated JTI. Cache hits are disabled whenever distributed invalidation is
+// unhealthy, matching the revocation-verdict cache's fail-closed behavior.
+func (m *JWTManager) CachedSessionIdentity(jti string) (SessionIdentity, bool) {
+	if m == nil || jti == "" {
+		return SessionIdentity{}, false
+	}
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+	if m.cacheTTL <= 0 || m.cacheMaxEntries <= 0 {
+		return SessionIdentity{}, false
+	}
+	if m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy() {
+		cacheinvalidate.RecordBypass("jwt", "coordinator_unhealthy")
+		return SessionIdentity{}, false
+	}
+	entry, ok := m.cache[jti]
+	if !ok {
+		return SessionIdentity{}, false
+	}
+	if !entry.expiresAt.After(time.Now()) {
+		delete(m.cache, jti)
+		return SessionIdentity{}, false
+	}
+	if !entry.hasIdentity || entry.identity.UserID == uuid.Nil || entry.identity.UserID != entry.userID {
+		return SessionIdentity{}, false
+	}
+	return entry.identity, true
+}
+
+// CacheSessionIdentity attaches an authoritative active-user lookup to the
+// positive JTI cache. The entry is bounded by the normal validation TTL and
+// participates in the same per-JTI, per-user, and global invalidation paths.
+func (m *JWTManager) CacheSessionIdentity(jti string, identity SessionIdentity) {
+	if m == nil || jti == "" || identity.UserID == uuid.Nil {
+		return
+	}
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+	if m.cacheTTL <= 0 || m.cacheMaxEntries <= 0 || (m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy()) {
+		return
+	}
+	now := time.Now()
+	entry, ok := m.cache[jti]
+	if ok && (!entry.expiresAt.After(now) || entry.userID != identity.UserID) {
+		delete(m.cache, jti)
+		ok = false
+	}
+	if !ok {
+		if len(m.cache) >= m.cacheMaxEntries {
+			m.evictCacheEntryLocked(now)
+		}
+		entry = validationCacheEntry{expiresAt: now.Add(m.cacheTTL), userID: identity.UserID}
+	}
+	entry.identity = identity
+	entry.hasIdentity = true
+	m.cache[jti] = entry
+}
+
+// ResolveSessionIdentity returns the cached identity for jti or coalesces
+// concurrent cache misses into one authoritative lookup. The lookup outlives
+// cancellation of the first waiter (within a strict two-second bound), while
+// every waiting request still observes its own cancellation promptly.
+func (m *JWTManager) ResolveSessionIdentity(ctx context.Context, jti string, userID uuid.UUID, resolve func(context.Context) (SessionIdentity, error)) (SessionIdentity, error) {
+	if identity, ok := m.CachedSessionIdentity(jti); ok && identity.UserID == userID {
+		return identity, nil
+	}
+	if resolve == nil {
+		return SessionIdentity{}, errors.New("session identity resolver is not configured")
+	}
+	if jti == "" {
+		return resolve(ctx)
+	}
+	result := m.identityGroup.DoChan(jti, func() (any, error) {
+		if identity, ok := m.CachedSessionIdentity(jti); ok && identity.UserID == userID {
+			return identity, nil
+		}
+		resolveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		identity, err := resolve(resolveCtx)
+		if err != nil {
+			return SessionIdentity{}, err
+		}
+		if identity.UserID == uuid.Nil || identity.UserID != userID {
+			return SessionIdentity{}, errors.New("resolved session identity does not match token subject")
+		}
+		m.CacheSessionIdentity(jti, identity)
+		return identity, nil
+	})
+	select {
+	case <-ctx.Done():
+		return SessionIdentity{}, ctx.Err()
+	case resolved := <-result:
+		if resolved.Err != nil {
+			return SessionIdentity{}, resolved.Err
+		}
+		identity, ok := resolved.Val.(SessionIdentity)
+		if !ok {
+			return SessionIdentity{}, errors.New("resolved session identity has invalid type")
+		}
+		return identity, nil
+	}
+}
+
+// evictCacheEntryLocked removes expired entries first, then the entry closest
+// to expiry if the cache remains full. cacheMu must be held by the caller.
+func (m *JWTManager) evictCacheEntryLocked(now time.Time) {
+	var oldestJTI string
+	var oldestExpiry time.Time
+	for jti, entry := range m.cache {
+		if !entry.expiresAt.After(now) {
+			delete(m.cache, jti)
+			continue
+		}
+		if oldestJTI == "" || entry.expiresAt.Before(oldestExpiry) {
+			oldestJTI = jti
+			oldestExpiry = entry.expiresAt
+		}
+	}
+	if len(m.cache) >= m.cacheMaxEntries && oldestJTI != "" {
+		delete(m.cache, oldestJTI)
+	}
 }
 
 // InvalidateCache drops every entry from the positive-result cache.

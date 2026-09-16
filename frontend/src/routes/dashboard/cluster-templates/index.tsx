@@ -12,13 +12,16 @@ import { createFileRoute } from "@tanstack/react-router";
  * the user lacks read we still mount the page — we just render an explainer
  * instead of the list, so the sidebar link remains a stable target.
  */
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { Plus, Trash2, Layers } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { LoadingState, PermissionState } from "@/components/ui/empty-state";
+import { EmptyState, PermissionState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { ActionButton } from "@/components/ui/action-button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import {
   useClusterTemplates,
   useDeleteClusterTemplate,
@@ -29,15 +32,18 @@ import { formatRelativeTime } from "@/lib/utils";
 import type { ClusterTemplate } from "@/lib/api/project-detail";
 
 function ClusterTemplatesPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data: user } = useCurrentUser();
   const canRead = canReadClusterTemplates(user);
   const canWrite = canWriteClusterTemplates(user);
 
-  const { data, isLoading } = useClusterTemplates();
+  const templatesQuery = useClusterTemplates();
   const deleteMutation = useDeleteClusterTemplate();
+  const [deleteTarget, setDeleteTarget] = useState<ClusterTemplate | null>(
+    null,
+  );
 
-  const templates = data?.data || [];
+  const templates = templatesQuery.data?.data || [];
 
   if (!canRead) {
     return (
@@ -87,7 +93,7 @@ function ClusterTemplatesPage() {
       key: "environment",
       header: "Environment",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.spec.environment}
         </span>
       ),
@@ -121,16 +127,8 @@ function ClusterTemplatesPage() {
           {canWrite && (
             <button
               type="button"
-              onClick={() => {
-                if (
-                  confirm(
-                    `Delete template "${row.displayName}"? This action cannot be undone.`,
-                  )
-                ) {
-                  deleteMutation.mutate(row.id);
-                }
-              }}
-              className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+              onClick={() => setDeleteTarget(row)}
+              className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
               title="Delete template"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -152,7 +150,9 @@ function ClusterTemplatesPage() {
             <ActionButton
               intent="primary"
               icon={<Plus className="h-4 w-4" />}
-              onClick={() => router.push("/dashboard/cluster-templates/new")}
+              onClick={() =>
+                void navigate({ to: "/dashboard/cluster-templates/new" })
+              }
             >
               New bundle
             </ActionButton>
@@ -160,21 +160,70 @@ function ClusterTemplatesPage() {
         }
       />
 
-      {isLoading ? (
-        <LoadingState title="Loading cluster templates" className="h-32 py-0" />
-      ) : (
+      <QueryStates
+        query={templatesQuery}
+        loadingTitle="Loading onboarding bundles"
+        permission="cluster_templates:read"
+        errorTitle="Failed to load onboarding bundles"
+        isEmpty={(result) => result.data.length === 0}
+        empty={
+          <EmptyState
+            icon={Layers}
+            title="No onboarding bundles yet"
+            description="Create a reusable bundle of tools, policy, and project defaults for adopted clusters."
+            actionLabel={canWrite ? "Create bundle" : undefined}
+            actionIcon={Plus}
+            onAction={
+              canWrite
+                ? () =>
+                    void navigate({ to: "/dashboard/cluster-templates/new" })
+                : undefined
+            }
+          />
+        }
+      >
         <DataTable
           data={templates}
           columns={columns}
           keyExtractor={(row) => row.id}
           searchPlaceholder="Search templates..."
-          loading={isLoading}
-          emptyMessage="No onboarding bundles yet."
+          emptyState={{
+            title: "No onboarding bundles available",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
           onRowClick={(row) =>
-            router.push(`/dashboard/cluster-templates/${row.id}`)
+            void navigate({ to: `/dashboard/cluster-templates/${row.id}` })
           }
         />
-      )}
+      </QueryStates>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          deleteMutation.mutate(deleteTarget.id, {
+            onSuccess: () => setDeleteTarget(null),
+          });
+        }}
+        title="Delete onboarding bundle"
+        description="This permanently deletes the reusable onboarding configuration."
+        confirmValue={deleteTarget?.displayName}
+        variant="destructive"
+        loading={deleteMutation.isPending}
+        impact={
+          deleteTarget
+            ? {
+                scope: deleteTarget.displayName,
+                consequences: [
+                  "The bundle can no longer be selected for newly adopted clusters.",
+                  `${deleteTarget.clustersBound} currently bound cluster${deleteTarget.clustersBound === 1 ? "" : "s"} keep their existing configuration.`,
+                ],
+                recovery: "Recreate the onboarding bundle manually.",
+              }
+            : undefined
+        }
+      />
     </PageShell>
   );
 }

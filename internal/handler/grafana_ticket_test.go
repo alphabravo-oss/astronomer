@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/google/uuid"
 )
 
@@ -26,7 +27,7 @@ func grafanaTicketHandler(t *testing.T, bindings []rbac.RoleBinding) *Monitoring
 
 func grafanaTicketAuthed(email string) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/observability/grafana-ticket?return=https://grafana.astronomer.example.com/", nil)
-	return req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	return req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.NewString(), Email: email, AuthMethod: "jwt",
 	}))
 }
@@ -44,7 +45,7 @@ func TestGrafanaTicketAllowListRejectsOpenRedirect(t *testing.T) {
 	}
 	for _, ret := range cases {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/observability/grafana-ticket?return="+ret, nil)
-		req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 			ID: uuid.NewString(), Email: "a@example.com", AuthMethod: "jwt",
 		}))
 		rec := httptest.NewRecorder()
@@ -65,7 +66,7 @@ func TestGrafanaTicketAllowListAcceptsHostRootAndCallback(t *testing.T) {
 		"https://grafana.astronomer.example.com/auth/callback",
 	} {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/observability/grafana-ticket?return="+ret, nil)
-		req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 			ID: uuid.NewString(), Email: "a@example.com", AuthMethod: "jwt",
 		}))
 		rec := httptest.NewRecorder()

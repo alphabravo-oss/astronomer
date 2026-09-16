@@ -49,6 +49,25 @@ func resourceFields(prefix, cpuReq, memReq, memLim string) []ToolFormField {
 
 // toolFormSchemas is keyed by tool slug. Absent slug → raw-YAML editor only.
 var toolFormSchemas = map[string]ToolFormSchema{
+	"istio": {Fields: append([]ToolFormField{
+		{Path: "base.defaultRevision", Label: "Default control plane revision", Type: toolFieldString, Group: "Base CRDs", Default: "default", Help: "Base CRDs are installed before the control plane."},
+		{Path: "istiod.autoscaleEnabled", Label: "Autoscale the control plane", Type: toolFieldBoolean, Group: "Control plane", Default: "true"},
+		{Path: "istiod.autoscaleMin", Label: "Minimum replicas", Type: toolFieldNumber, Group: "Control plane", Default: "2"},
+		{Path: "istiod.autoscaleMax", Label: "Maximum replicas", Type: toolFieldNumber, Group: "Control plane", Default: "5"},
+		{Path: "istiod.replicaCount", Label: "Replicas when autoscaling is disabled", Type: toolFieldNumber, Group: "Control plane", Default: "2"},
+		{Path: "istiod.sidecarInjectorWebhook.enableNamespacesByDefault", Label: "Inject sidecars in all namespaces", Type: toolFieldBoolean, Group: "Injection", Default: "false", Help: "Leave off and opt in individual namespaces after reviewing workload compatibility."},
+	}, resourceFields("istiod.resources.", "500m", "2048Mi", "4096Mi")...)},
+	"longhorn": {Fields: []ToolFormField{
+		{Path: "persistence.defaultClass", Label: "Make Longhorn the default StorageClass", Type: toolFieldBoolean, Group: "Storage", Default: "false", Help: "Leave off to preserve the existing cluster default."},
+		{Path: "persistence.defaultClassReplicaCount", Label: "Replicas per volume", Type: toolFieldNumber, Group: "Storage", Default: "3", Help: "Requires enough eligible nodes to place replicas."},
+		{Path: "persistence.reclaimPolicy", Label: "Volume reclaim policy", Type: toolFieldSelect, Group: "Storage", Default: "Retain", Options: []string{"Retain", "Delete"}, Help: "Retain preserves volume data when a claim is deleted."},
+		{Path: "csi.kubeletRootDir", Label: "Kubelet root directory", Type: toolFieldString, Group: "Storage", Placeholder: "/var/lib/kubelet", Help: "Set only when the distribution uses a non-standard kubelet directory."},
+	}},
+	"neuvector": {Fields: []ToolFormField{
+		{Path: "controller.replicas", Label: "Controller replicas", Type: toolFieldNumber, Group: "Scaling", Default: "3"},
+		{Path: "cve.scanner.replicas", Label: "Scanner replicas", Type: toolFieldNumber, Group: "Scaling", Default: "1"},
+		{Path: "manager.svc.type", Label: "Manager service type", Type: toolFieldSelect, Group: "Networking", Default: "ClusterIP", Options: []string{"ClusterIP", "NodePort", "LoadBalancer"}, Help: "Configure authentication before exposing the manager outside the cluster."},
+	}},
 	"kube-state-metrics": {Fields: append([]ToolFormField{
 		{Path: "replicas", Label: "Replicas", Type: toolFieldNumber, Group: "Scaling", Default: "1", Help: "kube-state-metrics is sharded; 1 is fine for most clusters."},
 	}, resourceFields("resources.", "10m", "32Mi", "64Mi")...)},

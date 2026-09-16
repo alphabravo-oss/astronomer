@@ -26,7 +26,7 @@ func TestServiceProxyRejectsOversizeBody(t *testing.T) {
 	router := serviceProxyTestRouter(h)
 
 	oversize := strings.Repeat("a", serviceProxyMaxBodyBytes+1)
-	req := httptest.NewRequest(http.MethodPost, "/clusters/cluster-1/proxy/service/observability/grafana:3000/api/admin", strings.NewReader(oversize))
+	req := httptest.NewRequest(http.MethodPost, "/clusters/"+serviceProxyClusterID+"/proxy/service/observability/grafana:3000/api/admin", strings.NewReader(oversize))
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -51,7 +51,7 @@ func TestServiceProxyAllowsBodyUnderCap(t *testing.T) {
 	router := serviceProxyTestRouter(h)
 
 	body := strings.Repeat("a", 1024)
-	req := httptest.NewRequest(http.MethodPost, "/clusters/cluster-1/proxy/service/observability/grafana:3000/api/admin", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/clusters/"+serviceProxyClusterID+"/proxy/service/observability/grafana:3000/api/admin", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

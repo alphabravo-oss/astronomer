@@ -12,12 +12,11 @@ import {
   listCatalogCharts,
   listRecommendedCharts,
   listChartVersions,
-} from "@/lib/api/cluster-detail";
+} from "@/lib/api/cluster-apps";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("@/lib/api/generated/client")
-  >();
+  const actual =
+    await importOriginal<typeof import("@/lib/api/generated/client")>();
   return {
     ...actual,
     getCatalogCharts: vi.fn(),
@@ -56,9 +55,13 @@ describe("catalog project isolation", () => {
   it("scopes every generated chart browse and version request to a project", async () => {
     vi.mocked(generated.getCatalogCharts).mockResolvedValueOnce({
       data: [],
-      count: 0,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 0,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
     vi.mocked(generated.getCatalogChartsByIdVersions).mockResolvedValueOnce({
       data: [],
@@ -79,16 +82,35 @@ describe("catalog project isolation", () => {
 
   it("keeps compatibility browse helpers project-scoped", async () => {
     vi.mocked(generated.getCatalogCharts).mockResolvedValueOnce({
-      data: [], count: 0, next: null, previous: null,
+      data: [],
+      pagination: {
+        total: 0,
+        limit: 60,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
-    vi.mocked(generated.getCatalogRecommendationsPopular).mockResolvedValueOnce({
-      data: [], count: 0, next: null, previous: null,
-    });
+    vi.mocked(generated.getCatalogRecommendationsPopular).mockResolvedValueOnce(
+      {
+        data: [],
+        pagination: {
+          total: 0,
+          limit: 10,
+          offset: 0,
+          has_more: false,
+          next_offset: null,
+        },
+      },
+    );
     vi.mocked(generated.getCatalogChartsByIdVersions).mockResolvedValueOnce({
-      data: [], pagination: { limit: 50, offset: 0, has_more: false, next_offset: null },
+      data: [],
+      pagination: { limit: 50, offset: 0, has_more: false, next_offset: null },
     });
     vi.mocked(generated.getCatalogChartsByIdValues).mockResolvedValueOnce({
-      chart: "metrics", version: "1.2.3", default_values: "",
+      chart: "metrics",
+      version: "1.2.3",
+      default_values: "",
     });
 
     await listCatalogCharts({ projectId: "project-1", limit: 60 });
@@ -101,10 +123,13 @@ describe("catalog project isolation", () => {
       signal: undefined,
     });
     expect(generated.getCatalogRecommendationsPopular).toHaveBeenCalledWith({
-      query: { project_id: "project-1", limit: 12 }, signal: undefined,
+      query: { project_id: "project-1", limit: 12 },
+      signal: undefined,
     });
     expect(generated.getCatalogChartsByIdVersions).toHaveBeenCalledWith({
-      path: { id: "chart-1" }, query: { project_id: "project-1", limit: 50 }, signal: undefined,
+      path: { id: "chart-1" },
+      query: { project_id: "project-1", limit: 50 },
+      signal: undefined,
     });
     expect(generated.getCatalogChartsByIdValues).toHaveBeenCalledWith({
       path: { id: "chart-1" },
@@ -155,7 +180,10 @@ describe("catalog project isolation", () => {
 
   it("keeps the cluster install compatibility helper project-bound", async () => {
     vi.mocked(generated.postCatalogInstalled).mockResolvedValueOnce({
-      data: { installation: { ...installationWire, id: "installation-1" }, operation: {} },
+      data: {
+        installation: { ...installationWire, id: "installation-1" },
+        operation: {},
+      },
     });
 
     await installChartOnCluster({

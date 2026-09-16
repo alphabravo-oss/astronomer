@@ -61,13 +61,9 @@ func TestDeliverySourceStateAndAuditCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources/", nil)
 			params := sqlc.CreateDeliverySourceParams{ProjectID: uuid.New(), Name: "platform", SourceType: "git", AuthMode: "bearer", CredentialEncrypted: "ciphertext", CredentialKeyVersion: 1}
 
-			_, err := executeSourceMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q SourceMutationTx) (sqlc.CreateDeliverySourceRow, error) {
 					return q.CreateDeliverySource(r.Context(), params)
-				},
-				func() (sqlc.CreateDeliverySourceRow, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.CreateDeliverySourceRow{}, nil
 				},
 				func(row sqlc.CreateDeliverySourceRow) deliveryAuditEvent {
 					return deliveryAuditEvent{action: "delivery.source.created", resourceType: "delivery_source", resourceID: row.ID.String(), status: http.StatusCreated}
@@ -107,7 +103,7 @@ func TestEveryDeliverySourceMutationUsesTransactionalExecutor(t *testing.T) {
 			}
 			switch fn := call.Fun.(type) {
 			case *ast.Ident:
-				if fn.Name == "executeSourceMutation" {
+				if fn.Name == "executeMutation" {
 					want[fnDecl.Name.Name] = true
 				}
 			case *ast.SelectorExpr:
@@ -120,7 +116,7 @@ func TestEveryDeliverySourceMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeSourceMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

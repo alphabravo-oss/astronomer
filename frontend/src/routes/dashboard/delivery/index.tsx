@@ -14,11 +14,11 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, type ReactNode } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { MetricCard } from "@/components/ui/metric-card";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
-import { usePathname, useRouter, useSearchParams } from "@/lib/navigation";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -31,24 +31,26 @@ import {
   projectClusterId,
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
+import { listClusterDeployments } from "@/lib/api/delivery-deployments";
+import { listComponentBundles } from "@/lib/api/delivery-bundles";
+import { listDeliveryRollouts } from "@/lib/api/delivery-rollouts";
+import { listDeliverySources } from "@/lib/api/delivery-sources";
+import { listDeliveryTargets } from "@/lib/api/delivery-targets";
 import {
   getDeliveryEstate,
   getDeliverySystemCompatibility,
-  listClusterDeployments,
-  listComponentBundles,
-  listDeliveryRollouts,
-  listDeliverySources,
-  listDeliveryTargets,
   type DeliveryEstate,
   type DeliveryEstateAttention,
   type DeliveryEstateCluster,
   type DeliveryEstateCount,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-system";
 import { queryKeys } from "@/lib/query-keys";
-import { useClusters, useCurrentUser } from "@/lib/hooks";
+import { useClusters } from "@/lib/hooks/clusters";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
+import { pageRowCount } from "@/lib/api/pagination";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
 function isForbiddenError(error: unknown): boolean {
@@ -178,9 +180,11 @@ function FleetDeliveryOverview({
 }) {
   const estate = query.data;
   const summary = estate?.summary;
-  const router = useRouter();
-  const pathname = usePathname();
-  const search = useSearchParams();
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const search = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
   const focus = search.get("focus") ?? "";
   const clusters = estate?.clusters ?? [];
   const clusterList = useClusters({ pageSize: 200 });
@@ -200,13 +204,16 @@ function FleetDeliveryOverview({
       clusterMatchesFocus(cluster, next),
     );
     if (matches.length === 1) {
-      router.push(clusterHref(matches[0].id));
+      void navigate({ to: clusterHref(matches[0].id) });
       return;
     }
     const params = new URLSearchParams(search);
     if (next) params.set("focus", next);
     else params.delete("focus");
-    router.replace(`${pathname}${params.size ? `?${params.toString()}` : ""}`);
+    void navigate({
+      to: `${pathname}${params.size ? `?${params.toString()}` : ""}`,
+      replace: true,
+    });
     requestAnimationFrame(() => {
       document
         .getElementById("estate-clusters")
@@ -449,12 +456,18 @@ function FleetDeliveryOverview({
             loading={query.isLoading}
             isError={query.isError && !isForbiddenError(query.error)}
             onRetry={() => void query.refetch()}
-            onRowClick={(row) => router.push(clusterHref(row.id))}
-            emptyMessage={
-              focus
-                ? "No clusters match this filter."
-                : "No clusters are registered."
-            }
+            onRowClick={(row) => void navigate({ to: clusterHref(row.id) })}
+            filtersActive={!!focus}
+            onClearFilters={() => setFocus("")}
+            emptyState={{
+              title: "No clusters registered",
+              description:
+                "Register a cluster to inspect its delivery readiness.",
+              action: {
+                label: "Register cluster",
+                href: "/dashboard/clusters/register",
+              },
+            }}
           />
         </PageSection>
       </div>
@@ -480,7 +493,7 @@ function FleetTile({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-start justify-between rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring",
+        "flex items-start justify-between rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-accent/40 focus:outline-hidden focus:ring-2 focus:ring-ring",
         active && "ring-2 ring-ring",
       )}
     >
@@ -514,9 +527,9 @@ function AttentionList({
   return (
     <div className="space-y-2">
       {items.map((item) => (
-        <Link
+        <RouterLink
           key={`${item.clusterId}-${item.reason}`}
-          href={clusterHref(item.clusterId)}
+          to={clusterHref(item.clusterId)}
           className={
             item.severity === "error"
               ? "flex items-center justify-between rounded-md border border-status-error/30 bg-status-error/10 p-3"
@@ -536,7 +549,7 @@ function AttentionList({
             </span>
           </span>
           <DeliveryPhaseBadge value={item.reason} />
-        </Link>
+        </RouterLink>
       ))}
     </div>
   );
@@ -697,31 +710,31 @@ function ProjectDeliveryOverview({
         />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <MetricLink
-            href="sources"
+            section="sources"
             projectId={projectId}
             clusterId={clusterId}
             icon={GitBranch}
             label="Sources"
-            value={sources.data?.count ?? "—"}
+            value={sources.data ? pageRowCount(sources.data) : "—"}
           />
           <MetricLink
-            href="bundles"
+            section="bundles"
             projectId={projectId}
             clusterId={clusterId}
             icon={Boxes}
             label="Bundles"
-            value={bundles.data?.count ?? "—"}
+            value={bundles.data ? pageRowCount(bundles.data) : "—"}
           />
           <MetricLink
-            href="targets"
+            section="targets"
             projectId={projectId}
             clusterId={clusterId}
             icon={Crosshair}
             label="Targets"
-            value={targets.data?.count ?? "—"}
+            value={targets.data ? pageRowCount(targets.data) : "—"}
           />
           <MetricLink
-            href="rollouts"
+            section="rollouts"
             projectId={projectId}
             clusterId={clusterId}
             icon={Rocket}
@@ -739,36 +752,37 @@ function ProjectDeliveryOverview({
             }
           />
           <MetricLink
-            href="deployments"
+            section="deployments"
             projectId={projectId}
             clusterId={clusterId}
             icon={Layers}
             label="Drifted (loaded page)"
             value={drifted}
           />
-          <Link
-            href="/dashboard/agents"
-            className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+          <RouterLink
+            to="/dashboard/agents"
+            className="block rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
           >
             <MetricCard
               icon={<ServerCog className="h-4 w-4" />}
               title="Incompatible clusters"
               value={system.isLoading ? "—" : incompatibleClusters}
             />
-          </Link>
+          </RouterLink>
         </div>
-        {unhealthySources.data && unhealthySources.data.count > 0 && (
-          <Link
-            href={`/dashboard/delivery/sources?project=${encodeURIComponent(projectId)}&status=degraded`}
+        {unhealthySources.data && pageRowCount(unhealthySources.data) > 0 && (
+          <RouterLink
+            to="/dashboard/delivery/sources"
+            search={{ project: projectId, status: "degraded" }}
             className="flex items-center justify-between rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-sm"
           >
             <span className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-status-warning" />
-              {unhealthySources.data.count} degraded delivery source
-              {unhealthySources.data.count === 1 ? "" : "s"}
+              {pageRowCount(unhealthySources.data)} degraded delivery source
+              {pageRowCount(unhealthySources.data) === 1 ? "" : "s"}
             </span>
             <DeliveryPhaseBadge value="degraded" />
-          </Link>
+          </RouterLink>
         )}
         {system.isError && <ErrorMessage error={system.error} />}
         {system.data && (
@@ -843,9 +857,9 @@ function ProjectDeliveryOverview({
           ) : (
             <div className="space-y-2">
               {failures.map((deployment) => (
-                <Link
+                <RouterLink
                   key={deployment.id}
-                  href={deliveryEntityPath("deployments", deployment.id, {
+                  to={deliveryEntityPath("deployments", deployment.id, {
                     clusterId: deployment.clusterId || clusterId,
                     projectId,
                   })}
@@ -859,14 +873,14 @@ function ProjectDeliveryOverview({
                     </span>
                   </span>
                   <DeliveryPhaseBadge value={deployment.phase} />
-                </Link>
+                </RouterLink>
               ))}
               {(rollouts.data?.data ?? [])
                 .filter((item) => item.state === "rollback_failed")
                 .map((rollout) => (
-                  <Link
+                  <RouterLink
                     key={rollout.id}
-                    href={deliveryEntityPath("rollouts", rollout.id, {
+                    to={deliveryEntityPath("rollouts", rollout.id, {
                       clusterId,
                       projectId,
                     })}
@@ -878,7 +892,7 @@ function ProjectDeliveryOverview({
                       <code className="text-xs">{rollout.id}</code>
                     </span>
                     <DeliveryPhaseBadge value={rollout.state} />
-                  </Link>
+                  </RouterLink>
                 ))}
             </div>
           )}
@@ -889,35 +903,142 @@ function ProjectDeliveryOverview({
 }
 
 function MetricLink({
-  href,
+  section,
   projectId,
   clusterId,
   icon: Icon,
   label,
   value,
 }: {
-  href: string;
+  section: "sources" | "bundles" | "targets" | "rollouts" | "deployments";
   projectId: string;
   clusterId?: string;
   icon: typeof ServerCog;
   label: string;
   value: string | number;
 }) {
-  const target = clusterId
-    ? `${clusterDeliveryPath(clusterId, href)}?project=${encodeURIComponent(projectId)}`
-    : `/dashboard/delivery/${href}?project=${encodeURIComponent(projectId)}`;
-  return (
-    <Link
-      href={target}
-      className="block rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
-    >
-      <MetricCard
-        icon={<Icon className="h-4 w-4" />}
-        title={label}
-        value={value}
-      />
-    </Link>
+  const card = (
+    <MetricCard
+      icon={<Icon className="h-4 w-4" />}
+      title={label}
+      value={value}
+    />
   );
+  const className =
+    "block rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring";
+
+  if (clusterId) {
+    switch (section) {
+      case "sources":
+        return (
+          <RouterLink
+            to="/dashboard/clusters/$id/delivery/sources"
+            params={{ id: clusterId }}
+            search={{ project: projectId }}
+            className={className}
+          >
+            {card}
+          </RouterLink>
+        );
+      case "bundles":
+        return (
+          <RouterLink
+            to="/dashboard/clusters/$id/delivery/bundles"
+            params={{ id: clusterId }}
+            search={{ project: projectId }}
+            className={className}
+          >
+            {card}
+          </RouterLink>
+        );
+      case "targets":
+        return (
+          <RouterLink
+            to="/dashboard/clusters/$id/delivery/targets"
+            params={{ id: clusterId }}
+            search={{ project: projectId }}
+            className={className}
+          >
+            {card}
+          </RouterLink>
+        );
+      case "rollouts":
+        return (
+          <RouterLink
+            to="/dashboard/clusters/$id/delivery/rollouts"
+            params={{ id: clusterId }}
+            search={{ project: projectId }}
+            className={className}
+          >
+            {card}
+          </RouterLink>
+        );
+      case "deployments":
+        return (
+          <RouterLink
+            to="/dashboard/clusters/$id/delivery/deployments"
+            params={{ id: clusterId }}
+            search={{ project: projectId }}
+            className={className}
+          >
+            {card}
+          </RouterLink>
+        );
+    }
+  }
+
+  switch (section) {
+    case "sources":
+      return (
+        <RouterLink
+          to="/dashboard/delivery/sources"
+          search={{ project: projectId }}
+          className={className}
+        >
+          {card}
+        </RouterLink>
+      );
+    case "bundles":
+      return (
+        <RouterLink
+          to="/dashboard/delivery/bundles"
+          search={{ project: projectId }}
+          className={className}
+        >
+          {card}
+        </RouterLink>
+      );
+    case "targets":
+      return (
+        <RouterLink
+          to="/dashboard/delivery/targets"
+          search={{ project: projectId }}
+          className={className}
+        >
+          {card}
+        </RouterLink>
+      );
+    case "rollouts":
+      return (
+        <RouterLink
+          to="/dashboard/delivery/rollouts"
+          search={{ project: projectId }}
+          className={className}
+        >
+          {card}
+        </RouterLink>
+      );
+    case "deployments":
+      return (
+        <RouterLink
+          to="/dashboard/delivery/deployments"
+          search={{ project: projectId }}
+          className={className}
+        >
+          {card}
+        </RouterLink>
+      );
+  }
 }
 function stringField(
   value: Record<string, unknown> | null,

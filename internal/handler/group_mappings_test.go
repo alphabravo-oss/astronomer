@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/auth"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeGroupMappings implements GroupMappingsQuerier with hand-rolled
@@ -282,7 +282,7 @@ func makeAuthedRequest(t *testing.T, method, target string, body []byte, callerI
 	} else {
 		req = httptest.NewRequest(method, target, nil)
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         callerID.String(),
 		AuthMethod: "jwt",
 	})
@@ -302,7 +302,7 @@ func TestGroupMappingsHandler_CRUD(t *testing.T) {
 	f := newFakeMappings()
 	f.user = sqlc.User{ID: caller, IsSuperuser: true}
 
-	h := NewGroupMappingsHandler(f)
+	h := wireGroupMappingsMutationFixture(NewGroupMappingsHandler(f), f)
 
 	// Create
 	body := []byte(`{"group_name":"engineering","scope":"global","role_id":"` + uuid.New().String() + `"}`)
@@ -332,14 +332,14 @@ func TestGroupMappingsHandler_CRUD(t *testing.T) {
 		t.Fatalf("list: code = %d", rec.Code)
 	}
 	var listResp struct {
-		Data  []GroupMappingResponse `json:"data"`
-		Count int64                  `json:"count"`
+		Data       []GroupMappingResponse `json:"data"`
+		Pagination paging.Metadata        `json:"pagination"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &listResp); err != nil {
 		t.Fatalf("decode list: %v", err)
 	}
-	if listResp.Count != 1 || len(listResp.Data) != 1 {
-		t.Fatalf("list count=%d items=%d", listResp.Count, len(listResp.Data))
+	if exactPageTotal(t, listResp.Pagination) != 1 || len(listResp.Data) != 1 {
+		t.Fatalf("list count=%d items=%d", exactPageTotal(t, listResp.Pagination), len(listResp.Data))
 	}
 
 	// Get
@@ -375,7 +375,7 @@ func TestGroupMappingsHandler_RequiresSuperuser(t *testing.T) {
 	caller := uuid.New()
 	f := newFakeMappings()
 	f.user = sqlc.User{ID: caller, IsSuperuser: false}
-	h := NewGroupMappingsHandler(f)
+	h := wireGroupMappingsMutationFixture(NewGroupMappingsHandler(f), f)
 
 	endpoints := []struct {
 		name string
@@ -404,7 +404,7 @@ func TestGroupMappingsHandler_CreateValidation(t *testing.T) {
 	caller := uuid.New()
 	f := newFakeMappings()
 	f.user = sqlc.User{ID: caller, IsSuperuser: true}
-	h := NewGroupMappingsHandler(f)
+	h := wireGroupMappingsMutationFixture(NewGroupMappingsHandler(f), f)
 
 	cases := []struct {
 		name string
@@ -464,7 +464,7 @@ func TestGroupMappingsHandler_ResyncUser(t *testing.T) {
 	// param, so we patch f.user temporarily.
 	f.user = sqlc.User{ID: target, IsSuperuser: true}
 
-	h := NewGroupMappingsHandler(f)
+	h := wireGroupMappingsMutationFixture(NewGroupMappingsHandler(f), f)
 	rec := httptest.NewRecorder()
 	h.ResyncUser(rec, makeAuthedRequest(t, http.MethodPost,
 		"/api/v1/admin/users/"+target.String()+"/resync-groups/",
@@ -496,7 +496,7 @@ func TestGroupMappingsHandler_ResyncUser_NoSnapshot(t *testing.T) {
 	f.user = sqlc.User{ID: target, IsSuperuser: true}
 	f.snapshotErr = pgx.ErrNoRows
 
-	h := NewGroupMappingsHandler(f)
+	h := wireGroupMappingsMutationFixture(NewGroupMappingsHandler(f), f)
 	rec := httptest.NewRecorder()
 	h.ResyncUser(rec, makeAuthedRequest(t, http.MethodPost,
 		"/api/v1/admin/users/"+target.String()+"/resync-groups/",

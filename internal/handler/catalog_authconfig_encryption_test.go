@@ -30,6 +30,35 @@ type sealingCatalogQuerier struct {
 	existing sqlc.HelmRepository
 }
 
+type sealingCatalogMutationTx struct {
+	CatalogMutationTx
+	queries *sealingCatalogQuerier
+}
+
+func (tx *sealingCatalogMutationTx) CreateHelmRepository(ctx context.Context, arg sqlc.CreateHelmRepositoryParams) (sqlc.HelmRepository, error) {
+	return tx.queries.CreateHelmRepository(ctx, arg)
+}
+
+func (tx *sealingCatalogMutationTx) UpdateHelmRepository(ctx context.Context, arg sqlc.UpdateHelmRepositoryParams) (sqlc.HelmRepository, error) {
+	return tx.queries.UpdateHelmRepository(ctx, arg)
+}
+
+func (tx *sealingCatalogMutationTx) UpsertAuditOutbox(_ context.Context, _ sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{}, nil
+}
+
+func (tx *sealingCatalogMutationTx) UpsertTaskOutbox(_ context.Context, _ sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	return sqlc.TaskOutbox{}, nil
+}
+
+func newSealingCatalogHandler(q *sealingCatalogQuerier) *CatalogHandler {
+	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h.SetRunTx(func(_ context.Context, fn func(CatalogMutationTx) error) error {
+		return fn(&sealingCatalogMutationTx{queries: q})
+	})
+	return h
+}
+
 func (q *sealingCatalogQuerier) CreateHelmRepository(_ context.Context, arg sqlc.CreateHelmRepositoryParams) (sqlc.HelmRepository, error) {
 	q.created = arg
 	return sqlc.HelmRepository{
@@ -130,7 +159,7 @@ func TestCreateRepoRejectsCredentialWhenEncryptionIsUnavailable(t *testing.T) {
 func TestCreateRepoSealsCredentialAtRest(t *testing.T) {
 	enc := testEncryptor(t)
 	q := &sealingCatalogQuerier{}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	body := `{"name":"private","url":"https://charts.example.com","auth_type":"basic",` +
@@ -198,7 +227,7 @@ func TestUpdateRepoSentinelMergesAgainstDecryptedDocument(t *testing.T) {
 	existing := sealRepo(t, enc, "private", "https://charts.example.com", "basic",
 		`{"username":"u","password":"s3cret"}`)
 	q := &sealingCatalogQuerier{existing: existing}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	body := `{"name":"private","url":"https://charts.example.com","auth_type":"basic",` +

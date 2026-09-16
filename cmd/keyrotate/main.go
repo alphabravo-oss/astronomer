@@ -166,6 +166,7 @@ var rewriteTargets = []target{
 	{"backup_storage_configs", "id", "encrypted_credentials"},
 	{"vault_connections", "id", "auth_encrypted"},
 	{"gitops_registration_sources", "id", "auth_encrypted"},
+	{"gitops_registration_sources", "id", "webhook_secret_encrypted"},
 	{"prometheus_datasources", "id", "auth_encrypted"},
 	{"siem_forwarders", "id", "auth_encrypted"},
 	{"cloud_credentials", "id", "data_encrypted"},

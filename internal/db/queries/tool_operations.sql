@@ -60,9 +60,13 @@ WHERE (
   AND (payload->>'clusterId')::uuid = ANY(sqlc.arg(cluster_ids)::uuid[]);
 
 -- name: ListPendingToolOperations :many
-SELECT * FROM tool_operations
-WHERE status IN ('pending', 'running')
-ORDER BY created_at ASC
+SELECT operation.* FROM tool_operations operation
+WHERE operation.status = 'running' OR (operation.status = 'pending' AND NOT EXISTS (
+    SELECT 1 FROM tool_operations running
+    WHERE running.target_type = operation.target_type AND running.target_key = operation.target_key
+      AND running.status = 'running'
+))
+ORDER BY operation.created_at ASC
 LIMIT $1;
 
 -- name: GetLatestToolOperationForTarget :one
@@ -84,31 +88,46 @@ SET
     started_at = now(),
     error_message = '',
     updated_at = now()
-WHERE id = $1
+WHERE tool_operations.id = $1
   AND (
-      status = 'pending'
-      OR (status = 'running' AND (started_at IS NULL OR started_at < now() - interval '1 minute'))
+      tool_operations.status = 'pending'
+      OR (tool_operations.status = 'running' AND (tool_operations.started_at IS NULL OR tool_operations.started_at < now() - interval '1 minute'))
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM tool_operations other
+      WHERE other.target_type = tool_operations.target_type
+        AND other.target_key = tool_operations.target_key
+        AND other.status = 'running' AND other.id <> tool_operations.id
   )
 RETURNING *;
 
--- name: MarkToolOperationCompleted :one
+-- name: RenewToolOperationLease :one
 UPDATE tool_operations
-SET
-    status = 'completed',
-    completed_at = now(),
-    error_message = '',
-    updated_at = now()
-WHERE id = $1
+SET started_at = now(), updated_at = now()
+WHERE id = $1 AND status = 'running' AND attempt_count = $2
 RETURNING *;
 
--- name: MarkToolOperationFailed :one
+-- name: CheckpointToolOperation :one
+WITH checkpoint AS (
+    UPDATE tool_operations
+    SET payload = sqlc.arg(payload)::jsonb, updated_at = now(), started_at = now()
+    WHERE id = sqlc.arg(id)::uuid
+      AND status = 'running' AND attempt_count = sqlc.arg(attempt_count)::integer
+    RETURNING *
+), event AS (
+    INSERT INTO tool_operation_events (operation_id, level, stage, message, detail)
+    SELECT id, sqlc.arg(event_level)::text, sqlc.arg(event_stage)::text,
+           sqlc.arg(event_message)::text, sqlc.arg(event_detail)::jsonb
+    FROM checkpoint
+)
+SELECT * FROM checkpoint;
+
+-- name: FinishToolOperation :one
 UPDATE tool_operations
-SET
-    status = 'failed',
-    completed_at = now(),
-    error_message = $2,
-    updated_at = now()
-WHERE id = $1
+SET status = sqlc.arg(final_status)::text, error_message = sqlc.arg(error_message)::text,
+    completed_at = now(), updated_at = now()
+WHERE id = sqlc.arg(id)::uuid AND status = 'running'
+  AND attempt_count = sqlc.arg(attempt_count)::integer
 RETURNING *;
 
 -- name: MarkToolOperationSuperseded :one
@@ -118,7 +137,7 @@ SET
     completed_at = now(),
     error_message = $2,
     updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: RequeueToolOperation :one
@@ -130,4 +149,5 @@ SET
     error_message = '',
     updated_at = now()
 WHERE id = $1
+  AND status IN ('failed', 'superseded')
 RETURNING *;
