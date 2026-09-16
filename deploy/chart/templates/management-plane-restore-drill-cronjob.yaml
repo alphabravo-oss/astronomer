@@ -50,7 +50,9 @@ spec:
             {{- include "astronomer.componentLabels" (dict "context" . "component" "restore-drill") | nindent 12 }}
         spec:
           restartPolicy: OnFailure
-          serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+          # Restore validation talks only to Postgres and object storage.
+          # Kubernetes API access would add unrelated secret/RBAC authority.
+          automountServiceAccountToken: false
           {{- with .Values.managementRestoreDrill.podSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}

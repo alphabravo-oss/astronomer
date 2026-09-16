@@ -1236,6 +1236,15 @@ managementLogging:
     limits:
       cpu: 500m
       memory: 256Mi
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   # Standard DaemonSet scheduling knobs. nodeSelector pins the daemon to
   # specific nodes (e.g. linux only); tolerations let it run on tainted
   # nodes (e.g. the control-plane). Default tolerations are empty so the

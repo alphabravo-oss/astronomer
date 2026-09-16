@@ -202,6 +202,22 @@ func TestManagementLoggingDaemonSet_RespectsImageRegistry(t *testing.T) {
 	if !strings.Contains(out, "checksum/config:") {
 		t.Fatalf("checksum/config annotation missing:\n%s", out)
 	}
+	doc := renderedDocumentContaining(t, out, "checksum/config:")
+	for _, want := range []string{
+		"allowPrivilegeEscalation: false",
+		"readOnlyRootFilesystem: true",
+		"type: RuntimeDefault",
+		"mountPath: /var/log\n              readOnly: true",
+		"mountPath: /fluent-bit/state",
+		"name: state\n          emptyDir: {}",
+	} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("hardened logging DaemonSet missing %q:\n%s", want, doc)
+		}
+	}
+	if !strings.Contains(out, "DB                /fluent-bit/state/flb-astronomer.db") {
+		t.Fatalf("tail offset database is not on the dedicated writable volume:\n%s", out)
+	}
 }
 
 func TestManagementLogging_DisabledRendersNothing(t *testing.T) {

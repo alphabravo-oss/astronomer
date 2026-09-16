@@ -41,6 +41,10 @@ spec:
         prometheus.io/path: "/api/v1/metrics/prometheus"
     spec:
       serviceAccountName: {{ include "astronomer.fullname" . }}-mgmt-logging
+      {{- with .Values.managementLogging.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -60,6 +64,10 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: fluent-bit
+          {{- with .Values.managementLogging.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementLogging.image.repository "tag" .Values.managementLogging.image.tag "digest" .Values.managementLogging.image.digest "registry" .Values.managementLogging.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.managementLogging.image.pullPolicy | default "IfNotPresent" }}
           args:
@@ -107,13 +115,15 @@ spec:
               readOnly: true
             - name: varlog
               mountPath: /var/log
-              readOnly: false
+              readOnly: true
             - name: varlibdockercontainers
               mountPath: /var/lib/docker/containers
               readOnly: true
             - name: varlogpods
               mountPath: /var/log/pods
               readOnly: true
+            - name: state
+              mountPath: /fluent-bit/state
       terminationGracePeriodSeconds: 10
       volumes:
         - name: config
@@ -128,4 +138,6 @@ spec:
         - name: varlogpods
           hostPath:
             path: /var/log/pods
+        - name: state
+          emptyDir: {}
 {{- end }}

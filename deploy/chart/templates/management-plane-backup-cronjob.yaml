@@ -33,7 +33,10 @@ spec:
             {{- include "astronomer.componentLabels" (dict "context" . "component" "management-backup") | nindent 12 }}
         spec:
           restartPolicy: OnFailure
-          serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+          # The job only needs database and object-store credentials. Do not
+          # give a dump utility the platform ServiceAccount's Kubernetes API
+          # authority.
+          automountServiceAccountToken: false
           {{- with .Values.managementBackup.podSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}

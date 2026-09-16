@@ -62,6 +62,26 @@ managementRestoreDrill:
 		"name: scratch",
 		"mountPath: /tmp",
 	)
+	for _, name := range []string{"astronomer-management-backup", "astronomer-restore-drill"} {
+		doc := renderedDocumentContaining(t, out, "name: "+name)
+		if !strings.Contains(doc, "automountServiceAccountToken: false") {
+			t.Fatalf("%s mounts a Kubernetes API token:\n%s", name, doc)
+		}
+		if strings.Contains(doc, "serviceAccountName:") {
+			t.Fatalf("%s is coupled to a Kubernetes ServiceAccount:\n%s", name, doc)
+		}
+	}
+}
+
+func renderedDocumentContaining(t *testing.T, rendered, needle string) string {
+	t.Helper()
+	for _, doc := range strings.Split(rendered, "\n---\n") {
+		if strings.Contains(doc, needle) {
+			return doc
+		}
+	}
+	t.Fatalf("rendered document containing %q not found", needle)
+	return ""
 }
 
 func assertRenderedContains(t *testing.T, out string, wants ...string) {
