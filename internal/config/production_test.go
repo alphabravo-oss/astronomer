@@ -88,6 +88,33 @@ func TestValidateProductionSecurity_EnforcesTLSAndURL(t *testing.T) {
 	}
 }
 
+func TestDSNEnforcesTLSParsesEffectivePGXConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		dsn  string
+		want bool
+	}{
+		{name: "url require", dsn: "postgres://u:p@db/astronomer?sslmode=require", want: true},
+		{name: "url verify full", dsn: "postgres://u:p@db/astronomer?sslmode=verify-full", want: true},
+		{name: "keyword verify ca", dsn: "host=db user=u dbname=astronomer sslmode=verify-ca", want: true},
+		{name: "prefer permits plaintext fallback", dsn: "postgres://u:p@db/astronomer?sslmode=prefer", want: false},
+		{name: "omitted defaults to prefer", dsn: "postgres://u:p@db/astronomer", want: false},
+		{name: "misleading password", dsn: "postgres://u:sslmode%3Drequire@db/astronomer?sslmode=disable", want: false},
+		{name: "misleading application name", dsn: "host=db user=u sslmode=disable application_name=sslmode=require", want: false},
+		// libpq/pgx keyword names are case-sensitive. An uppercase lookalike must
+		// not be mistaken for an effective TLS setting.
+		{name: "mixed case keyword is not effective", dsn: "host=db user=u SSLMODE=require", want: false},
+		{name: "duplicate URL parameter uses effective last value", dsn: "postgres://u:p@db/astronomer?sslmode=require&sslmode=disable", want: false},
+		{name: "invalid", dsn: "postgres://%", want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DSNEnforcesTLS(tc.dsn); got != tc.want {
+				t.Fatalf("DSNEnforcesTLS() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestDevSentinelsInUse is the dev-keys-default-and-silent regression: the
 // sentinels are published in this repository, so detection must be independent
 // of config.env — a "development" install signs the same JWTs and wraps the

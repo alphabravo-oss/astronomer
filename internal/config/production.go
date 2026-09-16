@@ -7,9 +7,12 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 var immutableDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+var keywordSSLModePattern = regexp.MustCompile(`(?:^|\s)sslmode\s*=`)
 
 // Known development sentinel values. A production deployment that still carries
 // either of these has not been configured with real secrets and must fail fast
@@ -65,10 +68,43 @@ func IsProduction(cfg *Config) bool {
 // else (disable/allow/prefer, or omission — which Postgres treats as prefer and
 // silently downgrades to plaintext) returns false.
 func DSNEnforcesTLS(dsn string) bool {
-	d := strings.ToLower(dsn)
-	return strings.Contains(d, "sslmode=require") ||
-		strings.Contains(d, "sslmode=verify-ca") ||
-		strings.Contains(d, "sslmode=verify-full")
+	dsn = strings.TrimSpace(dsn)
+	if !dsnHasUnambiguousSSLMode(dsn) {
+		return false
+	}
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil || cfg.TLSConfig == nil {
+		return false
+	}
+	// sslmode=prefer and sslmode=allow include a plaintext fallback. Inspect
+	// pgx's effective connection plan so misleading substrings, encoded values,
+	// and duplicate parameters cannot bypass the production gate.
+	for _, fallback := range cfg.Fallbacks {
+		if fallback.TLSConfig == nil {
+			return false
+		}
+	}
+	return true
+}
+
+// dsnHasUnambiguousSSLMode rejects duplicate and case-lookalike settings
+// before pgx resolves them. Different parsers choosing different duplicate
+// values is exactly the kind of configuration ambiguity a production TLS gate
+// must not accept.
+func dsnHasUnambiguousSSLMode(dsn string) bool {
+	if parsed, err := url.Parse(dsn); err == nil && (parsed.Scheme == "postgres" || parsed.Scheme == "postgresql") {
+		found := 0
+		for key, values := range parsed.Query() {
+			if strings.EqualFold(key, "sslmode") {
+				if key != "sslmode" {
+					return false
+				}
+				found += len(values)
+			}
+		}
+		return found == 1
+	}
+	return len(keywordSSLModePattern.FindAllStringIndex(dsn, -1)) == 1
 }
 
 // Metric/label names for the credentials guarded by the dev sentinels. They
