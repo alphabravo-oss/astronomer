@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -82,8 +83,12 @@ func SetAuthenticatedAPITokenForTest(ctx context.Context, tok *sqlc.ApiToken) co
 
 // authError writes a JSON 401 error response.
 func authError(w http.ResponseWriter, code, message string) {
+	authErrorStatus(w, http.StatusUnauthorized, code, message)
+}
+
+func authErrorStatus(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
+	w.WriteHeader(status)
 	resp := map[string]interface{}{
 		"error": map[string]string{
 			"code":    code,
@@ -232,8 +237,13 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 				}
 			} else {
 				// JWT path
-				claims, err := jwtManager.ValidateToken(token)
+				claims, err := jwtManager.ValidateTokenContext(r.Context(), token)
 				if err != nil {
+					if errors.Is(err, auth.ErrRevocationUnavailable) {
+						w.Header().Set("Retry-After", "2")
+						authErrorStatus(w, http.StatusServiceUnavailable, "authentication_dependency_unavailable", "Authentication state is temporarily unavailable")
+						return
+					}
 					authError(w, "authentication_required", "Invalid or expired token")
 					return
 				}

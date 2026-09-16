@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +15,16 @@ import (
 )
 
 const testSecret = "test-secret-key-for-auth-middleware"
+type unavailableRevocationChecker struct{}
+
+func (unavailableRevocationChecker) IsJWTRevoked(context.Context, string) (bool, error) {
+	return false, errors.New("revocation store unavailable")
+}
+
+func (unavailableRevocationChecker) UserTokensInvalidatedAt(context.Context, uuid.UUID) (time.Time, bool, error) {
+	return time.Time{}, false, errors.New("revocation store unavailable")
+}
+
 
 func newTestJWTManager() *auth.JWTManager {
 	return auth.MustNewJWTManager(testSecret, 60)
@@ -168,6 +180,38 @@ func TestAuth(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAuthFailsClosedWhenRevocationStateIsUnavailable(t *testing.T) {
+	manager := newTestJWTManager()
+	token, err := manager.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.SetRevocationChecker(unavailableRevocationChecker{})
+	called := false
+	handler := Auth(manager)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, req)
+
+	if called {
+		t.Fatal("authenticated handler ran while revocation state was unavailable")
+	}
+	if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") != "2" {
+		t.Fatalf("status=%d Retry-After=%q body=%s", response.Code, response.Header().Get("Retry-After"), response.Body.String())
+	}
+	var body map[string]map[string]string
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error"]["code"] != "authentication_dependency_unavailable" {
+		t.Fatalf("error response = %#v", body)
 	}
 }
 
