@@ -46,6 +46,8 @@ export AGENT_UPGRADE_MATCH_TEST_DATABASE_URL="$database_url"
 export CHARLIE_VISIBILITY_TEST_DATABASE_URL="$database_url"
 export BUILTIN_PROVISIONER_TEST_DATABASE_URL="$database_url"
 export DELIVERY_ROLLOUT_TEST_DATABASE_URL="$database_url"
+export HEARTBEAT_TEST_DATABASE_URL="$database_url"
+export INACTIVE_USER_RETENTION_TEST_DATABASE_URL="$database_url"
 
 expected=(
   TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders
@@ -60,6 +62,8 @@ expected=(
   TestPostgresPlanningTransactionAndHAFencing
   TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses
   TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease
+  TestRecordAgentHeartbeatAtomicWrite
+  TestDeactivateInactiveUsersPostgresSemantics
 )
 pattern="^($(IFS='|'; printf '%s' "${expected[*]}"))$"
 race_args=()
