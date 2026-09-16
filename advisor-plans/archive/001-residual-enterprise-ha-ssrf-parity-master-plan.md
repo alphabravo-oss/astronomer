@@ -1,5 +1,8 @@
 # Plan 001: Residual enterprise HA, SSRF completion, and Rancher day-2 parity
 
+> **Archive status (2026-09-16):** HISTORICAL — superseded by Plan 002 and the
+> Flux-native v1 architecture. Do not restore retired Argo or dual-tunnel work.
+
 > **Audience**: Human review first; then split into numbered executor child plans
 > (`002-…`) only after approval of waves and sequencing.
 >

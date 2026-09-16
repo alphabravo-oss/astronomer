@@ -1,5 +1,8 @@
 # Plan 003: Make self-managed Argo acceptance operations race-free and release 0.3.0 only after deterministic live proof
 
+> **Archive status (2026-09-16):** HISTORICAL — applicable only to the retired
+> v0.3 Argo release line. It is not authority for the Flux-native v1 product.
+
 > **Executor instructions**: Read this entire plan before changing code. Follow
 > the phases in order and run every verification gate. This plan closes one P0
 > correctness defect; it is not authorization to redesign self-management,
@@ -746,4 +749,3 @@ For any live failure:
 - The Rancher-relative bar here is deterministic day-2 operation ownership,
   HA recovery, auditability, and rollback—not cluster provisioning or Fleet
   compatibility.
-

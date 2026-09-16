@@ -1,5 +1,9 @@
 # Plan 002: Close enterprise-grade correctness, trust, scale, and Rancher day-2 assurance gaps
 
+> **Archive status (2026-09-16):** HISTORICAL — v0.x/Argo implementation and
+> acceptance record. Superseded for v1 by Plan 007; current residuals are in
+> Plan 016.
+
 > **Executor instructions**: This is a human-reviewable master program and a
 > handoff specification for implementation agents. Read the entire document
 > before changing code. Execute phases in order unless the dependency graph

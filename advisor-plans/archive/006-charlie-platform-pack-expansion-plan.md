@@ -1,5 +1,9 @@
 # Plan 006: Expand Charlie into a version-aware platform intelligence catalog
 
+> **Archive status (2026-09-16):** DONE FOR APPROVED P1 SCOPE — selection
+> contracts and the approved platform packs shipped. Demand-gated P2 packs are
+> product options, not release blockers, and are not carried into Plan 016.
+
 > **Executor instructions**: Follow this plan in order. Read the complete plan
 > before editing either repository. Run every verification command and confirm
 > the stated result before moving on. If a STOP condition occurs, stop and

@@ -1,5 +1,9 @@
 # Plan 000: Elite enterprise quality & Rancher day-2 parity — master remediation plan
 
+> **Archive status (2026-09-16):** HISTORICAL — superseded through Plans 001,
+> 002, 007, 008, and finally Plan 016. Argo-era residuals are retired and are
+> not current implementation authority.
+
 > **Audience**: Human review first. This is the full assessment + ordered remediation
 > program. Split into numbered executor plans (`001-…`, `002-…`) only after approval.
 >

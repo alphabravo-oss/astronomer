@@ -1,5 +1,9 @@
 # Plan 009: Prove Astronomer and Constellation end to end on repeated bare-metal K3s and RKE2 topologies
 
+> **Archive status (2026-09-16):** NOT EXECUTED; SUPERSEDED BY PLAN 016. The
+> work is retained there as a claim-gated physical interoperability campaign,
+> not as an unconditional core-GA blocker.
+
 > **Executor instructions:** This is a destructive hardware qualification plan.
 > Read the entire plan before running any command. Implement the harness first,
 > validate it with dry-run and negative fixtures, and execute it only after the

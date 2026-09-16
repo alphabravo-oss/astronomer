@@ -1,6 +1,8 @@
 # Astronomer Enterprise-Grade API and Rancher-Parity Implementation Plan
 
-**Status:** LOCAL IMPLEMENTATION COMPLETE — the corrected exact-tree static and locally runnable integration sign-off is green; eight credentialed, production-scale, release-candidate, protected-approval, or human qualification executions remain before GA release approval
+**Archive status (2026-09-16): LOCAL IMPLEMENTATION COMPLETE; SUPERSEDED BY
+PLAN 016 FOR GA CLOSURE.** The eight external qualification executions remain
+open and are carried verbatim by outcome into Plan 016.
 **Created:** 2026-08-23
 **Baseline:** `c8534cc` (`main`)
 **Scope:** All 20 findings from the 2026-08-23 deep enterprise/Rancher-parity audit

@@ -1,6 +1,7 @@
 # Production security, disaster recovery, and supply-chain plan
 
-**Status:** IN PROGRESS — priority 3 of 5
+**Status:** ARCHIVED — PARTIAL; remaining production security, DR, air-gap, and
+supply-chain outcomes are consolidated into Plan 016.
 
 **Planned at:** `32100314e081e635e89f43fcf14673a25449ef63` on 2026-09-16, against the current dirty working tree
 

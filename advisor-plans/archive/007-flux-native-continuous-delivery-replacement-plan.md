@@ -1,5 +1,10 @@
 # Plan 007: Replace Argo and the legacy fleet-operation engine with Astronomer-owned, Flux-native continuous delivery
 
+> **Archive status (2026-09-16):** VERIFIED DONE FOR V1 ARCHITECTURE — Flux is
+> the only delivery engine in the current product. Release-candidate evidence
+> still needed for GA is consolidated in Plan 016; retired Argo work remains
+> historical.
+
 > **Executor instructions**: This is the authoritative end-to-end program plan,
 > not an MVP outline. Read it completely before changing code. Execute the waves
 > in order, keep every public contract and generated artifact in the same commit

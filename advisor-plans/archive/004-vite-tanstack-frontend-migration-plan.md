@@ -1,5 +1,10 @@
 # Plan 004: Migrate the frontend from Next.js 16 to a Vite + React 19 + TanStack SPA with live-everything SSE
 
+> **Archive status (2026-09-16):** VERIFIED DONE — the current frontend is a
+> Vite/React/TanStack SPA, the Next app tree is absent, and current TypeScript
+> and ESLint gates pass. Unrelated scale/accessibility residuals moved to Plan
+> 016.
+
 > **Executor instructions**: Read this entire plan before changing code. Execute
 > phases in order on a single migration branch; phases are internally ordered so
 > the full gate (Section 6) is runnable after every phase. This plan is

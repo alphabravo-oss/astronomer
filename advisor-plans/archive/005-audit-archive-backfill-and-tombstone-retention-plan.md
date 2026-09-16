@@ -1,6 +1,9 @@
 # 005 — audit_archive backfill + cluster tombstone retention
 
-**Status:** not started. Investigation complete, no code written, nothing deleted.
+**Archive status (2026-09-16): VERIFIED DONE ON CURRENT TREE.** The archive
+schema carries `archived_cluster_name`, decommission archival populates it, the
+worker registers a scheduled guarded tombstone-retention task, and focused
+retention tests pass. Preserve the backfill-before-purge invariant.
 **Raised:** 2026-07-17, from "why are decommissioned retained? how does rancher handle that".
 
 ## The one rule

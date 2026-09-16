@@ -1,6 +1,7 @@
 # Data durability, scale, and observability plan
 
-**Status:** IN PROGRESS — priority 4 of 5
+**Status:** ARCHIVED — PARTIAL; remaining durability, pagination, scale, and
+telemetry outcomes are consolidated into Plan 016.
 
 **Planned at:** `32100314e081e635e89f43fcf14673a25449ef63` on 2026-09-16, against the current dirty working tree
 

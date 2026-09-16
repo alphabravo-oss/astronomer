@@ -1,6 +1,7 @@
 # Frontend scale, accessibility, and guide-alignment plan
 
-**Status:** IN PROGRESS — priority 5 of 5
+**Status:** ARCHIVED — PARTIAL; remaining estate-scale UX, accessibility,
+toolchain, and ADR outcomes are consolidated into Plan 016.
 
 **Planned at:** `32100314e081e635e89f43fcf14673a25449ef63` on 2026-09-16, against the current dirty working tree
 
