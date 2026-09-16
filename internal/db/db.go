@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/exaring/otelpgx"
@@ -12,7 +13,17 @@ import (
 
 // DB wraps a pgxpool.Pool with convenience methods.
 type DB struct {
-	pool *pgxpool.Pool
+	pool                *pgxpool.Pool
+	poolSaturationState poolSaturationState
+}
+
+type poolSaturationState struct {
+	lastEmptyAcquireCount atomic.Int64
+}
+
+func (s *poolSaturationState) waitingForConnection(idleConns int32, emptyAcquireCount int64) bool {
+	previous := s.lastEmptyAcquireCount.Swap(emptyAcquireCount)
+	return idleConns == 0 && emptyAcquireCount > previous
 }
 
 // PoolConfig holds the operator-tunable knobs for Connect. Zero values
@@ -232,19 +243,14 @@ func isUndefinedTable(err error) bool {
 //
 // We compare against the last observed count rather than the absolute
 // value because EmptyAcquireCount is monotonic; what matters for "is
-// there pressure NOW?" is whether it's increasing. State is
-// per-process — concurrent /readyz probes may all observe true once
-// then all observe false on the next round, which is fine: the kubelet
-// probe cadence is wide enough that the signal stays meaningful.
-var lastEmptyAcquireCount int64
+// there pressure NOW?" is whether it's increasing. State belongs to the
+// specific DB wrapper and is updated atomically so concurrent readiness
+// probes and multiple server instances cannot race or influence one another.
 
 func (d *DB) PoolWaitingForConn() bool {
 	if d == nil || d.pool == nil {
 		return false
 	}
 	stat := d.pool.Stat()
-	current := stat.EmptyAcquireCount()
-	delta := current - lastEmptyAcquireCount
-	lastEmptyAcquireCount = current
-	return stat.IdleConns() == 0 && delta > 0
+	return d.poolSaturationState.waitingForConnection(stat.IdleConns(), stat.EmptyAcquireCount())
 }
