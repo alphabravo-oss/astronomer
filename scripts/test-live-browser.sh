@@ -67,6 +67,7 @@ direct_kubeconfig="$artifact_dir/direct-kubeconfig"
 direct_api_ca="$artifact_dir/direct-api-ca.pem"
 direct_api_endpoint=""
 direct_ca_sha256=""
+admin_curl_config=""
 flux_fixture_root="$artifact_dir/flux-fixture"
 flux_tls_cert="$artifact_dir/flux-fixture-ca.pem"
 flux_tls_key="$artifact_dir/flux-fixture-key.pem"
@@ -171,6 +172,7 @@ cleanup() {
   set +e
   collect_state "exit-$status"
   rm -f -- "$direct_kubeconfig"
+  [[ -z "$admin_curl_config" ]] || rm -f -- "$admin_curl_config"
   docker logs "$postgres_container" >"$artifact_dir/postgres.log" 2>&1 || true
   docker logs "$redis_container" >"$artifact_dir/redis.log" 2>&1 || true
   docker logs "$flux_fixture_container" >"$artifact_dir/flux-fixture-server.log" 2>&1 || true
@@ -495,9 +497,15 @@ json_field() {
 }
 
 backend_url="http://127.0.0.1:$server_port"
-admin_token="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-  -d "{\"email\":\"admin@astronomer.local\",\"password\":\"$admin_password\"}" \
-  "$backend_url/api/v1/auth/login/" | json_field token)"
+admin_credential="$(LIVE_FIXTURE_SERVER_URL="$backend_url" \
+  LIVE_FIXTURE_ADMIN_EMAIL="admin@astronomer.local" \
+  LIVE_FIXTURE_ADMIN_PASSWORD="$admin_password" \
+  "$artifact_dir/bin/live-browser-fixture" api-token)"
+admin_token="$(printf '%s' "$admin_credential" | json_field token)"
+admin_token_id="$(printf '%s' "$admin_credential" | json_field id)"
+unset admin_credential
+admin_curl_config="$artifact_dir/admin-api.curl"
+(umask 077; printf 'header = "Authorization: Bearer %s"\n' "$admin_token" >"$admin_curl_config")
 cluster_payload="$(python3 - "$direct_api_endpoint" "$direct_api_ca" <<'PY'
 import json
 import pathlib
@@ -516,17 +524,38 @@ print(json.dumps({
 PY
 )"
 cluster_id="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $admin_token" \
+  --config "$admin_curl_config" \
   -d "$cluster_payload" \
   "$backend_url/api/v1/clusters/" | json_field id)"
 unset cluster_payload
 agent_token="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $admin_token" -d '{}' \
+  --config "$admin_curl_config" -d '{}' \
   "$backend_url/api/v1/clusters/$cluster_id/register/" | json_field token)"
-curl -fsS --max-time 10 -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $admin_token" \
-  -d "{\"email\":\"restricted-live@astronomer.local\",\"username\":\"restricted-live\",\"first_name\":\"Restricted\",\"last_name\":\"Operator\",\"password\":\"$restricted_password\",\"is_active\":true,\"is_staff\":false,\"is_superuser\":false}" \
+restricted_user_payload="$(LIVE_FIXTURE_RESTRICTED_PASSWORD="$restricted_password" python3 - <<'PY'
+import json
+import os
+
+print(json.dumps({
+    "email": "restricted-live@astronomer.local",
+    "username": "restricted-live",
+    "first_name": "Restricted",
+    "last_name": "Operator",
+    "password": os.environ["LIVE_FIXTURE_RESTRICTED_PASSWORD"],
+    "is_active": True,
+    "is_staff": False,
+    "is_superuser": False,
+}))
+PY
+)"
+printf '%s' "$restricted_user_payload" | curl -fsS --max-time 10 -H 'Content-Type: application/json' \
+  --config "$admin_curl_config" --data-binary @- \
   "$backend_url/api/v1/users/" >"$artifact_dir/restricted-user.json"
+unset restricted_user_payload
+curl -fsS --max-time 10 --config "$admin_curl_config" -X DELETE \
+  "$backend_url/api/v1/auth/tokens/$admin_token_id/" >/dev/null
+rm -f -- "$admin_curl_config"
+admin_curl_config=""
+unset admin_token admin_token_id
 
 LIVE_FIXTURE_SERVER_URL="$backend_url" \
   LIVE_FIXTURE_CLUSTER_ID="$cluster_id" \

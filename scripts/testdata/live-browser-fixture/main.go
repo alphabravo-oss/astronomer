@@ -29,6 +29,7 @@ import (
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
+	"github.com/alphabravocompany/astronomer-go/internal/astrocli"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
@@ -44,7 +45,7 @@ const (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatalf("usage: live-browser-fixture agent|seed|direct-rbac")
+		fatalf("usage: live-browser-fixture agent|seed|direct-rbac|api-token")
 	}
 	var err error
 	switch os.Args[1] {
@@ -54,12 +55,33 @@ func main() {
 		err = seed()
 	case "direct-rbac":
 		err = renderDirectRBAC()
+	case "api-token":
+		err = issueAdminAPIToken()
 	default:
 		err = fmt.Errorf("unknown mode %q", os.Args[1])
 	}
 	if err != nil {
 		fatalf("%v", err)
 	}
+}
+
+func issueAdminAPIToken() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	credential, err := astrocli.IssuePasswordAPIToken(
+		ctx,
+		requiredEnv("LIVE_FIXTURE_SERVER_URL"),
+		requiredEnv("LIVE_FIXTURE_ADMIN_EMAIL"),
+		requiredEnv("LIVE_FIXTURE_ADMIN_PASSWORD"),
+		"live-browser-"+uuid.NewString(),
+		1,
+	)
+	if err != nil {
+		return fmt.Errorf("exchange live browser session for API token: %w", err)
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"id": credential.ID, "token": credential.Token,
+	})
 }
 
 const directReaderManifest = `apiVersion: v1
