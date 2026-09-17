@@ -60,12 +60,13 @@ WITH disconnected AS (
     UPDATE agent_connections
     SET status = 'disconnected', disconnected_at = now()
     WHERE cluster_id = sqlc.arg(cluster_id) AND status = 'connected'
+    RETURNING id
 )
 INSERT INTO agent_connections (cluster_id, agent_id, session_id, status, channel_name, pod_name, node_name, agent_version)
-VALUES (
+SELECT
     sqlc.arg(cluster_id), sqlc.arg(agent_id), sqlc.arg(session_id), 'connected',
     sqlc.arg(channel_name), sqlc.arg(pod_name), sqlc.arg(node_name), sqlc.arg(agent_version)
-)
+FROM (SELECT count(*) FROM disconnected) AS disconnect_barrier
 RETURNING *;
 
 -- name: UpdateAgentConnectionStatus :exec

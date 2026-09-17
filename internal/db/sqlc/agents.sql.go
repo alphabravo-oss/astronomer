@@ -288,12 +288,13 @@ WITH disconnected AS (
     UPDATE agent_connections
     SET status = 'disconnected', disconnected_at = now()
     WHERE cluster_id = $1 AND status = 'connected'
+    RETURNING id
 )
 INSERT INTO agent_connections (cluster_id, agent_id, session_id, status, channel_name, pod_name, node_name, agent_version)
-VALUES (
+SELECT
     $1, $2, $3, 'connected',
     $4, $5, $6, $7
-)
+FROM (SELECT count(*) FROM disconnected) AS disconnect_barrier
 RETURNING id, cluster_id, agent_id, session_id, connected_at, disconnected_at, last_ping, status, channel_name, pod_name, node_name, agent_version, created_at, updated_at
 `
 
