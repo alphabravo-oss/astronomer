@@ -386,6 +386,9 @@ func run(cfg *config, log *slog.Logger) error {
 		if err := reconcileMandatoryAudit(drainCtx, cfg, adminToken, rec); err != nil {
 			log.Warn("mandatory-audit conservation did not converge", "error", err)
 		}
+		if err := refreshAuditOutboxMetricsAfterDrain(drainCtx, cfg.metricsServer, adminToken, rec); err != nil {
+			log.Warn("mandatory-audit post-drain metrics refresh failed", "error", err)
+		}
 		drainCancel()
 	}
 

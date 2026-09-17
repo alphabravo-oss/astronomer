@@ -317,6 +317,41 @@ func TestEngineeringRunFailsOnNon2xxResponses(t *testing.T) {
 	}
 }
 
+func TestEngineeringRunFailsOnConservationGaps(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*config, *recorder)
+		want   string
+	}{
+		{name: "subtarget throughput", mutate: func(cfg *config, _ *recorder) {
+			cfg.rps = 100
+		}, want: "recorded requests"},
+		{name: "early termination", mutate: func(_ *config, rec *recorder) {
+			rec.endedAt = rec.startedAt.Add(100 * time.Millisecond)
+		}, want: "observed duration"},
+		{name: "missing state events", mutate: func(cfg *config, _ *recorder) {
+			cfg.resources.EventsPerSecond = 10
+		}, want: "state events emitted"},
+		{name: "unobserved durable intent", mutate: func(_ *config, rec *recorder) {
+			rec.auditConservation.IntentsObserved = 0
+		}, want: "mandatory-audit conservation failed"},
+		{name: "rejected audit mutation", mutate: func(_ *config, rec *recorder) {
+			rec.auditConservation.Rejected = 1
+		}, want: "mandatory-audit conservation failed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, rec := passingCertificationFixture()
+			cfg.certification = false
+			tc.mutate(cfg, rec)
+			report := newReport(cfg, rec)
+			if report.Verdict != "fail" || !strings.Contains(strings.Join(report.Reasons, "\n"), tc.want) {
+				t.Fatalf("verdict=%q reasons=%v, want %q", report.Verdict, report.Reasons, tc.want)
+			}
+		})
+	}
+}
+
 func TestBoundedReconnectStormAccountsForExpectedAgentRoute503s(t *testing.T) {
 	now := time.Now().UTC()
 	cfg := &config{

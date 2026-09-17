@@ -20,7 +20,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const mandatoryAuditDrainTimeout = 2 * time.Minute
+const (
+	mandatoryAuditDrainTimeout     = 2 * time.Minute
+	auditOutboxMetricsRefreshDelay = 16 * time.Second
+)
+
+// refreshAuditOutboxMetricsAfterDrain waits through one 15-second database
+// metrics-reporter interval before taking the post-drain scrape. Without this
+// barrier the report can retain a stale non-zero active-row gauge even after
+// the independent observer and public audit API have both proved delivery.
+func refreshAuditOutboxMetricsAfterDrain(ctx context.Context, metricsServer, token string, rec *recorder) error {
+	timer := time.NewTimer(auditOutboxMetricsRefreshDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return scrapeOnce(ctx, metricsServer, token, rec)
+	}
+}
 
 // runMandatoryAuditWorkload performs bounded, reversible metadata-only PATCHes on
 // run-owned fixture clusters. Fixture decommission remains the exact cleanup.

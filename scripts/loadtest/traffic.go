@@ -246,18 +246,23 @@ func maxInt(a, b int) int {
 	return b
 }
 
-const workloadTicksPerSecond = 100
+const workloadTicksPerSecond = 1000
 
-// nextWorkloadBatch converts a per-second rate into bounded 10ms micro-batches.
-// Scheduling one request every 2ms loses material throughput to timer wake-up
-// overhead at the estate profiles' 500 RPS, while a full one-second token
-// bucket releases an undeclared 500-request spike at t=0. Credit accounting
-// preserves the exact rate for values that are not divisible by 100.
-func nextWorkloadBatch(rps, ticksPerSecond int, credit *int) int {
-	*credit += rps
-	batch := *credit / ticksPerSecond
-	*credit -= batch * ticksPerSecond
-	return batch
+// workloadTarget converts elapsed wall time into the cumulative number of
+// requests that should have been scheduled by the end of the current tick.
+// Deriving the target from elapsed time (instead of counting ticker messages)
+// preserves the declared rate when Go coalesces or drops timer wake-ups. The
+// maximum caps catch-up at the exact measured-window request count.
+func workloadTarget(rps int, slotEnd time.Duration, maximum int) int {
+	if rps <= 0 || slotEnd <= 0 || maximum <= 0 {
+		return 0
+	}
+	numerator := slotEnd.Nanoseconds() * int64(rps)
+	target := int((numerator + int64(time.Second) - 1) / int64(time.Second))
+	if target > maximum {
+		return maximum
+	}
+	return target
 }
 
 // driveWorkload maintains cfg.rps requests per second until scheduleCtx is
@@ -274,16 +279,20 @@ func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token s
 	var inflight sync.WaitGroup
 	defer inflight.Wait()
 	ticksPerSecond := minInt(cfg.rps, workloadTicksPerSecond)
-	ticker := time.NewTicker(time.Second / time.Duration(ticksPerSecond))
+	tickInterval := time.Second / time.Duration(ticksPerSecond)
+	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
-	credit := 0
-	launchBatch := func() {
-		for range nextWorkloadBatch(cfg.rps, ticksPerSecond, &credit) {
+	startedAt := time.Now()
+	maximum := workloadTarget(cfg.rps, cfg.duration, int(^uint(0)>>1))
+	scheduled := 0
+	launchThrough := func(target int) {
+		for scheduled < target {
 			sc := pickScenario(scs, rng.Float64())
 			clusterID := ""
 			if len(cfg.fixtureClusterIDs) > 0 {
 				clusterID = cfg.fixtureClusterIDs[(sequence.Add(1)-1)%uint64(len(cfg.fixtureClusterIDs))]
 			}
+			scheduled++
 			inflight.Add(1)
 			go func() {
 				defer inflight.Done()
@@ -293,18 +302,19 @@ func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token s
 	}
 
 	// Open the measured window at the declared rate, bounded to at most one
-	// 10ms micro-batch instead of a full second of traffic.
-	launchBatch()
+	// scheduler micro-batch instead of a full second of traffic.
+	launchThrough(workloadTarget(cfg.rps, tickInterval, maximum))
 	for {
 		select {
 		case <-scheduleCtx.Done():
 			return
-		case <-ticker.C:
+		case tick := <-ticker.C:
+			if scheduleCtx.Err() != nil {
+				return
+			}
+			slotEnd := tick.Sub(startedAt) + tickInterval
+			launchThrough(workloadTarget(cfg.rps, slotEnd, maximum))
 		}
-		if scheduleCtx.Err() != nil {
-			return
-		}
-		launchBatch()
 	}
 }
 

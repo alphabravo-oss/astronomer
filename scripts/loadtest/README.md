@@ -41,7 +41,7 @@ Output is `loadtest-report.md` (override with `LOADTEST_OUT=...`).
 | `-server` | `LOADTEST_SERVER` | `http://localhost:8001` | Management-plane base URL |
 | `-metrics-server` | `LOADTEST_METRICS_SERVER` | value of `-server` | Prometheus metrics base URL when metrics use a separate listener or Service |
 | `-clusters` | `LOADTEST_CLUSTERS` | `50` | Synthetic agent count |
-| `-rps` | `LOADTEST_RPS` | `100` | Aggregate HTTP request rate (bounded 10 ms microbatches) |
+| `-rps` | `LOADTEST_RPS` | `100` | Aggregate HTTP request rate (bounded, credit-conserving microbatches) |
 | `-duration` | `LOADTEST_DURATION` | `5m` | How long to drive load |
 | `-token` | `LOADTEST_TOKEN` | _(empty)_ | Path to a pre-provisioned admin API bearer token used for fixture provisioning and HTTP workload requests; never used as an agent credential |
 | `-login-email` | `LOADTEST_LOGIN_EMAIL` | _(empty)_ | Local engineering only: browser-login email used to mint an in-memory one-day API token; forbidden in certification |
@@ -168,11 +168,12 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
    because that package transitively pulls in `client-go` and friends. The
    wire format is identical — see `pkg/protocol/types.go`.
 
-4. **HTTP workload**: a credit-conserving 100 Hz scheduler shapes the aggregate
-   rate to `-rps`. It emits bounded 10 ms microbatches so the first request does
-   not unlock a one-second burst and fractional credits are conserved across
-   ticks. Each scheduled request runs concurrently and is joined after the
-   measured window. Each request draws a scenario from the weighted mix in
+4. **HTTP workload**: a credit-conserving scheduler running at up to 1,000 Hz
+   shapes the aggregate rate to `-rps`. Rates through 1,000 RPS emit at most one
+   request per tick; higher rates use bounded microbatches. The first request
+   cannot unlock a one-second burst, and fractional credits are conserved
+   across ticks. Each scheduled request runs concurrently and is joined after
+   the measured window. Each request draws a scenario from the weighted mix in
    `scenarios.go`:
 
    | Scenario | Weight | Path |
@@ -196,7 +197,10 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
 
 6. **Report**: the verdict block is the first non-frontmatter line in the
    output file, in the form `VERDICT: pass` / `VERDICT: fail`. Grep for
-   `^VERDICT:` in CI.
+   `^VERDICT:` in CI. Rate, duration, resource cardinality, state-event, HTTP,
+   and mandatory-audit conservation are enforced in local engineering reports
+   as well as certification; certification adds signed provenance, drill, and
+   evidence-density requirements rather than weakening local verdicts.
 
 The certification workflow binds the report, report JSON and digest, rendered
 values, raw qualification JSON, drill JSON, and deterministic baseline row in
