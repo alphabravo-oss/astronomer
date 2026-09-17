@@ -248,11 +248,20 @@ func maxInt(a, b int) int {
 	return b
 }
 
+// newWorkloadLimiter paces the declared request rate from the first request.
+// A token bucket starts full, so using cfg.rps as its burst capacity would
+// release an undeclared cfg.rps-request spike at t=0. That startup spike both
+// distorts latency percentiles and manufactures database-pool pressure that is
+// unrelated to the steady request rate the profile declares.
+func newWorkloadLimiter(rps int) *rate.Limiter {
+	return rate.NewLimiter(rate.Limit(rps), 1)
+}
+
 // driveWorkload maintains cfg.rps requests per second until scheduleCtx is
 // done. Requests retain requestCtx so the declared window does not cancel
 // already-started work; all in-flight work is joined before returning.
 func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token string, rec *recorder, log *slog.Logger) {
-	limiter := rate.NewLimiter(rate.Limit(cfg.rps), cfg.rps)
+	limiter := newWorkloadLimiter(cfg.rps)
 	scs := defaultScenarios()
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	client := &http.Client{Timeout: 30 * time.Second}
