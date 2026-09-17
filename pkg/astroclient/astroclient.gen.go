@@ -9572,7 +9572,8 @@ type SCIMTokenCreatedEnvelope struct {
 
 // SCIMTokenList defines model for SCIMTokenList.
 type SCIMTokenList struct {
-	Tokens []SCIMToken `json:"tokens"`
+	Pagination PaginationMetadata `json:"pagination"`
+	Tokens     []SCIMToken        `json:"tokens"`
 }
 
 // SCIMTokenListEnvelope defines model for SCIMTokenListEnvelope.
@@ -11073,6 +11074,15 @@ type GetAdminQuotaPlansParams struct {
 	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetAdminScimTokensParams defines parameters for GetAdminScimTokens.
+type GetAdminScimTokensParams struct {
+	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Zero-based offset into the authorized, filtered result.
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // PostAdminScimTokensJSONBody defines parameters for PostAdminScimTokens.
 type PostAdminScimTokensJSONBody struct {
 	// ExpiresInDays Token lifetime in days.
@@ -11130,6 +11140,15 @@ type GetAdminTaskOutboxParamsStatus string
 type PostAdminTaskOutboxByIdRetryParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
+}
+
+// AdminVaultConnectionsListParams defines parameters for AdminVaultConnectionsList.
+type AdminVaultConnectionsListParams struct {
+	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Zero-based offset into the authorized, filtered result.
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // AdminVaultConnectionTestJSONBody defines parameters for AdminVaultConnectionTest.
@@ -19786,7 +19805,7 @@ type ClientInterface interface {
 	AdminReadAuditPolicyUpdate(ctx context.Context, id openapi_types.UUID, body AdminReadAuditPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAdminScimTokens request
-	GetAdminScimTokens(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetAdminScimTokens(ctx context.Context, params *GetAdminScimTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostAdminScimTokensWithBody request with any body
 	PostAdminScimTokensWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19887,7 +19906,7 @@ type ClientInterface interface {
 	PostAdminUsersByIdUnlock(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AdminVaultConnectionsList request
-	AdminVaultConnectionsList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	AdminVaultConnectionsList(ctx context.Context, params *AdminVaultConnectionsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AdminVaultConnectionsCreateWithBody request with any body
 	AdminVaultConnectionsCreateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -24076,8 +24095,8 @@ func (c *Client) AdminReadAuditPolicyUpdate(ctx context.Context, id openapi_type
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetAdminScimTokens(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetAdminScimTokensRequest(c.Server)
+func (c *Client) GetAdminScimTokens(ctx context.Context, params *GetAdminScimTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminScimTokensRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -24508,8 +24527,8 @@ func (c *Client) PostAdminUsersByIdUnlock(ctx context.Context, id openapi_types.
 	return c.Client.Do(req)
 }
 
-func (c *Client) AdminVaultConnectionsList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminVaultConnectionsListRequest(c.Server)
+func (c *Client) AdminVaultConnectionsList(ctx context.Context, params *AdminVaultConnectionsListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminVaultConnectionsListRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -39571,7 +39590,7 @@ func NewAdminReadAuditPolicyUpdateRequestWithBody(server string, id openapi_type
 }
 
 // NewGetAdminScimTokensRequest generates requests for GetAdminScimTokens
-func NewGetAdminScimTokensRequest(server string) (*http.Request, error) {
+func NewGetAdminScimTokensRequest(server string, params *GetAdminScimTokensParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -39587,6 +39606,44 @@ func NewGetAdminScimTokensRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -40651,7 +40708,7 @@ func NewPostAdminUsersByIdUnlockRequest(server string, id openapi_types.UUID) (*
 }
 
 // NewAdminVaultConnectionsListRequest generates requests for AdminVaultConnectionsList
-func NewAdminVaultConnectionsListRequest(server string) (*http.Request, error) {
+func NewAdminVaultConnectionsListRequest(server string, params *AdminVaultConnectionsListParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -40667,6 +40724,44 @@ func NewAdminVaultConnectionsListRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -74785,7 +74880,7 @@ type ClientWithResponsesInterface interface {
 	AdminReadAuditPolicyUpdateWithResponse(ctx context.Context, id openapi_types.UUID, body AdminReadAuditPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminReadAuditPolicyUpdateResponse, error)
 
 	// GetAdminScimTokensWithResponse request
-	GetAdminScimTokensWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminScimTokensResponse, error)
+	GetAdminScimTokensWithResponse(ctx context.Context, params *GetAdminScimTokensParams, reqEditors ...RequestEditorFn) (*GetAdminScimTokensResponse, error)
 
 	// PostAdminScimTokensWithBodyWithResponse request with any body
 	PostAdminScimTokensWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminScimTokensResponse, error)
@@ -74886,7 +74981,7 @@ type ClientWithResponsesInterface interface {
 	PostAdminUsersByIdUnlockWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostAdminUsersByIdUnlockResponse, error)
 
 	// AdminVaultConnectionsListWithResponse request
-	AdminVaultConnectionsListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsListResponse, error)
+	AdminVaultConnectionsListWithResponse(ctx context.Context, params *AdminVaultConnectionsListParams, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsListResponse, error)
 
 	// AdminVaultConnectionsCreateWithBodyWithResponse request with any body
 	AdminVaultConnectionsCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsCreateResponse, error)
@@ -81103,7 +81198,8 @@ type AdminVaultConnectionsListResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *struct {
 		Data struct {
-			Items *[]VaultConnection `json:"items,omitempty"`
+			Items      []VaultConnection  `json:"items"`
+			Pagination PaginationMetadata `json:"pagination"`
 		} `json:"data"`
 	}
 	JSON401 *Unauthorized
@@ -99845,8 +99941,8 @@ func (c *ClientWithResponses) AdminReadAuditPolicyUpdateWithResponse(ctx context
 }
 
 // GetAdminScimTokensWithResponse request returning *GetAdminScimTokensResponse
-func (c *ClientWithResponses) GetAdminScimTokensWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminScimTokensResponse, error) {
-	rsp, err := c.GetAdminScimTokens(ctx, reqEditors...)
+func (c *ClientWithResponses) GetAdminScimTokensWithResponse(ctx context.Context, params *GetAdminScimTokensParams, reqEditors ...RequestEditorFn) (*GetAdminScimTokensResponse, error) {
+	rsp, err := c.GetAdminScimTokens(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -100162,8 +100258,8 @@ func (c *ClientWithResponses) PostAdminUsersByIdUnlockWithResponse(ctx context.C
 }
 
 // AdminVaultConnectionsListWithResponse request returning *AdminVaultConnectionsListResponse
-func (c *ClientWithResponses) AdminVaultConnectionsListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsListResponse, error) {
-	rsp, err := c.AdminVaultConnectionsList(ctx, reqEditors...)
+func (c *ClientWithResponses) AdminVaultConnectionsListWithResponse(ctx context.Context, params *AdminVaultConnectionsListParams, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsListResponse, error) {
+	rsp, err := c.AdminVaultConnectionsList(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -115467,7 +115563,8 @@ func ParseAdminVaultConnectionsListResponse(rsp *http.Response) (*AdminVaultConn
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
 			Data struct {
-				Items *[]VaultConnection `json:"items,omitempty"`
+				Items      []VaultConnection  `json:"items"`
+				Pagination PaginationMetadata `json:"pagination"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

@@ -30,7 +30,16 @@ describe("SCIM token generated API boundary", () => {
 
   it("maps the handler's data-wrapped list response", async () => {
     vi.mocked(getAdminScimTokens).mockResolvedValueOnce({
-      data: { tokens: [tokenWire] },
+      data: {
+        tokens: [tokenWire],
+        pagination: {
+          total: 1,
+          limit: 20,
+          offset: 0,
+          has_more: false,
+          next_offset: null,
+        },
+      },
     });
 
     await expect(listSCIMTokens()).resolves.toEqual([

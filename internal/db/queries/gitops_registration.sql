@@ -7,14 +7,20 @@
 -- cluster:decommission for each. The handler tier owns CRUD over the
 -- sources themselves and the per-source /clusters/ + /preview/ readers.
 
--- name: ListGitOpsSources :many
-SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
+-- name: ListGitOpsSourcesPage :many
+-- List projection intentionally excludes both encrypted credential columns.
+SELECT id, name, repo_url, branch, path_prefix, auth_mode,
+       (auth_encrypted <> '') AS auth_configured,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
        created_by, created_at, updated_at, allow_mass_decommission,
-       webhook_provider, webhook_secret_encrypted
+       webhook_provider, (webhook_secret_encrypted <> '') AS webhook_configured
 FROM gitops_registration_sources
-ORDER BY name ASC;
+ORDER BY name ASC, id ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountGitOpsSources :one
+SELECT count(*) FROM gitops_registration_sources;
 
 -- name: ListEnabledGitOpsSources :many
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
@@ -123,6 +129,18 @@ SELECT cluster_id, source_id, repo_path, last_yaml_sha, last_applied_at,
 FROM gitops_registered_clusters
 WHERE source_id = $1
 ORDER BY repo_path ASC;
+
+-- name: ListGitOpsRegisteredClustersBySourcePage :many
+-- Admin list projection joins display metadata in the same bounded query,
+-- avoiding both an unbounded reconciliation read and per-row cluster lookups.
+SELECT g.cluster_id, g.source_id, g.repo_path, g.last_yaml_sha,
+       g.last_applied_at, g.status, g.tombstoned_at, g.created_at, g.updated_at,
+       c.name AS cluster_name, c.display_name
+FROM gitops_registered_clusters g
+LEFT JOIN clusters c ON c.id = g.cluster_id
+WHERE g.source_id = sqlc.arg(source_id)
+ORDER BY g.repo_path ASC, g.cluster_id ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: UpsertGitOpsRegisteredCluster :one
 -- The sync worker calls this after a YAML's contents have been applied

@@ -20,17 +20,24 @@ func (h *DashboardHandler) AdminListDatasources(w http.ResponseWriter, r *http.R
 	if !h.gate(w, r) {
 		return
 	}
-	rows, err := h.queries.ListPrometheusDatasources(r.Context())
+	limit, offset := queryLimitOffset(r, 20)
+	rows, err := h.queries.ListPrometheusDatasourcesPage(r.Context(), sqlc.ListPrometheusDatasourcesPageParams{
+		QueryLimit: int32(limit), QueryOffset: int32(offset),
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	out := make([]DatasourceResponse, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, datasourceToResponse(row))
+		out = append(out, datasourceListToResponse(row))
 	}
-	page, pagination := pageWindow(r, out)
-	paging.Write(w, page, pagination)
+	total, err := h.queries.CountPrometheusDatasources(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		return
+	}
+	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))
 }
 
 // AdminCreateDatasource handles POST /api/v1/admin/prometheus-datasources/.

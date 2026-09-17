@@ -1,7 +1,12 @@
 -- Quota plans CRUD --------------------------------------------------------
 
--- name: ListQuotaPlans :many
-SELECT * FROM quota_plans ORDER BY name ASC;
+-- name: ListQuotaPlansPage :many
+SELECT * FROM quota_plans
+ORDER BY name ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountQuotaPlans :one
+SELECT count(*) FROM quota_plans;
 
 -- name: GetQuotaPlan :one
 SELECT * FROM quota_plans WHERE name = $1;

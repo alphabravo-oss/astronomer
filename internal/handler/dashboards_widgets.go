@@ -17,7 +17,10 @@ func (h *DashboardHandler) AdminList(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {
 		return
 	}
-	rows, err := h.queries.ListDashboardWidgets(r.Context())
+	limit, offset := queryLimitOffset(r, 20)
+	rows, err := h.queries.ListDashboardWidgetsPage(r.Context(), sqlc.ListDashboardWidgetsPageParams{
+		QueryLimit: int32(limit), QueryOffset: int32(offset),
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
@@ -26,11 +29,12 @@ func (h *DashboardHandler) AdminList(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, widgetToResponse(row))
 	}
-	// The current SQL query materializes the bounded admin collection. Apply
-	// the shared in-memory window so the advertised pagination is real and an
-	// empty collection still carries a contract-valid positive limit.
-	page, pagination := pageWindow(r, out)
-	paging.Write(w, page, pagination)
+	total, err := h.queries.CountDashboardWidgets(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		return
+	}
+	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))
 }
 
 // AdminGet handles GET /api/v1/admin/dashboard-widgets/{id}/.

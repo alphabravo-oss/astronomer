@@ -244,6 +244,7 @@ type Querier interface {
 	CountClustersInProject(ctx context.Context, id uuid.UUID) (int64, error)
 	CountComponentBundles(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	CountDashboardWidgets(ctx context.Context) (int64, error)
 	CountDeferredOperations(ctx context.Context) (int64, error)
 	CountDeliveryControllerCompatibility(ctx context.Context) ([]CountDeliveryControllerCompatibilityRow, error)
 	CountDeliveryRolloutClusters(ctx context.Context, arg CountDeliveryRolloutClustersParams) (int64, error)
@@ -253,6 +254,7 @@ type Querier interface {
 	CountDeliveryTargets(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountEmailMessages(ctx context.Context) (int64, error)
 	CountGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
+	CountGitOpsSources(ctx context.Context) (int64, error)
 	CountGitOpsTombstonedBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
 	CountGlobalHelmRepositories(ctx context.Context) (int64, error)
 	CountGlobalRoles(ctx context.Context) (int64, error)
@@ -281,6 +283,7 @@ type Querier interface {
 	CountMirroredResourceQuotas(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountMirroredResourceQuotasByNamespace(ctx context.Context, arg CountMirroredResourceQuotasByNamespaceParams) (int64, error)
 	CountNamespacesInProject(ctx context.Context, id uuid.UUID) (int32, error)
+	CountNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountNetworkPolicyTemplates(ctx context.Context) (int64, error)
 	CountNotificationChannels(ctx context.Context) (int64, error)
 	// Total outputs scoped to a single cluster, matching ListOutputsByCluster so
@@ -300,8 +303,11 @@ type Querier interface {
 	CountProjectsForScopes(ctx context.Context, arg CountProjectsForScopesParams) (int64, error)
 	CountProjectsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
+	CountPrometheusDatasources(ctx context.Context) (int64, error)
+	CountQuotaPlans(ctx context.Context) (int64, error)
 	CountRestoreOperations(ctx context.Context) (int64, error)
 	CountSCIMGroupNames(ctx context.Context) (int64, error)
+	CountSCIMTokens(ctx context.Context) (int64, error)
 	CountSIEMQueueByForwarder(ctx context.Context, forwarderID uuid.UUID) (int64, error)
 	CountSearchUsers(ctx context.Context, search string) (int64, error)
 	CountSecurityScanResults(ctx context.Context) (int64, error)
@@ -321,6 +327,7 @@ type Querier interface {
 	// machine principals as users.
 	CountUsers(ctx context.Context) (int64, error)
 	CountUsersUsingQuotaPlan(ctx context.Context, quotaPlan string) (int64, error)
+	CountVaultConnections(ctx context.Context) (int64, error)
 	CountVulnerabilitiesForReport(ctx context.Context, arg CountVulnerabilitiesForReportParams) (int64, error)
 	CountVulnerableImagesForCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountWebhookDeliveriesBySubscription(ctx context.Context, subscriptionID uuid.UUID) (int64, error)
@@ -1463,12 +1470,8 @@ type Querier interface {
 	ListControlPlaneSnapshotsByCluster(ctx context.Context, arg ListControlPlaneSnapshotsByClusterParams) ([]ControlPlaneSnapshot, error)
 	// Dashboard widgets + Prometheus datasources (migration 058).
 	//
-	// Hand-edited SQL companion to the hand-written sqlc shim in
-	// internal/db/sqlc/dashboards.sql.go. The sqlc CLI isn't part of the
-	// local build path (compliance.sql lexer error blocks a fresh
-	// generate); these queries are kept in the canonical queries/ tree so
-	// a future `sqlc generate` picks them up by name.
-	ListDashboardWidgets(ctx context.Context) ([]DashboardWidget, error)
+	// Canonical sqlc source for dashboard widgets and Prometheus datasources.
+	ListDashboardWidgetsPage(ctx context.Context, arg ListDashboardWidgetsPageParams) ([]DashboardWidget, error)
 	ListDeferredOperations(ctx context.Context, arg ListDeferredOperationsParams) ([]DeferredOperation, error)
 	// Estate scoreboard: one row per live cluster. Local host-only clusters stay
 	// in the table so operators can see them, but the handler excludes is_local
@@ -1531,6 +1534,9 @@ type Querier interface {
 	ListExpiredTombstones(ctx context.Context, tombstonedAt pgtype.Timestamptz) ([]GitopsRegisteredCluster, error)
 	// Registered clusters --------------------------------------------------
 	ListGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) ([]GitopsRegisteredCluster, error)
+	// Admin list projection joins display metadata in the same bounded query,
+	// avoiding both an unbounded reconciliation read and per-row cluster lookups.
+	ListGitOpsRegisteredClustersBySourcePage(ctx context.Context, arg ListGitOpsRegisteredClustersBySourcePageParams) ([]ListGitOpsRegisteredClustersBySourcePageRow, error)
 	// GitOps cluster registration sources + tracked clusters (migration 060).
 	//
 	// The sync worker pulls ListEnabledGitOpsSources every 60s, fetches each
@@ -1539,7 +1545,8 @@ type Querier interface {
 	// the 24h grace via ListExpiredTombstones, enqueueing
 	// cluster:decommission for each. The handler tier owns CRUD over the
 	// sources themselves and the per-source /clusters/ + /preview/ readers.
-	ListGitOpsSources(ctx context.Context) ([]GitopsRegistrationSource, error)
+	// List projection intentionally excludes both encrypted credential columns.
+	ListGitOpsSourcesPage(ctx context.Context, arg ListGitOpsSourcesPageParams) ([]ListGitOpsSourcesPageRow, error)
 	// Admin default catalog view: only operator-curated global catalogs
 	// (owner_project_id IS NULL). Filtering + paginating at the DB layer
 	// avoids the over-fetch/in-Go-filter dance that dropped globals past the
@@ -1691,6 +1698,9 @@ type Querier interface {
 	// Both the CRUD/authoring view AND the authz-hook evaluation load use this:
 	// a user's full rule set, newest first. The hot-path caller caches the result.
 	ListNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) ([]NativeRbacRule, error)
+	// Bounded admin authoring view. Authorization evaluation deliberately keeps
+	// using ListNativeRBACRulesByUser so it evaluates the complete cached rule set.
+	ListNativeRBACRulesByUserPage(ctx context.Context, arg ListNativeRBACRulesByUserPageParams) ([]NativeRbacRule, error)
 	// Network policy templates + applications (migration 068).
 	// Backs:
 	//   * /api/v1/admin/network-policy-templates/*  — superuser CRUD on templates
@@ -1761,7 +1771,8 @@ type Querier interface {
 	// Same ordering as ListProjects.
 	ListProjectsForScopes(ctx context.Context, arg ListProjectsForScopesParams) ([]Project, error)
 	// Prometheus datasources -------------------------------------------------
-	ListPrometheusDatasources(ctx context.Context) ([]PrometheusDatasource, error)
+	// Admin lists need only the configured state, never the encrypted credential.
+	ListPrometheusDatasourcesPage(ctx context.Context, arg ListPrometheusDatasourcesPageParams) ([]ListPrometheusDatasourcesPageRow, error)
 	// Dispatcher worker batch read. Returns rows the worker should attempt
 	// this tick: brand-new queued rows and previously-failed rows whose
 	// attempt count is still under the retry budget. ORDER BY created_at
@@ -1769,7 +1780,7 @@ type Querier interface {
 	// front of the queue.
 	ListQueuedEmails(ctx context.Context, limit int32) ([]EmailMessage, error)
 	// Quota plans CRUD --------------------------------------------------------
-	ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error)
+	ListQuotaPlansPage(ctx context.Context, arg ListQuotaPlansPageParams) ([]QuotaPlan, error)
 	ListRecoverableAuthoredConstraints(ctx context.Context, limit int32) ([]AuthoredConstraint, error)
 	// Recover rows whose initial delivery was lost, whose consumer crashed while
 	// holding a lease, or whose durable next-poll timestamp is now due.
@@ -1788,7 +1799,8 @@ type Querier interface {
 	// becomes one SCIM Group resource. Paginated to match the SCIM list
 	// contract.
 	ListSCIMGroupNames(ctx context.Context, arg ListSCIMGroupNamesParams) ([]string, error)
-	ListSCIMTokens(ctx context.Context) ([]ScimToken, error)
+	// Never fetch token_hash for an operator list view.
+	ListSCIMTokenMetadata(ctx context.Context, arg ListSCIMTokenMetadataParams) ([]ListSCIMTokenMetadataRow, error)
 	// SIEM forwarder + queue + status queries (migration 055). Backs:
 	//
 	//   * /api/v1/admin/siem-forwarders/* CRUD + test + status (handler)
@@ -1844,12 +1856,10 @@ type Querier interface {
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// Vault connections CRUD (migration 067).
 	//
-	// Hand-edited SQL paired with the hand-authored sqlc shim in
-	// internal/db/sqlc/vault_connections.sql.go (sqlc CLI not available
-	// in agent worktrees; same pattern cloud_credentials uses). Keep this
-	// file byte-compatible with what sqlc would emit so a future
-	// `make sqlc` is a no-op.
-	ListVaultConnections(ctx context.Context) ([]VaultConnection, error)
+	// Canonical sqlc source for Vault connection persistence.
+	// List projection intentionally excludes auth_encrypted. Detail/probe paths
+	// use GetVaultConnectionByID when they need to resolve credential material.
+	ListVaultConnectionsPage(ctx context.Context, arg ListVaultConnectionsPageParams) ([]ListVaultConnectionsPageRow, error)
 	// Severity filter is empty-string-treated-as-no-filter so callers can
 	// pass an empty string for the unfiltered list.
 	ListVulnerabilitiesForReport(ctx context.Context, arg ListVulnerabilitiesForReportParams) ([]ImageVulnerability, error)
@@ -2139,6 +2149,7 @@ type Querier interface {
 	RotateClusterAgentToken(ctx context.Context, arg RotateClusterAgentTokenParams) (ClusterAgentToken, error)
 	RotateDeliverySourceCredential(ctx context.Context, arg RotateDeliverySourceCredentialParams) (RotateDeliverySourceCredentialRow, error)
 	RotateRefreshSession(ctx context.Context, arg RotateRefreshSessionParams) (string, error)
+	SCIMGroupExists(ctx context.Context, groupName string) (bool, error)
 	// Compare-and-set on the empty ciphertext: two schedulers (server + dedicated
 	// worker both run this task) racing on the same row must not have the loser
 	// overwrite a freshly-sealed envelope with a re-encryption of a document it

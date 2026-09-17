@@ -60,7 +60,7 @@ components:
       in: query
       required: false
       description: Zero-based offset into the authorized, filtered result.
-      schema: {type: integer, minimum: 0, default: 0}
+      schema: {type: integer, minimum: 0, maximum: 10000, default: 0}
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -2773,9 +2773,10 @@ components:
     SCIMTokenList:
       type: object
       additionalProperties: false
-      required: [tokens]
+      required: [tokens, pagination]
       properties:
         tokens: {type: array, items: {$ref: '#/components/schemas/SCIMToken'}}
+        pagination: {$ref: '#/components/schemas/PaginationMetadata'}
     SCIMTokenListEnvelope:
       type: object
       additionalProperties: false
@@ -32163,9 +32164,12 @@ paths:
       tags:
         - users-settings
       description: |
-        Returns metadata for every SCIM token. The secret is never
-        included — only id, name, display prefix, and timestamps.
+        Returns one bounded page of SCIM token metadata. Neither the secret nor
+        its stored hash is selected — only id, name, display prefix, and timestamps.
         Superuser only (gated in-handler).
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
       security:
         - bearerJWT: []
       responses:
@@ -33997,11 +34001,16 @@ paths:
       operationId: adminVaultConnectionsList
       summary: List Vault connections
       description: |
-        Lists all Vault connections. Auth secrets are method-specific redacted to the `<encrypted>` sentinel. Superuser-gated inside the handler. Returns `{data:{items:[...]}}` (not paginated).
+        Lists one bounded page of Vault connections. The list query never selects
+        encrypted auth; configured secret fields are represented by the `<encrypted>`
+        sentinel. Superuser-gated inside the handler.
       tags:
         - platform-admin-settings
       security:
         - bearerJWT: []
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
       responses:
         '200':
           description: All Vault connections.
@@ -34013,11 +34022,14 @@ paths:
                   - properties:
                       data:
                         type: object
+                        required: [items, pagination]
                         properties:
                           items:
                             type: array
                             items:
                               $ref: '#/components/schemas/VaultConnection'
+                          pagination:
+                            $ref: '#/components/schemas/PaginationMetadata'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':

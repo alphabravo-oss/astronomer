@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"sync"
 	"testing"
 
@@ -67,14 +68,22 @@ func newFakeQuotaQuerier(caller sqlc.User) *fakeQuotaQuerier {
 func (f *fakeQuotaQuerier) GetUserByID(_ context.Context, _ uuid.UUID) (sqlc.User, error) {
 	return f.user, nil
 }
-func (f *fakeQuotaQuerier) ListQuotaPlans(_ context.Context) ([]sqlc.QuotaPlan, error) {
+func (f *fakeQuotaQuerier) ListQuotaPlansPage(_ context.Context, arg sqlc.ListQuotaPlansPageParams) ([]sqlc.QuotaPlan, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]sqlc.QuotaPlan, 0, len(f.plans))
 	for _, p := range f.plans {
 		out = append(out, p)
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	start := min(int(arg.QueryOffset), len(out))
+	end := min(start+int(arg.QueryLimit), len(out))
+	return out[start:end], nil
+}
+func (f *fakeQuotaQuerier) CountQuotaPlans(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return int64(len(f.plans)), nil
 }
 func (f *fakeQuotaQuerier) GetQuotaPlan(_ context.Context, name string) (sqlc.QuotaPlan, error) {
 	f.mu.Lock()

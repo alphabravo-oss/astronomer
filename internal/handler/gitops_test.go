@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -52,12 +53,35 @@ func newFakeHandlerQuerier() *fakeGitOpsHandlerQuerier {
 func (f *fakeGitOpsHandlerQuerier) GetUserByID(_ context.Context, _ uuid.UUID) (sqlc.User, error) {
 	return f.user, nil
 }
-func (f *fakeGitOpsHandlerQuerier) ListGitOpsSources(_ context.Context) ([]sqlc.GitopsRegistrationSource, error) {
-	out := []sqlc.GitopsRegistrationSource{}
+func (f *fakeGitOpsHandlerQuerier) ListGitOpsSourcesPage(_ context.Context, arg sqlc.ListGitOpsSourcesPageParams) ([]sqlc.ListGitOpsSourcesPageRow, error) {
+	all := make([]sqlc.GitopsRegistrationSource, 0, len(f.sources))
 	for _, s := range f.sources {
-		out = append(out, s)
+		all = append(all, s)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].Name == all[j].Name {
+			return all[i].ID.String() < all[j].ID.String()
+		}
+		return all[i].Name < all[j].Name
+	})
+	start := min(int(arg.QueryOffset), len(all))
+	end := min(start+int(arg.QueryLimit), len(all))
+	out := make([]sqlc.ListGitOpsSourcesPageRow, 0, end-start)
+	for _, s := range all[start:end] {
+		out = append(out, sqlc.ListGitOpsSourcesPageRow{
+			ID: s.ID, Name: s.Name, RepoUrl: s.RepoUrl, Branch: s.Branch,
+			PathPrefix: s.PathPrefix, AuthMode: s.AuthMode, AuthConfigured: s.AuthEncrypted != "",
+			SyncMode: s.SyncMode, SyncIntervalSeconds: s.SyncIntervalSeconds, OnDelete: s.OnDelete,
+			LastSyncedAt: s.LastSyncedAt, LastSyncedSha: s.LastSyncedSha, LastError: s.LastError,
+			Enabled: s.Enabled, CreatedBy: s.CreatedBy, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+			AllowMassDecommission: s.AllowMassDecommission, WebhookProvider: s.WebhookProvider,
+			WebhookConfigured: s.WebhookSecretEncrypted != "",
+		})
 	}
 	return out, nil
+}
+func (f *fakeGitOpsHandlerQuerier) CountGitOpsSources(context.Context) (int64, error) {
+	return int64(len(f.sources)), nil
 }
 func (f *fakeGitOpsHandlerQuerier) GetGitOpsSource(_ context.Context, id uuid.UUID) (sqlc.GitopsRegistrationSource, error) {
 	s, ok := f.sources[id]
@@ -129,6 +153,34 @@ func (f *fakeGitOpsHandlerQuerier) DeleteGitOpsSource(_ context.Context, id uuid
 }
 func (f *fakeGitOpsHandlerQuerier) ListGitOpsRegisteredClustersBySource(_ context.Context, sourceID uuid.UUID) ([]sqlc.GitopsRegisteredCluster, error) {
 	return f.links[sourceID], nil
+}
+func (f *fakeGitOpsHandlerQuerier) ListGitOpsRegisteredClustersBySourcePage(_ context.Context, arg sqlc.ListGitOpsRegisteredClustersBySourcePageParams) ([]sqlc.ListGitOpsRegisteredClustersBySourcePageRow, error) {
+	links := append([]sqlc.GitopsRegisteredCluster(nil), f.links[arg.SourceID]...)
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].RepoPath == links[j].RepoPath {
+			return links[i].ClusterID.String() < links[j].ClusterID.String()
+		}
+		return links[i].RepoPath < links[j].RepoPath
+	})
+	start := min(int(arg.QueryOffset), len(links))
+	end := min(start+int(arg.QueryLimit), len(links))
+	out := make([]sqlc.ListGitOpsRegisteredClustersBySourcePageRow, 0, end-start)
+	for _, link := range links[start:end] {
+		row := sqlc.ListGitOpsRegisteredClustersBySourcePageRow{
+			ClusterID: link.ClusterID, SourceID: link.SourceID, RepoPath: link.RepoPath,
+			LastYamlSha: link.LastYamlSha, LastAppliedAt: link.LastAppliedAt, Status: link.Status,
+			TombstonedAt: link.TombstonedAt, CreatedAt: link.CreatedAt, UpdatedAt: link.UpdatedAt,
+		}
+		if cluster, ok := f.clusters[link.ClusterID]; ok {
+			row.ClusterName.String, row.ClusterName.Valid = cluster.Name, true
+			row.DisplayName.String, row.DisplayName.Valid = cluster.DisplayName, true
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+func (f *fakeGitOpsHandlerQuerier) CountGitOpsRegisteredClustersBySource(_ context.Context, sourceID uuid.UUID) (int64, error) {
+	return int64(len(f.links[sourceID])), nil
 }
 func (f *fakeGitOpsHandlerQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
 	c, ok := f.clusters[id]

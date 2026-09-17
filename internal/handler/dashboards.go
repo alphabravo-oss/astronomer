@@ -65,13 +65,15 @@ import (
 // DashboardQuerier is the narrow DB surface the handler reads + writes.
 // *sqlc.Queries satisfies it; tests pass narrow fakes.
 type DashboardQuerier interface {
-	ListDashboardWidgets(ctx context.Context) ([]sqlc.DashboardWidget, error)
+	ListDashboardWidgetsPage(ctx context.Context, arg sqlc.ListDashboardWidgetsPageParams) ([]sqlc.DashboardWidget, error)
+	CountDashboardWidgets(ctx context.Context) (int64, error)
 	GetDashboardWidgetByID(ctx context.Context, id uuid.UUID) (sqlc.DashboardWidget, error)
 	CreateDashboardWidget(ctx context.Context, arg sqlc.CreateDashboardWidgetParams) (sqlc.DashboardWidget, error)
 	UpdateDashboardWidget(ctx context.Context, arg sqlc.UpdateDashboardWidgetParams) (sqlc.DashboardWidget, error)
 	DeleteDashboardWidget(ctx context.Context, id uuid.UUID) error
 	ListWidgetsForScope(ctx context.Context, arg sqlc.ListWidgetsForScopeParams) ([]sqlc.DashboardWidget, error)
-	ListPrometheusDatasources(ctx context.Context) ([]sqlc.PrometheusDatasource, error)
+	ListPrometheusDatasourcesPage(ctx context.Context, arg sqlc.ListPrometheusDatasourcesPageParams) ([]sqlc.ListPrometheusDatasourcesPageRow, error)
+	CountPrometheusDatasources(ctx context.Context) (int64, error)
 	ListEnabledPrometheusDatasources(ctx context.Context) ([]sqlc.PrometheusDatasource, error)
 	GetPrometheusDatasourceByID(ctx context.Context, id uuid.UUID) (sqlc.PrometheusDatasource, error)
 	GetPrometheusDatasourceByName(ctx context.Context, name string) (sqlc.PrometheusDatasource, error)

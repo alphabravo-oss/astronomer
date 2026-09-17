@@ -60,6 +60,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 )
@@ -70,7 +71,8 @@ type VaultConnectionQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetProjectByID(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
 
-	ListVaultConnections(ctx context.Context) ([]sqlc.VaultConnection, error)
+	ListVaultConnectionsPage(ctx context.Context, arg sqlc.ListVaultConnectionsPageParams) ([]sqlc.ListVaultConnectionsPageRow, error)
+	CountVaultConnections(ctx context.Context) (int64, error)
 	GetVaultConnectionByID(ctx context.Context, id uuid.UUID) (sqlc.VaultConnection, error)
 	GetVaultConnectionByName(ctx context.Context, name string) (sqlc.VaultConnection, error)
 	CreateVaultConnection(ctx context.Context, arg sqlc.CreateVaultConnectionParams) (sqlc.VaultConnection, error)
@@ -254,16 +256,27 @@ func (h *VaultHandler) List(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.gateSuperuser(w, r); !ok {
 		return
 	}
-	rows, err := h.queries.ListVaultConnections(r.Context())
+	limit, offset := queryLimitOffset(r, 20)
+	rows, err := h.queries.ListVaultConnectionsPage(r.Context(), sqlc.ListVaultConnectionsPageParams{
+		QueryLimit: int32(limit), QueryOffset: int32(offset),
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list vault connections")
 		return
 	}
 	out := make([]VaultConnectionResponse, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, h.toResponse(row, true))
+		out = append(out, toVaultConnectionListResponse(row))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"items": out})
+	total, err := h.queries.CountVaultConnections(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count vault connections")
+		return
+	}
+	RespondJSON(w, http.StatusOK, struct {
+		Items      []VaultConnectionResponse `json:"items"`
+		Pagination paging.Metadata           `json:"pagination"`
+	}{Items: out, Pagination: paging.Exact(total, limit, offset, len(out))})
 }
 
 // Get handles GET /api/v1/admin/vault-connections/{id}/.
@@ -770,6 +783,41 @@ func (h *VaultHandler) toResponse(row sqlc.VaultConnection, redact bool) VaultCo
 		auth, _ := h.decryptAuthMap(row)
 		for k, v := range auth {
 			resp.Auth[k] = v
+		}
+	}
+	return resp
+}
+
+// toVaultConnectionListResponse maps the credential-free list projection.
+// Method-specific non-secret fields remain available from the detail endpoint;
+// list requests expose only whether encrypted auth is configured.
+func toVaultConnectionListResponse(row sqlc.ListVaultConnectionsPageRow) VaultConnectionResponse {
+	resp := VaultConnectionResponse{
+		ID:            row.ID,
+		Name:          row.Name,
+		Description:   row.Description,
+		Addr:          row.Addr,
+		AuthMethod:    row.AuthMethod,
+		Auth:          map[string]string{},
+		Namespace:     row.Namespace,
+		TLSSkipVerify: row.TlsSkipVerify,
+		CACertPEM:     row.CaCertPem,
+		DefaultMount:  row.DefaultMount,
+		Enabled:       row.Enabled,
+		LastHealthOK:  row.LastHealthOk,
+		LastError:     row.LastError,
+		CreatedAt:     row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:     row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if row.LastHealthAt.Valid {
+		resp.LastHealthAt = row.LastHealthAt.Time.UTC().Format(time.RFC3339)
+	}
+	if row.AuthConfigured {
+		switch row.AuthMethod {
+		case "token":
+			resp.Auth["token"] = avault.SentinelEncrypted
+		case "approle":
+			resp.Auth["secret_id"] = avault.SentinelEncrypted
 		}
 	}
 	return resp

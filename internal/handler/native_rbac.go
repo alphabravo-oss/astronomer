@@ -25,6 +25,8 @@ type NativeRBACQuerier interface {
 	GetNativeRBACRuleByID(ctx context.Context, id uuid.UUID) (sqlc.NativeRbacRule, error)
 	GetNativeRBACRuleForUpdate(ctx context.Context, id uuid.UUID) (sqlc.NativeRbacRule, error)
 	ListNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) ([]sqlc.NativeRbacRule, error)
+	ListNativeRBACRulesByUserPage(ctx context.Context, arg sqlc.ListNativeRBACRulesByUserPageParams) ([]sqlc.NativeRbacRule, error)
+	CountNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	ListNativeRBACRules(ctx context.Context, arg sqlc.ListNativeRBACRulesParams) ([]sqlc.NativeRbacRule, error)
 	DeleteNativeRBACRule(ctx context.Context, id uuid.UUID) error
 }
@@ -244,13 +246,21 @@ func (h *NativeRBACHandler) List(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "userId must be a valid UUID")
 			return
 		}
-		rows, err := h.queries.ListNativeRBACRulesByUser(r.Context(), userID)
+		limit, offset := queryLimitOffset(r, 20)
+		rows, err := h.queries.ListNativeRBACRulesByUserPage(r.Context(), sqlc.ListNativeRBACRulesByUserPageParams{
+			UserID: userID, QueryLimit: int32(limit), QueryOffset: int32(offset),
+		})
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list native rules")
 			return
 		}
-		items, metadata := pageWindow(r, nativeRulesToResponses(rows))
-		paging.Write(w, items, metadata)
+		total, err := h.queries.CountNativeRBACRulesByUser(r.Context(), userID)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count native rules")
+			return
+		}
+		items := nativeRulesToResponses(rows)
+		paging.Write(w, items, paging.Exact(total, limit, offset, len(items)))
 		return
 	}
 	limit, offset := int32(queryLimitMax(r, 100, 500)), int32(queryOffset(r))

@@ -15,22 +15,7 @@ import (
 )
 
 func scimGroupExists(ctx context.Context, q SCIMQuerier, name string) (bool, error) {
-	for offset := int32(0); ; offset += scimMaxListResult {
-		names, err := q.ListSCIMGroupNames(ctx, sqlc.ListSCIMGroupNamesParams{
-			Limit: scimMaxListResult, Offset: offset,
-		})
-		if err != nil {
-			return false, err
-		}
-		for _, candidate := range names {
-			if candidate == name {
-				return true, nil
-			}
-		}
-		if len(names) < scimMaxListResult {
-			return false, nil
-		}
-	}
+	return q.SCIMGroupExists(ctx, name)
 }
 
 func resolveSCIMGroupRoleID(ctx context.Context, q SCIMQuerier, explicit string) (uuid.UUID, error) {

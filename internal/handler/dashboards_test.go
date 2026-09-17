@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -44,14 +45,28 @@ func (f *fakeDashboardQuerier) GetUserByID(_ context.Context, _ uuid.UUID) (sqlc
 	return f.user, nil
 }
 
-func (f *fakeDashboardQuerier) ListDashboardWidgets(_ context.Context) ([]sqlc.DashboardWidget, error) {
+func (f *fakeDashboardQuerier) ListDashboardWidgetsPage(_ context.Context, arg sqlc.ListDashboardWidgetsPageParams) ([]sqlc.DashboardWidget, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]sqlc.DashboardWidget, 0, len(f.widgets))
 	for _, w := range f.widgets {
 		out = append(out, w)
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name == out[j].Name {
+			return out[i].ID.String() < out[j].ID.String()
+		}
+		return out[i].Name < out[j].Name
+	})
+	start := min(int(arg.QueryOffset), len(out))
+	end := min(start+int(arg.QueryLimit), len(out))
+	return out[start:end], nil
+}
+
+func (f *fakeDashboardQuerier) CountDashboardWidgets(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return int64(len(f.widgets)), nil
 }
 
 func (f *fakeDashboardQuerier) GetDashboardWidgetByID(_ context.Context, id uuid.UUID) (sqlc.DashboardWidget, error) {
@@ -148,14 +163,36 @@ func (f *fakeDashboardQuerier) ListWidgetsForScope(_ context.Context, arg sqlc.L
 	return out, nil
 }
 
-func (f *fakeDashboardQuerier) ListPrometheusDatasources(_ context.Context) ([]sqlc.PrometheusDatasource, error) {
+func (f *fakeDashboardQuerier) ListPrometheusDatasourcesPage(_ context.Context, arg sqlc.ListPrometheusDatasourcesPageParams) ([]sqlc.ListPrometheusDatasourcesPageRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := make([]sqlc.PrometheusDatasource, 0, len(f.datasources))
+	all := make([]sqlc.PrometheusDatasource, 0, len(f.datasources))
 	for _, d := range f.datasources {
-		out = append(out, d)
+		all = append(all, d)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].Name == all[j].Name {
+			return all[i].ID.String() < all[j].ID.String()
+		}
+		return all[i].Name < all[j].Name
+	})
+	start := min(int(arg.QueryOffset), len(all))
+	end := min(start+int(arg.QueryLimit), len(all))
+	out := make([]sqlc.ListPrometheusDatasourcesPageRow, 0, end-start)
+	for _, d := range all[start:end] {
+		out = append(out, sqlc.ListPrometheusDatasourcesPageRow{
+			ID: d.ID, Name: d.Name, Url: d.Url, HasAuth: d.AuthEncrypted != "",
+			TlsSkipVerify: d.TlsSkipVerify, Enabled: d.Enabled,
+			CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt,
+		})
 	}
 	return out, nil
+}
+
+func (f *fakeDashboardQuerier) CountPrometheusDatasources(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return int64(len(f.datasources)), nil
 }
 
 func (f *fakeDashboardQuerier) ListEnabledPrometheusDatasources(_ context.Context) ([]sqlc.PrometheusDatasource, error) {

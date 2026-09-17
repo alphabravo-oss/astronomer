@@ -43,18 +43,15 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid source ID")
 		return
 	}
-	rows, err := h.queries.ListGitOpsRegisteredClustersBySource(r.Context(), id)
+	limit, offset := queryLimitOffset(r, 20)
+	rows, err := h.queries.ListGitOpsRegisteredClustersBySourcePage(r.Context(), sqlc.ListGitOpsRegisteredClustersBySourcePageParams{
+		SourceID: id, QueryLimit: int32(limit), QueryOffset: int32(offset),
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
 		return
 	}
-	// Memoize the cluster lookup per request so a source with the same
-	// cluster registered under multiple repo paths resolves the name once
-	// instead of a GetClusterByID per row (N+1). Mirrors the instance→cluster
-	// cache in delivery status views and the clusterName cache in projects.
 	out := make([]map[string]any, 0, len(rows))
-	clusterCache := make(map[uuid.UUID]sqlc.Cluster, len(rows))
-	clusterMissing := make(map[uuid.UUID]struct{})
 	for _, link := range rows {
 		entry := map[string]any{
 			"cluster_id":      link.ClusterID.String(),
@@ -66,26 +63,20 @@ func (h *GitOpsHandler) ListClusters(w http.ResponseWriter, r *http.Request) {
 		if link.TombstonedAt.Valid {
 			entry["tombstoned_at"] = link.TombstonedAt.Time.UTC().Format(time.RFC3339)
 		}
-		cluster, ok := clusterCache[link.ClusterID]
-		if !ok {
-			if _, missed := clusterMissing[link.ClusterID]; !missed {
-				c, cerr := h.queries.GetClusterByID(r.Context(), link.ClusterID)
-				if cerr == nil {
-					cluster, ok = c, true
-					clusterCache[link.ClusterID] = c
-				} else {
-					clusterMissing[link.ClusterID] = struct{}{}
-				}
-			}
+		if link.ClusterName.Valid {
+			entry["cluster_name"] = link.ClusterName.String
 		}
-		if ok {
-			entry["cluster_name"] = cluster.Name
-			entry["display_name"] = cluster.DisplayName
+		if link.DisplayName.Valid {
+			entry["display_name"] = link.DisplayName.String
 		}
 		out = append(out, entry)
 	}
-	page, pagination := pageWindow(r, out)
-	paging.Write(w, page, pagination)
+	total, err := h.queries.CountGitOpsRegisteredClustersBySource(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count clusters")
+		return
+	}
+	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))
 }
 
 // Helpers -------------------------------------------------------------

@@ -183,21 +183,14 @@ func (h *SCIMHandler) ListGroups(w http.ResponseWriter, r *http.Request) {
 // displayName (URL-escaped).
 func (h *SCIMHandler) GetGroup(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "id")
-	// {id} is the group name; confirm it actually exists by scanning the
-	// (small, operator-curated) set rather than adding another query.
-	names, err := h.queries.ListSCIMGroupNames(r.Context(), sqlc.ListSCIMGroupNamesParams{
-		Limit:  scimMaxListResult,
-		Offset: 0,
-	})
+	exists, err := h.queries.SCIMGroupExists(r.Context(), name)
 	if err != nil {
 		h.scimError(w, http.StatusInternalServerError, "failed to look up group")
 		return
 	}
-	for _, n := range names {
-		if n == name {
-			h.writeSCIM(w, http.StatusOK, toSCIMGroup(n))
-			return
-		}
+	if exists {
+		h.writeSCIM(w, http.StatusOK, toSCIMGroup(name))
+		return
 	}
 	h.scimError(w, http.StatusNotFound, "group not found")
 }

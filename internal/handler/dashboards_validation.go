@@ -309,6 +309,19 @@ func datasourceToResponse(row sqlc.PrometheusDatasource) DatasourceResponse {
 	}
 }
 
+func datasourceListToResponse(row sqlc.ListPrometheusDatasourcesPageRow) DatasourceResponse {
+	return DatasourceResponse{
+		ID:            row.ID,
+		Name:          row.Name,
+		URL:           row.Url,
+		HasAuth:       row.HasAuth,
+		TLSSkipVerify: row.TlsSkipVerify,
+		Enabled:       row.Enabled,
+		CreatedAt:     row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:     row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}
+
 // defaultInt32 lives in monitoring.go — reuse it.
 
 func defaultJSONObject(b json.RawMessage) json.RawMessage {

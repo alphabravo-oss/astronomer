@@ -46,6 +46,12 @@ func (f *fakeNativeRBACQuerier) GetNativeRBACRuleForUpdate(ctx context.Context, 
 func (f *fakeNativeRBACQuerier) ListNativeRBACRulesByUser(context.Context, uuid.UUID) ([]sqlc.NativeRbacRule, error) {
 	return nil, nil
 }
+func (f *fakeNativeRBACQuerier) ListNativeRBACRulesByUserPage(context.Context, sqlc.ListNativeRBACRulesByUserPageParams) ([]sqlc.NativeRbacRule, error) {
+	return nil, nil
+}
+func (f *fakeNativeRBACQuerier) CountNativeRBACRulesByUser(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
 func (f *fakeNativeRBACQuerier) ListNativeRBACRules(context.Context, sqlc.ListNativeRBACRulesParams) ([]sqlc.NativeRbacRule, error) {
 	return nil, nil
 }

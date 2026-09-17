@@ -345,9 +345,10 @@ func (routeSecuritySCIMTokenQuerier) GetUserByID(context.Context, uuid.UUID) (sq
 func (routeSecuritySCIMTokenQuerier) CreateSCIMToken(context.Context, sqlc.CreateSCIMTokenParams) (sqlc.ScimToken, error) {
 	return sqlc.ScimToken{}, nil
 }
-func (routeSecuritySCIMTokenQuerier) ListSCIMTokens(context.Context) ([]sqlc.ScimToken, error) {
+func (routeSecuritySCIMTokenQuerier) ListSCIMTokenMetadata(context.Context, sqlc.ListSCIMTokenMetadataParams) ([]sqlc.ListSCIMTokenMetadataRow, error) {
 	return nil, nil
 }
+func (routeSecuritySCIMTokenQuerier) CountSCIMTokens(context.Context) (int64, error) { return 0, nil }
 func (routeSecuritySCIMTokenQuerier) RevokeSCIMToken(context.Context, uuid.UUID) (int64, error) {
 	return 1, nil
 }

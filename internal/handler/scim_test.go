@@ -39,6 +39,17 @@ type fakeSCIMQuerier struct {
 	idpErr    error
 }
 
+func TestSCIMPagingBoundsDeepOffsets(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?startIndex=999999999&count=999", nil)
+	startIndex, count := scimPaging(req)
+	if startIndex != int(maxPaginationOffset)+1 {
+		t.Fatalf("startIndex = %d, want %d", startIndex, int(maxPaginationOffset)+1)
+	}
+	if count != scimMaxListResult {
+		t.Fatalf("count = %d, want %d", count, scimMaxListResult)
+	}
+}
+
 func (f *fakeSCIMQuerier) clone() *fakeSCIMQuerier {
 	cloned := *f
 	cloned.users = make(map[string]sqlc.User, len(f.users))
@@ -180,6 +191,11 @@ func (f *fakeSCIMQuerier) ListSCIMGroupNames(_ context.Context, _ sqlc.ListSCIMG
 
 func (f *fakeSCIMQuerier) CountSCIMGroupNames(_ context.Context) (int64, error) {
 	return int64(len(f.groups)), nil
+}
+
+func (f *fakeSCIMQuerier) SCIMGroupExists(_ context.Context, name string) (bool, error) {
+	_, ok := f.groups[name]
+	return ok, nil
 }
 
 func (f *fakeSCIMQuerier) CreateGroupMapping(_ context.Context, arg sqlc.CreateGroupMappingParams) (sqlc.IdentityGroupMapping, error) {

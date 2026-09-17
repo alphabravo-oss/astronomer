@@ -31,6 +31,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 )
 
 // SCIMTokenAdminQuerier is the narrow DB surface this handler needs.
@@ -38,7 +39,8 @@ import (
 type SCIMTokenAdminQuerier interface {
 	UserByIDQuerier
 	CreateSCIMToken(ctx context.Context, arg sqlc.CreateSCIMTokenParams) (sqlc.ScimToken, error)
-	ListSCIMTokens(ctx context.Context) ([]sqlc.ScimToken, error)
+	ListSCIMTokenMetadata(ctx context.Context, arg sqlc.ListSCIMTokenMetadataParams) ([]sqlc.ListSCIMTokenMetadataRow, error)
+	CountSCIMTokens(ctx context.Context) (int64, error)
 	RevokeSCIMToken(ctx context.Context, id uuid.UUID) (int64, error)
 }
 
@@ -80,6 +82,25 @@ func toSCIMTokenMeta(t sqlc.ScimToken) scimTokenMeta {
 	}
 	if t.RevokedAt.Valid {
 		s := t.RevokedAt.Time.UTC().Format("2006-01-02T15:04:05Z07:00")
+		out.RevokedAt = &s
+	}
+	return out
+}
+
+func toSCIMTokenListMeta(t sqlc.ListSCIMTokenMetadataRow) scimTokenMeta {
+	out := scimTokenMeta{
+		ID:        t.ID.String(),
+		Name:      t.Name,
+		Prefix:    t.Prefix,
+		CreatedAt: t.CreatedAt.UTC().Format(time.RFC3339),
+		ExpiresAt: t.ExpiresAt.UTC().Format(time.RFC3339),
+	}
+	if t.LastUsedAt.Valid {
+		s := t.LastUsedAt.Time.UTC().Format(time.RFC3339)
+		out.LastUsedAt = &s
+	}
+	if t.RevokedAt.Valid {
+		s := t.RevokedAt.Time.UTC().Format(time.RFC3339)
 		out.RevokedAt = &s
 	}
 	return out
@@ -156,23 +177,34 @@ func (h *SCIMTokenAdminHandler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// List returns metadata for every SCIM token. The secret is never
-// included — only id, name, display prefix, and timestamps.
+// List returns one bounded page of SCIM token metadata. Neither the plaintext
+// token nor its hash is selected from the database.
 func (h *SCIMTokenAdminHandler) List(w http.ResponseWriter, r *http.Request) {
 	if !h.superuser(w, r) {
 		return
 	}
 
-	rows, err := h.queries.ListSCIMTokens(r.Context())
+	limit, offset := queryLimitOffset(r, 20)
+	rows, err := h.queries.ListSCIMTokenMetadata(r.Context(), sqlc.ListSCIMTokenMetadataParams{
+		QueryLimit: int32(limit), QueryOffset: int32(offset),
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
 		return
 	}
 	out := make([]scimTokenMeta, 0, len(rows))
 	for _, t := range rows {
-		out = append(out, toSCIMTokenMeta(t))
+		out = append(out, toSCIMTokenListMeta(t))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"tokens": out})
+	total, err := h.queries.CountSCIMTokens(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, err.Error())
+		return
+	}
+	RespondJSON(w, http.StatusOK, struct {
+		Tokens     []scimTokenMeta `json:"tokens"`
+		Pagination paging.Metadata `json:"pagination"`
+	}{Tokens: out, Pagination: paging.Exact(total, limit, offset, len(out))})
 }
 
 // Delete revokes a SCIM token by id.

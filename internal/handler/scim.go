@@ -71,6 +71,7 @@ type SCIMQuerier interface {
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	ListSCIMGroupNames(ctx context.Context, arg sqlc.ListSCIMGroupNamesParams) ([]string, error)
 	CountSCIMGroupNames(ctx context.Context) (int64, error)
+	SCIMGroupExists(ctx context.Context, groupName string) (bool, error)
 	// Group write surface (DIR-03).
 	CreateGroupMapping(ctx context.Context, arg sqlc.CreateGroupMappingParams) (sqlc.IdentityGroupMapping, error)
 	ListGroupMappings(ctx context.Context, arg sqlc.ListGroupMappingsParams) ([]sqlc.IdentityGroupMapping, error)

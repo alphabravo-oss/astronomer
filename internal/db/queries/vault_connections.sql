@@ -1,18 +1,21 @@
 -- Vault connections CRUD (migration 067).
 --
--- Hand-edited SQL paired with the hand-authored sqlc shim in
--- internal/db/sqlc/vault_connections.sql.go (sqlc CLI not available
--- in agent worktrees; same pattern cloud_credentials uses). Keep this
--- file byte-compatible with what sqlc would emit so a future
--- `make sqlc` is a no-op.
+-- Canonical sqlc source for Vault connection persistence.
 
--- name: ListVaultConnections :many
-SELECT id, name, description, addr, auth_method, auth_encrypted, namespace,
+-- name: ListVaultConnectionsPage :many
+-- List projection intentionally excludes auth_encrypted. Detail/probe paths
+-- use GetVaultConnectionByID when they need to resolve credential material.
+SELECT id, name, description, addr, auth_method,
+       (auth_encrypted <> '') AS auth_configured, namespace,
        tls_skip_verify, ca_cert_pem, default_mount, enabled,
        cached_token_expires_at, last_health_at, last_health_ok, last_error,
        created_by, created_at, updated_at
 FROM vault_connections
-ORDER BY name ASC;
+ORDER BY name ASC, id ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountVaultConnections :one
+SELECT count(*) FROM vault_connections;
 
 -- name: GetVaultConnectionByID :one
 SELECT id, name, description, addr, auth_method, auth_encrypted, namespace,

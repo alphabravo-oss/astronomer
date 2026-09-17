@@ -114,13 +114,17 @@ func (h *SCIMHandler) Schemas(w http.ResponseWriter, r *http.Request) {
 // --- helpers ---
 
 // scimPaging parses SCIM's 1-based startIndex + count params, clamping
-// count to [1, scimMaxListResult] and startIndex to >= 1.
+// count to [1, scimMaxListResult] and the legacy offset to the same bounded
+// ceiling used by the rest of the API.
 func scimPaging(r *http.Request) (startIndex, count int) {
 	startIndex = 1
 	if s := r.URL.Query().Get("startIndex"); s != "" {
 		if v, err := strconv.Atoi(s); err == nil && v >= 1 {
 			startIndex = v
 		}
+	}
+	if startIndex-1 > int(maxPaginationOffset) {
+		startIndex = int(maxPaginationOffset) + 1
 	}
 	count = 20
 	if s := r.URL.Query().Get("count"); s != "" {

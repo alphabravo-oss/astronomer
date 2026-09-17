@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -53,14 +54,34 @@ func (f *fakeSCIMTokenAdminQuerier) CreateSCIMToken(_ context.Context, arg sqlc.
 	return row, nil
 }
 
-func (f *fakeSCIMTokenAdminQuerier) ListSCIMTokens(_ context.Context) ([]sqlc.ScimToken, error) {
+func (f *fakeSCIMTokenAdminQuerier) ListSCIMTokenMetadata(_ context.Context, arg sqlc.ListSCIMTokenMetadataParams) ([]sqlc.ListSCIMTokenMetadataRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := make([]sqlc.ScimToken, 0, len(f.rows))
+	all := make([]sqlc.ScimToken, 0, len(f.rows))
 	for _, r := range f.rows {
-		out = append(out, r)
+		all = append(all, r)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].CreatedAt.Equal(all[j].CreatedAt) {
+			return all[i].ID.String() > all[j].ID.String()
+		}
+		return all[i].CreatedAt.After(all[j].CreatedAt)
+	})
+	start := min(int(arg.QueryOffset), len(all))
+	end := min(start+int(arg.QueryLimit), len(all))
+	out := make([]sqlc.ListSCIMTokenMetadataRow, 0, end-start)
+	for _, r := range all[start:end] {
+		out = append(out, sqlc.ListSCIMTokenMetadataRow{
+			ID: r.ID, Name: r.Name, Prefix: r.Prefix, LastUsedAt: r.LastUsedAt,
+			ExpiresAt: r.ExpiresAt, RevokedAt: r.RevokedAt, CreatedAt: r.CreatedAt,
+		})
 	}
 	return out, nil
+}
+func (f *fakeSCIMTokenAdminQuerier) CountSCIMTokens(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return int64(len(f.rows)), nil
 }
 
 func (f *fakeSCIMTokenAdminQuerier) RevokeSCIMToken(_ context.Context, id uuid.UUID) (int64, error) {
@@ -150,6 +171,48 @@ func TestSCIMTokenAdmin_CreateReturnsPlaintextOnceAndListNeverLeaks(t *testing.T
 	}
 }
 
+func TestSCIMTokenAdmin_ListIsBounded(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeSCIMTokenAdminQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
+	base := time.Now().UTC().Add(-time.Hour)
+	for i, name := range []string{"oldest", "middle", "newest"} {
+		id := uuid.New()
+		q.rows[id] = sqlc.ScimToken{
+			ID: id, Name: name, TokenHash: "hash-must-not-be-selected", Prefix: "astro_scim_test",
+			CreatedAt: base.Add(time.Duration(i) * time.Minute), ExpiresAt: base.Add(24 * time.Hour),
+		}
+	}
+	h := NewSCIMTokenAdminHandler(q)
+	recorder := httptest.NewRecorder()
+	h.List(recorder, authedRequest(http.MethodGet, "/api/v1/admin/scim-tokens/?limit=1&offset=1", callerID, nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("list status = %d; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), "hash-must-not-be-selected") {
+		t.Fatalf("list leaked stored hash: %s", recorder.Body.String())
+	}
+	var response struct {
+		Data struct {
+			Tokens     []scimTokenMeta `json:"tokens"`
+			Pagination struct {
+				Total  *int64 `json:"total"`
+				Limit  int    `json:"limit"`
+				Offset int    `json:"offset"`
+			} `json:"pagination"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(response.Data.Tokens) != 1 || response.Data.Tokens[0].Name != "middle" {
+		t.Fatalf("unexpected tokens: %+v", response.Data.Tokens)
+	}
+	page := response.Data.Pagination
+	if page.Total == nil || *page.Total != 3 || page.Limit != 1 || page.Offset != 1 {
+		t.Fatalf("unexpected pagination: %+v", page)
+	}
+}
+
 func TestSCIMTokenAdmin_NonSuperuserForbidden(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeSCIMTokenAdminQuerier(sqlc.User{ID: callerID, IsSuperuser: false})
@@ -184,7 +247,7 @@ func TestSCIMTokenAdmin_DeleteRevokes(t *testing.T) {
 		t.Fatalf("delete status = %d, want 204; body=%s", recDel.Code, recDel.Body.String())
 	}
 
-	rows, _ := q.ListSCIMTokens(context.Background())
+	rows, _ := q.ListSCIMTokenMetadata(context.Background(), sqlc.ListSCIMTokenMetadataParams{QueryLimit: 20})
 	if len(rows) != 1 || !rows[0].RevokedAt.Valid {
 		t.Fatalf("after revoke: rows=%+v, want one revoked row", rows)
 	}

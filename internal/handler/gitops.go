@@ -52,15 +52,16 @@ const gitOpsWebhookBodyLimit = 1 << 20
 
 // GitOpsQuerier is the database surface the handler needs.
 type GitOpsQuerier interface {
-	ListGitOpsSources(ctx context.Context) ([]sqlc.GitopsRegistrationSource, error)
+	ListGitOpsSourcesPage(ctx context.Context, arg sqlc.ListGitOpsSourcesPageParams) ([]sqlc.ListGitOpsSourcesPageRow, error)
+	CountGitOpsSources(ctx context.Context) (int64, error)
 	GetGitOpsSource(ctx context.Context, id uuid.UUID) (sqlc.GitopsRegistrationSource, error)
 	GetGitOpsSourceByName(ctx context.Context, name string) (sqlc.GitopsRegistrationSource, error)
 	CreateGitOpsSource(ctx context.Context, arg sqlc.CreateGitOpsSourceParams) (sqlc.GitopsRegistrationSource, error)
 	UpdateGitOpsSource(ctx context.Context, arg sqlc.UpdateGitOpsSourceParams) (sqlc.GitopsRegistrationSource, error)
 	DeleteGitOpsSource(ctx context.Context, id uuid.UUID) error
-	ListGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) ([]sqlc.GitopsRegisteredCluster, error)
+	ListGitOpsRegisteredClustersBySourcePage(ctx context.Context, arg sqlc.ListGitOpsRegisteredClustersBySourcePageParams) ([]sqlc.ListGitOpsRegisteredClustersBySourcePageRow, error)
+	CountGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
-	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
 	CreateGitOpsWebhookReceipt(ctx context.Context, arg sqlc.CreateGitOpsWebhookReceiptParams) (time.Time, error)
 }
 
@@ -175,6 +176,38 @@ func toGitOpsSourceResponse(row sqlc.GitopsRegistrationSource) gitopsSourceRespo
 		AllowMassDecommission: row.AllowMassDecommission,
 		WebhookProvider:       row.WebhookProvider,
 		WebhookConfigured:     row.WebhookProvider != "" && row.WebhookSecretEncrypted != "",
+		CreatedAt:             row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:             row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if resp.AuthConfigured {
+		resp.Auth = GitOpsAuthSentinel
+	}
+	if row.LastSyncedAt.Valid {
+		resp.LastSyncedAt = row.LastSyncedAt.Time.UTC().Format(time.RFC3339)
+	}
+	return resp
+}
+
+// toGitOpsSourceListResponse maps the credential-free list projection. List
+// requests never load either encrypted credential column from PostgreSQL.
+func toGitOpsSourceListResponse(row sqlc.ListGitOpsSourcesPageRow) gitopsSourceResponse {
+	resp := gitopsSourceResponse{
+		ID:                    row.ID.String(),
+		Name:                  row.Name,
+		RepoURL:               row.RepoUrl,
+		Branch:                row.Branch,
+		PathPrefix:            row.PathPrefix,
+		AuthMode:              row.AuthMode,
+		AuthConfigured:        row.AuthConfigured,
+		SyncMode:              row.SyncMode,
+		SyncIntervalSeconds:   row.SyncIntervalSeconds,
+		OnDelete:              row.OnDelete,
+		LastSyncedSHA:         row.LastSyncedSha,
+		LastError:             row.LastError,
+		Enabled:               row.Enabled,
+		AllowMassDecommission: row.AllowMassDecommission,
+		WebhookProvider:       row.WebhookProvider,
+		WebhookConfigured:     row.WebhookProvider != "" && row.WebhookConfigured,
 		CreatedAt:             row.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:             row.UpdatedAt.UTC().Format(time.RFC3339),
 	}

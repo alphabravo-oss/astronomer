@@ -27,17 +27,24 @@ func (h *GitOpsHandler) List(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {
 		return
 	}
-	rows, err := h.queries.ListGitOpsSources(r.Context())
+	limit, offset := queryLimitOffset(r, 20)
+	rows, err := h.queries.ListGitOpsSourcesPage(r.Context(), sqlc.ListGitOpsSourcesPageParams{
+		QueryLimit: int32(limit), QueryOffset: int32(offset),
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list gitops sources")
 		return
 	}
 	out := make([]gitopsSourceResponse, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, toGitOpsSourceResponse(row))
+		out = append(out, toGitOpsSourceListResponse(row))
 	}
-	page, pagination := pageWindow(r, out)
-	paging.Write(w, page, pagination)
+	total, err := h.queries.CountGitOpsSources(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count gitops sources")
+		return
+	}
+	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))
 }
 
 // Create handles POST /api/v1/admin/gitops-sources/.

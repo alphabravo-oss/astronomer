@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countSCIMGroupNames = `-- name: CountSCIMGroupNames :one
@@ -18,6 +19,17 @@ SELECT count(DISTINCT group_name) FROM identity_group_mappings
 
 func (q *Queries) CountSCIMGroupNames(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countSCIMGroupNames)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSCIMTokens = `-- name: CountSCIMTokens :one
+SELECT count(*) FROM scim_tokens
+`
+
+func (q *Queries) CountSCIMTokens(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countSCIMTokens)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -119,28 +131,46 @@ func (q *Queries) ListSCIMGroupNames(ctx context.Context, arg ListSCIMGroupNames
 	return items, nil
 }
 
-const listSCIMTokens = `-- name: ListSCIMTokens :many
-SELECT id, name, token_hash, prefix, last_used_at, created_at, expires_at, revoked_at FROM scim_tokens ORDER BY created_at DESC
+const listSCIMTokenMetadata = `-- name: ListSCIMTokenMetadata :many
+SELECT id, name, prefix, last_used_at, expires_at, revoked_at, created_at
+FROM scim_tokens
+ORDER BY created_at DESC, id DESC
+LIMIT $2 OFFSET $1
 `
 
-func (q *Queries) ListSCIMTokens(ctx context.Context) ([]ScimToken, error) {
-	rows, err := q.db.Query(ctx, listSCIMTokens)
+type ListSCIMTokenMetadataParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
+
+type ListSCIMTokenMetadataRow struct {
+	ID         uuid.UUID          `json:"id"`
+	Name       string             `json:"name"`
+	Prefix     string             `json:"prefix"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	ExpiresAt  time.Time          `json:"expires_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt  time.Time          `json:"created_at"`
+}
+
+// Never fetch token_hash for an operator list view.
+func (q *Queries) ListSCIMTokenMetadata(ctx context.Context, arg ListSCIMTokenMetadataParams) ([]ListSCIMTokenMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listSCIMTokenMetadata, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ScimToken{}
+	items := []ListSCIMTokenMetadataRow{}
 	for rows.Next() {
-		var i ScimToken
+		var i ListSCIMTokenMetadataRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.TokenHash,
 			&i.Prefix,
 			&i.LastUsedAt,
-			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.RevokedAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -164,6 +194,19 @@ func (q *Queries) RevokeSCIMToken(ctx context.Context, id uuid.UUID) (int64, err
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const sCIMGroupExists = `-- name: SCIMGroupExists :one
+SELECT EXISTS (
+    SELECT 1 FROM identity_group_mappings WHERE group_name = $1
+)
+`
+
+func (q *Queries) SCIMGroupExists(ctx context.Context, groupName string) (bool, error) {
+	row := q.db.QueryRow(ctx, sCIMGroupExists, groupName)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const touchSCIMToken = `-- name: TouchSCIMToken :exec

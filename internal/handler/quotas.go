@@ -54,7 +54,8 @@ import (
 // *sqlc.Queries satisfies it.
 type QuotaQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
-	ListQuotaPlans(ctx context.Context) ([]sqlc.QuotaPlan, error)
+	ListQuotaPlansPage(ctx context.Context, arg sqlc.ListQuotaPlansPageParams) ([]sqlc.QuotaPlan, error)
+	CountQuotaPlans(ctx context.Context) (int64, error)
 	GetQuotaPlan(ctx context.Context, name string) (sqlc.QuotaPlan, error)
 	GetQuotaPlanForUpdate(ctx context.Context, name string) (sqlc.QuotaPlan, error)
 	UpsertQuotaPlan(ctx context.Context, arg sqlc.UpsertQuotaPlanParams) (sqlc.QuotaPlan, error)
@@ -178,7 +179,10 @@ func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 	if !h.gate(w, r) {
 		return
 	}
-	rows, err := h.queries.ListQuotaPlans(r.Context())
+	limit, offset := queryLimitOffset(r, 20)
+	rows, err := h.queries.ListQuotaPlansPage(r.Context(), sqlc.ListQuotaPlansPageParams{
+		QueryLimit: int32(limit), QueryOffset: int32(offset),
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list quota plans")
 		return
@@ -187,8 +191,12 @@ func (h *QuotaHandler) ListPlans(w http.ResponseWriter, r *http.Request) {
 	for _, p := range rows {
 		out = append(out, planToResponse(p))
 	}
-	page, pagination := pageWindow(r, out)
-	paging.Write(w, page, pagination)
+	total, err := h.queries.CountQuotaPlans(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count quota plans")
+		return
+	}
+	paging.Write(w, out, paging.Exact(total, limit, offset, len(out)))
 }
 
 // GetPlan handles GET /api/v1/admin/quota-plans/{name}/.

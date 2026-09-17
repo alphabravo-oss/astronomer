@@ -4898,6 +4898,7 @@ export interface OpenAPIComponents {
         };
     SCIMTokenList: {
           "tokens": OpenAPIComponents['schemas']['SCIMToken'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
         };
     SCIMTokenListEnvelope: {
           "data": OpenAPIComponents['schemas']['SCIMTokenList'];
@@ -13485,7 +13486,12 @@ export interface OpenAPIOperations {
   "getAdminScimTokens": {
     method: "GET";
     path: "/api/v1/admin/scim-tokens/";
-    arguments: Record<string, never>;
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
     response: OpenAPIComponents['schemas']['SCIMTokenListEnvelope'];
   };
   "deleteAdminScimTokensById": {
@@ -14206,10 +14212,16 @@ export interface OpenAPIOperations {
   "adminVaultConnectionsList": {
     method: "GET";
     path: "/api/v1/admin/vault-connections";
-    arguments: Record<string, never>;
+    arguments: {
+        "query"?: {
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
     response: OpenAPIComponents['schemas']['DataEnvelope'] & {
         "data"?: {
-          "items"?: OpenAPIComponents['schemas']['VaultConnection'][];
+          "items": OpenAPIComponents['schemas']['VaultConnection'][];
+          "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
         };
       };
   };
