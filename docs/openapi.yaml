@@ -5686,6 +5686,35 @@ components:
           type: string
         taint:
           $ref: '#/components/schemas/NodeTaintRequest'
+    ClusterEstateSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - clusters_total
+        - clusters_active
+        - clusters_warning
+        - clusters_disconnected
+        - nodes_total
+        - pods_total
+        - as_of
+      properties:
+        clusters_total: {type: integer, format: int64, minimum: 0}
+        clusters_active: {type: integer, format: int64, minimum: 0}
+        clusters_warning:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Visible clusters in the error state that need operator attention.
+        clusters_disconnected: {type: integer, format: int64, minimum: 0}
+        nodes_total: {type: integer, format: int64, minimum: 0}
+        pods_total: {type: integer, format: int64, minimum: 0}
+        as_of: {type: string, format: date-time}
+    ClusterEstateSummaryEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/ClusterEstateSummary'}
     PaginatedClusters:
       type: object
       additionalProperties: false
@@ -20108,6 +20137,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/clusters/summary/:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-route-class: public-api
+      operationId: getClustersSummary
+      tags:
+        - Clusters
+      summary: Summarize the visible cluster estate
+      description: |
+        Returns authoritative aggregate counts and capacity across every
+        non-tombstoned cluster visible to the caller. Authorization scope is
+        applied in SQL; these values are never inferred from a list page.
+      responses:
+        '200':
+          description: Authorization-scoped cluster estate summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClusterEstateSummaryEnvelope'
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/clusters/{id}/:
     parameters:
       - name: id

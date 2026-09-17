@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useNavigate } from "@tanstack/react-router";
 import { registrationSearch } from "@/components/clusters/registration-flow";
 import { useClusters, useDeleteCluster } from "@/lib/hooks/clusters";
@@ -24,12 +25,21 @@ import {
 } from "@/lib/utils";
 import type { Cluster } from "@/types";
 import { Plus, SearchX, Server, Terminal, Pencil, Trash2 } from "lucide-react";
+import { pageRowCount } from "@/lib/api/pagination";
+
+const CLUSTERS_PAGE_SIZE = 50;
 
 function ClustersPage() {
   const navigate = useNavigate();
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const routeSearch = Route.useSearch();
+  const [statusFilter, setStatusFilter] = useState<string>(
+    typeof routeSearch.status === "string" ? routeSearch.status : "",
+  );
   const [providerFilter, setProviderFilter] = useState<string>("");
   const [envFilter, setEnvFilter] = useState<string>("");
+  const [pageIndex, setPageIndex] = useState(0);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
 
   // Action menu state
   const [editCluster, setEditCluster] = useState<Cluster | null>(null);
@@ -41,7 +51,9 @@ function ClustersPage() {
     status: statusFilter || undefined,
     provider: providerFilter || undefined,
     environment: envFilter || undefined,
-    pageSize: 100,
+    search: debouncedSearch.trim() || undefined,
+    page: pageIndex + 1,
+    pageSize: CLUSTERS_PAGE_SIZE,
   });
 
   // Live updates: shape-changing events trigger a list refetch; per-row
@@ -62,7 +74,9 @@ function ClustersPage() {
   );
 
   const clusters = clustersQuery.data?.data || [];
-  const hasServerFilters = Boolean(statusFilter || providerFilter || envFilter);
+  const hasServerFilters = Boolean(
+    statusFilter || providerFilter || envFilter || search,
+  );
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -242,6 +256,13 @@ function ClustersPage() {
       align: "center",
     },
   ];
+  // The API owns the stable estate-wide order (created_at DESC, id DESC).
+  // Page-local sorting would present a misleading partial order, so columns
+  // remain unsortable until a sort parameter is supported end to end.
+  const serverColumns = columns.map((column) => ({
+    ...column,
+    sortable: false,
+  }));
 
   return (
     <PageShell>
@@ -290,6 +311,8 @@ function ClustersPage() {
                     setStatusFilter("");
                     setProviderFilter("");
                     setEnvFilter("");
+                    setSearch("");
+                    setPageIndex(0);
                   }
                 : () => void navigate({ to: "/dashboard/clusters/register" })
             }
@@ -299,18 +322,33 @@ function ClustersPage() {
         {/* Filters */}
         <DataTable
           data={clusters}
-          columns={columns}
+          columns={serverColumns}
           keyExtractor={(row) => row.id}
           persistKey="clusters"
           onRowClick={(row) =>
             void navigate({ to: `/dashboard/clusters/${row.id}` })
           }
           searchPlaceholder="Search clusters..."
+          pageSize={CLUSTERS_PAGE_SIZE}
           filtersActive={hasServerFilters}
           onClearFilters={() => {
             setStatusFilter("");
             setProviderFilter("");
             setEnvFilter("");
+            setSearch("");
+            setPageIndex(0);
+          }}
+          serverSide={{
+            rowCount: pageRowCount(clustersQuery.data),
+            pagination: { pageIndex, pageSize: CLUSTERS_PAGE_SIZE },
+            onPaginationChange: (next) => setPageIndex(next.pageIndex),
+            search: {
+              value: search,
+              onChange: (value) => {
+                setSearch(value);
+                setPageIndex(0);
+              },
+            },
           }}
           emptyState={{
             title: "No clusters registered",
@@ -326,7 +364,10 @@ function ClustersPage() {
               <Select
                 aria-label="Filter clusters by status"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPageIndex(0);
+                }}
                 containerClassName="w-auto"
               >
                 <option value="">All Statuses</option>
@@ -340,7 +381,10 @@ function ClustersPage() {
               <Select
                 aria-label="Filter clusters by provider"
                 value={providerFilter}
-                onChange={(e) => setProviderFilter(e.target.value)}
+                onChange={(e) => {
+                  setProviderFilter(e.target.value);
+                  setPageIndex(0);
+                }}
                 containerClassName="w-auto"
               >
                 <option value="">All Providers</option>
@@ -354,7 +398,10 @@ function ClustersPage() {
               <Select
                 aria-label="Filter clusters by environment"
                 value={envFilter}
-                onChange={(e) => setEnvFilter(e.target.value)}
+                onChange={(e) => {
+                  setEnvFilter(e.target.value);
+                  setPageIndex(0);
+                }}
                 containerClassName="w-auto"
               >
                 <option value="">All Environments</option>
@@ -418,6 +465,6 @@ function ClustersPage() {
 export const Route = createFileRoute("/dashboard/clusters/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
   validateSearch: (search: Record<string, unknown>) =>
-    search as { register?: string } & Record<string, unknown>,
+    search as { register?: string; status?: string } & Record<string, unknown>,
   component: ClustersPage,
 });

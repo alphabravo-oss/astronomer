@@ -1,7 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ComponentPropsWithoutRef } from "react";
 
-import { useClusters } from "@/lib/hooks/clusters";
+import {
+  useClusterEstateSummary,
+  useClusters,
+} from "@/lib/hooks/clusters";
 import { useActivityFeed } from "@/lib/hooks/audit";
 import { queryKeys } from "@/lib/query-keys";
 import { useAlertEvents } from "@/lib/hooks/alerting";
@@ -35,8 +38,9 @@ import { EstateClustersTable } from "@/components/clusters/estate-clusters-table
 function DashboardPage() {
   const navigate = useNavigate();
   const clustersQuery = useClusters({
-    pageSize: 100,
+    pageSize: 10,
   });
+  const clusterSummaryQuery = useClusterEstateSummary();
   const { data: activityData, isLoading: activityLoading } =
     useActivityFeed(10);
   const { data: alertEventsData } = useAlertEvents({ status: "firing" });
@@ -60,17 +64,16 @@ function DashboardPage() {
   );
 
   const clusters = clustersQuery.data?.data || [];
+  const clusterSummary = clusterSummaryQuery.data;
   const activity = activityData || [];
   const alertEvents = alertEventsData ?? [];
   const tools = toolsData || [];
 
-  const activeClusters = clusters.filter((c) => c.status === "active").length;
-  const warningClusters = clusters.filter((c) => c.status === "warning").length;
-  const errorClusters = clusters.filter(
-    (c) => c.status === "error" || c.status === "disconnected",
-  ).length;
-  const totalNodes = clusters.reduce((acc, c) => acc + c.nodeCount, 0);
-  const totalPods = clusters.reduce((acc, c) => acc + c.podCount, 0);
+  const activeClusters = clusterSummary?.clustersActive ?? 0;
+  const warningClusters = clusterSummary?.clustersWarning ?? 0;
+  const disconnectedClusters = clusterSummary?.clustersDisconnected ?? 0;
+  const totalNodes = clusterSummary?.nodesTotal ?? 0;
+  const totalPods = clusterSummary?.podsTotal ?? 0;
   const criticalAlerts = alertEvents.filter(
     (e) => e.severity === "critical",
   ).length;
@@ -91,7 +94,7 @@ function DashboardPage() {
         <MetricTile
           destination="clusters"
           label="Clusters"
-          value={clusters.length}
+          value={clusterSummary?.clustersTotal ?? "—"}
           sublabel={`${activeClusters} active`}
           icon={<Server className="h-4 w-4" />}
           tone="default"
@@ -107,10 +110,10 @@ function DashboardPage() {
         <MetricTile
           destination="clusters-disconnected"
           label="Disconnected"
-          value={errorClusters}
+          value={disconnectedClusters}
           sublabel="agent offline"
           icon={<WifiOff className="h-4 w-4" />}
-          tone={errorClusters > 0 ? "error" : "default"}
+          tone={disconnectedClusters > 0 ? "error" : "default"}
         />
         <MetricTile
           destination="alerting"
@@ -135,7 +138,7 @@ function DashboardPage() {
         <MetricTile
           destination="clusters"
           label="Pods"
-          value={totalPods.toLocaleString()}
+          value={clusterSummary ? totalPods.toLocaleString() : "—"}
           sublabel={`across ${totalNodes} nodes`}
           icon={<Boxes className="h-4 w-4" />}
           tone="default"
@@ -203,7 +206,7 @@ function DashboardPage() {
             clusters={clusters}
             loading={clustersQuery.isLoading}
             isError={clustersQuery.isError}
-          error={clustersQuery.error}
+            error={clustersQuery.error}
             onRetry={() => void clustersQuery.refetch()}
             onRowClick={(cluster) =>
               void navigate({ to: `/dashboard/clusters/${cluster.id}` })
@@ -302,9 +305,11 @@ function DashboardPage() {
               destination="clusters-disconnected"
               icon={<WifiOff className="h-4 w-4" />}
               label="Agent offline"
-              value={errorClusters}
-              tone={errorClusters > 0 ? "error" : "success"}
-              hint={errorClusters > 0 ? "reconnect needed" : "all reachable"}
+              value={disconnectedClusters}
+              tone={disconnectedClusters > 0 ? "error" : "success"}
+              hint={
+                disconnectedClusters > 0 ? "reconnect needed" : "all reachable"
+              }
             />
             <HealthRow
               destination="tools"
@@ -387,7 +392,7 @@ function DashboardLink({
       return (
         <RouterLink
           to="/dashboard/clusters"
-          search={{ status: "warning" }}
+          search={{ status: "error" }}
           {...props}
         />
       );

@@ -4562,6 +4562,24 @@ type ClusterDeploymentPage struct {
 	Pagination PaginationMetadata  `json:"pagination"`
 }
 
+// ClusterEstateSummary defines model for ClusterEstateSummary.
+type ClusterEstateSummary struct {
+	AsOf                 time.Time `json:"as_of"`
+	ClustersActive       int64     `json:"clusters_active"`
+	ClustersDisconnected int64     `json:"clusters_disconnected"`
+	ClustersTotal        int64     `json:"clusters_total"`
+
+	// ClustersWarning Visible clusters in the error state that need operator attention.
+	ClustersWarning int64 `json:"clusters_warning"`
+	NodesTotal      int64 `json:"nodes_total"`
+	PodsTotal       int64 `json:"pods_total"`
+}
+
+// ClusterEstateSummaryEnvelope defines model for ClusterEstateSummaryEnvelope.
+type ClusterEstateSummaryEnvelope struct {
+	Data ClusterEstateSummary `json:"data"`
+}
+
 // ClusterEvent defines model for ClusterEvent.
 type ClusterEvent struct {
 	Count          *int       `json:"count,omitempty"`
@@ -20559,6 +20577,9 @@ type ClientInterface interface {
 
 	PostClusters(ctx context.Context, body PostClustersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetClustersSummary request
+	GetClustersSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetClustersByClusterIdApiserverAllowlist request
 	GetClustersByClusterIdApiserverAllowlist(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -27361,6 +27382,18 @@ func (c *Client) PostClustersWithBody(ctx context.Context, contentType string, b
 
 func (c *Client) PostClusters(ctx context.Context, body PostClustersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostClustersRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersSummaryRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -49750,6 +49783,33 @@ func NewPostClustersRequestWithBody(server string, contentType string, body io.R
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetClustersSummaryRequest generates requests for GetClustersSummary
+func NewGetClustersSummaryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/summary/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -75634,6 +75694,9 @@ type ClientWithResponsesInterface interface {
 
 	PostClustersWithResponse(ctx context.Context, body PostClustersJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersResponse, error)
 
+	// GetClustersSummaryWithResponse request
+	GetClustersSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClustersSummaryResponse, error)
+
 	// GetClustersByClusterIdApiserverAllowlistWithResponse request
 	GetClustersByClusterIdApiserverAllowlistWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdApiserverAllowlistResponse, error)
 
@@ -86006,6 +86069,31 @@ func (r PostClustersResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostClustersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ClusterEstateSummaryEnvelope
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersSummaryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -102331,6 +102419,15 @@ func (c *ClientWithResponses) PostClustersWithResponse(ctx context.Context, body
 		return nil, err
 	}
 	return ParsePostClustersResponse(rsp)
+}
+
+// GetClustersSummaryWithResponse request returning *GetClustersSummaryResponse
+func (c *ClientWithResponses) GetClustersSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClustersSummaryResponse, error) {
+	rsp, err := c.GetClustersSummary(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersSummaryResponse(rsp)
 }
 
 // GetClustersByClusterIdApiserverAllowlistWithResponse request returning *GetClustersByClusterIdApiserverAllowlistResponse
@@ -124155,6 +124252,53 @@ func ParsePostClustersResponse(rsp *http.Response) (*PostClustersResponse, error
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersSummaryResponse parses an HTTP response from a GetClustersSummaryWithResponse call
+func ParseGetClustersSummaryResponse(rsp *http.Response) (*GetClustersSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClusterEstateSummaryEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

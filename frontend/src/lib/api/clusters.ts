@@ -2,6 +2,7 @@ import {
   deleteClustersById as deleteClusterOperation,
   getClusters as listClustersOperation,
   getClustersById as getClusterOperation,
+  getClustersSummary as getClusterEstateSummaryOperation,
   patchClustersById as updateClusterOperation,
   postClusters as createClusterOperation,
 } from "@/lib/api/generated/client";
@@ -10,8 +11,20 @@ import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { Cluster, ClusterRegistration, PaginatedResponse } from "@/types";
 
 type ClusterWire = OpenAPIComponents["schemas"]["Cluster"];
+type ClusterEstateSummaryWire =
+  OpenAPIComponents["schemas"]["ClusterEstateSummary"];
 export type UpdateClusterInput =
   OpenAPIComponents["schemas"]["UpdateClusterRequest"];
+
+export interface ClusterEstateSummary {
+  clustersTotal: number;
+  clustersActive: number;
+  clustersWarning: number;
+  clustersDisconnected: number;
+  nodesTotal: number;
+  podsTotal: number;
+  asOf: string;
+}
 
 function requireData<T>(value: { data?: T } | undefined, operation: string): T {
   if (!value?.data) throw new Error(`${operation} returned no data payload`);
@@ -117,9 +130,33 @@ export async function getClusters(
   return mapPage(response, mapCluster);
 }
 
-export async function getCluster(id: string): Promise<Cluster> {
+export async function getClusterEstateSummary(
+  signal?: AbortSignal,
+): Promise<ClusterEstateSummary> {
+  const wire: ClusterEstateSummaryWire = requireData(
+    await getClusterEstateSummaryOperation({ signal }),
+    "getClusterEstateSummary",
+  );
+  return {
+    clustersTotal: wire.clusters_total,
+    clustersActive: wire.clusters_active,
+    clustersWarning: wire.clusters_warning,
+    clustersDisconnected: wire.clusters_disconnected,
+    nodesTotal: wire.nodes_total,
+    podsTotal: wire.pods_total,
+    asOf: wire.as_of,
+  };
+}
+
+export async function getCluster(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Cluster> {
   return mapCluster(
-    requireData(await getClusterOperation({ path: { id } }), "getCluster"),
+    requireData(
+      await getClusterOperation({ path: { id }, signal }),
+      "getCluster",
+    ),
   );
 }
 

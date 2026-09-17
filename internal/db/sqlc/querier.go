@@ -852,6 +852,16 @@ type Querier interface {
 	GetClusterDeployment(ctx context.Context, arg GetClusterDeploymentParams) (ClusterDeployment, error)
 	GetClusterDeploymentForAction(ctx context.Context, arg GetClusterDeploymentForActionParams) (ClusterDeployment, error)
 	GetClusterDeploymentForDeliveryStatus(ctx context.Context, arg GetClusterDeploymentForDeliveryStatusParams) (ClusterDeployment, error)
+	// Authoritative overview totals for every active (non-tombstoned) cluster.
+	// The latest persisted health row owns pod/node observations when present;
+	// clusters.node_count is the compatibility fallback for agents that have not
+	// published a health sample yet. Keep the status buckets aligned with the
+	// public Cluster enum: "error" is attention/warning, while "disconnected" is
+	// reported separately.
+	GetClusterEstateSummary(ctx context.Context) (GetClusterEstateSummaryRow, error)
+	// Predicate-identical scoped variant. A collection-scoped caller must never
+	// learn counts or capacity outside the exact cluster allow-set.
+	GetClusterEstateSummaryForScopes(ctx context.Context, clusterIds []uuid.UUID) (GetClusterEstateSummaryForScopesRow, error)
 	GetClusterGroupByID(ctx context.Context, id uuid.UUID) (ClusterGroup, error)
 	GetClusterHealthStatus(ctx context.Context, clusterID uuid.UUID) (ClusterHealthStatus, error)
 	GetClusterHealthTarget(ctx context.Context, clusterID uuid.UUID) (GetClusterHealthTargetRow, error)

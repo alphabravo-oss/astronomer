@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { list, get, create, update, remove } = vi.hoisted(() => ({
+const { list, get, summary, create, update, remove } = vi.hoisted(() => ({
   list: vi.fn(),
   get: vi.fn(),
+  summary: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
@@ -10,6 +11,7 @@ const { list, get, create, update, remove } = vi.hoisted(() => ({
 vi.mock("@/lib/api/generated/client", () => ({
   getClusters: list,
   getClustersById: get,
+  getClustersSummary: summary,
   postClusters: create,
   patchClustersById: update,
   deleteClustersById: remove,
@@ -17,6 +19,8 @@ vi.mock("@/lib/api/generated/client", () => ({
 
 import {
   createCluster,
+  getCluster,
+  getClusterEstateSummary,
   getClusters,
   mapCluster,
   updateCluster,
@@ -87,6 +91,18 @@ describe("cluster API mapper", () => {
     });
     create.mockResolvedValue({ data: wire });
     update.mockResolvedValue({ data: wire });
+    get.mockResolvedValue({ data: wire });
+    summary.mockResolvedValue({
+      data: {
+        clusters_total: 2001,
+        clusters_active: 1995,
+        clusters_warning: 2,
+        clusters_disconnected: 4,
+        nodes_total: 6003,
+        pods_total: 48024,
+        as_of: "2026-09-17T12:00:00Z",
+      },
+    });
   });
 
   it("maps the exact snake_case DTO and does not invent metrics capacity fields", () => {
@@ -123,6 +139,26 @@ describe("cluster API mapper", () => {
         has_more: false,
         next_offset: null,
       },
+    });
+  });
+
+  it("maps the authoritative estate summary and propagates cancellation", async () => {
+    const controller = new AbortController();
+    const result = await getClusterEstateSummary(controller.signal);
+    await getCluster("cluster-1", controller.signal);
+
+    expect(result).toMatchObject({
+      clustersTotal: 2001,
+      clustersActive: 1995,
+      clustersWarning: 2,
+      clustersDisconnected: 4,
+      nodesTotal: 6003,
+      podsTotal: 48024,
+    });
+    expect(summary).toHaveBeenCalledWith({ signal: controller.signal });
+    expect(get).toHaveBeenCalledWith({
+      path: { id: "cluster-1" },
+      signal: controller.signal,
     });
   });
 

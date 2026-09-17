@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
@@ -50,6 +51,15 @@ type clusterCursorQuerier interface {
 type clusterLivenessQuerier interface {
 	GetClusterLiveness(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterLiveness, error)
 	ListClusterLivenessForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.ClusterLiveness, error)
+}
+
+// clusterEstateSummaryQuerier is optional so focused handler fakes need only
+// implement it when exercising the overview endpoint. Production's generated
+// sqlc store always provides both methods. The handler fails closed if that
+// capability is absent; it never approximates an estate total from a page.
+type clusterEstateSummaryQuerier interface {
+	GetClusterEstateSummary(ctx context.Context) (sqlc.GetClusterEstateSummaryRow, error)
+	GetClusterEstateSummaryForScopes(ctx context.Context, clusterIds []uuid.UUID) (sqlc.GetClusterEstateSummaryForScopesRow, error)
 }
 
 // --- Request / Response types ---
@@ -129,6 +139,63 @@ func (r *UpdateClusterRequest) UnmarshalJSON(data []byte) error {
 }
 
 // --- Endpoints ---
+
+// ClusterEstateSummaryResponse is the authorization-scoped source of truth for
+// the platform overview. Counts and capacity describe the entire visible
+// estate, never merely the current inventory page.
+type ClusterEstateSummaryResponse struct {
+	ClustersTotal        int64     `json:"clusters_total"`
+	ClustersActive       int64     `json:"clusters_active"`
+	ClustersWarning      int64     `json:"clusters_warning"`
+	ClustersDisconnected int64     `json:"clusters_disconnected"`
+	NodesTotal           int64     `json:"nodes_total"`
+	PodsTotal            int64     `json:"pods_total"`
+	AsOf                 time.Time `json:"as_of"`
+}
+
+// Summary handles GET /api/v1/clusters/summary/.
+func (h *ClusterHandler) Summary(w http.ResponseWriter, r *http.Request) {
+	all, clusterIDs, _, err := h.authz.authorizedScopeIDs(r.Context(), rbac.ResourceClusters, rbac.VerbList, rbac.NarrowedClustersWiden)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+
+	store, ok := h.queries.(clusterEstateSummaryQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cluster summary store is not available")
+		return
+	}
+
+	response := ClusterEstateSummaryResponse{AsOf: time.Now().UTC()}
+	if all {
+		row, queryErr := store.GetClusterEstateSummary(r.Context())
+		if queryErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to summarize clusters")
+			return
+		}
+		response.ClustersTotal = row.ClustersTotal
+		response.ClustersActive = row.ClustersActive
+		response.ClustersWarning = row.ClustersWarning
+		response.ClustersDisconnected = row.ClustersDisconnected
+		response.NodesTotal = row.NodesTotal
+		response.PodsTotal = row.PodsTotal
+	} else {
+		row, queryErr := store.GetClusterEstateSummaryForScopes(r.Context(), clusterIDs)
+		if queryErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to summarize clusters")
+			return
+		}
+		response.ClustersTotal = row.ClustersTotal
+		response.ClustersActive = row.ClustersActive
+		response.ClustersWarning = row.ClustersWarning
+		response.ClustersDisconnected = row.ClustersDisconnected
+		response.NodesTotal = row.NodesTotal
+		response.PodsTotal = row.PodsTotal
+	}
+
+	RespondJSON(w, http.StatusOK, response)
+}
 
 // List handles GET /api/v1/clusters/.
 func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {

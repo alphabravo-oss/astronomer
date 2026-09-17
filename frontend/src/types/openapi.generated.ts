@@ -1440,6 +1440,18 @@ export interface OpenAPIComponents {
           "data": OpenAPIComponents['schemas']['ClusterDeployment'][];
           "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
         };
+    ClusterEstateSummary: {
+          "clusters_total": number;
+          "clusters_active": number;
+          "clusters_warning": number;
+          "clusters_disconnected": number;
+          "nodes_total": number;
+          "pods_total": number;
+          "as_of": string;
+        };
+    ClusterEstateSummaryEnvelope: {
+          "data": OpenAPIComponents['schemas']['ClusterEstateSummary'];
+        };
     ClusterEvent: {
           "id"?: string;
           "type"?: string;
@@ -10063,6 +10075,12 @@ export interface OpenAPIOperations {
         "data"?: OpenAPIComponents['schemas']['Cluster'];
       };
   };
+  "getClustersSummary": {
+    method: "GET";
+    path: "/api/v1/clusters/summary/";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['ClusterEstateSummaryEnvelope'];
+  };
   "getClustersById": {
     method: "GET";
     path: "/api/v1/clusters/{id}/";
@@ -15808,6 +15826,8 @@ export type ClusterDeploymentDetailEnvelope = OpenAPIComponents['schemas']['Clus
 export type ClusterDeploymentEvent = OpenAPIComponents['schemas']['ClusterDeploymentEvent'];
 export type ClusterDeploymentEventPage = OpenAPIComponents['schemas']['ClusterDeploymentEventPage'];
 export type ClusterDeploymentPage = OpenAPIComponents['schemas']['ClusterDeploymentPage'];
+export type ClusterEstateSummary = OpenAPIComponents['schemas']['ClusterEstateSummary'];
+export type ClusterEstateSummaryEnvelope = OpenAPIComponents['schemas']['ClusterEstateSummaryEnvelope'];
 export type ClusterEvent = OpenAPIComponents['schemas']['ClusterEvent'];
 export type ClusterGroupResponse = OpenAPIComponents['schemas']['ClusterGroupResponse'];
 export type ClusterMonitoringConfig = OpenAPIComponents['schemas']['ClusterMonitoringConfig'];

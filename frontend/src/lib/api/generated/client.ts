@@ -370,6 +370,7 @@ export const operationMetadata = {
   "getClustersByIdShellSessions": { method: "GET", path: "/api/v1/clusters/{id}/shell/sessions/", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdVulnerabilitiesImages": { method: "GET", path: "/api/v1/clusters/{id}/vulnerabilities/images/", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdVulnerabilitiesSummary": { method: "GET", path: "/api/v1/clusters/{id}/vulnerabilities/summary/", pathParameters: ["id"], responseType: "json" },
+  "getClustersSummary": { method: "GET", path: "/api/v1/clusters/summary/", pathParameters: [], responseType: "json" },
   "getClusterTemplates": { method: "GET", path: "/api/v1/cluster-templates", pathParameters: [], responseType: "json" },
   "getClusterTemplatesById": { method: "GET", path: "/api/v1/cluster-templates/{id}", pathParameters: ["id"], responseType: "json" },
   "getClusterTemplatesByIdClusters": { method: "GET", path: "/api/v1/cluster-templates/{id}/clusters", pathParameters: ["id"], responseType: "json" },
@@ -2548,6 +2549,11 @@ export function getClustersByIdVulnerabilitiesImages(args: OpenAPIArguments<"get
 export function getClustersByIdVulnerabilitiesSummary(args: OpenAPIArguments<"getClustersByIdVulnerabilitiesSummary">) {
   const operationId = "getClustersByIdVulnerabilitiesSummary" as const;
   return executeOpenAPIOperation(operationId, args);
+}
+
+export function getClustersSummary(args?: OpenAPIArguments<"getClustersSummary">) {
+  const operationId = "getClustersSummary" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
 export function getClusterTemplates(args?: OpenAPIArguments<"getClusterTemplates">) {

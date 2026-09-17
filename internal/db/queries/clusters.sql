@@ -303,6 +303,39 @@ ORDER BY decommissioned_at ASC;
 -- name: CountClusters :one
 SELECT count(*) FROM clusters WHERE decommissioned_at IS NULL;
 
+-- name: GetClusterEstateSummary :one
+-- Authoritative overview totals for every active (non-tombstoned) cluster.
+-- The latest persisted health row owns pod/node observations when present;
+-- clusters.node_count is the compatibility fallback for agents that have not
+-- published a health sample yet. Keep the status buckets aligned with the
+-- public Cluster enum: "error" is attention/warning, while "disconnected" is
+-- reported separately.
+SELECT
+  count(*)::bigint AS clusters_total,
+  count(*) FILTER (WHERE c.status = 'active')::bigint AS clusters_active,
+  count(*) FILTER (WHERE c.status = 'error')::bigint AS clusters_warning,
+  count(*) FILTER (WHERE c.status = 'disconnected')::bigint AS clusters_disconnected,
+  COALESCE(sum(COALESCE(h.node_count, c.node_count)), 0)::bigint AS nodes_total,
+  COALESCE(sum(COALESCE(h.pod_count, 0)), 0)::bigint AS pods_total
+FROM clusters c
+LEFT JOIN cluster_health_statuses h ON h.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL;
+
+-- name: GetClusterEstateSummaryForScopes :one
+-- Predicate-identical scoped variant. A collection-scoped caller must never
+-- learn counts or capacity outside the exact cluster allow-set.
+SELECT
+  count(*)::bigint AS clusters_total,
+  count(*) FILTER (WHERE c.status = 'active')::bigint AS clusters_active,
+  count(*) FILTER (WHERE c.status = 'error')::bigint AS clusters_warning,
+  count(*) FILTER (WHERE c.status = 'disconnected')::bigint AS clusters_disconnected,
+  COALESCE(sum(COALESCE(h.node_count, c.node_count)), 0)::bigint AS nodes_total,
+  COALESCE(sum(COALESCE(h.pod_count, 0)), 0)::bigint AS pods_total
+FROM clusters c
+LEFT JOIN cluster_health_statuses h ON h.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+  AND c.id = ANY(sqlc.arg(cluster_ids)::uuid[]);
+
 -- name: GetClusterHealthStatus :one
 SELECT * FROM cluster_health_statuses WHERE cluster_id = $1;
 

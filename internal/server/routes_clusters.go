@@ -30,6 +30,7 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 			// Collection gate: cluster-scoped callers are admitted and the
 			// handler filters the page to their clusters. See
 			// RequireCollectionPermission.
+			r.With(requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbList)).Get("/summary/", deps.ClusterResources.Clusters.Summary)
 			r.With(requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbList)).Get("/", deps.ClusterResources.Clusters.List)
 			r.With(writeClusters, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbCreate)).Post("/", deps.ClusterResources.Clusters.Create)
 			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceClusters, rbac.VerbRead)).Get("/{id}/", deps.ClusterResources.Clusters.Get)

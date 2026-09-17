@@ -52,6 +52,7 @@ export const queryKeys = {
   featureFlags: ["settings", "features"] as const,
   clusters: {
     all: ["clusters"] as const,
+    summary: ["clusters", "summary"] as const,
     search: (search: string) => ["clusters", "search", search] as const,
     list: (params?: Record<string, unknown>) =>
       ["clusters", "list", params] as const,

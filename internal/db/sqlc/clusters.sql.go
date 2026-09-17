@@ -768,6 +768,87 @@ func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, e
 	return i, err
 }
 
+const getClusterEstateSummary = `-- name: GetClusterEstateSummary :one
+SELECT
+  count(*)::bigint AS clusters_total,
+  count(*) FILTER (WHERE c.status = 'active')::bigint AS clusters_active,
+  count(*) FILTER (WHERE c.status = 'error')::bigint AS clusters_warning,
+  count(*) FILTER (WHERE c.status = 'disconnected')::bigint AS clusters_disconnected,
+  COALESCE(sum(COALESCE(h.node_count, c.node_count)), 0)::bigint AS nodes_total,
+  COALESCE(sum(COALESCE(h.pod_count, 0)), 0)::bigint AS pods_total
+FROM clusters c
+LEFT JOIN cluster_health_statuses h ON h.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+`
+
+type GetClusterEstateSummaryRow struct {
+	ClustersTotal        int64 `json:"clusters_total"`
+	ClustersActive       int64 `json:"clusters_active"`
+	ClustersWarning      int64 `json:"clusters_warning"`
+	ClustersDisconnected int64 `json:"clusters_disconnected"`
+	NodesTotal           int64 `json:"nodes_total"`
+	PodsTotal            int64 `json:"pods_total"`
+}
+
+// Authoritative overview totals for every active (non-tombstoned) cluster.
+// The latest persisted health row owns pod/node observations when present;
+// clusters.node_count is the compatibility fallback for agents that have not
+// published a health sample yet. Keep the status buckets aligned with the
+// public Cluster enum: "error" is attention/warning, while "disconnected" is
+// reported separately.
+func (q *Queries) GetClusterEstateSummary(ctx context.Context) (GetClusterEstateSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getClusterEstateSummary)
+	var i GetClusterEstateSummaryRow
+	err := row.Scan(
+		&i.ClustersTotal,
+		&i.ClustersActive,
+		&i.ClustersWarning,
+		&i.ClustersDisconnected,
+		&i.NodesTotal,
+		&i.PodsTotal,
+	)
+	return i, err
+}
+
+const getClusterEstateSummaryForScopes = `-- name: GetClusterEstateSummaryForScopes :one
+SELECT
+  count(*)::bigint AS clusters_total,
+  count(*) FILTER (WHERE c.status = 'active')::bigint AS clusters_active,
+  count(*) FILTER (WHERE c.status = 'error')::bigint AS clusters_warning,
+  count(*) FILTER (WHERE c.status = 'disconnected')::bigint AS clusters_disconnected,
+  COALESCE(sum(COALESCE(h.node_count, c.node_count)), 0)::bigint AS nodes_total,
+  COALESCE(sum(COALESCE(h.pod_count, 0)), 0)::bigint AS pods_total
+FROM clusters c
+LEFT JOIN cluster_health_statuses h ON h.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+  AND c.id = ANY($1::uuid[])
+`
+
+type GetClusterEstateSummaryForScopesRow struct {
+	ClustersTotal        int64 `json:"clusters_total"`
+	ClustersActive       int64 `json:"clusters_active"`
+	ClustersWarning      int64 `json:"clusters_warning"`
+	ClustersDisconnected int64 `json:"clusters_disconnected"`
+	NodesTotal           int64 `json:"nodes_total"`
+	PodsTotal            int64 `json:"pods_total"`
+}
+
+// Predicate-identical scoped variant. A collection-scoped caller must never
+// learn counts or capacity outside the exact cluster allow-set.
+func (q *Queries) GetClusterEstateSummaryForScopes(ctx context.Context, clusterIds []uuid.UUID) (GetClusterEstateSummaryForScopesRow, error) {
+	row := q.db.QueryRow(ctx, getClusterEstateSummaryForScopes, clusterIds)
+	var i GetClusterEstateSummaryForScopesRow
+	err := row.Scan(
+		&i.ClustersTotal,
+		&i.ClustersActive,
+		&i.ClustersWarning,
+		&i.ClustersDisconnected,
+		&i.NodesTotal,
+		&i.PodsTotal,
+	)
+	return i, err
+}
+
 const getClusterHealthStatus = `-- name: GetClusterHealthStatus :one
 SELECT id, cluster_id, cpu_usage_percent, memory_usage_percent, pod_count, node_count, conditions, last_check, created_at, updated_at, last_metrics_at FROM cluster_health_statuses WHERE cluster_id = $1
 `

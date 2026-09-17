@@ -4,6 +4,7 @@ import { getFeatureFlags } from "@/lib/api/feature-flags";
 import {
   getClusters,
   getCluster,
+  getClusterEstateSummary,
   createCluster,
   updateCluster,
   deleteCluster,
@@ -73,8 +74,16 @@ export function useClusters(params?: {
 }) {
   return useQuery({
     queryKey: queryKeys.clusters.list(params),
-    queryFn: () => getClusters(params),
+    queryFn: ({ signal }) => getClusters(params, signal),
     // Poll only while the live bus is down; events drive freshness when open.
+    refetchInterval: liveFallback(30000),
+  });
+}
+
+export function useClusterEstateSummary() {
+  return useQuery({
+    queryKey: queryKeys.clusters.summary,
+    queryFn: ({ signal }) => getClusterEstateSummary(signal),
     refetchInterval: liveFallback(30000),
   });
 }
@@ -82,7 +91,7 @@ export function useClusters(params?: {
 export function useCluster(id: string) {
   return useQuery({
     queryKey: queryKeys.clusters.detail(id),
-    queryFn: () => getCluster(id),
+    queryFn: ({ signal }) => getCluster(id, signal),
     enabled: !!id,
     refetchInterval: liveFallback(15000),
   });
