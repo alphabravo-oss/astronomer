@@ -178,7 +178,11 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now().UTC(),
 		Payload:   out,
 	}); err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
+		if errors.Is(err, ErrAgentCapabilityUnsupported) {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusPreconditionFailed)
+			return
+		}
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -191,6 +195,10 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	select {
 	case respBytes = <-stream.DataCh:
 	case <-stream.DoneCh:
+		if h.hub.GetAgent(clusterID) != agent {
+			http.Error(w, `{"error":"Cluster agent connection changed"}`, http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(w, `{"error":"stream closed"}`, http.StatusBadGateway)
 		return
 	case <-waitCtx.Done():

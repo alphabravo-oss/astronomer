@@ -104,6 +104,98 @@ func TestInternalHelmHandler_NoAgentReturns503(t *testing.T) {
 	}
 }
 
+func TestInternalHelmHandler_SendFailureReturnsServiceUnavailable(t *testing.T) {
+	hub := NewHub(slog.Default())
+	agent := &AgentConnection{
+		ClusterID: "c-helm-send-full",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, 1),
+		cancel:    func() {},
+	}
+	agent.sendCh <- &protocol.Message{Type: protocol.MsgHeartbeat}
+	hub.agents.Set(agent.ClusterID, agent)
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
+
+	body, _ := json.Marshal(InternalHelmRequest{
+		MsgType: protocol.MsgHelmInstall,
+		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/"+agent.ClusterID, bytes.NewReader(body))
+	if err := SignInternalHelmRequest(req, "psk", agent.ClusterID, body); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	helmHandlerRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("send failure status = %d, want 503: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInternalHelmHandler_UnsupportedCapabilityReturnsPreconditionFailed(t *testing.T) {
+	hub := NewHub(slog.Default())
+	agent := &AgentConnection{
+		ClusterID:    "c-helm-no-capability",
+		Capabilities: map[string]struct{}{},
+		Streams:      NewStreamManager(256),
+		sendCh:       make(chan *protocol.Message, sendChannelSize),
+		cancel:       func() {},
+	}
+	hub.agents.Set(agent.ClusterID, agent)
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
+
+	body, _ := json.Marshal(InternalHelmRequest{
+		MsgType: protocol.MsgHelmInstall,
+		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/"+agent.ClusterID, bytes.NewReader(body))
+	if err := SignInternalHelmRequest(req, "psk", agent.ClusterID, body); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	helmHandlerRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusPreconditionFailed {
+		t.Fatalf("unsupported capability status = %d, want 412: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInternalHelmHandler_ReplacedAgentStreamReturnsServiceUnavailable(t *testing.T) {
+	hub := NewHub(slog.Default())
+	oldAgent := &AgentConnection{
+		ClusterID: "c-helm-replaced",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, sendChannelSize),
+		cancel:    func() {},
+	}
+	hub.agents.Set(oldAgent.ClusterID, oldAgent)
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
+
+	go func() {
+		<-oldAgent.sendCh
+		newAgent := &AgentConnection{
+			ClusterID: oldAgent.ClusterID,
+			Streams:   NewStreamManager(256),
+			sendCh:    make(chan *protocol.Message, sendChannelSize),
+			cancel:    func() {},
+		}
+		replaced := hub.agents.Set(oldAgent.ClusterID, newAgent)
+		replaced.Streams.CloseAll()
+	}()
+
+	body, _ := json.Marshal(InternalHelmRequest{
+		MsgType: protocol.MsgHelmStatus,
+		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/"+oldAgent.ClusterID, bytes.NewReader(body))
+	if err := SignInternalHelmRequest(req, "psk", oldAgent.ClusterID, body); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	helmHandlerRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("replaced stream status = %d, want 503: %s", w.Code, w.Body.String())
+	}
+}
+
 // End-to-end happy path: a fake agent is registered in the hub, the
 // handler dispatches HELM_INSTALL via SendToAgent, and a goroutine
 // simulates the agent's HELM_RESULT response.
