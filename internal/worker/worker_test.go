@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +29,67 @@ import (
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+}
+
+type immediateAsyncTaskServer struct {
+	started  chan struct{}
+	stopped  chan struct{}
+	stopOnce sync.Once
+}
+
+func newImmediateAsyncTaskServer() *immediateAsyncTaskServer {
+	return &immediateAsyncTaskServer{started: make(chan struct{}), stopped: make(chan struct{})}
+}
+
+func (s *immediateAsyncTaskServer) Start(asynq.Handler) error {
+	close(s.started)
+	return nil
+}
+
+func (s *immediateAsyncTaskServer) Shutdown() {
+	s.stopOnce.Do(func() { close(s.stopped) })
+}
+
+func TestWorkerRunOwnsAsynchronousServerUntilShutdown(t *testing.T) {
+	server := newImmediateAsyncTaskServer()
+	w := &Worker{
+		server: server,
+		mux:    asynq.NewServeMux(),
+		log:    testLogger(),
+		done:   make(chan struct{}),
+	}
+	result := make(chan error, 1)
+	go func() { result <- w.Run(context.Background()) }()
+
+	select {
+	case <-server.started:
+	case <-time.After(time.Second):
+		t.Fatal("asynchronous task server did not start")
+	}
+	select {
+	case err := <-result:
+		t.Fatalf("Run() returned before shutdown: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	w.Shutdown()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not return after shutdown")
+	}
+	select {
+	case <-server.stopped:
+	default:
+		t.Fatal("Shutdown() did not stop asynchronous task server")
+	}
+
+	// Shutdown remains safe for callers that combine explicit cleanup with a
+	// deferred fallback.
+	w.Shutdown()
 }
 
 type workerDeliveryStub struct{}

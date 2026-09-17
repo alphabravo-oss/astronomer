@@ -54,7 +54,7 @@ func newInjectedTunnelWorker(err error) *injectedTunnelWorker {
 	return &injectedTunnelWorker{started: make(chan struct{}), exit: make(chan struct{}), err: err}
 }
 
-func (w *injectedTunnelWorker) Start() error {
+func (w *injectedTunnelWorker) Run(context.Context) error {
 	close(w.started)
 	<-w.exit
 	return w.err

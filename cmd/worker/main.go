@@ -483,7 +483,7 @@ func main() {
 	// Start worker and scheduler in background goroutines.
 	errCh := make(chan error, 3)
 	go func() {
-		if err := w.Start(); err != nil {
+		if err := w.Run(ctx); err != nil {
 			errCh <- fmt.Errorf("worker: %w", err)
 		}
 	}()

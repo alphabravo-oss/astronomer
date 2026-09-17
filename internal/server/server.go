@@ -419,7 +419,7 @@ type Server struct {
 }
 
 type tunnelWorkerLifecycle interface {
-	Start() error
+	Run(context.Context) error
 	Shutdown()
 }
 
@@ -564,8 +564,8 @@ func (s *Server) Start(addr string) error {
 			_ = ln.Close()
 			return errors.New("tunnel-queue worker requires runtime supervisor")
 		}
-		if err := s.runtime.Go("tunnel-queue-worker", true, func(context.Context) error {
-			return s.tunnelWorker.Start()
+		if err := s.runtime.Go("tunnel-queue-worker", true, func(ctx context.Context) error {
+			return s.tunnelWorker.Run(ctx)
 		}); err != nil {
 			_ = ln.Close()
 			return err

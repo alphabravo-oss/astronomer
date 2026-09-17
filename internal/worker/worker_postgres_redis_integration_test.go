@@ -2616,6 +2616,7 @@ func newWorkerIntegrationConsumer(t *testing.T, redisURL string, descriptors []T
 		mux:         asynq.NewServeMux(),
 		log:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		descriptors: descriptors,
+		done:        make(chan struct{}),
 	}
 }
 
