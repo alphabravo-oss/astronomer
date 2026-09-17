@@ -30,15 +30,19 @@ func (h *RBACHandler) CreateGlobalRole(w http.ResponseWriter, r *http.Request) {
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
-	if rejectGlobalCRDGrants(w, r, defaultJSON(req.Rules)) {
+	permissions, rules, ok := roleDocuments(w, r, req)
+	if !ok {
+		return
+	}
+	if rejectGlobalCRDGrants(w, r, rules) {
 		return
 	}
 	params := sqlc.CreateGlobalRoleParams{
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
-		Permissions: defaultJSON(req.Permissions),
-		Rules:       defaultJSON(req.Rules),
+		Permissions: permissions,
+		Rules:       rules,
 	}
 	role, err := executeMutation(r, h.runTx,
 		func(q RBACMutationTx) (sqlc.GlobalRole, error) { return q.CreateGlobalRole(r.Context(), params) },
@@ -74,10 +78,14 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	if rejectGlobalCRDGrants(w, r, defaultJSON(req.Rules)) {
+	permissions, rules, ok := roleDocuments(w, r, req)
+	if !ok {
 		return
 	}
-	if !h.guardGlobalRoleRules(w, r, id, defaultJSON(req.Rules)) {
+	if rejectGlobalCRDGrants(w, r, rules) {
+		return
+	}
+	if !h.guardGlobalRoleRules(w, r, id, rules) {
 		return
 	}
 	params := sqlc.UpdateGlobalRoleParams{
@@ -85,8 +93,8 @@ func (h *RBACHandler) UpdateGlobalRole(w http.ResponseWriter, r *http.Request) {
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
-		Permissions: defaultJSON(req.Permissions),
-		Rules:       defaultJSON(req.Rules),
+		Permissions: permissions,
+		Rules:       rules,
 	}
 	role, err := executeMutation(r, h.runTx,
 		func(q RBACMutationTx) (sqlc.GlobalRole, error) { return q.UpdateGlobalRole(r.Context(), params) },
@@ -157,12 +165,16 @@ func (h *RBACHandler) CreateClusterRole(w http.ResponseWriter, r *http.Request) 
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
+	permissions, rules, ok := roleDocuments(w, r, req)
+	if !ok {
+		return
+	}
 	params := sqlc.CreateClusterRoleParams{
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
-		Permissions: defaultJSON(req.Permissions),
-		Rules:       defaultJSON(req.Rules),
+		Permissions: permissions,
+		Rules:       rules,
 	}
 	role, err := executeMutation(r, h.runTx,
 		func(q RBACMutationTx) (sqlc.ClusterRole, error) { return q.CreateClusterRole(r.Context(), params) },
@@ -203,7 +215,11 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	if !h.guardClusterRoleRules(w, r, id, defaultJSON(req.Rules)) {
+	permissions, rules, ok := roleDocuments(w, r, req)
+	if !ok {
+		return
+	}
+	if !h.guardClusterRoleRules(w, r, id, rules) {
 		return
 	}
 	params := sqlc.UpdateClusterRoleParams{
@@ -211,8 +227,8 @@ func (h *RBACHandler) UpdateClusterRole(w http.ResponseWriter, r *http.Request) 
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
-		Permissions: defaultJSON(req.Permissions),
-		Rules:       defaultJSON(req.Rules),
+		Permissions: permissions,
+		Rules:       rules,
 	}
 	role, err := executeMutation(r, h.runTx,
 		func(q RBACMutationTx) (sqlc.ClusterRole, error) { return q.UpdateClusterRole(r.Context(), params) },
@@ -275,12 +291,16 @@ func (h *RBACHandler) CreateProjectRole(w http.ResponseWriter, r *http.Request) 
 	if !decodeAndValidate(w, r, &req) {
 		return
 	}
+	permissions, rules, ok := roleDocuments(w, r, req)
+	if !ok {
+		return
+	}
 	params := sqlc.CreateProjectRoleParams{
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
-		Permissions: defaultJSON(req.Permissions),
-		Rules:       defaultJSON(req.Rules),
+		Permissions: permissions,
+		Rules:       rules,
 	}
 	role, err := executeMutation(r, h.runTx,
 		func(q RBACMutationTx) (sqlc.ProjectRole, error) { return q.CreateProjectRole(r.Context(), params) },
@@ -321,7 +341,11 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
 		return
 	}
-	if !h.guardProjectRoleRules(w, r, id, defaultJSON(req.Rules)) {
+	permissions, rules, ok := roleDocuments(w, r, req)
+	if !ok {
+		return
+	}
+	if !h.guardProjectRoleRules(w, r, id, rules) {
 		return
 	}
 	params := sqlc.UpdateProjectRoleParams{
@@ -329,8 +353,8 @@ func (h *RBACHandler) UpdateProjectRole(w http.ResponseWriter, r *http.Request) 
 		Name:        req.Name,
 		DisplayName: req.resolveDisplayName(),
 		Description: req.Description,
-		Permissions: defaultJSON(req.Permissions),
-		Rules:       defaultJSON(req.Rules),
+		Permissions: permissions,
+		Rules:       rules,
 	}
 	role, err := executeMutation(r, h.runTx,
 		func(q RBACMutationTx) (sqlc.ProjectRole, error) { return q.UpdateProjectRole(r.Context(), params) },

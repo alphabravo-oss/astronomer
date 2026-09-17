@@ -268,11 +268,28 @@ func parseUUIDURLParam(w http.ResponseWriter, r *http.Request, param, label stri
 	return id, true
 }
 
-func defaultJSON(raw json.RawMessage) json.RawMessage {
+func defaultJSONArray(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 {
 		return json.RawMessage("[]")
 	}
 	return raw
+}
+
+func roleDocuments(w http.ResponseWriter, r *http.Request, req roleRequest) (json.RawMessage, json.RawMessage, bool) {
+	permissions := defaultJSONObject(req.Permissions)
+	rules := defaultJSONArray(req.Rules)
+
+	var permissionObject map[string]json.RawMessage
+	if err := json.Unmarshal(permissions, &permissionObject); err != nil || permissionObject == nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Role permissions must be a JSON object")
+		return nil, nil, false
+	}
+	var ruleArray []json.RawMessage
+	if err := json.Unmarshal(rules, &ruleArray); err != nil || ruleArray == nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Role rules must be a JSON array")
+		return nil, nil, false
+	}
+	return permissions, rules, true
 }
 
 // rejectGroupBinding blocks the manual role-binding API from creating

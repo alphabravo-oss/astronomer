@@ -109,6 +109,40 @@ func TestCreateGlobalRoleReturnsAuditUnavailableAndRollsBack(t *testing.T) {
 	}
 }
 
+func TestRoleDocumentsEnforceDurableJSONShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		permissions string
+		rules       string
+		wantOK      bool
+	}{
+		{name: "defaults", wantOK: true},
+		{name: "explicit shapes", permissions: `{}`, rules: `[]`, wantOK: true},
+		{name: "permissions array", permissions: `[]`, rules: `[]`},
+		{name: "rules object", permissions: `{}`, rules: `{}`},
+		{name: "permissions null", permissions: `null`, rules: `[]`},
+		{name: "rules null", permissions: `{}`, rules: `null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/rbac/global-roles/", nil)
+			permissions, rules, ok := roleDocuments(recorder, request, roleRequest{
+				Permissions: []byte(tc.permissions),
+				Rules:       []byte(tc.rules),
+			})
+			if ok != tc.wantOK {
+				t.Fatalf("roleDocuments ok = %t, want %t; response=%s", ok, tc.wantOK, recorder.Body.String())
+			}
+			if tc.wantOK && (string(permissions) != "{}" || string(rules) != "[]") {
+				t.Fatalf("normalized documents = %s/%s, want {}/[]", permissions, rules)
+			}
+			if !tc.wantOK && recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", recorder.Code)
+			}
+		})
+	}
+}
+
 func TestEveryRBACPrivilegeMutationUsesTransactionalExecutor(t *testing.T) {
 	paths, err := filepath.Glob("rbac*.go")
 	if err != nil {
