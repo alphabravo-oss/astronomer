@@ -1,4 +1,4 @@
-.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
+.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all local-ci-install local-ci-pr local-ci-pr-representative check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
@@ -26,6 +26,14 @@ GOVULNCHECK_VERSION   ?= v1.8.0
 # Pinned oapi-codegen (Go SDK generator) — mirrors the sqlc pinned-tool pattern.
 OAPI_CODEGEN_VERSION ?= v2.5.0
 OAPI_CODEGEN         ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
+
+# Local CI executes the real PR workflow with the official GitHub runner. The
+# npm package and runner base image are independently pinned under tools/ and
+# .github/ so this pre-push gate never executes a floating dependency.
+LOCAL_CI_BIN          = ./tools/local-ci/node_modules/.bin/local-ci
+LOCAL_CI_JOBS        ?= 2
+LOCAL_CI_PREWARM      = .github/workflows/pr-validation.yaml:frontend:install-dependencies
+LOCAL_CI_WORKING_DIR ?= $(CURDIR)/.local-ci
 
 # Image naming — override IMG_TAG=... to push semantic versions.
 # IMG_REGISTRY carries the first-party GHCR prefix so locally-built images match
@@ -176,6 +184,24 @@ verify-all: ## Run static, stateful, race, failover, and browser qualification l
 	$(MAKE) test-postgres-failover-certification
 	cd frontend && npm run test:e2e && npm run test:e2e:smoke && npm run test:e2e:visual
 	$(MAKE) test-live-browser
+
+$(LOCAL_CI_BIN): tools/local-ci/package.json tools/local-ci/package-lock.json
+	npm ci --prefix tools/local-ci
+
+local-ci-install: $(LOCAL_CI_BIN) ## Install the lockfile-pinned Local CI runner
+
+local-ci-pr: local-ci-install ## Run the complete pull-request workflow locally before pushing
+	AI_AGENT=1 LOCAL_CI_WORKING_DIR="$(LOCAL_CI_WORKING_DIR)" $(LOCAL_CI_BIN) run \
+		--workflow .github/workflows/pr-validation.yaml \
+		--jobs $(LOCAL_CI_JOBS) \
+		--prewarm-through $(LOCAL_CI_PREWARM)
+
+local-ci-pr-representative: local-ci-install ## Run one representative entry from each PR matrix locally
+	AI_AGENT=1 LOCAL_CI_WORKING_DIR="$(LOCAL_CI_WORKING_DIR)" $(LOCAL_CI_BIN) run \
+		--workflow .github/workflows/pr-validation.yaml \
+		--no-matrix \
+		--jobs $(LOCAL_CI_JOBS) \
+		--prewarm-through $(LOCAL_CI_PREWARM)
 
 docs-check: ## Validate current documentation links, classification, and terminology
 	node scripts/check-docs.mjs

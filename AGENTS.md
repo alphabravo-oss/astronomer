@@ -43,6 +43,17 @@ cd frontend && npm run type-check && npm run lint && npm test
 make verify-enterprise VERIFY_SCOPE=backend   # or frontend / helm / all
 ```
 
+Before pushing a pull request, use the lockfile-pinned Local CI runner rather
+than treating GitHub-hosted CI as an interactive debugger:
+
+```bash
+make local-ci-pr-representative  # iteration: one entry per matrix
+make local-ci-pr                 # phase/PR boundary: complete matrix
+```
+
+These are local preflight gates, not substitutes for protected GitHub release,
+cloud, DR, scale, accessibility, or approval evidence.
+
 ## Generated artifacts
 
 - Change SQL in `internal/db/queries/*.sql`, then run `sqlc generate`; verify with `make sqlc-check`.

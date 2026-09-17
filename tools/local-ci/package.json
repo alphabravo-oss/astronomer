@@ -1,0 +1,12 @@
+{
+  "name": "astronomer-local-ci-tooling",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Lockfile-pinned tooling for running GitHub Actions locally",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "run-local-ci": "0.18.1"
+  }
+}

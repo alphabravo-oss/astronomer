@@ -32,6 +32,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install contract dependencies
+        id: install-contract-dependencies
         working-directory: frontend
         run: npm ci
 
@@ -50,36 +51,36 @@ jobs:
       - name: Run authoritative backend gate
         run: ./scripts/verify-enterprise.sh backend
         env:
-          VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-backend
+          VERIFY_ARTIFACT_DIR: /tmp/astronomer-verify-enterprise-backend
 
       - name: Upload commit-bound backend evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: enterprise-backend-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/astronomer-verify-enterprise-backend
+          path: /tmp/astronomer-verify-enterprise-backend
           if-no-files-found: error
           retention-days: 90
 
   stateful-qualifications:
-    name: stateful · ${{ matrix.name }}
+    name: stateful · ${{ matrix.qualification }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {name: postgres-integrations, command: "make test-postgres-integration"}
-          - {name: postgres-integrations-race, command: "POSTGRES_INTEGRATION_RACE=1 make test-postgres-integration"}
-          - {name: worker-runtime, command: "make test-worker-runtime-integration"}
-          - {name: worker-runtime-race, command: "WORKER_INTEGRATION_RACE=1 make test-worker-runtime-integration"}
-          - {name: process-restart, command: "make test-process-restart-qualification"}
-          - {name: process-restart-race, command: "PROCESS_RESTART_QUALIFICATION_RACE=1 make test-process-restart-qualification"}
-          - {name: redis-outage, command: "make test-redis-outage-recovery"}
-          - {name: redis-outage-race, command: "REDIS_OUTAGE_RECOVERY_RACE=1 make test-redis-outage-recovery"}
-          - {name: postgres-outage, command: "make test-postgres-outage-qualification"}
-          - {name: postgres-outage-race, command: "POSTGRES_OUTAGE_QUALIFICATION_RACE=1 make test-postgres-outage-qualification"}
-          - {name: tunnel-owner-ha, command: "./scripts/test-tunnel-queue-ha.sh"}
+        qualification:
+          - postgres-integrations
+          - postgres-integrations-race
+          - worker-runtime
+          - worker-runtime-race
+          - process-restart
+          - process-restart-race
+          - redis-outage
+          - redis-outage-race
+          - postgres-outage
+          - postgres-outage-race
+          - tunnel-owner-ha
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -89,16 +90,30 @@ jobs:
           go-version-file: go.mod
       - name: Run qualification without hidden skips
         env:
-          QUALIFICATION_COMMAND: ${{ matrix.command }}
+          QUALIFICATION: ${{ matrix.qualification }}
         run: |
+          case "$QUALIFICATION" in
+            postgres-integrations) qualification_command='make test-postgres-integration' ;;
+            postgres-integrations-race) qualification_command='POSTGRES_INTEGRATION_RACE=1 make test-postgres-integration' ;;
+            worker-runtime) qualification_command='make test-worker-runtime-integration' ;;
+            worker-runtime-race) qualification_command='WORKER_INTEGRATION_RACE=1 make test-worker-runtime-integration' ;;
+            process-restart) qualification_command='make test-process-restart-qualification' ;;
+            process-restart-race) qualification_command='PROCESS_RESTART_QUALIFICATION_RACE=1 make test-process-restart-qualification' ;;
+            redis-outage) qualification_command='make test-redis-outage-recovery' ;;
+            redis-outage-race) qualification_command='REDIS_OUTAGE_RECOVERY_RACE=1 make test-redis-outage-recovery' ;;
+            postgres-outage) qualification_command='make test-postgres-outage-qualification' ;;
+            postgres-outage-race) qualification_command='POSTGRES_OUTAGE_QUALIFICATION_RACE=1 make test-postgres-outage-qualification' ;;
+            tunnel-owner-ha) qualification_command='./scripts/test-tunnel-queue-ha.sh' ;;
+            *) echo "unknown stateful qualification: $QUALIFICATION" >&2; exit 2 ;;
+          esac
           mkdir -p stateful-evidence
           set -o pipefail
-          bash -Eeuo pipefail -c "$QUALIFICATION_COMMAND" 2>&1 | tee "stateful-evidence/${{ matrix.name }}.log"
+          bash -Eeuo pipefail -c "$qualification_command" 2>&1 | tee "stateful-evidence/${QUALIFICATION}.log"
       - name: Retain stateful qualification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: stateful-${{ matrix.name }}-${{ github.run_id }}
+          name: stateful-${{ matrix.qualification }}-${{ github.run_id }}
           path: stateful-evidence/
           if-no-files-found: error
           retention-days: 90
@@ -123,7 +138,7 @@ jobs:
       - name: Certify PostgreSQL streaming failover
         run: make test-postgres-failover-certification
         env:
-          POSTGRES_FAILOVER_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-postgres-failover
+          POSTGRES_FAILOVER_ARTIFACT_DIR: /tmp/astronomer-postgres-failover
           POSTGRES_FAILOVER_RPO_MAX_ROWS: "0"
           POSTGRES_FAILOVER_RTO_MAX_SECONDS: "30"
 
@@ -132,7 +147,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: postgres-failover-evidence-${{ github.run_id }}
-          path: ${{ runner.temp }}/astronomer-postgres-failover/
+          path: /tmp/astronomer-postgres-failover/
           if-no-files-found: error
           retention-days: 90
 
@@ -153,6 +168,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
+        id: install-dependencies
         working-directory: frontend
         run: npm ci
 
@@ -162,14 +178,14 @@ jobs:
           # Preserve the existing moderate threshold, which is stricter than
           # the enterprise high/critical minimum.
           NPM_AUDIT_LEVEL: moderate
-          VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-frontend
+          VERIFY_ARTIFACT_DIR: /tmp/astronomer-verify-enterprise-frontend
 
       - name: Upload commit-bound frontend evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: enterprise-frontend-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/astronomer-verify-enterprise-frontend
+          path: /tmp/astronomer-verify-enterprise-frontend
           if-no-files-found: error
           retention-days: 90
 
@@ -269,7 +285,10 @@ jobs:
       - name: Disposable live end-to-end stack
         run: make test-live-browser
         env:
-          LIVE_BROWSER_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-live-browser
+          # The fixture directory is bind-mounted into host-Docker containers.
+          # Keep it below the checked-out workspace so Local CI can translate
+          # the runner path to its Docker-host path without weakening isolation.
+          LIVE_BROWSER_ARTIFACT_DIR: test-artifacts/astronomer-live-browser
           LIVE_BROWSER_TRIVY_ENABLED: "1"
 
       - name: Upload live browser evidence
@@ -277,7 +296,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: live-browser-evidence-${{ github.run_id }}
-          path: ${{ runner.temp }}/astronomer-live-browser/
+          path: test-artifacts/astronomer-live-browser/
           if-no-files-found: error
           retention-days: 90
 
@@ -303,14 +322,14 @@ jobs:
       - name: Run authoritative Helm gate
         run: ./scripts/verify-enterprise.sh helm
         env:
-          VERIFY_ARTIFACT_DIR: ${{ runner.temp }}/astronomer-verify-enterprise-helm
+          VERIFY_ARTIFACT_DIR: /tmp/astronomer-verify-enterprise-helm
 
       - name: Upload commit-bound Helm evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: enterprise-helm-evidence-${{ github.sha }}
-          path: ${{ runner.temp }}/astronomer-verify-enterprise-helm
+          path: /tmp/astronomer-verify-enterprise-helm
           if-no-files-found: error
           retention-days: 90
 
@@ -322,12 +341,12 @@ jobs:
       fail-fast: false
       matrix:
         component:
-          - { name: server, context: ., dockerfile: deploy/docker/Dockerfile.server, image: astronomer-go-server }
-          - { name: worker, context: ., dockerfile: deploy/docker/Dockerfile.worker, image: astronomer-go-worker }
-          - { name: agent, context: ., dockerfile: deploy/docker/Dockerfile.agent, image: astronomer-go-agent }
-          - { name: migrate, context: ., dockerfile: deploy/docker/Dockerfile.migrate, image: astronomer-go-migrate }
-          - { name: shell, context: ., dockerfile: deploy/docker/Dockerfile.shell, image: astronomer-shell, skip_files: /usr/local/bin/kubectl }
-          - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile, image: astronomer-frontend }
+          - server
+          - worker
+          - agent
+          - migrate
+          - shell
+          - frontend
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -339,22 +358,22 @@ jobs:
       - name: Build image locally
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
-          context: ${{ matrix.component.context }}
-          file: ${{ matrix.component.dockerfile }}
+          context: ${{ matrix.component == 'frontend' && 'frontend' || '.' }}
+          file: ${{ matrix.component == 'server' && 'deploy/docker/Dockerfile.server' || matrix.component == 'worker' && 'deploy/docker/Dockerfile.worker' || matrix.component == 'agent' && 'deploy/docker/Dockerfile.agent' || matrix.component == 'migrate' && 'deploy/docker/Dockerfile.migrate' || matrix.component == 'shell' && 'deploy/docker/Dockerfile.shell' || 'frontend/Dockerfile' }}
           load: true
-          tags: ${{ matrix.component.image }}:ci
+          tags: ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || 'astronomer-frontend' }}:ci
           provenance: false
           sbom: false
 
       - name: Scan image
         uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
         with:
-          image-ref: ${{ matrix.component.image }}:ci
+          image-ref: ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || 'astronomer-frontend' }}:ci
           format: table
           vuln-type: os,library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          skip-files: ${{ matrix.component.skip_files }}
+          skip-files: ${{ matrix.component == 'shell' && '/usr/local/bin/kubectl' || '' }}
           exit-code: "1"
 
       - name: Install syft
@@ -364,17 +383,17 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          syft ${{ matrix.component.image }}:ci \
+          syft ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || 'astronomer-frontend' }}:ci \
             -o spdx-json \
-            > sbom-${{ matrix.component.name }}.spdx.json
-          test -s sbom-${{ matrix.component.name }}.spdx.json
-          python3 -c "import json; json.load(open('sbom-${{ matrix.component.name }}.spdx.json'))"
+            > sbom-${{ matrix.component }}.spdx.json
+          test -s sbom-${{ matrix.component }}.spdx.json
+          python3 -c "import json; json.load(open('sbom-${{ matrix.component }}.spdx.json'))"
 
       - name: Upload SBOM
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: sbom-${{ matrix.component.name }}-${{ github.sha }}
-          path: sbom-${{ matrix.component.name }}.spdx.json
+          name: sbom-${{ matrix.component }}-${{ github.sha }}
+          path: sbom-${{ matrix.component }}.spdx.json
           retention-days: 30
 
   enterprise-signoff:

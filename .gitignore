@@ -15,6 +15,8 @@ bin/
 
 # Environment
 .env
+.env.local-ci
+/.local-ci/
 .worktrees/
 
 # Local debugging / one-off agent install YAMLs from manual ops
@@ -31,6 +33,7 @@ coverage.out
 /test-artifacts/
 /keyrotate
 /node_modules/
+/tools/local-ci/node_modules/
 .claude/
 **/__pycache__/
 
