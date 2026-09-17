@@ -56,6 +56,8 @@ type config struct {
 	rps               int
 	duration          time.Duration
 	tokenPath         string
+	loginEmail        string
+	loginPasswordPath string
 	outPath           string
 	verbose           bool
 	skipAgents        bool // dev convenience — disable WS dial entirely
@@ -105,7 +107,9 @@ func parseFlags() *config {
 	flag.IntVar(&cfg.clusters, "clusters", envOrInt("LOADTEST_CLUSTERS", defaultClusters), "number of synthetic agents to spawn")
 	flag.IntVar(&cfg.rps, "rps", envOrInt("LOADTEST_RPS", defaultRPS), "aggregate HTTP request rate (per second)")
 	flag.DurationVar(&cfg.duration, "duration", envOrDuration("LOADTEST_DURATION", defaultDuration), "how long to run")
-	flag.StringVar(&cfg.tokenPath, "token", envOr("LOADTEST_TOKEN", ""), "path to a file holding an admin JWT (Bearer token)")
+	flag.StringVar(&cfg.tokenPath, "token", envOr("LOADTEST_TOKEN", ""), "path to a file holding an admin API bearer token")
+	flag.StringVar(&cfg.loginEmail, "login-email", envOr("LOADTEST_LOGIN_EMAIL", ""), "local engineering only: email used to mint an ephemeral API token")
+	flag.StringVar(&cfg.loginPasswordPath, "login-password-file", envOr("LOADTEST_LOGIN_PASSWORD_FILE", ""), "local engineering only: path or file descriptor containing the login password")
 	flag.StringVar(&cfg.outPath, "out", envOr("LOADTEST_OUT", defaultOut), "where to write the markdown report")
 	flag.StringVar(&cfg.profilePath, "profile", envOr("LOADTEST_PROFILE", ""), "optional YAML scale profile path")
 	flag.StringVar(&cfg.auditObserverPath, "audit-observer-dsn", envOr("LOADTEST_AUDIT_OBSERVER_DATABASE_URL_FILE", ""), "path to a read-only PostgreSQL DSN used to independently observe durable audit outbox intents")
@@ -212,10 +216,30 @@ func run(cfg *config, log *slog.Logger) error {
 		}
 	}
 
-	// 1. Load token. Required unless -skip-agents AND rps==0.
+	// 1. Load a pre-provisioned API token, or exchange a local browser login for
+	// an ephemeral API token without persisting bearer material. Certification
+	// continues to use the approval-gated pre-provisioned token path.
 	adminToken, err := loadToken(cfg.tokenPath)
 	if err != nil {
 		return fmt.Errorf("load token: %w", err)
+	}
+	var cleanupAdminToken func()
+	if strings.TrimSpace(adminToken) == "" && (strings.TrimSpace(cfg.loginEmail) != "" || strings.TrimSpace(cfg.loginPasswordPath) != "") {
+		if cfg.certification {
+			return fmt.Errorf("certification requires a pre-provisioned API token; local login bootstrap is not accepted")
+		}
+		password, passwordErr := loadCredential(cfg.loginPasswordPath, "login password")
+		if passwordErr != nil {
+			return passwordErr
+		}
+		adminToken, cleanupAdminToken, err = bootstrapAdminAPIToken(context.Background(), cfg.server, cfg.loginEmail, password)
+		if err != nil {
+			return fmt.Errorf("bootstrap ephemeral API token: %w", err)
+		}
+		defer cleanupAdminToken()
+	}
+	if strings.TrimSpace(cfg.tokenPath) != "" && (strings.TrimSpace(cfg.loginEmail) != "" || strings.TrimSpace(cfg.loginPasswordPath) != "") {
+		return fmt.Errorf("-token and local login bootstrap are mutually exclusive")
 	}
 
 	// 2. Authenticate against /api/v1/auth/me/ — fail fast on bad creds /
@@ -388,6 +412,9 @@ func run(cfg *config, log *slog.Logger) error {
 			// os.Exit skips deferred functions, so explicitly clean the estate
 			// after evidence is written and before returning the failing verdict.
 			cleanupFixtures()
+		}
+		if cleanupAdminToken != nil {
+			cleanupAdminToken()
 		}
 		os.Exit(2)
 	}

@@ -15,19 +15,19 @@ add a row to the doc.
 # 1. Have the complete management plane running: server and worker. `make dev`
 #    exposes the API on 8001 and metrics on 9090. A server-only run cannot
 #    drain the transactional audit/task outboxes and is never qualification.
-# 2. Get an admin JWT and put it in a file:
-curl -s -X POST http://localhost:8001/api/v1/auth/login/ \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@example.com","password":"..."}' | jq -r .data.token > /tmp/jwt
-# 3. Run the harness:
+# 2. For local engineering only, let the harness exchange the cookie-only
+#    browser login for an ephemeral one-day API token held only in memory.
+#    The token is revoked during cleanup. Keep the password outside shell
+#    arguments (a file descriptor or mode-0600 file):
 make load-test LOADTEST_SERVER=http://localhost:8001 LOADTEST_METRICS_SERVER=http://localhost:9090 \
-  LOADTEST_TOKEN=/tmp/jwt LOADTEST_CLUSTERS=100 LOADTEST_RPS=200 LOADTEST_DURATION=10m
+  LOADTEST_LOGIN_EMAIL=admin@example.com LOADTEST_LOGIN_PASSWORD_FILE=/secure/password \
+  LOADTEST_CLUSTERS=100 LOADTEST_RPS=200 LOADTEST_DURATION=10m
 
 # Or run a named enterprise fleet profile:
 go run ./scripts/loadtest \
   -server http://localhost:8001 \
   -metrics-server http://localhost:9090 \
-  -token /tmp/jwt \
+  -token /secure/admin-api-token \
   -profile scripts/loadtest/profiles/small.yaml \
   -out loadtest-small.md
 ```
@@ -43,7 +43,9 @@ Output is `loadtest-report.md` (override with `LOADTEST_OUT=...`).
 | `-clusters` | `LOADTEST_CLUSTERS` | `50` | Synthetic agent count |
 | `-rps` | `LOADTEST_RPS` | `100` | Aggregate HTTP request rate (token bucket) |
 | `-duration` | `LOADTEST_DURATION` | `5m` | How long to drive load |
-| `-token` | `LOADTEST_TOKEN` | _(empty)_ | Path to an admin Bearer JWT used for fixture provisioning and HTTP workload requests; never used as an agent credential |
+| `-token` | `LOADTEST_TOKEN` | _(empty)_ | Path to a pre-provisioned admin API bearer token used for fixture provisioning and HTTP workload requests; never used as an agent credential |
+| `-login-email` | `LOADTEST_LOGIN_EMAIL` | _(empty)_ | Local engineering only: browser-login email used to mint an in-memory one-day API token; forbidden in certification |
+| `-login-password-file` | `LOADTEST_LOGIN_PASSWORD_FILE` | _(empty)_ | Local engineering only: password file or inherited file descriptor; bearer material is never written by the harness |
 | `-out` | `LOADTEST_OUT` | `loadtest-report.md` | Markdown report path |
 | `-profile` | `LOADTEST_PROFILE` | _(empty)_ | YAML profile that sets clusters, RPS, duration, resource cardinality, reconnect storm, and drill labels |
 | `-audit-observer-dsn` | `LOADTEST_AUDIT_OBSERVER_DATABASE_URL_FILE` | _(empty)_ | Path to a read-only PostgreSQL DSN used to independently reconcile durable audit intents; required for certification |
