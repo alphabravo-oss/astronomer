@@ -8,6 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 type TaskOutboxWriter interface {
@@ -25,6 +27,7 @@ type TaskOutboxOptions struct {
 }
 
 func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {
+	payload := observability.EnrichTaskPayload(ctx, task.Payload(), reqctx.CorrelationID(ctx))
 	if opts.QueueName == "" {
 		opts.QueueName = "default"
 	}
@@ -44,7 +47,7 @@ func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task
 	return q.UpsertTaskOutbox(ctx, sqlc.UpsertTaskOutboxParams{
 		DedupeKey:           dedupe,
 		TaskType:            task.Type(),
-		Payload:             task.Payload(),
+		Payload:             payload,
 		QueueName:           opts.QueueName,
 		MaxRetry:            int32(opts.MaxRetry),
 		TimeoutSeconds:      int32(opts.Timeout.Round(time.Second) / time.Second),

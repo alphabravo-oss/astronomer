@@ -134,6 +134,10 @@ type ClusterHandler struct {
 	systemArtifactDigest string
 	systemOIDCIssuer     string
 	systemOIDCIdentity   string
+	agentOTELEndpoint    string
+	agentOTELInsecure    bool
+	agentOTELSampler     string
+	agentEnvironment     string
 	// enforcer gates Create against the estate-wide cluster cap
 	// configured by the 'global' quota plan (migration 051).
 	// Optional; nil disables the check (test fakes, pre-migration).

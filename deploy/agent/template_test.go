@@ -1062,3 +1062,24 @@ func TestRenderInstallYAMLBootstrapsSuspendedSignedSystemAfterAgent(t *testing.T
 		t.Fatal("invalid or credential-bearing system source was rendered")
 	}
 }
+
+func TestRenderInstallYAMLCarriesNonSecretAgentTelemetry(t *testing.T) {
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL: "https://astro.example.test", ClusterID: "c1", RegistrationToken: "tok",
+		AgentImage: "registry.example.test/agent:v1", OTELEndpoint: "http://tempo.observability.svc:4318",
+		OTELInsecure: true, OTELSamplerRatio: "0", Environment: "staging",
+	})
+	for _, want := range []string{
+		"- name: ASTRONOMER_ENV\n              value: \"staging\"",
+		"- name: OTEL_EXPORTER_OTLP_ENDPOINT\n              value: \"http://tempo.observability.svc:4318\"",
+		"- name: OTEL_EXPORTER_OTLP_INSECURE\n              value: \"true\"",
+		"- name: OTEL_TRACES_SAMPLER_ARG\n              value: \"0\"",
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Fatalf("agent manifest missing telemetry setting %q", want)
+		}
+	}
+	if strings.Contains(manifest, "OTEL_EXPORTER_OTLP_HEADERS") {
+		t.Fatal("agent manifest must not copy management-plane collector credentials")
+	}
+}

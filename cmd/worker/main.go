@@ -86,7 +86,7 @@ func alertNotificationTxRunner(database *db.DB) tasks.AlertNotificationRunTx {
 }
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	observability.WithEvent(log, "worker_starting").Info("starting astronomer worker binary",
@@ -148,6 +148,9 @@ func main() {
 	}
 	tracingCfg.ServiceName = "astronomer-worker"
 	tracingCfg.ServiceVersion = version.Version
+	tracingCfg.Environment = cfg.Env
+	tracingCfg.ServiceNamespace = "astronomer"
+	tracingCfg.ServiceInstanceID = cfg.ProcessHostname
 	otelShutdown, err := observability.InitTracing(context.Background(), log, tracingCfg)
 	if err != nil {
 		log.Error("failed to init otel tracing", "error", err)

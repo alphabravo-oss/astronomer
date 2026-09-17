@@ -170,7 +170,7 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 	// roundTrip sets StreamID==RequestID so the agent's response routes
 	// correctly via either field. Mirror that here.
-	if err := h.hub.SendToAgent(clusterID, &protocol.Message{
+	if err := h.hub.SendToAgentContext(r.Context(), clusterID, &protocol.Message{
 		Type:      req.MsgType,
 		StreamID:  streamID,
 		RequestID: streamID,

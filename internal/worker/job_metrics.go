@@ -131,8 +131,8 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
 		labels := observability.MetricValues(job, status)
-		workerJobsTotal.WithLabelValues(labels...).Inc()
-		workerJobDurationSeconds.WithLabelValues(labels...).Observe(time.Since(start).Seconds())
+		observability.IncrementWithTraceExemplar(ctx, workerJobsTotal.WithLabelValues(labels...))
+		observability.ObserveWithTraceExemplar(ctx, workerJobDurationSeconds.WithLabelValues(labels...), time.Since(start).Seconds())
 		return err
 	}
 }

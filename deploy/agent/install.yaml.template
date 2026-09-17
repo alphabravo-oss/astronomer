@@ -761,6 +761,16 @@ spec:
                 configMapKeyRef:
                   name: astronomer-agent-config
                   key: METRICS_INTERVAL
+            # Trace routing only. Collector credentials are deliberately not
+            # copied out of the management plane into adopted clusters.
+            - name: ASTRONOMER_ENV
+              value: "{{AGENT_ENVIRONMENT}}"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "{{OTEL_EXPORTER_OTLP_ENDPOINT}}"
+            - name: OTEL_EXPORTER_OTLP_INSECURE
+              value: "{{OTEL_EXPORTER_OTLP_INSECURE}}"
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "{{OTEL_TRACES_SAMPLER_ARG}}"
             - name: ASTRONOMER_PRIVILEGE_PROFILE
               valueFrom:
                 configMapKeyRef:

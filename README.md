@@ -186,6 +186,9 @@ npm run dev
 and the worker. Vite serves the operator console on port 3000 and proxies API
 and WebSocket traffic to the Go server. Use `make dev-full` when the
 containerized frontend is preferable to the Vite development server.
+Use the optional [local telemetry stack](docs/local-telemetry.md) to inspect
+correlated JSON logs, Prometheus exemplars and end-to-end traces without a
+hosted collector.
 
 ### Verification scopes
 

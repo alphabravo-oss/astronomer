@@ -59,6 +59,7 @@ type ExecStream struct {
 
 	hub       *Hub
 	clusterID string
+	ctx       context.Context
 }
 
 // SendInput pumps a stdin chunk to the agent's exec session.
@@ -66,7 +67,7 @@ func (s *ExecStream) SendInput(data []byte) error {
 	if s == nil || s.hub == nil {
 		return errors.New("exec stream is not active")
 	}
-	return s.hub.SendToAgent(s.clusterID, &protocol.Message{
+	return s.hub.SendToAgentContext(s.ctx, s.clusterID, &protocol.Message{
 		Type:      protocol.MsgExecInput,
 		StreamID:  s.StreamID,
 		ClusterID: s.clusterID,
@@ -81,7 +82,7 @@ func (s *ExecStream) SendResize(width, height int) error {
 		return errors.New("exec stream is not active")
 	}
 	payload, _ := json.Marshal(protocol.ExecResizePayload{Width: width, Height: height})
-	return s.hub.SendToAgent(s.clusterID, &protocol.Message{
+	return s.hub.SendToAgentContext(s.ctx, s.clusterID, &protocol.Message{
 		Type:      protocol.MsgExecResize,
 		StreamID:  s.StreamID,
 		ClusterID: s.clusterID,
@@ -135,7 +136,7 @@ func roundTrip[Resp any](
 	if err != nil {
 		return nil, err
 	}
-	if err := h.SendToAgent(clusterID, &protocol.Message{
+	if err := h.SendToAgentContext(ctx, clusterID, &protocol.Message{
 		Type:      msgType,
 		StreamID:  streamID,
 		RequestID: streamID,
@@ -244,7 +245,7 @@ func (h *Hub) StartLogStream(ctx context.Context, clusterID string, payload prot
 		agent.Streams.CloseStream(streamID)
 		return nil, err
 	}
-	if err := h.SendToAgent(clusterID, &protocol.Message{
+	if err := h.SendToAgentContext(ctx, clusterID, &protocol.Message{
 		Type:      protocol.MsgLogStart,
 		StreamID:  streamID,
 		ClusterID: clusterID,
@@ -319,7 +320,7 @@ func (h *Hub) StartExecSession(ctx context.Context, clusterID string, payload pr
 		agent.Streams.CloseStream(streamID)
 		return nil, err
 	}
-	if err := h.SendToAgent(clusterID, &protocol.Message{
+	if err := h.SendToAgentContext(ctx, clusterID, &protocol.Message{
 		Type:      protocol.MsgExecStart,
 		StreamID:  streamID,
 		ClusterID: clusterID,
@@ -384,11 +385,12 @@ func (h *Hub) StartExecSession(ctx context.Context, clusterID string, payload pr
 		Output:    out,
 		hub:       h,
 		clusterID: clusterID,
+		ctx:       ctx,
 	}
 	es.Cancel = func() {
 		// Best-effort terminator; the agent also exits when its underlying
 		// SPDY stream closes.
-		_ = h.SendToAgent(clusterID, &protocol.Message{
+		_ = h.SendToAgentContext(ctx, clusterID, &protocol.Message{
 			Type:      protocol.MsgExecEnd,
 			StreamID:  streamID,
 			ClusterID: clusterID,

@@ -183,6 +183,15 @@ data:
   {{- if .samplerRatio }}
   OTEL_TRACES_SAMPLER_ARG: {{ .samplerRatio | quote }}
   {{- end }}
+  {{- if .agentEndpoint }}
+  AGENT_OTEL_EXPORTER_OTLP_ENDPOINT: {{ .agentEndpoint | quote }}
+  {{- end }}
+  {{- if .agentInsecure }}
+  AGENT_OTEL_EXPORTER_OTLP_INSECURE: {{ .agentInsecure | quote }}
+  {{- end }}
+  {{- if .agentSamplerRatio }}
+  AGENT_OTEL_TRACES_SAMPLER_ARG: {{ .agentSamplerRatio | quote }}
+  {{- end }}
   {{- end }}
   {{- end }}
   # Image + SA the server uses when reconciling per-destination management

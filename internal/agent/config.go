@@ -52,15 +52,20 @@ type AgentConfig struct {
 	// credential material.
 	CredentialSource string `mapstructure:"-"`
 
-	ReconnectBackoff  int                `mapstructure:"reconnect_backoff"`  // Base backoff seconds (default 5)
-	MaxReconnect      int                `mapstructure:"max_reconnect"`      // Max backoff seconds (default 300)
-	HeartbeatInterval int                `mapstructure:"heartbeat_interval"` // Seconds (default 30)
-	MetricsInterval   int                `mapstructure:"metrics_interval"`   // Seconds (default 60)
-	HealthAddr        string             `mapstructure:"health_addr"`        // Health server address (default :8081)
-	PrivilegeProfile  string             `mapstructure:"privilege_profile"`  // viewer|operator|namespace-viewer|namespace-operator|custom|admin
-	Insecure          bool               `mapstructure:"-"`                  // Explicit local-development plaintext transport override
-	InCluster         bool               `mapstructure:"-"`                  // Captured once from the process environment
-	HelmRuntime       helmruntime.Config `mapstructure:"-"`                  // Captured Helm SDK process contract
+	ReconnectBackoff     int                `mapstructure:"reconnect_backoff"`  // Base backoff seconds (default 5)
+	MaxReconnect         int                `mapstructure:"max_reconnect"`      // Max backoff seconds (default 300)
+	HeartbeatInterval    int                `mapstructure:"heartbeat_interval"` // Seconds (default 30)
+	MetricsInterval      int                `mapstructure:"metrics_interval"`   // Seconds (default 60)
+	HealthAddr           string             `mapstructure:"health_addr"`        // Health server address (default :8081)
+	PrivilegeProfile     string             `mapstructure:"privilege_profile"`  // viewer|operator|namespace-viewer|namespace-operator|custom|admin
+	Environment          string             `mapstructure:"env"`                // OTel deployment.environment identity
+	Insecure             bool               `mapstructure:"-"`                  // Explicit local-development plaintext transport override
+	InCluster            bool               `mapstructure:"-"`                  // Captured once from the process environment
+	HelmRuntime          helmruntime.Config `mapstructure:"-"`                  // Captured Helm SDK process contract
+	OTELExporterEndpoint string             `mapstructure:"-"`
+	OTELExporterInsecure bool               `mapstructure:"-"`
+	OTELExporterHeaders  string             `mapstructure:"-"`
+	OTELSamplerRatio     float64            `mapstructure:"-"`
 
 	// In-flight caps on inbound tunnel dispatch. readLoop spawns one goroutine
 	// per message; these bound how many may run at once so a burst of proxied
@@ -136,6 +141,14 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	kubernetesServiceHostConfigured := strings.TrimSpace(os.Getenv("KUBERNETES_SERVICE_HOST")) != ""
 	insecureConfigured := os.Getenv("ASTRONOMER_INSECURE") == "true"
 	helmRuntime := helmruntime.FromSettings(cli.New(), os.Getenv("HELM_DRIVER"))
+	otelSamplerRatio := 0.05
+	if raw := strings.TrimSpace(os.Getenv("OTEL_TRACES_SAMPLER_ARG")); raw != "" {
+		parsed, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse OTEL_TRACES_SAMPLER_ARG: %w", err)
+		}
+		otelSamplerRatio = parsed
+	}
 	v := envconfig.NewViper("ASTRONOMER")
 	envconfig.SetDefaults(v,
 		envconfig.Default{Key: "server_url", Value: ""},
@@ -156,6 +169,7 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		envconfig.Default{Key: "metrics_interval", Value: 60},
 		envconfig.Default{Key: "health_addr", Value: ":8081"},
 		envconfig.Default{Key: "privilege_profile", Value: agenttemplate.PrivilegeProfileViewer},
+		envconfig.Default{Key: "env", Value: "managed-cluster"},
 		envconfig.Default{Key: "max_inflight_requests", Value: defaultMaxInflightRequests},
 		envconfig.Default{Key: "max_inflight_streams", Value: defaultMaxInflightStreams},
 		envconfig.Default{Key: "audit_enabled", Value: false},
@@ -182,6 +196,10 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	cfg.InCluster = kubernetesServiceHostConfigured
 	cfg.Insecure = insecureConfigured
 	cfg.HelmRuntime = helmRuntime
+	cfg.OTELExporterEndpoint = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	cfg.OTELExporterInsecure, _ = strconv.ParseBool(strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_INSECURE")))
+	cfg.OTELExporterHeaders = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS"))
+	cfg.OTELSamplerRatio = otelSamplerRatio
 
 	if cfg.ServerURL == "" {
 		return nil, fmt.Errorf("ASTRONOMER_SERVER_URL is required")

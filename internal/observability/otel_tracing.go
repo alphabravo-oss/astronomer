@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -55,9 +56,16 @@ type TracingConfig struct {
 	// recorded by pkg/version).
 	ServiceVersion string
 
+	// Environment, ServiceNamespace, and ServiceInstanceID make otherwise
+	// identical server/worker/agent resources distinguishable in one backend.
+	Environment       string
+	ServiceNamespace  string
+	ServiceInstanceID string
+
 	// SamplerRatio is the head sampler probability in [0.0, 1.0].
 	// Zero → no traces; 1.0 → all traces. Values outside that range
-	// are clamped. When unspecified (zero), defaults to 0.05.
+	// are clamped. Configuration loaders own defaults so an explicit zero
+	// remains distinguishable from an unset value.
 	SamplerRatio float64
 }
 
@@ -119,15 +127,9 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 		serviceName = "astronomer-go"
 	}
 
-	res, err := resource.Merge(
-		resource.Default(),
-		resource.NewWithAttributes(semconv.SchemaURL,
-			semconv.ServiceName(serviceName),
-			semconv.ServiceVersionKey.String(cfg.ServiceVersion),
-		),
-	)
+	res, err := tracingResource(cfg, serviceName)
 	if err != nil {
-		return noopShutdown, fmt.Errorf("otel resource: %w", err)
+		return noopShutdown, err
 	}
 
 	exporterOpts := []otlptracehttp.Option{
@@ -150,18 +152,11 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 
 	// Sampling. Head-based ratio sampler with parent-respect — a
 	// caller that already started a trace (e.g. external client) gets
-	// its sampling decision propagated rather than re-rolled.
-	ratio := cfg.SamplerRatio
-	if ratio < 0 {
-		ratio = 0
-	}
-	if ratio > 1 {
-		ratio = 1
-	}
-	if ratio == 0 {
-		ratio = 0.05
-	}
-	sampler := sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio))
+	// its sampling decision propagated rather than re-rolled. Explicit zero is
+	// stronger: NeverSample also rejects a sampled remote parent, guaranteeing
+	// that a zero-configured process exports no sampled traces.
+	ratio := normalizedSamplerRatio(cfg.SamplerRatio)
+	sampler := samplerForRatio(ratio)
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
@@ -176,9 +171,52 @@ func InitTracing(ctx context.Context, log *slog.Logger, cfg TracingConfig) (Trac
 	otel.SetTracerProvider(tp)
 
 	log.Info("otel tracing initialized",
-		"endpoint", cfg.Endpoint,
 		"sampler_ratio", ratio,
 		"service_name", serviceName)
 
 	return tp.Shutdown, nil
+}
+
+func tracingResource(cfg TracingConfig, serviceName string) (*resource.Resource, error) {
+	attributes := []attribute.KeyValue{
+		semconv.ServiceName(serviceName),
+		semconv.ServiceVersionKey.String(cfg.ServiceVersion),
+	}
+	if cfg.Environment != "" {
+		attributes = append(attributes, semconv.DeploymentEnvironment(cfg.Environment))
+	}
+	if cfg.ServiceNamespace != "" {
+		attributes = append(attributes, semconv.ServiceNamespace(cfg.ServiceNamespace))
+	}
+	if cfg.ServiceInstanceID != "" {
+		attributes = append(attributes, semconv.ServiceInstanceID(cfg.ServiceInstanceID))
+	}
+	res, err := resource.Merge(
+		resource.Default(),
+		// The SDK's default resource can carry a newer semantic-convention
+		// schema than this module. Keep these stable identity keys schemaless so
+		// merging them cannot fail solely because dependency versions differ.
+		resource.NewSchemaless(attributes...),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("otel resource: %w", err)
+	}
+	return res, nil
+}
+
+func normalizedSamplerRatio(ratio float64) float64 {
+	if ratio < 0 {
+		return 0
+	}
+	if ratio > 1 {
+		return 1
+	}
+	return ratio
+}
+
+func samplerForRatio(ratio float64) sdktrace.Sampler {
+	if ratio == 0 {
+		return sdktrace.NeverSample()
+	}
+	return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio))
 }

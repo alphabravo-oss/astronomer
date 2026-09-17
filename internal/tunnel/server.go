@@ -877,6 +877,22 @@ func (h *Hub) SendToAgent(clusterID string, msg *protocol.Message) error {
 	}
 }
 
+// SendToAgentContext injects the active W3C trace context into the tunnel
+// envelope before using the ordinary bounded send path. Payloads and baggage
+// are never inspected or copied into trace metadata.
+func (h *Hub) SendToAgentContext(ctx context.Context, clusterID string, msg *protocol.Message) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if msg != nil {
+		if traceparent, tracestate := observability.TraceContextFromContext(ctx); traceparent != "" {
+			msg.Traceparent = traceparent
+			msg.Tracestate = tracestate
+		}
+	}
+	return h.SendToAgent(clusterID, msg)
+}
+
 func (h *Hub) writeConnectRejection(ctx context.Context, conn *websocket.Conn, status agentcompat.Status) {
 	body, _ := json.Marshal(protocol.ConnectAckPayload{
 		Accepted:              false,

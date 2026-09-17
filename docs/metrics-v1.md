@@ -17,6 +17,8 @@ exposed by `astronomer-go`.
 - status labels use status class (`2xx`, `4xx`, `5xx`), not exact status codes
 - `cluster_id` labels are bounded by registered-cluster count
 - no request IDs, correlation IDs, or resource names may appear in metric labels
+- sampled worker and agent observations may carry a `trace_id` exemplar; trace
+  IDs must never become ordinary metric labels
 
 ## Hosted Loki ingest (`loki-auth`)
 
@@ -84,6 +86,7 @@ metrics when available:
 - `astronomer_agent_messages_total{astronomer_instance_id,cluster_id,direction}`
 - `astronomer_agent_state_updates_received_total{astronomer_instance_id,kind}`
 - `astronomer_agent_state_updates_handled_total{astronomer_instance_id,outcome,kind}`
+- `astronomer_agent_tunnel_messages_total{astronomer_instance_id,type,status}`
 - `astronomer_tunnel_state_updates_received_total{astronomer_instance_id,kind}`
 - `astronomer_tunnel_state_updates_handled_total{astronomer_instance_id,outcome,kind}`
 - `astronomer_k8s_proxy_errors_total{astronomer_instance_id,mode,reason}`

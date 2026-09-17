@@ -149,6 +149,11 @@ type Config struct {
 	OTELServiceName      string  `mapstructure:"otel_service_name"`
 	OTELServiceVersion   string  `mapstructure:"otel_service_version"`
 	OTELSamplerRatio     float64 `mapstructure:"otel_traces_sampler_arg"`
+	// Adopted-cluster agents need their own collector route because management-
+	// plane service DNS is generally not reachable from a remote cluster.
+	AgentOTELExporterEndpoint string  `mapstructure:"agent_otel_exporter_otlp_endpoint"`
+	AgentOTELExporterInsecure bool    `mapstructure:"agent_otel_exporter_otlp_insecure"`
+	AgentOTELSamplerRatio     float64 `mapstructure:"agent_otel_traces_sampler_arg"`
 
 	// Charlie MCP is a separate, private mTLS listener. The chart mounts these
 	// files from the installation-owned Secret; an empty address leaves the
@@ -388,6 +393,9 @@ func Load() (*Config, error) {
 		"otel_service_name",
 		"otel_service_version",
 		"otel_traces_sampler_arg",
+		"agent_otel_exporter_otlp_endpoint",
+		"agent_otel_exporter_otlp_insecure",
+		"agent_otel_traces_sampler_arg",
 		"charlie_mcp_listen_address",
 		"charlie_mcp_tls_cert_file",
 		"charlie_mcp_tls_key_file",
@@ -503,6 +511,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "otel_traces_sampler_arg", Value: 0.05},
+		envconfig.Default{Key: "agent_otel_traces_sampler_arg", Value: 0.05},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
 		envconfig.Default{Key: "dex_bundled_namespace", Value: "astronomer"},
 		envconfig.Default{Key: "dex_bundled_release_name", Value: "astronomer"},

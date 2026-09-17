@@ -64,6 +64,24 @@ func TestRenderAgentInstallManifestPreservesReleaseDigest(t *testing.T) {
 	}
 }
 
+func TestRenderAgentInstallManifestCarriesConfiguredTraceRouting(t *testing.T) {
+	h := NewClusterHandler(nil)
+	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")
+	h.SetAgentTelemetry("http://tempo.observability.svc:4318", true, 0, "production")
+	cluster := sqlc.Cluster{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), Name: "demo"}
+	manifest := mustRenderAgentInstallManifest(t, h, cluster, "reg-token", "https://astro.example.com")
+	for _, want := range []string{
+		`value: "http://tempo.observability.svc:4318"`,
+		`value: "true"`,
+		`value: "0"`,
+		`value: "production"`,
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Fatalf("manifest missing trace setting %q", want)
+		}
+	}
+}
+
 func TestRenderAgentInstallManifestHonorsPrivilegeProfileAnnotation(t *testing.T) {
 	h := NewClusterHandler(nil)
 	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")

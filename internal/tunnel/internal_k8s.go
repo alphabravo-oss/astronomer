@@ -247,7 +247,7 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"`+mErr.Error()+`"}`, http.StatusInternalServerError)
 		return
 	}
-	if err := h.hub.SendToAgent(clusterID, &protocol.Message{
+	if err := h.hub.SendToAgentContext(r.Context(), clusterID, &protocol.Message{
 		Type:      protocol.MsgK8sRequest,
 		StreamID:  streamID,
 		ClusterID: clusterID,

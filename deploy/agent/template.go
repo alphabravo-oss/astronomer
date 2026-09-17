@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
@@ -53,6 +54,13 @@ type InstallTemplateData struct {
 	SystemArtifactDigest string
 	SystemOIDCIssuer     string
 	SystemOIDCIdentity   string
+	// Agent tracing is intentionally limited to non-secret routing settings.
+	// Collector authentication headers stay management-plane local unless an
+	// adopted cluster is configured with its own Secret-backed collector path.
+	OTELEndpoint     string
+	OTELInsecure     bool
+	OTELSamplerRatio string
+	Environment      string
 }
 
 // CAChecksumFromPEM computes the Rancher CATTLE_CA_CHECKSUM-style pin for a CA
@@ -98,6 +106,14 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	if trimmed := strings.TrimSpace(data.CACert); trimmed != "" {
 		caCert = base64.StdEncoding.EncodeToString([]byte(trimmed))
 	}
+	otelSamplerRatio := strings.TrimSpace(data.OTELSamplerRatio)
+	if otelSamplerRatio == "" {
+		otelSamplerRatio = "0.05"
+	}
+	environment := strings.TrimSpace(data.Environment)
+	if environment == "" {
+		environment = "managed-cluster"
+	}
 	agentManifest := strings.NewReplacer(
 		"{{AGENT_INSECURE}}", insecure,
 		// L7: every scalar below renders into a double-quoted YAML scalar in
@@ -114,6 +130,10 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{CA_CHECKSUM}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.CAChecksum)),
 		"{{AGENT_IMAGE}}", escapeYAMLDoubleQuoted(data.AgentImage),
 		"{{AGENT_IMAGE_REPOSITORY}}", escapeYAMLDoubleQuoted(imageRepositoryOf(data.AgentImage)),
+		"{{OTEL_EXPORTER_OTLP_ENDPOINT}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.OTELEndpoint)),
+		"{{OTEL_EXPORTER_OTLP_INSECURE}}", strconv.FormatBool(data.OTELInsecure),
+		"{{OTEL_TRACES_SAMPLER_ARG}}", escapeYAMLDoubleQuoted(otelSamplerRatio),
+		"{{AGENT_ENVIRONMENT}}", escapeYAMLDoubleQuoted(environment),
 		"{{SYSTEM_OIDC_ISSUER}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIssuer)),
 		"{{SYSTEM_OIDC_IDENTITY}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIdentity)),
 		"{{AGENT_SERVICE_ACCOUNT_NAME}}", serviceAccountName,

@@ -19,6 +19,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -68,6 +72,33 @@ func TestSendToAgentNotConnected(t *testing.T) {
 	err := h.SendToAgent("nonexistent", &protocol.Message{Type: protocol.MsgPong})
 	if err == nil {
 		t.Fatal("expected error for non-connected agent")
+	}
+}
+
+func TestSendToAgentContextCarriesW3CParent(t *testing.T) {
+	previousProvider := otel.GetTracerProvider()
+	previousPropagator := otel.GetTextMapPropagator()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	otel.SetTracerProvider(provider)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previousProvider)
+		otel.SetTextMapPropagator(previousPropagator)
+		_ = provider.Shutdown(context.Background())
+	})
+
+	h := NewHub(slog.Default())
+	agent := &AgentConnection{ClusterID: "trace-cluster", sendCh: make(chan *protocol.Message, 1)}
+	h.agents.Set(agent.ClusterID, agent)
+	ctx, span := provider.Tracer("test/server").Start(context.Background(), "request")
+	defer span.End()
+	if err := h.SendToAgentContext(ctx, agent.ClusterID, &protocol.Message{Type: protocol.MsgHealthCheck}); err != nil {
+		t.Fatal(err)
+	}
+	received := <-agent.sendCh
+	extracted := observability.ContextWithTraceContext(context.Background(), received.Traceparent, received.Tracestate)
+	if got := trace.SpanContextFromContext(extracted).TraceID(); got != span.SpanContext().TraceID() {
+		t.Fatalf("tunnel trace ID = %s, want %s", got, span.SpanContext().TraceID())
 	}
 }
 

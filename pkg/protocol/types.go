@@ -329,13 +329,15 @@ type AgentUpgradeResultPayload struct {
 
 // Message is the envelope for all tunnel communication.
 type Message struct {
-	Type      MessageType     `json:"type"`
-	StreamID  string          `json:"stream_id,omitempty"`
-	RequestID string          `json:"request_id,omitempty"`
-	ClusterID string          `json:"cluster_id,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
-	Payload   json.RawMessage `json:"payload,omitempty"`
-	Error     string          `json:"error,omitempty"`
+	Type        MessageType     `json:"type"`
+	StreamID    string          `json:"stream_id,omitempty"`
+	RequestID   string          `json:"request_id,omitempty"`
+	ClusterID   string          `json:"cluster_id,omitempty"`
+	Timestamp   time.Time       `json:"timestamp"`
+	Traceparent string          `json:"traceparent,omitempty"`
+	Tracestate  string          `json:"tracestate,omitempty"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
+	Error       string          `json:"error,omitempty"`
 }
 
 // ConnectPayload is sent by the agent when establishing a connection.

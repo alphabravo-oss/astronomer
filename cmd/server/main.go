@@ -88,7 +88,7 @@ func main() {
 	default:
 		level = slog.LevelInfo
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
 	observability.WithEvent(logger, "server_starting").Info("starting astronomer server",
@@ -110,6 +110,9 @@ func main() {
 	}
 	tracingCfg.ServiceName = "astronomer-server"
 	tracingCfg.ServiceVersion = version.Version
+	tracingCfg.Environment = cfg.Env
+	tracingCfg.ServiceNamespace = "astronomer"
+	tracingCfg.ServiceInstanceID = cfg.ProcessHostname
 	otelShutdown, err := observability.InitTracing(context.Background(), logger, tracingCfg)
 	if err != nil {
 		logger.Error("failed to init otel tracing", "error", err)

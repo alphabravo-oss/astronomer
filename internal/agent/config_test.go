@@ -380,6 +380,8 @@ func TestLoadAgentConfigCapturesHelmRuntime(t *testing.T) {
 	t.Setenv("KUBERNETES_SERVICE_HOST", "")
 	t.Setenv("HELM_DRIVER", "configmap")
 	t.Setenv("HELM_REGISTRY_CONFIG", "/typed/registry.json")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://tempo:4318")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0")
 
 	cfg, err := LoadAgentConfig()
 	if err != nil {
@@ -387,6 +389,9 @@ func TestLoadAgentConfigCapturesHelmRuntime(t *testing.T) {
 	}
 	if cfg.HelmRuntime.Driver != "configmap" || cfg.HelmRuntime.RegistryConfig != "/typed/registry.json" {
 		t.Fatalf("HelmRuntime = %#v", cfg.HelmRuntime)
+	}
+	if cfg.OTELExporterEndpoint != "http://tempo:4318" || cfg.OTELSamplerRatio != 0 {
+		t.Fatalf("OTel runtime = endpoint %q ratio %v", cfg.OTELExporterEndpoint, cfg.OTELSamplerRatio)
 	}
 }
 

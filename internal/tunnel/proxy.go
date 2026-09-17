@@ -146,7 +146,7 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 		Payload:   payloadBytes,
 	}
 
-	if err := p.hub.SendToAgent(clusterID, msg); err != nil {
+	if err := p.hub.SendToAgentContext(r.Context(), clusterID, msg); err != nil {
 		p.log.Error("failed to send to agent",
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
@@ -247,7 +247,7 @@ func (p *ProxyHandler) consumeStreamingResponse(w http.ResponseWriter, r *http.R
 	// sendCh and force a full-tunnel reset that kills every other stream/op for
 	// the cluster. Mirrors logs_consumer.go emitting MsgLogStop.
 	defer func() {
-		_ = p.hub.SendToAgent(clusterID, &protocol.Message{
+		_ = p.hub.SendToAgentContext(r.Context(), clusterID, &protocol.Message{
 			Type:      protocol.MsgK8sStreamStop,
 			StreamID:  stream.ID,
 			ClusterID: clusterID,

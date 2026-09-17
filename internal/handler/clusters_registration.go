@@ -129,6 +129,19 @@ func (h *ClusterHandler) SetAgentImage(repository, tag string) {
 	h.agentImage = targetAgentImage(repository, tag)
 }
 
+// SetAgentTelemetry carries non-secret trace routing into newly rendered agent
+// manifests. OTLP authentication headers are intentionally not copied across
+// the management/adopted-cluster trust boundary.
+func (h *ClusterHandler) SetAgentTelemetry(endpoint string, insecure bool, samplerRatio float64, environment string) {
+	if h == nil {
+		return
+	}
+	h.agentOTELEndpoint = strings.TrimSpace(endpoint)
+	h.agentOTELInsecure = insecure
+	h.agentOTELSampler = strconv.FormatFloat(samplerRatio, 'g', -1, 64)
+	h.agentEnvironment = strings.TrimSpace(environment)
+}
+
 // SetDeliverySystemBootstrap configures the immutable, signed Flux system
 // artifact embedded in new-cluster registration manifests. Invalid or partial
 // values are omitted by the renderer; production startup validation rejects
@@ -587,6 +600,10 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		SystemArtifactDigest: h.systemArtifactDigest,
 		SystemOIDCIssuer:     h.systemOIDCIssuer,
 		SystemOIDCIdentity:   h.systemOIDCIdentity,
+		OTELEndpoint:         h.agentOTELEndpoint,
+		OTELInsecure:         h.agentOTELInsecure,
+		OTELSamplerRatio:     h.agentOTELSampler,
+		Environment:          h.agentEnvironment,
 	}), nil
 }
 

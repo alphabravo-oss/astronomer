@@ -917,10 +917,20 @@ observability:
     # Comma-separated key=value list forwarded with every OTLP export.
     # Typical use: "Authorization=Bearer xyz" for hosted backends.
     headers: ""
-    # Head sampler ratio in [0.0, 1.0]. Empty/zero defaults to 0.05.
+    # Head sampler ratio in [0.0, 1.0]. Empty defaults to 0.05; the string
+    # "0" explicitly disables sampling.
     # Set to "1.0" while bootstrapping the trace pipeline so every
     # request appears; turn down once volume is acceptable.
     samplerRatio: ""
+    # Adopted clusters usually cannot resolve the management cluster's
+    # collector Service DNS. Configure a separately reachable OTLP/HTTP route
+    # for newly rendered agent manifests. Collector auth headers are never
+    # copied into those manifests.
+    agentEndpoint: ""
+    agentInsecure: false
+    # Empty defaults to 0.05; the string "0" explicitly disables agent
+    # sampling while preserving zero-sampling semantics end to end.
+    agentSamplerRatio: ""
 
 # =============================================================================
 # Management-plane DR (pg_dump -> S3)

@@ -186,7 +186,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			ClusterID: clusterID,
 			Timestamp: time.Now().UTC(),
 		}
-		_ = lc.hub.SendToAgent(clusterID, stopMsg)
+		_ = lc.hub.SendToAgentContext(r.Context(), clusterID, stopMsg)
 	}()
 
 	// Parse query parameters for log options.
@@ -242,7 +242,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		Payload:   startPayload,
 	}
 
-	if err := lc.hub.SendToAgent(clusterID, startMsg); err != nil {
+	if err := lc.hub.SendToAgentContext(r.Context(), clusterID, startMsg); err != nil {
 		lc.log.Error("failed to send LOG_START",
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),

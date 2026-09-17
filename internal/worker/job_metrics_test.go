@@ -92,6 +92,23 @@ func TestInstrumentTaskLogsTraceID(t *testing.T) {
 			t.Fatalf("trace_id = %v, want %s in line %#v", line["trace_id"], traceID, line)
 		}
 	}
+	metric := &dto.Metric{}
+	if err := workerJobsTotal.WithLabelValues(observability.MetricValues("job.trace", "success")...).Write(metric); err != nil {
+		t.Fatal(err)
+	}
+	exemplar := metric.GetCounter().GetExemplar()
+	if exemplar == nil {
+		t.Fatal("worker counter is missing sampled trace exemplar")
+	}
+	var exemplarTraceID string
+	for _, label := range exemplar.GetLabel() {
+		if label.GetName() == "trace_id" {
+			exemplarTraceID = label.GetValue()
+		}
+	}
+	if exemplarTraceID != traceID {
+		t.Fatalf("metric exemplar trace_id = %q, want %q", exemplarTraceID, traceID)
+	}
 }
 
 func TestInstrumentTaskLogsPayloadIdentifiers(t *testing.T) {

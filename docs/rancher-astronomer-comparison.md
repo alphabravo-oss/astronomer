@@ -4,7 +4,7 @@ Status: current release guidance
 Last reviewed: 2026-09-10
 Scope: day-2 management of clusters that already exist
 
-<!-- api-contract-evidence: operations=799 mounted_routes=773/773 request_bindings=156 provisional_request_shapes=0 actionable_202=107 async_202_exceptions=5 -->
+<!-- api-contract-evidence: operations=799 mounted_routes=773/773 request_bindings=155 provisional_request_shapes=0 actionable_202=107 async_202_exceptions=5 -->
 
 Astronomer is intended to meet or exceed Rancher's operator experience for
 adopted clusters. It intentionally does not provision clusters, machines, node

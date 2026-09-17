@@ -135,6 +135,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	clusterHandler.SetEncryptor(encryptor)
 	clusterHandler.SetAgentDisconnector(hub)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
+	clusterHandler.SetAgentTelemetry(cfg.AgentOTELExporterEndpoint, cfg.AgentOTELExporterInsecure, cfg.AgentOTELSamplerRatio, cfg.Env)
 	clusterHandler.SetDeliverySystemBootstrap(
 		cfg.DeliveryFluxDistributionRepository,
 		cfg.DeliveryFluxDistributionDigest,

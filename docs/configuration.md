@@ -33,6 +33,11 @@ Production-specific invariants are enforced at startup by
 | `RELEASE_NAME` | `ReleaseName` | string | `astronomer` | No |
 | `CHART_VERSION` | `ChartVersion` | string | Go zero value | No |
 | `ASTRONOMER_SERVER_IMAGE` | `ServerImage` | string | Go zero value | No |
+| `HELM_DRIVER` | `HelmDriver` | string | Go zero value | No |
+| `HELM_REGISTRY_CONFIG` | `HelmRegistryConfig` | string | `/tmp/helm/config/registry/config.json` | No |
+| `HELM_REPOSITORY_CONFIG` | `HelmRepositoryConfig` | string | `/tmp/helm/config/repositories.yaml` | No |
+| `HELM_REPOSITORY_CACHE` | `HelmRepositoryCache` | string | `/tmp/helm/cache/repository` | No |
+| `HELM_PLUGINS` | `HelmPluginsDirectory` | string | `/tmp/helm/data/plugins` | No |
 | `ASTRONOMER_TUNNEL_EGRESS_CIDRS` | `TunnelEgressCIDRs` | string | Go zero value | No |
 | `ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS` | `RCAllowPrivateWebhooks` | boolean | Go zero value | No |
 | `ASTRONOMER_BOOTSTRAP_PASSWORD` | `BootstrapAdminPassword` | string | Go zero value | Yes |
@@ -90,6 +95,9 @@ Production-specific invariants are enforced at startup by
 | `OTEL_SERVICE_NAME` | `OTELServiceName` | string | Go zero value | No |
 | `OTEL_SERVICE_VERSION` | `OTELServiceVersion` | string | Go zero value | No |
 | `OTEL_TRACES_SAMPLER_ARG` | `OTELSamplerRatio` | number | `0.05` | No |
+| `AGENT_OTEL_EXPORTER_OTLP_ENDPOINT` | `AgentOTELExporterEndpoint` | string | Go zero value | No |
+| `AGENT_OTEL_EXPORTER_OTLP_INSECURE` | `AgentOTELExporterInsecure` | boolean | Go zero value | No |
+| `AGENT_OTEL_TRACES_SAMPLER_ARG` | `AgentOTELSamplerRatio` | number | `0.05` | No |
 | `CHARLIE_MCP_LISTEN_ADDRESS` | `CharlieMCPListenAddress` | string | Go zero value | No |
 | `CHARLIE_MCP_TLS_CERT_FILE` | `CharlieMCPTLSCertFile` | string | Go zero value | No |
 | `CHARLIE_MCP_TLS_KEY_FILE` | `CharlieMCPTLSKeyFile` | string | Go zero value | No |

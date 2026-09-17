@@ -160,7 +160,7 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		return nil, err
 	}
 
-	if err := r.hub.SendToAgent(clusterID, &protocol.Message{
+	if err := r.hub.SendToAgentContext(ctx, clusterID, &protocol.Message{
 		Type:      protocol.MsgK8sRequest,
 		StreamID:  streamID,
 		ClusterID: clusterID,

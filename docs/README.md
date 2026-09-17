@@ -19,6 +19,7 @@ history; accepted architecture lives under `docs/architecture/decisions/`.
 - [Enterprise ownership and review boundaries](engineering-ownership.md)
 - [Accessibility release-candidate checklist](accessibility-release-checklist.md)
 - [Test flake and quarantine policy](test-flake-policy.md)
+- [Local telemetry stack](local-telemetry.md)
 - [Runbook index](runbooks/README.md)
 
 ## Generated contracts

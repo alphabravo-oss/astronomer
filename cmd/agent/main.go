@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -27,9 +28,10 @@ import (
 const upgradeReportInterval = time.Minute
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
+	slog.SetDefault(logger)
 
 	rootCmd := &cobra.Command{
 		Use:     "astronomer-agent",
@@ -73,6 +75,27 @@ func runConnect(logger *slog.Logger) error {
 		logger.Error("failed to load config", "error", err)
 		return err
 	}
+	instanceID := cfg.AgentID
+	if instanceID == "" {
+		instanceID = cfg.ClusterID
+	}
+	otelShutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{
+		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		ServiceName: "astronomer-agent", ServiceVersion: version.Version,
+		Environment: cfg.Environment, ServiceNamespace: "astronomer", ServiceInstanceID: instanceID,
+		SamplerRatio: cfg.OTELSamplerRatio,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize agent tracing: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if shutdownErr := otelShutdown(shutdownCtx); shutdownErr != nil {
+			logger.Warn("otel shutdown error", "error", shutdownErr)
+		}
+	}()
 
 	tunnel := agent.NewTunnelClient(cfg, logger)
 

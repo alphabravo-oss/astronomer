@@ -268,7 +268,7 @@ func (ec *ExecConsumer) proxyToAgent(ctx context.Context, conn *websocket.Conn, 
 		Payload:   startPayload,
 	}
 
-	if err := ec.hub.SendToAgent(clusterID, startMsg); err != nil {
+	if err := ec.hub.SendToAgentContext(ctx, clusterID, startMsg); err != nil {
 		ec.log.Error("failed to send EXEC_START",
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),
@@ -326,7 +326,7 @@ func (ec *ExecConsumer) proxyToAgent(ctx context.Context, conn *websocket.Conn, 
 					ClusterID: clusterID,
 					Timestamp: time.Now().UTC(),
 				}
-				_ = ec.hub.SendToAgent(clusterID, endMsg)
+				_ = ec.hub.SendToAgentContext(relayCtx, clusterID, endMsg)
 				return
 			}
 
@@ -344,7 +344,7 @@ func (ec *ExecConsumer) proxyToAgent(ctx context.Context, conn *websocket.Conn, 
 			if tunnelMsg == nil {
 				continue
 			}
-			if err := ec.hub.SendToAgent(clusterID, tunnelMsg); err != nil {
+			if err := ec.hub.SendToAgentContext(relayCtx, clusterID, tunnelMsg); err != nil {
 				ec.log.Error("failed to send to agent",
 					slog.String("cluster_id", clusterID),
 					slog.String("error", err.Error()),
