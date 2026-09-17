@@ -173,9 +173,9 @@ func (p *ProxyHandler) HandleK8sProxy(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := reassembleK8sResponse(ctx, stream.DataCh, stream.DoneCh)
 	if err != nil {
-		if ctx.Err() != nil {
-			recordK8sProxyError(mode, "timeout")
-			http.Error(w, `{"error":"request timed out"}`, http.StatusGatewayTimeout)
+		if status, reason, body := classifyK8sReassemblyFailure(err, ctx.Err(), p.hub, clusterID, agent); status != 0 {
+			recordK8sProxyError(mode, reason)
+			http.Error(w, body, status)
 			return
 		}
 		p.log.Error("failed to assemble K8s response",

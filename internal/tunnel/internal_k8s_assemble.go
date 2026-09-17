@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -35,6 +36,13 @@ import (
 // transport. Matches the handler-side cap so the two paths refuse the
 // same payloads.
 const maxInternalK8sResponseBytes = 64 * 1024 * 1024
+
+// errK8sStreamClosedUnexpectedly lets callers distinguish a tunnel/session
+// transition from malformed response data. In particular, when an agent
+// reconnect replaces the connection that owns an in-flight request, the old
+// connection closes all of its streams. That is temporary unavailability
+// (HTTP 503), not an invalid upstream response (HTTP 502).
+var errK8sStreamClosedUnexpectedly = errors.New("stream closed unexpectedly")
 
 // reassembleK8sResponse reads frames off the agent stream and returns
 // a single K8sResponsePayload regardless of whether the agent picked
@@ -107,11 +115,11 @@ func readK8sStreamFrame(ctx context.Context, dataCh <-chan []byte, doneCh <-chan
 	select {
 	case data, ok := <-dataCh:
 		if !ok {
-			return nil, fmt.Errorf("stream closed unexpectedly")
+			return nil, errK8sStreamClosedUnexpectedly
 		}
 		return data, nil
 	case <-doneCh:
-		return nil, fmt.Errorf("stream closed unexpectedly")
+		return nil, errK8sStreamClosedUnexpectedly
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

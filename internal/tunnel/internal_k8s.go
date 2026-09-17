@@ -274,8 +274,8 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	// pod boundary. reassembleK8sResponse drives both shapes.
 	resp, err := reassembleK8sResponse(waitCtx, stream.DataCh, stream.DoneCh)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			http.Error(w, `{"error":"timeout"}`, http.StatusGatewayTimeout)
+		if status, _, body := classifyK8sReassemblyFailure(err, waitCtx.Err(), h.hub, clusterID, agent); status != 0 {
+			http.Error(w, body, status)
 			return
 		}
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
@@ -291,6 +291,20 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// classifyK8sReassemblyFailure maps only failures with transport semantics.
+// A reconnect replaces the Hub entry before closing the old connection's
+// streams, so that closure is temporary unavailability rather than malformed
+// agent data. Other assembly failures remain 502 at the caller.
+func classifyK8sReassemblyFailure(err, contextErr error, hub *Hub, clusterID string, expected *AgentConnection) (int, string, string) {
+	if contextErr != nil {
+		return http.StatusGatewayTimeout, "timeout", `{"error":"request timed out"}`
+	}
+	if errors.Is(err, errK8sStreamClosedUnexpectedly) && hub.GetAgent(clusterID) != expected {
+		return http.StatusServiceUnavailable, "agent_replaced", `{"error":"Cluster agent connection changed"}`
+	}
+	return 0, "", ""
 }
 
 // internalK8sMutatingMethod reports whether the forwarded k8s method

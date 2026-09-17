@@ -300,6 +300,45 @@ func TestHandleK8sProxy_InvalidAgentResponseRecordsMetric(t *testing.T) {
 	}
 }
 
+func TestHandleK8sProxy_ReplacedAgentReturnsServiceUnavailable(t *testing.T) {
+	k8sProxyErrorsTotal.Reset()
+	hub := NewHub(slog.Default())
+	oldAgent := &AgentConnection{
+		ClusterID: "cluster-replaced",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, sendChannelSize),
+		cancel:    func() {},
+	}
+	hub.agents.Set("cluster-replaced", oldAgent)
+
+	proxy := NewProxyHandler(hub, slog.Default())
+	r := chi.NewRouter()
+	r.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", proxy.HandleK8sProxy)
+
+	go func() {
+		<-oldAgent.sendCh
+		newAgent := &AgentConnection{
+			ClusterID: "cluster-replaced",
+			Streams:   NewStreamManager(256),
+			sendCh:    make(chan *protocol.Message, sendChannelSize),
+			cancel:    func() {},
+		}
+		replaced := hub.agents.Set("cluster-replaced", newAgent)
+		replaced.Streams.CloseAll()
+	}()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/cluster-replaced/k8s/api/v1/events", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := tunnelMetricValue(t, k8sProxyErrorsTotal.WithLabelValues(observability.MetricValues("normal", "agent_replaced")...)); got != 1 {
+		t.Fatalf("agent_replaced errors = %v, want 1", got)
+	}
+}
+
 func TestHandleK8sProxy_ForwardsNamedK8sOperations(t *testing.T) {
 	tests := []struct {
 		name        string
