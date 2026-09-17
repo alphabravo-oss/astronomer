@@ -111,17 +111,33 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 						AuthMethod: "api_token",
 					}
 				} else {
-					apiToken, err := queries.GetTokenByHash(r.Context(), tokenHash)
+					resolve := func(ctx context.Context) (auth.APITokenAuthentication, error) {
+						apiToken, err := queries.GetTokenByHash(ctx, tokenHash)
+						if err != nil {
+							return auth.APITokenAuthentication{}, err
+						}
+						dbUser, err := queries.GetUserByID(ctx, apiToken.UserID)
+						if err != nil || !dbUser.IsActive {
+							if err == nil {
+								err = errors.New("user is inactive")
+							}
+							return auth.APITokenAuthentication{}, err
+						}
+						return auth.APITokenAuthentication{Token: apiToken, Identity: sessionIdentityFromDatabase(dbUser)}, nil
+					}
+					var authentication auth.APITokenAuthentication
+					var err error
+					if jwtManager != nil {
+						authentication, err = jwtManager.ResolveAPITokenAuthentication(r.Context(), tokenHash, resolve)
+					} else {
+						authentication, err = resolve(r.Context())
+					}
 					if err != nil {
 						authError(w, "authentication_required", "Invalid or expired token")
 						return
 					}
+					apiToken := authentication.Token
 					if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
-						authError(w, "authentication_required", "Invalid or expired token")
-						return
-					}
-					dbUser, err := queries.GetUserByID(r.Context(), apiToken.UserID)
-					if err != nil || !dbUser.IsActive {
 						authError(w, "authentication_required", "Invalid or expired token")
 						return
 					}
@@ -138,21 +154,24 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 							return
 						}
 					}
-					_ = queries.UpdateAPITokenLastUsed(r.Context(), apiToken.ID)
-					// Best-effort last-seen IP stamp — never fail the
-					// request on a write error. Cast through the
-					// optional capability interface so test fakes that
-					// don't expose the new method still satisfy
-					// TokenUserQuerier.
-					if updater, ok := queries.(APITokenLastSeenUpdater); ok && updater != nil {
-						if ip := reqctx.ClientIP(r); ip != nil {
-							_ = updater.UpdateAPITokenLastSeenIP(r.Context(), sqlc.UpdateAPITokenLastSeenIPParams{
-								ID:               apiToken.ID,
-								LastSeenRemoteIp: ip.String(),
-							})
+					clientIP := reqctx.ClientIP(r)
+					if jwtManager == nil || jwtManager.ClaimAPITokenActivity(tokenHash) {
+						_ = queries.UpdateAPITokenLastUsed(r.Context(), apiToken.ID)
+						// Best-effort last-seen IP stamp — never fail the
+						// request on a write error. Cast through the
+						// optional capability interface so test fakes that
+						// don't expose the new method still satisfy
+						// TokenUserQuerier.
+						if updater, ok := queries.(APITokenLastSeenUpdater); ok && updater != nil {
+							if ip := clientIP; ip != nil {
+								_ = updater.UpdateAPITokenLastSeenIP(r.Context(), sqlc.UpdateAPITokenLastSeenIPParams{
+									ID:               apiToken.ID,
+									LastSeenRemoteIp: ip.String(),
+								})
+							}
 						}
 					}
-					user = requestUserFromDatabase(dbUser, "api_token")
+					user = requestUserFromSessionIdentity(authentication.Identity, "api_token")
 					tok := apiToken
 					apiTokenForCtx = &tok
 				}
@@ -214,10 +233,6 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-func requestUserFromDatabase(user sqlc.User, method string) *reqctx.User {
-	return requestUserFromSessionIdentity(sessionIdentityFromDatabase(user), method)
 }
 
 func sessionIdentityFromDatabase(user sqlc.User) auth.SessionIdentity {

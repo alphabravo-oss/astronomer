@@ -347,6 +347,12 @@ func (h *AuthHandler) RevokeToken(w http.ResponseWriter, r *http.Request) {
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.RevokeError, "Failed to revoke token")
 		return
 	}
+	if h.jwt != nil {
+		// API-token authentication shares the JWT manager's short-lived,
+		// distributed-invalidated identity cache. Flush the owner's entries only
+		// after the revoke and its mandatory audit evidence have committed.
+		h.jwt.InvalidateUser(r.Context(), token.UserID)
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }

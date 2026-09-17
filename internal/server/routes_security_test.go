@@ -1985,7 +1985,7 @@ func TestServiceProxyAPITokenMutationsRequireWriteScope(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	userID := uuid.New()
-	rawToken := "astro_route_security_service_proxy_scope"
+	rawToken := "astro_route_security_service_proxy_read_scope"
 
 	readOnlyRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["read"]`)), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
 	readOnlyReq := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/grafana:3000/", nil)
@@ -1996,9 +1996,10 @@ func TestServiceProxyAPITokenMutationsRequireWriteScope(t *testing.T) {
 		t.Fatalf("read-only token status = %d, want %d; body=%s", readOnlyRec.Code, http.StatusForbidden, readOnlyRec.Body.String())
 	}
 
-	writeRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["clusters:write"]`)), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
+	writeToken := "astro_route_security_service_proxy_write_scope"
+	writeRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(writeToken, userID, json.RawMessage(`["clusters:write"]`)), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
 	writeReq := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/grafana:3000/", nil)
-	writeReq.Header.Set("Authorization", "Bearer "+rawToken)
+	writeReq.Header.Set("Authorization", "Bearer "+writeToken)
 	writeRec := httptest.NewRecorder()
 	writeRouter.ServeHTTP(writeRec, writeReq)
 	if writeRec.Code != http.StatusNoContent {

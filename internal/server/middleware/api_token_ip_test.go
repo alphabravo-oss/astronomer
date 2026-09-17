@@ -27,11 +27,18 @@ type fakeTokenUserQuerier struct {
 	token       sqlc.ApiToken
 	user        sqlc.User
 	lastSeen    atomic.Int32
+	lastUsed    atomic.Int32
+	tokenReads  atomic.Int32
 	userLookups atomic.Int32
+	tokenDelay  time.Duration
 	userDelay   time.Duration
 }
 
 func (f *fakeTokenUserQuerier) GetTokenByHash(ctx context.Context, hash string) (sqlc.ApiToken, error) {
+	f.tokenReads.Add(1)
+	if f.tokenDelay > 0 {
+		time.Sleep(f.tokenDelay)
+	}
 	return f.token, nil
 }
 
@@ -44,6 +51,7 @@ func (f *fakeTokenUserQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (s
 }
 
 func (f *fakeTokenUserQuerier) UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error {
+	f.lastUsed.Add(1)
 	return nil
 }
 
@@ -273,5 +281,79 @@ func TestJWTAuthCoalescesConcurrentUserCacheMiss(t *testing.T) {
 	}
 	if got := q.userLookups.Load(); got != 1 {
 		t.Fatalf("user lookups for %d concurrent cache misses = %d, want 1", requests, got)
+	}
+}
+
+func TestAPITokenAuthCoalescesResolutionAndThrottlesActivity(t *testing.T) {
+	q := newFakeWithCIDRs(t, "")
+	q.tokenDelay = 25 * time.Millisecond
+	q.userDelay = 25 * time.Millisecond
+	manager := auth.MustNewJWTManager("api-token-cache-singleflight-test-secret", 60)
+	handler := AuthWithQueries(manager, q)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	const requests = 128
+	start := make(chan struct{})
+	statuses := make(chan int, requests)
+	var group sync.WaitGroup
+	group.Add(requests)
+	for range requests {
+		go func() {
+			defer group.Done()
+			<-start
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/", nil)
+			req.Header.Set("Authorization", "Bearer astro_test_token")
+			req.RemoteAddr = "203.0.113.5:443"
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, req)
+			statuses <- recorder.Code
+		}()
+	}
+	close(start)
+	group.Wait()
+	close(statuses)
+	for status := range statuses {
+		if status != http.StatusOK {
+			t.Fatalf("concurrent API-token auth status = %d, want 200", status)
+		}
+	}
+
+	if got := q.tokenReads.Load(); got != 1 {
+		t.Fatalf("token reads for %d concurrent misses = %d, want 1", requests, got)
+	}
+	if got := q.userLookups.Load(); got != 1 {
+		t.Fatalf("user reads for %d concurrent misses = %d, want 1", requests, got)
+	}
+	if got := q.lastUsed.Load(); got != 1 {
+		t.Fatalf("last-used writes for %d requests = %d, want 1", requests, got)
+	}
+	if got := q.lastSeen.Load(); got != 1 {
+		t.Fatalf("last-seen-IP writes for %d requests = %d, want 1", requests, got)
+	}
+
+	// A committed per-user invalidation covers API-token revocation and user
+	// deactivation. The next request must go back to the authoritative store and
+	// establish a fresh activity window.
+	manager.InvalidateUser(context.Background(), q.user.ID)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/", nil)
+	req.Header.Set("Authorization", "Bearer astro_test_token")
+	req.RemoteAddr = "203.0.113.5:443"
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("post-invalidation auth status = %d, want 200", recorder.Code)
+	}
+	if got := q.tokenReads.Load(); got != 2 {
+		t.Fatalf("token reads after invalidation = %d, want 2", got)
+	}
+	if got := q.userLookups.Load(); got != 2 {
+		t.Fatalf("user reads after invalidation = %d, want 2", got)
+	}
+	if got := q.lastUsed.Load(); got != 2 {
+		t.Fatalf("last-used writes after invalidation = %d, want 2", got)
+	}
+	if got := q.lastSeen.Load(); got != 2 {
+		t.Fatalf("last-seen-IP writes after invalidation = %d, want 2", got)
 	}
 }

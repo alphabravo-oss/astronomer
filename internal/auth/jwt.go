@@ -126,6 +126,9 @@ type JWTManager struct {
 	cacheCoordinator cacheinvalidate.Broadcaster
 	validationGroup  singleflight.Group
 	identityGroup    singleflight.Group
+	apiTokenGroup    singleflight.Group
+	apiTokenCache    map[string]apiTokenAuthenticationCacheEntry
+	apiTokenEpoch    uint64
 }
 
 // JWTValidationCacheTTL is the default TTL for the "this JTI is still
@@ -237,6 +240,7 @@ func NewJWTManagerWithConfig(cfg JWTConfig) (*JWTManager, error) {
 		cacheTTL:             JWTValidationCacheTTL,
 		cacheMaxEntries:      JWTValidationCacheMaxEntries,
 		cache:                make(map[string]validationCacheEntry),
+		apiTokenCache:        make(map[string]apiTokenAuthenticationCacheEntry),
 	}, nil
 }
 
@@ -285,6 +289,8 @@ func (m *JWTManager) SetValidationCacheTTL(d time.Duration) {
 	m.cacheMu.Lock()
 	m.cacheTTL = d
 	m.cache = make(map[string]validationCacheEntry) // drop stale entries
+	m.apiTokenCache = make(map[string]apiTokenAuthenticationCacheEntry)
+	m.apiTokenEpoch++
 	m.cacheMu.Unlock()
 }
 
@@ -298,6 +304,8 @@ func (m *JWTManager) SetValidationCacheMaxEntries(maxEntries int) {
 	m.cacheMu.Lock()
 	m.cacheMaxEntries = maxEntries
 	m.cache = make(map[string]validationCacheEntry)
+	m.apiTokenCache = make(map[string]apiTokenAuthenticationCacheEntry)
+	m.apiTokenEpoch++
 	m.cacheMu.Unlock()
 }
 
@@ -310,6 +318,8 @@ func (m *JWTManager) SetCacheInvalidationCoordinator(c cacheinvalidate.Broadcast
 	m.cacheMu.Lock()
 	m.cacheCoordinator = c
 	m.cache = make(map[string]validationCacheEntry)
+	m.apiTokenCache = make(map[string]apiTokenAuthenticationCacheEntry)
+	m.apiTokenEpoch++
 	m.cacheMu.Unlock()
 }
 
@@ -815,41 +825,6 @@ func (m *JWTManager) InvalidateUser(ctx context.Context, userID uuid.UUID) {
 	if coordinator != nil {
 		_ = coordinator.Broadcast(ctx, cacheinvalidate.KindJWTUser, userID.String())
 	}
-}
-
-func (m *JWTManager) InvalidateJWTJTILocal(jti string) {
-	if m == nil || jti == "" {
-		return
-	}
-	m.cacheMu.Lock()
-	delete(m.cache, jti)
-	m.cacheMu.Unlock()
-}
-
-func (m *JWTManager) InvalidateJWTUserLocal(userID string) {
-	if m == nil || userID == "" {
-		return
-	}
-	id, err := uuid.Parse(userID)
-	if err != nil {
-		return
-	}
-	m.cacheMu.Lock()
-	for jti, entry := range m.cache {
-		if entry.userID == id {
-			delete(m.cache, jti)
-		}
-	}
-	m.cacheMu.Unlock()
-}
-
-func (m *JWTManager) InvalidateJWTAllLocal() {
-	if m == nil {
-		return
-	}
-	m.cacheMu.Lock()
-	m.cache = make(map[string]validationCacheEntry)
-	m.cacheMu.Unlock()
 }
 
 // generateToken is the internal token generation helper

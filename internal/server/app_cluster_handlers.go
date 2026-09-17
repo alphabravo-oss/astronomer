@@ -134,7 +134,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	// PATH A: mint the scoped apiserver-audit ingest token in CONNECT_ACK so an
 	// agent configured with AUDIT_DELIVERY=http can authenticate its direct POST
 	// to /clusters/{id}/apiserver-audit/ (clusters:write scope + audit_ingest:create).
-	if issuer := auth.NewIngestIssuer(queries); issuer != nil {
+	if issuer := auth.NewIngestIssuer(queries, c.jwtManager); issuer != nil {
 		hub.SetAuditIngestIssuer(issuer)
 	}
 	controlPlaneHandler := handler.NewControlPlaneHandler(queries, controlplane.NewService(map[string]controlplane.SummaryProvider{

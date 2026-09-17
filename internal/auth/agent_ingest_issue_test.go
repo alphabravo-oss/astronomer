@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,6 +13,17 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
+
+type recordingCredentialInvalidator struct {
+	mu      sync.Mutex
+	userIDs []uuid.UUID
+}
+
+func (r *recordingCredentialInvalidator) InvalidateUser(_ context.Context, userID uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.userIDs = append(r.userIDs, userID)
+}
 
 // fakeIngestQuerier is an in-memory AgentIngestQuerier that records every
 // provisioning call so the test can assert the service identity, the
@@ -187,11 +199,12 @@ func TestIssueAgentIngestTokenProvisionsNarrowAuthority(t *testing.T) {
 func TestIssueAgentIngestTokenReusesIdentityAndRemints(t *testing.T) {
 	clusterID := uuid.New()
 	f := &fakeIngestQuerier{}
+	invalidator := &recordingCredentialInvalidator{}
 
-	if _, err := IssueAgentIngestToken(context.Background(), f, clusterID); err != nil {
+	if _, err := IssueAgentIngestToken(context.Background(), f, clusterID, invalidator); err != nil {
 		t.Fatalf("first issue: %v", err)
 	}
-	if _, err := IssueAgentIngestToken(context.Background(), f, clusterID); err != nil {
+	if _, err := IssueAgentIngestToken(context.Background(), f, clusterID, invalidator); err != nil {
 		t.Fatalf("second issue: %v", err)
 	}
 
@@ -212,6 +225,9 @@ func TestIssueAgentIngestTokenReusesIdentityAndRemints(t *testing.T) {
 	}
 	if len(f.tokens) != 2 {
 		t.Errorf("tokens minted = %d, want 2", len(f.tokens))
+	}
+	if len(invalidator.userIDs) != 2 || invalidator.userIDs[0] != f.user.ID || invalidator.userIDs[1] != f.user.ID {
+		t.Errorf("credential invalidations = %v, want service user %s after each rotation", invalidator.userIDs, f.user.ID)
 	}
 }
 

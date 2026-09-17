@@ -143,6 +143,13 @@ type AgentIngestQuerier interface {
 	CreateAPIToken(ctx context.Context, arg sqlc.CreateAPITokenParams) (sqlc.ApiToken, error)
 }
 
+// UserCredentialInvalidator flushes cached credentials for an identity after
+// a committed token rotation. JWTManager implements it and broadcasts the
+// invalidation to sibling server replicas.
+type UserCredentialInvalidator interface {
+	InvalidateUser(context.Context, uuid.UUID)
+}
+
 // IssueAgentIngestToken provisions (idempotently) this cluster's reserved
 // service principal, the shared audit_ingest:create role, and a cluster-scoped
 // binding for the connecting cluster, then mints a fresh scoped clusters:write
@@ -153,7 +160,7 @@ type AgentIngestQuerier interface {
 //
 // The returned plaintext is delivered once in CONNECT_ACK; only its SHA-256
 // hash is persisted.
-func IssueAgentIngestToken(ctx context.Context, q AgentIngestQuerier, clusterID uuid.UUID) (string, error) {
+func IssueAgentIngestToken(ctx context.Context, q AgentIngestQuerier, clusterID uuid.UUID, invalidators ...UserCredentialInvalidator) (string, error) {
 	user, err := ensureAgentIngestServiceUser(ctx, q, clusterID)
 	if err != nil {
 		return "", fmt.Errorf("ensure ingest service user: %w", err)
@@ -183,6 +190,14 @@ func IssueAgentIngestToken(ctx context.Context, q AgentIngestQuerier, clusterID 
 	if _, err := q.CreateAPIToken(ctx, params); err != nil {
 		return "", fmt.Errorf("create ingest token: %w", err)
 	}
+	for _, invalidator := range invalidators {
+		if invalidator != nil {
+			// The prior token was just revoked. Flush every cached credential for
+			// this one-purpose service identity across server replicas before the
+			// replacement is returned to the connecting agent.
+			invalidator.InvalidateUser(ctx, user.ID)
+		}
+	}
 	return plaintext, nil
 }
 
@@ -190,21 +205,29 @@ func IssueAgentIngestToken(ctx context.Context, q AgentIngestQuerier, clusterID 
 // AuditIngestIssuer interface (IssueIngestToken). Wired at startup over
 // *sqlc.Queries.
 type IngestIssuer struct {
-	q AgentIngestQuerier
+	q           AgentIngestQuerier
+	invalidator UserCredentialInvalidator
 }
 
 // NewIngestIssuer builds an IngestIssuer over the given querier. Returns nil
 // when q is nil so the nil-safe Hub setter leaves PATH A issuance disabled.
-func NewIngestIssuer(q AgentIngestQuerier) *IngestIssuer {
+func NewIngestIssuer(q AgentIngestQuerier, invalidators ...UserCredentialInvalidator) *IngestIssuer {
 	if q == nil {
 		return nil
 	}
-	return &IngestIssuer{q: q}
+	var invalidator UserCredentialInvalidator
+	if len(invalidators) > 0 {
+		invalidator = invalidators[0]
+	}
+	return &IngestIssuer{q: q, invalidator: invalidator}
 }
 
 // IssueIngestToken mints (or re-mints) the scoped ingest token for clusterID.
 func (i *IngestIssuer) IssueIngestToken(ctx context.Context, clusterID uuid.UUID) (string, error) {
-	return IssueAgentIngestToken(ctx, i.q, clusterID)
+	if i.invalidator == nil {
+		return IssueAgentIngestToken(ctx, i.q, clusterID)
+	}
+	return IssueAgentIngestToken(ctx, i.q, clusterID, i.invalidator)
 }
 
 func ensureAgentIngestServiceUser(ctx context.Context, q AgentIngestQuerier, clusterID uuid.UUID) (sqlc.User, error) {
