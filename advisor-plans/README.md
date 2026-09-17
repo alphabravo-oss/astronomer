@@ -8,7 +8,7 @@ mapping.
 
 | Plan | Priority | Status | Next gate |
 |---|---|---|---|
-| [016 — Production and GA closure](./016-production-ga-closure-master-plan.md) | P0/P1 + release qualification | **IN PROGRESS** | Phase 2: refresh-session families, JWT context, cookie-only browser auth, and versioned ciphertext. Phase 0 artifact/deployment qualification repeats against the final exact candidate. |
+| [016 — Production and GA closure](./016-production-ga-closure-master-plan.md) | P0/P1 + release qualification | **IN PROGRESS** | Finish the final estate-100 rerun and exact-candidate replay after the measured-window fixes; then execute the eight external Phase 6 qualifications. Phase 7 remains separately claim-gated and unauthorized. |
 
 Status values: `TODO — READY`, `IN PROGRESS`, `BLOCKED` with a concrete reason,
 or `DONE` with retained evidence links.
@@ -37,6 +37,9 @@ historical Argo/Fleet path or duplicating a completed finding.
 - Audit archive name backfill and guarded cluster-tombstone retention.
 - The completed local portions recorded in archived Plans 008 and 011–015,
   enumerated in Plan 016's reconciliation verdict.
+- Plan 016 Phases 1–3 are locally implemented. Phase 4 implementation and
+  Phase 5 automated implementation/browser qualification are locally complete;
+  their remaining scale and manual/external evidence stays open in Plan 016.
 
 ## Archive
 

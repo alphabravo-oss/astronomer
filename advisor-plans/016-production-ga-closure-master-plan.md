@@ -36,10 +36,10 @@
 - **Category:** correctness, security, DR, supply chain, durability, scale,
   observability, accessibility, release qualification.
 - **Planned at:** `5567da3bbba8c72bb95924f1824f5c100d147058`, 2026-09-16,
-  plus the preserved dirty integration tree described above.
-- **Branch:** continue `advisor/011-015-hardening` for reconciliation, then use
-  focused `advisor/016-<phase>` branches or worktrees after the source baseline
-  is clean and committed.
+  plus the preserved dirty integration tree described above. Execution was
+  reconciled through `11a243bf251b770299dc375e74d8e8247e2dbf4d` on
+  2026-09-17.
+- **Branch:** `advisor/016-production-ga-closure`.
 
 ## Product and authority boundaries
 
@@ -85,44 +85,41 @@ production readiness.
 
 ## Current remaining evidence
 
-These live-code observations are the reason the phases below remain open:
+The stale live-code observations from the original review have been closed by
+the implementation commits recorded below. The plan remains active for these
+observed residuals:
 
-- `internal/auth/jwt.go`: session JWTs still omit required issuer, audience,
-  subject, and durable session-family context.
-- `internal/handler/auth.go` and `internal/handler/auth_sessions.go`: browser
-  cookies are set, but login/refresh responses still return access and refresh
-  bearer values to JavaScript.
-- `internal/auth/crypto.go`: Fernet supports fallback keys but ciphertext does
-  not identify envelope version, algorithm, or key ID.
-- `deploy/chart/templates/networkpolicy.yaml`: backup, restore-drill, and
-  management-logging workloads lack complete narrow allow policies.
-- `deploy/chart/templates/management-plane-backup-cronjob.yaml`: database dumps
-  upload directly and the same credential prunes them; key bundles still use
-  unauthenticated AES-CBC.
-- `scripts/airgap-kit.py`: image archives are extracted before the embedded
-  index and member set are authenticated and validated.
-- `deploy/docker/Dockerfile.shell`: downloaded kubectl is version-checked but
-  not checksum/signature-verified; service images still use mutable
-  `apk upgrade` at build time.
-- `internal/handler/control_plane.go` and
-  `internal/worker/tasks/alert_evaluation.go`: notification enqueue errors can
-  still be logged/discarded without durable recovery.
-- `internal/handler/response.go` and several SQL/list handlers: deep offsets
-  remain accepted and several collections still load all rows before paging.
-- `frontend/src/routes/dashboard/index.tsx` and several selectors: fixed 50–200
-  item requests still stand in for estate-wide truth.
-- `frontend/package.json` and `frontend/Dockerfile`: the supported runtime is
-  Node 22; the guide-alignment decision and reusable Playwright auth state are
-  unresolved.
+- The final clean candidate must be rebuilt and redeployed after the scale
+  scheduler and declarative bundled-PostgreSQL changes at `1c7fdfe8` and
+  `11a243bf`, then receive one final static/stateful replay.
+- Estate-100 is not yet a pass. The 2026-09-17 exact-image local run completed
+  its 30-minute window with good latency, bounded resources, successful
+  100-agent reconnect, and conserved accepted audit intents, but failed the
+  database empty-acquire threshold. The run also exposed scheduler/accounting
+  defects fixed after the run. Retained evidence is in
+  [`docs/scale-evidence/estate-100-2026-09-17-local-fail.md`](../docs/scale-evidence/estate-100-2026-09-17-local-fail.md).
+- The eight credentialed, signed, human, assistive-technology, DR, scale, and
+  protected-approval executions in Phase 6 have not been supplied. Local
+  harness success cannot substitute for them.
+- The live agent-identity lane remains explicitly unavailable without
+  `AGENT_IDENTITY_TEST_CONTEXT`; this is declared rather than silently skipped.
+- Phase 7 still lacks the signed six-host Constellation inventory and explicit
+  destructive operator authorization. No physical-interoperability claim may
+  be made.
 
 ## Execution ledger
 
-- **Phase 0 baseline, partially complete:** clean-clone static enterprise
-  verification passed at `32f464e5150c25dffd10ddd802b4349872b2a376` on
-  2026-09-17, including the full normal/race Go tree, frontend, generated/API
-  contracts, documentation, and Helm gates. Exact image build, digest-pinned
-  local deployment, and stateful qualification remain open and must be repeated
-  against the final candidate after implementation phases change the commit.
+- **Phase 0 baseline, final replay pending:** the preserved integration tree was
+  classified and committed, and clean-clone static enterprise verification
+  passed at `32f464e5150c25dffd10ddd802b4349872b2a376` on 2026-09-17. The full
+  normal/race Go tree, PostgreSQL integration, frontend, generated/API,
+  documentation, Helm, worker/restart/outage/failover, tunnel-HA, and live
+  browser lanes subsequently passed during implementation. Exact images for
+  `0e0a321dd20a9b7f3072afb6fb705c150c1f710d` were built, imported, and
+  atomically deployed as Helm revision 45 with immutable digests; `/health/`
+  and `/readyz` were green. The scale run then produced the two later source
+  fixes above, so the final exact-image build/deploy and broad replay remain
+  open rather than being claimed from the earlier candidate.
 - **Phase 1, complete locally:** commit
   `a84e393a3fb81ec8c4f5f229cc9154e45e7aa5ff` gives every production runtime
   loop a named supervisor or joined component owner, connects critical failure
@@ -144,6 +141,30 @@ These live-code observations are the reason the phases below remain open:
   integration tests, the full Go tree, vet/build, focused auth/handler/server
   race suites, all 1,200 frontend tests plus type-check/lint/production build,
   Helm/deploy tests, and SQLC/OpenAPI/config/compatibility drift checks passed.
+- **Phase 3, complete locally:** `009f7578`, `1b0bbcf2`, `63ae40b6`, and
+  `90493f65` close authenticated-before-extraction air-gap handling,
+  production networking/image/runtime policy, authenticated immutable backup
+  custody and restore contracts, and strict kubectl checksum/signature
+  verification. Render, archive-negative, DR-crypto, release-contract, and
+  supply-chain gates passed. Real-CNI and exact protected DR executions remain
+  Phase 6 evidence, not local implementation work.
+- **Phase 4, implementation complete locally; scale gate open:** `cb1931dc`,
+  `5115a90f`, `7aacdc00`, `d0a62779`, `5239c7e7`, `3c251a63`, and
+  `a4efe473` implement durable notification intent, bounded cursor/SQL access,
+  JSON/deletion governance, generated-query ownership, typed services, and
+  correlated telemetry. Later qualification repairs cover restart, PostgreSQL
+  and Redis outages, failover, tunnel HA, reconnect accounting, credential
+  bootstrap, and measured-window scheduling. Estate-100 must pass before a
+  higher rung starts.
+- **Phase 5, automated implementation complete locally:** `9719a216`,
+  `b8fb7feb`, `a85db0f6`, `db38d75f`, `e4c036f4`, `5dfdf2ae`,
+  `02637f37`, `94dc0aef`, and `3a47f9b2` close authoritative fleet/workload/
+  alert views, remote action search, cancellable generated requests, automated
+  accessibility, Node 24/tooling alignment, reusable role state, accepted
+  architecture decisions, and keyboard-reachable overflow. Frontend unit,
+  type, lint, production build, 124 main E2E, 264 smoke, 50 visual, and the
+  15-scenario live-browser qualification passed. The manual AT matrix remains
+  Phase 6.
 
 ## Commands and authoritative gates
 
@@ -264,6 +285,9 @@ release qualification remain governed by Phases 0 and 6.**
 
 ## Phase 2 — Complete browser-session, JWT-context, and ciphertext boundaries
 
+**Status: DONE locally at `f73a1234`; final exact-candidate replay remains
+governed by Phase 0.**
+
 ### Work
 
 1. Add durable refresh-session families. Store a hashed refresh JTI/family,
@@ -305,6 +329,9 @@ release qualification remain governed by Phases 0 and 6.**
 - Focused auth race tests plus full backend/frontend/API-contract gates pass.
 
 ## Phase 3 — Close production networking, DR, air-gap, and supply-chain gaps
+
+**Status: DONE locally through `90493f65`; real-CNI and protected exact-RC DR
+qualification remain governed by Phase 6.**
 
 ### Work
 
@@ -363,6 +390,9 @@ release qualification remain governed by Phases 0 and 6.**
 
 ## Phase 4 — Finish durable dispatch, bounded data access, scale, and telemetry
 
+**Status: implementation DONE locally; estate-100 remains OPEN after the
+retained 2026-09-17 failed engineering run. Do not start a higher rung.**
+
 ### Work
 
 1. Route alert/control-plane notifications through one PostgreSQL durable outbox
@@ -408,6 +438,9 @@ release qualification remain governed by Phases 0 and 6.**
 - Retained estate-100 evidence passes before any higher scale claim is made.
 
 ## Phase 5 — Finish estate-scale frontend truth, accessibility, and toolchain alignment
+
+**Status: automated implementation and browser qualification DONE locally;
+the human/manual assistive-technology matrix remains governed by Phase 6.**
 
 ### Work
 
@@ -532,12 +565,12 @@ is mandatory only when that claim is made.
 - [ ] Static, race, PostgreSQL, browser, Helm, generated-contract, and applicable
       stateful gates pass on that exact commit with zero hidden skips.
 - [x] Every server-owned critical loop has supervised health and bounded join.
-- [ ] Refresh replay, JWT context, cookie-only browser auth, revocation, error
+- [x] Refresh replay, JWT context, cookie-only browser auth, revocation, error
       redaction, DSN parsing, and versioned ciphertext criteria pass.
 - [ ] Default-deny networking, DR authority, authenticated immutable backups,
       safe air-gap input handling, immutable image inputs, and supply-chain
       gates pass.
-- [ ] Notifications are durable; default data access is bounded/keyset and SQL-
+- [x] Notifications are durable; default data access is bounded/keyset and SQL-
       scoped; JSON/deletion/sqlc ownership rules are enforced.
 - [ ] Estate-scale UI truth, action search, cancellation, accessibility,
       Playwright, Node/toolchain, and ADR criteria pass.
