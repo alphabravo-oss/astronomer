@@ -124,7 +124,6 @@ function ClustersPage() {
         </span>
       ),
       sortAccessor: (row) => row.provider,
-      filter: { label: "Provider" },
     },
     {
       key: "distribution",

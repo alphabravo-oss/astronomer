@@ -122,7 +122,17 @@ export const overrides: StubOverride[] = [
   {
     method: "GET",
     path: "/api/v1/clusters",
-    body: { data: [smokeCluster], count: 1, next: null, previous: null },
+    body: {
+      data: [smokeCluster],
+      pagination: {
+        total: 1,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+        next_cursor: null,
+      },
+    },
   },
   {
     method: "GET",
