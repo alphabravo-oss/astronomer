@@ -80,6 +80,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 		Queries: queries,
 		Driver:  handler.NewVeleroDriverAdapter(requester),
 		Log:     logger,
+		Bus:     c.bus,
 	}}
 	// Migration 071 — service mesh detector. The handler's POST /detect/
 	// path delegates to tasks.DetectAndUpsert, so the deps need to be

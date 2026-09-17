@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 )
 
 // fakePollQuerier is the in-memory implementation of
@@ -279,7 +280,11 @@ func TestPoller_UpdatesPhase(t *testing.T) {
 		CompletionTime: time.Now(),
 	}
 
-	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d}}
+	bus := events.NewBus()
+	eventContext, cancelEvents := context.WithCancel(context.Background())
+	defer cancelEvents()
+	eventStream := bus.Subscribe(eventContext, events.AcceptAll)
+	runtime := ClusterSnapshotRuntime{Deps: ClusterSnapshotDeps{Queries: q, Driver: d, Bus: bus}}
 
 	var outcomes []string
 	SetSnapshotOutcomeRecorder(func(cid, oc string) { outcomes = append(outcomes, cid+":"+oc) })
@@ -297,6 +302,18 @@ func TestPoller_UpdatesPhase(t *testing.T) {
 	}
 	if len(outcomes) != 1 || outcomes[0] != clusterID.String()+":completed" {
 		t.Fatalf("expected one outcome recorded; got %+v", outcomes)
+	}
+	select {
+	case event := <-eventStream:
+		if event.Type != events.TypeSnapshotChanged {
+			t.Fatalf("event type = %q, want %q", event.Type, events.TypeSnapshotChanged)
+		}
+		payload, ok := event.Data.(map[string]any)
+		if !ok || payload["cluster_id"] != clusterID.String() || payload["id"] != row.ID.String() || payload["kind"] != "snapshot" {
+			t.Fatalf("snapshot.changed payload = %#v", event.Data)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("snapshot phase transition did not publish snapshot.changed")
 	}
 }
 
