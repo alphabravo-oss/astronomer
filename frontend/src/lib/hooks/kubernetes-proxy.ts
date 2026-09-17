@@ -64,7 +64,7 @@ export function useClusterResourceCounts(
 export function useResourceDiscovery(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.generic.discovery(clusterId),
-    queryFn: () => getResourceDiscovery(clusterId),
+    queryFn: ({ signal }) => getResourceDiscovery(clusterId, signal),
     enabled: !!clusterId,
     staleTime: 5 * 60_000,
   });
@@ -77,7 +77,7 @@ export function useResourceSchema(
 ) {
   return useQuery({
     queryKey: queryKeys.generic.schema(clusterId, resourceType),
-    queryFn: () => getResourceSchema(clusterId, resourceType),
+    queryFn: ({ signal }) => getResourceSchema(clusterId, resourceType, signal),
     enabled: enabled && !!clusterId && !!resourceType,
     staleTime: 5 * 60_000,
   });
@@ -125,7 +125,7 @@ export const k8sQueryKeys = {
 export function useK8sGetYaml(clusterId: string, path: string, enabled = true) {
   return useQuery({
     queryKey: k8sQueryKeys.yaml(clusterId, path),
-    queryFn: () => k8sGetYaml(clusterId, path),
+    queryFn: ({ signal }) => k8sGetYaml(clusterId, path, signal),
     enabled: !!clusterId && !!path && enabled,
     staleTime: 0,
     gcTime: 0,
@@ -140,7 +140,7 @@ export function useK8sResource(
 ) {
   return useQuery({
     queryKey: k8sQueryKeys.resource(clusterId, path),
-    queryFn: () => k8sGet(clusterId, path),
+    queryFn: ({ signal }) => k8sGet(clusterId, path, signal),
     enabled: !!clusterId && !!path && enabled,
     staleTime: 0,
     gcTime: 0,

@@ -66,6 +66,7 @@ describe("RBAC generated API boundary", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("maps role wire casing and uses bounded generated list pagination", async () => {
+    const signal = new AbortController().signal;
     vi.mocked(generated.getRbacGlobalRoles).mockResolvedValueOnce({
       data: [roleWire],
       pagination: {
@@ -77,7 +78,7 @@ describe("RBAC generated API boundary", () => {
       },
     });
 
-    await expect(getGlobalRoles()).resolves.toEqual([
+    await expect(getGlobalRoles(signal)).resolves.toEqual([
       expect.objectContaining({
         id: roleWire.id,
         displayName: "Incident Responder",
@@ -92,6 +93,7 @@ describe("RBAC generated API boundary", () => {
     ]);
     expect(generated.getRbacGlobalRoles).toHaveBeenCalledWith({
       query: { limit: 200 },
+      signal,
     });
   });
 

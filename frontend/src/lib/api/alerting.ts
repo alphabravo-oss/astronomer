@@ -41,6 +41,7 @@ import type {
   PaginatedResponse,
 } from "@/types";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { CamelizeKeys } from "@/types/wire-contract";
 
 type Contracts = OpenAPIComponents["schemas"];
 
@@ -74,17 +75,9 @@ export interface AlertEventQuery {
   offset?: number | string;
 }
 
-export interface AlertEventSummary {
-  total: number;
-  firing: number;
-  acknowledged: number;
-  resolved: number;
-  silenced: number;
-  firingCritical: number;
-  firingWarning: number;
-  firingInfo: number;
-  asOf: string;
-}
+export type AlertEventSummary = CamelizeKeys<
+  OpenAPIComponents["schemas"]["AlertEventSummary"]
+>;
 
 function requireData<T>(response: { data?: T }, operation: string): T {
   if (response.data === undefined) {
@@ -105,7 +98,9 @@ function requiredText(value: string | undefined, field: string): string {
   return normalized;
 }
 
-function optionalInteger(value: number | string | undefined): number | undefined {
+function optionalInteger(
+  value: number | string | undefined,
+): number | undefined {
   if (value === undefined || value === "") return undefined;
   const parsed = typeof value === "number" ? value : Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : undefined;
@@ -137,8 +132,8 @@ export function toAlertRuleWriteRequest(
     anomaly_window_seconds:
       data.anomaly_window_seconds ?? data.anomalyWindowSeconds,
     anomaly_min_samples: data.anomaly_min_samples ?? data.anomalyMinSamples,
-    anomaly_direction: data.anomaly_direction ??
-      (data.anomalyDirection || undefined),
+    anomaly_direction:
+      data.anomaly_direction ?? (data.anomalyDirection || undefined),
   });
 }
 
@@ -168,12 +163,15 @@ export function toAlertSilenceWriteRequest(
   });
 }
 
-export async function getAlertRules(params?: {
-  clusterId?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<AlertRule[]> {
-  const page = await getAlertingRules({ query: params });
+export async function getAlertRules(
+  params?: {
+    clusterId?: string;
+    limit?: number;
+    offset?: number;
+  },
+  signal?: AbortSignal,
+): Promise<AlertRule[]> {
+  const page = await getAlertingRules({ query: params, signal });
   return page.data;
 }
 
@@ -287,11 +285,14 @@ export async function resolveAlert(id: string): Promise<AlertEvent> {
   );
 }
 
-export async function getNotificationChannels(params?: {
-  limit?: number;
-  offset?: number;
-}): Promise<NotificationChannel[]> {
-  const page = await getAlertingChannels({ query: params });
+export async function getNotificationChannels(
+  params?: {
+    limit?: number;
+    offset?: number;
+  },
+  signal?: AbortSignal,
+): Promise<NotificationChannel[]> {
+  const page = await getAlertingChannels({ query: params, signal });
   return page.data;
 }
 
@@ -343,11 +344,14 @@ export async function testNotificationChannel(
   );
 }
 
-export async function getAlertSilences(params?: {
-  limit?: number;
-  offset?: number;
-}): Promise<AlertSilence[]> {
-  const page = await getAlertingSilences({ query: params });
+export async function getAlertSilences(
+  params?: {
+    limit?: number;
+    offset?: number;
+  },
+  signal?: AbortSignal,
+): Promise<AlertSilence[]> {
+  const page = await getAlertingSilences({ query: params, signal });
   return page.data;
 }
 
@@ -371,20 +375,24 @@ export async function expireAlertSilence(id: string): Promise<AlertSilence> {
   );
 }
 
-export async function getAnomalyBaselines(params?: {
-  clusterId?: string;
-  limit?: number;
-  offset?: number;
-}): Promise<AnomalyBaseline[]> {
-  const page = await getAnomalyBaselinesOperation({ query: params });
+export async function getAnomalyBaselines(
+  params?: {
+    clusterId?: string;
+    limit?: number;
+    offset?: number;
+  },
+  signal?: AbortSignal,
+): Promise<AnomalyBaseline[]> {
+  const page = await getAnomalyBaselinesOperation({ query: params, signal });
   return page.data;
 }
 
 export async function getAnomalyBaseline(
   id: string,
+  signal?: AbortSignal,
 ): Promise<AnomalyBaseline> {
   return requireData(
-    await getAnomalyBaselineOperation({ path: { id } }),
+    await getAnomalyBaselineOperation({ path: { id }, signal }),
     "getAnomalyBaseline",
   );
 }

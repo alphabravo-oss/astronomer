@@ -438,11 +438,9 @@ export function CommandPalette() {
                         className={`inline-flex h-2 w-2 rounded-full ${
                           cluster.status === "active"
                             ? "bg-status-success"
-                            : cluster.status === "warning"
-                              ? "bg-status-warning"
-                              : cluster.status === "error"
-                                ? "bg-status-error"
-                                : "bg-status-neutral"
+                            : cluster.status === "error"
+                              ? "bg-status-error"
+                              : "bg-status-neutral"
                         }`}
                       />
                     }

@@ -80,9 +80,11 @@ function mapEntry(wire: WireEntry): ResourceDiscoveryEntryView {
 
 export async function getResourceDiscovery(
   clusterId: string,
+  signal?: AbortSignal,
 ): Promise<ResourceDiscoveryView> {
   const { data } = await getClustersByClusterIdResourcesDiscovery({
     path: { cluster_id: clusterId },
+    signal,
   });
   return {
     clusterId: data.cluster_id,
@@ -96,10 +98,12 @@ export async function getResourceDiscovery(
 export async function getResourceSchema(
   clusterId: string,
   resourceType: ResourceType,
+  signal?: AbortSignal,
 ): Promise<ResourceSchemaView> {
   const { data } = await getClustersByClusterIdResourcesSchema({
     path: { cluster_id: clusterId },
     query: { resource_type: resourceType },
+    signal,
   });
   return {
     resource: mapEntry(data.resource),

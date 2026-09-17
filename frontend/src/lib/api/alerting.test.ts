@@ -184,13 +184,18 @@ beforeEach(() => {
 
 describe("generated alerting reads", () => {
   it("uses typed pagination and filter parameters for every list", async () => {
+    const signal = new AbortController().signal;
     await expect(
-      getAlertRules({ clusterId: RULE.clusterId ?? undefined, limit: 200 }),
+      getAlertRules(
+        { clusterId: RULE.clusterId ?? undefined, limit: 200 },
+        signal,
+      ),
     ).resolves.toEqual([RULE]);
     expect(lastRequest()?.params).toEqual({
       clusterId: RULE.clusterId,
       limit: 200,
     });
+    expect(lastRequest()?.signal).toBe(signal);
 
     await expect(
       getAlertEvents({
@@ -209,7 +214,9 @@ describe("generated alerting reads", () => {
       offset: 10,
     });
 
-    await expect(getAlertEventSummary(RULE.clusterId ?? undefined)).resolves.toMatchObject({
+    await expect(
+      getAlertEventSummary(RULE.clusterId ?? undefined),
+    ).resolves.toMatchObject({
       total: 42,
       firing: 5,
       firingCritical: 2,
@@ -353,7 +360,9 @@ describe("generated alerting mutations", () => {
     await deleteAlertSilence(SILENCE.id);
 
     expect(
-      request.mock.calls.slice(-9).map(([config]) => [config.method, config.url]),
+      request.mock.calls
+        .slice(-9)
+        .map(([config]) => [config.method, config.url]),
     ).toEqual([
       ["POST", `/api/v1/alerting/rules/${RULE.id}/enable`],
       ["POST", `/api/v1/alerting/rules/${RULE.id}/disable`],

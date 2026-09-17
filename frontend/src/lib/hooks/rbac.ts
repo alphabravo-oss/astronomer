@@ -34,28 +34,28 @@ import type { PolicyRule } from "@/types";
 export function useGlobalRoles() {
   return useQuery({
     queryKey: queryKeys.rbac.globalRoles,
-    queryFn: getGlobalRoles,
+    queryFn: ({ signal }) => getGlobalRoles(signal),
   });
 }
 
 export function useClusterRoles() {
   return useQuery({
     queryKey: queryKeys.rbac.clusterRoles(),
-    queryFn: getClusterRoles,
+    queryFn: ({ signal }) => getClusterRoles(signal),
   });
 }
 
 export function useProjectRoles() {
   return useQuery({
     queryKey: queryKeys.rbac.projectRoles(),
-    queryFn: getProjectRoles,
+    queryFn: ({ signal }) => getProjectRoles(signal),
   });
 }
 
 export function useMyEffectivePermissions(params?: EffectivePermissionParams) {
   return useQuery({
     queryKey: queryKeys.rbac.myPermissions(params),
-    queryFn: () => getMyEffectivePermissions(params),
+    queryFn: ({ signal }) => getMyEffectivePermissions(params, signal),
   });
 }
 
@@ -66,10 +66,10 @@ export function useEffectivePermissions(
   const self = !userId;
   return useQuery({
     queryKey: queryKeys.rbac.effectivePermissions(userId || "me", params, self),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       self
-        ? getMyEffectivePermissions(params)
-        : getEffectivePermissionsForUser(userId, params),
+        ? getMyEffectivePermissions(params, signal)
+        : getEffectivePermissionsForUser(userId, params, signal),
   });
 }
 
@@ -132,7 +132,7 @@ export function useDeleteRole() {
 export function useRoleTemplates() {
   return useQuery({
     queryKey: queryKeys.rbac.templates,
-    queryFn: listRoleTemplates,
+    queryFn: ({ signal }) => listRoleTemplates(signal),
   });
 }
 
@@ -175,21 +175,21 @@ export function useApplyProjectRoleTemplate() {
 export function useClusterRoleBindings(params?: { cluster_id?: string }) {
   return useQuery({
     queryKey: queryKeys.rbac.clusterRoleBindings(params),
-    queryFn: () => listClusterRoleBindings(params),
+    queryFn: ({ signal }) => listClusterRoleBindings(params, signal),
   });
 }
 
 export function useGlobalRoleBindings() {
   return useQuery({
     queryKey: queryKeys.rbac.globalRoleBindings,
-    queryFn: listGlobalRoleBindings,
+    queryFn: ({ signal }) => listGlobalRoleBindings(signal),
   });
 }
 
 export function useProjectRoleBindings(params?: { project_id?: string }) {
   return useQuery({
     queryKey: queryKeys.rbac.projectRoleBindings(params),
-    queryFn: () => listProjectRoleBindings(params),
+    queryFn: ({ signal }) => listProjectRoleBindings(params, signal),
   });
 }
 

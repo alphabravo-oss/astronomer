@@ -53,6 +53,7 @@ describe("catalog project isolation", () => {
   });
 
   it("scopes every generated chart browse and version request to a project", async () => {
+    const signal = new AbortController().signal;
     vi.mocked(generated.getCatalogCharts).mockResolvedValueOnce({
       data: [],
       pagination: {
@@ -68,15 +69,17 @@ describe("catalog project isolation", () => {
       pagination: { limit: 200, offset: 0, has_more: false, next_offset: null },
     });
 
-    await getHelmCharts({ projectId: "project-1", search: "metrics" });
-    await getHelmChartVersions("project-1", "chart-1");
+    await getHelmCharts({ projectId: "project-1", search: "metrics" }, signal);
+    await getHelmChartVersions("project-1", "chart-1", signal);
 
     expect(generated.getCatalogCharts).toHaveBeenCalledWith({
       query: { project_id: "project-1", limit: 200 },
+      signal,
     });
     expect(generated.getCatalogChartsByIdVersions).toHaveBeenCalledWith({
       path: { id: "chart-1" },
       query: { project_id: "project-1", limit: 200 },
+      signal,
     });
   });
 

@@ -4,31 +4,11 @@ import type { CamelizeKeys } from "@/types/wire-contract";
 
 // --- Cluster Types ---
 
-export type ClusterStatus =
-  | "pending"
-  | "active"
-  | "connecting"
-  | "warning"
-  | "error"
-  | "disconnected"
-  | "provisioning";
+type ClusterWire = OpenAPIComponents["schemas"]["Cluster"];
 
-export type ClusterProvider =
-  | "aws"
-  | "gcp"
-  | "azure"
-  | "eks"
-  | "gke"
-  | "aks"
-  | "doks"
-  | "self-managed"
-  | "on-prem"
-  | "digitalocean"
-  | "other"
-  | string;
-
-export type ClusterEnvironment =
-  "production" | "staging" | "development" | "dev" | "testing" | string;
+export type ClusterStatus = CamelizeKeys<ClusterWire>["status"];
+export type ClusterProvider = CamelizeKeys<ClusterWire>["provider"];
+export type ClusterEnvironment = CamelizeKeys<ClusterWire>["environment"];
 
 export interface ClusterHealth {
   status: ClusterStatus;
@@ -43,8 +23,7 @@ export interface ClusterHealthComponent {
   message?: string;
 }
 
-export type ClusterDistribution =
-  "k3s" | "rke2" | "eks" | "aks" | "gke" | "openshift" | "k8s" | "";
+export type ClusterDistribution = CamelizeKeys<ClusterWire>["distribution"];
 
 /**
  * Explicit view model for the cluster wire DTO. The optional health/capacity
@@ -53,25 +32,10 @@ export type ClusterDistribution =
  */
 export type Cluster = Omit<
   CamelizeKeys<OpenAPIComponents["schemas"]["Cluster"]>,
-  | "status"
-  | "provider"
-  | "environment"
-  | "distribution"
-  | "agentPrivilegeProfile"
-  | "agentOverrides"
+  "agentOverrides"
 > & {
-  status: ClusterStatus;
-  provider: ClusterProvider;
-  environment: ClusterEnvironment;
-  distribution: ClusterDistribution;
-  agentPrivilegeProfile:
-    | "viewer"
-    | "operator"
-    | "namespace-viewer"
-    | "namespace-operator"
-    | "custom"
-    | "admin"
-    | string;
+  // This nested Kubernetes-style configuration intentionally retains the
+  // documented snake_case keys used in generated manifests.
   agentOverrides: OpenAPIComponents["schemas"]["AgentOverrides"];
   health?: ClusterHealth;
   namespaceCount?: number;
@@ -80,6 +44,16 @@ export type Cluster = Omit<
   memoryCapacity?: number;
   memoryUsage?: number;
 };
+
+export type ClusterWireView = Omit<
+  Cluster,
+  | "health"
+  | "namespaceCount"
+  | "cpuCapacity"
+  | "cpuUsage"
+  | "memoryCapacity"
+  | "memoryUsage"
+>;
 
 export type ClusterAgentStatus = "connected" | "degraded" | "disconnected";
 

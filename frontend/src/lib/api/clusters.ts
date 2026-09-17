@@ -8,6 +8,7 @@ import {
 } from "@/lib/api/generated/client";
 import { mapPage } from "@/lib/api/pagination";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { CamelizeKeys } from "@/types/wire-contract";
 import type { Cluster, ClusterRegistration, PaginatedResponse } from "@/types";
 
 type ClusterWire = OpenAPIComponents["schemas"]["Cluster"];
@@ -16,15 +17,9 @@ type ClusterEstateSummaryWire =
 export type UpdateClusterInput =
   OpenAPIComponents["schemas"]["UpdateClusterRequest"];
 
-export interface ClusterEstateSummary {
-  clustersTotal: number;
-  clustersActive: number;
-  clustersWarning: number;
-  clustersDisconnected: number;
-  nodesTotal: number;
-  podsTotal: number;
-  asOf: string;
-}
+export type ClusterEstateSummary = CamelizeKeys<
+  OpenAPIComponents["schemas"]["ClusterEstateSummary"]
+>;
 
 function requireData<T>(value: { data?: T } | undefined, operation: string): T {
   if (!value?.data) throw new Error(`${operation} returned no data payload`);
@@ -50,7 +45,7 @@ export function mapCluster(wire: ClusterWire): Cluster {
     provider: wire.provider,
     labels: wire.labels,
     annotations: wire.annotations,
-    distribution: wire.distribution as Cluster["distribution"],
+    distribution: wire.distribution,
     agentVersion: wire.agent_version,
     lastHeartbeat: wire.last_heartbeat,
     kubernetesVersion: wire.kubernetes_version,

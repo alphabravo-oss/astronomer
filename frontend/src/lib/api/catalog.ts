@@ -44,9 +44,10 @@ export type ChartRatingAggregate = CamelizeKeys<
   OpenAPIComponents["schemas"]["ChartRatingAggregate"]
 >;
 export type ChartScore = CamelizeKeys<ChartRecommendationWire>;
-export type CatalogOperation = OpenAPIComponents["schemas"]["CatalogOperation"] & {
-  events?: Schemas["CatalogOperationEvent"][];
-};
+export type CatalogOperation =
+  OpenAPIComponents["schemas"]["CatalogOperation"] & {
+    events?: Schemas["CatalogOperationEvent"][];
+  };
 
 export interface CatalogInstallationReceipt {
   installation: InstalledChart;
@@ -72,7 +73,8 @@ function requiredString(value: string | undefined, field: string): string {
 }
 
 function requiredNumber(value: number | undefined, field: string): number {
-  if (value === undefined) throw new Error(`Catalog API response omitted ${field}`);
+  if (value === undefined)
+    throw new Error(`Catalog API response omitted ${field}`);
   return value;
 }
 
@@ -85,7 +87,9 @@ function requireData<T>(response: { data?: T }, operation: string): T {
 
 function repositoryType(value: string | undefined): HelmRepoType {
   if (value === "helm" || value === "oci") return value;
-  throw new Error(`Catalog API returned unsupported repository type: ${value ?? "missing"}`);
+  throw new Error(
+    `Catalog API returned unsupported repository type: ${value ?? "missing"}`,
+  );
 }
 
 function chartCategory(value: string | undefined): HelmChartCategory {
@@ -164,7 +168,10 @@ export function mapInstalledChart(
     id: requiredString(wire.id, "installedChart.id"),
     clusterId: requiredString(wire.cluster_id, "installedChart.cluster_id"),
     chartVersionId: wire.chart_version_id,
-    releaseName: requiredString(wire.release_name, "installedChart.release_name"),
+    releaseName: requiredString(
+      wire.release_name,
+      "installedChart.release_name",
+    ),
     namespace: requiredString(wire.namespace, "installedChart.namespace"),
     valuesOverride: wire.values_override,
     status: requiredString(wire.status, "installedChart.status"),
@@ -213,9 +220,12 @@ function mapChartScore(wire: ChartRecommendationWire): ChartScore {
   };
 }
 
-export async function getHelmRepositories(): Promise<HelmRepository[]> {
+export async function getHelmRepositories(
+  signal?: AbortSignal,
+): Promise<HelmRepository[]> {
   const response = await getCatalogRepositories({
     query: { limit: CATALOG_PAGE_LIMIT },
+    signal,
   });
   const rows = Array.isArray(response) ? response : (response.data ?? []);
   return rows.map(mapHelmRepository);
@@ -257,18 +267,23 @@ export async function deleteHelmRepository(id: string): Promise<void> {
   await deleteCatalogRepositoriesById({ path: { id } });
 }
 
-export async function getHelmCharts(params: {
-  projectId: string;
-  repository?: string;
-  category?: string;
-  search?: string;
-}): Promise<HelmChart[]> {
+export async function getHelmCharts(
+  params: {
+    projectId: string;
+    repository?: string;
+    category?: string;
+    search?: string;
+  },
+  signal?: AbortSignal,
+): Promise<HelmChart[]> {
   const response = await getCatalogCharts({
     query: { project_id: params.projectId, limit: CATALOG_PAGE_LIMIT },
+    signal,
   });
   const search = params.search?.trim().toLocaleLowerCase();
   return (response.data ?? []).map(mapHelmChart).filter((chart) => {
-    if (params.repository && chart.repositoryId !== params.repository) return false;
+    if (params.repository && chart.repositoryId !== params.repository)
+      return false;
     if (params.category && chart.category !== params.category) return false;
     if (!search) return true;
     return [chart.name, chart.displayName, chart.description, ...chart.keywords]
@@ -280,19 +295,25 @@ export async function getHelmCharts(params: {
 export async function getHelmChartVersions(
   projectId: string,
   chartId: string,
+  signal?: AbortSignal,
 ): Promise<HelmChartVersion[]> {
   const response = await getCatalogChartsByIdVersions({
     path: { id: chartId },
     query: { project_id: projectId, limit: 200 },
+    signal,
   });
   return (response.data ?? []).map(mapHelmChartVersion);
 }
 
-export async function getInstalledCharts(params?: {
-  cluster?: string;
-}): Promise<InstalledChart[]> {
+export async function getInstalledCharts(
+  params?: {
+    cluster?: string;
+  },
+  signal?: AbortSignal,
+): Promise<InstalledChart[]> {
   const response = await getCatalogInstalled({
     query: { cluster_id: params?.cluster, limit: CATALOG_PAGE_LIMIT },
+    signal,
   });
   return (response.data ?? []).map(mapInstalledChart);
 }
@@ -323,7 +344,9 @@ export async function installHelmChart(
 }
 
 /** Detail is the only catalog endpoint that exposes persisted stage events. */
-export async function getCatalogOperation(id: string): Promise<CatalogOperation> {
+export async function getCatalogOperation(
+  id: string,
+): Promise<CatalogOperation> {
   return getCatalogOperationsById({ path: { id } });
 }
 
@@ -349,7 +372,10 @@ export async function uninstallChart(id: string): Promise<void> {
   });
 }
 
-export async function rollbackChart(id: string, revision: number): Promise<void> {
+export async function rollbackChart(
+  id: string,
+  revision: number,
+): Promise<void> {
   await postCatalogInstalledByIdRollback({
     path: { id },
     headerParams: idempotencyHeaderParams(),
@@ -385,7 +411,9 @@ export async function getChartRatingAggregate(
   const response = await getChartsByChartIdRatingsAggregate({
     path: { chart_id: chartId },
   });
-  return mapChartRatingAggregate(requireData(response, "getChartRatingAggregate"));
+  return mapChartRatingAggregate(
+    requireData(response, "getChartRatingAggregate"),
+  );
 }
 
 export async function getMyChartRating(

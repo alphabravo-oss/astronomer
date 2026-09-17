@@ -3,14 +3,6 @@
   "description": "Classifies direct Redis enqueue call sites that are not statically proven task-outbox backed by scripts/operation-task-inventory.mjs.",
   "classifications": [
     {
-      "file": "internal/handler/control_plane.go",
-      "function": "enqueueNotifications",
-      "classification": "best-effort",
-      "owner": "backend/notifications",
-      "reason": "Notification fan-out is side-effect delivery for already-detected control-plane alerts. It should not block control-plane health responses.",
-      "validation": "Failure only drops an outbound notification attempt; alert state remains queryable through control-plane status."
-    },
-    {
       "file": "internal/worker/job_metrics.go",
       "function": "EnqueueWithCorrelation",
       "classification": "wrapper-only",
@@ -19,12 +11,12 @@
       "validation": "Callers remain responsible for their own durable intent or best-effort classification."
     },
     {
-      "file": "internal/worker/tasks/alert_evaluation.go",
-      "function": "dispatchAlertNotifications",
-      "classification": "best-effort",
-      "owner": "backend/alerting",
-      "reason": "The firing or resolved alert event is persisted before outbound channel fan-out, so alert state remains visible even when a notification enqueue fails. Channel failures are intentionally isolated so they cannot abort evaluation of other rules or channels.",
-      "validation": "Enqueue failures are logged with event and channel identifiers; successfully accepted notification:send tasks run on the critical queue with MaxRetry(3). There is no claimed notification-delivery repair path, so outbound delivery remains explicitly best-effort."
+      "file": "internal/worker/tasks/notification_dispatch.go",
+      "function": "HandleNotificationSend",
+      "classification": "outbox-backed",
+      "owner": "backend/notifications",
+      "reason": "Email delivery is handed off from the durable notification task into the PostgreSQL email_messages queue with a stable per-recipient dedupe key before the notification task succeeds.",
+      "validation": "The notification intent originates in task_outbox; email.Enqueuer persists email_messages idempotently, and a persistence failure returns an error so asynq retries the durable notification task."
     },
     {
       "file": "internal/worker/tasks/cluster_template_apply.go",

@@ -24,6 +24,7 @@ export async function k8sProxy(
   k8sPath: string,
   body?: unknown,
   headers?: Record<string, string>,
+  signal?: AbortSignal,
 ) {
   const url = `/clusters/${clusterId}/k8s/${k8sPath}`;
   const res = await api.request({
@@ -31,13 +32,18 @@ export async function k8sProxy(
     method,
     data: body,
     headers,
+    signal,
     timeout: 60000,
   });
   return res.data;
 }
 
-export async function k8sGet(clusterId: string, path: string) {
-  return k8sProxy(clusterId, "GET", path);
+export async function k8sGet(
+  clusterId: string,
+  path: string,
+  signal?: AbortSignal,
+) {
+  return k8sProxy(clusterId, "GET", path, undefined, undefined, signal);
 }
 
 export async function k8sCreate(
@@ -104,8 +110,9 @@ function appendK8sQuery(path: string, params: Record<string, string>): string {
 export async function k8sGetYaml(
   clusterId: string,
   path: string,
+  signal?: AbortSignal,
 ): Promise<string> {
-  const data = await k8sGet(clusterId, path);
+  const data = await k8sGet(clusterId, path, signal);
   const yaml = await import("js-yaml");
   if (data?.metadata?.managedFields) delete data.metadata.managedFields;
   return yaml.dump(data, { lineWidth: -1, noRefs: true });

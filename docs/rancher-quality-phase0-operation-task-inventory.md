@@ -9,14 +9,14 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 ## Scan Scope
 
 - Worker Go files scanned: 102
-- Handler Go files scanned: 318
-- Production source files scanned: 454
+- Handler Go files scanned: 320
+- Production source files scanned: 456
 - Task constants resolved: 159
 - Worker handler registrations: 91
 - Periodic schedules: 62
 - Task constructors: 71
 - Production `asynq.NewTask` call sites: 87
-- Production `.Enqueue(...)` call sites: 6
+- Production `.Enqueue(...)` call sites: 5
 - Task-outbox producer call sites: 31
 - Durable operation tables: 15
 
@@ -42,12 +42,11 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 
 | Location |Function |Nearby task |Classification |Owner |Reason |Validation |
 | --- |--- |--- |--- |--- |--- |--- |
-| [`internal/handler/control_plane.go:541`](internal/handler/control_plane.go:541) |enqueueNotifications |NewNotificationSendTask |best-effort |backend/notifications |Notification fan-out is side-effect delivery for already-detected control-plane alerts. It should not block control-plane health responses. |Failure only drops an outbound notification attempt; alert state remains queryable through control-plane status. |
-| [`internal/worker/job_metrics.go:68`](internal/worker/job_metrics.go:68) |EnqueueWithCorrelation |task.Type( |wrapper-only |backend/worker |This is a shared instrumentation wrapper around asynq.Client.Enqueue, not an independent product action producer. |Callers remain responsible for their own durable intent or best-effort classification. |
-| [`internal/worker/tasks/alert_evaluation.go:212`](internal/worker/tasks/alert_evaluation.go:212) |dispatchAlertNotifications |unknown |best-effort |backend/alerting |The firing or resolved alert event is persisted before outbound channel fan-out, so alert state remains visible even when a notification enqueue fails. Channel failures are intentionally isolated so they cannot abort evaluation of other rules or channels. |Enqueue failures are logged with event and channel identifiers; successfully accepted notification:send tasks run on the critical queue with MaxRetry(3). There is no claimed notification-delivery repair path, so outbound delivery remains explicitly best-effort. |
+| [`internal/worker/job_metrics.go:69`](internal/worker/job_metrics.go:69) |EnqueueWithCorrelation |task.Type( |wrapper-only |backend/worker |This is a shared instrumentation wrapper around asynq.Client.Enqueue, not an independent product action producer. |Callers remain responsible for their own durable intent or best-effort classification. |
 | [`internal/worker/tasks/cluster_template_apply.go:612`](internal/worker/tasks/cluster_template_apply.go:612) |HandleClusterTemplateDriftCheck |NewClusterTemplateApplyTask |repair-backed |backend/templates |This direct enqueue happens inside the recovery sweep for failed template applications. If delivery fails, the durable failed row remains eligible for the next sweep after backoff. |cluster_template:drift_check is scheduled on the tunnel queue and guards repeated failures with failedApplyMinBackoff. |
 | [`internal/worker/tasks/cluster_template_apply.go:655`](internal/worker/tasks/cluster_template_apply.go:655) |HandleClusterTemplateDriftCheck |NewClusterTemplateApplyTask |repair-backed |backend/templates |This direct enqueue happens inside the recovery sweep for failed template applications. If delivery fails, the durable failed row remains eligible for the next sweep after backoff. |cluster_template:drift_check is scheduled on the tunnel queue and guards repeated failures with failedApplyMinBackoff. |
 | [`internal/worker/tasks/gitops_sync.go:572`](internal/worker/tasks/gitops_sync.go:572) |enqueueDecommission |unknown |repair-backed |backend/gitops |The path creates a durable cluster_decommissions operation before dispatch and prefers a deduplicated task_outbox row. If both outbox and direct acceleration are unavailable, the pending operation remains eligible for repair. |cluster:decommission_all is scheduled every minute on the tunnel queue, re-enqueues pending rows, and the reconciler uses a lease claim plus persisted idempotent phase state; TestGitOpsDecommissionWritesTaskOutboxBeforeDirectEnqueue verifies the normal outbox contract. |
+| [`internal/worker/tasks/notification_dispatch.go:201`](internal/worker/tasks/notification_dispatch.go:201) |HandleNotificationSend |unknown |outbox-backed |backend/notifications |Email delivery is handed off from the durable notification task into the PostgreSQL email_messages queue with a stable per-recipient dedupe key before the notification task succeeds. |The notification intent originates in task_outbox; email.Enqueuer persists email_messages idempotently, and a persistence failure returns an error so asynq retries the durable notification task. |
 
 ## Worker Task Registry
 
@@ -69,7 +68,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `audit:outbox_dispatch` |rejectUnboundRuntimeTask (worker) [`internal/worker/task_registry.go:106`](internal/worker/task_registry.go:106) |@every 2s / default [`internal/worker/task_registry.go:216`](internal/worker/task_registry.go:216) |none |0 |
 | `audit_export:generate` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:178`](internal/worker/task_registry.go:178) |none |NewAuditExportOperationTask [`internal/worker/tasks/audit_export_operation.go:90`](internal/worker/tasks/audit_export_operation.go:90) |1 |
 | `audit_export:recover` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:179`](internal/worker/task_registry.go:179) |@every 2m / tunnel [`internal/worker/task_registry.go:201`](internal/worker/task_registry.go:201) |NewAuditExportRecoveryTask [`internal/worker/tasks/audit_export_operation.go:67`](internal/worker/tasks/audit_export_operation.go:67) |1 |
-| `audit_log:enforce_retention` |HandleEnforceAuditLogRetention (worker) [`internal/worker/task_registry.go:105`](internal/worker/task_registry.go:105) |30 1 * * * / default [`internal/worker/task_registry.go:215`](internal/worker/task_registry.go:215) |NewEnforceAuditLogRetentionTask [`internal/worker/tasks/audit_retention.go:52`](internal/worker/tasks/audit_retention.go:52) |1 |
+| `audit_log:enforce_retention` |HandleEnforceAuditLogRetention (worker) [`internal/worker/task_registry.go:105`](internal/worker/task_registry.go:105) |30 1 * * * / default [`internal/worker/task_registry.go:215`](internal/worker/task_registry.go:215) |NewEnforceAuditLogRetentionTask [`internal/worker/tasks/audit_retention.go:56`](internal/worker/tasks/audit_retention.go:56) |1 |
 | `audit_log:ensure_partitions` |HandleEnsureAuditLogPartitions (worker) [`internal/worker/task_registry.go:104`](internal/worker/task_registry.go:104) |0 1 * * * / default [`internal/worker/task_registry.go:214`](internal/worker/task_registry.go:214) |NewEnsureAuditLogPartitionsTask [`internal/worker/tasks/audit_partition_maintenance.go:18`](internal/worker/tasks/audit_partition_maintenance.go:18) |1 |
 | `auth:refresh_group_sync_metrics` |HandleRefreshGroupSyncMetrics (worker) [`internal/worker/task_registry.go:114`](internal/worker/task_registry.go:114) |@every 5m / default [`internal/worker/task_registry.go:221`](internal/worker/task_registry.go:221) |NewRefreshGroupSyncMetricsTask [`internal/worker/tasks/refresh_group_sync_metrics.go:18`](internal/worker/tasks/refresh_group_sync_metrics.go:18) |1 |
 | `backup:execute` |HandleBackupExecution (worker) [`internal/worker/task_registry.go:91`](internal/worker/task_registry.go:91) |none |NewBackupExecutionTask [`internal/worker/tasks/backup_execution.go:29`](internal/worker/tasks/backup_execution.go:29) |1 |
@@ -124,7 +123,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `network_policy:apply` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:159`](internal/worker/task_registry.go:159) |@every 5m / tunnel [`internal/worker/task_registry.go:253`](internal/worker/task_registry.go:253) |NewNetworkPolicyApplyTask [`internal/worker/tasks/network_policy_apply.go:74`](internal/worker/tasks/network_policy_apply.go:74) |1 |
 | `network_policy:drift_check` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:160`](internal/worker/task_registry.go:160) |@every 30m / tunnel [`internal/worker/task_registry.go:254`](internal/worker/task_registry.go:254) |NewNetworkPolicyDriftCheckTask [`internal/worker/tasks/network_policy_apply.go:87`](internal/worker/tasks/network_policy_apply.go:87) |1 |
 | `node:operation` |HandleNodeOperation (tunnel) [`internal/worker/task_registry.go:169`](internal/worker/task_registry.go:169) |none |NewNodeOperationTask [`internal/worker/tasks/node_operation.go:34`](internal/worker/tasks/node_operation.go:34) |1 |
-| `notification:send` |HandleNotificationSend (worker) [`internal/worker/task_registry.go:98`](internal/worker/task_registry.go:98) |none |NewNotificationSendTask [`internal/worker/tasks/notification_dispatch.go:91`](internal/worker/tasks/notification_dispatch.go:91) |1 |
+| `notification:send` |HandleNotificationSend (worker) [`internal/worker/task_registry.go:98`](internal/worker/task_registry.go:98) |none |NewNotificationSendTask [`internal/worker/tasks/notification_dispatch.go:130`](internal/worker/tasks/notification_dispatch.go:130) |1 |
 | `pod:delete` |HandlePodDelete (tunnel) [`internal/worker/task_registry.go:167`](internal/worker/task_registry.go:167) |none |NewPodDeleteTask [`internal/worker/tasks/pod_delete.go:33`](internal/worker/tasks/pod_delete.go:33) |1 |
 | `project:reconcile` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:144`](internal/worker/task_registry.go:144) |none |NewProjectReconcileTask [`internal/worker/tasks/project_reconcile.go:159`](internal/worker/tasks/project_reconcile.go:159) |1 |
 | `project:reconcile_all` |rejectUnboundRuntimeTask (tunnel) [`internal/worker/task_registry.go:145`](internal/worker/task_registry.go:145) |@every 5m / tunnel [`internal/worker/task_registry.go:245`](internal/worker/task_registry.go:245) |NewProjectReconcileAllTask [`internal/worker/tasks/project_reconcile.go:169`](internal/worker/tasks/project_reconcile.go:169) |1 |
@@ -149,19 +148,17 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 
 | Location |Function |Nearby task |Outbox observed |Detail |
 | --- |--- |--- |--- |--- |
-| [`internal/handler/control_plane.go:541`](internal/handler/control_plane.go:541) |enqueueNotifications |NewNotificationSendTask |no |_, _ = h.queue.Enqueue(task) |
-| [`internal/worker/job_metrics.go:68`](internal/worker/job_metrics.go:68) |EnqueueWithCorrelation |task.Type( |no |return client.Enqueue(task, opts...) |
-| [`internal/worker/tasks/alert_evaluation.go:212`](internal/worker/tasks/alert_evaluation.go:212) |dispatchAlertNotifications |unknown |no |if _, enqErr := runtimeDependencies(ctx).Enqueuer.Enqueue(task); enqErr != nil { |
+| [`internal/worker/job_metrics.go:69`](internal/worker/job_metrics.go:69) |EnqueueWithCorrelation |task.Type( |no |return client.Enqueue(task, opts...) |
 | [`internal/worker/tasks/cluster_template_apply.go:612`](internal/worker/tasks/cluster_template_apply.go:612) |HandleClusterTemplateDriftCheck |NewClusterTemplateApplyTask |no |_, enqueueErr := enqueuer.Enqueue(task, |
 | [`internal/worker/tasks/cluster_template_apply.go:655`](internal/worker/tasks/cluster_template_apply.go:655) |HandleClusterTemplateDriftCheck |NewClusterTemplateApplyTask |no |_, enqueueErr := enqueuer.Enqueue(task, |
 | [`internal/worker/tasks/gitops_sync.go:572`](internal/worker/tasks/gitops_sync.go:572) |enqueueDecommission |unknown |no |if _, err := runtime.Deps.Enqueuer.Enqueue(task, asynq.Queue(ClusterTemplateApplyQueueName)); err != nil { |
+| [`internal/worker/tasks/notification_dispatch.go:201`](internal/worker/tasks/notification_dispatch.go:201) |HandleNotificationSend |unknown |no |if _, err := emails.Enqueue(ctx, email.Request{ |
 
 ## Task Outbox Producers
 
 - [`internal/handler/admin_management_backup_operations.go:92`](internal/handler/admin_management_backup_operations.go:92) - `_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{DedupeKey: fmt.Sprintf("management_backup:%s:%d", row.ID, row.DesiredGeneration), MaxRetry: 8, Timeout: 5 * time.Minute})`
 - [`internal/handler/admin_management_backup_operations.go:127`](internal/handler/admin_management_backup_operations.go:127) - `if _, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{DedupeKey: "management_backup_operation:" + operation.ID.String(), MaxRetry: 20, Timeout: 5 * time.Minute, MaxDeliveryAttempts: 30}); err != nil {`
 - [`internal/handler/admin_queues.go:294`](internal/handler/admin_queues.go:294) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/alerting_channels.go:223`](internal/handler/alerting_channels.go:223) - `_, enqueueErr := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/apiserver_allowlist.go:457`](internal/handler/apiserver_allowlist.go:457) - `_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/catalog_repositories.go:395`](internal/handler/catalog_repositories.go:395) - `outbox, mutationErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/cloud_credentials_targets.go:113`](internal/handler/cloud_credentials_targets.go:113) - `_, err = q.UpsertCloudCredentialMaterializationWithTaskOutbox(ctx, sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams{`
@@ -185,10 +182,11 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/resource_operations.go:203`](internal/handler/resource_operations.go:203) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/workloads_resources.go:270`](internal/handler/workloads_resources.go:270) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/worker/tasks/gitops_sync.go:550`](internal/worker/tasks/gitops_sync.go:550) - `if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{`
+- [`internal/worker/tasks/notification_dispatch.go:120`](internal/worker/tasks/notification_dispatch.go:120) - `_, err = EnqueueTaskOutbox(ctx, q, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/security_scan.go:255`](internal/worker/tasks/security_scan.go:255) - `_, err = EnqueueTaskOutbox(ctx, runtime.Deps.Outbox, task, TaskOutboxOptions{`
-- [`internal/worker/tasks/task_outbox_enqueue.go:14`](internal/worker/tasks/task_outbox_enqueue.go:14) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
-- [`internal/worker/tasks/task_outbox_enqueue.go:27`](internal/worker/tasks/task_outbox_enqueue.go:27) - `func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {`
-- [`internal/worker/tasks/task_outbox_enqueue.go:44`](internal/worker/tasks/task_outbox_enqueue.go:44) - `return q.UpsertTaskOutbox(ctx, sqlc.UpsertTaskOutboxParams{`
+- [`internal/worker/tasks/task_outbox_enqueue.go:16`](internal/worker/tasks/task_outbox_enqueue.go:16) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
+- [`internal/worker/tasks/task_outbox_enqueue.go:29`](internal/worker/tasks/task_outbox_enqueue.go:29) - `func EnqueueTaskOutbox(ctx context.Context, q TaskOutboxWriter, task *asynq.Task, opts TaskOutboxOptions) (sqlc.TaskOutbox, error) {`
+- [`internal/worker/tasks/task_outbox_enqueue.go:47`](internal/worker/tasks/task_outbox_enqueue.go:47) - `return q.UpsertTaskOutbox(ctx, sqlc.UpsertTaskOutboxParams{`
 
 ## Durable Operation Tables
 
@@ -213,18 +211,18 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | Operation helper |Create helper |Idempotent helper |Handler create uses |Handler idempotent uses |
 | --- |--- |--- |--- |--- |
 | AdminQueueOperation |[`internal/db/sqlc/admin_queue_operations.sql.go:76`](internal/db/sqlc/admin_queue_operations.sql.go:76) |missing |2 |0 |
-| AgentLifecycleOperation |[`internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:94`](internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:94) |[`internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:143`](internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:143) |2 |2 |
+| AgentLifecycleOperation |[`internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:97`](internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:97) |[`internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:146`](internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:146) |2 |2 |
 | AuditExportOperation |[`internal/db/sqlc/audit_export_operations.sql.go:111`](internal/db/sqlc/audit_export_operations.sql.go:111) |missing |2 |0 |
-| CatalogOperation |[`internal/db/sqlc/catalog_operations.sql.go:93`](internal/db/sqlc/catalog_operations.sql.go:93) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:87`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:87) |4 |3 |
-| DeferredOperation |[`internal/db/sqlc/maintenance.sql.go:50`](internal/db/sqlc/maintenance.sql.go:50) |[`internal/db/sqlc/operation_idempotency_special_ext.sql.go:120`](internal/db/sqlc/operation_idempotency_special_ext.sql.go:120) |2 |2 |
-| LoggingOperation |[`internal/db/sqlc/logging_operations.sql.go:112`](internal/db/sqlc/logging_operations.sql.go:112) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:155`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:155) |4 |3 |
-| MonitoringOperation |[`internal/db/sqlc/monitoring_operations.sql.go:85`](internal/db/sqlc/monitoring_operations.sql.go:85) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:250`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:250) |4 |3 |
+| CatalogOperation |[`internal/db/sqlc/catalog_operations.sql.go:93`](internal/db/sqlc/catalog_operations.sql.go:93) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:90`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:90) |4 |3 |
+| DeferredOperation |[`internal/db/sqlc/maintenance.sql.go:50`](internal/db/sqlc/maintenance.sql.go:50) |[`internal/db/sqlc/operation_idempotency_special_ext.sql.go:123`](internal/db/sqlc/operation_idempotency_special_ext.sql.go:123) |2 |2 |
+| LoggingOperation |[`internal/db/sqlc/logging_operations.sql.go:112`](internal/db/sqlc/logging_operations.sql.go:112) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:158`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:158) |4 |3 |
+| MonitoringOperation |[`internal/db/sqlc/monitoring_operations.sql.go:85`](internal/db/sqlc/monitoring_operations.sql.go:85) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:253`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:253) |4 |3 |
 | NodeOperation |missing |[`internal/db/sqlc/node_operations.sql.go:94`](internal/db/sqlc/node_operations.sql.go:94) |0 |2 |
 | ResourceOperation |missing |[`internal/db/sqlc/resource_operations.sql.go:110`](internal/db/sqlc/resource_operations.sql.go:110) |0 |2 |
-| RestoreOperation |[`internal/db/sqlc/backups.sql.go:275`](internal/db/sqlc/backups.sql.go:275) |[`internal/db/sqlc/operation_idempotency_special_ext.sql.go:59`](internal/db/sqlc/operation_idempotency_special_ext.sql.go:59) |4 |3 |
+| RestoreOperation |[`internal/db/sqlc/backups.sql.go:275`](internal/db/sqlc/backups.sql.go:275) |[`internal/db/sqlc/operation_idempotency_special_ext.sql.go:62`](internal/db/sqlc/operation_idempotency_special_ext.sql.go:62) |4 |3 |
 | SupportBundleOperation |[`internal/db/sqlc/support_bundle_operations.sql.go:120`](internal/db/sqlc/support_bundle_operations.sql.go:120) |missing |2 |0 |
-| ToolOperation |[`internal/db/sqlc/tool_operations.sql.go:165`](internal/db/sqlc/tool_operations.sql.go:165) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:60`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:60) |4 |3 |
-| WorkloadOperation |[`internal/db/sqlc/workload_operations.sql.go:120`](internal/db/sqlc/workload_operations.sql.go:120) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:223`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:223) |7 |7 |
+| ToolOperation |[`internal/db/sqlc/tool_operations.sql.go:165`](internal/db/sqlc/tool_operations.sql.go:165) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:63`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:63) |4 |3 |
+| WorkloadOperation |[`internal/db/sqlc/workload_operations.sql.go:120`](internal/db/sqlc/workload_operations.sql.go:120) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:226`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:226) |7 |7 |
 
 ## Idempotency Scopes Used By Handlers
 
@@ -237,7 +235,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `admin-webhook-delivery-retry` |1 |[`internal/handler/webhooks_deliveries.go:141`](internal/handler/webhooks_deliveries.go:141) |
 | `admin-webhook-test` |1 |[`internal/handler/webhooks_test_delivery.go:62`](internal/handler/webhooks_test_delivery.go:62) |
 | `agent_lifecycle` |1 |[`internal/handler/cluster_agents_upgrade.go:90`](internal/handler/cluster_agents_upgrade.go:90) |
-| `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:225`](internal/handler/clusters_registration.go:225) |
+| `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:238`](internal/handler/clusters_registration.go:238) |
 | `apiserver_allowlist_reconcile` |1 |[`internal/handler/apiserver_allowlist.go:391`](internal/handler/apiserver_allowlist.go:391) |
 | `catalog` |4 |[`internal/handler/catalog_installations.go:170`](internal/handler/catalog_installations.go:170)<br>[`internal/handler/catalog_installations.go:231`](internal/handler/catalog_installations.go:231)<br>[`internal/handler/catalog_installations.go:425`](internal/handler/catalog_installations.go:425)<br>[`internal/handler/catalog_installations.go:503`](internal/handler/catalog_installations.go:503) |
 | `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:359`](internal/handler/catalog_repositories.go:359) |
@@ -253,7 +251,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `logging` |11 |[`internal/handler/logging_attach.go:161`](internal/handler/logging_attach.go:161)<br>[`internal/handler/logging_loki_token.go:80`](internal/handler/logging_loki_token.go:80)<br>[`internal/handler/logging_outputs.go:98`](internal/handler/logging_outputs.go:98)<br>[`internal/handler/logging_outputs.go:158`](internal/handler/logging_outputs.go:158) |
 | `management_backup` |1 |[`internal/handler/admin_management_backup_operations.go:105`](internal/handler/admin_management_backup_operations.go:105) |
 | `monitoring` |3 |[`internal/handler/monitoring_stack_cluster.go:193`](internal/handler/monitoring_stack_cluster.go:193)<br>[`internal/handler/monitoring_stack_cluster.go:316`](internal/handler/monitoring_stack_cluster.go:316)<br>[`internal/handler/monitoring_stack_shared.go:342`](internal/handler/monitoring_stack_shared.go:342) |
-| `monitoring_operation_retry` |1 |[`internal/handler/monitoring_operations.go:149`](internal/handler/monitoring_operations.go:149) |
+| `monitoring_operation_retry` |1 |[`internal/handler/monitoring_operations.go:166`](internal/handler/monitoring_operations.go:166) |
 | `network_policy_apply` |1 |[`internal/handler/network_policies.go:557`](internal/handler/network_policies.go:557) |
 | `network_policy_reapply` |1 |[`internal/handler/network_policies.go:757`](internal/handler/network_policies.go:757) |
 | `pod-deletes` |1 |[`internal/handler/workloads_resources.go:227`](internal/handler/workloads_resources.go:227) |

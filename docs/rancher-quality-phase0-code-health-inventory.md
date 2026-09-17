@@ -8,12 +8,12 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 756
-- Frontend source lines: 180869
-- Go source files under `internal/` excluding generated sqlc and tests: 880
-- Go source files scanned for sqlc query references excluding generated sqlc: 1894
-- sqlc query declarations: 1204
-- Component files scanned: 239
+- Frontend source files: 758
+- Frontend source lines: 181646
+- Go source files under `internal/` excluding generated sqlc and tests: 889
+- Go source files scanned for sqlc query references excluding generated sqlc: 1918
+- sqlc query declarations: 1226
+- Component files scanned: 241
 - Helm top-level values scanned: 34
 
 ## Hard Gates
@@ -95,7 +95,7 @@ Owner: frontend/platform. Target abstraction: shared `queryKeys` or feature hook
 Owner: backend/platform. Target abstraction: shared helper package only when call sites perform the same behavior.
 
 - `actionTransition` in [`internal/delivery/rollout/control.go:355`](internal/delivery/rollout/control.go:355), [`internal/delivery/systemrollout/service.go:392`](internal/delivery/systemrollout/service.go:392)
-- `bearerToken` in [`internal/handler/scim.go:271`](internal/handler/scim.go:271), [`internal/lokiauth/auth.go:369`](internal/lokiauth/auth.go:369)
+- `bearerToken` in [`internal/handler/scim.go:272`](internal/handler/scim.go:272), [`internal/lokiauth/auth.go:369`](internal/lokiauth/auth.go:369)
 - `canonicalCandidates` in [`internal/delivery/placement/placement.go:412`](internal/delivery/placement/placement.go:412), [`internal/delivery/rollout/cohorts.go:85`](internal/delivery/rollout/cohorts.go:85)
 - `cloneStringMap` in [`internal/delivery/model/placement.go:193`](internal/delivery/model/placement.go:193), [`internal/delivery/placement/placement.go:557`](internal/delivery/placement/placement.go:557)
 - `contains` in [`internal/delivery/placement/placement.go:565`](internal/delivery/placement/placement.go:565), [`internal/server/vault_observer.go:108`](internal/server/vault_observer.go:108)
@@ -105,9 +105,11 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac_guards.go:251`](internal/handler/rbac_guards.go:251), [`internal/server/middleware/rbac_queries.go:244`](internal/server/middleware/rbac_queries.go:244)
 - `decodeStrict` in [`internal/delivery/provider/provider.go:475`](internal/delivery/provider/provider.go:475), [`internal/delivery/rollout/postgres_store.go:334`](internal/delivery/rollout/postgres_store.go:334)
+- `defaultString` in [`internal/handler/resource_presenters.go:703`](internal/handler/resource_presenters.go:703), [`internal/helmruntime/config.go:109`](internal/helmruntime/config.go:109)
 - `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:186`](internal/delivery/resolver/network.go:186)
 - `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
 - `ensureJSONEOF` in [`internal/handler/validate.go:103`](internal/handler/validate.go:103), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
+- `intValue` in [`internal/controlplane/service.go:177`](internal/controlplane/service.go:177), [`internal/handler/resource_presenters.go:598`](internal/handler/resource_presenters.go:598)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isUniqueViolation` in [`internal/handler/cluster_templates_registry.go:336`](internal/handler/cluster_templates_registry.go:336), [`internal/projects/service.go:571`](internal/projects/service.go:571)
 - `missingCapabilities` in [`internal/agentcompat/compat.go:119`](internal/agentcompat/compat.go:119), [`internal/delivery/placement/placement.go:392`](internal/delivery/placement/placement.go:392)
@@ -122,9 +124,7 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `sortedUUIDs` in [`internal/delivery/model/placement.go:187`](internal/delivery/model/placement.go:187), [`internal/handler/authorization.go:223`](internal/handler/authorization.go:223)
 - `strictJSON` in [`internal/agent/delivery/checkpoint.go:276`](internal/agent/delivery/checkpoint.go:276), [`internal/delivery/resolver/postgres_worker.go:381`](internal/delivery/resolver/postgres_worker.go:381)
 - `stringValue` in [`internal/agent/delivery/observer.go:440`](internal/agent/delivery/observer.go:440), [`internal/handler/resource_presenters.go:566`](internal/handler/resource_presenters.go:566)
-- `stripHopByHop` in [`internal/grafanaproxy/proxy.go:299`](internal/grafanaproxy/proxy.go:299), [`internal/lokiauth/auth.go:432`](internal/lokiauth/auth.go:432)
-- `timestamptz` in [`internal/delivery/rollout/postgres_store.go:427`](internal/delivery/rollout/postgres_store.go:427), [`internal/worker/tasks/security_scan.go:320`](internal/worker/tasks/security_scan.go:320)
-- ... 3 more
+- ... 5 more
 
 ### Dead-Code Candidates
 
@@ -144,7 +144,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 33
+- Duplicate-code candidates: 35
 - Dead-code candidates: 2
 
 ## Definition Of Done For Each Candidate

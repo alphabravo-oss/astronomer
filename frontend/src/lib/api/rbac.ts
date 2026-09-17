@@ -138,23 +138,32 @@ function roleRequest(input: RoleInput): Schemas["RBACRoleRequest"] {
   };
 }
 
-export async function getGlobalRoles(): Promise<GlobalRole[]> {
+export async function getGlobalRoles(
+  signal?: AbortSignal,
+): Promise<GlobalRole[]> {
   const response = await getRbacGlobalRoles({
     query: { limit: RBAC_LIST_LIMIT },
+    signal,
   });
   return (response.data ?? []).map(mapRole);
 }
 
-export async function getClusterRoles(): Promise<ClusterRole[]> {
+export async function getClusterRoles(
+  signal?: AbortSignal,
+): Promise<ClusterRole[]> {
   const response = await getRbacClusterRoles({
     query: { limit: RBAC_LIST_LIMIT },
+    signal,
   });
   return (response.data ?? []).map(mapRole);
 }
 
-export async function getProjectRoles(): Promise<ProjectRole[]> {
+export async function getProjectRoles(
+  signal?: AbortSignal,
+): Promise<ProjectRole[]> {
   const response = await getRbacProjectRoles({
     query: { limit: RBAC_LIST_LIMIT },
+    signal,
   });
   return (response.data ?? []).map(mapRole);
 }
@@ -227,8 +236,10 @@ export interface RoleTemplate {
   rules: PolicyRule[];
 }
 
-export async function listRoleTemplates(): Promise<RoleTemplate[]> {
-  const response = await getRbacTemplates();
+export async function listRoleTemplates(
+  signal?: AbortSignal,
+): Promise<RoleTemplate[]> {
+  const response = await getRbacTemplates({ signal });
   return (response.data?.templates ?? []).map((template) => ({
     name: template.name ?? "",
     displayName: template.display_name ?? template.name ?? "",
@@ -279,27 +290,38 @@ function mapAccessBinding(
   };
 }
 
-export async function listClusterRoleBindings(params?: {
-  cluster_id?: string;
-}): Promise<AccessBinding[]> {
+export async function listClusterRoleBindings(
+  params?: {
+    cluster_id?: string;
+  },
+  signal?: AbortSignal,
+): Promise<AccessBinding[]> {
   const response = await getRbacClusterRoleBindings({
     query: { limit: RBAC_LIST_LIMIT, cluster_id: params?.cluster_id },
+    signal,
   });
   return (response.data ?? []).map((wire) => mapAccessBinding("cluster", wire));
 }
 
-export async function listGlobalRoleBindings(): Promise<AccessBinding[]> {
+export async function listGlobalRoleBindings(
+  signal?: AbortSignal,
+): Promise<AccessBinding[]> {
   const response = await getRbacGlobalRoleBindings({
     query: { limit: RBAC_LIST_LIMIT },
+    signal,
   });
   return (response.data ?? []).map((wire) => mapAccessBinding("global", wire));
 }
 
-export async function listProjectRoleBindings(params?: {
-  project_id?: string;
-}): Promise<AccessBinding[]> {
+export async function listProjectRoleBindings(
+  params?: {
+    project_id?: string;
+  },
+  signal?: AbortSignal,
+): Promise<AccessBinding[]> {
   const response = await getRbacProjectRoleBindings({
     query: { limit: RBAC_LIST_LIMIT, project_id: params?.project_id },
+    signal,
   });
   return (response.data ?? []).map((wire) => mapAccessBinding("project", wire));
 }
@@ -439,9 +461,11 @@ export function mapEffectivePermissions(
 
 export async function getMyEffectivePermissions(
   params?: EffectivePermissionParams,
+  signal?: AbortSignal,
 ): Promise<EffectivePermissionResponse> {
   const response = await getRbacMyPermissions({
     query: effectiveQuery(params),
+    signal,
   });
   return mapEffectivePermissions(
     requireData(response, "getMyEffectivePermissions"),
@@ -451,10 +475,12 @@ export async function getMyEffectivePermissions(
 export async function getEffectivePermissionsForUser(
   userId: string,
   params?: EffectivePermissionParams,
+  signal?: AbortSignal,
 ): Promise<EffectivePermissionResponse> {
   const response = await getRbacEffectivePermissionsByUserId({
     path: { user_id: userId },
     query: effectiveQuery(params),
+    signal,
   });
   return mapEffectivePermissions(
     requireData(response, "getEffectivePermissionsForUser"),

@@ -17,6 +17,7 @@ describe("audit API generated boundary", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("maps generated wire rows and computes stable pagination", async () => {
+    const signal = new AbortController().signal;
     mockedListAuditLogs.mockResolvedValueOnce({
       data: [
         {
@@ -42,13 +43,16 @@ describe("audit API generated boundary", () => {
     });
 
     await expect(
-      getAuditLogs({
-        page: 2,
-        pageSize: 25,
-        q: "prod",
-        audience: "people",
-        result: "success",
-      }),
+      getAuditLogs(
+        {
+          page: 2,
+          pageSize: 25,
+          q: "prod",
+          audience: "people",
+          result: "success",
+        },
+        signal,
+      ),
     ).resolves.toEqual(
       expect.objectContaining({
         pagination: {
@@ -77,6 +81,7 @@ describe("audit API generated boundary", () => {
         audience: "people",
         result: "success",
       }),
+      signal,
     });
   });
 

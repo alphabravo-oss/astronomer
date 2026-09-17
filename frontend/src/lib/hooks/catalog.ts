@@ -21,7 +21,7 @@ import type { HelmRepoType } from "@/types";
 export function useHelmRepositories() {
   return useQuery({
     queryKey: queryKeys.catalog.repositories,
-    queryFn: getHelmRepositories,
+    queryFn: ({ signal }) => getHelmRepositories(signal),
   });
 }
 
@@ -80,7 +80,7 @@ export type HelmChartQuery = Record<string, unknown> & {
 export function useHelmCharts(params: HelmChartQuery) {
   return useQuery({
     queryKey: queryKeys.catalog.charts(params),
-    queryFn: () => getHelmCharts(params),
+    queryFn: ({ signal }) => getHelmCharts(params, signal),
     enabled: !!params.projectId,
   });
 }
@@ -88,7 +88,7 @@ export function useHelmCharts(params: HelmChartQuery) {
 export function useHelmChartVersions(projectId: string, chartId: string) {
   return useQuery({
     queryKey: queryKeys.catalog.chartVersions(projectId, chartId),
-    queryFn: () => getHelmChartVersions(projectId, chartId),
+    queryFn: ({ signal }) => getHelmChartVersions(projectId, chartId, signal),
     enabled: !!projectId && !!chartId,
   });
 }
@@ -96,7 +96,7 @@ export function useHelmChartVersions(projectId: string, chartId: string) {
 export function useInstalledCharts(params?: { cluster?: string }) {
   return useQuery({
     queryKey: queryKeys.catalog.installed(params),
-    queryFn: () => getInstalledCharts(params),
+    queryFn: ({ signal }) => getInstalledCharts(params, signal),
     refetchInterval: liveFallback(30_000),
   });
 }

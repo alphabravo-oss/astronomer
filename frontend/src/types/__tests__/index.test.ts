@@ -149,14 +149,12 @@ describe("Cluster types", () => {
 
   it("ClusterStatus accepts all valid values", () => {
     const statuses: ClusterStatus[] = [
+      "pending",
       "active",
-      "connecting",
-      "warning",
       "error",
       "disconnected",
-      "provisioning",
     ];
-    expect(statuses).toHaveLength(6);
+    expect(statuses).toHaveLength(4);
   });
 
   it("ClusterProvider accepts all valid values", () => {
@@ -176,7 +174,7 @@ describe("Cluster types", () => {
       "production",
       "staging",
       "development",
-      "testing",
+      "dev",
     ];
     expect(envs).toHaveLength(4);
   });

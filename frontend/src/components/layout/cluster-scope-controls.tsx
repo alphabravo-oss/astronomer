@@ -50,12 +50,9 @@ function useDismissable(open: boolean, close: () => void) {
 
 const statusClass: Record<ClusterStatus, string> = {
   active: "bg-status-success",
-  warning: "bg-status-warning",
   error: "bg-status-error",
   disconnected: "bg-status-neutral",
   pending: "bg-status-info",
-  connecting: "bg-status-info",
-  provisioning: "bg-status-info",
 };
 
 function ClusterOption({ cluster }: { cluster: Cluster }) {

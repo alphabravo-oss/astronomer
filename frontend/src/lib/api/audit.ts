@@ -97,8 +97,8 @@ function mapAuditLog(wire: AuditLogWire): AuditLogEntry {
     ipAddress: wire.ip_address,
     userAgent: wire.user_agent,
     sourceIP: wire.source_ip ?? "",
-	    status: (wire.status ?? "error") as AuditLogEntry["status"],
-	    detail,
+    status: (wire.status ?? "error") as AuditLogEntry["status"],
+    detail,
     createdAt: wire.created_at,
     updatedAt: wire.updated_at,
     timestamp: wire.timestamp ?? wire.created_at ?? "",
@@ -107,9 +107,10 @@ function mapAuditLog(wire: AuditLogWire): AuditLogEntry {
 
 export async function getAuditLogs(
   params?: AuditLogQueryParams,
+  signal?: AbortSignal,
 ): Promise<PaginatedResponse<AuditLogEntry>> {
   const query = auditLogRequestParams(params);
-  const response = await listAuditLogs({ query });
+  const response = await listAuditLogs({ query, signal });
   return mapPage(
     { data: response.data ?? [], pagination: response.pagination },
     mapAuditLog,
@@ -128,8 +129,11 @@ export function getAuditLogExportURL(params?: AuditLogQueryParams) {
   return `${API_BASE}/audit/export/?${search.toString()}`;
 }
 
-export async function getActivityFeed(params?: { limit?: number }) {
-  const response = await getActivity({ query: params });
+export async function getActivityFeed(
+  params?: { limit?: number },
+  signal?: AbortSignal,
+) {
+  const response = await getActivity({ query: params, signal });
   return response.map((wire): ActivityEvent => ({
     id: wire.id ?? "",
     type: (wire.type ?? "system") as ActivityEvent["type"],
