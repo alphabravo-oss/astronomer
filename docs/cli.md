@@ -468,7 +468,9 @@ Usage:
   astro admin vault list [flags]
 
 Flags:
-  -h, --help   help for list
+  -h, --help         help for list
+      --limit int    max results to return (0 = server default)
+      --offset int   results offset for pagination
 
 Global Flags:
       --json            alias for --output json (deprecated)
@@ -2399,7 +2401,8 @@ config reads and writes the on-disk CLI config. The file is kept
 at chmod 0600 because it carries the bearer token.
 
 Settable keys: server_url, username.
-Read-only keys (managed by login/logout): access_token, refresh_token.
+Read-only keys (managed by login/logout): access_token, api_token_id,
+refresh_token. Secret values are redacted in every output format.
 
 Usage:
   astro config [command]
@@ -3370,10 +3373,13 @@ Global Flags:
 
 ```text
 login prompts for username + password (or reads them from
---user / --password / $ASTRO_PASSWORD), POSTs to /api/v1/auth/login/,
-and persists the returned JWT to ~/.config/astronomer/config.yaml.
+--user / --password / $ASTRO_PASSWORD), establishes a cookie-bound browser
+session, and exchanges it for a 30-day API token stored in
+~/.config/astronomer/config.yaml.
 
-The persisted token is used for every subsequent astro command.
+The persisted token is used for every subsequent astro command and is revoked
+remotely by astro logout. Browser access and refresh JWTs are never exposed to
+the CLI.
 
 Usage:
   astro login [flags]
