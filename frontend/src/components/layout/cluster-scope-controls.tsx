@@ -28,7 +28,11 @@ export function clusterIdFromPath(pathname: string): string | undefined {
     : undefined;
 }
 
-function useDismissable(open: boolean, close: () => void) {
+function useDismissable(
+  open: boolean,
+  close: () => void,
+  restoreFocus?: () => void,
+) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -36,7 +40,10 @@ function useDismissable(open: boolean, close: () => void) {
       if (!ref.current?.contains(event.target as Node)) close();
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") {
+        close();
+        requestAnimationFrame(() => restoreFocus?.());
+      }
     };
     document.addEventListener("mousedown", dismiss);
     document.addEventListener("keydown", escape);
@@ -44,7 +51,7 @@ function useDismissable(open: boolean, close: () => void) {
       document.removeEventListener("mousedown", dismiss);
       document.removeEventListener("keydown", escape);
     };
-  }, [close, open]);
+  }, [close, open, restoreFocus]);
   return ref;
 }
 
@@ -59,12 +66,14 @@ function ClusterOption({ cluster }: { cluster: Cluster }) {
   return (
     <>
       <span
+        aria-hidden="true"
         className={cn(
           "h-2 w-2 shrink-0 rounded-full",
           statusClass[cluster.status] ?? "bg-status-neutral",
         )}
       />
       <span className="min-w-0 flex-1">
+        <span className="sr-only">{cluster.status} cluster. </span>
         <span className="block truncate text-sm text-foreground">
           {cluster.displayName || cluster.name}
         </span>
@@ -94,12 +103,19 @@ export function SearchableClusterSwitcher({
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [debouncedTerm] = useDebouncedValue(term, { wait: 250 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const query = useClusterSearch(debouncedTerm, open);
   const close = () => setOpen(false);
-  const ref = useDismissable(open, close);
+  const restoreFocus = () => triggerRef.current?.focus();
+  const ref = useDismissable(open, close, restoreFocus);
   const clusters = query.data?.pages.flatMap((page) => page.data) ?? [];
   const current = clusters.find((cluster) => cluster.id === clusterId);
   const subRoute = pathname.slice(`/dashboard/clusters/${clusterId}`.length);
+
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+  }, [open]);
 
   const select = (next: Cluster) => {
     const nextPath = `/dashboard/clusters/${next.id}${subRoute}`;
@@ -112,11 +128,13 @@ export function SearchableClusterSwitcher({
       ),
     });
     close();
+    requestAnimationFrame(restoreFocus);
   };
 
   return (
     <div ref={ref} className="relative min-w-0">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="listbox"
@@ -140,6 +158,7 @@ export function SearchableClusterSwitcher({
           <div className="flex items-center border-b border-border px-3">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Command.Input
+              ref={searchRef}
               value={term}
               onValueChange={setTerm}
               placeholder="Find a cluster..."
@@ -218,6 +237,8 @@ function ProjectScopePicker({
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [debouncedTerm] = useDebouncedValue(term, { wait: 250 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const projectsQuery = useProjectSearch(clusterId, debouncedTerm, open);
   const selectedProjectQuery = useProject(scope.selectedProjectId ?? "");
   const projects = useMemo(
@@ -229,16 +250,22 @@ function ProjectScopePicker({
     (selectedProjectQuery.data?.clusterId === clusterId
       ? selectedProjectQuery.data
       : undefined);
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+  }, [open]);
   const close = () => setOpen(false);
-  const ref = useDismissable(open, close);
+  const restoreFocus = () => triggerRef.current?.focus();
+  const ref = useDismissable(open, close, restoreFocus);
   const selectProject = (projectId: string | null) => {
     const project = projects.find((candidate) => candidate.id === projectId);
     scope.setProjectScope(project?.id ?? null, project?.namespaces ?? null);
     close();
+    requestAnimationFrame(restoreFocus);
   };
   return (
     <div ref={ref} className="relative shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         disabled={projectsQuery.isLoading || !scope.ready}
@@ -263,6 +290,7 @@ function ProjectScopePicker({
           <div className="flex items-center border-b border-border px-3">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Command.Input
+              ref={searchRef}
               value={term}
               onValueChange={setTerm}
               placeholder="Find a project..."
@@ -353,9 +381,15 @@ function ProjectScopePicker({
 
 function NamespaceScopePicker({ scope }: { scope: ClusterNamespaceScope }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const close = () => setOpen(false);
-  const ref = useDismissable(open, close);
+  const restoreFocus = () => triggerRef.current?.focus();
+  const ref = useDismissable(open, close, restoreFocus);
   const selected = scope.selectedNamespaces;
+  useEffect(() => {
+    if (open) searchRef.current?.focus();
+  }, [open]);
   const label = useMemo(() => {
     if (!scope.ready) return "Namespaces";
     if (selected === null) return "All namespaces";
@@ -376,6 +410,7 @@ function NamespaceScopePicker({ scope }: { scope: ClusterNamespaceScope }) {
   return (
     <div ref={ref} className="relative shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         disabled={!scope.ready}
@@ -393,6 +428,7 @@ function NamespaceScopePicker({ scope }: { scope: ClusterNamespaceScope }) {
           <div className="flex items-center border-b border-border px-3">
             <Search className="h-4 w-4 text-muted-foreground" />
             <Command.Input
+              ref={searchRef}
               placeholder="Filter namespaces..."
               className="h-10 min-w-0 flex-1 bg-transparent px-2 text-sm outline-hidden placeholder:text-muted-foreground"
             />

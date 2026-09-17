@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { usePodLogs } from "@/lib/hooks/workloads";
 import type { PodLogsStatus } from "@/lib/hooks/workloads";
@@ -161,7 +160,10 @@ export function LogsTab({
 
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => setShowTimestamps((v) => !v)}
+            aria-label="Show timestamps"
+            aria-pressed={showTimestamps}
             className={cn(
               "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               showTimestamps
@@ -173,7 +175,10 @@ export function LogsTab({
             <Clock className="h-3 w-3" />
           </button>
           <button
+            type="button"
             onClick={() => setWrap((v) => !v)}
+            aria-label="Wrap log lines"
+            aria-pressed={wrap}
             className={cn(
               "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               wrap
@@ -185,7 +190,10 @@ export function LogsTab({
             <WrapText className="h-3 w-3" />
           </button>
           <button
+            type="button"
             onClick={() => setShowSearch((v) => !v)}
+            aria-label="Filter log lines"
+            aria-pressed={showSearch}
             className={cn(
               "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               showSearch
@@ -197,7 +205,10 @@ export function LogsTab({
             <Search className="h-3 w-3" />
           </button>
           <button
+            type="button"
             onClick={() => setFollow((v) => !v)}
+            aria-label="Follow new log lines"
+            aria-pressed={follow}
             className={cn(
               "inline-flex items-center gap-1 h-6 px-1.5 rounded-sm text-2xs transition-colors",
               follow
@@ -216,7 +227,9 @@ export function LogsTab({
             </span>
           </button>
           <button
+            type="button"
             onClick={handleDownload}
+            aria-label="Download logs"
             className="inline-flex items-center h-6 px-1.5 rounded-sm text-2xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Download logs"
@@ -231,6 +244,7 @@ export function LogsTab({
           <Search className="h-3 w-3 text-muted-foreground shrink-0" />
           <input
             type="text"
+            aria-label="Filter log lines"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter logs..."
@@ -244,6 +258,8 @@ export function LogsTab({
             </span>
           )}
           <button
+            type="button"
+            aria-label="Close log filter"
             onClick={() => {
               setShowSearch(false);
               setSearchQuery("");
@@ -255,9 +271,22 @@ export function LogsTab({
         </div>
       )}
 
+      <div role="status" aria-live="polite" className="sr-only">
+        {isLoading
+          ? "Loading logs"
+          : searchQuery
+            ? `${filteredLogs.length} matching log lines`
+            : follow
+              ? "Following new log lines"
+              : "Log following paused"}
+      </div>
+
       {/* Log content */}
       <div
         ref={scrollRef}
+        role="log"
+        aria-live="off"
+        aria-label={`Logs for ${namespace}/${pod}`}
         className={cn(
           "log-viewer flex-1 min-h-0 overflow-y-auto p-3",
           wrap ? "overflow-x-hidden" : "overflow-x-auto",
@@ -300,6 +329,7 @@ export function LogsTab({
 
       {!follow && filteredLogs.length > 0 && (
         <button
+          type="button"
           onClick={() => {
             setFollow(true);
             if (scrollRef.current) {
@@ -410,6 +440,9 @@ function TailRangeSelect({
     return (
       <button
         key={opt.label}
+        type="button"
+        role="option"
+        aria-selected={selected}
         onClick={() => pick(opt)}
         className={cn(
           "w-full flex items-center px-2 py-1 rounded-sm text-2xs transition-colors",
@@ -426,6 +459,10 @@ function TailRangeSelect({
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
+        aria-label={`Tail range: ${labelForRange(value)}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1 h-6 px-2 rounded-sm border border-border bg-background
           text-2xs text-foreground hover:bg-accent transition-colors
@@ -451,7 +488,11 @@ function TailRangeSelect({
         </svg>
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-36 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
+        <div
+          role="listbox"
+          aria-label="Log tail range"
+          className="absolute left-0 top-full mt-1 w-36 rounded-md border border-border bg-popover p-1 shadow-lg z-50"
+        >
           {TAIL_LINE_OPTIONS.map(renderOption)}
           <div className="my-1 border-t border-border" />
           {TAIL_TIME_OPTIONS.map(renderOption)}

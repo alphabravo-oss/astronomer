@@ -158,6 +158,7 @@ export function PodLogsViewer({
         <div className="flex items-center gap-2">
           {/* Pod selector */}
           <select
+            aria-label="Pod"
             value={podName}
             onChange={(e) => onPodChange(e.target.value)}
             className="h-7 px-2 rounded-sm border border-border bg-background text-xs
@@ -173,6 +174,7 @@ export function PodLogsViewer({
           {/* Container selector */}
           {containers.length > 1 && (
             <select
+              aria-label="Container"
               value={selectedContainer}
               onChange={(e) => setSelectedContainer(e.target.value)}
               className="h-7 px-2 rounded-sm border border-border bg-background text-xs
@@ -188,6 +190,7 @@ export function PodLogsViewer({
 
           {/* Tail lines */}
           <select
+            aria-label="Log tail lines"
             value={tailLines}
             onChange={(e) => setTailLines(Number(e.target.value))}
             className="h-7 px-2 rounded-sm border border-border bg-background text-xs
@@ -203,7 +206,10 @@ export function PodLogsViewer({
         <div className="flex items-center gap-1">
           {/* Timestamps toggle */}
           <button
+            type="button"
             onClick={() => setShowTimestamps(!showTimestamps)}
+            aria-label="Show timestamps"
+            aria-pressed={showTimestamps}
             className={cn(
               "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
               showTimestamps
@@ -217,7 +223,10 @@ export function PodLogsViewer({
 
           {/* Search toggle */}
           <button
+            type="button"
             onClick={() => setShowSearch(!showSearch)}
+            aria-label="Filter log lines"
+            aria-pressed={showSearch}
             className={cn(
               "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
               showSearch
@@ -231,7 +240,10 @@ export function PodLogsViewer({
 
           {/* Follow toggle */}
           <button
+            type="button"
             onClick={() => setFollow(!follow)}
+            aria-label="Follow new log lines"
+            aria-pressed={follow}
             className={cn(
               "inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs transition-colors",
               follow
@@ -252,7 +264,9 @@ export function PodLogsViewer({
 
           {/* Download */}
           <button
+            type="button"
             onClick={handleDownload}
+            aria-label="Download logs"
             className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Download logs"
@@ -268,6 +282,7 @@ export function PodLogsViewer({
           <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <input
             type="text"
+            aria-label="Filter log lines"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter logs..."
@@ -281,6 +296,8 @@ export function PodLogsViewer({
             </span>
           )}
           <button
+            type="button"
+            aria-label="Close log filter"
             onClick={() => {
               setShowSearch(false);
               setSearchQuery("");
@@ -292,9 +309,22 @@ export function PodLogsViewer({
         </div>
       )}
 
+      <div role="status" aria-live="polite" className="sr-only">
+        {isLoading
+          ? "Loading logs"
+          : searchQuery
+            ? `${filteredLogs.length} matching log lines`
+            : follow
+              ? "Following new log lines"
+              : "Log following paused"}
+      </div>
+
       {/* Log content */}
       <div
         ref={scrollRef}
+        role="log"
+        aria-live="off"
+        aria-label={`Logs for ${namespace}/${podName}`}
         className={cn(
           "log-viewer overflow-y-auto overflow-x-hidden p-3",
           className || "h-[500px]",
@@ -334,6 +364,7 @@ export function PodLogsViewer({
       {/* Auto-scroll indicator */}
       {!follow && (
         <button
+          type="button"
           onClick={() => {
             setFollow(true);
             if (scrollRef.current) {

@@ -40,6 +40,13 @@ export function AlertRuleModal({
       anomalyDirection: (rule?.anomalyDirection || "above") as
         "above" | "below" | "either",
     },
+    validators: {
+      onSubmit: ({ value }) => {
+        if (!value.name.trim()) return "Enter a rule name";
+        if (!value.query.trim()) return "Enter a PromQL query";
+        return undefined;
+      },
+    },
     onSubmit: async ({ value }) => {
       const isAnomaly = value.type === "anomaly";
       const data: AlertRuleWrite = {
@@ -92,13 +99,17 @@ export function AlertRuleModal({
       title={rule ? "Edit Alert Rule" : "Create Alert Rule"}
       onClose={onClose}
       size="md"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
       footer={
         <>
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
+            type="submit"
             intent="primary"
-            onClick={() => void form.handleSubmit()}
-            disabled={!ruleName}
+            disabled={!ruleName.trim()}
             loading={isPending}
           >
             {rule ? "Update Rule" : "Create Rule"}
@@ -107,6 +118,11 @@ export function AlertRuleModal({
       }
       footerClassName="flex items-center justify-end gap-2"
     >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={createRule.error?.message || updateRule.error?.message}
+        />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -118,6 +134,7 @@ export function AlertRuleModal({
           {(field) => (
             <Input
               id="field-419a263c-112"
+              name={field.name}
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -138,6 +155,7 @@ export function AlertRuleModal({
           {(field) => (
             <Input
               id="field-419a263c-126"
+              name={field.name}
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -159,6 +177,7 @@ export function AlertRuleModal({
             {(field) => (
               <Select
                 id="field-419a263c-141"
+                name={field.name}
                 value={field.state.value}
                 onChange={(e) =>
                   field.handleChange(e.target.value as AlertRule["type"])
@@ -189,6 +208,7 @@ export function AlertRuleModal({
               <button
                 key={sev}
                 type="button"
+                aria-pressed={severity === sev}
                 onClick={() => form.setFieldValue("severity", sev)}
                 className={cn(
                   "flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors capitalize",
@@ -215,6 +235,7 @@ export function AlertRuleModal({
           {(field) => (
             <Textarea
               id="field-419a263c-180"
+              name={field.name}
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -247,6 +268,7 @@ export function AlertRuleModal({
               {(field) => (
                 <Select
                   id="field-419a263c-204"
+                  name={field.name}
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
@@ -276,6 +298,7 @@ export function AlertRuleModal({
                 {(field) => (
                   <Input
                     id="field-419a263c-223"
+                    name={field.name}
                     type="number"
                     step="0.1"
                     value={field.state.value}
@@ -297,6 +320,7 @@ export function AlertRuleModal({
                 {(field) => (
                   <Select
                     id="field-419a263c-238"
+                    name={field.name}
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
                     onBlur={field.handleBlur}
@@ -322,6 +346,7 @@ export function AlertRuleModal({
                 {(field) => (
                   <Select
                     id="field-419a263c-257"
+                    name={field.name}
                     value={field.state.value}
                     onChange={(e) =>
                       field.handleChange(
@@ -348,6 +373,7 @@ export function AlertRuleModal({
                 {(field) => (
                   <Input
                     id="field-419a263c-275"
+                    name={field.name}
                     type="number"
                     value={field.state.value}
                     onChange={(e) => field.handleChange(e.target.value)}
@@ -373,6 +399,7 @@ export function AlertRuleModal({
             {(field) => (
               <Input
                 id="field-419a263c-294"
+                name={field.name}
                 type="number"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -393,6 +420,7 @@ export function AlertRuleModal({
             {(field) => (
               <Input
                 id="field-419a263c-308"
+                name={field.name}
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
@@ -408,6 +436,7 @@ export function AlertRuleModal({
           {(field) => (
             <Input
               type="checkbox"
+              name={field.name}
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}
               onBlur={field.handleBlur}

@@ -13,6 +13,7 @@ interface RemoteClusterPickerProps {
   onChange: (clusterId: string) => void;
   onBlur?: () => void;
   id?: string;
+  name?: string;
   ariaLabel?: string;
   placeholder?: string;
   allowedClusterIds?: readonly string[];
@@ -36,6 +37,7 @@ export function RemoteClusterPicker({
   onChange,
   onBlur,
   id,
+  name,
   ariaLabel = "Cluster",
   placeholder = "Select a cluster…",
   allowedClusterIds,
@@ -50,6 +52,7 @@ export function RemoteClusterPicker({
   const selectedQuery = useCluster(value);
   const searchQuery = useClusterSearch(debouncedTerm, open && !disabled);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -107,6 +110,7 @@ export function RemoteClusterPicker({
     setOpen(false);
     setTerm("");
     onBlur?.();
+    requestAnimationFrame(() => triggerRef.current?.focus());
   };
   const selected = selectedQuery.data;
   const selectedText = selected ? clusterLabel(selected) : value;
@@ -115,7 +119,9 @@ export function RemoteClusterPicker({
   return (
     <div ref={rootRef} className={cn("relative", className)}>
       <button
+        ref={triggerRef}
         id={id}
+        name={name}
         type="button"
         role="combobox"
         aria-label={ariaLabel}
@@ -151,6 +157,7 @@ export function RemoteClusterPicker({
                   event.preventDefault();
                   setOpen(false);
                   onBlur?.();
+                  requestAnimationFrame(() => triggerRef.current?.focus());
                   return;
                 }
                 if (event.key === "ArrowDown") {

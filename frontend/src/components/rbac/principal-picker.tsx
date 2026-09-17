@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 interface PrincipalPickerProps {
   value: string;
   onChange: (userId: string) => void;
+  id?: string;
 }
 
 function kindLabel(kind: PrincipalSearchItem["kind"]): string {
@@ -23,7 +24,7 @@ function kindLabel(kind: PrincipalSearchItem["kind"]): string {
   }
 }
 
-export function PrincipalPicker({ value, onChange }: PrincipalPickerProps) {
+export function PrincipalPicker({ value, onChange, id }: PrincipalPickerProps) {
   const [input, setInput] = useState("");
   const [selected, setSelected] = useState<PrincipalSearchItem | null>(null);
   const [debouncedQuery] = useDebouncedValue(input.trim(), { wait: 250 });
@@ -71,6 +72,7 @@ export function PrincipalPicker({ value, onChange }: PrincipalPickerProps) {
           className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <Input
+          id={id}
           type="search"
           value={input}
           onChange={(event) => setInput(event.target.value)}

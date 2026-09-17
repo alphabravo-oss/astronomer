@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RemoteClusterPicker } from "./remote-cluster-picker";
@@ -73,7 +73,7 @@ describe("RemoteClusterPicker", () => {
     ).toHaveTextContent("Selected cluster");
   });
 
-  it("permission-filters remote results and selects by keyboard", () => {
+  it("permission-filters remote results, selects by keyboard, and restores focus", async () => {
     const onChange = vi.fn();
     render(
       <RemoteClusterPicker
@@ -95,5 +95,10 @@ describe("RemoteClusterPicker", () => {
       },
     );
     expect(onChange).toHaveBeenCalledWith("cluster-b");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Target cluster" }),
+      ).toHaveFocus(),
+    );
   });
 });

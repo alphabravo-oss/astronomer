@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { FormEvent } from "react";
 import { ModalShell } from "@/components/ui/modal-shell";
 
 describe("ModalShell", () => {
@@ -87,5 +88,26 @@ describe("ModalShell", () => {
     );
 
     expect(screen.getByLabelText("Confirmation")).toHaveFocus();
+  });
+
+  it("hosts body and footer controls in one semantic form", () => {
+    const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) =>
+      event.preventDefault(),
+    );
+    render(
+      <ModalShell
+        title="Create binding"
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+        footer={<button type="submit">Create</button>}
+      >
+        <input aria-label="Binding name" />
+      </ModalShell>,
+    );
+
+    const form = screen.getByRole("button", { name: "Create" }).closest("form");
+    expect(form).toContainElement(screen.getByLabelText("Binding name"));
+    fireEvent.submit(form!);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });

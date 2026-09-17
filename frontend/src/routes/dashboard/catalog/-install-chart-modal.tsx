@@ -74,6 +74,20 @@ function InstallChartForm({
       namespace: "default",
       valuesOverride: version.defaultValues || "",
     },
+    validators: {
+      onSubmit: ({ value }) => {
+        if (!value.clusterId) return "Select a target cluster";
+        if (!value.releaseName.trim()) return "Enter a release name";
+        if (!value.namespace.trim()) return "Enter a namespace";
+        if (
+          value.valuesOverride.trim() &&
+          parseHelmValuesYAML(value.valuesOverride) == null
+        ) {
+          return "Values override must be valid YAML containing an object";
+        }
+        return undefined;
+      },
+    },
     onSubmit: async ({ value }) => {
       try {
         const receipt = await installChart.mutateAsync({
@@ -130,10 +144,10 @@ function InstallChartForm({
     <>
       <ActionButton onClick={onClose}>Cancel</ActionButton>
       <ActionButton
+        type="submit"
         intent="primary"
         loading={installChart.isPending}
         disabled={!clusterId || !releaseName || !namespace}
-        onClick={() => void form.handleSubmit()}
       >
         Install Chart
       </ActionButton>
@@ -146,9 +160,18 @@ function InstallChartForm({
       subtitle={`Version ${version.version}`}
       onClose={onClose}
       size="md"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
       footer={footer}
       footerClassName="flex items-center justify-end gap-2"
     >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={yamlError || installChart.error?.message}
+        />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -160,6 +183,7 @@ function InstallChartForm({
           {(field) => (
             <RemoteClusterPicker
               id="field-60f181fe-140"
+              name={field.name}
               ariaLabel="Target Cluster"
               value={field.state.value}
               onChange={field.handleChange}
@@ -182,6 +206,7 @@ function InstallChartForm({
           {(field) => (
             <Input
               id="field-60f181fe-161"
+              name={field.name}
               aria-label="Release Name"
               type="text"
               value={field.state.value}
@@ -204,6 +229,7 @@ function InstallChartForm({
           {(field) => (
             <Input
               id="field-60f181fe-177"
+              name={field.name}
               aria-label="Namespace"
               type="text"
               value={field.state.value}
@@ -234,6 +260,7 @@ function InstallChartForm({
             <div className="inline-flex rounded-md border border-border bg-muted/30 p-1">
               <button
                 type="button"
+                aria-pressed={editorMode === "form"}
                 onClick={() => setEditorMode("form")}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
@@ -247,6 +274,7 @@ function InstallChartForm({
               </button>
               <button
                 type="button"
+                aria-pressed={editorMode === "yaml"}
                 onClick={() => setEditorMode("yaml")}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
@@ -276,6 +304,7 @@ function InstallChartForm({
               {(field) => (
                 <Textarea
                   id="field-60f181fe-195"
+                  name={field.name}
                   aria-label="Values Override"
                   value={field.state.value}
                   onChange={(e) => handleYAMLChange(e.target.value)}
@@ -287,7 +316,10 @@ function InstallChartForm({
               )}
             </form.Field>
             {yamlError && (
-              <div className="inline-flex items-center gap-2 rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning">
+              <div
+                role="alert"
+                className="inline-flex items-center gap-2 rounded-md border border-status-warning/30 bg-status-warning/10 px-3 py-2 text-xs text-status-warning"
+              >
                 <AlertTriangle className="h-3.5 w-3.5" />
                 {yamlError}
               </div>

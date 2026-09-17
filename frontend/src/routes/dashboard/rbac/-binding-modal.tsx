@@ -115,21 +115,32 @@ export function CreateClusterBindingModal({
       title="Create Binding"
       onClose={onClose}
       size="md"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
       footerClassName="flex items-center justify-end gap-2"
       footer={
         <>
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
+            type="submit"
             intent="primary"
             loading={createBinding.isPending || applyTemplate.isPending}
             disabled={!canSubmit}
-            onClick={() => void form.handleSubmit()}
           >
             Create Binding
           </ActionButton>
         </>
       }
     >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={
+            createBinding.error?.message || applyTemplate.error?.message
+          }
+        />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -141,6 +152,7 @@ export function CreateClusterBindingModal({
           {(field) => (
             <Select
               id="field-b53e75b3-111"
+              name={field.name}
               value={field.state.value}
               onChange={(e) => {
                 field.handleChange(
@@ -168,6 +180,7 @@ export function CreateClusterBindingModal({
         <form.Field name="userId">
           {(field) => (
             <PrincipalPicker
+              id="field-b53e75b3-131"
               value={field.state.value}
               onChange={field.handleChange}
             />
@@ -191,6 +204,7 @@ export function CreateClusterBindingModal({
           {(field) => (
             <Select
               id="field-b53e75b3-151"
+              name={field.name}
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -236,6 +250,7 @@ export function CreateClusterBindingModal({
               {(field) => (
                 <RemoteClusterPicker
                   id="field-b53e75b3-173"
+                  name={field.name}
                   ariaLabel="Cluster"
                   value={field.state.value}
                   onChange={field.handleChange}
@@ -252,6 +267,7 @@ export function CreateClusterBindingModal({
               {(field) => (
                 <Input
                   id="field-b53e75b3-193"
+                  name={field.name}
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -286,6 +302,7 @@ export function CreateClusterBindingModal({
             {(field) => (
               <Select
                 id="field-b53e75b3-217"
+                name={field.name}
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
