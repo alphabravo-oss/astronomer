@@ -42,7 +42,10 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	}
 
 	queries := sqlc.New(database.Pool())
-	jwtManager, jwtErr := auth.NewJWTManager(cfg.SecretKey, cfg.SessionTimeoutMinutes)
+	jwtManager, jwtErr := auth.NewJWTManagerWithConfig(auth.JWTConfig{
+		SecretKey: cfg.SecretKey, AccessLifetimeMinutes: cfg.SessionTimeoutMinutes,
+		Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience,
+	})
 	if jwtErr != nil {
 		database.Close()
 		return jwtErr

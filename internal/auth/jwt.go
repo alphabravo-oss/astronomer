@@ -52,8 +52,9 @@ const (
 // Claims represents the JWT claims for Astronomer tokens
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID    uuid.UUID `json:"user_id"`
-	TokenType TokenType `json:"token_type"`
+	UserID          uuid.UUID `json:"user_id"`
+	TokenType       TokenType `json:"token_type"`
+	SessionFamilyID uuid.UUID `json:"session_family_id,omitempty"`
 	// Purpose narrows what a PurposeToken is allowed to do. Empty on
 	// regular access / refresh tokens. The verify handler is the only
 	// thing that should accept a non-empty Purpose; the regular auth
@@ -88,6 +89,8 @@ var ErrRevocationUnavailable = errors.New("token revocation state unavailable")
 // existing callers working unchanged.
 type JWTManager struct {
 	secretKeys           [][]byte // primary first
+	issuer               string
+	audience             string
 	accessTokenLifetime  time.Duration
 	refreshTokenLifetime time.Duration
 
@@ -128,7 +131,19 @@ type JWTManager struct {
 const (
 	JWTValidationCacheTTL        = 30 * time.Second
 	JWTValidationCacheMaxEntries = 10_000
+	DefaultJWTIssuer             = "astronomer"
+	DefaultJWTAudience           = "astronomer-browser"
 )
+
+// JWTConfig is the typed trust context for Astronomer-issued JWTs. Issuer and
+// audience are mandatory in production so a token signed with shared key
+// material cannot cross an application or deployment boundary accidentally.
+type JWTConfig struct {
+	SecretKey             string
+	AccessLifetimeMinutes int
+	Issuer                string
+	Audience              string
+}
 
 type validationCacheEntry struct {
 	expiresAt   time.Time
@@ -175,11 +190,22 @@ type SessionIdentity struct {
 // zero-length HMAC key, which every reader of this repository can reproduce
 // (dev-keys-default-and-silent).
 func NewJWTManager(secretKey string, accessLifetimeMinutes int) (*JWTManager, error) {
+	return NewJWTManagerWithConfig(JWTConfig{
+		SecretKey: secretKey, AccessLifetimeMinutes: accessLifetimeMinutes,
+		Issuer: DefaultJWTIssuer, Audience: DefaultJWTAudience,
+	})
+}
+
+// NewJWTManagerWithConfig constructs a manager with an explicit token trust
+// context. The compatibility constructor above uses the documented defaults;
+// production composition passes typed configuration here directly.
+func NewJWTManagerWithConfig(cfg JWTConfig) (*JWTManager, error) {
+	accessLifetimeMinutes := cfg.AccessLifetimeMinutes
 	if accessLifetimeMinutes < sessionpolicy.MinMinutes || accessLifetimeMinutes > sessionpolicy.MaxMinutes {
 		accessLifetimeMinutes = sessionpolicy.DefaultMinutes
 	}
 	var keys [][]byte
-	for _, raw := range strings.Split(secretKey, ",") {
+	for _, raw := range strings.Split(cfg.SecretKey, ",") {
 		s := strings.TrimSpace(raw)
 		if s == "" {
 			continue
@@ -189,8 +215,18 @@ func NewJWTManager(secretKey string, accessLifetimeMinutes int) (*JWTManager, er
 	if len(keys) == 0 {
 		return nil, errors.New("jwt: secret key is empty; set SECRET_KEY (chart: secrets.secretKey) to real signing material")
 	}
+	issuer := strings.TrimSpace(cfg.Issuer)
+	if issuer == "" {
+		return nil, errors.New("jwt: issuer is empty; set JWT_ISSUER")
+	}
+	audience := strings.TrimSpace(cfg.Audience)
+	if audience == "" {
+		return nil, errors.New("jwt: audience is empty; set JWT_AUDIENCE")
+	}
 	return &JWTManager{
 		secretKeys:           keys,
+		issuer:               issuer,
+		audience:             audience,
 		accessTokenLifetime:  time.Duration(accessLifetimeMinutes) * time.Minute,
 		refreshTokenLifetime: 7 * 24 * time.Hour, // 7 days
 		cacheTTL:             JWTValidationCacheTTL,
@@ -306,16 +342,14 @@ func (m *JWTManager) GenerateTokenPair(userID uuid.UUID) (accessToken, refreshTo
 // access-TTL provider so settings reads inherit request cancellation and
 // deadlines.
 func (m *JWTManager) GenerateTokenPairContext(ctx context.Context, userID uuid.UUID) (accessToken, refreshToken string, err error) {
-	accessToken, err = m.GenerateAccessTokenContext(ctx, userID)
+	pair, err := m.PrepareTokenPairContext(ctx)
 	if err != nil {
-		return "", "", fmt.Errorf("generating access token: %w", err)
+		return "", "", fmt.Errorf("preparing token pair: %w", err)
 	}
-
-	refreshToken, err = m.GenerateRefreshToken(userID)
+	accessToken, refreshToken, err = m.SignPreparedTokenPair(userID, pair)
 	if err != nil {
-		return "", "", fmt.Errorf("generating refresh token: %w", err)
+		return "", "", fmt.Errorf("signing token pair: %w", err)
 	}
-
 	return accessToken, refreshToken, nil
 }
 
@@ -385,12 +419,12 @@ func (m *JWTManager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 // handlers use this through GenerateTokenPairContext; the context-free method
 // remains for non-request callers and compatibility.
 func (m *JWTManager) GenerateAccessTokenContext(ctx context.Context, userID uuid.UUID) (string, error) {
-	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(ctx))
+	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(ctx), uuid.New())
 }
 
 // GenerateRefreshToken creates a refresh token
 func (m *JWTManager) GenerateRefreshToken(userID uuid.UUID) (string, error) {
-	return m.generateToken(userID, RefreshToken, m.refreshTokenLifetime)
+	return m.generateToken(userID, RefreshToken, m.refreshTokenLifetime, uuid.New())
 }
 
 // GeneratePurposeToken creates a short-lived JWT whose only legitimate use
@@ -410,14 +444,10 @@ func (m *JWTManager) GeneratePurposeToken(userID uuid.UUID, purpose string, ttl 
 	}
 	now := time.Now()
 	claims := Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        uuid.New().String(),
-		},
-		UserID:    userID,
-		TokenType: PurposeToken,
-		Purpose:   purpose,
+		RegisteredClaims: m.registeredClaims(userID, uuid.NewString(), now, now.Add(ttl)),
+		UserID:           userID,
+		TokenType:        PurposeToken,
+		Purpose:          purpose,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(m.secretKeys[0])
@@ -458,7 +488,8 @@ func (m *JWTManager) ValidateTokenContext(ctx context.Context, tokenString strin
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
 			return key, nil
-		})
+		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuer(m.issuer),
+			jwt.WithAudience(m.audience), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
 		if err != nil {
 			lastErr = err
 			continue
@@ -470,8 +501,29 @@ func (m *JWTManager) ValidateTokenContext(ctx context.Context, tokenString strin
 		if claims.UserID == uuid.Nil {
 			return nil, fmt.Errorf("invalid token: missing user_id claim")
 		}
-		if claims.TokenType == "" {
-			return nil, fmt.Errorf("invalid token: missing token_type claim")
+		if claims.Subject != claims.UserID.String() {
+			return nil, fmt.Errorf("invalid token: subject does not match user_id")
+		}
+		if claims.ID == "" {
+			return nil, fmt.Errorf("invalid token: missing jti claim")
+		}
+		switch claims.TokenType {
+		case AccessToken, RefreshToken:
+			if claims.SessionFamilyID == uuid.Nil {
+				return nil, fmt.Errorf("invalid token: missing session family")
+			}
+			if claims.Purpose != "" {
+				return nil, fmt.Errorf("invalid token: session token has purpose claim")
+			}
+		case PurposeToken:
+			if strings.TrimSpace(claims.Purpose) == "" {
+				return nil, fmt.Errorf("invalid token: purpose token has no purpose")
+			}
+			if claims.SessionFamilyID != uuid.Nil {
+				return nil, fmt.Errorf("invalid token: purpose token has session family")
+			}
+		default:
+			return nil, fmt.Errorf("invalid token: unsupported token_type claim")
 		}
 		// Revocation checks — only run when a checker is attached AND
 		// the cache says we haven't recently validated this JTI.
@@ -784,17 +836,12 @@ func (m *JWTManager) InvalidateJWTAllLocal() {
 }
 
 // generateToken is the internal token generation helper
-func (m *JWTManager) generateToken(userID uuid.UUID, tokenType TokenType, lifetime time.Duration) (string, error) {
+func (m *JWTManager) generateToken(userID uuid.UUID, tokenType TokenType, lifetime time.Duration, familyID uuid.UUID) (string, error) {
 	now := time.Now()
 
 	claims := Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(lifetime)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        uuid.New().String(),
-		},
-		UserID:    userID,
-		TokenType: tokenType,
+		RegisteredClaims: m.registeredClaims(userID, uuid.NewString(), now, now.Add(lifetime)),
+		UserID:           userID, TokenType: tokenType, SessionFamilyID: familyID,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -804,4 +851,12 @@ func (m *JWTManager) generateToken(userID uuid.UUID, tokenType TokenType, lifeti
 	}
 
 	return signedToken, nil
+}
+
+func (m *JWTManager) registeredClaims(userID uuid.UUID, id string, issuedAt, expiresAt time.Time) jwt.RegisteredClaims {
+	return jwt.RegisteredClaims{
+		Issuer: m.issuer, Subject: userID.String(), Audience: jwt.ClaimStrings{m.audience},
+		ExpiresAt: jwt.NewNumericDate(expiresAt), NotBefore: jwt.NewNumericDate(issuedAt),
+		IssuedAt: jwt.NewNumericDate(issuedAt), ID: id,
+	}
 }

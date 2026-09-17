@@ -27,9 +27,11 @@ type Config struct {
 	DBMaxConnIdleMin       int   `mapstructure:"db_max_conn_idle_minutes"`
 	DBHealthCheckPeriodSec int   `mapstructure:"db_health_check_period_seconds"`
 
-	SecretKey string `mapstructure:"secret_key"`
-	Env       string `mapstructure:"env"`
-	Debug     bool   `mapstructure:"debug"`
+	SecretKey   string `mapstructure:"secret_key"`
+	JWTIssuer   string `mapstructure:"jwt_issuer"`
+	JWTAudience string `mapstructure:"jwt_audience"`
+	Env         string `mapstructure:"env"`
+	Debug       bool   `mapstructure:"debug"`
 
 	// ProcessIdentity and Kubernetes runtime metadata are injected by the
 	// deployment once and then passed explicitly through composition. Runtime
@@ -351,6 +353,8 @@ func Load() (*Config, error) {
 		"redis_url",
 		"event_relay_queue_capacity",
 		"secret_key",
+		"jwt_issuer",
+		"jwt_audience",
 		"hostname",
 		"astronomer_pod_ip",
 		"pod_namespace",
@@ -450,6 +454,8 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
 		envconfig.Default{Key: "trusted_proxy_cidrs", Value: ""},
 		envconfig.Default{Key: "session_timeout_minutes", Value: sessionpolicy.DefaultMinutes},
+		envconfig.Default{Key: "jwt_issuer", Value: "astronomer"},
+		envconfig.Default{Key: "jwt_audience", Value: "astronomer-browser"},
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "delivery_enabled", Value: true},
 		envconfig.Default{Key: "delivery_kubernetes_min_minor", Value: "1.33"},

@@ -306,6 +306,75 @@ func TestValidateTokenRejectsDifferentHMACAlgorithm(t *testing.T) {
 	}
 }
 
+func TestJWTManagerEnforcesTrustAndSessionContext(t *testing.T) {
+	const secret = "strict-context-test-secret"
+	mgr, err := NewJWTManagerWithConfig(JWTConfig{
+		SecretKey: secret, AccessLifetimeMinutes: 15,
+		Issuer: "https://control.example.test", Audience: "astronomer-console",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID := uuid.New()
+	access, refresh, err := mgr.GenerateTokenPair(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessClaims, err := mgr.ValidateToken(access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshClaims, err := mgr.ValidateToken(refresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accessClaims.Issuer != "https://control.example.test" || accessClaims.Subject != userID.String() ||
+		len(accessClaims.Audience) != 1 || accessClaims.Audience[0] != "astronomer-console" || accessClaims.ID == "" {
+		t.Fatalf("access trust context is incomplete: %#v", accessClaims.RegisteredClaims)
+	}
+	if accessClaims.SessionFamilyID == uuid.Nil || accessClaims.SessionFamilyID != refreshClaims.SessionFamilyID {
+		t.Fatalf("token pair family mismatch: %s / %s", accessClaims.SessionFamilyID, refreshClaims.SessionFamilyID)
+	}
+
+	sign := func(claims Claims) string {
+		t.Helper()
+		raw, signErr := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+		if signErr != nil {
+			t.Fatal(signErr)
+		}
+		return raw
+	}
+	tests := map[string]func(*Claims){
+		"wrong issuer":     func(c *Claims) { c.Issuer = "other" },
+		"wrong audience":   func(c *Claims) { c.Audience = jwt.ClaimStrings{"other"} },
+		"subject mismatch": func(c *Claims) { c.Subject = uuid.NewString() },
+		"missing jti":      func(c *Claims) { c.ID = "" },
+		"missing family":   func(c *Claims) { c.SessionFamilyID = uuid.Nil },
+		"unsupported type": func(c *Claims) { c.TokenType = TokenType("admin") },
+		"session purpose":  func(c *Claims) { c.Purpose = "totp_challenge" },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			claims := *accessClaims
+			mutate(&claims)
+			if _, validateErr := mgr.ValidateToken(sign(claims)); validateErr == nil {
+				t.Fatal("validation accepted malformed trust/session context")
+			}
+		})
+	}
+}
+
+func TestNewJWTManagerWithConfigRejectsEmptyTrustContext(t *testing.T) {
+	for _, cfg := range []JWTConfig{
+		{SecretKey: "secret", Audience: "audience"},
+		{SecretKey: "secret", Issuer: "issuer"},
+	} {
+		if _, err := NewJWTManagerWithConfig(cfg); err == nil {
+			t.Fatalf("NewJWTManagerWithConfig(%+v) succeeded", cfg)
+		}
+	}
+}
+
 // Multi-key rotation: tokens signed under the old key must still validate
 // after a new key is promoted to primary; new tokens must sign under the
 // new primary. This mirrors the rotation procedure in

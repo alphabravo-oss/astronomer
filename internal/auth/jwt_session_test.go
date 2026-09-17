@@ -35,6 +35,9 @@ func TestPreparedSessionSignsReservedMetadata(t *testing.T) {
 		if claims.UserID != userID {
 			t.Fatal("wrong user")
 		}
+		if claims.SessionFamilyID != pair.FamilyID() || claims.Subject != userID.String() {
+			t.Fatal("session family or subject changed at signing")
+		}
 		if claims.TokenType == AccessToken {
 			if claims.ID != pair.AccessID() || claims.ExpiresAt.Sub(claims.IssuedAt.Time) != 7*time.Minute {
 				t.Fatal("access metadata changed at signing")
