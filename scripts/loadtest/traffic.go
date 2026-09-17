@@ -39,6 +39,18 @@ func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm
 		jitter = 15 * time.Second
 	}
 	log.Warn("triggering reconnect storm", "agents", limit, "jitter", jitter)
+	if limit == 0 {
+		return
+	}
+	type reconnectTarget struct {
+		agent      *syntheticAgent
+		generation uint64
+	}
+	targets := make(chan reconnectTarget, limit)
+	rec := agents[0].rec
+	if rec != nil {
+		rec.beginReconnectStorm(limit)
+	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < limit; i++ {
 		agent := agents[i]
@@ -46,10 +58,44 @@ func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm
 		go func() {
 			select {
 			case <-ctx.Done():
+				return
 			case <-time.After(delay):
-				agent.CloseForStorm()
+				targets <- reconnectTarget{agent: agent, generation: agent.CloseForStorm()}
 			}
 		}()
+	}
+
+	closed := make([]reconnectTarget, 0, limit)
+	for len(closed) < limit {
+		select {
+		case <-ctx.Done():
+			return
+		case target := <-targets:
+			closed = append(closed, target)
+		}
+	}
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		reconnected := 0
+		for _, target := range closed {
+			if target.agent.ConnectionGeneration() > target.generation {
+				reconnected++
+			}
+		}
+		if reconnected == limit {
+			if rec != nil {
+				rec.finishReconnectStorm(reconnected)
+			}
+			log.Info("reconnect storm recovered", "agents", reconnected)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 

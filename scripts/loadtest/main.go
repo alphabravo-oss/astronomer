@@ -438,11 +438,12 @@ type syntheticAgent struct {
 	rec       *recorder
 	resources scaleResources
 
-	mu        sync.Mutex
-	writeMu   sync.Mutex
-	ready     chan struct{}
-	readyOnce sync.Once
-	conn      *websocket.Conn
+	mu                   sync.Mutex
+	writeMu              sync.Mutex
+	ready                chan struct{}
+	readyOnce            sync.Once
+	conn                 *websocket.Conn
+	connectionGeneration uint64
 }
 
 func newSyntheticAgent(server string, credential agentCredential, log *slog.Logger, rec *recorder, resources scaleResources) *syntheticAgent {
@@ -516,13 +517,21 @@ func (sa *syntheticAgent) sendSyntheticStateUpdate(ctx context.Context, sequence
 	}) == nil
 }
 
-func (sa *syntheticAgent) CloseForStorm() {
+func (sa *syntheticAgent) CloseForStorm() uint64 {
 	sa.mu.Lock()
 	conn := sa.conn
+	generation := sa.connectionGeneration
 	sa.mu.Unlock()
 	if conn != nil {
 		_ = conn.Close(websocket.StatusGoingAway, "loadtest reconnect storm")
 	}
+	return generation
+}
+
+func (sa *syntheticAgent) ConnectionGeneration() uint64 {
+	sa.mu.Lock()
+	defer sa.mu.Unlock()
+	return sa.connectionGeneration
 }
 
 // backoffWithJitter mirrors internal/agent/tunnel.go BackoffDurationWithJitter
@@ -621,6 +630,9 @@ func (sa *syntheticAgent) connectAndServe(ctx context.Context) error {
 	}
 
 	sa.rec.RecordConnect()
+	sa.mu.Lock()
+	sa.connectionGeneration++
+	sa.mu.Unlock()
 	sa.readyOnce.Do(func() { close(sa.ready) })
 	defer sa.rec.RecordAgentEnd()
 

@@ -27,10 +27,11 @@ type recorder struct {
 	// Per-scenario latency samples — capped so a 30-minute run at 1000 RPS
 	// doesn't blow heap. p50/p95/p99 stay accurate as long as the reservoir
 	// is representative.
-	httpSamples map[string][]time.Duration
-	httpCount   map[string]int
-	httpErrors  map[string]int
-	httpStatus  map[string]map[int]int
+	httpSamples    map[string][]time.Duration
+	httpCount      map[string]int
+	httpErrors     map[string]int
+	httpStatus     map[string]map[int]int
+	reconnectStorm reconnectStormObservation
 
 	// Agent-fleet counters.
 	connectCount        int
@@ -47,6 +48,14 @@ type recorder struct {
 	// so the report has a baseline for the harness itself.
 	driverGoroutines int
 	driverHeapBytes  uint64
+}
+
+type reconnectStormObservation struct {
+	StartedAt           time.Time
+	RecoveredAt         time.Time
+	TargetAgents        int
+	ReconnectedAgents   int
+	AgentRoute503ByName map[string]int
 }
 
 type auditConservation struct {
@@ -150,7 +159,27 @@ func newRecorder() *recorder {
 		httpStatus:          make(map[string]map[int]int),
 		scrapeSeries:        make(map[string][]scrapePoint),
 		resourceCardinality: make(map[string]int),
+		reconnectStorm: reconnectStormObservation{
+			AgentRoute503ByName: make(map[string]int),
+		},
 	}
+}
+
+func (r *recorder) beginReconnectStorm(targetAgents int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.reconnectStorm = reconnectStormObservation{
+		StartedAt:           time.Now().UTC(),
+		TargetAgents:        targetAgents,
+		AgentRoute503ByName: make(map[string]int),
+	}
+}
+
+func (r *recorder) finishReconnectStorm(reconnectedAgents int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.reconnectStorm.RecoveredAt = time.Now().UTC()
+	r.reconnectStorm.ReconnectedAgents = reconnectedAgents
 }
 
 func (r *recorder) RecordStateEvents(count int) {
@@ -196,11 +225,25 @@ func (r *recorder) RecordHTTP(name string, status int, elapsed time.Duration, er
 			r.httpStatus[name] = make(map[int]int)
 		}
 		r.httpStatus[name][status]++
+		if status == http.StatusServiceUnavailable &&
+			!r.reconnectStorm.StartedAt.IsZero() && r.reconnectStorm.RecoveredAt.IsZero() &&
+			isAgentRoutedScenario(name) {
+			r.reconnectStorm.AgentRoute503ByName[name]++
+		}
 	}
 	samples := r.httpSamples[name]
 	if len(samples) < maxSamplesPerScenario {
 		samples = append(samples, elapsed)
 		r.httpSamples[name] = samples
+	}
+}
+
+func isAgentRoutedScenario(name string) bool {
+	switch name {
+	case "cluster_pods", "cluster_deployments", "cluster_services", "cluster_events":
+		return true
+	default:
+		return false
 	}
 }
 

@@ -128,6 +128,26 @@ func (r *report) evaluate() {
 		}
 	}
 
+	stormQualifies := false
+	if r.cfg.reconnectStorm.Enabled {
+		storm := r.rec.reconnectStorm
+		budget := reconnectStormRecoveryBudget(r.cfg.reconnectStorm)
+		switch {
+		case storm.StartedAt.IsZero():
+			r.Reasons = append(r.Reasons, "reconnect storm was configured but never started")
+		case storm.RecoveredAt.IsZero():
+			r.Reasons = append(r.Reasons, "reconnect storm did not recover before the workload ended")
+		case storm.ReconnectedAgents != storm.TargetAgents:
+			r.Reasons = append(r.Reasons,
+				fmt.Sprintf("reconnect storm recovered %d/%d targeted agents", storm.ReconnectedAgents, storm.TargetAgents))
+		case storm.RecoveredAt.Sub(storm.StartedAt) > budget:
+			r.Reasons = append(r.Reasons,
+				fmt.Sprintf("reconnect storm recovery %s exceeded %s", storm.RecoveredAt.Sub(storm.StartedAt).Round(time.Millisecond), budget))
+		default:
+			stormQualifies = true
+		}
+	}
+
 	// 4. DLQ growth — measured as worker_queue_pending at end. Asynq's
 	//    "pending" is the queued-but-not-running count, which is what we
 	//    want for "is the worker keeping up?".
@@ -189,9 +209,26 @@ func (r *report) evaluate() {
 		totalRequests += count
 		failedRequests += r.rec.httpErrors[name]
 		for status, statusCount := range r.rec.httpStatus[name] {
+			if stormQualifies && status == 503 {
+				statusCount -= r.rec.reconnectStorm.AgentRoute503ByName[name]
+				if statusCount < 0 {
+					statusCount = 0
+				}
+			}
 			if status < 200 || status >= 300 {
 				failedRequests += statusCount
 			}
+		}
+	}
+	if stormQualifies {
+		transient503s := 0
+		for _, count := range r.rec.reconnectStorm.AgentRoute503ByName {
+			transient503s += count
+		}
+		if transient503s > 0 {
+			r.Reasons = append(r.Reasons, fmt.Sprintf(
+				"INFO: reconnect storm produced %d expected agent-route 503 responses during bounded %s recovery",
+				transient503s, r.rec.reconnectStorm.RecoveredAt.Sub(r.rec.reconnectStorm.StartedAt).Round(time.Millisecond)))
 		}
 	}
 	if totalRequests > 0 {
@@ -347,6 +384,14 @@ func (r *report) evaluate() {
 	}
 }
 
+func reconnectStormRecoveryBudget(storm reconnectStormConfig) time.Duration {
+	jitter := storm.JitterDuration
+	if jitter <= 0 {
+		jitter = 15 * time.Second
+	}
+	return jitter + 30*time.Second
+}
+
 func minDuration(a, b time.Duration) time.Duration {
 	if a < b {
 		return a
@@ -454,7 +499,7 @@ func (r *report) WriteFile(path string) error {
 	fmt.Fprintf(&sb, "| open-FD terminal/baseline absolute growth | <= %.0f |\n", r.thresh.openFDGrowthMax)
 	fmt.Fprintf(&sb, "| oldest worker queue item | <= %.0fs |\n", r.thresh.queueAgeMaxSeconds)
 	fmt.Fprintf(&sb, "| event relay lag | <= %.0fs |\n", r.thresh.eventLagMaxSeconds)
-	fmt.Fprintf(&sb, "| HTTP failure ratio | <= %.6f |\n", r.thresh.httpErrorRatioMax)
+	fmt.Fprintf(&sb, "| HTTP failure ratio outside bounded reconnect | <= %.6f |\n", r.thresh.httpErrorRatioMax)
 	fmt.Fprintf(&sb, "| achieved request rate | >= %.2f of target |\n", r.thresh.achievedRPSMin)
 	fmt.Fprintf(&sb, "| observed duration | >= %.2f of configured |\n", r.thresh.durationRatioMin)
 	fmt.Fprintf(&sb, "| emitted state-event rate | >= %.2f of declared |\n", r.thresh.eventRateRatioMin)
@@ -539,6 +584,19 @@ func (r *report) WriteFile(path string) error {
 	fmt.Fprintf(&sb, "| Successful CONNECT_ACKs | %d |\n", r.rec.connectCount)
 	fmt.Fprintf(&sb, "| Disconnects (reconnect attempts) | %d |\n", r.rec.disconnectCount)
 	fmt.Fprintf(&sb, "| Connected at end (gauge) | %.0f |\n", lastValue(r.rec.scrapeSeries["agent_connections"]))
+	if r.cfg.reconnectStorm.Enabled {
+		recovery := "not recovered"
+		if !r.rec.reconnectStorm.StartedAt.IsZero() && !r.rec.reconnectStorm.RecoveredAt.IsZero() {
+			recovery = r.rec.reconnectStorm.RecoveredAt.Sub(r.rec.reconnectStorm.StartedAt).Round(time.Millisecond).String()
+		}
+		transient503s := 0
+		for _, count := range r.rec.reconnectStorm.AgentRoute503ByName {
+			transient503s += count
+		}
+		fmt.Fprintf(&sb, "| Reconnect storm recovered | %d/%d in %s |\n",
+			r.rec.reconnectStorm.ReconnectedAgents, r.rec.reconnectStorm.TargetAgents, recovery)
+		fmt.Fprintf(&sb, "| Agent-route 503s inside recovery window | %d |\n", transient503s)
+	}
 	sb.WriteString("\n")
 
 	// ── Server resource peaks
@@ -837,7 +895,8 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 		samples := r.rec.httpSamples[name]
 		scenarios[name] = map[string]any{
 			"requests": count, "errors": r.rec.httpErrors[name], "status_codes": r.rec.httpStatus[name],
-			"p50_ms": percentile(samples, .50).Milliseconds(), "p95_ms": percentile(samples, .95).Milliseconds(),
+			"bounded_reconnect_503s": r.rec.reconnectStorm.AgentRoute503ByName[name],
+			"p50_ms":                 percentile(samples, .50).Milliseconds(), "p95_ms": percentile(samples, .95).Milliseconds(),
 			"p99_ms": percentile(samples, .99).Milliseconds(),
 		}
 	}
@@ -896,6 +955,16 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 			"terminal_window_average": terminal, "sufficient_evidence": ok,
 		}
 	}
+	reconnectStorm := map[string]any{
+		"configured":           r.cfg.reconnectStorm.Enabled,
+		"target_agents":        r.rec.reconnectStorm.TargetAgents,
+		"reconnected_agents":   r.rec.reconnectStorm.ReconnectedAgents,
+		"started_at":           optionalTimestamp(r.rec.reconnectStorm.StartedAt),
+		"recovered_at":         optionalTimestamp(r.rec.reconnectStorm.RecoveredAt),
+		"recovery_duration_ms": optionalDurationMilliseconds(r.rec.reconnectStorm.StartedAt, r.rec.reconnectStorm.RecoveredAt),
+		"recovery_budget_ms":   reconnectStormRecoveryBudget(r.cfg.reconnectStorm).Milliseconds(),
+		"agent_route_503s":     r.rec.reconnectStorm.AgentRoute503ByName,
+	}
 	rawScrapes := map[string]any{}
 	for name, series := range r.rec.scrapeSeries {
 		points := make([]map[string]any, 0, len(series))
@@ -917,6 +986,7 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 		"resource_cardinality": cardinality, "state_events_emitted": r.rec.stateEventsEmitted,
 		"mandatory_audit": conservation, "audit_metrics": auditMetrics,
 		"component_metrics": componentMetrics,
+		"reconnect_storm":   reconnectStorm,
 		"scrape_series":     rawScrapes,
 		"leak_evidence":     leakEvidence,
 		"thresholds": map[string]any{
@@ -934,6 +1004,20 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 	digest := sha256.Sum256(markdown)
 	digestLine := fmt.Sprintf("%x  %s\n", digest, filepath.Base(path))
 	return os.WriteFile(path+".sha256", []byte(digestLine), 0o644)
+}
+
+func optionalTimestamp(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func optionalDurationMilliseconds(start, end time.Time) int64 {
+	if start.IsZero() || end.IsZero() || end.Before(start) {
+		return 0
+	}
+	return end.Sub(start).Milliseconds()
 }
 
 func componentRateEvidence(series []scrapePoint, unit string, declaredLoad float64) map[string]any {

@@ -125,7 +125,7 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
 | `LOADTEST_THRESH_OPEN_FD_GROWTH` | `64` | maximum absolute post-warm-up/terminal open-FD growth |
 | `LOADTEST_THRESH_QUEUE_AGE_SECONDS` | `60` | Oldest pending worker task age |
 | `LOADTEST_THRESH_EVENT_LAG_SECONDS` | `30` | Distributed event/cache relay lag |
-| `LOADTEST_THRESH_HTTP_ERROR_RATIO` | `0` | Maximum transport plus non-2xx response ratio |
+| `LOADTEST_THRESH_HTTP_ERROR_RATIO` | `0` | Maximum transport plus non-2xx response ratio outside a bounded intentional reconnect window |
 | `LOADTEST_THRESH_ACHIEVED_RPS_RATIO` | `0.95` | Minimum observed/target request-rate ratio |
 | `LOADTEST_THRESH_DURATION_RATIO` | `0.98` | Minimum observed/configured workload-window ratio |
 | `LOADTEST_THRESH_EVENT_RATE_RATIO` | `0.95` | Minimum emitted/declared state-event-rate ratio |
@@ -155,6 +155,14 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
    - replies to `K8S_STREAM_REQUEST` with a header + end frame
    - on disconnect, retries with jittered exponential backoff (matches
      `internal/agent/tunnel.go BackoffDurationWithJitter`)
+
+   A configured reconnect storm records its exact start, targeted agents, full
+   recovery, and recovery duration. HTTP 503 responses from agent-routed
+   resource scenarios are reported separately while that bounded drill is in
+   progress; they do not consume the steady-state HTTP error budget only when
+   every targeted agent reconnects within `jitter + 30s`. Transport failures,
+   non-agent routes, responses after recovery, and an incomplete or slow
+   reconnect still fail the run.
 
    The agent code is a slim reimplementation (not a `TunnelClient` import)
    because that package transitively pulls in `client-go` and friends. The
