@@ -8,7 +8,7 @@ mapping.
 
 | Plan | Priority | Status | Next gate |
 |---|---|---|---|
-| [016 — Production and GA closure](./016-production-ga-closure-master-plan.md) | P0/P1 + release qualification | **TODO — READY** | Phase 0: reconcile the preserved dirty integration tree into one clean, reproducible, digest-pinned release baseline. |
+| [016 — Production and GA closure](./016-production-ga-closure-master-plan.md) | P0/P1 + release qualification | **IN PROGRESS** | Phase 2: refresh-session families, JWT context, cookie-only browser auth, and versioned ciphertext. Phase 0 artifact/deployment qualification repeats against the final exact candidate. |
 
 Status values: `TODO — READY`, `IN PROGRESS`, `BLOCKED` with a concrete reason,
 or `DONE` with retained evidence links.

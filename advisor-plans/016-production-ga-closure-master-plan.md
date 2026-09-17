@@ -87,9 +87,6 @@ production readiness.
 
 These live-code observations are the reason the phases below remain open:
 
-- `internal/server/server.go`: the tunnel worker can terminate the process, but
-  readiness has no explicit critical-runtime health input; shutdown cancels the
-  reconcile context without a demonstrated join for every owned loop.
 - `internal/auth/jwt.go`: session JWTs still omit required issuer, audience,
   subject, and durable session-family context.
 - `internal/handler/auth.go` and `internal/handler/auth_sessions.go`: browser
@@ -117,10 +114,25 @@ These live-code observations are the reason the phases below remain open:
 - `frontend/package.json` and `frontend/Dockerfile`: the supported runtime is
   Node 22; the guide-alignment decision and reusable Playwright auth state are
   unresolved.
-- `node scripts/check-docs.mjs` currently fails because one mounted operation is
-  missing from OpenAPI. The route dump/OpenAPI/generated-client set must be
-  reconciled in Phase 0; archived claims of zero route drift are not current
-  evidence for this dirty tree.
+
+## Execution ledger
+
+- **Phase 0 baseline, partially complete:** clean-clone static enterprise
+  verification passed at `32f464e5150c25dffd10ddd802b4349872b2a376` on
+  2026-09-17, including the full normal/race Go tree, frontend, generated/API
+  contracts, documentation, and Helm gates. Exact image build, digest-pinned
+  local deployment, and stateful qualification remain open and must be repeated
+  against the final candidate after implementation phases change the commit.
+- **Phase 1, complete locally:** commit
+  `a84e393a3fb81ec8c4f5f229cc9154e45e7aa5ff` gives every production runtime
+  loop a named supervisor or joined component owner, connects critical failure
+  to `/readyz` and process termination, makes shutdown idempotent and ordered,
+  joins Charlie generations, and keeps dependency pools open when a hung loop
+  exceeds the shutdown deadline. Failure-injection tests cover worker crash,
+  intentional worker exit, hung join, live-dependency audit drain, and repeated
+  shutdown. `go test -race ./internal/charlie ./internal/server/... ./cmd/server/... -count=1`,
+  focused normal tests, vet, complexity, dependency-boundary, and environment-
+  access gates passed on 2026-09-17.
 
 ## Commands and authoritative gates
 
@@ -203,6 +215,10 @@ source is committed; the deployed manifests use the exact verified digests;
 static/stateful gates and local health pass against the same commit.
 
 ## Phase 1 — Finish runtime lifecycle and critical-loop health
+
+**Status: DONE locally at
+`a84e393a3fb81ec8c4f5f229cc9154e45e7aa5ff`; exact-candidate deployment and
+release qualification remain governed by Phases 0 and 6.**
 
 ### Work
 
@@ -504,7 +520,7 @@ is mandatory only when that claim is made.
       the exact verified commit produced the deployed digest-pinned artifacts.
 - [ ] Static, race, PostgreSQL, browser, Helm, generated-contract, and applicable
       stateful gates pass on that exact commit with zero hidden skips.
-- [ ] Every server-owned critical loop has supervised health and bounded join.
+- [x] Every server-owned critical loop has supervised health and bounded join.
 - [ ] Refresh replay, JWT context, cookie-only browser auth, revocation, error
       redaction, DSN parsing, and versioned ciphertext criteria pass.
 - [ ] Default-deny networking, DR authority, authenticated immutable backups,
