@@ -189,7 +189,11 @@ development container that must publish the port.
 `make dev` starts Postgres, Redis, migrations, the Go server on port 8001,
 and the worker. Vite serves the operator console on port 3000 and proxies API
 and WebSocket traffic to the Go server. Use `make dev-full` when the
-containerized frontend is preferable to the Vite development server.
+containerized frontend is preferable to the Vite development server. After a
+Go or SQL change, run `make dev-reload` to rebuild and replace the migrator,
+server, and worker through the same production Dockerfiles. The explicit
+rebuild is the supported backend reload path; the repository does not require a
+separate file-watcher runtime.
 Use the optional [local telemetry stack](docs/local-telemetry.md) to inspect
 correlated JSON logs, Prometheus exemplars and end-to-end traces without a
 hosted collector.

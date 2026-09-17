@@ -1,6 +1,6 @@
 .PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all local-ci-install local-ci-pr local-ci-pr-representative check-build-capacity release-contract-check airgap-plan data-governance-check sqlc sqlc-generate sqlc-check sqlc-extensions-generate sqlc-extensions-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-dr docker-build-all \
-        migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
+        migrate-up migrate-down migrate-create clean dev dev-reload dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
         validate-live-b6 validate-live-delivery validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects verify-agent-identity-live
 
@@ -412,6 +412,9 @@ dev: ## Start backend dependencies for local Vite development
 
 dev-full: ## Start backend and containerized frontend
 	docker compose -f deploy/docker-compose.yml --profile frontend up -d
+
+dev-reload: ## Rebuild and replace the migrator, server, and worker after Go/SQL changes
+	docker compose -f deploy/docker-compose.yml up -d --build migrate server worker
 
 dev-down: ## Stop dev environment
 	docker compose -f deploy/docker-compose.yml down
