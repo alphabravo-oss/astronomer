@@ -274,6 +274,20 @@ export interface OpenAPIComponents {
           "data": OpenAPIComponents['schemas']['AlertEvent'][];
           "pagination": OpenAPIComponents['schemas']['PaginationMetadata'];
         };
+    AlertEventSummary: {
+          "total": number;
+          "firing": number;
+          "acknowledged": number;
+          "resolved": number;
+          "silenced": number;
+          "firing_critical": number;
+          "firing_warning": number;
+          "firing_info": number;
+          "as_of": string;
+        };
+    AlertEventSummaryEnvelope: {
+          "data": OpenAPIComponents['schemas']['AlertEventSummary'];
+        };
     AlertRule: {
           "id": string;
           "name": string;
@@ -10049,6 +10063,16 @@ export interface OpenAPIOperations {
       };
     response: OpenAPIComponents['schemas']['AlertEventPage'];
   };
+  "getAlertingEventsSummary": {
+    method: "GET";
+    path: "/api/v1/alerting/events/summary/";
+    arguments: {
+        "query"?: {
+          "clusterId"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['AlertEventSummaryEnvelope'];
+  };
   "getClusters": {
     method: "GET";
     path: "/api/v1/clusters/";
@@ -14873,6 +14897,7 @@ export interface OpenAPIOperations {
           "namespace"?: string;
           "kind"?: string;
           "search"?: string;
+          "sort"?: "namespace_asc" | "namespace_desc" | "name_asc" | "name_desc" | "created_asc" | "created_desc";
         };
       };
     response: OpenAPIComponents['schemas']['PageEnvelope'] & {
@@ -15705,6 +15730,8 @@ export type AlertChannelRequest = OpenAPIComponents['schemas']['AlertChannelRequ
 export type AlertEvent = OpenAPIComponents['schemas']['AlertEvent'];
 export type AlertEventEnvelope = OpenAPIComponents['schemas']['AlertEventEnvelope'];
 export type AlertEventPage = OpenAPIComponents['schemas']['AlertEventPage'];
+export type AlertEventSummary = OpenAPIComponents['schemas']['AlertEventSummary'];
+export type AlertEventSummaryEnvelope = OpenAPIComponents['schemas']['AlertEventSummaryEnvelope'];
 export type AlertRule = OpenAPIComponents['schemas']['AlertRule'];
 export type AlertRuleEnvelope = OpenAPIComponents['schemas']['AlertRuleEnvelope'];
 export type AlertRulePage = OpenAPIComponents['schemas']['AlertRulePage'];

@@ -261,6 +261,8 @@ export const queryKeys = {
     rules: (clusterId?: string) =>
       ["alerting", "rules", clusterId ?? "all"] as const,
     events: (params?: object) => ["alerting", "events", params] as const,
+    eventSummary: (clusterId?: string) =>
+      ["alerting", "events", "summary", clusterId ?? "all"] as const,
     // Prefix matching every `events(params)` variant — used by the live
     // routing table on `alerting.changed` (kind: event).
     eventsAll: ["alerting", "events"] as const,

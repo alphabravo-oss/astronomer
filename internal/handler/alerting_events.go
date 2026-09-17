@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -10,6 +12,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type alertEventSummaryQuerier interface {
+	GetAlertEventSummary(ctx context.Context, clusterID pgtype.UUID) (sqlc.GetAlertEventSummaryRow, error)
+}
+
+type alertEventSummaryResponse struct {
+	Total          int64     `json:"total"`
+	Firing         int64     `json:"firing"`
+	Acknowledged   int64     `json:"acknowledged"`
+	Resolved       int64     `json:"resolved"`
+	Silenced       int64     `json:"silenced"`
+	FiringCritical int64     `json:"firing_critical"`
+	FiringWarning  int64     `json:"firing_warning"`
+	FiringInfo     int64     `json:"firing_info"`
+	AsOf           time.Time `json:"as_of"`
+}
 
 // --- Event Endpoints ---
 
@@ -61,6 +79,37 @@ func (h *AlertingHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		ClusterID: clusterID,
 	})
 	paging.Write(w, items, paging.Exact(total, int(limit), int(offset), len(items)))
+}
+
+// EventSummary handles GET /api/v1/alerting/events/summary/. It is a separate
+// aggregate contract so list-page pagination and live invalidation never make
+// the UI infer fleet-wide counts from a partial page.
+func (h *AlertingHandler) EventSummary(w http.ResponseWriter, r *http.Request) {
+	store, ok := h.queries.(alertEventSummaryQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Alert event summary store is not available")
+		return
+	}
+	var clusterID pgtype.UUID
+	if value := r.URL.Query().Get("clusterId"); value != "" {
+		parsed, err := uuid.Parse(value)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid cluster ID")
+			return
+		}
+		clusterID = pgtype.UUID{Bytes: parsed, Valid: true}
+	}
+	row, err := store.GetAlertEventSummary(r.Context(), clusterID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to summarize alert events")
+		return
+	}
+	RespondJSON(w, http.StatusOK, alertEventSummaryResponse{
+		Total: row.Total, Firing: row.Firing, Acknowledged: row.Acknowledged,
+		Resolved: row.Resolved, Silenced: row.Silenced,
+		FiringCritical: row.FiringCritical, FiringWarning: row.FiringWarning,
+		FiringInfo: row.FiringInfo, AsOf: time.Now().UTC(),
+	})
 }
 
 // GetEvent handles GET /api/v1/alerting/events/{id}/.

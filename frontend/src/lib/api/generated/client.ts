@@ -240,6 +240,7 @@ export const operationMetadata = {
   "getAlertingChannelsById": { method: "GET", path: "/api/v1/alerting/channels/{id}", pathParameters: ["id"], responseType: "json" },
   "getAlertingEvents": { method: "GET", path: "/api/v1/alerting/events/", pathParameters: [], responseType: "json" },
   "getAlertingEventsById": { method: "GET", path: "/api/v1/alerting/events/{id}", pathParameters: ["id"], responseType: "json" },
+  "getAlertingEventsSummary": { method: "GET", path: "/api/v1/alerting/events/summary/", pathParameters: [], responseType: "json" },
   "getAlertingRules": { method: "GET", path: "/api/v1/alerting/rules", pathParameters: [], responseType: "json" },
   "getAlertingRulesById": { method: "GET", path: "/api/v1/alerting/rules/{id}", pathParameters: ["id"], responseType: "json" },
   "getAlertingSilences": { method: "GET", path: "/api/v1/alerting/silences", pathParameters: [], responseType: "json" },
@@ -1899,6 +1900,11 @@ export function getAlertingEvents(args?: OpenAPIArguments<"getAlertingEvents">) 
 export function getAlertingEventsById(args: OpenAPIArguments<"getAlertingEventsById">) {
   const operationId = "getAlertingEventsById" as const;
   return executeOpenAPIOperation(operationId, args);
+}
+
+export function getAlertingEventsSummary(args?: OpenAPIArguments<"getAlertingEventsSummary">) {
+  const operationId = "getAlertingEventsSummary" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
 export function getAlertingRules(args?: OpenAPIArguments<"getAlertingRules">) {

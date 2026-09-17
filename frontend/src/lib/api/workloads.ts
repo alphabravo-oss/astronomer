@@ -240,6 +240,7 @@ export async function getWorkloads(
     namespace?: string;
     kind?: string;
     search?: string;
+    sort?: WorkloadSort;
     page?: number;
     pageSize?: number;
     signal?: AbortSignal;
@@ -255,6 +256,7 @@ export async function getWorkloads(
       namespace: params?.namespace,
       kind: params?.kind,
       search: params?.search,
+      sort: params?.sort,
     },
     signal: params?.signal,
   });
@@ -263,6 +265,14 @@ export async function getWorkloads(
     mapWorkload,
   );
 }
+
+export type WorkloadSort =
+  | "namespace_asc"
+  | "namespace_desc"
+  | "name_asc"
+  | "name_desc"
+  | "created_asc"
+  | "created_desc";
 
 export async function scaleWorkload(
   clusterId: string,

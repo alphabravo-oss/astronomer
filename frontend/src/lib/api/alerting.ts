@@ -16,6 +16,7 @@ import {
   getAlertingChannelsById,
   getAlertingEvents,
   getAlertingEventsById,
+  getAlertingEventsSummary,
   getAlertingRules,
   getAlertingRulesById,
   getAlertingSilences,
@@ -37,6 +38,7 @@ import type {
   AlertRule,
   AlertSilence,
   NotificationChannel,
+  PaginatedResponse,
 } from "@/types";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 
@@ -70,6 +72,18 @@ export interface AlertEventQuery {
   clusterId?: string;
   limit?: number | string;
   offset?: number | string;
+}
+
+export interface AlertEventSummary {
+  total: number;
+  firing: number;
+  acknowledged: number;
+  resolved: number;
+  silenced: number;
+  firingCritical: number;
+  firingWarning: number;
+  firingInfo: number;
+  asOf: string;
 }
 
 function requireData<T>(response: { data?: T }, operation: string): T {
@@ -213,7 +227,8 @@ export async function disableAlertRule(id: string): Promise<AlertRule> {
 
 export async function getAlertEvents(
   params?: AlertEventQuery,
-): Promise<AlertEvent[]> {
+  signal?: AbortSignal,
+): Promise<PaginatedResponse<AlertEvent>> {
   const page = await getAlertingEvents({
     query: present({
       status: params?.status,
@@ -222,8 +237,33 @@ export async function getAlertEvents(
       limit: optionalInteger(params?.limit),
       offset: optionalInteger(params?.offset),
     }),
+    signal,
   });
-  return page.data;
+  return { data: page.data, pagination: page.pagination };
+}
+
+export async function getAlertEventSummary(
+  clusterId?: string,
+  signal?: AbortSignal,
+): Promise<AlertEventSummary> {
+  const wire = requireData(
+    await getAlertingEventsSummary({
+      query: { clusterId },
+      signal,
+    }),
+    "getAlertEventSummary",
+  );
+  return {
+    total: wire.total,
+    firing: wire.firing,
+    acknowledged: wire.acknowledged,
+    resolved: wire.resolved,
+    silenced: wire.silenced,
+    firingCritical: wire.firing_critical,
+    firingWarning: wire.firing_warning,
+    firingInfo: wire.firing_info,
+    asOf: wire.as_of,
+  };
 }
 
 export async function getAlertEvent(id: string): Promise<AlertEvent> {

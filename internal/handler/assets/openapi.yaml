@@ -2381,6 +2381,26 @@ components:
       properties:
         data: {type: array, items: {$ref: '#/components/schemas/AlertEvent'}}
         pagination: {$ref: '#/components/schemas/PaginationMetadata'}
+    AlertEventSummary:
+      type: object
+      additionalProperties: false
+      required: [total, firing, acknowledged, resolved, silenced, firing_critical, firing_warning, firing_info, as_of]
+      properties:
+        total: {type: integer, format: int64, minimum: 0}
+        firing: {type: integer, format: int64, minimum: 0}
+        acknowledged: {type: integer, format: int64, minimum: 0}
+        resolved: {type: integer, format: int64, minimum: 0}
+        silenced: {type: integer, format: int64, minimum: 0}
+        firing_critical: {type: integer, format: int64, minimum: 0}
+        firing_warning: {type: integer, format: int64, minimum: 0}
+        firing_info: {type: integer, format: int64, minimum: 0}
+        as_of: {type: string, format: date-time}
+    AlertEventSummaryEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/AlertEventSummary'}
     AlertSilence:
       type: object
       additionalProperties: false
@@ -20050,6 +20070,27 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/alerting/events/summary/:
+    get:
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-route-class: public-api
+      operationId: getAlertingEventsSummary
+      tags: [Alerting]
+      summary: Summarize alert events
+      description: Returns authoritative status and firing-severity counts, optionally for one cluster.
+      parameters:
+        - {name: clusterId, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Alert event aggregate counts
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertEventSummaryEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/clusters/:
     get:
       x-astronomer-auth: "bearer-or-session"
@@ -36181,6 +36222,14 @@ paths:
           description: Case-insensitive substring match on name or namespace.
           schema:
             type: string
+        - name: sort
+          in: query
+          required: false
+          description: Stable server-side workload order applied before pagination.
+          schema:
+            type: string
+            default: namespace_asc
+            enum: [namespace_asc, namespace_desc, name_asc, name_desc, created_asc, created_desc]
       responses:
         '200':
           description: Workload page

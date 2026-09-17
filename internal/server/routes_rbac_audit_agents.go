@@ -169,6 +169,7 @@ func registerRBACAuditAgentRoutes(r chi.Router, deps RouterDependencies, rateLim
 			r.With(alertsUpdate).Post("/rules/{id}/enable/", deps.AdminPlatform.Alerting.EnableRule)
 			r.With(alertsUpdate).Post("/rules/{id}/disable/", deps.AdminPlatform.Alerting.DisableRule)
 			r.With(alertsRead).Get("/events/", deps.AdminPlatform.Alerting.ListEvents)
+			r.With(alertsRead).Get("/events/summary/", deps.AdminPlatform.Alerting.EventSummary)
 			r.With(alertsRead).Get("/events/{id}/", deps.AdminPlatform.Alerting.GetEvent)
 			r.With(alertsUpdate).Post("/events/{id}/acknowledge/", deps.AdminPlatform.Alerting.AcknowledgeEvent)
 			r.With(alertsUpdate).Post("/events/{id}/resolve/", deps.AdminPlatform.Alerting.ResolveEvent)

@@ -776,6 +776,10 @@ type Querier interface {
 	GetAdminQueueOperation(ctx context.Context, id uuid.UUID) (AdminQueueOperation, error)
 	// Alert Events
 	GetAlertEventByID(ctx context.Context, id uuid.UUID) (AlertEvent, error)
+	// Authoritative counts for the event estate (optionally one cluster). Severity
+	// belongs to the rule, so aggregate it in SQL rather than asking a UI page to
+	// infer totals from the rows it happens to hold.
+	GetAlertEventSummary(ctx context.Context, clusterID pgtype.UUID) (GetAlertEventSummaryRow, error)
 	GetAlertInhibitionByID(ctx context.Context, id uuid.UUID) (AlertInhibition, error)
 	// Alert Rules
 	GetAlertRuleByID(ctx context.Context, id uuid.UUID) (AlertRule, error)

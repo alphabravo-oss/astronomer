@@ -7,7 +7,7 @@ import {
 } from "@/lib/hooks/clusters";
 import { useActivityFeed } from "@/lib/hooks/audit";
 import { queryKeys } from "@/lib/query-keys";
-import { useAlertEvents } from "@/lib/hooks/alerting";
+import { useAlertEventSummary } from "@/lib/hooks/alerting";
 import { useTools } from "@/lib/hooks/tools";
 import { useLatestBackupDrill } from "@/components/settings/hooks";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
@@ -43,7 +43,7 @@ function DashboardPage() {
   const clusterSummaryQuery = useClusterEstateSummary();
   const { data: activityData, isLoading: activityLoading } =
     useActivityFeed(10);
-  const { data: alertEventsData } = useAlertEvents({ status: "firing" });
+  const { data: alertSummary } = useAlertEventSummary();
   const { data: toolsData } = useTools();
   // T7.3 — backup-drill health row. The CronJob writes one row
   // per drill run; useLatestBackupDrill returns the most recent.
@@ -66,7 +66,6 @@ function DashboardPage() {
   const clusters = clustersQuery.data?.data || [];
   const clusterSummary = clusterSummaryQuery.data;
   const activity = activityData || [];
-  const alertEvents = alertEventsData ?? [];
   const tools = toolsData || [];
 
   const activeClusters = clusterSummary?.clustersActive ?? 0;
@@ -74,12 +73,8 @@ function DashboardPage() {
   const disconnectedClusters = clusterSummary?.clustersDisconnected ?? 0;
   const totalNodes = clusterSummary?.nodesTotal ?? 0;
   const totalPods = clusterSummary?.podsTotal ?? 0;
-  const criticalAlerts = alertEvents.filter(
-    (e) => e.severity === "critical",
-  ).length;
-  const warningAlerts = alertEvents.filter(
-    (e) => e.severity === "warning",
-  ).length;
+  const criticalAlerts = alertSummary?.firingCritical ?? 0;
+  const warningAlerts = alertSummary?.firingWarning ?? 0;
   const totalTools = Array.isArray(tools) ? tools.length : 0;
 
   return (
@@ -118,7 +113,7 @@ function DashboardPage() {
         <MetricTile
           destination="alerting"
           label="Open Alerts"
-          value={alertEvents.length}
+          value={alertSummary?.firing ?? "—"}
           sublabel={
             criticalAlerts > 0
               ? `${criticalAlerts} critical`
@@ -285,7 +280,7 @@ function DashboardPage() {
               destination="alerting"
               icon={<Bell className="h-4 w-4" />}
               label="Firing alerts"
-              value={alertEvents.length}
+              value={alertSummary?.firing ?? "—"}
               tone={
                 criticalAlerts > 0
                   ? "error"

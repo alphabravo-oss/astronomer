@@ -21,6 +21,7 @@ import { toastApiError, toastSuccess } from "@/lib/toast";
 import type { PodLog } from "@/types";
 import { useOperationMutation } from "@/lib/hooks/operation-mutation";
 import { k8sQueryKeys } from "@/lib/hooks/kubernetes-proxy";
+import type { WorkloadSort } from "@/lib/api/workloads";
 import {
   getResourceDef,
   k8sResourcePath,
@@ -37,6 +38,7 @@ export function useWorkloads(
     namespace?: string;
     kind?: string;
     search?: string;
+    sort?: WorkloadSort;
     page?: number;
     pageSize?: number;
   },

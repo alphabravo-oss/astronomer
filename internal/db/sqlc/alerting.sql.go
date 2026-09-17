@@ -396,6 +396,52 @@ func (q *Queries) GetAlertEventByID(ctx context.Context, id uuid.UUID) (AlertEve
 	return i, err
 }
 
+const getAlertEventSummary = `-- name: GetAlertEventSummary :one
+SELECT
+  count(*)::bigint AS total,
+  count(*) FILTER (WHERE e.status = 'firing')::bigint AS firing,
+  count(*) FILTER (WHERE e.status = 'acknowledged')::bigint AS acknowledged,
+  count(*) FILTER (WHERE e.status = 'resolved')::bigint AS resolved,
+  count(*) FILTER (WHERE e.status = 'silenced')::bigint AS silenced,
+  count(*) FILTER (WHERE e.status = 'firing' AND r.severity = 'critical')::bigint AS firing_critical,
+  count(*) FILTER (WHERE e.status = 'firing' AND r.severity = 'warning')::bigint AS firing_warning,
+  count(*) FILTER (WHERE e.status = 'firing' AND r.severity = 'info')::bigint AS firing_info
+FROM alert_events e
+LEFT JOIN alert_rules r ON r.id = e.rule_id
+WHERE $1::uuid IS NULL
+   OR e.cluster_id = $1::uuid
+`
+
+type GetAlertEventSummaryRow struct {
+	Total          int64 `json:"total"`
+	Firing         int64 `json:"firing"`
+	Acknowledged   int64 `json:"acknowledged"`
+	Resolved       int64 `json:"resolved"`
+	Silenced       int64 `json:"silenced"`
+	FiringCritical int64 `json:"firing_critical"`
+	FiringWarning  int64 `json:"firing_warning"`
+	FiringInfo     int64 `json:"firing_info"`
+}
+
+// Authoritative counts for the event estate (optionally one cluster). Severity
+// belongs to the rule, so aggregate it in SQL rather than asking a UI page to
+// infer totals from the rows it happens to hold.
+func (q *Queries) GetAlertEventSummary(ctx context.Context, clusterID pgtype.UUID) (GetAlertEventSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getAlertEventSummary, clusterID)
+	var i GetAlertEventSummaryRow
+	err := row.Scan(
+		&i.Total,
+		&i.Firing,
+		&i.Acknowledged,
+		&i.Resolved,
+		&i.Silenced,
+		&i.FiringCritical,
+		&i.FiringWarning,
+		&i.FiringInfo,
+	)
+	return i, err
+}
+
 const getAlertRuleByID = `-- name: GetAlertRuleByID :one
 
 SELECT id, name, cluster_id, rule_type, configuration, severity, enabled, cooldown_minutes, created_by_id, created_at, updated_at, rule_kind, anomaly_stddev, anomaly_window_seconds, anomaly_min_samples, anomaly_direction FROM alert_rules WHERE id = $1

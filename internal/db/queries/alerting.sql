@@ -157,6 +157,24 @@ WHERE (
     OR rule_id IN (SELECT id FROM alert_rules WHERE severity = sqlc.narg(severity)::text)
 );
 
+-- name: GetAlertEventSummary :one
+-- Authoritative counts for the event estate (optionally one cluster). Severity
+-- belongs to the rule, so aggregate it in SQL rather than asking a UI page to
+-- infer totals from the rows it happens to hold.
+SELECT
+  count(*)::bigint AS total,
+  count(*) FILTER (WHERE e.status = 'firing')::bigint AS firing,
+  count(*) FILTER (WHERE e.status = 'acknowledged')::bigint AS acknowledged,
+  count(*) FILTER (WHERE e.status = 'resolved')::bigint AS resolved,
+  count(*) FILTER (WHERE e.status = 'silenced')::bigint AS silenced,
+  count(*) FILTER (WHERE e.status = 'firing' AND r.severity = 'critical')::bigint AS firing_critical,
+  count(*) FILTER (WHERE e.status = 'firing' AND r.severity = 'warning')::bigint AS firing_warning,
+  count(*) FILTER (WHERE e.status = 'firing' AND r.severity = 'info')::bigint AS firing_info
+FROM alert_events e
+LEFT JOIN alert_rules r ON r.id = e.rule_id
+WHERE sqlc.narg(cluster_id)::uuid IS NULL
+   OR e.cluster_id = sqlc.narg(cluster_id)::uuid;
+
 -- name: DeleteAlertEventsOlderThan :execrows
 -- Deletes alert events older than the supplied cutoff. Used by the scheduled
 -- cleanup_old_alert_events worker.

@@ -83,6 +83,7 @@ describe("workloads generated API boundary", () => {
 
     const result = await getWorkloads("cluster-1", {
       namespace: "default",
+      sort: "name_desc",
       page: 3,
       pageSize: 20,
     });
@@ -95,6 +96,7 @@ describe("workloads generated API boundary", () => {
         namespace: "default",
         kind: undefined,
         search: undefined,
+        sort: "name_desc",
       },
       signal: undefined,
     });

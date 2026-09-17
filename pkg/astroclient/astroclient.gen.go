@@ -2274,6 +2274,16 @@ const (
 	DeleteNamedClusterResourceParamsResourceTypeServices               DeleteNamedClusterResourceParamsResourceType = "services"
 )
 
+// Defines values for GetClustersByClusterIdWorkloadsParamsSort.
+const (
+	GetClustersByClusterIdWorkloadsParamsSortCreatedAsc    GetClustersByClusterIdWorkloadsParamsSort = "created_asc"
+	GetClustersByClusterIdWorkloadsParamsSortCreatedDesc   GetClustersByClusterIdWorkloadsParamsSort = "created_desc"
+	GetClustersByClusterIdWorkloadsParamsSortNameAsc       GetClustersByClusterIdWorkloadsParamsSort = "name_asc"
+	GetClustersByClusterIdWorkloadsParamsSortNameDesc      GetClustersByClusterIdWorkloadsParamsSort = "name_desc"
+	GetClustersByClusterIdWorkloadsParamsSortNamespaceAsc  GetClustersByClusterIdWorkloadsParamsSort = "namespace_asc"
+	GetClustersByClusterIdWorkloadsParamsSortNamespaceDesc GetClustersByClusterIdWorkloadsParamsSort = "namespace_desc"
+)
+
 // Defines values for GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRange.
 const (
 	GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRangeN1h  GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRange = "1h"
@@ -2782,6 +2792,24 @@ type AlertEventEnvelope struct {
 type AlertEventPage struct {
 	Data       []AlertEvent       `json:"data"`
 	Pagination PaginationMetadata `json:"pagination"`
+}
+
+// AlertEventSummary defines model for AlertEventSummary.
+type AlertEventSummary struct {
+	Acknowledged   int64     `json:"acknowledged"`
+	AsOf           time.Time `json:"as_of"`
+	Firing         int64     `json:"firing"`
+	FiringCritical int64     `json:"firing_critical"`
+	FiringInfo     int64     `json:"firing_info"`
+	FiringWarning  int64     `json:"firing_warning"`
+	Resolved       int64     `json:"resolved"`
+	Silenced       int64     `json:"silenced"`
+	Total          int64     `json:"total"`
+}
+
+// AlertEventSummaryEnvelope defines model for AlertEventSummaryEnvelope.
+type AlertEventSummaryEnvelope struct {
+	Data AlertEventSummary `json:"data"`
 }
 
 // AlertRule defines model for AlertRule.
@@ -11214,6 +11242,11 @@ type GetAlertingEventsParamsStatus string
 // GetAlertingEventsParamsSeverity defines parameters for GetAlertingEvents.
 type GetAlertingEventsParamsSeverity string
 
+// GetAlertingEventsSummaryParams defines parameters for GetAlertingEventsSummary.
+type GetAlertingEventsSummaryParams struct {
+	ClusterId *openapi_types.UUID `form:"clusterId,omitempty" json:"clusterId,omitempty"`
+}
+
 // GetAlertingRulesParams defines parameters for GetAlertingRules.
 type GetAlertingRulesParams struct {
 	ClusterId *openapi_types.UUID `form:"clusterId,omitempty" json:"clusterId,omitempty"`
@@ -12166,7 +12199,13 @@ type GetClustersByClusterIdWorkloadsParams struct {
 
 	// Search Case-insensitive substring match on name or namespace.
 	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// Sort Stable server-side workload order applied before pagination.
+	Sort *GetClustersByClusterIdWorkloadsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
 }
+
+// GetClustersByClusterIdWorkloadsParamsSort defines parameters for GetClustersByClusterIdWorkloads.
+type GetClustersByClusterIdWorkloadsParamsSort string
 
 // DeleteClustersByClusterIdWorkloadsByKindByNamespaceByNameParams defines parameters for DeleteClustersByClusterIdWorkloadsByKindByNamespaceByName.
 type DeleteClustersByClusterIdWorkloadsByKindByNamespaceByNameParams struct {
@@ -20006,6 +20045,9 @@ type ClientInterface interface {
 	// GetAlertingEvents request
 	GetAlertingEvents(ctx context.Context, params *GetAlertingEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAlertingEventsSummary request
+	GetAlertingEventsSummary(ctx context.Context, params *GetAlertingEventsSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAlertingEventsById request
 	GetAlertingEventsById(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -24898,6 +24940,18 @@ func (c *Client) PostAlertingChannelsByIdTest(ctx context.Context, id string, re
 
 func (c *Client) GetAlertingEvents(ctx context.Context, params *GetAlertingEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAlertingEventsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAlertingEventsSummary(ctx context.Context, params *GetAlertingEventsSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertingEventsSummaryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -41804,6 +41858,55 @@ func NewGetAlertingEventsRequest(server string, params *GetAlertingEventsParams)
 	return req, nil
 }
 
+// NewGetAlertingEventsSummaryRequest generates requests for GetAlertingEventsSummary
+func NewGetAlertingEventsSummaryRequest(server string, params *GetAlertingEventsSummaryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerting/events/summary/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "clusterId", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetAlertingEventsByIdRequest generates requests for GetAlertingEventsById
 func NewGetAlertingEventsByIdRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -56198,6 +56301,22 @@ func NewGetClustersByClusterIdWorkloadsRequest(server string, clusterId openapi_
 		if params.Search != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -75123,6 +75242,9 @@ type ClientWithResponsesInterface interface {
 	// GetAlertingEventsWithResponse request
 	GetAlertingEventsWithResponse(ctx context.Context, params *GetAlertingEventsParams, reqEditors ...RequestEditorFn) (*GetAlertingEventsResponse, error)
 
+	// GetAlertingEventsSummaryWithResponse request
+	GetAlertingEventsSummaryWithResponse(ctx context.Context, params *GetAlertingEventsSummaryParams, reqEditors ...RequestEditorFn) (*GetAlertingEventsSummaryResponse, error)
+
 	// GetAlertingEventsByIdWithResponse request
 	GetAlertingEventsByIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetAlertingEventsByIdResponse, error)
 
@@ -81886,6 +82008,32 @@ func (r GetAlertingEventsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetAlertingEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAlertingEventsSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertEventSummaryEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertingEventsSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertingEventsSummaryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -100608,6 +100756,15 @@ func (c *ClientWithResponses) GetAlertingEventsWithResponse(ctx context.Context,
 	return ParseGetAlertingEventsResponse(rsp)
 }
 
+// GetAlertingEventsSummaryWithResponse request returning *GetAlertingEventsSummaryResponse
+func (c *ClientWithResponses) GetAlertingEventsSummaryWithResponse(ctx context.Context, params *GetAlertingEventsSummaryParams, reqEditors ...RequestEditorFn) (*GetAlertingEventsSummaryResponse, error) {
+	rsp, err := c.GetAlertingEventsSummary(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertingEventsSummaryResponse(rsp)
+}
+
 // GetAlertingEventsByIdWithResponse request returning *GetAlertingEventsByIdResponse
 func (c *ClientWithResponses) GetAlertingEventsByIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetAlertingEventsByIdResponse, error) {
 	rsp, err := c.GetAlertingEventsById(ctx, id, reqEditors...)
@@ -116879,6 +117036,60 @@ func ParseGetAlertingEventsResponse(rsp *http.Response) (*GetAlertingEventsRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest AlertEventPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertingEventsSummaryResponse parses an HTTP response from a GetAlertingEventsSummaryWithResponse call
+func ParseGetAlertingEventsSummaryResponse(rsp *http.Response) (*GetAlertingEventsSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertingEventsSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertEventSummaryEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

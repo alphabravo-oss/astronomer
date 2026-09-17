@@ -28,7 +28,10 @@ import {
   useCharlieActivated,
   useFeatureFlags,
 } from "@/lib/hooks/clusters";
-import { useAlertEvents } from "@/lib/hooks/alerting";
+import {
+  useAlertEvents,
+  useAlertEventSummary,
+} from "@/lib/hooks/alerting";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime } from "@/lib/utils";
 import { GlobalSearch } from "@/components/layout/global-search";
@@ -82,7 +85,11 @@ export function Topbar() {
     isLoading: activeClusterLoading,
     isError: activeClusterError,
   } = useCluster(activeClusterId ?? "");
-  const { data: alertEvents } = useAlertEvents({ status: "firing" });
+  const { data: alertEventsPage } = useAlertEvents({
+    status: "firing",
+    limit: 5,
+  });
+  const { data: alertEventSummary } = useAlertEventSummary();
   const { data: featureFlags } = useFeatureFlags();
   const { activated: charlieActivated } = useCharlieActivated();
   const { data: charlieFindings } = useQuery({
@@ -114,14 +121,13 @@ export function Topbar() {
 
   const breadcrumbs = generateBreadcrumbs(pathname, clusterMap);
 
-  const firingAlerts = alertEvents?.filter((e) => e.status === "firing") || [];
-  const recentAlerts = (alertEvents || []).slice(0, 5);
+  const recentAlerts = alertEventsPage?.data ?? [];
   const actionableCharlieFindings = selectImportantCharlieFindings(
     charlieFindings || [],
   );
   const importantFindings = actionableCharlieFindings.slice(0, 5);
   const notificationCount =
-    firingAlerts.length + actionableCharlieFindings.length;
+    (alertEventSummary?.firing ?? 0) + actionableCharlieFindings.length;
   const canOpenClusterShell = activeClusterId
     ? can(user, "shell", "exec", { type: "cluster", id: activeClusterId })
     : false;
@@ -261,9 +267,9 @@ export function Topbar() {
                 <h4 className="text-sm font-medium text-foreground">
                   Notifications
                 </h4>
-                {firingAlerts.length > 0 && (
+                {(alertEventSummary?.firing ?? 0) > 0 && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-status-error/10 text-status-error font-medium">
-                    {firingAlerts.length} firing
+                    {alertEventSummary?.firing} firing
                   </span>
                 )}
               </div>

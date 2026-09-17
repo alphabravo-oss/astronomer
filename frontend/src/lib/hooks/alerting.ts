@@ -9,6 +9,7 @@ import {
   getAnomalyBaseline,
   getAnomalyBaselines,
   getAlertEvents,
+  getAlertEventSummary,
   getAlertRules,
   getAlertSilences,
   getNotificationChannels,
@@ -78,7 +79,15 @@ export function useDeleteAlertRule() {
 export function useAlertEvents(params?: AlertEventQuery) {
   return useQuery({
     queryKey: queryKeys.alerting.events(params),
-    queryFn: () => getAlertEvents(params),
+    queryFn: ({ signal }) => getAlertEvents(params, signal),
+    refetchInterval: liveFallback(15000),
+  });
+}
+
+export function useAlertEventSummary(clusterId?: string) {
+  return useQuery({
+    queryKey: queryKeys.alerting.eventSummary(clusterId),
+    queryFn: ({ signal }) => getAlertEventSummary(clusterId, signal),
     refetchInterval: liveFallback(15000),
   });
 }

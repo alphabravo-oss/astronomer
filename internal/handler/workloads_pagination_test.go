@@ -62,6 +62,27 @@ func TestPageWindow(t *testing.T) {
 	}
 }
 
+func TestSortWorkloadItemsUsesStableIdentityTieBreaker(t *testing.T) {
+	items := []map[string]any{
+		{"namespace": "team-b", "kind": "Deployment", "name": "same", "createdAt": "2026-01-01T00:00:00Z"},
+		{"namespace": "team-a", "kind": "StatefulSet", "name": "same", "createdAt": "2026-01-02T00:00:00Z"},
+		{"namespace": "team-a", "kind": "Deployment", "name": "alpha", "createdAt": "2026-01-03T00:00:00Z"},
+	}
+	sortWorkloadItems(items, "name_desc")
+	got := []string{
+		items[0]["namespace"].(string) + "/" + items[0]["kind"].(string) + "/" + items[0]["name"].(string),
+		items[1]["namespace"].(string) + "/" + items[1]["kind"].(string) + "/" + items[1]["name"].(string),
+		items[2]["namespace"].(string) + "/" + items[2]["kind"].(string) + "/" + items[2]["name"].(string),
+	}
+	want := []string{"team-a/StatefulSet/same", "team-b/Deployment/same", "team-a/Deployment/alpha"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("sorted identities = %v, want %v", got, want)
+	}
+	if validWorkloadSort("partial-page-local") {
+		t.Fatal("unsupported sort must fail closed")
+	}
+}
+
 // TestListNodes_HonoursLimitOffset drives ListNodes end-to-end against a stub
 // agent returning 25 nodes. Before the fix the handler returned all 25 while
 // advertising limit=20, and "Next" (offset=20) re-fetched the identical full

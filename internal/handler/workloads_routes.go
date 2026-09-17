@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,6 +29,14 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 	namespace := r.URL.Query().Get("namespace")
 	kind := r.URL.Query().Get("kind")
 	search := strings.ToLower(r.URL.Query().Get("search"))
+	sortOrder := strings.TrimSpace(r.URL.Query().Get("sort"))
+	if sortOrder == "" {
+		sortOrder = "namespace_asc"
+	}
+	if !validWorkloadSort(sortOrder) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid workload sort order")
+		return
+	}
 
 	workloads, err := h.listWorkloads(r.Context(), clusterID, namespace, kind)
 	if err != nil {
@@ -51,10 +60,55 @@ func (h *WorkloadHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		filtered = append(filtered, item)
 	}
+	sortWorkloadItems(filtered, sortOrder)
 	// Slice server-side with the same shared limit/offset policy used to build
 	// the response links instead of returning the whole cluster on every page.
 	page, metadata := pageWindow(r, filtered)
 	paging.Write(w, page, metadata)
+}
+
+func validWorkloadSort(order string) bool {
+	switch order {
+	case "namespace_asc", "namespace_desc", "name_asc", "name_desc", "created_asc", "created_desc":
+		return true
+	default:
+		return false
+	}
+}
+
+func sortWorkloadItems(items []map[string]any, order string) {
+	field := "namespace"
+	descending := false
+	switch order {
+	case "namespace_desc":
+		descending = true
+	case "name_asc":
+		field = "name"
+	case "name_desc":
+		field, descending = "name", true
+	case "created_asc":
+		field = "createdAt"
+	case "created_desc":
+		field, descending = "createdAt", true
+	}
+	value := func(item map[string]any, key string) string {
+		result, _ := item[key].(string)
+		return result
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		left, right := value(items[i], field), value(items[j], field)
+		if left != right {
+			if descending {
+				return left > right
+			}
+			return left < right
+		}
+		// Every order has the same deterministic identity tie-breaker so page
+		// boundaries remain stable across refreshes.
+		leftID := value(items[i], "namespace") + "\x00" + value(items[i], "kind") + "\x00" + value(items[i], "name")
+		rightID := value(items[j], "namespace") + "\x00" + value(items[j], "kind") + "\x00" + value(items[j], "name")
+		return leftID < rightID
+	})
 }
 
 func (h *WorkloadHandler) Get(w http.ResponseWriter, r *http.Request) {

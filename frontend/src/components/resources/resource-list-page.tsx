@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useCluster } from "@/lib/hooks/clusters";
 import {
   useWorkloads,
@@ -89,6 +90,9 @@ import {
   Plus,
 } from "lucide-react";
 import { toastError } from "@/lib/toast";
+import { pageRowCount } from "@/lib/api/pagination";
+
+const WORKLOAD_RESOURCE_PAGE_SIZE = 50;
 
 // ── Per-resource components (each calls only its own hook) ──
 
@@ -212,10 +216,20 @@ function WorkloadsTable({
   kind: string;
   title: string;
 }) {
-  const { data, isLoading } = useWorkloads(clusterId);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
+  const workloadQuery = useWorkloads(clusterId, {
+    kind,
+    search: debouncedSearch.trim() || undefined,
+    sort: "namespace_asc",
+    page: pageIndex + 1,
+    pageSize: WORKLOAD_RESOURCE_PAGE_SIZE,
+  });
+  const { data, isLoading, isError, error, refetch } = workloadQuery;
   const resourceType = kindToResourceType(kind);
   const navigate = useNavigate();
-  const filtered = (data?.data || []).filter((w) => w.kind === kind);
+  const workloads = data?.data || [];
   const scaleWorkload = useScaleWorkload();
   const restartWorkload = useRestartWorkload();
   const k8sDeleteMut = useK8sDelete();
@@ -321,6 +335,10 @@ function WorkloadsTable({
       restartWorkload,
     ],
   );
+  const serverColumns = columns.map((column) => ({
+    ...column,
+    sortable: false,
+  }));
 
   return (
     <>
@@ -339,8 +357,8 @@ function WorkloadsTable({
       <ExplorerDataTable
         clusterId={clusterId}
         resourceType={resourceType}
-        data={filtered}
-        columns={columns}
+        data={workloads}
+        columns={serverColumns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={(row) => {
           if (!permissions.read.allowed) {
@@ -357,7 +375,31 @@ function WorkloadsTable({
           });
         }}
         searchPlaceholder={`Search ${title.toLowerCase()}...`}
+        pageSize={WORKLOAD_RESOURCE_PAGE_SIZE}
         loading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={() => void refetch()}
+        filtersActive={search.trim() !== ""}
+        onClearFilters={() => {
+          setSearch("");
+          setPageIndex(0);
+        }}
+        serverSide={{
+          rowCount: pageRowCount(data),
+          pagination: {
+            pageIndex,
+            pageSize: WORKLOAD_RESOURCE_PAGE_SIZE,
+          },
+          onPaginationChange: (next) => setPageIndex(next.pageIndex),
+          search: {
+            value: search,
+            onChange: (value) => {
+              setSearch(value);
+              setPageIndex(0);
+            },
+          },
+        }}
         emptyState={{
           title: `No ${title.toLowerCase()} found`,
           description:
