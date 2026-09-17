@@ -501,6 +501,38 @@ rendered manifest.
     {{- if not (or .Values.bootstrap.password .Values.bootstrap.existingSecret) }}
       {{- $errs = append $errs "  - bootstrap.password or bootstrap.existingSecret must be set when config.env=production. An empty bootstrap.password re-rolls randAlphaNum on every offline render (lookup can't read the prior Secret without a live cluster), rotating the admin password. Pin bootstrap.password, or set bootstrap.existingSecret to a pre-created Secret with a 'password' key." }}
     {{- end }}
+    {{- /* Production image identity is content-addressed. Tags remain only as
+           human-readable release metadata and development defaults. */ -}}
+    {{- if not .Values.image.requireDigest }}
+      {{- $errs = append $errs "  - image.requireDigest must be true when config.env=production" }}
+    {{- end }}
+    {{- $immutableImages := dict
+          "image.server.digest" .Values.image.server.digest
+          "image.worker.digest" .Values.image.worker.digest
+          "image.agent.digest" .Values.image.agent.digest
+          "image.migrate.digest" .Values.image.migrate.digest
+          "utilities.busybox.digest" .Values.utilities.busybox.digest
+          "postgres.image.digest" .Values.postgres.image.digest
+          "preflight.image.digest" .Values.preflight.image.digest -}}
+    {{- if .Values.frontend.enabled }}{{- $_ := set $immutableImages "frontend.image.digest" .Values.frontend.image.digest -}}{{- end }}
+    {{- if .Values.dex.enabled }}{{- $_ := set $immutableImages "dex.image.digest" .Values.dex.image.digest -}}{{- end }}
+    {{- if .Values.redis.bundled.enabled }}{{- $_ := set $immutableImages "redis.image.digest" .Values.redis.image.digest -}}{{- end }}
+    {{- if .Values.managementBackup.enabled }}
+      {{- $_ := set $immutableImages "managementBackup.image.digest" .Values.managementBackup.image.digest -}}
+      {{- if .Values.managementRestoreDrill.enabled }}
+        {{- $_ := set $immutableImages "managementRestoreDrill.image.digest" .Values.managementRestoreDrill.image.digest -}}
+        {{- $_ := set $immutableImages "managementRestoreDrill.sidecar.image.digest" .Values.managementRestoreDrill.sidecar.image.digest -}}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.managementLogging.enabled }}{{- $_ := set $immutableImages "managementLogging.image.digest" .Values.managementLogging.image.digest -}}{{- end }}
+    {{- range $field, $digest := $immutableImages }}
+      {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" ($digest | default "")) }}
+        {{- $errs = append $errs (printf "  - %s must be an exact sha256 digest when config.env=production" $field) }}
+      {{- end }}
+    {{- end }}
+    {{- if and .Values.kubectlShell.enabled .Values.kubectlShell.image (not (regexMatch "^[^[:space:]]+@sha256:[a-f0-9]{64}$" .Values.kubectlShell.image)) }}
+      {{- $errs = append $errs "  - kubectlShell.image must be repository@sha256:digest when explicitly overridden in production" }}
+    {{- end }}
     {{- /* Migration 045 soft check: production posture is "Dex on" unless
            the operator explicitly opts into local-password-only auth. The
            default chart value of config.auth.localPasswordOnly=false makes
@@ -520,6 +552,12 @@ rendered manifest.
       {{- if not .Values.managementBackup.s3.credentialsSecretRef.name }}
         {{- $errs = append $errs "  - managementBackup.s3.credentialsSecretRef.name is empty but managementBackup.enabled=true — provide the S3 credentials Secret (see values-production.yaml) or set managementBackup.enabled=false to explicitly opt out." }}
       {{- end }}
+      {{- $objectStoreCIDRs := .Values.networkPolicy.objectStoreEgressCIDRs | default (list) }}
+      {{- if eq (len $objectStoreCIDRs) 0 }}
+        {{- $errs = append $errs "  - networkPolicy.objectStoreEgressCIDRs must identify the backup object-store endpoint network when managementBackup.enabled=true; backup and restore pods receive no general Internet egress." }}
+      {{- else if or (has "0.0.0.0/0" $objectStoreCIDRs) (has "::/0" $objectStoreCIDRs) }}
+        {{- $errs = append $errs "  - networkPolicy.objectStoreEgressCIDRs must not contain 0.0.0.0/0 or ::/0 in production; use the object-store endpoint's narrow CIDR ranges." }}
+      {{- end }}
       {{- /* OPS-01: key wrap custody is required when backups are enabled so a
            restore onto a new cluster can decrypt Fernet columns. Empty
            wrappingSecretRef leaves CronJobs green but key backup inert. */ -}}
@@ -533,6 +571,17 @@ rendered manifest.
         {{- if not (and .Values.managementBackup.encryptionKeyBackup .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name) }}
           {{- $errs = append $errs "  - managementBackup.encryptionKeyBackup.wrappingSecretRef.name is empty but managementBackup.enabled=true — production DR requires encryption-key custody (see values-production.yaml and docs/management-plane-dr-runbook.md). Create a separate wrap Secret and set the name, or set managementBackup.encryptionKeyBackup.enabled=false to explicitly opt out of key backup (restored Fernet data will be undecryptable on a new cluster)." }}
         {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.managementLogging.enabled }}
+      {{- $loggingCIDRs := .Values.networkPolicy.loggingSinkEgressCIDRs | default (list) }}
+      {{- if eq (len $loggingCIDRs) 0 }}
+        {{- $errs = append $errs "  - networkPolicy.loggingSinkEgressCIDRs must identify the configured managementLogging.endpoint network when managementLogging.enabled=true." }}
+      {{- else if or (has "0.0.0.0/0" $loggingCIDRs) (has "::/0" $loggingCIDRs) }}
+        {{- $errs = append $errs "  - networkPolicy.loggingSinkEgressCIDRs must not contain 0.0.0.0/0 or ::/0 in production." }}
+      {{- end }}
+      {{- if eq (len (.Values.managementLogging.networkPolicyPorts | default (list))) 0 }}
+        {{- $errs = append $errs "  - managementLogging.networkPolicyPorts must contain the exact TCP port used by managementLogging.endpoint." }}
       {{- end }}
     {{- end }}
     {{- /* The retained namespace default-deny already selects Helm hook pods

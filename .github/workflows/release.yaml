@@ -475,9 +475,11 @@ jobs:
         run: |
           test -z "$(find deploy/chart/charts -mindepth 1 -maxdepth 1 -type f -print -quit 2>/dev/null)"
           test "$(helm dependency list deploy/chart 2>/dev/null | awk 'NR > 1 && NF {count++} END {print count+0}')" -eq 0
+          openssl rand -base64 48 > /tmp/release-lint-jwt-key
+          openssl rand -base64 32 | tr '+/' '-_' > /tmp/release-lint-encryption-key
           helm lint deploy/chart \
-            --set secrets.secretKey=release-lint-render-only \
-            --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
+            --set-file secrets.secretKey=/tmp/release-lint-jwt-key \
+            --set-file secrets.encryptionKey=/tmp/release-lint-encryption-key
 
       - name: Resolve every tagged runtime image
         run: ./scripts/resolve-release-images.py --inventory deploy/chart/images.txt --output resolved-images.json

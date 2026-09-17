@@ -46,6 +46,7 @@ managementRestoreDrill:
 	}
 
 	out := helmTemplateWithValueFiles(t, []string{valuesPath})
+	docs := parseRenderedDocs(t, out)
 	assertRenderedContains(t, out,
 		"name: astronomer-management-backup",
 		"name: pgdump-s3",
@@ -63,12 +64,13 @@ managementRestoreDrill:
 		"mountPath: /tmp",
 	)
 	for _, name := range []string{"astronomer-management-backup", "astronomer-restore-drill"} {
-		doc := renderedDocumentContaining(t, out, "name: "+name)
-		if !strings.Contains(doc, "automountServiceAccountToken: false") {
-			t.Fatalf("%s mounts a Kubernetes API token:\n%s", name, doc)
+		doc := findRenderedDoc(t, docs, "CronJob", name)
+		podSpec := podSpecFor(doc)
+		if mounted, ok := podSpec["automountServiceAccountToken"].(bool); !ok || mounted {
+			t.Fatalf("%s automountServiceAccountToken = %#v, want false", name, podSpec["automountServiceAccountToken"])
 		}
-		if strings.Contains(doc, "serviceAccountName:") {
-			t.Fatalf("%s is coupled to a Kubernetes ServiceAccount:\n%s", name, doc)
+		if serviceAccount := stringValue(podSpec["serviceAccountName"]); serviceAccount != "" {
+			t.Fatalf("%s is coupled to Kubernetes ServiceAccount %q", name, serviceAccount)
 		}
 	}
 }

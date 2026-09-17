@@ -38,6 +38,8 @@ COPY cmd/dexconfigcheck ./cmd/dexconfigcheck
 COPY internal/dexconfig ./internal/dexconfig
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
 
+FROM gcr.io/projectsigstore/cosign:v2.6.0@sha256:71b96f6405dd3c3f081ebf73099f18edac7a716699398660890a86c42bf5edfd AS cosign
+
 # Fetch kubectl in a throwaway stage so the runtime image does not ship curl.
 # kubectl version is pinned in lockstep with the bundled control-plane minor.
 # Bump in the same commit that bumps the k8s.io/* dependencies in go.mod so
@@ -48,9 +50,19 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./c
 FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS kubectl
 ARG KUBECTL_VERSION=v1.35.2
 ARG TARGETARCH=amd64
+COPY --from=cosign /ko-app/cosign /usr/local/bin/cosign
 RUN apk add --no-cache ca-certificates curl \
-    && curl -fsSL -o /kubectl \
-        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}/kubectl" \
+    && KUBECTL_URL="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}" \
+    && curl -fsSLo /kubectl "${KUBECTL_URL}/kubectl" \
+    && curl -fsSLo /kubectl.sha256 "${KUBECTL_URL}/kubectl.sha256" \
+    && curl -fsSLo /kubectl.sig "${KUBECTL_URL}/kubectl.sig" \
+    && curl -fsSLo /kubectl.cert "${KUBECTL_URL}/kubectl.cert" \
+    && echo "$(cat /kubectl.sha256)  /kubectl" | sha256sum --check --strict \
+    && cosign verify-blob /kubectl \
+        --signature /kubectl.sig \
+        --certificate /kubectl.cert \
+        --certificate-identity krel-staging@k8s-releng-prod.iam.gserviceaccount.com \
+        --certificate-oidc-issuer https://accounts.google.com \
     && chmod +x /kubectl \
     && /kubectl version --client=true --output=yaml | grep -q "${KUBECTL_VERSION}"
 
@@ -66,8 +78,7 @@ LABEL org.opencontainers.image.source="https://github.com/alphabravo-oss/astrono
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-RUN apk upgrade --no-cache \
-    && apk add --no-cache \
+RUN apk add --no-cache \
         bash \
         ca-certificates \
         coreutils \

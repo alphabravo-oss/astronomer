@@ -162,7 +162,8 @@ function CompliancePage() {
           <p className="text-sm text-muted-foreground mt-1">
             One-click preset profiles (PCI-DSS, HIPAA, FedRAMP, SOC 2) that
             snapshot and apply the related platform settings, quota plans, audit
-            retention, and alert rules.
+            retention, and alert rules. Presets are not certifications and do
+            not make the standard release artifact FIPS validated.
           </p>
           <RouterLink
             to="/dashboard/settings/compliance/baselines"

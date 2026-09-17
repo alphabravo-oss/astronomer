@@ -4,6 +4,10 @@ Sprint 17 / migration 064 introduces the four-preset compliance baselines
 feature. An operator opens **Settings → Compliance → Baselines** and
 applies one of:
 
+These are configuration presets, not compliance certifications. In particular,
+the `fedramp_moderate` preset does not claim FedRAMP authorization or FIPS
+validation; see [the accepted cryptography-boundary ADR](architecture/fips-cryptography-boundary.md).
+
 | Slug              | Standard           | Audit retention | PSS profile | TOTP | SMTP |
 | ----------------- | ------------------ | --------------- | ----------- | ---- | ---- |
 | `pci_dss_4_0`     | PCI-DSS 4.0        | 365 days        | restricted  | yes  | yes  |

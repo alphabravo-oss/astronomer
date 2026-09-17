@@ -1,0 +1,47 @@
+name: security-analysis
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: security-analysis-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-security:
+    name: gosec SARIF and full-history secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run pinned gosec and retain SARIF
+        run: |
+          mapfile -t packages < <(go list ./... | grep -v '/frontend/node_modules/')
+          go run github.com/securego/gosec/v2/cmd/gosec@v2.22.10 \
+            -no-fail -fmt sarif -out gosec.sarif "${packages[@]}"
+
+      - name: Upload gosec findings
+        if: ${{ always() }}
+        uses: github/codeql-action/upload-sarif@c20e34f438d671fc35777cc9820dd7adf8252874 # v3
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+
+      - name: Scan complete Git history without printing secret values
+        run: go run github.com/zricethezav/gitleaks/v8@v8.27.2 git --redact=100 --no-banner --log-opts=--all .

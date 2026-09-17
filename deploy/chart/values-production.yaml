@@ -55,6 +55,9 @@ preflight:
   enabled: true
 
 # ── Resource topology ─────────────────────────────────────────────────────
+image:
+  requireDigest: true
+
 server:
   replicaCount: 3
   podDisruptionBudget:
@@ -311,6 +314,10 @@ networkPolicy:
   # Required: CIDR coverage for the Service ClusterIP and API endpoint/nodes.
   kubernetesAPIEgressCIDRs: []
   identityProviderEgressCIDRs: []
+  # Required while managementBackup.enabled=true: the S3/API endpoint network.
+  objectStoreEgressCIDRs: []
+  # Required only when managementLogging.enabled=true.
+  loggingSinkEgressCIDRs: []
 
 # ── Management-plane DR ───────────────────────────────────────────────────
 # Nightly pg_dump of Astronomer's own Postgres pushed to S3. The companion

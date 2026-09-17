@@ -133,7 +133,7 @@ func TestFirstPartyDockerfilesDeclareFinalImageIdentity(t *testing.T) {
 	}
 }
 
-func TestOSSRuntimeImagesPatchAlpineAndDropRoot(t *testing.T) {
+func TestOSSRuntimeImagesUseImmutableBasePackagesAndDropRoot(t *testing.T) {
 	cases := []struct {
 		dockerfile string
 		user       string
@@ -152,13 +152,30 @@ func TestOSSRuntimeImagesPatchAlpineAndDropRoot(t *testing.T) {
 				t.Fatal(err)
 			}
 			final := dockerfileFinalStage(t, string(raw))
-			if !strings.Contains(final, "apk upgrade --no-cache") {
-				t.Fatal("final stage does not apk upgrade")
+			if strings.Contains(final, "apk upgrade") {
+				t.Fatal("final stage mutates the digest-pinned base with apk upgrade")
 			}
 			if !strings.Contains(final, tc.user) {
 				t.Fatalf("final stage missing %q", tc.user)
 			}
 		})
+	}
+}
+
+func TestShellKubectlDownloadIsChecksumAndSignatureVerified(t *testing.T) {
+	raw, err := os.ReadFile("docker/Dockerfile.shell")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, required := range []string{
+		"kubectl.sha256", "sha256sum --check --strict", "kubectl.sig", "kubectl.cert",
+		"cosign verify-blob /kubectl", "krel-staging@k8s-releng-prod.iam.gserviceaccount.com",
+		"--certificate-oidc-issuer https://accounts.google.com",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("kubectl fetch stage missing %q", required)
+		}
 	}
 }
 

@@ -261,7 +261,7 @@ function ComplianceBaselinesPage() {
           <p className="text-sm text-muted-foreground mt-1">
             One-click preset profiles for PCI-DSS, HIPAA, FedRAMP-Moderate, and
             SOC 2. Each baseline snapshots prior state on apply so a revert
-            restores it.
+            restores it. Applying a preset is not a certification or FIPS claim.
           </p>
         </div>
 

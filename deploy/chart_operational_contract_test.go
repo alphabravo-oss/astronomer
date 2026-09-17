@@ -17,6 +17,8 @@ import (
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
 
+const productionTestImageDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
 // repoRoot returns the repository root relative to this test file
 // (deploy/ sits directly under the root).
 func repoRoot(t *testing.T) string {
@@ -49,6 +51,19 @@ var productionWiringSets = []string{
 	// address and 10.40.x API endpoint network. Cardinality cannot prove that;
 	// operators must inventory the target cluster's actual addresses.
 	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
+	"networkPolicy.objectStoreEgressCIDRs[0]=10.50.0.0/16",
+	"image.server.digest=" + productionTestImageDigest,
+	"image.worker.digest=" + productionTestImageDigest,
+	"image.agent.digest=" + productionTestImageDigest,
+	"image.migrate.digest=" + productionTestImageDigest,
+	"utilities.busybox.digest=" + productionTestImageDigest,
+	"postgres.image.digest=" + productionTestImageDigest,
+	"preflight.image.digest=" + productionTestImageDigest,
+	"frontend.image.digest=" + productionTestImageDigest,
+	"dex.image.digest=" + productionTestImageDigest,
+	"managementBackup.image.digest=" + productionTestImageDigest,
+	"managementRestoreDrill.image.digest=" + productionTestImageDigest,
+	"managementRestoreDrill.sidecar.image.digest=" + productionTestImageDigest,
 	"delivery.artifacts.fluxDistribution.ociRepository=ghcr.io/example/astronomer/flux-distribution",
 	"delivery.artifacts.fluxDistribution.digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	"delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
@@ -77,6 +92,56 @@ func TestEnterpriseProductionRenderCoversProductionWiringContract(t *testing.T) 
 		if !strings.Contains(productionBlock, canonicalKey+"=") {
 			t.Errorf("enterprise verifier production render is missing productionWiringSets key %q", canonicalKey)
 		}
+	}
+}
+
+func TestProductionWorkloadImagesAreDigestOnly(t *testing.T) {
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
+		"managementBackup.s3.bucket=astronomer-backups",
+		"managementBackup.s3.credentialsSecretRef.name=backup-creds",
+		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=backup-wrap",
+	)
+	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{filepath.Join("chart", "values-production.yaml")}, sets...))
+	count := 0
+	for _, doc := range docs {
+		podSpec := podSpecFor(doc)
+		if podSpec == nil {
+			continue
+		}
+		for _, field := range []string{"initContainers", "containers"} {
+			for _, container := range containerList(podSpec, field) {
+				image := stringValue(container["image"])
+				if image == "" {
+					continue
+				}
+				count++
+				if !regexp.MustCompile(`^[^[:space:]]+@sha256:[a-f0-9]{64}$`).MatchString(image) {
+					t.Errorf("%s/%s %s %q uses mutable image %q", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"), field, stringValue(container["name"]), image)
+				}
+			}
+		}
+	}
+	if count == 0 {
+		t.Fatal("production render contained no workload images")
+	}
+}
+
+func TestProductionRejectsMissingActiveImageDigest(t *testing.T) {
+	sets := make([]string, 0, len(productionWiringSets)+3)
+	for _, set := range productionWiringSets {
+		if !strings.HasPrefix(set, "frontend.image.digest=") {
+			sets = append(sets, set)
+		}
+	}
+	sets = append(sets,
+		"managementBackup.s3.bucket=astronomer-backups",
+		"managementBackup.s3.credentialsSecretRef.name=backup-creds",
+		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=backup-wrap",
+	)
+	errOut := helmTemplateExpectError(t, []string{filepath.Join("chart", "values-production.yaml")}, sets...)
+	if !strings.Contains(errOut, "frontend.image.digest must be an exact sha256 digest") {
+		t.Fatalf("production render did not reject mutable frontend image:\n%s", errOut)
 	}
 }
 

@@ -32,10 +32,6 @@ LABEL org.opencontainers.image.title="astronomer-frontend" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-# Pull Alpine package fixes newer than the base image build (CI scans this
-# image with Trivy at HIGH/CRITICAL, ignore-unfixed, exit-code 1).
-RUN apk upgrade --no-cache
-
 RUN rm -rf /etc/nginx/conf.d /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /app/dist /usr/share/nginx/html

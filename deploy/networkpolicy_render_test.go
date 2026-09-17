@@ -243,6 +243,55 @@ func TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase(t *testing
 	}
 }
 
+func TestOptionalProductionWorkloadsHaveDedicatedNarrowPolicies(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"managementBackup.s3.bucket=enterprise-backups",
+		"managementBackup.s3.credentialsSecretRef.name=enterprise-backup-credentials",
+		"managementLogging.enabled=true",
+		"managementLogging.endpoint=https://logs.example.invalid",
+		"managementLogging.networkPolicyPorts[0]=8443",
+		"networkPolicy.objectStoreEgressCIDRs[0]=10.50.0.0/24",
+		"networkPolicy.loggingSinkEgressCIDRs[0]=10.60.0.0/24",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/24",
+	))
+
+	for _, tt := range []struct {
+		name      string
+		component string
+		want      []string
+		forbid    []string
+	}{
+		{name: "astronomer-management-backup", component: "management-backup", want: []string{"10.50.0.0/24", "5432", "443", "80"}, forbid: []string{"10.60.0.0/24", "6443"}},
+		{name: "astronomer-restore-drill", component: "restore-drill", want: []string{"10.50.0.0/24", "5432", "443", "80"}, forbid: []string{"10.60.0.0/24", "6443"}},
+		{name: "astronomer-management-logging", component: "management-logging", want: []string{"10.60.0.0/24", "10.40.0.0/24", "8443", "6443"}, forbid: []string{"10.50.0.0/24", "5432", "80"}},
+	} {
+		policy := findRenderedDoc(t, docs, "NetworkPolicy", tt.name)
+		selector := nestedStringMap(policy, "spec", "podSelector", "matchLabels")
+		if got := selector["app.kubernetes.io/component"]; got != tt.component {
+			t.Errorf("%s selector component = %q, want %q", tt.name, got, tt.component)
+		}
+		rendered := fmt.Sprint(nestedMap(policy, "spec")["egress"])
+		for _, want := range tt.want {
+			if !strings.Contains(rendered, want) {
+				t.Errorf("%s egress missing %q: %s", tt.name, want, rendered)
+			}
+		}
+		for _, forbidden := range append(tt.forbid, "0.0.0.0/0", "::/0") {
+			if strings.Contains(rendered, forbidden) {
+				t.Errorf("%s egress unexpectedly contains %q: %s", tt.name, forbidden, rendered)
+			}
+		}
+	}
+
+	postgres := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-postgres")
+	ingress := fmt.Sprint(nestedMap(postgres, "spec")["ingress"])
+	for _, component := range []string{"management-backup", "restore-drill"} {
+		if !strings.Contains(ingress, component) {
+			t.Errorf("bundled postgres ingress does not admit %s: %s", component, ingress)
+		}
+	}
+}
+
 func renderedWorkloadPodLabels(doc renderedDoc) (map[string]string, bool) {
 	switch stringValue(doc["kind"]) {
 	case "Deployment", "StatefulSet", "DaemonSet", "Job":

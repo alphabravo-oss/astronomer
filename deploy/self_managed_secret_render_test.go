@@ -109,6 +109,7 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"--set", "networkPolicy.externalPostgresEgressCIDRs[0]=10.20.0.0/16",
 		"--set", "networkPolicy.externalRedisEgressCIDRs[0]=10.30.0.0/16",
 		"--set", "networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
+		"--set", "networkPolicy.objectStoreEgressCIDRs[0]=10.50.0.0/16",
 		"--set", "managementBackup.s3.bucket=management-backups",
 		"--set", "managementBackup.s3.credentialsSecretRef.name=backup-credentials",
 		"--set", "managementBackup.encryptionKeyBackup.wrappingSecretRef.name=backup-wrap",
@@ -119,6 +120,14 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 		"--set", "delivery.artifacts.builtInBundles.ociRepository=ghcr.io/example/astronomer/bundles",
 		"--set", "delivery.artifacts.builtInBundles.digest=sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
 		"--set", "delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
+	}
+	for _, field := range []string{
+		"image.server.digest", "image.worker.digest", "image.agent.digest", "image.migrate.digest",
+		"utilities.busybox.digest", "postgres.image.digest", "preflight.image.digest", "frontend.image.digest",
+		"dex.image.digest", "managementBackup.image.digest", "managementRestoreDrill.image.digest",
+		"managementRestoreDrill.sidecar.image.digest",
+	} {
+		args = append(args, "--set", field+"="+productionTestImageDigest)
 	}
 	command := exec.Command("helm", args...)
 	var stdout bytes.Buffer
