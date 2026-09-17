@@ -37,7 +37,7 @@
   observability, accessibility, release qualification.
 - **Planned at:** `5567da3bbba8c72bb95924f1824f5c100d147058`, 2026-09-16,
   plus the preserved dirty integration tree described above. Execution was
-  reconciled through `f5be9744` on
+  reconciled through `fe4b51eb` on
   2026-09-17.
 - **Branch:** `advisor/016-production-ga-closure`.
 
@@ -93,15 +93,20 @@ observed residuals:
   race Go suites, PostgreSQL/Redis outage and failover lanes, tunnel HA, 124
   primary browser tests, 264 route-smoke tests, 50 visual tests, and 15 live
   browser journeys. The scoped reconnect correction at `f5be9744` has focused
-  normal/race coverage and a live pass, but the final broad exact-commit replay
-  remains deferred to the last test wave.
+  normal/race coverage and a live pass. Follow-up commits `05abe58f` and
+  `fe4b51eb` close the equivalent cross-pod send-pressure, capability, and
+  replaced-session classifications with focused normal/race coverage. The
+  final broad replay on exact candidate `fe4b51eb` remains deferred to the last
+  test wave.
 - Estate-100 is not yet a retained pass. A later 2026-09-17 exact-image run at
   `f0d9dd2c` delivered exactly 900,000 requests at 500 RPS, conserved
   9,000/9,000/9,000 audit operations, kept pool pressure and resources bounded,
   and recovered 100/100 agents, but correctly failed on one 502 caused by an
   in-flight old-session stream during reconnect. Commit `f5be9744` fixes that
   classification, and its exact revision-60 images passed a five-minute,
-  100-agent/500-RPS targeted live regression with zero 502s. See
+  100-agent/500-RPS targeted live regression with zero 502s. The final
+  cross-pod follow-ups were rebuilt as an exact coherent candidate and deployed
+  green as revision 61. See
   [`docs/scale-evidence/estate-100-reconnect-closure-2026-09-17.md`](../docs/scale-evidence/estate-100-reconnect-closure-2026-09-17.md).
 - The eight credentialed, signed, human, assistive-technology, DR, scale, and
   protected-approval executions in Phase 6 have not been supplied. Local
@@ -125,8 +130,13 @@ observed residuals:
   `f5be9744`. That commit's complete seven-image set was label-verified,
   imported, and atomically deployed as revision 60; health, readiness, schema
   52, runtime image IDs, and release registration were exact and green. The
-  scoped live regression passed, while the final broad replay on `f5be9744`
-  remains open rather than being inferred from its parent.
+  scoped live regression passed. Cross-pod classification follow-ups
+  `05abe58f` and `fe4b51eb` then passed the full tunnel package, focused race,
+  vet, and complexity gates. The exact `fe4b51eb` seven-image set was
+  label-verified, imported, and atomically deployed as revision 61; hooks,
+  health, readiness, schema 52, runtime image IDs, release registration, and
+  zero-restart checks were exact and green. The final broad replay on
+  `fe4b51eb` remains open rather than being inferred from its tested parents.
 - **Phase 1, complete locally:** commit
   `a84e393a3fb81ec8c4f5f229cc9154e45e7aa5ff` gives every production runtime
   loop a named supervisor or joined component owner, connects critical failure
@@ -174,7 +184,9 @@ observed residuals:
   reconnect stream classified as 502. `f5be9744` corrects that production path;
   an exact-image five-minute 100-agent/500-RPS run passed with 150,000 requests,
   1,500/1,500/1,500 audit conservation, 100/100 reconnect recovery, and zero
-  502s. The final 30-minute retained rerun remains last-wave work.
+  502s. `05abe58f` and `fe4b51eb` close the corresponding internal cross-pod
+  cases without broadening malformed-response handling. The final 30-minute
+  retained rerun on exact candidate `fe4b51eb` remains last-wave work.
 - **Phase 5, automated implementation complete locally:** `9719a216`,
   `b8fb7feb`, `a85db0f6`, `db38d75f`, `e4c036f4`, `5dfdf2ae`,
   `02637f37`, `94dc0aef`, and `3a47f9b2` close authoritative fleet/workload/

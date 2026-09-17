@@ -82,3 +82,42 @@ deployment. A final full estate-100 rerun is intentionally deferred to the
 last qualification wave and is still required before any retained capacity
 claim.
 
+## Final coherent local candidate
+
+Two follow-up commits close the matching cross-pod classifications before the
+last qualification wave:
+
+- `05abe58f` maps internal Kubernetes agent-send pressure to retryable 503 and
+  covers the full-buffer path deterministically.
+- `fe4b51ebca8ccc302fb53553b97ed6af74703482` maps internal Helm send failure
+  and replaced-session closure to 503, preserves 412 for an unsupported
+  capability, and preserves 502 for malformed agent responses.
+
+The full tunnel package, focused race coverage, vet, and complexity checks
+passed for these changes. The latter paths require multiple server replicas,
+so the single-server local environment cannot turn them into cross-pod live
+evidence; that limitation is explicit rather than hidden.
+
+The exact `fe4b51ebca8ccc302fb53553b97ed6af74703482` source was rebuilt as a
+coherent seven-image set with version `1.1.0-advisor016.fe4b51eb`, label-checked,
+imported into local k3s, and atomically deployed as Helm revision 61. The
+preflight and migration hooks succeeded. All five running release workloads
+were Ready with zero restarts, `/health/` and `/readyz` were green, schema 52
+was clean, the tunnel reported one connected cluster, and release
+`v1.1.0-advisor016.fe4b51eb` was registered in draft state with the exact agent
+digest. The only server warnings occurred during initial startup and did not
+recur.
+
+| Component | Revision-61 image digest |
+|---|---|
+| server | `sha256:20a083a81c37c2c88de0fdc089d72d0b785a4df23fffbbc1977212ad87286a5a` |
+| agent | `sha256:3d13b2fdfae63f673cde2999facac789e5ebe099c8e40839fe64cf04451f8201` |
+| worker | `sha256:adffdb047d421b0f510d538d4b96c3f6166c280787c47817ab9e5d6a5ea0720a` |
+| migrate | `sha256:53c5bcf13e61c581f3e98b4419ffae0daaf92e51e95b0ed0cce7c256614e9001` |
+| frontend | `sha256:00c0fc0245024ca0cedd07b52b873a18eb51734fd868631fb001b4e1f6d06bdb` |
+| shell | `sha256:ebb681a53d60b00b8850226b10b5222b3a433df826048c4bea69902ca4b772b8` |
+| DR | `sha256:48ac3b4ba735f0b7dca5c94be67f3ce6704783121909fc70339bb9314e161554` |
+
+The five-minute reconnect run remains the focused live proof for the original
+defect. The broad exact-commit replay and retained 30-minute estate-100 rerun
+remain deliberately last-wave work for the final candidate.
