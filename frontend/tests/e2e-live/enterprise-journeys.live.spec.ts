@@ -98,7 +98,11 @@ test("CIS scan shows running state and durable completed findings", async ({
   await loginViaForm(page);
   await page.goto("/dashboard/security/scans/new");
 
-  await page.getByRole("button", { name: /Live Browser Cluster/ }).click();
+  await page.getByRole("combobox", { name: "Cluster to scan" }).click();
+  await page
+    .getByRole("searchbox", { name: "Search clusters" })
+    .fill("Live Browser Cluster");
+  await page.getByRole("option", { name: /Live Browser Cluster/ }).click();
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByText("cis-1.8", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Next" }).click();
