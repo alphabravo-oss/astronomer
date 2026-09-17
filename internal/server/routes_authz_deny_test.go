@@ -142,7 +142,7 @@ func TestControllersMutatingRoutesRequireSuperuser(t *testing.T) {
 	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{
 
 		// Non-superuser user resolved by the superuser gate.
-		JWT: jwtMgr, AuthQueries: routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}}, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ControlPlane: handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil)},
+		JWT: jwtMgr, AuthQueries: routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}}, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ControlPlane: handler.NewControlPlaneHandler(nil, nil)},
 	})
 
 	for _, tc := range []struct {

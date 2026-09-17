@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/controlplane"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
@@ -45,12 +46,7 @@ type controlPlaneRunTxFunc func(context.Context, func(ControlPlaneMutationTx) er
 
 type ControlPlaneHandler struct {
 	queries    ControlPlaneQuerier
-	Monitoring *MonitoringHandler
-	Tools      *ToolHandler
-	Catalog    *CatalogHandler
-	Backups    *BackupHandler
-	Logging    *LoggingHandler
-	Security   *SecurityHandler
+	service    *controlplane.Service
 	runTx      controlPlaneRunTxFunc
 	mu         sync.Mutex
 	evaluateCh chan struct{}
@@ -89,15 +85,13 @@ type CreateControlPlaneSilenceRequest struct {
 	Duration      string `json:"duration"`
 }
 
-func NewControlPlaneHandler(queries ControlPlaneQuerier, monitoring *MonitoringHandler, tools *ToolHandler, catalog *CatalogHandler, backups *BackupHandler, logging *LoggingHandler, security *SecurityHandler) *ControlPlaneHandler {
+func NewControlPlaneHandler(queries ControlPlaneQuerier, service *controlplane.Service) *ControlPlaneHandler {
+	if service == nil {
+		service = controlplane.NewService(nil)
+	}
 	return &ControlPlaneHandler{
 		queries:    queries,
-		Monitoring: monitoring,
-		Tools:      tools,
-		Catalog:    catalog,
-		Backups:    backups,
-		Logging:    logging,
-		Security:   security,
+		service:    service,
 		evaluateCh: make(chan struct{}, 1),
 	}
 }
@@ -130,9 +124,13 @@ func (h *ControlPlaneHandler) RunEvaluator(ctx context.Context) {
 
 func (h *ControlPlaneHandler) Status(w http.ResponseWriter, r *http.Request) {
 	policy, _ := h.queries.GetDefaultControlPlanePolicy(r.Context())
-	out, summary := h.statusPayload(r.Context(), policy)
+	snapshot := h.service.Snapshot(r.Context(), controlPlaneDomainPolicy(policy))
+	out := make(map[string]any, len(snapshot.Controllers)+2)
+	for name, summary := range snapshot.Controllers {
+		out[name] = summary
+	}
 	out["policy"] = controlPlanePolicyResponse(policy)
-	out["summary"] = summary
+	out["summary"] = snapshot.Aggregate
 	RespondJSON(w, http.StatusOK, out)
 }
 
@@ -327,111 +325,6 @@ func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *ControlPlaneHandler) statusPayload(ctx context.Context, policy sqlc.ControlPlanePolicy) (map[string]any, map[string]any) {
-	out := map[string]any{}
-	totalQueue := 0
-	totalStale := 0
-	controllersWithFailures := 0
-	degraded := 0
-
-	for name, summary := range h.collectSummaries(ctx) {
-		evaluated := h.applyPolicy(name, summary, policy)
-		out[name] = evaluated
-		totalQueue += extractQueueDepth(evaluated)
-		totalStale += extractStaleRunning(evaluated)
-		if hasLatestFailure(evaluated) {
-			controllersWithFailures++
-		}
-		if controllerHealth(evaluated) != "healthy" {
-			degraded++
-		}
-	}
-
-	return out, map[string]any{
-		"controllers":             len(out),
-		"queueDepth":              totalQueue,
-		"staleRunningCount":       totalStale,
-		"controllersWithFailures": controllersWithFailures,
-		"degradedControllers":     degraded,
-		"health":                  ternaryHealth(degraded == 0),
-	}
-}
-
-func (h *ControlPlaneHandler) collectSummaries(ctx context.Context) map[string]map[string]any {
-	out := map[string]map[string]any{}
-	if h.Monitoring != nil {
-		if summary, err := h.Monitoring.controllerSummary(ctx); err == nil {
-			out["monitoring"] = summary
-		}
-	}
-	if h.Tools != nil {
-		if summary, err := h.Tools.controllerSummary(ctx); err == nil {
-			out["tools"] = summary
-		}
-	}
-	if h.Catalog != nil {
-		if summary, err := h.Catalog.controllerSummary(ctx); err == nil {
-			out["catalog"] = summary
-		}
-	}
-	if h.Backups != nil {
-		if summary, err := h.Backups.controllerSummary(ctx); err == nil {
-			out["backups"] = summary
-		}
-	}
-	if h.Logging != nil {
-		if summary, err := h.Logging.controllerSummary(ctx); err == nil {
-			out["logging"] = summary
-		}
-	}
-	if h.Security != nil {
-		if summary, err := h.Security.controllerSummary(ctx); err == nil {
-			out["security"] = summary
-		}
-	}
-	return out
-}
-
-func (h *ControlPlaneHandler) applyPolicy(name string, summary map[string]any, policy sqlc.ControlPlanePolicy) map[string]any {
-	if !policyManagedController(name) {
-		if _, ok := summary["health"]; !ok {
-			summary["health"] = "unknown"
-		}
-		if _, ok := summary["healthReasons"]; !ok {
-			summary["healthReasons"] = []string{}
-		}
-		summary["policy"] = map[string]any{"managed": false}
-		return summary
-	}
-	queueThreshold, staleThreshold, failureThreshold := thresholdsFor(name, policy)
-	queueDepth := extractQueueDepth(summary)
-	staleRunning := extractStaleRunning(summary)
-	recentFailures := extractRecentFailureCount(summary)
-	health := "healthy"
-	reasons := []string{}
-	if queueDepth >= int(queueThreshold) {
-		health = "degraded"
-		reasons = append(reasons, "queue_depth")
-	}
-	if staleRunning >= int(staleThreshold) {
-		health = "degraded"
-		reasons = append(reasons, "stale_running")
-	}
-	if recentFailures >= int(failureThreshold) {
-		health = "degraded"
-		reasons = append(reasons, "recent_failures")
-	}
-	summary["health"] = health
-	summary["healthReasons"] = reasons
-	summary["policy"] = map[string]any{
-		"queueDepthThreshold":        queueThreshold,
-		"staleRunningThreshold":      staleThreshold,
-		"recentFailureThreshold":     failureThreshold,
-		"recentFailureWindowMinutes": policy.RecentFailureWindowMinutes,
-	}
-	return summary
-}
-
 func (h *ControlPlaneHandler) evaluate(ctx context.Context) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -440,23 +333,25 @@ func (h *ControlPlaneHandler) evaluate(ctx context.Context) {
 		return
 	}
 	silences, _ := h.queries.GetActiveControlPlaneSilences(ctx)
-	for name, summary := range h.collectSummaries(ctx) {
-		evaluated := h.applyPolicy(name, summary, policy)
-		if !policyManagedController(name) {
+	for _, evaluated := range h.service.Snapshot(ctx, controlPlaneDomainPolicy(policy)).Evaluations {
+		if !evaluated.Managed {
 			continue
 		}
-		h.reconcileAlert(ctx, name, "queue_depth", extractQueueDepth(evaluated) >= int(thresholdQueue(name, policy)), evaluated, silences)
-		h.reconcileAlert(ctx, name, "stale_running", extractStaleRunning(evaluated) >= int(thresholdStale(name, policy)), evaluated, silences)
-		h.reconcileAlert(ctx, name, "recent_failures", extractRecentFailureCount(evaluated) >= int(thresholdFailures(name, policy)), evaluated, silences)
+		h.reconcileAlert(ctx, evaluated.Controller, "queue_depth", evaluated.QueueDepthExceeded, evaluated.Summary, silences)
+		h.reconcileAlert(ctx, evaluated.Controller, "stale_running", evaluated.StaleRunningExceeded, evaluated.Summary, silences)
+		h.reconcileAlert(ctx, evaluated.Controller, "recent_failures", evaluated.RecentFailuresExceeded, evaluated.Summary, silences)
 	}
 }
 
-func policyManagedController(name string) bool {
-	switch name {
-	case "monitoring", "delivery", "tools", "catalog":
-		return true
-	default:
-		return false
+func controlPlaneDomainPolicy(policy sqlc.ControlPlanePolicy) controlplane.Policy {
+	return controlplane.Policy{
+		RecentFailureWindowMinutes: policy.RecentFailureWindowMinutes,
+		Controllers: map[string]controlplane.Thresholds{
+			"monitoring": {QueueDepth: policy.MonitoringQueueDepthThreshold, StaleRunning: policy.MonitoringStaleRunningThreshold, RecentFailure: policy.MonitoringRecentFailureThreshold},
+			"delivery":   {QueueDepth: policy.DeliveryQueueDepthThreshold, StaleRunning: policy.DeliveryStaleRunningThreshold, RecentFailure: policy.DeliveryRecentFailureThreshold},
+			"tools":      {QueueDepth: policy.ToolsQueueDepthThreshold, StaleRunning: policy.ToolsStaleRunningThreshold, RecentFailure: policy.ToolsRecentFailureThreshold},
+			"catalog":    {QueueDepth: policy.CatalogQueueDepthThreshold, StaleRunning: policy.CatalogStaleRunningThreshold, RecentFailure: policy.CatalogRecentFailureThreshold},
+		},
 	}
 }
 
@@ -596,106 +491,9 @@ func controlPlaneSilenceResponse(item sqlc.ControlPlaneSilence) map[string]any {
 	}
 }
 
-func thresholdsFor(name string, policy sqlc.ControlPlanePolicy) (int32, int32, int32) {
-	return thresholdQueue(name, policy), thresholdStale(name, policy), thresholdFailures(name, policy)
-}
-
-func thresholdQueue(name string, policy sqlc.ControlPlanePolicy) int32 {
-	switch name {
-	case "monitoring":
-		return policy.MonitoringQueueDepthThreshold
-	case "delivery":
-		return policy.DeliveryQueueDepthThreshold
-	case "tools":
-		return policy.ToolsQueueDepthThreshold
-	default:
-		return policy.CatalogQueueDepthThreshold
-	}
-}
-
-func thresholdStale(name string, policy sqlc.ControlPlanePolicy) int32 {
-	switch name {
-	case "monitoring":
-		return policy.MonitoringStaleRunningThreshold
-	case "delivery":
-		return policy.DeliveryStaleRunningThreshold
-	case "tools":
-		return policy.ToolsStaleRunningThreshold
-	default:
-		return policy.CatalogStaleRunningThreshold
-	}
-}
-
-func thresholdFailures(name string, policy sqlc.ControlPlanePolicy) int32 {
-	switch name {
-	case "monitoring":
-		return policy.MonitoringRecentFailureThreshold
-	case "delivery":
-		return policy.DeliveryRecentFailureThreshold
-	case "tools":
-		return policy.ToolsRecentFailureThreshold
-	default:
-		return policy.CatalogRecentFailureThreshold
-	}
-}
-
-func extractQueueDepth(summary map[string]any) int {
-	reconciler, ok := summary["reconciler"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	return controlPlaneIntValue(reconciler["queueDepth"])
-}
-
-func extractStaleRunning(summary map[string]any) int {
-	reconciler, ok := summary["reconciler"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	return controlPlaneIntValue(reconciler["staleRunningCount"])
-}
-
-func extractRecentFailureCount(summary map[string]any) int {
-	return controlPlaneIntValue(summary["recentFailureCount"])
-}
-
-func controllerHealth(summary map[string]any) string {
-	if value, ok := summary["health"].(string); ok {
-		return value
-	}
-	return "unknown"
-}
-
-func hasLatestFailure(summary map[string]any) bool {
-	value, ok := summary["latestFailure"]
-	return ok && value != nil
-}
-
-func controlPlaneIntValue(value any) int {
-	switch v := value.(type) {
-	case int:
-		return v
-	case int32:
-		return int(v)
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	default:
-		return 0
-	}
-}
-
 func atLeastOne(v int32) int32 {
 	if v < 1 {
 		return 1
 	}
 	return v
-}
-
-func ternaryHealth(healthy bool) string {
-	if healthy {
-		return "healthy"
-	}
-	return "degraded"
 }

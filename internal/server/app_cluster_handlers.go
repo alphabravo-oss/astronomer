@@ -7,6 +7,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/controlplane"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
@@ -136,7 +137,14 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	if issuer := auth.NewIngestIssuer(queries); issuer != nil {
 		hub.SetAuditIngestIssuer(issuer)
 	}
-	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler)
+	controlPlaneHandler := handler.NewControlPlaneHandler(queries, controlplane.NewService(map[string]controlplane.SummaryProvider{
+		"monitoring": monitoringHandler,
+		"tools":      toolHandler,
+		"catalog":    catalogHandler,
+		"backups":    backupHandler,
+		"logging":    loggingHandler,
+		"security":   securityHandler,
+	}))
 	controlPlaneHandler.SetRunTx(sqlcMutationTxRunner[handler.ControlPlaneMutationTx](database))
 	c.clusterSnapshotsHandler = clusterSnapshotsHandler
 	c.controlPlaneSnapshotHandler = controlPlaneSnapshotHandler

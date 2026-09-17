@@ -113,7 +113,7 @@ func fakeControlPlaneRunTx(q *transactionalControlPlaneQ) controlPlaneRunTxFunc 
 }
 
 func newTransactionalControlPlaneHandler(q *transactionalControlPlaneQ) *ControlPlaneHandler {
-	h := NewControlPlaneHandler(q, nil, nil, nil, nil, nil, nil)
+	h := NewControlPlaneHandler(q, nil)
 	h.SetRunTx(fakeControlPlaneRunTx(q))
 	return h
 }

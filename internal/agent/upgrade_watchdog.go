@@ -42,7 +42,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -134,9 +133,10 @@ type upgradeStatusRecord struct {
 	Reported      bool   `json:"reported,omitempty"`
 }
 
-// RunUpgradeWatchdogFromEnv is the `astronomer-agent upgrade-watchdog`
-// entrypoint. It builds an in-cluster client and runs the watchdog loop.
-func RunUpgradeWatchdogFromEnv(ctx context.Context, log *slog.Logger) error {
+// RunUpgradeWatchdogInCluster is the `astronomer-agent upgrade-watchdog`
+// runtime entrypoint. Its process environment was already captured as opts by
+// the executable's typed configuration boundary.
+func RunUpgradeWatchdogInCluster(ctx context.Context, log *slog.Logger, opts UpgradeWatchdogOptions) error {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -147,16 +147,6 @@ func RunUpgradeWatchdogFromEnv(ctx context.Context, log *slog.Logger) error {
 	client, err := kubernetes.NewForConfig(restCfg)
 	if err != nil {
 		return fmt.Errorf("upgrade watchdog kubernetes client: %w", err)
-	}
-	opts := UpgradeWatchdogOptions{
-		Namespace:     os.Getenv(envWatchdogNamespace),
-		Deployment:    os.Getenv(envWatchdogDeployment),
-		OperationID:   os.Getenv(envWatchdogOperationID),
-		TargetImage:   os.Getenv(envWatchdogTargetImage),
-		RollbackImage: os.Getenv(envWatchdogRollbackImage),
-	}
-	if seconds, convErr := strconv.Atoi(strings.TrimSpace(os.Getenv(envWatchdogRolloutTimeout))); convErr == nil && seconds > 0 {
-		opts.RolloutTimeout = time.Duration(seconds) * time.Second
 	}
 	return RunUpgradeWatchdog(ctx, client, log, opts)
 }

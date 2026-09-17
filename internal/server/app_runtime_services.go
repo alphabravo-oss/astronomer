@@ -7,6 +7,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
@@ -40,7 +41,11 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		logger.Warn("local cluster bootstrap failed", "error", err)
 	} else if localCluster != nil {
 		c.workloadHandler.SetLocalClusterID(localCluster.ID.String())
-		localAgent, err := buildLocalAgentRuntime(foundation.ctx, logger, c.queries, localCluster.ID)
+		localAgent, err := buildLocalAgentRuntime(foundation.ctx, logger, c.queries, localCluster.ID, helmruntime.Config{
+			Driver: cfg.HelmDriver, RegistryConfig: cfg.HelmRegistryConfig,
+			RepositoryConfig: cfg.HelmRepositoryConfig, RepositoryCache: cfg.HelmRepositoryCache,
+			PluginsDirectory: cfg.HelmPluginsDirectory, BurstLimit: 100,
+		})
 		if err != nil {
 			logger.Warn("local agent start failed", "error", err)
 		} else if localAgent != nil {

@@ -64,6 +64,16 @@
       "rationale": "Catalog policy and orchestration are reusable by HTTP handlers and workers; they cannot depend on HTTP delivery or router composition."
     },
     {
+      "name": "control-plane-domain-does-not-depend-on-http-delivery",
+      "root": "internal/controlplane",
+      "forbidden_prefixes": [
+        "github.com/alphabravocompany/astronomer-go/internal/handler",
+        "github.com/alphabravocompany/astronomer-go/internal/server"
+      ],
+      "exclude_suffixes": ["_test.go"],
+      "rationale": "Control-plane health policy consumes narrow controller summary interfaces and cannot retain HTTP handlers or router composition."
+    },
+    {
       "name": "projects-domain-does-not-depend-on-http-delivery",
       "root": "internal/projects",
       "forbidden_prefixes": [

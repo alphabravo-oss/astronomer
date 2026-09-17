@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -17,40 +16,29 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage/driver"
 
+	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
+
+// HelmRuntimeConfig is the typed Helm SDK process contract accepted by the
+// agent composition root.
+type HelmRuntimeConfig = helmruntime.Config
 
 // HelmHandler processes Helm operations received through the tunnel.
 type HelmHandler struct {
 	settings *cli.EnvSettings
+	driver   string
 	log      *slog.Logger
 }
 
 // NewHelmHandler creates a new Helm operations handler.
 //
-// The Helm SDK derives its cache/config/data dirs from XDG env vars and HOME.
-// The agent runs as a non-root user inside a read-only-root container with
-// HOME=/, so without these overrides the SDK tries to write to /.cache/helm/*
-// on the first chart fetch and crashes with "permission denied". Force every
-// helm-managed dir to /tmp; values caller-provided via env still win.
-func NewHelmHandler(log *slog.Logger) *HelmHandler {
-	setIfEmpty := func(k, v string) {
-		if os.Getenv(k) == "" {
-			_ = os.Setenv(k, v)
-		}
-	}
-	setIfEmpty("HELM_CACHE_HOME", "/tmp/helm/cache")
-	setIfEmpty("HELM_CONFIG_HOME", "/tmp/helm/config")
-	setIfEmpty("HELM_DATA_HOME", "/tmp/helm/data")
-	setIfEmpty("HELM_REGISTRY_CONFIG", "/tmp/helm/config/registry/config.json")
-	setIfEmpty("HELM_REPOSITORY_CONFIG", "/tmp/helm/config/repositories.yaml")
-	setIfEmpty("HELM_REPOSITORY_CACHE", "/tmp/helm/cache/repository")
-	setIfEmpty("XDG_CACHE_HOME", "/tmp/.cache")
-	setIfEmpty("XDG_CONFIG_HOME", "/tmp/.config")
-	setIfEmpty("XDG_DATA_HOME", "/tmp/.local/share")
-
+// The caller captures Helm's process contract at the configuration boundary.
+// Writable /tmp defaults keep the non-root, read-only-root agent viable.
+func NewHelmHandler(log *slog.Logger, runtime helmruntime.Config) *HelmHandler {
 	return &HelmHandler{
-		settings: cli.New(),
+		settings: runtime.Settings(),
+		driver:   runtime.Driver,
 		log:      log,
 	}
 }
@@ -61,7 +49,7 @@ func (h *HelmHandler) actionConfig(namespace string) (*action.Configuration, err
 	logFunc := func(format string, v ...interface{}) {
 		h.log.Debug(fmt.Sprintf(format, v...), "component", "helm")
 	}
-	if err := cfg.Init(h.settings.RESTClientGetter(), namespace, os.Getenv("HELM_DRIVER"), logFunc); err != nil {
+	if err := cfg.Init(h.settings.RESTClientGetter(), namespace, h.driver, logFunc); err != nil {
 		return nil, fmt.Errorf("init helm config: %w", err)
 	}
 	return cfg, nil

@@ -55,7 +55,7 @@ func main() {
 		Short:  "Verify an in-flight agent self-upgrade and roll it back if it never becomes healthy",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return agent.RunUpgradeWatchdogFromEnv(cmd.Context(), logger)
+			return agent.RunUpgradeWatchdogInCluster(cmd.Context(), logger, agent.LoadUpgradeWatchdogOptions())
 		},
 	}
 
@@ -386,7 +386,7 @@ func runConnect(logger *slog.Logger) error {
 
 	// k8s proxy was unavailable: fall back to helm-only registration so the
 	// agent can still serve helm requests off-cluster (testing scenario).
-	registerHelm(tunnel, logger)
+	registerHelm(tunnel, logger, cfg.HelmRuntime)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -411,8 +411,8 @@ func runConnect(logger *slog.Logger) error {
 	return tunnel.Close()
 }
 
-func registerHelm(tunnel *agent.TunnelClient, _ *slog.Logger) {
-	helm := agent.NewHelmHandler(slog.Default())
+func registerHelm(tunnel *agent.TunnelClient, logger *slog.Logger, runtime agent.HelmRuntimeConfig) {
+	helm := agent.NewHelmHandler(logger, runtime)
 	tunnel.RegisterHandler(protocol.MsgHelmInstall, helm.HandleInstall)
 	tunnel.RegisterHandler(protocol.MsgHelmUpgrade, helm.HandleUpgrade)
 	tunnel.RegisterHandler(protocol.MsgHelmUninstall, helm.HandleUninstall)
@@ -422,7 +422,7 @@ func registerHelm(tunnel *agent.TunnelClient, _ *slog.Logger) {
 }
 
 func runHelmAndConnect(ctx context.Context, tunnel *agent.TunnelClient, logger *slog.Logger, cfg *agent.AgentConfig) error {
-	registerHelm(tunnel, logger)
+	registerHelm(tunnel, logger, cfg.HelmRuntime)
 
 	logger.Info("starting agent",
 		"server_url", cfg.ServerURL,

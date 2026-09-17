@@ -19,6 +19,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -132,7 +133,7 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 // logs a warning and returns nil — the server still comes up, just without
 // the local cluster's data plane.
 func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID) error {
-	run, err := buildLocalAgentRuntime(ctx, logger, queries, clusterID)
+	run, err := buildLocalAgentRuntime(ctx, logger, queries, clusterID, helmruntime.InClusterDefaults())
 	if err != nil || run == nil {
 		return err
 	}
@@ -142,7 +143,7 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 
 // buildLocalAgentRuntime performs fallible setup synchronously, then returns a
 // blocking runtime that joins the tunnel, informer, and health loops.
-func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID) (func(context.Context) error, error) {
+func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID, helmRuntime helmruntime.Config) (func(context.Context) error, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -220,7 +221,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 	svcProxy := agent.NewServiceProxy(logger)
 	tunnelClient.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
-	helm := agent.NewHelmHandler(logger)
+	helm := agent.NewHelmHandler(logger, helmRuntime)
 	tunnelClient.RegisterHandler(protocol.MsgHelmInstall, helm.HandleInstall)
 	tunnelClient.RegisterHandler(protocol.MsgHelmUpgrade, helm.HandleUpgrade)
 	tunnelClient.RegisterHandler(protocol.MsgHelmUninstall, helm.HandleUninstall)

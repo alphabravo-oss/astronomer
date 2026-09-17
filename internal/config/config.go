@@ -42,6 +42,11 @@ type Config struct {
 	ReleaseName            string `mapstructure:"release_name"`
 	ChartVersion           string `mapstructure:"chart_version"`
 	ServerImage            string `mapstructure:"astronomer_server_image"`
+	HelmDriver             string `mapstructure:"helm_driver"`
+	HelmRegistryConfig     string `mapstructure:"helm_registry_config"`
+	HelmRepositoryConfig   string `mapstructure:"helm_repository_config"`
+	HelmRepositoryCache    string `mapstructure:"helm_repository_cache"`
+	HelmPluginsDirectory   string `mapstructure:"helm_plugins"`
 	TunnelEgressCIDRs      string `mapstructure:"astronomer_tunnel_egress_cidrs"`
 	RCAllowPrivateWebhooks bool   `mapstructure:"astronomer_rc_allow_private_webhooks"`
 
@@ -361,6 +366,11 @@ func Load() (*Config, error) {
 		"release_name",
 		"chart_version",
 		"astronomer_server_image",
+		"helm_driver",
+		"helm_registry_config",
+		"helm_repository_config",
+		"helm_repository_cache",
+		"helm_plugins",
 		"astronomer_tunnel_egress_cidrs",
 		"astronomer_rc_allow_private_webhooks",
 		"astronomer_bootstrap_password",
@@ -449,6 +459,10 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "env", Value: "development"},
 		envconfig.Default{Key: "debug", Value: false},
 		envconfig.Default{Key: "release_name", Value: "astronomer"},
+		envconfig.Default{Key: "helm_registry_config", Value: "/tmp/helm/config/registry/config.json"},
+		envconfig.Default{Key: "helm_repository_config", Value: "/tmp/helm/config/repositories.yaml"},
+		envconfig.Default{Key: "helm_repository_cache", Value: "/tmp/helm/cache/repository"},
+		envconfig.Default{Key: "helm_plugins", Value: "/tmp/helm/data/plugins"},
 		envconfig.Default{Key: "astronomer_bootstrap_username", Value: "admin"},
 		envconfig.Default{Key: "astronomer_bootstrap_email", Value: "admin@astronomer.local"},
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
