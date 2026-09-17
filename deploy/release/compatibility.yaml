@@ -106,8 +106,8 @@
     "tls_required_in_production": true,
     "migration_mode": "versioned_incremental",
     "minimum_upgrade_schema": 1,
-    "target_schema": 49,
-    "reversible_through_schema": 49,
+    "target_schema": 50,
+    "reversible_through_schema": 50,
     "supported_upgrade_release_lines": ["1.0.x", "1.1.x"]
   },
   "browsers": {

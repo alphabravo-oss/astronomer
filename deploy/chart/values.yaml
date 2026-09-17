@@ -408,7 +408,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 49
+    targetVersion: 50
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
