@@ -154,6 +154,19 @@ type RuntimeQuerier interface {
 	ListDistinctRatedChartIDs(ctx context.Context) ([]uuid.UUID, error)
 }
 
+// AlertNotificationMutationTx is the transaction-bound surface that commits
+// an alert state transition and every resulting notification intent together.
+// Redis is deliberately absent: the task-outbox dispatcher performs that
+// hand-off only after PostgreSQL commits.
+type AlertNotificationMutationTx interface {
+	CreateAlertEvent(ctx context.Context, arg sqlc.CreateAlertEventParams) (sqlc.AlertEvent, error)
+	UpdateAlertEventStatus(ctx context.Context, arg sqlc.UpdateAlertEventStatusParams) error
+	ListChannelsForAlertRule(ctx context.Context, alertRuleID uuid.UUID) ([]sqlc.NotificationChannel, error)
+	TaskOutboxWriter
+}
+
+type AlertNotificationRunTx func(context.Context, func(AlertNotificationMutationTx) error) error
+
 type RuntimeDependencies struct {
 	Queries                   RuntimeQuerier
 	ManagementBackup          ManagementBackupExecutor
@@ -194,6 +207,11 @@ type RuntimeDependencies struct {
 	// Optional — when nil, tasks that would fan out a follow-up log and skip
 	// it rather than crash. *asynq.Client satisfies it.
 	Enqueuer Enqueuer
+	// NotificationEmail is the durable email_messages hand-off used by
+	// notification:send for email channels. It is worker-owned so every alert
+	// channel follows the same PostgreSQL task-outbox path before delivery.
+	NotificationEmail      NotificationEmailEnqueuer
+	AlertNotificationRunTx AlertNotificationRunTx
 	// Bus is the SSE events bus (P4.9). In the dedicated worker process it
 	// is a Redis-attached bus with no local subscribers — publishes fan out
 	// to the server pods' relays; in the server process it is the shared

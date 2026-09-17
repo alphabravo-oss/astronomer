@@ -10,8 +10,8 @@
 //   pagerduty   — Events API v2 (routing_key flows through configuration.routing_key)
 //   msteams     — MS Teams Workflow / Power Automate webhook (Adaptive Card)
 //   webhook     — generic JSON POST with the unstructured envelope
-//   email       — handled by the SMTP path (worker/tasks/email_dispatch.go);
-//                 we no-op here so the asynq task succeeds without double-send
+//   email       — persisted idempotently to email_messages, then handled by
+//                 the SMTP path in worker/tasks/email_dispatch.go
 //
 // Each formatter produces a fresh `http.Request` body shaped exactly
 // like the receiving service wants. Slack/MS Teams accept any 200; we
@@ -30,6 +30,7 @@ package tasks
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,9 +40,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
+	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
@@ -70,19 +75,53 @@ var SupportedNotificationChannels = []string{
 // optional but recommended — Slack + MS Teams render with a colour
 // swatch based on it, PagerDuty maps it onto the event severity field.
 type NotificationSendPayload struct {
-	Channel    string   `json:"channel"`              // canonical type string (slack|pagerduty|msteams|webhook|email)
-	Subject    string   `json:"subject"`              // short title — alert rule name
-	Body       string   `json:"body"`                 // long-form text — what fired, links, etc.
-	Recipients []string `json:"recipients"`           // destination URL(s) / routing key(s); shape depends on channel
-	Severity   string   `json:"severity,omitempty"`   // critical|warning|info — drives styling
-	ClusterID  string   `json:"cluster_id,omitempty"` // optional source cluster, surfaced as a field
-	RuleID     string   `json:"rule_id,omitempty"`    // optional alert-rule UUID
-	FiredAt    string   `json:"fired_at,omitempty"`   // RFC3339; defaults to time.Now() inside the formatter
+	Channel    string   `json:"channel"`               // canonical type string (slack|pagerduty|msteams|webhook|email)
+	Subject    string   `json:"subject"`               // short title — alert rule name
+	Body       string   `json:"body"`                  // long-form text — what fired, links, etc.
+	Recipients []string `json:"recipients"`            // destination URL(s) / routing key(s); shape depends on channel
+	Severity   string   `json:"severity,omitempty"`    // critical|warning|info — drives styling
+	ClusterID  string   `json:"cluster_id,omitempty"`  // optional source cluster, surfaced as a field
+	RuleID     string   `json:"rule_id,omitempty"`     // optional alert-rule UUID
+	ChannelID  string   `json:"channel_id,omitempty"`  // durable destination identity
+	EventID    string   `json:"event_id,omitempty"`    // alert/control-plane event identity
+	DeliveryID string   `json:"delivery_id,omitempty"` // stable receiver idempotency identity
+	FiredAt    string   `json:"fired_at,omitempty"`    // RFC3339; defaults to time.Now() inside the formatter
 	// Resolved marks this as a recovery/resolved notification (the alert
 	// transitioned firing->resolved). Formatters render a green
 	// "resolved" variant and PagerDuty emits event_action=resolve so the
 	// open incident auto-closes instead of paging again.
 	Resolved bool `json:"resolved,omitempty"`
+}
+
+// NotificationEmailEnqueuer is the durable SMTP hand-off used by the
+// notification worker. *email.Enqueuer satisfies it. The stable DedupeKey in
+// email.Request closes the retry-after-commit duplicate window.
+type NotificationEmailEnqueuer interface {
+	Enqueue(ctx context.Context, req email.Request) (uuid.UUID, error)
+}
+
+const (
+	notificationQueue               = "critical"
+	notificationMaxRetry            = 3
+	notificationMaxDeliveryAttempts = 20
+)
+
+// EnqueueNotificationOutbox persists notification intent with the same queue
+// semantics as NewNotificationSendTask. The payload carries request/trace
+// metadata before it is stored, so a later Redis recovery rejoins the original
+// operation rather than starting an uncorrelated trace.
+func EnqueueNotificationOutbox(ctx context.Context, q TaskOutboxWriter, payload NotificationSendPayload, dedupeKey string) error {
+	task, err := NewNotificationSendTask(payload)
+	if err != nil {
+		return err
+	}
+	enriched := observability.EnrichTaskPayload(ctx, task.Payload(), reqctx.CorrelationID(ctx))
+	task = asynq.NewTask(task.Type(), enriched)
+	_, err = EnqueueTaskOutbox(ctx, q, task, TaskOutboxOptions{
+		DedupeKey: dedupeKey, QueueName: notificationQueue, MaxRetry: notificationMaxRetry,
+		Timeout: time.Minute, MaxDeliveryAttempts: notificationMaxDeliveryAttempts,
+	})
+	return err
 }
 
 // NewNotificationSendTask builds an asynq task. MaxRetry=3 with the
@@ -106,7 +145,7 @@ func HandleNotificationSend(ctx context.Context, t *asynq.Task) error {
 	if p.Channel == "" {
 		return fmt.Errorf("channel is required")
 	}
-	if len(p.Recipients) == 0 && strings.ToLower(p.Channel) != ChannelTypeEmail {
+	if len(p.Recipients) == 0 {
 		return fmt.Errorf("at least one recipient is required for channel %q", p.Channel)
 	}
 	if p.FiredAt == "" {
@@ -150,17 +189,31 @@ func HandleNotificationSend(ctx context.Context, t *asynq.Task) error {
 			}
 		}
 	case ChannelTypeEmail:
-		// Email goes through internal/worker/tasks/email_dispatch.go
-		// driven by the email_messages table. The alert-evaluator
-		// writes a row there separately; this dispatcher just
-		// acknowledges the notification:send task so the asynq queue
-		// stays clean.
-		runtimeLogger(ctx).InfoContext(ctx, "email channel handled by smtp dispatcher", "subject", p.Subject)
+		emails := runtimeDependencies(ctx).NotificationEmail
+		if emails == nil {
+			return fmt.Errorf("notification email enqueuer is not configured")
+		}
+		for _, recipient := range p.Recipients {
+			dedupeKey := p.DeliveryID
+			if dedupeKey != "" {
+				dedupeKey = fmt.Sprintf("%s:%x", dedupeKey, sha256.Sum256([]byte(strings.ToLower(strings.TrimSpace(recipient)))))
+			}
+			if _, err := emails.Enqueue(ctx, email.Request{
+				To: recipient, Template: email.TemplateAlertFired, Subject: p.Subject,
+				DedupeKey: dedupeKey,
+				Data: map[string]any{
+					"AlertName": p.Subject, "Severity": p.Severity, "FiredAt": p.FiredAt,
+					"Resource": p.ClusterID, "Message": p.Body, "DashboardURL": "",
+				},
+			}); err != nil {
+				return fmt.Errorf("persist notification email: %w", err)
+			}
+		}
 	default:
 		return fmt.Errorf("unsupported notification channel %q", p.Channel)
 	}
 
-	slog.InfoContext(ctx, "notification sent", "channel", p.Channel, "subject", p.Subject)
+	slog.InfoContext(ctx, "notification delivery accepted", "channel", p.Channel, "subject", p.Subject, "delivery_id", p.DeliveryID)
 	return nil
 }
 
@@ -190,7 +243,7 @@ func postSlack(ctx context.Context, client *http.Client, webhookURL string, p No
 			"fields": slackFields(p),
 		}},
 	}
-	return postJSON(ctx, client, webhookURL, body, http.StatusOK)
+	return postJSONWithDeliveryID(ctx, client, webhookURL, body, http.StatusOK, p.DeliveryID)
 }
 
 func slackSeverityColor(sev string) string {
@@ -234,7 +287,7 @@ func postPagerDuty(ctx context.Context, client *http.Client, routingKey string, 
 	// PagerDuty closes the incident this rule opened. The Events API v2
 	// ignores the payload block for resolve, so we only send the keys.
 	if p.Resolved {
-		return postJSON(ctx, client, pagerDutyEventsURL, pagerDutyResolveBody(routingKey, p), http.StatusAccepted)
+		return postJSONWithDeliveryID(ctx, client, pagerDutyEventsURL, pagerDutyResolveBody(routingKey, p), http.StatusAccepted, p.DeliveryID)
 	}
 	body := map[string]any{
 		"routing_key":  routingKey,
@@ -253,7 +306,7 @@ func postPagerDuty(ctx context.Context, client *http.Client, routingKey string, 
 		},
 	}
 	// PagerDuty returns 202 on accept; treat anything < 300 as success.
-	return postJSON(ctx, client, pagerDutyEventsURL, body, http.StatusAccepted)
+	return postJSONWithDeliveryID(ctx, client, pagerDutyEventsURL, body, http.StatusAccepted, p.DeliveryID)
 }
 
 // pagerDutyResolveBody is the Events API v2 resolve payload. The
@@ -284,6 +337,9 @@ func pagerDutySeverity(sev string) string {
 // updates one incident instead of paging the on-call human N times.
 // Falls back to subject hash when rule_id is unknown.
 func pagerDutyDedupKey(p NotificationSendPayload) string {
+	if p.DeliveryID != "" {
+		return p.DeliveryID
+	}
 	if p.RuleID != "" {
 		return "astronomer-" + p.RuleID
 	}
@@ -342,7 +398,7 @@ func postMSTeams(ctx context.Context, client *http.Client, webhookURL string, p 
 			},
 		}},
 	}
-	return postJSON(ctx, client, webhookURL, body, http.StatusOK)
+	return postJSONWithDeliveryID(ctx, client, webhookURL, body, http.StatusOK, p.DeliveryID)
 }
 
 // msTeamsResolveColor renders the title in green ("Good") for a
@@ -373,16 +429,19 @@ func msTeamsSeverityColor(sev string) string {
 
 func postGenericWebhook(ctx context.Context, client *http.Client, url string, p NotificationSendPayload) error {
 	body := map[string]any{
-		"subject":    p.Subject,
-		"body":       p.Body,
-		"text":       p.Body, // legacy compat: callers that read `text`
-		"severity":   p.Severity,
-		"cluster_id": p.ClusterID,
-		"rule_id":    p.RuleID,
-		"fired_at":   p.FiredAt,
-		"resolved":   p.Resolved,
+		"subject":     p.Subject,
+		"body":        p.Body,
+		"text":        p.Body, // legacy compat: callers that read `text`
+		"severity":    p.Severity,
+		"cluster_id":  p.ClusterID,
+		"rule_id":     p.RuleID,
+		"fired_at":    p.FiredAt,
+		"resolved":    p.Resolved,
+		"channel_id":  p.ChannelID,
+		"event_id":    p.EventID,
+		"delivery_id": p.DeliveryID,
 	}
-	return postJSON(ctx, client, url, body, http.StatusOK)
+	return postJSONWithDeliveryID(ctx, client, url, body, http.StatusOK, p.DeliveryID)
 }
 
 // ---------------------------------------------------------------------
@@ -395,6 +454,10 @@ func postGenericWebhook(ctx context.Context, client *http.Client, url string, p 
 // so logs are clearer when an upstream silently returns 200 instead
 // of 202 etc.
 func postJSON(ctx context.Context, client *http.Client, url string, body any, acceptStatus int) error {
+	return postJSONWithDeliveryID(ctx, client, url, body, acceptStatus, "")
+}
+
+func postJSONWithDeliveryID(ctx context.Context, client *http.Client, url string, body any, acceptStatus int, deliveryID string) error {
 	// SSRF guard: the channel URL is operator-configured (Slack/Teams/generic
 	// webhook), so refuse to dispatch to a loopback/internal/metadata address.
 	// Do not echo the URL in the error.
@@ -416,6 +479,9 @@ func postJSON(ctx context.Context, client *http.Client, url string, body any, ac
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	if deliveryID != "" {
+		req.Header.Set("Idempotency-Key", deliveryID)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		// client.Do returns a *url.Error whose Error() embeds the FULL

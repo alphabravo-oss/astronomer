@@ -3,11 +3,11 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -18,22 +18,35 @@ import (
 // nil-deref, flagging an unexpected path.
 type alertDispatchQuerier struct {
 	RuntimeQuerier
-	channels []sqlc.NotificationChannel
+	channels  []sqlc.NotificationChannel
+	outbox    []sqlc.UpsertTaskOutboxParams
+	events    []sqlc.AlertEvent
+	outboxErr error
 }
 
 func (q *alertDispatchQuerier) ListChannelsForAlertRule(_ context.Context, _ uuid.UUID) ([]sqlc.NotificationChannel, error) {
 	return q.channels, nil
 }
 
-// recordingEnqueuer captures the tasks dispatchAlertNotifications enqueues
-// so the test can decode the payload.
-type recordingEnqueuer struct {
-	tasks []*asynq.Task
+func (q *alertDispatchQuerier) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	if q.outboxErr != nil {
+		return sqlc.TaskOutbox{}, q.outboxErr
+	}
+	q.outbox = append(q.outbox, arg)
+	return sqlc.TaskOutbox{ID: uuid.New()}, nil
 }
 
-func (e *recordingEnqueuer) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
-	e.tasks = append(e.tasks, task)
-	return &asynq.TaskInfo{}, nil
+func (q *alertDispatchQuerier) CreateAlertEvent(_ context.Context, arg sqlc.CreateAlertEventParams) (sqlc.AlertEvent, error) {
+	event := sqlc.AlertEvent{
+		ID: uuid.New(), RuleID: arg.RuleID, ClusterID: arg.ClusterID, Status: arg.Status,
+		Message: arg.Message, Details: arg.Details, FiredAt: time.Now().UTC(),
+	}
+	q.events = append(q.events, event)
+	return event, nil
+}
+
+func (q *alertDispatchQuerier) UpdateAlertEventStatus(context.Context, sqlc.UpdateAlertEventStatusParams) error {
+	return nil
 }
 
 // A global rule (empty rule.ClusterID) firing on a specific cluster must
@@ -42,11 +55,10 @@ func TestDispatchAlertNotifications_GlobalRuleReportsFiringCluster(t *testing.T)
 	firingCluster := uuid.New()
 	q := &alertDispatchQuerier{
 		channels: []sqlc.NotificationChannel{
-			{ID: uuid.New(), ChannelType: "webhook", Enabled: true},
+			{ID: uuid.New(), ChannelType: "webhook", Enabled: true, Configuration: []byte(`{"url":"https://alerts.example.test/hook"}`)},
 		},
 	}
-	enq := &recordingEnqueuer{}
-	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, Enqueuer: enq})
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
 	rule := sqlc.AlertRule{ID: uuid.New(), Name: "global-rule"} // ClusterID zero/invalid => global
 	event := sqlc.AlertEvent{
@@ -55,17 +67,48 @@ func TestDispatchAlertNotifications_GlobalRuleReportsFiringCluster(t *testing.T)
 		ClusterID: pgtype.UUID{Bytes: firingCluster, Valid: true},
 	}
 
-	dispatchAlertNotifications(ctx, rule, event, "subject", "body", false)
+	if err := dispatchAlertNotifications(ctx, q, rule, event, "subject", "body", false); err != nil {
+		t.Fatal(err)
+	}
 
-	if len(enq.tasks) != 1 {
-		t.Fatalf("expected 1 enqueued notification, got %d", len(enq.tasks))
+	if len(q.outbox) != 1 {
+		t.Fatalf("expected 1 durable notification, got %d", len(q.outbox))
 	}
 	var p NotificationSendPayload
-	if err := json.Unmarshal(enq.tasks[0].Payload(), &p); err != nil {
+	if err := json.Unmarshal(q.outbox[0].Payload, &p); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
 	if p.ClusterID != firingCluster.String() {
 		t.Fatalf("notification reported cluster %q, want firing cluster %q", p.ClusterID, firingCluster.String())
+	}
+	if p.ChannelID != q.channels[0].ID.String() || p.EventID != event.ID.String() || p.DeliveryID == "" {
+		t.Fatalf("notification destination identity missing: %+v", p)
+	}
+}
+
+func TestAlertEventAndNotificationIntentRollbackTogether(t *testing.T) {
+	q := &alertDispatchQuerier{
+		channels: []sqlc.NotificationChannel{{
+			ID: uuid.New(), ChannelType: "webhook", Enabled: true,
+			Configuration: []byte(`{"url":"https://alerts.example.test/hook"}`),
+		}},
+		outboxErr: errors.New("task-outbox unavailable"),
+	}
+	runTx := func(ctx context.Context, fn func(AlertNotificationMutationTx) error) error {
+		events := append([]sqlc.AlertEvent(nil), q.events...)
+		outbox := append([]sqlc.UpsertTaskOutboxParams(nil), q.outbox...)
+		if err := fn(q); err != nil {
+			q.events, q.outbox = events, outbox
+			return err
+		}
+		return nil
+	}
+	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, AlertNotificationRunTx: runTx})
+	err := processRuleEvaluation(ctx, sqlc.AlertRule{ID: uuid.New(), Name: "database unavailable", Severity: "critical"}, ruleClusterEval{
+		triggered: true, message: "database unavailable", details: []byte(`{}`),
+	}, nil, nil, nil, nil)
+	if err == nil || len(q.events) != 0 || len(q.outbox) != 0 {
+		t.Fatalf("event/outbox did not roll back together: err=%v events=%d outbox=%d", err, len(q.events), len(q.outbox))
 	}
 }
 

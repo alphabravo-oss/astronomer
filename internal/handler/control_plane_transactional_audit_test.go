@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -25,8 +26,31 @@ type transactionalControlPlaneQ struct {
 	silences      map[uuid.UUID]sqlc.ControlPlaneSilence
 	audits        []sqlc.UpsertAuditOutboxParams
 	outboxErr     error
+	taskOutboxErr error
 	policyMutated bool
 	alertMutated  bool
+	taskOutbox    []sqlc.UpsertTaskOutboxParams
+	channels      []sqlc.NotificationChannel
+}
+
+func (q *transactionalControlPlaneQ) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	if q.taskOutboxErr != nil {
+		return sqlc.TaskOutbox{}, q.taskOutboxErr
+	}
+	q.taskOutbox = append(q.taskOutbox, arg)
+	return sqlc.TaskOutbox{ID: uuid.New()}, nil
+}
+
+func (q *transactionalControlPlaneQ) CreateControlPlaneAlert(_ context.Context, arg sqlc.CreateControlPlaneAlertParams) (sqlc.ControlPlaneAlert, error) {
+	q.alertMutated = true
+	return sqlc.ControlPlaneAlert{
+		ID: uuid.New(), Controller: arg.Controller, ConditionType: arg.ConditionType,
+		Status: arg.Status, Message: arg.Message, FiredAt: time.Now().UTC(),
+	}, nil
+}
+
+func (q *transactionalControlPlaneQ) ListEnabledNotificationChannels(context.Context) ([]sqlc.NotificationChannel, error) {
+	return q.channels, nil
 }
 
 func (q *transactionalControlPlaneQ) UpsertDefaultControlPlanePolicy(_ context.Context, _ sqlc.UpsertDefaultControlPlanePolicyParams) (sqlc.ControlPlanePolicy, error) {
@@ -77,9 +101,10 @@ func fakeControlPlaneRunTx(q *transactionalControlPlaneQ) controlPlaneRunTxFunc 
 	return func(_ context.Context, fn func(ControlPlaneMutationTx) error) error {
 		silences := cloneControlPlaneSilences(q.silences)
 		audits := append([]sqlc.UpsertAuditOutboxParams(nil), q.audits...)
+		taskOutbox := append([]sqlc.UpsertTaskOutboxParams(nil), q.taskOutbox...)
 		policyMutated, alertMutated := q.policyMutated, q.alertMutated
 		if err := fn(q); err != nil {
-			q.silences, q.audits = silences, audits
+			q.silences, q.audits, q.taskOutbox = silences, audits, taskOutbox
 			q.policyMutated, q.alertMutated = policyMutated, alertMutated
 			return err
 		}
@@ -88,7 +113,7 @@ func fakeControlPlaneRunTx(q *transactionalControlPlaneQ) controlPlaneRunTxFunc 
 }
 
 func newTransactionalControlPlaneHandler(q *transactionalControlPlaneQ) *ControlPlaneHandler {
-	h := NewControlPlaneHandler(q, nil, nil, nil, nil, nil, nil, nil)
+	h := NewControlPlaneHandler(q, nil, nil, nil, nil, nil, nil)
 	h.SetRunTx(fakeControlPlaneRunTx(q))
 	return h
 }
@@ -140,6 +165,22 @@ func TestControlPlaneSilenceAuditOmitsReason(t *testing.T) {
 	auditJSON, _ := json.Marshal(q.audits[0])
 	if strings.Contains(string(auditJSON), secretReason) || q.audits[0].ResourceName != "delivery" {
 		t.Fatalf("silence audit disclosed reason: %s", auditJSON)
+	}
+}
+
+func TestControlPlaneAlertAndNotificationIntentRollbackTogether(t *testing.T) {
+	q := &transactionalControlPlaneQ{
+		silences: map[uuid.UUID]sqlc.ControlPlaneSilence{},
+		channels: []sqlc.NotificationChannel{{
+			ID: uuid.New(), ChannelType: "webhook", Enabled: true,
+			Configuration: []byte(`{"url":"https://alerts.example.test/hook"}`),
+		}},
+		taskOutboxErr: errors.New("task-outbox unavailable"),
+	}
+	h := newTransactionalControlPlaneHandler(q)
+	h.reconcileAlert(context.Background(), "delivery", "queue_depth", true, map[string]any{"queueDepth": 10}, nil)
+	if q.alertMutated || len(q.taskOutbox) != 0 {
+		t.Fatalf("alert/outbox escaped failed transaction: alert=%v outbox=%d", q.alertMutated, len(q.taskOutbox))
 	}
 }
 

@@ -155,18 +155,13 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 	})
 }
 
-// dispatchAlertNotifications enqueues a notification:send task for every
-// enabled channel bound to the rule. resolved=true marks it as a
-// recovery notification so the formatters render the resolved variant
-// (green swatch, PagerDuty event_action=resolve). Errors are logged but
-// not returned: a single channel/enqueue failure must not abort the
-// evaluation loop for the remaining rules.
-func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event sqlc.AlertEvent, subject, body string, resolved bool) {
-	channels, err := runtimeDependencies(ctx).Queries.ListChannelsForAlertRule(ctx, rule.ID)
+// dispatchAlertNotifications writes one durable task-outbox row per enabled
+// destination through q, which must be bound to the same transaction as the
+// alert event state transition. resolved=true renders the recovery variant.
+func dispatchAlertNotifications(ctx context.Context, q AlertNotificationMutationTx, rule sqlc.AlertRule, event sqlc.AlertEvent, subject, body string, resolved bool) error {
+	channels, err := q.ListChannelsForAlertRule(ctx, rule.ID)
 	if err != nil {
-		runtimeLogger(ctx).ErrorContext(ctx, "failed to list channels for alert rule",
-			"event_id", event.ID.String(), "rule_id", rule.ID.String(), "error", err)
-		return
+		return fmt.Errorf("list notification channels for event %s: %w", event.ID, err)
 	}
 	// Prefer the cluster the event actually fired on. Global rules have an
 	// empty rule.ClusterID, so without this the operator could not tell which
@@ -182,49 +177,48 @@ func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event 
 		if !channel.Enabled {
 			continue
 		}
-		task, err := NewNotificationSendTask(NotificationSendPayload{
+		recipients := notificationRecipients(channel)
+		if len(recipients) == 0 {
+			return fmt.Errorf("notification channel %s has no destination", channel.ID)
+		}
+		deliveryID := "alert-event:" + event.ID.String() + ":" + channel.ID.String()
+		if err := EnqueueNotificationOutbox(ctx, q, NotificationSendPayload{
 			Channel:    channel.ChannelType,
 			Subject:    subject,
 			Body:       body,
-			Recipients: notificationRecipients(channel),
+			Recipients: recipients,
 			// Plumb severity/cluster/rule through so the
 			// Slack / PagerDuty / Teams formatters can render
 			// colours + dedup keys + facts instead of just a
 			// dumb text dump.
-			Severity:  rule.Severity,
-			ClusterID: clusterStr,
-			RuleID:    rule.ID.String(),
-			Resolved:  resolved,
-		})
-		if err != nil || task == nil {
-			runtimeLogger(ctx).ErrorContext(ctx, "failed to build alert notification task",
-				"event_id", event.ID.String(),
-				"channel_id", channel.ID.String(),
-				"error", err)
-			continue
+			Severity:   rule.Severity,
+			ClusterID:  clusterStr,
+			RuleID:     rule.ID.String(),
+			ChannelID:  channel.ID.String(),
+			EventID:    event.ID.String(),
+			DeliveryID: deliveryID,
+			FiredAt:    event.FiredAt.UTC().Format(time.RFC3339),
+			Resolved:   resolved,
+		}, deliveryID); err != nil {
+			return fmt.Errorf("persist notification intent for event %s channel %s: %w", event.ID, channel.ID, err)
 		}
-		if runtimeDependencies(ctx).Enqueuer == nil {
-			runtimeLogger(ctx).WarnContext(ctx, "alert notification not delivered: enqueuer not configured",
-				"event_id", event.ID.String(),
-				"channel_id", channel.ID.String())
-			continue
-		}
-		if _, enqErr := runtimeDependencies(ctx).Enqueuer.Enqueue(task); enqErr != nil {
-			runtimeLogger(ctx).ErrorContext(ctx, "failed to enqueue alert notification",
-				"event_id", event.ID.String(),
-				"channel_id", channel.ID.String(),
-				"channel_type", channel.ChannelType,
-				"error", enqErr)
-			continue
-		}
-		runtimeLogger(ctx).InfoContext(ctx, "enqueued alert notification",
+		runtimeLogger(ctx).InfoContext(ctx, "persisted alert notification intent",
 			"event_id", event.ID.String(),
 			"channel_id", channel.ID.String(),
 			"channel_type", channel.ChannelType,
 			"severity", rule.Severity,
 			"resolved", resolved,
-			"recipient_count", len(notificationRecipients(channel)))
+			"recipient_count", len(recipients))
 	}
+	return nil
+}
+
+func runAlertNotificationTx(ctx context.Context, fn func(AlertNotificationMutationTx) error) error {
+	runTx := runtimeDependencies(ctx).AlertNotificationRunTx
+	if runTx == nil {
+		return fmt.Errorf("alert notification transaction runner is not configured")
+	}
+	return runTx(ctx, fn)
 }
 
 // alertEvalSweepPageSize bounds each ListClusters/ListAlertRules/ListAlertSilences
@@ -365,22 +359,22 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 	activeEvents := filterActiveEventsForCluster(existingEvents, targetClusterID)
 	if !eval.triggered {
 		for _, event := range activeEvents {
-			if err := runtimeDependencies(ctx).Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
-				ID:         event.ID,
-				Status:     "resolved",
-				ResolvedAt: pgTime(time.Now()),
-			}); err != nil {
+			err := runAlertNotificationTx(ctx, func(q AlertNotificationMutationTx) error {
+				if err := q.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
+					ID: event.ID, Status: "resolved", ResolvedAt: pgTime(time.Now()),
+				}); err != nil {
+					return err
+				}
+				if event.Status == "firing" || event.Status == "acknowledged" {
+					return dispatchAlertNotifications(ctx, q, rule, event, "Astronomer alert resolved: "+rule.Name,
+						fmt.Sprintf("Alert %q has resolved.", rule.Name), true)
+				}
+				return nil
+			})
+			if err != nil {
 				return err
 			}
 			publishAlertEventChanged(ctx, event.ClusterID, event.ID)
-			// Only "firing"/"acknowledged" events represent an
-			// alert that actually paged someone; "silenced" ones
-			// never notified on trigger, so we don't notify on
-			// resolve either.
-			if event.Status == "firing" || event.Status == "acknowledged" {
-				dispatchAlertNotifications(ctx, rule, event, "Astronomer alert resolved: "+rule.Name,
-					fmt.Sprintf("Alert %q has resolved.", rule.Name), true)
-			}
 		}
 		return nil
 	}
@@ -427,12 +421,16 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 		details, _ = json.Marshal(detailMap)
 		message = fmt.Sprintf("%s (silenced: %s)", message, silence.Reason)
 	}
-	event, err := runtimeDependencies(ctx).Queries.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
-		RuleID:    rule.ID,
-		ClusterID: targetClusterID,
-		Status:    status,
-		Message:   message,
-		Details:   details,
+	var event sqlc.AlertEvent
+	err := runAlertNotificationTx(ctx, func(q AlertNotificationMutationTx) error {
+		var createErr error
+		event, createErr = q.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
+			RuleID: rule.ID, ClusterID: targetClusterID, Status: status, Message: message, Details: details,
+		})
+		if createErr != nil || silence != nil {
+			return createErr
+		}
+		return dispatchAlertNotifications(ctx, q, rule, event, "Astronomer alert: "+rule.Name, message, false)
 	})
 	if err != nil {
 		return err
@@ -442,7 +440,6 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 		runtimeLogger(ctx).InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
 		return nil
 	}
-	dispatchAlertNotifications(ctx, rule, event, "Astronomer alert: "+rule.Name, message, false)
 	return nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 var (
@@ -86,6 +87,7 @@ func instrumentTask(job string, handler func(context.Context, *asynq.Task) error
 		logger := slog.Default()
 		if cid := observability.ExtractAsynqCorrelationID(task.Payload()); cid != "" {
 			logger = observability.WithCorrelationID(logger, cid)
+			ctx = reqctx.WithRequestID(ctx, cid, false)
 		}
 		logger = observability.WithLogIdentifiers(logger, observability.ExtractLogIdentifiers(task.Payload()))
 		// Rejoin the originating trace if traceparent rode the

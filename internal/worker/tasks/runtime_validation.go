@@ -32,6 +32,8 @@ func (runtime CoreRuntime) ValidateStandalone(features StandaloneRuntimeFeatures
 		{name: "queries", value: runtime.Deps.Queries},
 		{name: "leader", value: runtime.Deps.Leader},
 		{name: "enqueuer", value: runtime.Deps.Enqueuer},
+		{name: "notification_email", value: runtime.Deps.NotificationEmail},
+		{name: "alert_notification_tx", value: runtime.Deps.AlertNotificationRunTx},
 		{name: "catalog_decryptor", value: runtime.Deps.CatalogDecryptor},
 		{name: "monitoring_cipher", value: runtime.Deps.MonitoringCipher},
 	}
@@ -63,6 +65,8 @@ func ValidateStandaloneRuntime(features StandaloneRuntimeFeatures, coreRuntime C
 		{name: "runtime.queries", value: coreRuntime.Deps.Queries},
 		{name: "runtime.leader", value: coreRuntime.Deps.Leader},
 		{name: "runtime.enqueuer", value: coreRuntime.Deps.Enqueuer},
+		{name: "runtime.notification_email", value: coreRuntime.Deps.NotificationEmail},
+		{name: "runtime.alert_notification_tx", value: coreRuntime.Deps.AlertNotificationRunTx},
 		{name: "runtime.catalog_decryptor", value: coreRuntime.Deps.CatalogDecryptor},
 		{name: "runtime.monitoring_cipher", value: coreRuntime.Deps.MonitoringCipher},
 		{name: "apiserver_allowlist.queries", value: allowlistRuntime.Deps.Queries},

@@ -81,6 +81,10 @@ type Request struct {
 	Template string
 	Subject  string // optional override
 	Data     any
+	// DedupeKey identifies one durable notification delivery. It is optional
+	// for legacy callers; alert delivery sets it so an Asynq retry after the
+	// database commit cannot create a second effective email.
+	DedupeKey string
 	// UserID is the optional user_id link recorded on the row.
 	UserID uuid.UUID
 }
@@ -159,6 +163,7 @@ func (e *Enqueuer) Enqueue(ctx context.Context, req Request) (uuid.UUID, error) 
 		UserID:    pgtype.UUID{Bytes: req.UserID, Valid: req.UserID != uuid.Nil},
 		Status:    status,
 		LastError: lastError,
+		DedupeKey: pgtype.Text{String: req.DedupeKey, Valid: req.DedupeKey != ""},
 	}
 	inserted, err := e.q.InsertEmailMessage(ctx, params)
 	if err != nil {

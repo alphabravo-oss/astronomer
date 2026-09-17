@@ -4,21 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
-	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -41,6 +38,7 @@ type ControlPlaneQuerier interface {
 type ControlPlaneMutationTx interface {
 	ControlPlaneQuerier
 	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
 }
 
 type controlPlaneRunTxFunc func(context.Context, func(ControlPlaneMutationTx) error) error
@@ -53,8 +51,6 @@ type ControlPlaneHandler struct {
 	Backups    *BackupHandler
 	Logging    *LoggingHandler
 	Security   *SecurityHandler
-	queue      *asynq.Client
-	emails     EmailNotifier
 	runTx      controlPlaneRunTxFunc
 	mu         sync.Mutex
 	evaluateCh chan struct{}
@@ -67,13 +63,6 @@ func (h *ControlPlaneHandler) SetRunTx(runTx controlPlaneRunTxFunc) {
 }
 
 func (h *ControlPlaneHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
-
-// SetEmailNotifier attaches the SMTP email enqueuer used by the
-// alert-fired dispatch path to render and persist email_messages
-// rows for every email-class notification channel that fires. The
-// existing webhook/slack dispatch (via asynq notification:send) is
-// unaffected.
-func (h *ControlPlaneHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
 // openapi:request ControlPlanePolicyRequest
 type UpdateControlPlanePolicyRequest struct {
@@ -100,7 +89,7 @@ type CreateControlPlaneSilenceRequest struct {
 	Duration      string `json:"duration"`
 }
 
-func NewControlPlaneHandler(queries ControlPlaneQuerier, monitoring *MonitoringHandler, tools *ToolHandler, catalog *CatalogHandler, backups *BackupHandler, logging *LoggingHandler, security *SecurityHandler, queue *asynq.Client) *ControlPlaneHandler {
+func NewControlPlaneHandler(queries ControlPlaneQuerier, monitoring *MonitoringHandler, tools *ToolHandler, catalog *CatalogHandler, backups *BackupHandler, logging *LoggingHandler, security *SecurityHandler) *ControlPlaneHandler {
 	return &ControlPlaneHandler{
 		queries:    queries,
 		Monitoring: monitoring,
@@ -109,7 +98,6 @@ func NewControlPlaneHandler(queries ControlPlaneQuerier, monitoring *MonitoringH
 		Backups:    backups,
 		Logging:    logging,
 		Security:   security,
-		queue:      queue,
 		evaluateCh: make(chan struct{}, 1),
 	}
 }
@@ -482,15 +470,21 @@ func (h *ControlPlaneHandler) reconcileAlert(ctx context.Context, controller, co
 			return
 		}
 		raw, _ := json.Marshal(summary)
-		alert, err := h.queries.CreateControlPlaneAlert(ctx, sqlc.CreateControlPlaneAlertParams{
-			Controller:    controller,
-			ConditionType: condition,
-			Status:        "active",
-			Message:       controller + " controller degraded: " + condition,
-			Detail:        raw,
-		})
-		if err == nil && !isSilenced(controller, condition, silences) {
-			h.enqueueNotifications(ctx, alert)
+		if h.runTx == nil {
+			return
+		}
+		if txErr := h.runTx(ctx, func(q ControlPlaneMutationTx) error {
+			alert, createErr := q.CreateControlPlaneAlert(ctx, sqlc.CreateControlPlaneAlertParams{
+				Controller: controller, ConditionType: condition, Status: "active",
+				Message: controller + " controller degraded: " + condition, Detail: raw,
+			})
+			if createErr != nil || isSilenced(controller, condition, silences) {
+				return createErr
+			}
+			return enqueueControlPlaneNotifications(ctx, q, alert)
+		}); txErr != nil {
+			slog.ErrorContext(ctx, "control-plane alert transaction failed",
+				"controller", controller, "condition", condition, "error", txErr)
 		}
 		return
 	}
@@ -503,55 +497,32 @@ func (h *ControlPlaneHandler) reconcileAlert(ctx context.Context, controller, co
 	}
 }
 
-func (h *ControlPlaneHandler) enqueueNotifications(ctx context.Context, alert sqlc.ControlPlaneAlert) {
-	if h == nil || h.queue == nil || h.queries == nil {
-		return
-	}
-	channels, err := h.queries.ListEnabledNotificationChannels(ctx)
+func enqueueControlPlaneNotifications(ctx context.Context, q ControlPlaneMutationTx, alert sqlc.ControlPlaneAlert) error {
+	channels, err := q.ListEnabledNotificationChannels(ctx)
 	if err != nil {
-		return
+		return err
 	}
 	for _, channel := range channels {
 		recipients := controlPlaneChannelRecipients(channel)
 		if len(recipients) == 0 {
 			continue
 		}
-		// Email channels: enqueue through the SMTP path so the
-		// admin-email audit view sees them and the operator gets a
-		// real templated message. Falls back to the legacy
-		// notification:send asynq task when the email enqueuer
-		// isn't wired (test scaffolding, pre-encryption-key boot).
-		if strings.EqualFold(channel.ChannelType, "email") && h.emails != nil {
-			for _, recipient := range recipients {
-				h.emails.EnqueueAndLog(ctx, EmailNotifierRequest{
-					To:       recipient,
-					Template: "alert_fired",
-					Subject:  alert.Controller + " " + alert.ConditionType,
-					Data: map[string]any{
-						"AlertName":    alert.Controller + ":" + alert.ConditionType,
-						"Severity":     alert.Status,
-						"FiredAt":      alert.FiredAt.UTC().Format(time.RFC3339),
-						"Resource":     alert.Controller,
-						"Message":      alert.Message,
-						"DashboardURL": "",
-					},
-				})
-			}
-			continue
-		}
-		task, err := tasks.NewNotificationSendTask(tasks.NotificationSendPayload{
+		deliveryID := "control-plane-alert:" + alert.ID.String() + ":" + channel.ID.String()
+		if err := tasks.EnqueueNotificationOutbox(ctx, q, tasks.NotificationSendPayload{
 			Channel:    channel.ChannelType,
 			Subject:    "Control plane alert: " + alert.Controller + " " + alert.ConditionType,
 			Body:       alert.Message,
 			Recipients: recipients,
-		})
-		if err != nil {
-			continue
+			Severity:   alert.Status,
+			ChannelID:  channel.ID.String(),
+			EventID:    alert.ID.String(),
+			DeliveryID: deliveryID,
+			FiredAt:    alert.FiredAt.UTC().Format(time.RFC3339),
+		}, deliveryID); err != nil {
+			return err
 		}
-		payload := observability.EnrichTaskPayload(ctx, task.Payload(), reqctx.CorrelationID(ctx))
-		task = asynq.NewTask(task.Type(), payload)
-		_, _ = h.queue.Enqueue(task)
 	}
+	return nil
 }
 
 func controlPlaneChannelRecipients(channel sqlc.NotificationChannel) []string {

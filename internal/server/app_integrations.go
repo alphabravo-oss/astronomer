@@ -29,7 +29,6 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	requester := c.requester
 	rbacEngine := c.rbacEngine
 	rbacQuerier := c.rbacQuerier
-	controlPlaneHandler := c.controlPlaneHandler
 	authHandler := c.authHandler
 	totpHandler := c.totpHandler
 	ssoHandler := c.ssoHandler
@@ -100,7 +99,6 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 			totpHandler.SetEmailNotifier(notifier)
 		}
 		resourceHandler.SetEmailNotifier(notifier)
-		controlPlaneHandler.SetEmailNotifier(notifier)
 		authHandler.SetPasswordResetStore(queries)
 	}
 

@@ -1841,6 +1841,7 @@ type EmailMessage struct {
 	SentAt    pgtype.Timestamptz `json:"sent_at"`
 	CreatedAt time.Time          `json:"created_at"`
 	UpdatedAt time.Time          `json:"updated_at"`
+	DedupeKey pgtype.Text        `json:"dedupe_key"`
 }
 
 type ExternalPrincipal struct {

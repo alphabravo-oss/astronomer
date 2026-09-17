@@ -20,7 +20,6 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	bus := c.bus
 	hub := c.hub
 	requester := c.requester
-	queue := c.queue
 	rbacEngine := c.rbacEngine
 	rbacQuerier := c.rbacQuerier
 	monitoringHandler := c.monitoringHandler
@@ -137,7 +136,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	if issuer := auth.NewIngestIssuer(queries); issuer != nil {
 		hub.SetAuditIngestIssuer(issuer)
 	}
-	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
+	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler)
 	controlPlaneHandler.SetRunTx(sqlcMutationTxRunner[handler.ControlPlaneMutationTx](database))
 	c.clusterSnapshotsHandler = clusterSnapshotsHandler
 	c.controlPlaneSnapshotHandler = controlPlaneSnapshotHandler

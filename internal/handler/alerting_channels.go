@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
@@ -202,28 +201,23 @@ func (h *AlertingHandler) TestChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recipients := tasks.NotificationRecipients(channel)
-	if len(recipients) == 0 && strings.ToLower(channel.ChannelType) != "email" {
+	if len(recipients) == 0 {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.NoDestination, "Channel has no configured destination to test")
 		return
 	}
-	task, err := tasks.NewNotificationSendTask(tasks.NotificationSendPayload{
+	deliveryID := "alert-channel-test:" + id.String() + ":" + uuid.NewString()
+	payload := tasks.NotificationSendPayload{
 		Channel:    channel.ChannelType,
 		Subject:    "Astronomer test notification",
 		Body:       "This is a test notification from Astronomer for channel \"" + channel.Name + "\". If you can see this, delivery is working.",
 		Recipients: recipients,
 		Severity:   "info",
-	})
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.BuildError, "Failed to build test notification")
-		return
+		ChannelID:  channel.ID.String(),
+		DeliveryID: deliveryID,
 	}
-	dedupeKey := "alert_channel_test:" + id.String() + ":" + uuid.NewString()
 	_, err = executeMutation(r, h.runTx,
 		func(q AlertingMutationTx) (sqlc.NotificationChannel, error) {
-			_, enqueueErr := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{
-				DedupeKey: dedupeKey, QueueName: "critical", MaxRetry: 3,
-				Timeout: time.Minute, MaxDeliveryAttempts: 20,
-			})
+			enqueueErr := tasks.EnqueueNotificationOutbox(r.Context(), q, payload, deliveryID)
 			return channel, enqueueErr
 		},
 		func(row sqlc.NotificationChannel) mutationAuditEvent {

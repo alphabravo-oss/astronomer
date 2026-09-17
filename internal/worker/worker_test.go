@@ -300,6 +300,12 @@ type workerEmailSender struct{}
 
 func (workerEmailSender) Send(context.Context, email.Message) error { return nil }
 
+type workerNotificationEmail struct{}
+
+func (workerNotificationEmail) Enqueue(context.Context, email.Request) (uuid.UUID, error) {
+	return uuid.New(), nil
+}
+
 type workerEmailProvider struct{}
 
 func (workerEmailProvider) Provide(context.Context) (email.Settings, error) {
@@ -557,6 +563,8 @@ func testStandaloneRuntime() StandaloneRuntime {
 	return StandaloneRuntime{Features: tasks.StandaloneRuntimeFeatures{ManagementBackup: true}, Core: tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
 		Queries: workerRuntimeQueries{}, Leader: workerLeaderElector{}, Enqueuer: workerTaskEnqueuer{}, Log: testLogger(),
 		CatalogDecryptor: encryptor, MonitoringCipher: encryptor, ManagementBackup: workerManagementBackupExecutor{},
+		NotificationEmail:      workerNotificationEmail{},
+		AlertNotificationRunTx: func(context.Context, func(tasks.AlertNotificationMutationTx) error) error { return nil },
 	}}, Delivery: tasks.DeliveryRuntime{
 		SourceResolver:          stub,
 		RolloutReconciler:       stub,

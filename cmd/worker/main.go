@@ -68,6 +68,23 @@ func webhookHTTPClient(cfg *config.Config) *http.Client {
 	return httpclient.SafeClient(30 * time.Second)
 }
 
+func alertNotificationTxRunner(database *db.DB) tasks.AlertNotificationRunTx {
+	return func(ctx context.Context, fn func(tasks.AlertNotificationMutationTx) error) error {
+		tx, err := database.Pool().Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin alert notification transaction: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if err := fn(sqlc.New(tx)); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit alert notification transaction: %w", err)
+		}
+		return nil
+	}
+}
+
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -238,6 +255,7 @@ func main() {
 		CatalogDecryptor:              tasks.CatalogDecryptorFor(platformEncryptor),
 		MonitoringCipher:              tasks.MonitoringCipherFor(platformEncryptor),
 		ManagementBackup:              backupExecutor,
+		AlertNotificationRunTx:        alertNotificationTxRunner(database),
 	}}
 	allowlistQueries := sqlc.New(database.Pool())
 	var allowlistMaterializer allowlistproviders.CloudCredentialMaterializer
@@ -345,8 +363,18 @@ func main() {
 		q := sqlc.New(database.Pool())
 		provider := email.NewSQLSettingsProvider(q, platformEncryptor, 5*time.Second)
 		sender := email.NewSender(provider, platformEncryptor, log)
-		sender.SetBrandingProvider(email.NewPlatformConfigBrandingProvider(q, ""))
+		branding := email.NewPlatformConfigBrandingProvider(q, "")
+		sender.SetBrandingProvider(branding)
 		emailDispatchDeps = tasks.EmailDeps{Queries: q, Sender: sender, Provider: provider}
+		notificationEmails := email.NewEnqueuer(q, branding, log)
+		notificationEmails.SetOverrideLookup(func(ctx context.Context, key string) (email.Overrides, bool) {
+			resolved, resolveErr := notify.Resolve(ctx, q, key)
+			if resolveErr != nil || !resolved.HasOverride {
+				return email.Overrides{}, false
+			}
+			return email.Overrides{Subject: resolved.Subject, BodyText: resolved.Body}, true
+		})
+		coreRuntime.Deps.NotificationEmail = notificationEmails
 	} else {
 		log.Warn("email dispatch disabled: ASTRONOMER_ENCRYPTION_KEY is not set")
 	}

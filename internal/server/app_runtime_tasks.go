@@ -28,8 +28,10 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 		AuditLogRetentionMonths:       cfg.AuditLogRetentionMonths,
 		ClusterTombstoneRetentionDays: cfg.ClusterTombstoneRetentionDays,
 		ResourceDecryptor:             c.encryptor, Enqueuer: c.queue, Bus: c.bus,
-		CatalogDecryptor: tasks.CatalogDecryptorFor(c.encryptor),
-		MonitoringCipher: tasks.MonitoringCipherFor(c.encryptor),
+		NotificationEmail:      c.emailEnqueuer,
+		AlertNotificationRunTx: sqlcMutationTxRunner[tasks.AlertNotificationMutationTx](c.database),
+		CatalogDecryptor:       tasks.CatalogDecryptorFor(c.encryptor),
+		MonitoringCipher:       tasks.MonitoringCipherFor(c.encryptor),
 	}}
 	clusterDecommission := tasks.ClusterDecommissionRuntime{Deps: tasks.ClusterDecommissionDeps{
 		Queries: c.queries, Tunnel: c.hub, RBACCache: c.rbacQuerier.Cache(),
