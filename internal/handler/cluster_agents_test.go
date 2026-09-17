@@ -25,16 +25,17 @@ import (
 
 type fakeClusterAgentQuerier struct {
 	fakeOperationIdempotencyStore
-	clusters   []sqlc.Cluster
-	active     []sqlc.AgentConnection
-	history    map[uuid.UUID][]sqlc.AgentConnection
-	conditions map[uuid.UUID][]sqlc.ClusterCondition
-	operations map[uuid.UUID][]sqlc.AgentLifecycleOperation
-	created    []sqlc.AgentLifecycleOperation
-	idempotent []sqlc.CreateAgentLifecycleOperationIdempotentParams
-	users      map[uuid.UUID]sqlc.User
-	audits     []sqlc.UpsertAuditOutboxParams
-	outboxErr  error
+	clusters    []sqlc.Cluster
+	active      []sqlc.AgentConnection
+	history     map[uuid.UUID][]sqlc.AgentConnection
+	conditions  map[uuid.UUID][]sqlc.ClusterCondition
+	operations  map[uuid.UUID][]sqlc.AgentLifecycleOperation
+	created     []sqlc.AgentLifecycleOperation
+	idempotent  []sqlc.CreateAgentLifecycleOperationIdempotentParams
+	users       map[uuid.UUID]sqlc.User
+	audits      []sqlc.UpsertAuditOutboxParams
+	outboxErr   error
+	cursorCalls []sqlc.ListClustersAfterParams
 }
 
 func (f *fakeClusterAgentQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -72,6 +73,25 @@ func (f *fakeClusterAgentQuerier) GetClusterByID(_ context.Context, id uuid.UUID
 
 func (f *fakeClusterAgentQuerier) ListClusters(context.Context, sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
 	return f.clusters, nil
+}
+
+func (f *fakeClusterAgentQuerier) ListClustersAfter(_ context.Context, arg sqlc.ListClustersAfterParams) ([]sqlc.Cluster, error) {
+	f.cursorCalls = append(f.cursorCalls, arg)
+	start := 0
+	if arg.HasCursor {
+		start = len(f.clusters)
+		for i, cluster := range f.clusters {
+			if cluster.CreatedAt.Before(arg.AfterCreatedAt) || (cluster.CreatedAt.Equal(arg.AfterCreatedAt) && cluster.ID.String() < arg.AfterID.String()) {
+				start = i
+				break
+			}
+		}
+	}
+	end := start + int(arg.QueryLimit)
+	if end > len(f.clusters) {
+		end = len(f.clusters)
+	}
+	return f.clusters[start:end], nil
 }
 
 func (f *fakeClusterAgentQuerier) ListConnectionsByCluster(_ context.Context, arg sqlc.ListConnectionsByClusterParams) ([]sqlc.AgentConnection, error) {
@@ -299,6 +319,36 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 	}
 	if got.Summary.Compatibility["supported"] != 1 || got.Summary.Compatibility["deprecated"] != 1 || got.Summary.Compatibility["blocked"] != 1 {
 		t.Fatalf("compatibility summary = %+v, want supported=1 deprecated=1 blocked=1", got.Summary.Compatibility)
+	}
+}
+
+func TestClusterAgentListUsesCursorContinuation(t *testing.T) {
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	q := &fakeClusterAgentQuerier{clusters: []sqlc.Cluster{
+		{ID: uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff"), Name: "one", CreatedAt: now},
+		{ID: uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), Name: "two", CreatedAt: now.Add(-time.Second)},
+		{ID: uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd"), Name: "three", CreatedAt: now.Add(-2 * time.Second)},
+	}}
+	h := NewClusterAgentHandler(q)
+	first := httptest.NewRecorder()
+	h.List(first, httptest.NewRequest(http.MethodGet, "/api/v1/cluster-agents/?limit=2", nil))
+	if first.Code != http.StatusOK {
+		t.Fatalf("first page status=%d body=%s", first.Code, first.Body.String())
+	}
+	var page clusterAgentResponse
+	if err := json.Unmarshal(first.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Data) != 2 || page.Pagination.NextCursor == nil || len(q.cursorCalls) != 1 || q.cursorCalls[0].QueryLimit != 3 {
+		t.Fatalf("page=%+v cursor calls=%+v", page.Pagination, q.cursorCalls)
+	}
+	second := httptest.NewRecorder()
+	h.List(second, httptest.NewRequest(http.MethodGet, "/api/v1/cluster-agents/?limit=2&cursor="+*page.Pagination.NextCursor, nil))
+	if second.Code != http.StatusOK {
+		t.Fatalf("second page status=%d body=%s", second.Code, second.Body.String())
+	}
+	if len(q.cursorCalls) != 2 || !q.cursorCalls[1].HasCursor {
+		t.Fatalf("second cursor call=%+v", q.cursorCalls)
 	}
 }
 

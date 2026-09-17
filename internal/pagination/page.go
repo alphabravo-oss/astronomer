@@ -9,11 +9,12 @@ import (
 // Metadata describes the actual authorized page. Total is omitted unless an
 // exact filtered count is known; a page length is never a substitute for it.
 type Metadata struct {
-	Total      *int64 `json:"total,omitempty"`
-	Limit      int    `json:"limit"`
-	Offset     int    `json:"offset"`
-	HasMore    bool   `json:"has_more"`
-	NextOffset *int   `json:"next_offset"`
+	Total      *int64  `json:"total,omitempty"`
+	Limit      int     `json:"limit"`
+	Offset     int     `json:"offset"`
+	HasMore    bool    `json:"has_more"`
+	NextOffset *int    `json:"next_offset"`
+	NextCursor *string `json:"next_cursor,omitempty"`
 }
 
 type Response[T any] struct {

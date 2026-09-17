@@ -4146,6 +4146,7 @@ export interface OpenAPIComponents {
           "offset": number;
           "has_more": boolean;
           "next_offset": number | null;
+          "next_cursor"?: string | null;
         };
     PlatformDefaultClusterTemplateRequest: {
           "template_id"?: string | null;
@@ -9916,6 +9917,7 @@ export interface OpenAPIOperations {
         "query"?: {
           "limit"?: number;
           "offset"?: number;
+          "cursor"?: string;
         };
       };
     response: OpenAPIComponents['schemas']['ClusterAgentResponse'];
@@ -10045,6 +10047,7 @@ export interface OpenAPIOperations {
           "provider"?: string;
           "limit"?: number;
           "offset"?: number;
+          "cursor"?: string;
         };
       };
     response: OpenAPIComponents['schemas']['PaginatedClusters'];

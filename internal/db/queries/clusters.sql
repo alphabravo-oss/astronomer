@@ -62,7 +62,17 @@ SELECT * FROM clusters WHERE name = $1 AND decommissioned_at IS NULL;
 -- name: ListClusters :many
 -- Excludes tombstoned (sprint 038) rows. Decommissioned clusters keep
 -- their row in the DB for forensics but never appear in the UI list.
-SELECT * FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+SELECT * FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2;
+
+-- name: ListClustersAfter :many
+SELECT * FROM clusters
+WHERE decommissioned_at IS NULL
+  AND (
+    NOT sqlc.arg(has_cursor)::boolean
+    OR (created_at, id) < (sqlc.arg(after_created_at)::timestamptz, sqlc.arg(after_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
 
 -- name: ListClusterRuntimeTargets :many
 -- Narrow projection for periodic server-side metrics/status/probe sweeps. These
@@ -99,6 +109,24 @@ WHERE decommissioned_at IS NULL
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
+-- name: ListClustersFilteredAfter :many
+SELECT * FROM clusters
+WHERE decommissioned_at IS NULL
+  AND (sqlc.arg(filter_status)::text = '' OR status = sqlc.arg(filter_status))
+  AND (sqlc.arg(filter_provider)::text = '' OR provider = sqlc.arg(filter_provider))
+  AND (sqlc.arg(filter_environment)::text = '' OR environment = sqlc.arg(filter_environment))
+  AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+  )
+  AND (
+    NOT sqlc.arg(has_cursor)::boolean
+    OR (created_at, id) < (sqlc.arg(after_created_at)::timestamptz, sqlc.arg(after_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
+
 -- name: CountClustersFiltered :one
 SELECT count(*) FROM clusters
 WHERE decommissioned_at IS NULL
@@ -120,8 +148,19 @@ WHERE decommissioned_at IS NULL
 SELECT * FROM clusters
 WHERE decommissioned_at IS NULL
   AND id = ANY(sqlc.arg(cluster_ids)::uuid[])
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: ListClustersForScopesAfter :many
+SELECT * FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY(sqlc.arg(cluster_ids)::uuid[])
+  AND (
+    NOT sqlc.arg(has_cursor)::boolean
+    OR (created_at, id) < (sqlc.arg(after_created_at)::timestamptz, sqlc.arg(after_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
 
 -- name: ListClustersFilteredForScopes :many
 SELECT * FROM clusters
@@ -137,6 +176,25 @@ WHERE decommissioned_at IS NULL
   )
 ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: ListClustersFilteredForScopesAfter :many
+SELECT * FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY(sqlc.arg(cluster_ids)::uuid[])
+  AND (sqlc.arg(filter_status)::text = '' OR status = sqlc.arg(filter_status))
+  AND (sqlc.arg(filter_provider)::text = '' OR provider = sqlc.arg(filter_provider))
+  AND (sqlc.arg(filter_environment)::text = '' OR environment = sqlc.arg(filter_environment))
+  AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+  )
+  AND (
+    NOT sqlc.arg(has_cursor)::boolean
+    OR (created_at, id) < (sqlc.arg(after_created_at)::timestamptz, sqlc.arg(after_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit);
 
 -- name: CountClustersFilteredForScopes :one
 SELECT count(*) FROM clusters
@@ -160,7 +218,7 @@ WHERE decommissioned_at IS NULL
   AND id = ANY(sqlc.arg(cluster_ids)::uuid[]);
 
 -- name: ListClustersByStatus :many
-SELECT * FROM clusters WHERE status = sqlc.arg(status) AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+SELECT * FROM clusters WHERE status = sqlc.arg(status) AND decommissioned_at IS NULL ORDER BY created_at DESC, id DESC LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CreateCluster :one
 INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, api_server_url, ca_certificate, created_by_id, badge_text, badge_color, agent_overrides)

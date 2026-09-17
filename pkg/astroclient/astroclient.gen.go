@@ -8446,11 +8446,12 @@ type PaginatedClusters struct {
 
 // PaginationMetadata defines model for PaginationMetadata.
 type PaginationMetadata struct {
-	HasMore    bool   `json:"has_more"`
-	Limit      int    `json:"limit"`
-	NextOffset *int   `json:"next_offset"`
-	Offset     int    `json:"offset"`
-	Total      *int64 `json:"total,omitempty"`
+	HasMore    bool    `json:"has_more"`
+	Limit      int     `json:"limit"`
+	NextCursor *string `json:"next_cursor"`
+	NextOffset *int    `json:"next_offset"`
+	Offset     int     `json:"offset"`
+	Total      *int64  `json:"total,omitempty"`
 }
 
 // PlatformDefaultClusterTemplateRequest defines model for PlatformDefaultClusterTemplateRequest.
@@ -11694,6 +11695,9 @@ type GetChartsByChartIdRatingsParams struct {
 type GetClusterAgentsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Cursor Opaque continuation bound to the stable sort contract.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // GetClusterAgentsByClusterIdOperationsParams defines parameters for GetClusterAgentsByClusterIdOperations.
@@ -11732,6 +11736,9 @@ type GetClustersParams struct {
 	Provider    *string `form:"provider,omitempty" json:"provider,omitempty"`
 	Limit       *int    `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset      *int    `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Cursor Opaque continuation bound to filters and caller authorization scope.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // PostClustersByClusterIdApiserverAllowlistReconcileParams defines parameters for PostClustersByClusterIdApiserverAllowlistReconcile.
@@ -48476,6 +48483,22 @@ func NewGetClusterAgentsRequest(server string, params *GetClusterAgentsParams) (
 
 		}
 
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -49556,6 +49579,22 @@ func NewGetClustersRequest(server string, params *GetClustersParams) (*http.Requ
 		if params.Offset != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err

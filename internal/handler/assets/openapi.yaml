@@ -9317,6 +9317,7 @@ components:
         offset: {type: integer, minimum: 0}
         has_more: {type: boolean}
         next_offset: {type: integer, minimum: 0, nullable: true}
+        next_cursor: {type: string, maxLength: 1024, nullable: true}
     DeliverySourceVerification:
       type: object
       additionalProperties: false
@@ -19733,9 +19734,15 @@ paths:
             maximum: 500
         - name: offset
           in: query
+          deprecated: true
           schema:
             type: integer
             default: 0
+            maximum: 10000
+        - name: cursor
+          in: query
+          description: Opaque continuation bound to the stable sort contract.
+          schema: {type: string, maxLength: 1024}
       responses:
         '200':
           description: Cluster-agent health summary and rows
@@ -20024,7 +20031,9 @@ paths:
       summary: List clusters
       description: |
         Returns all clusters the caller can read, excluding tombstoned
-        rows (decommissioned_at IS NOT NULL).
+        rows (decommissioned_at IS NOT NULL). The default continuation is an
+        opaque keyset cursor bound to the caller's authorization scope and
+        filters. The bounded offset parameter remains for compatibility.
       parameters:
         - name: search
           in: query
@@ -20046,7 +20055,12 @@ paths:
           schema: {type: integer, minimum: 1, maximum: 200, default: 20}
         - name: offset
           in: query
-          schema: {type: integer, minimum: 0, default: 0}
+          deprecated: true
+          schema: {type: integer, minimum: 0, maximum: 10000, default: 0}
+        - name: cursor
+          in: query
+          description: Opaque continuation bound to filters and caller authorization scope.
+          schema: {type: string, maxLength: 1024}
       responses:
         '200':
           description: List of clusters

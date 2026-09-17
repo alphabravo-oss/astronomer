@@ -40,6 +40,13 @@ type clusterFilteredQuerier interface {
 	CountClustersFilteredForScopes(ctx context.Context, arg sqlc.CountClustersFilteredForScopesParams) (int64, error)
 }
 
+type clusterCursorQuerier interface {
+	ListClustersAfter(ctx context.Context, arg sqlc.ListClustersAfterParams) ([]sqlc.Cluster, error)
+	ListClustersFilteredAfter(ctx context.Context, arg sqlc.ListClustersFilteredAfterParams) ([]sqlc.Cluster, error)
+	ListClustersForScopesAfter(ctx context.Context, arg sqlc.ListClustersForScopesAfterParams) ([]sqlc.Cluster, error)
+	ListClustersFilteredForScopesAfter(ctx context.Context, arg sqlc.ListClustersFilteredForScopesAfterParams) ([]sqlc.Cluster, error)
+}
+
 type clusterLivenessQuerier interface {
 	GetClusterLiveness(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterLiveness, error)
 	ListClusterLivenessForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.ClusterLiveness, error)
@@ -157,6 +164,42 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cursorValue, cursorProvided := r.URL.Query()["cursor"]
+	_, offsetProvided := r.URL.Query()["offset"]
+	if cursorProvided && offsetProvided {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor and offset cannot be combined")
+		return
+	}
+	cursorMode := !offsetProvided
+	cursorBinding := paging.Binding(
+		"clusters:v1", "created_at:desc,id:desc", filterStatus, filterProvider,
+		filterEnvironment, filterSearch, fmt.Sprintf("all=%t", all), paging.SortedUUIDs(clusterIDs),
+	)
+	var cursor paging.Cursor
+	if cursorProvided {
+		if len(cursorValue) != 1 {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor must be one opaque value")
+			return
+		}
+		cursor, err = paging.DecodeCursor(cursorValue[0], cursorBinding)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pagination cursor")
+			return
+		}
+	}
+	cursorQueries, cursorCapable := h.queries.(clusterCursorQuerier)
+	if cursorMode && !cursorCapable {
+		if cursorProvided {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cursor cluster listing is not available")
+			return
+		}
+		// Compatibility for injected stores that predate cursor support. The
+		// production sqlc store always implements clusterCursorQuerier.
+		cursorMode = false
+	}
+	cursorLimit := limit + 1
+	hasCursor := cursorProvided
+
 	var clusters []sqlc.Cluster
 	var total int64
 	if all && hasFilters {
@@ -165,11 +208,19 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Filtered cluster listing is not available")
 			return
 		}
-		clusters, err = filtered.ListClustersFiltered(r.Context(), sqlc.ListClustersFilteredParams{
-			FilterStatus: filterStatus, FilterProvider: filterProvider,
-			FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
-			QueryLimit: limit, QueryOffset: offset,
-		})
+		if cursorMode {
+			clusters, err = cursorQueries.ListClustersFilteredAfter(r.Context(), sqlc.ListClustersFilteredAfterParams{
+				FilterStatus: filterStatus, FilterProvider: filterProvider,
+				FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
+				HasCursor: hasCursor, AfterCreatedAt: cursor.Time, AfterID: cursor.ID, QueryLimit: cursorLimit,
+			})
+		} else {
+			clusters, err = filtered.ListClustersFiltered(r.Context(), sqlc.ListClustersFilteredParams{
+				FilterStatus: filterStatus, FilterProvider: filterProvider,
+				FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
+				QueryLimit: limit, QueryOffset: offset,
+			})
+		}
 		if err == nil {
 			total, err = filtered.CountClustersFiltered(r.Context(), sqlc.CountClustersFilteredParams{
 				FilterStatus: filterStatus, FilterProvider: filterProvider,
@@ -181,10 +232,13 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if all {
-		clusters, err = h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{
-			Limit:  limit,
-			Offset: offset,
-		})
+		if cursorMode {
+			clusters, err = cursorQueries.ListClustersAfter(r.Context(), sqlc.ListClustersAfterParams{
+				HasCursor: hasCursor, AfterCreatedAt: cursor.Time, AfterID: cursor.ID, QueryLimit: cursorLimit,
+			})
+		} else {
+			clusters, err = h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: limit, Offset: offset})
+		}
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
 			return
@@ -200,11 +254,19 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Scoped filtered cluster listing is not available")
 			return
 		}
-		clusters, err = filtered.ListClustersFilteredForScopes(r.Context(), sqlc.ListClustersFilteredForScopesParams{
-			ClusterIds: clusterIDs, FilterStatus: filterStatus, FilterProvider: filterProvider,
-			FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
-			QueryLimit: limit, QueryOffset: offset,
-		})
+		if cursorMode {
+			clusters, err = cursorQueries.ListClustersFilteredForScopesAfter(r.Context(), sqlc.ListClustersFilteredForScopesAfterParams{
+				ClusterIds: clusterIDs, FilterStatus: filterStatus, FilterProvider: filterProvider,
+				FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
+				HasCursor: hasCursor, AfterCreatedAt: cursor.Time, AfterID: cursor.ID, QueryLimit: cursorLimit,
+			})
+		} else {
+			clusters, err = filtered.ListClustersFilteredForScopes(r.Context(), sqlc.ListClustersFilteredForScopesParams{
+				ClusterIds: clusterIDs, FilterStatus: filterStatus, FilterProvider: filterProvider,
+				FilterEnvironment: filterEnvironment, FilterSearch: filterSearch,
+				QueryLimit: limit, QueryOffset: offset,
+			})
+		}
 		if err == nil {
 			total, err = filtered.CountClustersFilteredForScopes(r.Context(), sqlc.CountClustersFilteredForScopesParams{
 				ClusterIds: clusterIDs, FilterStatus: filterStatus, FilterProvider: filterProvider,
@@ -223,11 +285,16 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Scoped cluster listing is not available")
 			return
 		}
-		clusters, err = scoped.ListClustersForScopes(r.Context(), sqlc.ListClustersForScopesParams{
-			ClusterIds:  clusterIDs,
-			QueryLimit:  limit,
-			QueryOffset: offset,
-		})
+		if cursorMode {
+			clusters, err = cursorQueries.ListClustersForScopesAfter(r.Context(), sqlc.ListClustersForScopesAfterParams{
+				ClusterIds: clusterIDs, HasCursor: hasCursor,
+				AfterCreatedAt: cursor.Time, AfterID: cursor.ID, QueryLimit: cursorLimit,
+			})
+		} else {
+			clusters, err = scoped.ListClustersForScopes(r.Context(), sqlc.ListClustersForScopesParams{
+				ClusterIds: clusterIDs, QueryLimit: limit, QueryOffset: offset,
+			})
+		}
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
 			return
@@ -238,6 +305,21 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
 			return
+		}
+	}
+
+	nextCursor := ""
+	seen := offsetInt
+	if cursorMode {
+		seen = cursor.Seen
+		if len(clusters) > limitInt {
+			clusters = clusters[:limitInt]
+			last := clusters[len(clusters)-1]
+			nextCursor, err = paging.EncodeCursor(paging.NewCursor(last.CreatedAt, last.ID, cursorBinding, seen+len(clusters)))
+			if err != nil {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode pagination cursor")
+				return
+			}
 		}
 	}
 
@@ -275,7 +357,11 @@ func (h *ClusterHandler) List(w http.ResponseWriter, r *http.Request) {
 		resp.Decommissioning = decommissioning[c.ID]
 		enriched = append(enriched, resp)
 	}
-	paging.Write(w, enriched, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(enriched)))
+	metadata := paging.Exact(total, limitInt, offsetInt, len(enriched))
+	if cursorMode {
+		metadata = paging.CursorPage(total, limitInt, seen, len(enriched), nextCursor)
+	}
+	paging.Write(w, enriched, metadata)
 }
 
 // inFlightDecommissionSet returns which of the given cluster IDs have a

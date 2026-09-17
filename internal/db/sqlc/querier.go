@@ -1424,6 +1424,7 @@ type Querier interface {
 	// Excludes tombstoned (sprint 038) rows. Decommissioned clusters keep
 	// their row in the DB for forensics but never appear in the UI list.
 	ListClusters(ctx context.Context, arg ListClustersParams) ([]Cluster, error)
+	ListClustersAfter(ctx context.Context, arg ListClustersAfterParams) ([]Cluster, error)
 	// Cluster lookups (alerting)
 	// Bulk cluster lookup so the rule list can resolve every cluster name for
 	// a page in one query instead of one GetClusterByID per rule.
@@ -1439,13 +1440,16 @@ type Querier interface {
 	// platform-wide callers; scoped callers use the predicate-identical scoped
 	// variant below so authorization is applied before pagination.
 	ListClustersFiltered(ctx context.Context, arg ListClustersFilteredParams) ([]Cluster, error)
+	ListClustersFilteredAfter(ctx context.Context, arg ListClustersFilteredAfterParams) ([]Cluster, error)
 	ListClustersFilteredForScopes(ctx context.Context, arg ListClustersFilteredForScopesParams) ([]Cluster, error)
+	ListClustersFilteredForScopesAfter(ctx context.Context, arg ListClustersFilteredForScopesAfterParams) ([]Cluster, error)
 	// Scope-filtered ListClusters: only the clusters the caller's cluster-scoped
 	// bindings name (see rbac.AuthorizedScopeIDs). Callers holding a platform-wide
 	// grant use plain ListClusters instead — this variant is never reached for
 	// them. Same tombstone predicate and ordering as ListClusters so a filtered
 	// page differs only in which rows it may contain.
 	ListClustersForScopes(ctx context.Context, arg ListClustersForScopesParams) ([]Cluster, error)
+	ListClustersForScopesAfter(ctx context.Context, arg ListClustersForScopesAfterParams) ([]Cluster, error)
 	// PERF-03: callers that only need a page should clamp after fetch (handler
 	// ListClusters uses queryLimit). Delete uses the full result for audit.
 	// A hard safety LIMIT keeps a pathological tree from materializing unbounded

@@ -40,8 +40,9 @@ func TestNoUnclampedLimitParsing(t *testing.T) {
 }
 
 // TestNoRawOffsetParsing keeps every SQL-backed list on queryOffset. Direct
-// queryInt parsing followed by int32 conversion can turn an oversized client
-// value into a negative PostgreSQL OFFSET and a 500 response.
+// queryInt parsing can either overflow an int32 conversion or permit a
+// pathological deep scan. queryOffset applies the bounded compatibility cap
+// before any value reaches PostgreSQL.
 func TestNoRawOffsetParsing(t *testing.T) {
 	raw := regexp.MustCompile(`queryInt\(r,\s*"offset"`)
 
@@ -59,7 +60,7 @@ func TestNoRawOffsetParsing(t *testing.T) {
 			t.Fatal(err)
 		}
 		if raw.Match(b) {
-			t.Errorf("%s parses ?offset with raw queryInt; use queryOffset so values remain in the non-negative int32 range", name)
+			t.Errorf("%s parses ?offset with raw queryInt; use queryOffset so values remain bounded before SQL", name)
 		}
 	}
 }

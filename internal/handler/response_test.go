@@ -181,9 +181,10 @@ func TestQueryOffset(t *testing.T) {
 		{name: "valid", query: "?offset=42", want: 42},
 		{name: "negative", query: "?offset=-1", want: 0},
 		{name: "invalid", query: "?offset=nope", want: 0},
-		{name: "int32 max", query: "?offset=2147483647", want: 2147483647},
-		{name: "oversized", query: "?offset=9223372036854775807", want: 2147483647},
-		{name: "beyond uint64", query: "?offset=999999999999999999999999999", want: 2147483647},
+		{name: "compatibility max", query: "?offset=10000", want: 10000},
+		{name: "deep", query: "?offset=2147483647", want: 10000},
+		{name: "oversized", query: "?offset=9223372036854775807", want: 10000},
+		{name: "beyond uint64", query: "?offset=999999999999999999999999999", want: 10000},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

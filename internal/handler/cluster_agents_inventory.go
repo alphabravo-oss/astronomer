@@ -18,13 +18,17 @@ import (
 	"github.com/google/uuid"
 )
 
+type clusterAgentCursorQuerier interface {
+	ListClustersAfter(ctx context.Context, arg sqlc.ListClustersAfterParams) ([]sqlc.Cluster, error)
+}
+
 func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ClusterAgentUnavailable, "Cluster agent inventory is not configured")
 		return
 	}
 
-	limit := int32(queryLimit(r, 100))
+	limit := int32(queryLimitMax(r, 100, 500))
 	offset := int32(queryOffset(r))
 	if limit <= 0 {
 		limit = 100
@@ -32,16 +36,66 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 	if limit > 500 {
 		limit = 500
 	}
+	cursorValues, cursorProvided := r.URL.Query()["cursor"]
+	_, offsetProvided := r.URL.Query()["offset"]
+	if cursorProvided && offsetProvided {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor and offset cannot be combined")
+		return
+	}
+	cursorMode := !offsetProvided
+	cursorBinding := paging.Binding("cluster-agents:v1", "created_at:desc,id:desc")
+	var cursor paging.Cursor
+	var err error
+	if cursorProvided {
+		if len(cursorValues) != 1 {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "cursor must be one opaque value")
+			return
+		}
+		cursor, err = paging.DecodeCursor(cursorValues[0], cursorBinding)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pagination cursor")
+			return
+		}
+	}
+	cursorQueries, cursorCapable := h.queries.(clusterAgentCursorQuerier)
+	if cursorMode && !cursorCapable {
+		if cursorProvided {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StoreUnavailable, "Cursor cluster-agent listing is not available")
+			return
+		}
+		cursorMode = false
+	}
 
 	total, err := h.queries.CountClusters(r.Context())
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count clusters")
 		return
 	}
-	clusters, err := h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: limit, Offset: offset})
+	var clusters []sqlc.Cluster
+	if cursorMode {
+		clusters, err = cursorQueries.ListClustersAfter(r.Context(), sqlc.ListClustersAfterParams{
+			HasCursor: cursorProvided, AfterCreatedAt: cursor.Time, AfterID: cursor.ID, QueryLimit: limit + 1,
+		})
+	} else {
+		clusters, err = h.queries.ListClusters(r.Context(), sqlc.ListClustersParams{Limit: limit, Offset: offset})
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list clusters")
 		return
+	}
+	nextCursor := ""
+	seen := int(offset)
+	if cursorMode {
+		seen = cursor.Seen
+		if len(clusters) > int(limit) {
+			clusters = clusters[:limit]
+			last := clusters[len(clusters)-1]
+			nextCursor, err = paging.EncodeCursor(paging.NewCursor(last.CreatedAt, last.ID, cursorBinding, seen+len(clusters)))
+			if err != nil {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode pagination cursor")
+				return
+			}
+		}
 	}
 	// Load the most recent connection per cluster for the page in a single
 	// DISTINCT ON query rather than one fallback query per disconnected
@@ -98,8 +152,12 @@ func (h *ClusterAgentHandler) List(w http.ResponseWriter, r *http.Request) {
 		summary.Compatibility[item.CompatibilityStatus]++
 	}
 
+	metadata := paging.Exact(total, int(limit), int(offset), len(items))
+	if cursorMode {
+		metadata = paging.CursorPage(total, int(limit), seen, len(items), nextCursor)
+	}
 	RespondJSONUnwrapped(w, http.StatusOK, clusterAgentResponse{
-		Response: paging.Response[clusterAgentItem]{Data: items, Pagination: paging.Exact(total, int(limit), int(offset), len(items))},
+		Response: paging.Response[clusterAgentItem]{Data: items, Pagination: metadata},
 		Summary:  summary,
 	})
 }

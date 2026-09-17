@@ -96,12 +96,14 @@ func queryInt(r *http.Request, key string, defaultVal int) int {
 	return v
 }
 
-const maxPaginationOffset = uint64(1<<31 - 1)
+// maxPaginationOffset is the compatibility ceiling for legacy offset clients.
+// Fleet endpoints use keyset cursors by default; no request may make
+// PostgreSQL discard an unbounded number of rows.
+const maxPaginationOffset = uint64(10_000)
 
 // queryOffset parses the shared "offset" query parameter into the non-negative
-// int32 range accepted by sqlc-generated pagination queries. Invalid and
-// negative values start at the first page; oversized values clamp instead of
-// wrapping through an int32 conversion into a negative PostgreSQL OFFSET.
+// bounded range accepted by legacy sqlc pagination queries. Invalid and
+// negative values start at the first page; oversized values clamp before SQL.
 func queryOffset(r *http.Request) int {
 	s := r.URL.Query().Get("offset")
 	if s == "" {
