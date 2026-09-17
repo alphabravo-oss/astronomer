@@ -1250,8 +1250,10 @@ func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerF
 		}
 
 		encKeys := 0
+		encKeyInventory := []iauth.EncryptionKeyInfo{}
 		if deps.CoreAuth.Encryptor != nil {
 			encKeys = deps.CoreAuth.Encryptor.KeyCount()
+			encKeyInventory = deps.CoreAuth.Encryptor.KeyInventory()
 		}
 		jwtKeys := 0
 		if deps.CoreAuth.JWT != nil {
@@ -1274,10 +1276,11 @@ func keyStatusHandler(cfg *config.Config, deps RouterDependencies) http.HandlerF
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"encryption_keys":   encKeys,
-			"jwt_keys":          jwtKeys,
-			"insecure_dev_keys": insecureDevKeys,
-			"as_of":             time.Now().UTC().Format(time.RFC3339),
+			"encryption_keys":          encKeys,
+			"encryption_key_inventory": encKeyInventory,
+			"jwt_keys":                 jwtKeys,
+			"insecure_dev_keys":        insecureDevKeys,
+			"as_of":                    time.Now().UTC().Format(time.RFC3339),
 		})
 	}
 }

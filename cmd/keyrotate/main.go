@@ -41,7 +41,7 @@ import (
 type stats struct {
 	scanned int
 	rewrote int
-	skipped int // already under primary key — Fernet doesn't expose key id, so we detect by attempting decrypt and re-encrypting unconditionally; "skipped" is reserved for rows where decryption failed entirely (alarming).
+	skipped int // already a v1 envelope under the current primary key
 	failed  int
 }
 
@@ -86,7 +86,7 @@ func main() {
 		log.Error("invalid primary encryption key")
 		os.Exit(2)
 	}
-	log.Info("keyrotate starting", "keys_loaded", enc.KeyCount(), "dry_run", *dryRun)
+	log.Info("keyrotate starting", "keys_loaded", enc.KeyCount(), "primary_key_id", enc.PrimaryKeyID(), "dry_run", *dryRun)
 	if enc.KeyCount() < 2 && !*dryRun {
 		log.Warn("only one key configured — nothing to rotate FROM; this run will rewrite ciphertexts under themselves (harmless but wasteful)")
 	}
@@ -264,6 +264,10 @@ func rewriteColumn(ctx context.Context, log *slog.Logger, db *sql.DB, enc *auth.
 
 		for _, r := range batch {
 			s.scanned++
+			if enc.IsPrimaryCiphertext(r.ct) {
+				s.skipped++
+				continue
+			}
 			plain, err := enc.Decrypt(r.ct)
 			if err != nil {
 				log.Error("decrypt failed — no configured key signed this ciphertext",
@@ -395,6 +399,9 @@ func rotateDexConnectorConfig(raw, connectorType string, enc *auth.Encryptor) (s
 	for _, field := range fields {
 		ciphertext, _ := config[field].(string)
 		if ciphertext == "" {
+			continue
+		}
+		if enc.IsPrimaryCiphertext(ciphertext) {
 			continue
 		}
 		plain, err := enc.Decrypt(ciphertext)
@@ -551,6 +558,11 @@ func verifyPrimaryColumn(ctx context.Context, log *slog.Logger, db *sql.DB, prim
 			}
 			count++
 			result.scanned++
+			if !primary.IsPrimaryCiphertext(ciphertext) {
+				log.Error("primary-only verification found legacy or fallback envelope", "table", target.table, "column", target.column, "id", id)
+				result.failed++
+				continue
+			}
 			if _, err := primary.Decrypt(ciphertext); err != nil {
 				log.Error("primary-only verification failed", "table", target.table, "column", target.column, "id", id)
 				result.failed++
@@ -628,6 +640,9 @@ func verifyDexConnectorPrimary(raw, connectorType string, primary *auth.Encrypto
 		if !ok {
 			return fmt.Errorf("secret field is not a string")
 		}
+		if !primary.IsPrimaryCiphertext(ciphertext) {
+			return fmt.Errorf("secret field is not a primary-key v1 envelope")
+		}
 		if _, err := primary.Decrypt(ciphertext); err != nil {
 			return fmt.Errorf("secret field is not encrypted by primary")
 		}
@@ -693,6 +708,9 @@ func verifyDexStaticClientRow(plaintext, envelope string, cutover bool, primary 
 			return fmt.Errorf("non-empty clients have no envelope")
 		}
 		return nil
+	}
+	if !primary.IsPrimaryCiphertext(envelope) {
+		return fmt.Errorf("static-client ciphertext is not a primary-key v1 envelope")
 	}
 	decrypted, err := primary.Decrypt(envelope)
 	if err != nil {

@@ -1,6 +1,6 @@
 # Secret Column Inventory
 
-Date: 2026-08-24
+Date: 2026-09-17
 
 The greenfield database is defined only by `001_initial.up.sql`. Every
 secret-looking text, JSON, UUID, or byte column in that file is classified by
@@ -12,18 +12,18 @@ unclassified column fails CI.
 | Table / column | Classification | Runtime rule |
 | --- | --- | --- |
 | `users.password` | Password hash | Never plaintext. |
-| `sso_configurations.client_secret_encrypted` | Fernet ciphertext | Write-only secret. |
-| `smtp_settings.password_encrypted` | Fernet ciphertext | Write-only secret. |
-| `user_totp_enrollments.secret_encrypted` | Fernet ciphertext | Never returned. |
-| `webhook_subscriptions.secret_encrypted` | Fernet ciphertext | Never returned. |
-| `sso_sessions.upstream_id_token_encrypted` | Fernet ciphertext | Used only for upstream session lifecycle. |
-| `backup_storage_configs.encrypted_credentials` | Fernet ciphertext | Complete object-store credential envelope. |
-| `management_backup_destinations.encrypted_credentials` | Fernet ciphertext | Complete management-plane dump object-store credential envelope. |
-| `cluster_registry_configs.registry_password_encrypted` | Fernet ciphertext | Complete cluster registry password. |
-| `project_registry_credentials.registry_credential_encrypted` | Fernet ciphertext | Complete project registry credential. |
-| `delivery_sources.credential_encrypted` | Fernet ciphertext | Complete write-only delivery-source credential map. |
-| `gitops_registration_sources.webhook_secret_encrypted` | Fernet ciphertext | Per-source GitHub webhook HMAC secret; write-only and never logged. |
-| `dex_operations.payload_encrypted` | Fernet ciphertext | Durable, bounded Dex SSO-finalization input; never returned or logged. |
+| `sso_configurations.client_secret_encrypted` | Versioned authenticated ciphertext | Write-only secret. |
+| `smtp_settings.password_encrypted` | Versioned authenticated ciphertext | Write-only secret. |
+| `user_totp_enrollments.secret_encrypted` | Versioned authenticated ciphertext | Never returned. |
+| `webhook_subscriptions.secret_encrypted` | Versioned authenticated ciphertext | Never returned. |
+| `sso_sessions.upstream_id_token_encrypted` | Versioned authenticated ciphertext | Used only for upstream session lifecycle. |
+| `backup_storage_configs.encrypted_credentials` | Versioned authenticated ciphertext | Complete object-store credential envelope. |
+| `management_backup_destinations.encrypted_credentials` | Versioned authenticated ciphertext | Complete management-plane dump object-store credential envelope. |
+| `cluster_registry_configs.registry_password_encrypted` | Versioned authenticated ciphertext | Complete cluster registry password. |
+| `project_registry_credentials.registry_credential_encrypted` | Versioned authenticated ciphertext | Complete project registry credential. |
+| `delivery_sources.credential_encrypted` | Versioned authenticated ciphertext | Complete write-only delivery-source credential map. |
+| `gitops_registration_sources.webhook_secret_encrypted` | Versioned authenticated ciphertext | Per-source GitHub webhook HMAC secret; write-only and never logged. |
+| `dex_operations.payload_encrypted` | Versioned authenticated ciphertext | Durable, bounded Dex SSO-finalization input; never returned or logged. |
 | `api_tokens.token_hash` | Password-style token hash | Plaintext is returned once. |
 | `cluster_registration_tokens.token_hash` | Token hash | Registration authentication uses only the hash. |
 | `cluster_agent_tokens.token_hash` | Token hash | Active agent authentication uses only the hash. |
@@ -31,13 +31,20 @@ unclassified column fails CI.
 | `password_reset_tokens.token_hash` | Token hash | Plaintext is returned once. |
 | `password_reset_tokens.password_hash_at_issue` | Password-hash snapshot | Invalidates reset tokens after a password change. |
 | `scim_tokens.token_hash` | Token hash | Plaintext is returned once. |
-| `charlie_connections.local_trust_material_encrypted` | Fernet ciphertext | Astronomer-owned local CA/private-key and bridge/MCP TLS material only. |
-| `charlie_action_receipts.arguments_encrypted` | Fernet ciphertext | Bounded postcondition-reconciliation input; excluded from logs and support bundles. |
-| `charlie_action_receipts.result_encrypted` | Fernet ciphertext | Bounded idempotent replay result; excluded from logs and support bundles. |
+| `charlie_connections.local_trust_material_encrypted` | Versioned authenticated ciphertext | Astronomer-owned local CA/private-key and bridge/MCP TLS material only. |
+| `charlie_action_receipts.arguments_encrypted` | Versioned authenticated ciphertext | Bounded postcondition-reconciliation input; excluded from logs and support bundles. |
+| `charlie_action_receipts.result_encrypted` | Versioned authenticated ciphertext | Bounded idempotent replay result; excluded from logs and support bundles. |
 | `charlie_delegations.authorization_hash` | SHA-256 lookup hash | Hash of an opaque, short-lived authorization reference. |
 | `charlie_connections.agent_secret_hmac` | Keyed digest | Reconciles deterministic Kubernetes Secret content without retaining the secret. |
 | `loki_ingest_tokens.token_hash` | Token hash | SHA-256 of the hosted Loki ingest bearer. Projected into the management-cluster hash Secret; never plaintext. |
-| `loki_ingest_tokens.token_encrypted` | Fernet ciphertext | Re-renders the member Kubernetes Secret `astronomer-loki-ingest-token`. Fluent Bit OUTPUT uses `bearer_token_file`. List APIs never return it. |
+| `loki_ingest_tokens.token_encrypted` | Versioned authenticated ciphertext | Re-renders the member Kubernetes Secret `astronomer-loki-ingest-token`. Fluent Bit OUTPUT uses `bearer_token_file`. List APIs never return it. |
+
+Every new encrypted write uses
+`astronomer:v1:fernet:<key-id>:<ciphertext>`. The envelope authenticates the
+payload through Fernet and identifies the exact read key without trial
+decryption. Raw Fernet tokens remain a measured, read-only compatibility path
+during migration (`astronomer_ciphertext_decryptions_total{format="legacy"}`);
+`keyrotate` rewrites them to the primary-key envelope before fallback removal.
 
 `logging_outputs.configuration` is not a secret column. System (`is_system`) Loki rows store only `host`, `port`, `tls`, `tenant_id`, and `labels`. The member copy lives in Secret `astronomer-loki-ingest-token` (mounted via fluent-bit Helm `extraVolumes` / `extraVolumeMounts`); the ConfigMap references `bearer_token_file` only. Plaintext is loaded at apply time from `loki_ingest_tokens.token_encrypted` and is never stored in JSONB or returned by list/get.
 

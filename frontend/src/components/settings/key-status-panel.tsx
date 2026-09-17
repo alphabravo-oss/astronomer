@@ -67,6 +67,18 @@ export function KeyStatusPanel() {
           ) : null}
           <KeyTile label="Encryption keys" value={data.encryptionKeys} />
           <KeyTile label="JWT signing keys" value={data.jwtKeys} />
+          <div className="col-span-2 rounded-lg border border-border bg-background px-4 py-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Encryption key inventory
+            </p>
+            <ul className="mt-2 space-y-1 font-mono text-xs text-foreground">
+              {data.encryptionKeyInventory.map((key) => (
+                <li key={key.id}>
+                  {key.id}{key.primary ? " (primary)" : " (read fallback)"}
+                </li>
+              ))}
+            </ul>
+          </div>
           <p className="col-span-2 text-2xs text-muted-foreground">
             As of {formatDate(data.asOf)}
             {isFetching ? " · refreshing…" : ""}

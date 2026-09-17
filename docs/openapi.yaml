@@ -33691,7 +33691,7 @@ paths:
       operationId: adminKeyStatus
       summary: Encryption and JWT signing key-rotation status
       description: |
-        Returns the number of loaded encryption + JWT signing keys. A count > 1 means a key rotation is mid-flight. Superuser-gated inside the handler. Response is NOT wrapped in a data envelope (raw top-level object).
+        Returns the loaded encryption-key inventory plus JWT signing-key count. Encryption IDs are non-secret operator labels or deterministic fingerprints; key material is never returned. A count > 1 means a key rotation is mid-flight. Superuser-gated inside the handler. Response is NOT wrapped in a data envelope (raw top-level object).
       tags:
         - platform-admin-settings
       security:
@@ -33706,6 +33706,15 @@ paths:
                 properties:
                   encryption_keys:
                     type: integer
+                  encryption_key_inventory:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        id: {type: string}
+                        primary: {type: boolean}
+                      required: [id, primary]
                   jwt_keys:
                     type: integer
                   insecure_dev_keys:
@@ -33716,6 +33725,7 @@ paths:
                     format: date-time
                 required:
                   - encryption_keys
+                  - encryption_key_inventory
                   - jwt_keys
                   - insecure_dev_keys
                   - as_of

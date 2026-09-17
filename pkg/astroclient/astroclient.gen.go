@@ -78923,10 +78923,14 @@ type AdminKeyStatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		AsOf            time.Time `json:"as_of"`
-		EncryptionKeys  int       `json:"encryption_keys"`
-		InsecureDevKeys []string  `json:"insecure_dev_keys"`
-		JwtKeys         int       `json:"jwt_keys"`
+		AsOf                   time.Time `json:"as_of"`
+		EncryptionKeyInventory []struct {
+			Id      string `json:"id"`
+			Primary bool   `json:"primary"`
+		} `json:"encryption_key_inventory"`
+		EncryptionKeys  int      `json:"encryption_keys"`
+		InsecureDevKeys []string `json:"insecure_dev_keys"`
+		JwtKeys         int      `json:"jwt_keys"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -111089,10 +111093,14 @@ func ParseAdminKeyStatusResponse(rsp *http.Response) (*AdminKeyStatusResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			AsOf            time.Time `json:"as_of"`
-			EncryptionKeys  int       `json:"encryption_keys"`
-			InsecureDevKeys []string  `json:"insecure_dev_keys"`
-			JwtKeys         int       `json:"jwt_keys"`
+			AsOf                   time.Time `json:"as_of"`
+			EncryptionKeyInventory []struct {
+				Id      string `json:"id"`
+				Primary bool   `json:"primary"`
+			} `json:"encryption_key_inventory"`
+			EncryptionKeys  int      `json:"encryption_keys"`
+			InsecureDevKeys []string `json:"insecure_dev_keys"`
+			JwtKeys         int      `json:"jwt_keys"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

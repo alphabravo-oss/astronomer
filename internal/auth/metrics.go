@@ -92,6 +92,18 @@ var (
 		},
 		observability.MetricLabels("provider", "outcome"),
 	)
+
+	// CiphertextDecryptionsTotal makes the bounded legacy-read migration
+	// observable. A non-zero `legacy` rate means keyrotate is not yet complete;
+	// `unknown_key` and `invalid` are operator-actionable failures.
+	CiphertextDecryptionsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Name:      "ciphertext_decryptions_total",
+			Help:      "Total at-rest ciphertext decryptions by envelope outcome.",
+		},
+		[]string{"format"},
+	)
 )
 
 // RegisterAuthMetrics is idempotent; tests that spin up multiple
@@ -106,6 +118,7 @@ func RegisterAuthMetrics() {
 			TOTPVerifiesTotal,
 			TOTPEnrollmentsGauge,
 			SSOLogoutsTotal,
+			CiphertextDecryptionsTotal,
 		} {
 			if err := prometheus.Register(c); err != nil {
 				if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {

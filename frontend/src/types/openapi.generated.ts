@@ -14128,6 +14128,10 @@ export interface OpenAPIOperations {
     arguments: Record<string, never>;
     response: {
         "encryption_keys": number;
+        "encryption_key_inventory": Array<{
+          "id": string;
+          "primary": boolean;
+        }>;
         "jwt_keys": number;
         "insecure_dev_keys": string[];
         "as_of": string;

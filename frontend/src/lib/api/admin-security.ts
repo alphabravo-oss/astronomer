@@ -21,6 +21,7 @@ import {
 
 export interface KeyStatus {
   encryptionKeys: number;
+  encryptionKeyInventory: Array<{ id: string; primary: boolean }>;
   jwtKeys: number;
   /**
    * Credentials still set to a value published in the Astronomer repository
@@ -36,6 +37,7 @@ export async function getKeyStatus(signal?: AbortSignal): Promise<KeyStatus> {
   const response = await adminKeyStatus({ signal });
   return {
     encryptionKeys: response.encryption_keys,
+    encryptionKeyInventory: response.encryption_key_inventory,
     jwtKeys: response.jwt_keys,
     insecureDevKeys: response.insecure_dev_keys,
     asOf: response.as_of,
