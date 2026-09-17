@@ -7,6 +7,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+. scripts/lib/docker-test-endpoint.sh
 
 mapfile -t UP_FILES < <(find internal/db/migrations -maxdepth 1 -name '*.up.sql' -type f | sort)
 mapfile -t DOWN_FILES < <(find internal/db/migrations -maxdepth 1 -name '*.down.sql' -type f | sort)
@@ -80,7 +81,10 @@ SELECT string_agg(signature, E'\\n' ORDER BY signature) FROM (
   SELECT 'global_roles|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY id), '')) AS signature FROM global_roles t
   UNION ALL SELECT 'cluster_roles|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY id), '')) FROM cluster_roles t
   UNION ALL SELECT 'project_roles|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY id), '')) FROM project_roles t
-  UNION ALL SELECT 'cluster_tools|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY id), '')) FROM cluster_tools t
+  -- Curated tools added after the initial baseline use the table's clock-based
+  -- created/updated defaults. Those audit timestamps are expected to change on
+  -- a destructive rebuild; hash the durable seed contract, not wall-clock time.
+  UNION ALL SELECT 'cluster_tools|' || count(*) || '|' || md5(COALESCE(string_agg((to_jsonb(t) - 'created_at' - 'updated_at')::text, '' ORDER BY id), '')) FROM cluster_tools t
   UNION ALL SELECT 'platform_settings|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY key), '')) FROM platform_settings t
   UNION ALL SELECT 'helm_repositories|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY id), '')) FROM helm_repositories t
 ) signatures;"
@@ -88,11 +92,11 @@ SELECT string_agg(signature, E'\\n' ORDER BY signature) FROM (
 run_major() {
   local major="$1"
   local container="astronomer-migration-pg${major}-$$"
-  local database_url port first_schema first_seeds remaining_tables version
+  local database_url port first_schema first_seeds second_schema second_seeds remaining_tables version
 
   docker run -d --rm --name "$container" \
     -e POSTGRES_PASSWORD=astro -e POSTGRES_USER=astro -e POSTGRES_DB=astro \
-    -p 127.0.0.1::5432 "pgvector/pgvector:pg${major}" >/dev/null
+    -p "${DOCKER_TEST_BIND_HOST}::5432" "pgvector/pgvector:pg${major}" >/dev/null
   ACTIVE_CONTAINERS+=("$container")
   for _ in $(seq 1 60); do
     if docker exec "$container" pg_isready -U astro -d astro >/dev/null 2>&1; then
@@ -102,7 +106,7 @@ run_major() {
   done
   docker exec "$container" pg_isready -U astro -d astro >/dev/null
   port="$(docker port "$container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
-  database_url="postgres://astro:astro@127.0.0.1:${port}/astro?sslmode=disable"
+  database_url="postgres://astro:astro@${DOCKER_TEST_CONNECT_HOST}:${port}/astro?sslmode=disable"
 
   echo "PostgreSQL ${major}: up"
   migrate -database "$database_url" -path internal/db/migrations up
@@ -131,8 +135,18 @@ run_major() {
 
   echo "PostgreSQL ${major}: re-apply"
   migrate -database "$database_url" -path internal/db/migrations up
-  [[ "$first_schema" == "$(docker exec "$container" psql -X -U astro -d astro -Atc "$schema_signature_sql")" ]]
-  [[ "$first_seeds" == "$(docker exec "$container" psql -X -U astro -d astro -Atc "$seed_signature_sql")" ]]
+  second_schema="$(docker exec "$container" psql -X -U astro -d astro -Atc "$schema_signature_sql")"
+  second_seeds="$(docker exec "$container" psql -X -U astro -d astro -Atc "$seed_signature_sql")"
+  if [[ "$first_schema" != "$second_schema" ]]; then
+    echo "PostgreSQL ${major}: schema signature changed after full down/up" >&2
+    diff -u <(printf '%s\n' "$first_schema") <(printf '%s\n' "$second_schema") >&2 || true
+    return 1
+  fi
+  if [[ "$first_seeds" != "$second_seeds" ]]; then
+    echo "PostgreSQL ${major}: seed signature changed after full down/up" >&2
+    diff -u <(printf '%s\n' "$first_seeds") <(printf '%s\n' "$second_seeds") >&2 || true
+    return 1
+  fi
   printf '%s\n' "$first_schema" >"$ARTIFACT_DIR/schema-${major}"
   printf '%s\n' "$first_seeds" >"$ARTIFACT_DIR/seeds-${major}"
 

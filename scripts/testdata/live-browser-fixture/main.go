@@ -29,6 +29,7 @@ import (
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	deliveryrollout "github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -373,6 +374,10 @@ func seed() error {
 	plan, err := planner.Create(ctx, deliveryrollout.CreateRequest{
 		TargetID: targetID, ExpectedTargetGeneration: 1, PreviewDigest: preview.PreviewDigest,
 		ConfirmAllClusters: true, Actor: "live-browser-fixture", IdempotencyKey: "live-browser-rollout",
+		Audit: audit.Intent{
+			Event:     audit.Event{Source: "fixture", Action: "delivery.rollout.created", ResourceType: "delivery_rollout"},
+			DedupeKey: "live-browser-fixture:rollout:create",
+		},
 		Strategy: model.RolloutStrategy{
 			Type: model.StrategyRolling, MaxConcurrent: 1,
 			MaxUnavailable:   model.Amount{Type: model.AmountCount, Value: 1},
@@ -386,6 +391,10 @@ func seed() error {
 	rollbackPlan, err := planner.Create(ctx, deliveryrollout.CreateRequest{
 		TargetID: targetID, ExpectedTargetGeneration: 1, PreviewDigest: preview.PreviewDigest,
 		ConfirmAllClusters: true, Actor: "live-browser-fixture", IdempotencyKey: "live-browser-rollback",
+		Audit: audit.Intent{
+			Event:     audit.Event{Source: "fixture", Action: "delivery.rollout.created", ResourceType: "delivery_rollout"},
+			DedupeKey: "live-browser-fixture:rollback:create",
+		},
 		Strategy: model.RolloutStrategy{
 			Type: model.StrategyRolling, MaxConcurrent: 1,
 			MaxUnavailable:   model.Amount{Type: model.AmountCount, Value: 1},
@@ -406,6 +415,10 @@ func seed() error {
 			TargetID: trivyTarget.id, ExpectedTargetGeneration: trivyTarget.generation,
 			PreviewDigest: trivyPreview.PreviewDigest, ConfirmAllClusters: true,
 			Actor: "live-browser-fixture", IdempotencyKey: "live-browser-trivy-rollout",
+			Audit: audit.Intent{
+				Event:     audit.Event{Source: "fixture", Action: "delivery.rollout.created", ResourceType: "delivery_rollout"},
+				DedupeKey: "live-browser-fixture:trivy-rollout:create",
+			},
 			Strategy: model.RolloutStrategy{
 				Type: model.StrategyRolling, MaxConcurrent: 1,
 				MaxUnavailable:   model.Amount{Type: model.AmountCount, Value: 1},

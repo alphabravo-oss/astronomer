@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+. scripts/lib/docker-test-endpoint.sh
 
 if [[ "${1:-}" == "--validate-only" ]]; then
   echo "test-live-browser: static contract OK"
@@ -43,6 +44,8 @@ artifact_dir="$(cd "$artifact_dir" && pwd)"
 
 postgres_container="astronomer-live-browser-pg-$suffix"
 redis_container="astronomer-live-browser-redis-$suffix"
+flux_fixture_container="astronomer-live-browser-flux-$suffix"
+flux_fixture_runtime_image="astronomer-flux-fixture-runtime:alpine-3.22-git-2.49.1"
 postgres_user="live_browser"
 postgres_database="live_browser"
 postgres_credential="$(openssl rand -hex 24)"
@@ -58,7 +61,6 @@ server_pid=""
 worker_pid=""
 frontend_pid=""
 fixture_pid=""
-flux_fixture_pid=""
 flux_cluster="test-run-live-$((BASHPID % 1000000))-$(openssl rand -hex 2)"
 flux_kubeconfig="$artifact_dir/flux-kubeconfig"
 direct_kubeconfig="$artifact_dir/direct-kubeconfig"
@@ -66,7 +68,6 @@ direct_api_ca="$artifact_dir/direct-api-ca.pem"
 direct_api_endpoint=""
 direct_ca_sha256=""
 flux_fixture_root="$artifact_dir/flux-fixture"
-flux_fixture_port_file="$artifact_dir/flux-fixture.port"
 flux_tls_cert="$artifact_dir/flux-fixture-ca.pem"
 flux_tls_key="$artifact_dir/flux-fixture-key.pem"
 flux_created=0
@@ -156,6 +157,11 @@ collect_state() {
     else
       echo "redis=stopped"
     fi
+    if docker inspect -f '{{.State.Running}}' "$flux_fixture_container" 2>/dev/null | grep -qx true; then
+      echo "flux-fixture=alive"
+    else
+      echo "flux-fixture=stopped"
+    fi
   } >>"$artifact_dir/process-state.log"
 }
 
@@ -167,6 +173,7 @@ cleanup() {
   rm -f -- "$direct_kubeconfig"
   docker logs "$postgres_container" >"$artifact_dir/postgres.log" 2>&1 || true
   docker logs "$redis_container" >"$artifact_dir/redis.log" 2>&1 || true
+  docker logs "$flux_fixture_container" >"$artifact_dir/flux-fixture-server.log" 2>&1 || true
 	if [[ "$trivy_enabled" == 1 && -n "$trivy_target_id" ]] && docker inspect -f '{{.State.Running}}' "$postgres_container" 2>/dev/null | grep -qx true; then
 		docker exec "$postgres_container" psql -X -U "$postgres_user" -d "$postgres_database" -c \
 			"SELECT r.id AS rollout_id,r.state,d.phase,d.desired_generation,d.observed_generation,d.desired_spec_digest,d.observed_spec_digest,d.last_error_code FROM delivery_rollouts r LEFT JOIN cluster_deployments d ON d.target_id=r.target_id AND d.cluster_id='$cluster_id' WHERE r.target_id='$trivy_target_id'; SELECT report_name,namespace,image_repo,image_tag,critical_count,high_count,medium_count,low_count,unknown_count,scanned_at FROM image_vulnerability_reports WHERE cluster_id='$cluster_id' AND namespace='live-delivery';" \
@@ -188,13 +195,12 @@ cleanup() {
 	fi
   stop_process "$frontend_pid"
   stop_process "$fixture_pid"
-	stop_process "$flux_fixture_pid"
   stop_process "$worker_pid"
   stop_process "$server_pid"
 	if [[ "$flux_created" == 1 && "$flux_cluster" == test-run-live-* ]]; then
 		k3d cluster delete "$flux_cluster" >/dev/null 2>&1 || true
 	fi
-  docker rm -f "$postgres_container" "$redis_container" >/dev/null 2>&1 || true
+  docker rm -f "$postgres_container" "$redis_container" "$flux_fixture_container" >/dev/null 2>&1 || true
   printf 'exit_status=%d\n' "$status" >"$artifact_dir/result.txt"
   echo "test-live-browser: artifacts: $artifact_dir"
   exit "$status"
@@ -274,26 +280,32 @@ docker run -d --rm --name "$postgres_container" \
   -e POSTGRES_USER="$postgres_user" \
   -e POSTGRES_PASSWORD="$postgres_credential" \
   -e POSTGRES_DB="$postgres_database" \
-  -p 127.0.0.1::5432 postgres:16-alpine >/dev/null
+  -p "${DOCKER_TEST_BIND_HOST}::5432" postgres:16-alpine >/dev/null
 docker run -d --rm --name "$redis_container" \
-  -p 127.0.0.1::6379 redis:7-alpine >/dev/null
+  -p "${DOCKER_TEST_BIND_HOST}::6379" redis:7-alpine >/dev/null
 wait_container_ready "$postgres_container" pg_isready -U "$postgres_user" -d "$postgres_database"
 wait_container_ready "$redis_container" redis-cli ping
 
 postgres_port="$(docker port "$postgres_container" 5432/tcp | awk -F: 'NR==1 {print $NF}')"
 redis_port="$(docker port "$redis_container" 6379/tcp | awk -F: 'NR==1 {print $NF}')"
-database_url="postgres://$postgres_user:$postgres_credential@127.0.0.1:$postgres_port/$postgres_database?sslmode=disable"
-redis_url="redis://127.0.0.1:$redis_port/0"
+database_url="postgres://$postgres_user:$postgres_credential@${DOCKER_TEST_CONNECT_HOST}:$postgres_port/$postgres_database?sslmode=disable"
+redis_url="redis://${DOCKER_TEST_CONNECT_HOST}:$redis_port/0"
 
 direct_api_host="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
 [[ -n "$direct_api_host" ]] || {
 	echo "test-live-browser: Docker bridge has no routable gateway for direct API validation" >&2
 	exit 1
 }
-port_is_free_at "$direct_api_host" 443 || {
-	echo "test-live-browser: $direct_api_host:443 is already in use; direct API acceptance requires a supported production port" >&2
-	exit 2
-}
+# From a Local CI runner container, the Docker bridge gateway is deliberately
+# not a local interface. k3d performs the authoritative host-side bind below
+# and fails closed if port 443 is occupied. Direct host runs retain the early
+# bind check so they cannot accidentally probe an existing endpoint.
+if [[ "${LOCAL_CI_LOCAL:-false}" != "true" ]]; then
+	port_is_free_at "$direct_api_host" 443 || {
+		echo "test-live-browser: $direct_api_host:443 is already in use; direct API acceptance requires a supported production port" >&2
+		exit 2
+	}
+fi
 direct_api_endpoint="https://$direct_api_host:443"
 
 echo "test-live-browser: creating isolated Flux member cluster $flux_cluster"
@@ -324,24 +336,35 @@ git clone --bare "$artifact_dir/flux-worktree" "$flux_fixture_root/git/repositor
 git_digest="sha256:$(git -C "$artifact_dir/flux-worktree" archive HEAD | sha256sum | awk '{print $1}')"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
 	-subj '/CN=host.k3d.internal' \
-	-addext 'subjectAltName=DNS:host.k3d.internal,DNS:localhost,IP:127.0.0.1' \
+	-addext 'subjectAltName=DNS:host.k3d.internal,DNS:host.docker.internal,DNS:localhost,IP:127.0.0.1' \
 	-keyout "$flux_tls_key" -out "$flux_tls_cert" >"$artifact_dir/flux-tls.log" 2>&1
 chmod 0600 "$flux_tls_key" "$flux_tls_cert"
 
-go build -trimpath -o "$artifact_dir/bin/flux-fixture-server" ./scripts/fixtures/flux/server >"$artifact_dir/build-flux-fixture.log" 2>&1
-setsid "$artifact_dir/bin/flux-fixture-server" --root "$flux_fixture_root" --listen 0.0.0.0:0 \
-	--port-file "$flux_fixture_port_file" --tls-cert "$flux_tls_cert" --tls-key "$flux_tls_key" \
-	>"$artifact_dir/flux-fixture-server.log" 2>&1 &
-flux_fixture_pid=$!
+CGO_ENABLED=0 go build -trimpath -o "$artifact_dir/bin/flux-fixture-server" ./scripts/fixtures/flux/server >"$artifact_dir/build-flux-fixture.log" 2>&1
+docker build --pull=false -t "$flux_fixture_runtime_image" \
+	-f scripts/fixtures/flux/server/Dockerfile.runtime scripts/fixtures/flux/server \
+	>"$artifact_dir/build-flux-fixture-runtime.log"
+flux_fixture_host_artifact_dir="$(docker_test_host_path "$artifact_dir")"
+docker run -d --name "$flux_fixture_container" --publish 8443 \
+	--volume "$flux_fixture_host_artifact_dir:/fixture:ro" \
+	--entrypoint /fixture/bin/flux-fixture-server \
+	"$flux_fixture_runtime_image" \
+	--root /fixture/flux-fixture --listen 0.0.0.0:8443 \
+	--tls-cert /fixture/flux-fixture-ca.pem --tls-key /fixture/flux-fixture-key.pem >/dev/null
 for _ in $(seq 1 50); do
-	[[ -s "$flux_fixture_port_file" ]] && break
-	process_alive "$flux_fixture_pid" || { echo "test-live-browser: Flux fixture server exited" >&2; exit 1; }
+	flux_fixture_port="$(docker port "$flux_fixture_container" 8443/tcp 2>/dev/null | awk -F: 'NR == 1 {print $NF}')"
+	[[ -n "$flux_fixture_port" ]] && break
+	docker inspect -f '{{.State.Running}}' "$flux_fixture_container" 2>/dev/null | grep -qx true || {
+		echo "test-live-browser: Flux fixture server exited" >&2
+		exit 1
+	}
 	sleep 0.1
 done
-[[ -s "$flux_fixture_port_file" ]] || { echo "test-live-browser: Flux fixture server did not publish its port" >&2; exit 1; }
-flux_fixture_port="$(tr -d '\n' <"$flux_fixture_port_file")"
-curl -fsS --connect-timeout 2 --max-time 5 --cacert "$flux_tls_cert" "https://localhost:$flux_fixture_port/healthz" >/dev/null
-GIT_SSL_CAINFO="$flux_tls_cert" git ls-remote "https://localhost:$flux_fixture_port/git/repository.git" refs/heads/main >/dev/null
+[[ -n "${flux_fixture_port:-}" ]] || { echo "test-live-browser: Flux fixture server did not publish its port" >&2; exit 1; }
+curl -fsS --connect-timeout 2 --max-time 5 --cacert "$flux_tls_cert" \
+	"https://${DOCKER_TEST_CONNECT_HOST}:$flux_fixture_port/healthz" >/dev/null
+GIT_SSL_CAINFO="$flux_tls_cert" git ls-remote \
+	"https://${DOCKER_TEST_CONNECT_HOST}:$flux_fixture_port/git/repository.git" refs/heads/main >/dev/null
 
 k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
 	--image "${K3S_IMAGE:-rancher/k3s:v1.35.0-k3s1}" \
@@ -385,7 +408,7 @@ KUBECONFIG="$flux_kubeconfig" kubectl apply \
 	-f scripts/testdata/live-browser-fixture/velero-minio.yaml >"$artifact_dir/minio-install.log"
 KUBECONFIG="$flux_kubeconfig" kubectl -n minio rollout status deployment/minio --timeout=3m
 KUBECONFIG="$flux_kubeconfig" kubectl -n minio run minio-mc-bootstrap \
-	--image=minio/mc:RELEASE.2025-04-16T18-13-26Z --restart=Never --rm -i \
+	--image=quay.io/minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3 --restart=Never --rm -i \
 	--command -- sh -c "mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc mb --ignore-existing local/velero" \
 	>"$artifact_dir/minio-bootstrap.log"
 helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts >/dev/null 2>&1 || true
@@ -699,7 +722,7 @@ KUBECONFIG="$flux_kubeconfig" kubectl -n velero wait --for=jsonpath='{.status.ph
 }
 velero_backup_name="$(KUBECONFIG="$flux_kubeconfig" kubectl -n velero get backup -l app.kubernetes.io/managed-by=astronomer-go -o jsonpath='{.items[0].metadata.name}')"
 KUBECONFIG="$flux_kubeconfig" kubectl -n minio run minio-mc-verify \
-	--image=minio/mc:RELEASE.2025-04-16T18-13-26Z --restart=Never --rm -i \
+	--image=quay.io/minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3 --restart=Never --rm -i \
 	--command -- sh -c "mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc find local/velero/live-browser --name '*$velero_backup_name.tar.gz'" \
 	| tee "$artifact_dir/minio-backup-artifacts.log"
 grep -Fq -- "$velero_backup_name.tar.gz" "$artifact_dir/minio-backup-artifacts.log" || {

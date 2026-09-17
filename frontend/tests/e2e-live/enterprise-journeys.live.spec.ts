@@ -289,7 +289,10 @@ test("direct kubeconfig is permission-aware, TLS-pinned, short-lived, and read-o
   await loginViaFormAs(restrictedPage, restrictedEmail, restrictedPassword);
   await restrictedPage.goto(`/dashboard/clusters/${clusterID}`);
   await expect(
-    restrictedPage.getByText("Cluster not found", { exact: true }),
+    restrictedPage.getByText("Permission required", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    restrictedPage.getByText("clusters:read", { exact: true }),
   ).toBeVisible();
   await expect(
     restrictedPage.getByRole("button", { name: "Direct kubeconfig" }),
