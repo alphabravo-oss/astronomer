@@ -48,6 +48,8 @@ required_patterns=(
 	'--set upgradeCRDs=false'
 	'LIVE_FIXTURE_BACKUP_NAMESPACE="$backup_namespace"'
 	'app.kubernetes.io/managed-by=astronomer-go'
+	'mc stat --json'
+	'backups/$velero_backup_name/$velero_backup_name.tar.gz'
 	'velero-durable-state.log'
 	'LIVE_FIXTURE_DIRECT_ENDPOINT="$direct_api_endpoint"'
 	'LIVE_FIXTURE_DIRECT_CA_SHA256="$direct_ca_sha256"'

@@ -22,6 +22,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -177,6 +178,20 @@ func (b *clusterBreaker) allow(clusterID string) (proceed bool, finalize func(er
 func (b *clusterBreaker) finalize(clusterID string, e *breakerEntry, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	// A caller abandoning an in-flight request says nothing about tunnel
+	// health. Route changes deliberately cancel several parallel reads; counting
+	// those cancellations can otherwise open the shared per-cluster circuit even
+	// while the agent is healthy. Preserve the existing failure history. If the
+	// canceled call was the half-open probe, return to OPEN without recording a
+	// new trip and wait for a fresh probe after the normal cooldown.
+	if errors.Is(err, context.Canceled) {
+		if e.state == breakerHalfOpen {
+			e.state = breakerOpen
+			e.openedAt = time.Now()
+			circuitStateGauge.WithLabelValues(observability.MetricValues(clusterID)...).Set(float64(breakerOpen))
+		}
+		return
+	}
 	if err == nil {
 		// Success: reset failure counter, force CLOSED.
 		if e.state != breakerClosed {

@@ -122,6 +122,40 @@ process_alive() {
   [[ -n "$1" ]] && kill -0 "$1" >/dev/null 2>&1
 }
 
+run_minio_client() {
+	local pod_name="$1"
+	local log_file="$2"
+	local client_command="$3"
+	local phase=""
+
+	KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" \
+		--ignore-not-found --wait=true >/dev/null
+	KUBECONFIG="$flux_kubeconfig" kubectl -n minio run "$pod_name" \
+		--image=quay.io/minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3 \
+		--restart=Never --command -- sh -c "$client_command" >/dev/null
+	for _ in $(seq 1 120); do
+		phase="$(KUBECONFIG="$flux_kubeconfig" kubectl -n minio get pod "$pod_name" \
+			-o jsonpath='{.status.phase}' 2>/dev/null || true)"
+		case "$phase" in
+		Succeeded)
+			KUBECONFIG="$flux_kubeconfig" kubectl -n minio logs "$pod_name" >"$log_file"
+			KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" --wait=true >/dev/null
+			return 0
+			;;
+		Failed)
+			KUBECONFIG="$flux_kubeconfig" kubectl -n minio logs "$pod_name" >"$log_file" 2>&1 || true
+			KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" --wait=true >/dev/null
+			return 1
+			;;
+		esac
+		sleep 1
+	done
+	KUBECONFIG="$flux_kubeconfig" kubectl -n minio logs "$pod_name" >"$log_file" 2>&1 || true
+	KUBECONFIG="$flux_kubeconfig" kubectl -n minio delete pod "$pod_name" --wait=true >/dev/null
+	echo "test-live-browser: MinIO client pod timed out: $pod_name" >&2
+	return 1
+}
+
 stop_process() {
   local pid="$1"
   [[ -n "$pid" ]] || return 0
@@ -409,10 +443,8 @@ KUBECONFIG="$flux_kubeconfig" kubectl -n minio create secret generic minio-root 
 KUBECONFIG="$flux_kubeconfig" kubectl apply \
 	-f scripts/testdata/live-browser-fixture/velero-minio.yaml >"$artifact_dir/minio-install.log"
 KUBECONFIG="$flux_kubeconfig" kubectl -n minio rollout status deployment/minio --timeout=3m
-KUBECONFIG="$flux_kubeconfig" kubectl -n minio run minio-mc-bootstrap \
-	--image=quay.io/minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3 --restart=Never --rm -i \
-	--command -- sh -c "mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc mb --ignore-existing local/velero" \
-	>"$artifact_dir/minio-bootstrap.log"
+run_minio_client minio-mc-bootstrap "$artifact_dir/minio-bootstrap.log" \
+	"mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc mb --ignore-existing local/velero"
 helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts >/dev/null 2>&1 || true
 helm repo update vmware-tanzu >"$artifact_dir/helm-repo-update.log"
 KUBECONFIG="$flux_kubeconfig" helm upgrade --install velero vmware-tanzu/velero \
@@ -750,10 +782,17 @@ KUBECONFIG="$flux_kubeconfig" kubectl -n velero wait --for=jsonpath='{.status.ph
 	exit 1
 }
 velero_backup_name="$(KUBECONFIG="$flux_kubeconfig" kubectl -n velero get backup -l app.kubernetes.io/managed-by=astronomer-go -o jsonpath='{.items[0].metadata.name}')"
-KUBECONFIG="$flux_kubeconfig" kubectl -n minio run minio-mc-verify \
-	--image=quay.io/minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3 --restart=Never --rm -i \
-	--command -- sh -c "mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc find local/velero/live-browser --name '*$velero_backup_name.tar.gz'" \
-	| tee "$artifact_dir/minio-backup-artifacts.log"
+velero_bucket="$(KUBECONFIG="$flux_kubeconfig" kubectl -n velero get backupstoragelocation live-browser -o jsonpath='{.spec.objectStorage.bucket}')"
+velero_prefix="$(KUBECONFIG="$flux_kubeconfig" kubectl -n velero get backupstoragelocation live-browser -o jsonpath='{.spec.objectStorage.prefix}')"
+velero_prefix="${velero_prefix#/}"
+velero_prefix="${velero_prefix%/}"
+if [[ ! "$velero_bucket" =~ ^[a-z0-9][a-z0-9.-]*$ || ! "$velero_prefix" =~ ^[a-zA-Z0-9._/-]*$ || "$velero_prefix" == *..* ]]; then
+	echo "test-live-browser: Velero object storage bucket or prefix is unsafe" >&2
+	exit 1
+fi
+velero_object="${velero_prefix:+$velero_prefix/}backups/$velero_backup_name/$velero_backup_name.tar.gz"
+run_minio_client minio-mc-verify "$artifact_dir/minio-backup-artifacts.log" \
+	"mc alias set local http://minio.minio.svc.cluster.local:9000 '$minio_user' '$minio_password' >/dev/null && mc stat --json 'local/$velero_bucket/$velero_object'"
 grep -Fq -- "$velero_backup_name.tar.gz" "$artifact_dir/minio-backup-artifacts.log" || {
 	echo "test-live-browser: Velero backup artifact is missing from object storage" >&2
 	exit 1
