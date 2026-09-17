@@ -26,6 +26,7 @@ import sys
 import tarfile
 import tempfile
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any
 
 
@@ -33,6 +34,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 REGISTRY_RE = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?$")
 FORBIDDEN_ARG = re.compile(r"(password|passwd|secret|token|credential)", re.IGNORECASE)
+COSIGN_ISSUER = "https://token.actions.githubusercontent.com"
+COSIGN_WORKFLOW = "https://github.com/alphabravo-oss/astronomer/.github/workflows/release.yaml@refs/tags/{version}"
+MAX_INDEX_BYTES = 4 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 1_000_000
 
 KIT_README = """# Astronomer air-gap kit
 
@@ -79,6 +84,7 @@ This script does not accept passwords.
 ```bash
 ./astronomer-load-images.sh \\
   --manifest release-manifest.json \\
+  --signature release-manifest.sigstore.json \\
   --images astronomer-images.tar.gz \\
   --destination-registry registry.internal.example.com \\
   --values-output airgap-values.json
@@ -124,6 +130,14 @@ def load_mirror():
 
 def canonical(value: Any) -> bytes:
     return (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def sha256_path(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def container_images(manifest: dict[str, Any], *, first_party: bool = False) -> list[str]:
@@ -177,13 +191,35 @@ def digest_dir(digest: str) -> str:
     return digest.removeprefix("sha256:")
 
 
-def run(command: list[str]) -> None:
+def run(command: list[str], failure: str = "copying an immutable image") -> None:
     try:
         subprocess.run(command, check=True, env=os.environ.copy())
     except FileNotFoundError as exc:
         raise KitError(f"required command is unavailable: {command[0]}") from exc
     except subprocess.CalledProcessError as exc:
-        raise KitError(f"{command[0]} failed copying an immutable image") from exc
+        raise KitError(f"{command[0]} failed {failure}") from exc
+
+
+def verify_release_manifest(manifest_path: Path, signature: Path, manifest: dict[str, Any]) -> None:
+    version = manifest.get("release", {}).get("version")
+    if not isinstance(version, str) or re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", version) is None:
+        raise KitError("release manifest has an invalid release.version")
+    if not signature.is_file():
+        raise KitError("release manifest Sigstore bundle is required before loading images")
+    run(
+        [
+            "cosign",
+            "verify-blob",
+            "--bundle",
+            str(signature),
+            "--certificate-identity",
+            COSIGN_WORKFLOW.format(version=version),
+            "--certificate-oidc-issuer",
+            COSIGN_ISSUER,
+            str(manifest_path),
+        ],
+        "verifying the release manifest Sigstore identity",
+    )
 
 
 def write_kit_file(root: Path, relative: str, data: bytes, mode: int = 0o644) -> None:
@@ -293,13 +329,22 @@ def save(
                 command.extend([f"docker://{source}", f"dir:{directory}"])
                 run(command)
             records.append({"source": source, "digest": digest, "dir": digest_dir(digest)})
+        payloads: dict[str, str] = {}
+        for record in records:
+            directory = root / record["dir"]
+            for path in sorted(item for item in directory.rglob("*") if item.is_file()):
+                relative = path.relative_to(root).as_posix()
+                payloads[relative] = sha256_path(path)
         index = {
             "schema_version": 1,
             "release_version": manifest["release"]["version"],
+            "release_manifest_sha256": sha256_path(manifest_path),
+            "scope": "first_party" if first_party else "all",
             "os": None if all_platforms else os_name,
             "arch": None if all_platforms else arch,
             "all_platforms": all_platforms,
             "images": records,
+            "members": payloads,
         }
         (root / "index.json").write_bytes(canonical(index))
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -313,32 +358,147 @@ def save(
                 archive.add(root / record["dir"], arcname=record["dir"])
 
 
+def validated_member_name(name: str) -> PurePosixPath:
+    if not name or "\\" in name or "\x00" in name:
+        raise KitError(f"image archive contains an unsafe member path: {name!r}")
+    path = PurePosixPath(name)
+    if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts) or path.as_posix() != name:
+        raise KitError(f"image archive contains an unsafe member path: {name!r}")
+    return path
+
+
+def validate_image_archive(
+    archive: tarfile.TarFile, manifest: dict[str, Any], manifest_path: Path
+) -> tuple[dict[str, Any], list[tarfile.TarInfo]]:
+    members = archive.getmembers()
+    if not members or len(members) > MAX_ARCHIVE_MEMBERS:
+        raise KitError("image archive has an invalid member count")
+    names: set[str] = set()
+    index_member: tarfile.TarInfo | None = None
+    for member in members:
+        validated_member_name(member.name)
+        if member.name in names:
+            raise KitError(f"image archive contains duplicate member {member.name!r}")
+        names.add(member.name)
+        if not (member.isfile() or member.isdir()):
+            raise KitError(f"image archive member {member.name!r} is not a regular file or directory")
+        if member.name == "index.json":
+            if not member.isfile() or member.size > MAX_INDEX_BYTES:
+                raise KitError("image archive index.json is not a bounded regular file")
+            index_member = member
+    if index_member is None:
+        raise KitError("image archive is missing index.json")
+    handle = archive.extractfile(index_member)
+    if handle is None:
+        raise KitError("image archive index.json is unreadable")
+    try:
+        index = json.loads(handle.read().decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise KitError(f"image archive index.json is invalid: {exc}") from exc
+    expected_index_keys = {
+        "schema_version",
+        "release_version",
+        "release_manifest_sha256",
+        "scope",
+        "os",
+        "arch",
+        "all_platforms",
+        "images",
+        "members",
+    }
+    if not isinstance(index, dict) or set(index) != expected_index_keys or index.get("schema_version") != 1:
+        raise KitError("image archive index is not the closed v1 Astronomer schema")
+    if index["release_version"] != manifest.get("release", {}).get("version"):
+        raise KitError("image archive belongs to a different release")
+    if index["release_manifest_sha256"] != sha256_path(manifest_path):
+        raise KitError("image archive is not bound to this release manifest")
+    scope = index["scope"]
+    if scope not in ("all", "first_party"):
+        raise KitError("image archive has an invalid image scope")
+    image_records = index["images"]
+    if not isinstance(image_records, list) or not image_records:
+        raise KitError("image archive index lists no images")
+    expected_images = set(container_images(manifest, first_party=scope == "first_party"))
+    saved_images: set[str] = set()
+    allowed_dirs: set[str] = set()
+    for item in image_records:
+        if not isinstance(item, dict) or set(item) != {"source", "digest", "dir"}:
+            raise KitError("image archive contains an invalid image record")
+        source, digest, directory = item["source"], item["digest"], item["dir"]
+        if not all(isinstance(value, str) for value in (source, digest, directory)):
+            raise KitError("image archive image record fields must be strings")
+        if source in saved_images or digest_dir(digest) != directory or source.rsplit("@", 1)[-1] != digest:
+            raise KitError("image archive contains duplicate or inconsistent image identity")
+        saved_images.add(source)
+        allowed_dirs.add(directory)
+    if saved_images != expected_images:
+        raise KitError("image archive image set does not exactly match its signed release scope")
+
+    checksums = index["members"]
+    if not isinstance(checksums, dict) or not checksums:
+        raise KitError("image archive has no authenticated payload inventory")
+    regular_names = {member.name for member in members if member.isfile() and member.name != "index.json"}
+    if set(checksums) != regular_names:
+        raise KitError("image archive member set differs from the authenticated index")
+    for name, expected_digest in checksums.items():
+        path = validated_member_name(name)
+        if path.parts[0] not in allowed_dirs or not isinstance(expected_digest, str) or re.fullmatch(r"[a-f0-9]{64}", expected_digest) is None:
+            raise KitError(f"image archive index contains invalid payload {name!r}")
+    for member in members:
+        if member.name == "index.json":
+            continue
+        path = validated_member_name(member.name)
+        if path.parts[0] not in allowed_dirs:
+            raise KitError(f"image archive contains extra payload {member.name!r}")
+        if member.isfile():
+            payload = archive.extractfile(member)
+            if payload is None:
+                raise KitError(f"image archive member {member.name!r} is unreadable")
+            digest = hashlib.sha256()
+            for chunk in iter(lambda: payload.read(1024 * 1024), b""):
+                digest.update(chunk)
+            if digest.hexdigest() != checksums[member.name]:
+                raise KitError(f"image archive member checksum mismatch: {member.name}")
+    return index, members
+
+
+def extract_validated_archive(archive: tarfile.TarFile, root: Path, members: list[tarfile.TarInfo]) -> None:
+    for member in members:
+        if member.name == "index.json":
+            continue
+        relative = validated_member_name(member.name)
+        target = root.joinpath(*relative.parts)
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = archive.extractfile(member)
+        if source is None:
+            raise KitError(f"image archive member {member.name!r} is unreadable")
+        try:
+            with target.open("xb") as destination:
+                while chunk := source.read(1024 * 1024):
+                    destination.write(chunk)
+        except FileExistsError as exc:
+            raise KitError(f"image archive extraction would overwrite {member.name!r}") from exc
+
+
 def load(
     *,
     manifest_path: Path,
+    signature: Path,
     images_archive: Path,
     destination_registry: str,
     values_output: Path | None = None,
 ) -> None:
     manifest = load_json(manifest_path)
+    verify_release_manifest(manifest_path, signature, manifest)
     mirror = load_mirror()
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         with tarfile.open(images_archive, mode="r:gz") as archive:
-            try:
-                archive.extractall(root, filter="data")
-            except TypeError:
-                archive.extractall(root)
-        index_path = root / "index.json"
-        if not index_path.is_file():
-            raise KitError("image archive is missing index.json")
-        index = load_json(index_path)
-        if index.get("schema_version") != 1 or not index.get("images"):
-            raise KitError("image archive index is not a v1 Astronomer save")
-        saved = {item["source"] for item in index["images"]}
-        allowed = set(container_images(manifest))
-        if not saved or not saved.issubset(allowed):
-            raise KitError("image archive contains a container image that is not in the release manifest")
+            index, members = validate_image_archive(archive, manifest, manifest_path)
+            extract_validated_archive(archive, root, members)
         for item in index["images"]:
             source = item["source"]
             digest = item["digest"]
@@ -390,6 +550,7 @@ def parser() -> argparse.ArgumentParser:
 
     loading = sub.add_parser("load", help="Copy a saved archive into a private registry (dark site)")
     loading.add_argument("--manifest", type=Path, required=True)
+    loading.add_argument("--signature", type=Path, required=True)
     loading.add_argument("--images", type=Path, required=True)
     loading.add_argument("--destination-registry", required=True)
     loading.add_argument("--values-output", type=Path)
@@ -425,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "load":
             load(
                 manifest_path=args.manifest,
+                signature=args.signature,
                 images_archive=args.images,
                 destination_registry=args.destination_registry,
                 values_output=args.values_output,

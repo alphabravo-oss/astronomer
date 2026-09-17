@@ -72,10 +72,17 @@ Authenticate Skopeo to the private registry using its normal credential file
 ```bash
 ./astronomer-load-images.sh \
   --manifest release-manifest.json \
+  --signature release-manifest.sigstore.json \
   --images astronomer-images.tar.gz \
   --destination-registry registry.internal.example.com \
   --values-output airgap-values.json
 ```
+
+The load command verifies the Sigstore workflow identity first, then validates
+the archive's closed index, exact release image set, paths, member types, and
+every payload checksum before extracting anything or writing to the registry.
+Links, traversal, duplicate or extra members, and archives from another release
+are rejected.
 
 Continue at [step 5](#5-prepare-the-cluster) with the kit chart,
 `airgap-values.json`, and `--set-file release.manifest=release-manifest.json`.

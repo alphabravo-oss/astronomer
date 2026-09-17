@@ -63,7 +63,9 @@ chart, Flux and built-in bundle archives, `astronomer-images.txt` (complete
 digest-pinned container list), and save/load helpers. The kit does **not**
 contain image blobs. Operators run `astronomer-save-images.sh` on a connected
 host (default `linux/amd64`) and `astronomer-load-images.sh` against the
-private registry.
+private registry. Loading requires the release Sigstore bundle and authenticates
+the manifest identity plus the complete archive member set before extraction or
+the first registry write.
 
 `scripts/mirror-release.py` remains the registry-to-registry path. `plan`
 emits a deterministic mapping and exact Helm JSON; `apply` copies all platforms
