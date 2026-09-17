@@ -13,4 +13,6 @@ Charlie surfaces on. It does not store a durable Charlie API key and does not
 call Charlie central. An air-gapped package file remains available under the
 same settings page.
 
-See Charlie's [connect-token.md](../../charlie/docs/connect-token.md).
+See Charlie's
+[connect-token.md](https://github.com/AlphaBravoCompany/charlie/blob/main/docs/connect-token.md)
+for the token contract and operator workflow.
