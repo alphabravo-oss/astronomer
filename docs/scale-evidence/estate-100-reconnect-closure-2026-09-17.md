@@ -119,5 +119,34 @@ recur.
 | DR | `sha256:48ac3b4ba735f0b7dca5c94be67f3ce6704783121909fc70339bb9314e161554` |
 
 The five-minute reconnect run remains the focused live proof for the original
-defect. The broad exact-commit replay and retained 30-minute estate-100 rerun
-remain deliberately last-wave work for the final candidate.
+defect.
+
+## Final broad local replay
+
+The broad local gate was replayed after the revision-61 deployment at
+`230f3971be9016760d1a62704383f2a867e31813`, a documentation-only child of
+`fe4b51eb`; a path diff confirms that every production, test, deployment, and
+frontend file is identical to the image-producing commit. The first pass
+stopped at the release-contract disk-headroom guard after all static backend,
+normal Go, and race Go gates had passed. Removing 121 superseded
+`advisor016-*` Docker tags restored 190 GiB/58% free space. Verification then
+resumed from the failed stage instead of repeating the expensive work.
+
+The resumed constituent gates all passed:
+
+- release, image-inventory, air-gap, protected-producer, Helm lint/render, and
+  chart contracts;
+- 1,207 frontend units, type/lint/build/bundle/audit, 124 primary browser
+  cases, 264 route-smoke cases, and 50 visual cases;
+- all 15 PostgreSQL integration contracts in normal and race modes, worker
+  runtime and process-restart qualification in normal and race modes, Redis
+  and PostgreSQL outage qualification in normal and race modes, tunnel queue
+  HA, and PostgreSQL failover certification; and
+- 15/15 disposable live-browser journeys, including successful Flux
+  reconciliation and completed Velero snapshot/restore against disposable
+  MinIO object storage.
+
+The live agent-identity lane remained a declared skip because
+`AGENT_IDENTITY_TEST_CONTEXT` was not supplied. The retained 30-minute
+estate-100 rerun remains intentionally deferred; no scale-capacity claim is
+made from the broad replay.

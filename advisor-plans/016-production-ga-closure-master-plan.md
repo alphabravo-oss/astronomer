@@ -96,8 +96,10 @@ observed residuals:
   normal/race coverage and a live pass. Follow-up commits `05abe58f` and
   `fe4b51eb` close the equivalent cross-pod send-pressure, capability, and
   replaced-session classifications with focused normal/race coverage. The
-  final broad replay on exact candidate `fe4b51eb` remains deferred to the last
-  test wave.
+  complete broad gate was then replayed successfully at documentation-only
+  child `230f3971`, whose production tree is byte-identical to exact candidate
+  `fe4b51eb`. The live agent-identity lane is the sole declared skip because
+  its explicit test context is absent.
 - Estate-100 is not yet a retained pass. A later 2026-09-17 exact-image run at
   `f0d9dd2c` delivered exactly 900,000 requests at 500 RPS, conserved
   9,000/9,000/9,000 audit operations, kept pool pressure and resources bounded,
@@ -119,7 +121,7 @@ observed residuals:
 
 ## Execution ledger
 
-- **Phase 0 baseline, final exact-commit replay pending:** the preserved integration tree was
+- **Phase 0 baseline and final local replay complete:** the preserved integration tree was
   classified and committed, and clean-clone static enterprise verification
   passed at `32f464e5150c25dffd10ddd802b4349872b2a376` on 2026-09-17. The full
   normal/race Go tree, PostgreSQL integration, frontend, generated/API,
@@ -135,8 +137,14 @@ observed residuals:
   vet, and complexity gates. The exact `fe4b51eb` seven-image set was
   label-verified, imported, and atomically deployed as revision 61; hooks,
   health, readiness, schema 52, runtime image IDs, release registration, and
-  zero-restart checks were exact and green. The final broad replay on
-  `fe4b51eb` remains open rather than being inferred from its tested parents.
+  zero-restart checks were exact and green. The complete broad local gate then
+  passed at `230f3971`, a documentation-only child whose non-documentation tree
+  is identical to `fe4b51eb`: normal/race Go, PostgreSQL, worker/restart/outage,
+  tunnel HA, failover, release, frontend, Helm, 124 primary browser, 264 route,
+  50 visual, and 15 live-browser cases all passed. The first invocation stopped
+  only at the disk-headroom guard after its earlier gates passed; 121
+  superseded advisor image tags were removed and execution resumed from that
+  stage. Agent identity remains the one explicit prerequisite-based skip.
 - **Phase 1, complete locally:** commit
   `a84e393a3fb81ec8c4f5f229cc9154e45e7aa5ff` gives every production runtime
   loop a named supervisor or joined component owner, connects critical failure

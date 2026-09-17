@@ -8,7 +8,7 @@ mapping.
 
 | Plan | Priority | Status | Next gate |
 |---|---|---|---|
-| [016 — Production and GA closure](./016-production-ga-closure-master-plan.md) | P0/P1 + release qualification | **IN PROGRESS** | Run the final broad replay and estate-100 qualification on exact candidate `fe4b51eb`, whose coherent revision-61 deployment is green; then execute the eight external Phase 6 qualifications. Phase 7 remains separately claim-gated and unauthorized. |
+| [016 — Production and GA closure](./016-production-ga-closure-master-plan.md) | P0/P1 + release qualification | **IN PROGRESS** | The broad local replay and coherent revision-61 deployment are green for exact production candidate `fe4b51eb`; run the retained estate-100 qualification, then the eight external Phase 6 qualifications. Phase 7 remains separately claim-gated and unauthorized. |
 
 Status values: `TODO — READY`, `IN PROGRESS`, `BLOCKED` with a concrete reason,
 or `DONE` with retained evidence links.
