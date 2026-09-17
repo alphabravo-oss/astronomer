@@ -514,7 +514,8 @@ func newAdminVaultCmd() *cobra.Command {
 }
 
 func newAdminVaultListCmd() *cobra.Command {
-	return &cobra.Command{
+	var limit, offset int
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List Vault connections",
 		Args:  cobra.NoArgs,
@@ -523,7 +524,9 @@ func newAdminVaultListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.AdminVaultConnectionsListWithResponse(cmd.Context())
+			params := &astroclient.AdminVaultConnectionsListParams{}
+			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
+			resp, err := client.AdminVaultConnectionsListWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -533,6 +536,8 @@ func newAdminVaultListCmd() *cobra.Command {
 			return renderSDK(cmd, resp.JSON200.Data.Items)
 		},
 	}
+	addLimitOffsetFlags(cmd, &limit, &offset)
+	return cmd
 }
 
 func newAdminVaultGetCmd() *cobra.Command {

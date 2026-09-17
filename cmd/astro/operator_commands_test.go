@@ -145,7 +145,7 @@ func TestOperatorReadCommandsHTTPContract(t *testing.T) {
 		{args: []string{"settings", "sso", "list"}, path: "/api/v1/settings/sso", response: `[]`},
 		{args: []string{"admin", "smtp", "get"}, path: "/api/v1/admin/smtp", response: `{"data":{"host":"smtp.example.com"}}`},
 		{args: []string{"admin", "webhooks", "list"}, path: "/api/v1/admin/webhooks", response: `{"data":{"items":[],"total":0}}`},
-		{args: []string{"admin", "vault", "list"}, path: "/api/v1/admin/vault-connections", response: `{"data":{"items":[]}}`},
+		{args: []string{"admin", "vault", "list", "--limit=7", "--offset=2"}, path: "/api/v1/admin/vault-connections", query: "limit=7&offset=2", response: `{"data":{"items":[],"pagination":{"total":0,"limit":7,"offset":2,"has_more":false,"next_offset":null}}}`},
 		{args: []string{"admin", "key-status"}, path: "/api/v1/admin/key-status", response: `{"data":{}}`},
 		{args: []string{"cluster-agent", "list", "--limit=7", "--offset=2"}, path: "/api/v1/cluster-agents/", query: "limit=7&offset=2", response: `{"data":[]}`},
 		{args: []string{"cluster-agent", "diagnostics", id}, path: "/api/v1/cluster-agents/" + id + "/diagnostics/", response: `{"data":{"connected":true}}`},
