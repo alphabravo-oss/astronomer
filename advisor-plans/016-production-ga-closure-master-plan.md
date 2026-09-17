@@ -37,7 +37,7 @@
   observability, accessibility, release qualification.
 - **Planned at:** `5567da3bbba8c72bb95924f1824f5c100d147058`, 2026-09-16,
   plus the preserved dirty integration tree described above. Execution was
-  reconciled through `176fb894` on
+  reconciled through `f5be9744` on
   2026-09-17.
 - **Branch:** `advisor/016-production-ga-closure`.
 
@@ -89,15 +89,20 @@ The stale live-code observations from the original review have been closed by
 the implementation commits recorded below. The plan remains active for these
 observed residuals:
 
-- The final clean candidate must be rebuilt and redeployed after the elapsed-
-  time scale scheduler and fail-closed engineering evaluator at `176fb894`,
-  then receive one final static/stateful replay.
-- Estate-100 is not yet a pass. The 2026-09-17 exact-image local run completed
-  its 30-minute window with good latency, bounded resources, successful
-  100-agent reconnect, and conserved accepted audit intents, but failed the
-  database empty-acquire threshold. The run also exposed scheduler/accounting
-  defects fixed after the run. Retained evidence is in
-  [`docs/scale-evidence/estate-100-2026-09-17-local-fail.md`](../docs/scale-evidence/estate-100-2026-09-17-local-fail.md).
+- The broad static/stateful replay passed at `f0d9dd2c`, including normal and
+  race Go suites, PostgreSQL/Redis outage and failover lanes, tunnel HA, 124
+  primary browser tests, 264 route-smoke tests, 50 visual tests, and 15 live
+  browser journeys. The scoped reconnect correction at `f5be9744` has focused
+  normal/race coverage and a live pass, but the final broad exact-commit replay
+  remains deferred to the last test wave.
+- Estate-100 is not yet a retained pass. A later 2026-09-17 exact-image run at
+  `f0d9dd2c` delivered exactly 900,000 requests at 500 RPS, conserved
+  9,000/9,000/9,000 audit operations, kept pool pressure and resources bounded,
+  and recovered 100/100 agents, but correctly failed on one 502 caused by an
+  in-flight old-session stream during reconnect. Commit `f5be9744` fixes that
+  classification, and its exact revision-60 images passed a five-minute,
+  100-agent/500-RPS targeted live regression with zero 502s. See
+  [`docs/scale-evidence/estate-100-reconnect-closure-2026-09-17.md`](../docs/scale-evidence/estate-100-reconnect-closure-2026-09-17.md).
 - The eight credentialed, signed, human, assistive-technology, DR, scale, and
   protected-approval executions in Phase 6 have not been supplied. Local
   harness success cannot substitute for them.
@@ -109,17 +114,19 @@ observed residuals:
 
 ## Execution ledger
 
-- **Phase 0 baseline, final replay pending:** the preserved integration tree was
+- **Phase 0 baseline, final exact-commit replay pending:** the preserved integration tree was
   classified and committed, and clean-clone static enterprise verification
   passed at `32f464e5150c25dffd10ddd802b4349872b2a376` on 2026-09-17. The full
   normal/race Go tree, PostgreSQL integration, frontend, generated/API,
   documentation, Helm, worker/restart/outage/failover, tunnel-HA, and live
-  browser lanes subsequently passed during implementation. Exact images for
-  `0e0a321dd20a9b7f3072afb6fb705c150c1f710d` were built, imported, and
-  atomically deployed as Helm revision 45 with immutable digests; `/health/`
-  and `/readyz` were green. The scale run then produced the two later source
-  fixes above, so the final exact-image build/deploy and broad replay remain
-  open rather than being claimed from the earlier candidate.
+  browser lanes subsequently passed during implementation. The final broad
+  `make verify-all` replay passed at `f0d9dd2c`; exact images were deployed as
+  Helm revision 59. The scale run exposed one reconnect-specific 502, fixed by
+  `f5be9744`. That commit's complete seven-image set was label-verified,
+  imported, and atomically deployed as revision 60; health, readiness, schema
+  52, runtime image IDs, and release registration were exact and green. The
+  scoped live regression passed, while the final broad replay on `f5be9744`
+  remains open rather than being inferred from its parent.
 - **Phase 1, complete locally:** commit
   `a84e393a3fb81ec8c4f5f229cc9154e45e7aa5ff` gives every production runtime
   loop a named supervisor or joined component owner, connects critical failure
@@ -162,7 +169,12 @@ observed residuals:
   delivered exactly 60,000 requests at 499.96 RPS, 50 ms cluster-list p99,
   55 ms resource p99, zero new empty-pool acquires, 600/600/600 conserved
   audit operations, and 100/100 reconnect recovery. It is a smoke result, not
-  the required retained 30-minute rung.
+  the required retained 30-minute rung. A subsequent full run at `f0d9dd2c`
+  passed every scale/conservation/resource criterion except one old-session
+  reconnect stream classified as 502. `f5be9744` corrects that production path;
+  an exact-image five-minute 100-agent/500-RPS run passed with 150,000 requests,
+  1,500/1,500/1,500 audit conservation, 100/100 reconnect recovery, and zero
+  502s. The final 30-minute retained rerun remains last-wave work.
 - **Phase 5, automated implementation complete locally:** `9719a216`,
   `b8fb7feb`, `a85db0f6`, `db38d75f`, `e4c036f4`, `5dfdf2ae`,
   `02637f37`, `94dc0aef`, and `3a47f9b2` close authoritative fleet/workload/
