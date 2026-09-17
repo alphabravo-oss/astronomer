@@ -133,6 +133,17 @@ These live-code observations are the reason the phases below remain open:
   shutdown. `go test -race ./internal/charlie ./internal/server/... ./cmd/server/... -count=1`,
   focused normal tests, vet, complexity, dependency-boundary, and environment-
   access gates passed on 2026-09-17.
+- **Phase 2, complete locally:** commits `4c55a686`, `341ecaae`, and
+  `f73a1234` bind JWTs to exact issuer/audience/subject/type/purpose context,
+  add versioned key-identified ciphertext envelopes and measurable legacy
+  rewrap, and make browser sessions cookie-only with transactionally durable,
+  single-use refresh families. Concurrent refresh reuse revokes the family,
+  invalidates distributed caches, and writes mandatory audit without retaining
+  raw session identifiers. The schema/API/chart/generated clients moved
+  together to migration 47. On 2026-09-17, all 15 required PostgreSQL
+  integration tests, the full Go tree, vet/build, focused auth/handler/server
+  race suites, all 1,200 frontend tests plus type-check/lint/production build,
+  Helm/deploy tests, and SQLC/OpenAPI/config/compatibility drift checks passed.
 
 ## Commands and authoritative gates
 
