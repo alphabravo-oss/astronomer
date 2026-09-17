@@ -51,7 +51,10 @@ FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc
 ARG KUBECTL_VERSION=v1.35.2
 ARG TARGETARCH=amd64
 COPY --from=cosign /ko-app/cosign /usr/local/bin/cosign
-RUN apk add --no-cache ca-certificates curl \
+# GNU coreutils is builder-only and supplies strict checksum-file parsing.
+# BusyBox sha256sum does not implement --strict and would make the verified
+# download fail before Cosign can validate the release certificate.
+RUN apk add --no-cache ca-certificates coreutils curl \
     && KUBECTL_URL="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${TARGETARCH}" \
     && curl -fsSLo /kubectl "${KUBECTL_URL}/kubectl" \
     && curl -fsSLo /kubectl.sha256 "${KUBECTL_URL}/kubectl.sha256" \
