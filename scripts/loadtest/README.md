@@ -41,7 +41,7 @@ Output is `loadtest-report.md` (override with `LOADTEST_OUT=...`).
 | `-server` | `LOADTEST_SERVER` | `http://localhost:8001` | Management-plane base URL |
 | `-metrics-server` | `LOADTEST_METRICS_SERVER` | value of `-server` | Prometheus metrics base URL when metrics use a separate listener or Service |
 | `-clusters` | `LOADTEST_CLUSTERS` | `50` | Synthetic agent count |
-| `-rps` | `LOADTEST_RPS` | `100` | Aggregate HTTP request rate (token bucket) |
+| `-rps` | `LOADTEST_RPS` | `100` | Aggregate HTTP request rate (bounded 10 ms microbatches) |
 | `-duration` | `LOADTEST_DURATION` | `5m` | How long to drive load |
 | `-token` | `LOADTEST_TOKEN` | _(empty)_ | Path to a pre-provisioned admin API bearer token used for fixture provisioning and HTTP workload requests; never used as an agent credential |
 | `-login-email` | `LOADTEST_LOGIN_EMAIL` | _(empty)_ | Local engineering only: browser-login email used to mint an in-memory one-day API token; forbidden in certification |
@@ -168,9 +168,12 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
    because that package transitively pulls in `client-go` and friends. The
    wire format is identical — see `pkg/protocol/types.go`.
 
-4. **HTTP workload**: a global `golang.org/x/time/rate.Limiter` token bucket
-   shapes the aggregate rate to `-rps`. Each tick draws a scenario from the
-   weighted mix in `scenarios.go`:
+4. **HTTP workload**: a credit-conserving 100 Hz scheduler shapes the aggregate
+   rate to `-rps`. It emits bounded 10 ms microbatches so the first request does
+   not unlock a one-second burst and fractional credits are conserved across
+   ticks. Each scheduled request runs concurrently and is joined after the
+   measured window. Each request draws a scenario from the weighted mix in
+   `scenarios.go`:
 
    | Scenario | Weight | Path |
    |---|---|---|
