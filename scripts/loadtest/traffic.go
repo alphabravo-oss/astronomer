@@ -12,8 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm reconnectStormConfig, duration time.Duration, log *slog.Logger) {
@@ -248,40 +246,65 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// newWorkloadLimiter paces the declared request rate from the first request.
-// A token bucket starts full, so using cfg.rps as its burst capacity would
-// release an undeclared cfg.rps-request spike at t=0. That startup spike both
-// distorts latency percentiles and manufactures database-pool pressure that is
-// unrelated to the steady request rate the profile declares.
-func newWorkloadLimiter(rps int) *rate.Limiter {
-	return rate.NewLimiter(rate.Limit(rps), 1)
+const workloadTicksPerSecond = 100
+
+// nextWorkloadBatch converts a per-second rate into bounded 10ms micro-batches.
+// Scheduling one request every 2ms loses material throughput to timer wake-up
+// overhead at the estate profiles' 500 RPS, while a full one-second token
+// bucket releases an undeclared 500-request spike at t=0. Credit accounting
+// preserves the exact rate for values that are not divisible by 100.
+func nextWorkloadBatch(rps, ticksPerSecond int, credit *int) int {
+	*credit += rps
+	batch := *credit / ticksPerSecond
+	*credit -= batch * ticksPerSecond
+	return batch
 }
 
 // driveWorkload maintains cfg.rps requests per second until scheduleCtx is
 // done. Requests retain requestCtx so the declared window does not cancel
 // already-started work; all in-flight work is joined before returning.
 func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token string, rec *recorder, log *slog.Logger) {
-	limiter := newWorkloadLimiter(cfg.rps)
+	if cfg.rps <= 0 {
+		return
+	}
 	scs := defaultScenarios()
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	client := &http.Client{Timeout: 30 * time.Second}
 	var sequence atomic.Uint64
 	var inflight sync.WaitGroup
 	defer inflight.Wait()
+	ticksPerSecond := minInt(cfg.rps, workloadTicksPerSecond)
+	ticker := time.NewTicker(time.Second / time.Duration(ticksPerSecond))
+	defer ticker.Stop()
+	credit := 0
+	launchBatch := func() {
+		for range nextWorkloadBatch(cfg.rps, ticksPerSecond, &credit) {
+			sc := pickScenario(scs, rng.Float64())
+			clusterID := ""
+			if len(cfg.fixtureClusterIDs) > 0 {
+				clusterID = cfg.fixtureClusterIDs[(sequence.Add(1)-1)%uint64(len(cfg.fixtureClusterIDs))]
+			}
+			inflight.Add(1)
+			go func() {
+				defer inflight.Done()
+				doRequest(requestCtx, client, cfg.server, token, sc, clusterID, rec)
+			}()
+		}
+	}
+
+	// Open the measured window at the declared rate, bounded to at most one
+	// 10ms micro-batch instead of a full second of traffic.
+	launchBatch()
 	for {
-		if err := limiter.Wait(scheduleCtx); err != nil {
+		select {
+		case <-scheduleCtx.Done():
+			return
+		case <-ticker.C:
+		}
+		if scheduleCtx.Err() != nil {
 			return
 		}
-		sc := pickScenario(scs, rng.Float64())
-		clusterID := ""
-		if len(cfg.fixtureClusterIDs) > 0 {
-			clusterID = cfg.fixtureClusterIDs[(sequence.Add(1)-1)%uint64(len(cfg.fixtureClusterIDs))]
-		}
-		inflight.Add(1)
-		go func() {
-			defer inflight.Done()
-			doRequest(requestCtx, client, cfg.server, token, sc, clusterID, rec)
-		}()
+		launchBatch()
 	}
 }
 

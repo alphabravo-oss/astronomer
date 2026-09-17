@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,7 +26,7 @@ const mandatoryAuditDrainTimeout = 2 * time.Minute
 // run-owned fixture clusters. Fixture decommission remains the exact cleanup.
 // Each accepted request carries a unique UUID correlation ID that is later
 // reconciled through the public audit API.
-func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, rec *recorder, log *slog.Logger) {
+func runMandatoryAuditWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token string, rec *recorder, log *slog.Logger) {
 	profile := cfg.mandatoryAudit
 	if profile.RatePerSecond <= 0 || profile.MaxOperations <= 0 || len(cfg.fixtureClusterIDs) == 0 {
 		return
@@ -49,7 +50,7 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 	if operationLimit > profile.MaxOperations {
 		operationLimit = profile.MaxOperations
 	}
-	runMandatoryAuditOperations(ctx, operationLimit, ticker.C, func(sequence int) {
+	runConcurrentMandatoryAuditOperations(scheduleCtx, operationLimit, ticker.C, func(sequence int) {
 		clusterID := cfg.fixtureClusterIDs[sequence%len(cfg.fixtureClusterIDs)]
 		requestID := uuid.NewString()
 		body, err := json.Marshal(map[string]any{
@@ -63,7 +64,7 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 			rec.recordAuditMutation(requestID, false, time.Time{})
 			return
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, base+"/api/v1/clusters/"+clusterID+"/", bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(requestCtx, http.MethodPatch, base+"/api/v1/clusters/"+clusterID+"/", bytes.NewReader(body))
 		if err != nil {
 			rec.recordAuditMutation(requestID, false, time.Time{})
 			return
@@ -85,6 +86,29 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 			log.Warn("mandatory-audit qualification mutation rejected", "sequence", sequence, "transport_error", err != nil)
 		}
 	})
+}
+
+// runConcurrentMandatoryAuditOperations keeps the declared scheduling rate
+// independent of individual request latency, then joins every operation that
+// began before the scheduling window closed. The operation receives the
+// longer-lived request context from runMandatoryAuditWorkload, so a request
+// started at the final tick is not manufactured into a rejection merely
+// because the scheduling deadline arrived while it was in flight.
+func runConcurrentMandatoryAuditOperations(
+	ctx context.Context,
+	maxOperations int,
+	ticks <-chan time.Time,
+	operation func(sequence int),
+) {
+	var operations sync.WaitGroup
+	runMandatoryAuditOperations(ctx, maxOperations, ticks, func(sequence int) {
+		operations.Add(1)
+		go func() {
+			defer operations.Done()
+			operation(sequence)
+		}()
+	})
+	operations.Wait()
 }
 
 // runMandatoryAuditOperations opens the workload window with an operation at

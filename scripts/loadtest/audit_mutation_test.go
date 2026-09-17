@@ -52,3 +52,39 @@ func TestMandatoryAuditTargetEndsBeforeDeadlineTick(t *testing.T) {
 		t.Fatalf("operation sequences = %v, want 0..9", sequences)
 	}
 }
+
+func TestConcurrentMandatoryAuditScheduleDoesNotFallBehindSlowRequest(t *testing.T) {
+	t.Parallel()
+
+	ticks := make(chan time.Time, 1)
+	ticks <- time.Now()
+	started := make(chan int, 2)
+	release := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		runConcurrentMandatoryAuditOperations(context.Background(), 2, ticks, func(sequence int) {
+			started <- sequence
+			<-release
+		})
+		close(done)
+	}()
+
+	seen := map[int]bool{}
+	for range 2 {
+		select {
+		case sequence := <-started:
+			seen[sequence] = true
+		case <-time.After(time.Second):
+			t.Fatal("next scheduled operation waited for the prior request")
+		}
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("concurrent mandatory-audit operations did not join")
+	}
+	if !seen[0] || !seen[1] {
+		t.Fatalf("started sequences = %v, want 0 and 1", seen)
+	}
+}

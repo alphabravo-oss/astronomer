@@ -1,23 +1,20 @@
 package main
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestNewWorkloadLimiterDoesNotReleaseStartupBurst(t *testing.T) {
+func TestNextWorkloadBatchBoundsStartupAndConservesRate(t *testing.T) {
 	t.Parallel()
 
-	limiter := newWorkloadLimiter(500)
-	if got := limiter.Burst(); got != 1 {
-		t.Fatalf("workload limiter burst = %d, want 1", got)
+	credit := 0
+	total := 0
+	for tick := 0; tick < workloadTicksPerSecond; tick++ {
+		batch := nextWorkloadBatch(503, workloadTicksPerSecond, &credit)
+		if batch > 6 {
+			t.Fatalf("tick %d batch = %d, want at most 6", tick, batch)
+		}
+		total += batch
 	}
-
-	now := time.Now()
-	if !limiter.AllowN(now, 1) {
-		t.Fatal("workload limiter rejected the first request")
-	}
-	if limiter.AllowN(now, 1) {
-		t.Fatal("workload limiter released an undeclared second startup request")
+	if total != 503 {
+		t.Fatalf("one-second scheduled total = %d, want 503", total)
 	}
 }

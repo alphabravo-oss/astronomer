@@ -318,8 +318,9 @@ func run(cfg *config, log *slog.Logger) error {
 	// 4. Spawn synthetic agents. Each agent dials the WS and behaves like a
 	//    real agent. They keep running until ctx is cancelled.
 	var agentWG sync.WaitGroup
+	var agents []*syntheticAgent
 	if !cfg.skipAgents {
-		agents := make([]*syntheticAgent, cfg.clusters)
+		agents = make([]*syntheticAgent, cfg.clusters)
 		for i := 0; i < cfg.clusters; i++ {
 			agents[i] = newSyntheticAgent(cfg.server, agentCredentials[i], log, rec, cfg.resources)
 		}
@@ -333,18 +334,20 @@ func run(cfg *config, log *slog.Logger) error {
 			return fmt.Errorf("wait for synthetic agents: %w", err)
 		}
 		log.Info("all synthetic agents connected", "count", cfg.clusters)
-		if cfg.reconnectStorm.Enabled {
-			go scheduleReconnectStorm(ctx, agents, cfg.reconnectStorm, cfg.duration, log)
-		}
-		if cfg.resources.EventsPerSecond > 0 {
-			go emitSyntheticStateEvents(ctx, agents, cfg.resources.EventsPerSecond, rec, log)
-		}
 	}
 	rec.MarkStart()
 
 	// 5. Drive HTTP workload at the configured RPS.
 	workloadCtx, workloadCancel := context.WithTimeout(ctx, cfg.duration)
 	defer workloadCancel()
+	if len(agents) > 0 {
+		if cfg.reconnectStorm.Enabled {
+			go scheduleReconnectStorm(workloadCtx, agents, cfg.reconnectStorm, cfg.duration, log)
+		}
+		if cfg.resources.EventsPerSecond > 0 {
+			go emitSyntheticStateEvents(workloadCtx, agents, cfg.resources.EventsPerSecond, rec, log)
+		}
+	}
 
 	var workloadWG sync.WaitGroup
 	var auditMutationWG sync.WaitGroup
@@ -359,7 +362,7 @@ func run(cfg *config, log *slog.Logger) error {
 		auditMutationWG.Add(1)
 		go func() {
 			defer auditMutationWG.Done()
-			runMandatoryAuditWorkload(workloadCtx, cfg, adminToken, rec, log)
+			runMandatoryAuditWorkload(workloadCtx, ctx, cfg, adminToken, rec, log)
 		}()
 	}
 
