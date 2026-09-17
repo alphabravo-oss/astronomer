@@ -27,6 +27,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 )
 
 type diagnosticK8sRequester struct{ inner handler.K8sRequester }
@@ -37,6 +39,14 @@ func (r diagnosticK8sRequester) Do(ctx context.Context, clusterID, method, path 
 		fmt.Fprintln(os.Stderr, "tunnel HA requester:", err)
 	}
 	return response, err
+}
+
+func (r diagnosticK8sRequester) SupportsCapability(ctx context.Context, clusterID, capability string) (bool, error) {
+	checker, ok := r.inner.(tasks.K8sCapabilityChecker)
+	if !ok {
+		return false, fmt.Errorf("diagnostic Kubernetes requester is not capability-aware")
+	}
+	return checker.SupportsCapability(ctx, clusterID, capability)
 }
 
 const (
@@ -78,6 +88,18 @@ func TestTunnelQueueHAIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	runID, clusterID := uuid.New(), uuid.New()
+	queries := sqlc.New(pool)
+	if _, err := pool.Exec(ctx, `INSERT INTO clusters (id,name,display_name,status,is_local,registration_phase) VALUES ($1,$2,$2,'active',false,'ready')`, clusterID, "tunnel-ha-"+clusterID.String()); err != nil {
+		t.Fatal(err)
+	}
+	agentToken := "tunnel-ha-agent-" + uuid.NewString()
+	if _, err := queries.UpsertClusterAgentToken(ctx, sqlc.UpsertClusterAgentTokenParams{
+		ClusterID: clusterID,
+		Token:     agentToken,
+		TokenHash: auth.HashOpaqueToken(agentToken),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM tunnel_ha_test_effects WHERE run_id=$1", runID)
 	})
@@ -87,7 +109,7 @@ func TestTunnelQueueHAIntegration(t *testing.T) {
 	serverB := startHAHelper(t, ctx, "tunnel-paused", databaseURL, redisURL, workDir, "b")
 	defer stopHAHelper(serverA)
 	defer stopHAHelper(serverB)
-	connA := connectSyntheticAgent(t, ctx, serverA.address, clusterID)
+	connA := connectSyntheticAgent(t, ctx, serverA.address, clusterID, agentToken)
 	operation := createPodDeleteOperation(t, ctx, pool, clusterID, "failover")
 	asynqRedis, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
@@ -115,10 +137,11 @@ func TestTunnelQueueHAIntegration(t *testing.T) {
 	if _, err := pool.Exec(ctx, "UPDATE workload_operations SET started_at=now()-interval '4 minutes' WHERE id=$1", operation.ID); err != nil {
 		t.Fatal(err)
 	}
-	connB := connectSyntheticAgent(t, ctx, serverB.address, clusterID)
+	connB := connectSyntheticAgent(t, ctx, serverB.address, clusterID, agentToken)
+	connBClosed := false
 	defer func() {
-		if closeErr := connB.Close(websocket.StatusNormalClosure, "done"); closeErr != nil {
-			t.Errorf("close retry owner websocket: %v", closeErr)
+		if !connBClosed {
+			_ = connB.Close(websocket.StatusNormalClosure, "cleanup")
 		}
 	}()
 	if err := os.WriteFile(serverB.startPath, []byte("start"), 0o600); err != nil {
@@ -141,6 +164,10 @@ func TestTunnelQueueHAIntegration(t *testing.T) {
 	if requests != 2 || effects != 1 {
 		t.Fatalf("requests/effects=%d/%d, want 2/1", requests, effects)
 	}
+	if closeErr := connB.Close(websocket.StatusNormalClosure, "failover complete"); closeErr != nil {
+		t.Fatalf("close retry owner websocket: %v", closeErr)
+	}
+	connBClosed = true
 
 	stopHAHelper(serverB)
 	standalone := startHAHelper(t, ctx, "standalone", databaseURL, redisURL, workDir, "worker")
@@ -238,7 +265,7 @@ func TestTunnelQueueHAHelperProcess(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer pool.Close()
-		hub := tunnel.NewHub(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
+		hub := tunnel.NewHubWithValidator(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})), sqlc.New(pool))
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
@@ -300,14 +327,14 @@ func TestTunnelQueueHAHelperProcess(t *testing.T) {
 	}
 }
 
-func connectSyntheticAgent(t *testing.T, ctx context.Context, address string, clusterID uuid.UUID) *websocket.Conn {
+func connectSyntheticAgent(t *testing.T, ctx context.Context, address string, clusterID uuid.UUID, token string) *websocket.Conn {
 	t.Helper()
 	conn, _, err := websocket.Dial(ctx, "ws://"+address+"/ws", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	capabilities := append(protocol.RequiredConnectCapabilities(), "mutate")
-	payload, _ := json.Marshal(protocol.ConnectPayload{ClusterID: clusterID.String(), AgentID: "ha-synthetic-agent", AgentVersion: "1.0.0", TunnelProtocolVersion: protocol.TunnelProtocolVersion, HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion, DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: capabilities, Token: "integration-test-token"})
+	payload, _ := json.Marshal(protocol.ConnectPayload{ClusterID: clusterID.String(), AgentID: "ha-synthetic-agent", AgentVersion: "1.0.0", TunnelProtocolVersion: protocol.TunnelProtocolVersion, HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion, DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: capabilities, Token: token})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Timestamp: time.Now().UTC(), Payload: payload}); err != nil {
 		t.Fatal(err)
 	}
