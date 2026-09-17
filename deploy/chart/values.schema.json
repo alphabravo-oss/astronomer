@@ -48,7 +48,8 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "enabled": { "type": "boolean" }
+            "enabled": { "type": "boolean" },
+            "maxConnections": { "type": "integer", "minimum": 20, "maximum": 5000 }
           }
         },
         "external": {

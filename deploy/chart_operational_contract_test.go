@@ -829,6 +829,14 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
 	assertContainerImage(t, docs, "StatefulSet", "astronomer-redis", "containers", "redis", "registry.example.com/platform/valkey/valkey:8-alpine", "Always")
 }
 
+func TestBundledPostgresMaxConnectionsIsDeclarative(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t, "postgres.bundled.maxConnections=400"))
+	postgres := findContainer(t, podSpecFor(findRenderedDoc(t, docs, "StatefulSet", "astronomer-postgres")), "containers", "postgres")
+	if got, want := postgres["args"], []any{"-c", "max_connections=400"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("bundled postgres args = %#v, want %#v", got, want)
+	}
+}
+
 func assertContainerImage(t *testing.T, docs []renderedDoc, kind, name, field, containerName, wantImage, wantPullPolicy string) {
 	t.Helper()
 	doc := findRenderedDoc(t, docs, kind, name)

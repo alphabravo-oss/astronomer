@@ -250,6 +250,10 @@ worker:
 postgres:
   bundled:
     enabled: true
+    # Development/qualification-only capacity for the bundled database. Keep
+    # this above the combined server + worker pool maxima when exercising a
+    # scaled local topology. Production forbids the bundled database.
+    maxConnections: 100
   image:
     repository: postgres
     tag: 16-alpine
