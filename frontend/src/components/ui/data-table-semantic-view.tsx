@@ -70,7 +70,12 @@ export function SemanticDataTable<T extends RowData>({
 
   return (
     <div className="rounded-lg border border-border overflow-hidden">
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        role="region"
+        aria-label="Scrollable data table"
+        tabIndex={0}
+      >
         <Table className="w-full text-sm">
           <TableHeader>
             <TableRow className="border-b border-border bg-muted/50">
