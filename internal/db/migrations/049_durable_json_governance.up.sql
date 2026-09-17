@@ -16,6 +16,11 @@ CREATE TABLE public.durable_json_schemas (
     PRIMARY KEY (table_schema, table_name, column_name)
 );
 
+-- Keep catalog discovery inside PL/pgSQL so the application role executes it
+-- at migration time; sqlc's offline schema parser deliberately has no system
+-- catalog and must not mistake pg_attribute for an application relation.
+DO $json_contract_inventory$
+BEGIN
 WITH json_columns AS (
     SELECT
         namespace.nspname AS table_schema,
@@ -62,6 +67,8 @@ SELECT
         ELSE 'platform'
     END
 FROM json_columns;
+END;
+$json_contract_inventory$;
 
 -- Columns without a literal object/array default still have known domain
 -- shapes. Nullable values remain valid, but every non-null write must match.
@@ -184,6 +191,9 @@ $$;
 -- Readiness consumes this closed inventory. A future JSONB column without a
 -- registry row, or a table missing its writer trigger, holds the service out of
 -- rotation until the migration supplies an explicit compatibility contract.
+DO $json_contract_coverage$
+BEGIN
+EXECUTE $coverage_view$
 CREATE VIEW public.durable_json_schema_coverage AS
 SELECT
     namespace.nspname AS table_schema,
@@ -212,4 +222,7 @@ WHERE namespace.nspname = 'public'
   AND relation.relname <> 'durable_json_schemas'
   AND NOT EXISTS (
       SELECT 1 FROM pg_inherits WHERE inhrelid = relation.oid
-  );
+  )
+$coverage_view$;
+END;
+$json_contract_coverage$;

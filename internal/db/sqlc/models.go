@@ -1826,6 +1826,19 @@ type DexSetting struct {
 	SagaPreviousSsoEnabled bool `json:"saga_previous_sso_enabled"`
 }
 
+type DurableJsonSchema struct {
+	TableSchema       string   `json:"table_schema"`
+	TableName         string   `json:"table_name"`
+	ColumnName        string   `json:"column_name"`
+	SchemaVersion     int32    `json:"schema_version"`
+	JsonType          string   `json:"json_type"`
+	MaxBytes          int32    `json:"max_bytes"`
+	Nullable          bool     `json:"nullable"`
+	RequiredKeys      []string `json:"required_keys"`
+	CompatibilityMode string   `json:"compatibility_mode"`
+	Owner             string   `json:"owner"`
+}
+
 type EmailMessage struct {
 	ID        uuid.UUID          `json:"id"`
 	ToAddress string             `json:"to_address"`
