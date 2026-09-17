@@ -20,12 +20,29 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker run -d --name "$postgres_container" \
-  --label astronomer.qualification=postgres-outage \
-  -e POSTGRES_USER=postgres_outage \
-  -e POSTGRES_PASSWORD="$credential" \
-  -e POSTGRES_DB=postgres_outage \
-  -p "${DOCKER_TEST_BIND_HOST}::5432" pgvector/pgvector:pg16 >/dev/null
+# Docker reallocates an anonymous published port whenever a stopped container
+# starts again. This drill keeps one long-lived pgx pool across the restart, so
+# it needs an explicit host port. Retry a narrow randomized allocation instead
+# of weakening the test by rebuilding the pool against a new endpoint.
+postgres_port=""
+for attempt in $(seq 1 20); do
+  port_seed="$(openssl rand -hex 2)"
+  candidate_port=$((20000 + 16#$port_seed % 40000))
+  if docker run -d --name "$postgres_container" \
+    --label astronomer.qualification=postgres-outage \
+    -e POSTGRES_USER=postgres_outage \
+    -e POSTGRES_PASSWORD="$credential" \
+    -e POSTGRES_DB=postgres_outage \
+    -p "${DOCKER_TEST_BIND_HOST}:${candidate_port}:5432" pgvector/pgvector:pg16 >/dev/null 2>&1; then
+    postgres_port="$candidate_port"
+    break
+  fi
+  docker rm -f "$postgres_container" >/dev/null 2>&1 || true
+done
+if [[ -z "$postgres_port" ]]; then
+  echo "could not allocate a stable PostgreSQL qualification port" >&2
+  exit 1
+fi
 
 for attempt in $(seq 1 60); do
   if docker exec "$postgres_container" pg_isready -U postgres_outage -d postgres_outage >/dev/null 2>&1; then
@@ -38,7 +55,6 @@ for attempt in $(seq 1 60); do
   sleep 0.5
 done
 
-postgres_port="$(docker port "$postgres_container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
 export ASTRONOMER_POSTGRES_OUTAGE_DATABASE_URL="postgres://postgres_outage:${credential}@${DOCKER_TEST_CONNECT_HOST}:${postgres_port}/postgres_outage?sslmode=disable"
 export ASTRONOMER_POSTGRES_OUTAGE_CONTAINER="$postgres_container"
 export ASTRONOMER_POSTGRES_OUTAGE_DEDICATED=1
