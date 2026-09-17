@@ -1,4 +1,4 @@
-.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all local-ci-install local-ci-pr local-ci-pr-representative check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
+.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all local-ci-install local-ci-pr local-ci-pr-representative check-build-capacity release-contract-check airgap-plan data-governance-check sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
         docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-dr docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
@@ -263,6 +263,9 @@ sqlc: sqlc-generate ## Alias for sqlc-generate
 
 sqlc-check: ## Regenerate sqlc and fail if generated files are stale
 	SQLC_VERSION=$(SQLC_VERSION) ./scripts/check-sqlc-generated.sh
+
+data-governance-check: ## Verify JSON writer and destructive-delete ownership inventories
+	python3 ./scripts/check-data-governance.py
 
 sdk: ## Generate the typed Go SDK (pkg/astroclient) from docs/openapi.yaml via oapi-codegen
 	$(OAPI_CODEGEN) -config oapi-codegen.yaml docs/openapi.yaml

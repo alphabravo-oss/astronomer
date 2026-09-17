@@ -212,6 +212,19 @@ func (d *DB) SchemaHealth(ctx context.Context) error {
 			version, version,
 		)
 	}
+	if version >= 49 {
+		var ungoverned int
+		if err := d.pool.QueryRow(ctx, `
+			SELECT count(*)
+			FROM public.durable_json_schema_coverage
+			WHERE NOT governed OR NOT writer_validation_enabled
+		`).Scan(&ungoverned); err != nil {
+			return fmt.Errorf("schema health: query durable JSON governance coverage: %w", err)
+		}
+		if ungoverned != 0 {
+			return fmt.Errorf("schema health: %d durable JSONB columns lack a versioned contract or writer validation trigger", ungoverned)
+		}
+	}
 	return nil
 }
 

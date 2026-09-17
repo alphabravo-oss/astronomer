@@ -1,4 +1,4 @@
-DROP INDEX IF EXISTS email_messages_dedupe_key_unique;
+DROP INDEX IF EXISTS public.email_messages_dedupe_key_unique;
 
-ALTER TABLE email_messages
+ALTER TABLE public.email_messages
     DROP COLUMN IF EXISTS dedupe_key;

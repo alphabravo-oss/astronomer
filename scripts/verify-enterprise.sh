@@ -361,6 +361,7 @@ verify_backend() {
   step "Migration safety"
   run_logged migration-safety ./scripts/check-migrations.sh
   run_logged migration-policy-self-test ./scripts/check-migrations-test.sh
+  run_logged data-governance python3 ./scripts/check-data-governance.py
 
   step "sqlc generated-code drift"
   run_logged sqlc-generated ./scripts/check-sqlc-generated.sh
