@@ -30,6 +30,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
@@ -111,6 +112,14 @@ func testServerRestartPreservesCIS(t *testing.T, ctx context.Context, pool *pgxp
 		SELECT id,now(),1 FROM inserted`, clusterID, "restart-cis-"+clusterID.String()); err != nil {
 		t.Fatal(err)
 	}
+	agentToken := "restart-agent-" + uuid.NewString()
+	if _, err := queries.UpsertClusterAgentToken(ctx, sqlc.UpsertClusterAgentTokenParams{
+		ClusterID: clusterID,
+		Token:     agentToken,
+		TokenHash: auth.HashOpaqueToken(agentToken),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	scanName := "restart-cis-" + uuid.NewString()[:8]
 	scan, err := queries.CreateCISScanWithOutbox(ctx, sqlc.CreateCISScanWithOutboxParams{
 		ClusterID: clusterID, ScanType: "cis-1.8", ClusterScanName: scanName,
@@ -136,7 +145,7 @@ func testServerRestartPreservesCIS(t *testing.T, ctx context.Context, pool *pgxp
 
 	workDir := t.TempDir()
 	serverA := startRestartQualificationProcess(t, "server", pool.Config().ConnString(), redisURL, workDir, "server-a")
-	connA := connectRestartQualificationAgent(t, ctx, serverA.address, clusterID)
+	connA := connectRestartQualificationAgent(t, ctx, serverA.address, clusterID, agentToken)
 	asynqOptions, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +175,7 @@ func testServerRestartPreservesCIS(t *testing.T, ctx context.Context, pool *pgxp
 	}
 	serverB := startRestartQualificationProcess(t, "server", pool.Config().ConnString(), redisURL, workDir, "server-b")
 	defer stopRestartQualificationProcess(t, serverB)
-	connB := connectRestartQualificationAgent(t, ctx, serverB.address, clusterID)
+	connB := connectRestartQualificationAgent(t, ctx, serverB.address, clusterID, agentToken)
 	defer func() { _ = connB.Close(websocket.StatusNormalClosure, "qualification complete") }()
 	if _, err := pool.Exec(ctx, `UPDATE security_scan_results SET next_poll_at=now() WHERE id=$1`, scan.ID); err != nil {
 		t.Fatal(err)
@@ -388,7 +397,7 @@ func TestProcessRestartQualificationHelper(t *testing.T) {
 	readyValue := role
 	switch role {
 	case "server":
-		hub := tunnelHubForRestartQualification(log)
+		hub := tunnelHubForRestartQualification(log, queries)
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
@@ -459,8 +468,8 @@ func TestProcessRestartQualificationHelper(t *testing.T) {
 
 // Kept behind a helper so this file does not expose tunnel implementation
 // details to the assertions above.
-func tunnelHubForRestartQualification(log *slog.Logger) *tunnel.Hub {
-	return tunnel.NewHub(log)
+func tunnelHubForRestartQualification(log *slog.Logger, validator tunnel.AgentTokenValidator) *tunnel.Hub {
+	return tunnel.NewHubWithValidator(log, validator)
 }
 
 func respondRestartK8s(t *testing.T, ctx context.Context, conn *websocket.Conn, expectedPath string, status int, body []byte) {
@@ -481,7 +490,7 @@ func respondRestartK8s(t *testing.T, ctx context.Context, conn *websocket.Conn, 
 	}
 }
 
-func connectRestartQualificationAgent(t *testing.T, ctx context.Context, address string, clusterID uuid.UUID) *websocket.Conn {
+func connectRestartQualificationAgent(t *testing.T, ctx context.Context, address string, clusterID uuid.UUID, token string) *websocket.Conn {
 	t.Helper()
 	conn, _, err := websocket.Dial(ctx, "ws://"+address+"/ws", nil)
 	if err != nil {
@@ -491,7 +500,7 @@ func connectRestartQualificationAgent(t *testing.T, ctx context.Context, address
 	payload, _ := json.Marshal(protocol.ConnectPayload{
 		ClusterID: clusterID.String(), AgentID: "restart-qualification-agent", AgentVersion: "1.0.0",
 		TunnelProtocolVersion: protocol.TunnelProtocolVersion, HeartbeatSchemaVersion: protocol.HeartbeatSchemaVersion,
-		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: capabilities, Token: "integration-test-token",
+		DeliveryProtocolVersion: protocol.DeliveryProtocolVersion, Capabilities: capabilities, Token: token,
 	})
 	if err := wsjson.Write(ctx, conn, &protocol.Message{Type: protocol.MsgConnect, Timestamp: time.Now().UTC(), Payload: payload}); err != nil {
 		t.Fatal(err)
