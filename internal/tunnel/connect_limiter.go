@@ -129,19 +129,22 @@ func (l *ConnectFailureLimiter) evictExpired() int {
 // constructed in internal/server but its lifetime is tied to the server's
 // reconcile context.
 func (l *ConnectFailureLimiter) StartJanitor(ctx context.Context, interval time.Duration) {
+	go l.RunJanitor(ctx, interval)
+}
+
+// RunJanitor blocks until ctx is cancelled so its owner can join it.
+func (l *ConnectFailureLimiter) RunJanitor(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = 2 * l.window
 	}
 	ticker := time.NewTicker(interval)
-	go func() {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				l.evictExpired()
-			}
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l.evictExpired()
 		}
-	}()
+	}
 }

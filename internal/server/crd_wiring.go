@@ -602,8 +602,17 @@ func ownershipMatchesRef(apiVersion, kind, namespace, name string, ref crd.Objec
 // Dev/test keeps the previous warn-and-disable behavior so local binaries can
 // run without a kubeconfig.
 func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, decommissionRunTx crdClusterDecommissionRunTx) error {
+	run, err := buildCRDControllerRunner(logger, cfg, queries, decommissionRunTx)
+	if err != nil || run == nil {
+		return err
+	}
+	go func() { _ = run(ctx) }()
+	return nil
+}
+
+func buildCRDControllerRunner(logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, decommissionRunTx crdClusterDecommissionRunTx) (func(context.Context) error, error) {
 	if cfg == nil || !cfg.CRDEnabled {
-		return nil
+		return nil, nil
 	}
 	restCfg, err := rest.InClusterConfig()
 	if err != nil {
@@ -614,10 +623,10 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 		if ferr != nil {
 			err := fmt.Errorf("CRD controller enabled but no Kubernetes config is available: in-cluster=%v; fallback=%v", err, ferr)
 			if isProductionConfig(cfg) {
-				return err
+				return nil, err
 			}
 			logger.Warn("crd_controller_disabled", "reason", "no_kubeconfig", "error", err.Error())
-			return nil
+			return nil, nil
 		}
 		restCfg = fallback
 	}
@@ -642,21 +651,21 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 	if err != nil {
 		err := fmt.Errorf("build CRD controller manager: %w", err)
 		if isProductionConfig(cfg) {
-			return err
+			return nil, err
 		}
 		logger.Warn("crd_controller_disabled", "reason", "build_manager_failed", "error", err.Error())
-		return nil
+		return nil, nil
 	}
 
-	go func() {
+	return func(ctx context.Context) error {
 		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace(cfg.CRDWatchNamespace))
 		if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("crd_controller_stopped", "error", err.Error())
-			return
+			return err
 		}
 		logger.Info("crd_controller_stopped")
-	}()
-	return nil
+		return nil
+	}, nil
 }
 
 // crdWatchNamespace normalizes the startup-resolved namespace.

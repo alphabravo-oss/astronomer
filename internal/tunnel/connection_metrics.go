@@ -119,6 +119,15 @@ func StartConnectionMetricsReporter(ctx context.Context, lister clusterConnectio
 	if lister == nil {
 		return
 	}
+	go RunConnectionMetricsReporter(ctx, lister, log)
+}
+
+// RunConnectionMetricsReporter blocks until ctx is cancelled so the server
+// runtime supervisor can join it before closing PostgreSQL.
+func RunConnectionMetricsReporter(ctx context.Context, lister clusterConnectionStatusLister, log *slog.Logger) {
+	if lister == nil {
+		return
+	}
 	registerConnectionMetrics()
 
 	record := func() {
@@ -145,20 +154,17 @@ func StartConnectionMetricsReporter(ctx context.Context, lister clusterConnectio
 
 	record()
 
-	go func() {
-		ticker := time.NewTicker(15 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				record()
-			}
-		}
-	}()
-
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
 	if log != nil {
 		log.Debug("started agent connection metrics reporter")
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			record()
+		}
 	}
 }

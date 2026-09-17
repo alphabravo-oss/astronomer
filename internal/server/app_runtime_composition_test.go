@@ -79,7 +79,7 @@ func TestProductionRuntimeCompositionStaysBoundedAndOrdered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, call := range []string{"livemetrics.New", "startClusterProbeReconciler"} {
+	for _, call := range []string{"livemetrics.New", "runClusterProbeReconciler"} {
 		if !strings.Contains(string(foundation), call) {
 			t.Errorf("leader-controlled runtime foundation is missing %s", call)
 		}

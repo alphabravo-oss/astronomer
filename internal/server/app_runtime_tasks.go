@@ -80,13 +80,9 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 			worker.CapabilityOutboundHTTP: true,
 		}
 		if foundation.server.tunnelWorker == nil {
-			foundation.cancel()
-			c.database.Close()
 			return nil, fmt.Errorf("tunnel task runtime is unavailable; refusing production startup")
 		}
 		if err := worker.ValidateTaskCapabilities(worker.TaskOwnerTunnel, capabilities); err != nil {
-			foundation.cancel()
-			c.database.Close()
 			return nil, fmt.Errorf("validate tunnel task runtime: %w", err)
 		}
 		if err := tasks.ValidateTunnelRuntime(tasks.TunnelRuntimeFeatures{
@@ -96,8 +92,6 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 			c.meshRuntime, cloudCredential, clusterRegistry, project, c.clusterSnapshotRuntime,
 			clusterDecommission, c.controlPlaneSnapshotRuntime, routed.deferredRuntime,
 			c.kubectlSessionReapRuntime, c.securityIngestRuntime, crdOwnership); err != nil {
-			foundation.cancel()
-			c.database.Close()
 			return nil, fmt.Errorf("validate tunnel task composition: %w", err)
 		}
 		logger.Info("validated tunnel task runtime", "task_counts", worker.TaskRegistryCounts())

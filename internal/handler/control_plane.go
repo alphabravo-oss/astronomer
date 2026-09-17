@@ -57,6 +57,7 @@ type ControlPlaneHandler struct {
 	emails     EmailNotifier
 	runTx      controlPlaneRunTxFunc
 	mu         sync.Mutex
+	evaluateCh chan struct{}
 }
 
 func (h *ControlPlaneHandler) SetRunTx(runTx controlPlaneRunTxFunc) {
@@ -109,6 +110,7 @@ func NewControlPlaneHandler(queries ControlPlaneQuerier, monitoring *MonitoringH
 		Logging:    logging,
 		Security:   security,
 		queue:      queue,
+		evaluateCh: make(chan struct{}, 1),
 	}
 }
 
@@ -116,19 +118,26 @@ func (h *ControlPlaneHandler) StartEvaluator(ctx context.Context) {
 	if h == nil || h.queries == nil {
 		return
 	}
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		h.evaluate(ctx)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				h.evaluate(ctx)
-			}
+	go h.RunEvaluator(ctx)
+}
+
+func (h *ControlPlaneHandler) RunEvaluator(ctx context.Context) {
+	if h == nil || h.queries == nil {
+		return
+	}
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	h.evaluate(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			h.evaluate(ctx)
+		case <-h.evaluateCh:
+			h.evaluate(ctx)
 		}
-	}()
+	}
 }
 
 func (h *ControlPlaneHandler) Status(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +199,10 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.PolicyError, "Failed to update control plane policy")
 		return
 	}
-	go h.evaluate(context.Background())
+	select {
+	case h.evaluateCh <- struct{}{}:
+	default:
+	}
 	RespondJSON(w, http.StatusOK, controlPlanePolicyResponse(policy))
 }
 

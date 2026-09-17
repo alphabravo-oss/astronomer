@@ -271,7 +271,14 @@ func (h *LoggingHandler) StartReconciler(ctx context.Context) {
 	if h == nil || h.queries == nil {
 		return
 	}
-	go h.runReconciler(ctx)
+	go h.RunReconciler(ctx)
+}
+
+func (h *LoggingHandler) RunReconciler(ctx context.Context) {
+	if h == nil || h.queries == nil {
+		return
+	}
+	h.runReconciler(ctx)
 }
 
 // TriggerReconcile nudges the reconciler so newly-enqueued operations don't

@@ -34,6 +34,7 @@ import (
 // Keeping the hand-off typed makes the production composition root reviewable
 // without hiding dependencies in globals or an untyped service locator.
 type productionComposition struct {
+	runtime                      *runtimeSupervisor
 	database                     *db.DB
 	queries                      *sqlc.Queries
 	jwtManager                   *auth.JWTManager
@@ -63,6 +64,7 @@ type productionComposition struct {
 	taskLeader                   *leader.Elector
 	securityCacheCoordinator     *cacheinvalidate.Coordinator
 	runtimeRedisClient           redis.UniversalClient
+	eventRelayClient             redis.UniversalClient
 	securityIngestRuntime        tasks.SecurityIngestRuntime
 	projectHandler               *handler.ProjectHandler
 	clusterTemplateHandler       *handler.ClusterTemplateHandler

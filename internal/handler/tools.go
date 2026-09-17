@@ -248,7 +248,14 @@ func (h *ToolHandler) StartReconciler(ctx context.Context) {
 	if h == nil || h.queries == nil {
 		return
 	}
-	go h.runReconciler(ctx)
+	go h.RunReconciler(ctx)
+}
+
+func (h *ToolHandler) RunReconciler(ctx context.Context) {
+	if h == nil || h.queries == nil {
+		return
+	}
+	h.runReconciler(ctx)
 }
 
 func (h *ToolHandler) TriggerReconcile() {

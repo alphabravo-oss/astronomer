@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -34,12 +35,28 @@ func (h *MonitoringHandler) StartReconciler(ctx context.Context) {
 	if h == nil || h.queries == nil || h.helm == nil {
 		return
 	}
+	go h.RunReconciler(ctx)
+}
+
+// RunReconciler blocks until ctx is cancelled and joins all monitoring-owned
+// loops before returning. Production uses this form so the server supervisor
+// has one completion signal for the complete monitoring runtime.
+func (h *MonitoringHandler) RunReconciler(ctx context.Context) {
+	if h == nil || h.queries == nil || h.helm == nil {
+		return
+	}
 	if h.log == nil {
 		h.log = slog.Default()
 	}
-	go h.runReconciler(ctx)
-	go h.runLokiIngestReconciler(ctx)
-	go h.runGrafanaFolderReconciler(ctx)
+	var loops sync.WaitGroup
+	for _, run := range []func(context.Context){h.runReconciler, h.runLokiIngestReconciler, h.runGrafanaFolderReconciler} {
+		loops.Add(1)
+		go func() {
+			defer loops.Done()
+			run(ctx)
+		}()
+	}
+	loops.Wait()
 }
 
 func (h *MonitoringHandler) ListOperations(w http.ResponseWriter, r *http.Request) {

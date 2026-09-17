@@ -286,8 +286,15 @@ func (h *ProjectHandler) StartReconciler(ctx context.Context) {
 		return
 	}
 	h.reconcileOnce.Do(func() {
-		go h.runReconciler(ctx)
+		go h.RunReconciler(ctx)
 	})
+}
+
+func (h *ProjectHandler) RunReconciler(ctx context.Context) {
+	if h == nil || h.queries == nil {
+		return
+	}
+	h.runReconciler(ctx)
 }
 
 func (h *ProjectHandler) runReconciler(ctx context.Context) {

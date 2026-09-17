@@ -11,6 +11,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,7 +29,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
-	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
@@ -164,55 +164,33 @@ func (t securityCacheTarget) InvalidateRBACAllLocal() {
 // reconcilers only while this pod is leader (CORR-R06). On leadership loss it
 // cancels the child context (stopping ticker loops that respect ctx) and
 // retries acquisition.
-func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log *slog.Logger, start func(context.Context)) {
+func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log *slog.Logger, run func(context.Context) error) error {
 	if log == nil {
 		log = slog.Default()
 	}
 	const job = "server.reconcilers"
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	var (
-		heldCtx    context.Context
-		heldCancel context.CancelFunc
-		release    func()
-	)
-	stopHeld := func() {
-		if heldCancel != nil {
-			heldCancel()
-			heldCancel = nil
-			heldCtx = nil
-		}
-		if release != nil {
-			release()
-			release = nil
-		}
-	}
-	defer stopHeld()
-	try := func() {
-		if release != nil {
-			// Already leader — keep holding.
-			return
-		}
+	for {
 		rel, held, err := elector.TryLeader(ctx, job)
 		if err != nil {
 			log.Warn("server reconciler leader election failed", "error", err)
-			return
+		} else if held {
+			log.Info("server reconciler leadership acquired", "job", job)
+			runErr := run(ctx)
+			rel()
+			if ctx.Err() != nil {
+				return nil
+			}
+			if runErr == nil {
+				runErr = errors.New("reconciler group exited without cancellation")
+			}
+			return runErr
 		}
-		if !held {
-			return
-		}
-		release = rel
-		heldCtx, heldCancel = context.WithCancel(ctx)
-		log.Info("server reconciler leadership acquired", "job", job)
-		start(heldCtx)
-	}
-	try()
-	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
-			try()
 		}
 	}
 }
@@ -402,7 +380,6 @@ type Server struct {
 	handler    http.Handler
 	logger     *slog.Logger
 	db         *db.DB
-	cancel     context.CancelFunc
 	queue      *asynq.Client
 	// hub is the tunnel hub; nil in lightweight test servers. Held here
 	// so Shutdown can drain WS connections before tearing down HTTP.
@@ -412,7 +389,7 @@ type Server struct {
 	// drift_check) call into the ToolHandler.EnsureInstalled tunnel
 	// path, which only works on the pod that owns the WS terminations.
 	// Nil in lightweight test servers built via New().
-	tunnelWorker *worker.Worker
+	tunnelWorker tunnelWorkerLifecycle
 	// Encryptor is the Fernet encryptor wired into handlers that surface
 	// encrypted columns (delivery credentials, SSO client secrets, etc.).
 	Encryptor *auth.Encryptor
@@ -427,11 +404,23 @@ type Server struct {
 	// taskLeader owns the small Postgres pool reserved for advisory-lock
 	// sessions. It is closed after reconcilers stop and before the main pool.
 	taskLeader *leader.Elector
+	// runtime owns every process-lifetime loop and supplies the critical-loop
+	// readiness state consumed by /readyz.
+	runtime *runtimeSupervisor
 	// shutdownHooks drain durable buffers and telemetry before the resource
 	// pools they depend on are closed. Hooks are registered during startup and
 	// run in registration order after ingress has stopped.
-	shutdownHooks []shutdownHook
-	stopping      atomic.Bool
+	shutdownHooks   []shutdownHook
+	resourceClosers []shutdownHook
+	stopping        atomic.Bool
+	shutdownMu      sync.Mutex
+	shutdownDone    bool
+	shutdownErr     error
+}
+
+type tunnelWorkerLifecycle interface {
+	Start() error
+	Shutdown()
 }
 
 type shutdownHook struct {
@@ -446,6 +435,22 @@ func (s *Server) AddShutdownHook(name string, fn func(context.Context) error) {
 		return
 	}
 	s.shutdownHooks = append(s.shutdownHooks, shutdownHook{name: name, fn: fn})
+}
+
+func (s *Server) addResourceCloser(name string, fn func(context.Context) error) {
+	if s == nil || fn == nil {
+		return
+	}
+	s.resourceClosers = append(s.resourceClosers, shutdownHook{name: name, fn: fn})
+}
+
+// AddRuntimeLoop registers an additional process-lifetime component after
+// NewApp composition (for example the dedicated metrics listener).
+func (s *Server) AddRuntimeLoop(name string, critical bool, run func(context.Context) error) error {
+	if s == nil || s.runtime == nil {
+		return errors.New("runtime supervisor is unavailable")
+	}
+	return s.runtime.Go(name, critical, run)
 }
 
 // DB returns the primary application database wrapper when this server was
@@ -553,17 +558,29 @@ func (s *Server) Start(addr string) error {
 	if err != nil {
 		return err
 	}
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 1)
 	if s.tunnelWorker != nil {
-		go func() {
-			if err := s.tunnelWorker.Start(); err != nil {
-				errCh <- fmt.Errorf("tunnel-queue worker: %w", err)
-			}
-		}()
+		if s.runtime == nil {
+			_ = ln.Close()
+			return errors.New("tunnel-queue worker requires runtime supervisor")
+		}
+		if err := s.runtime.Go("tunnel-queue-worker", true, func(context.Context) error {
+			return s.tunnelWorker.Start()
+		}); err != nil {
+			_ = ln.Close()
+			return err
+		}
 	}
 	s.logger.Info("server listening", "addr", addr)
 	go func() { errCh <- s.httpServer.Serve(ln) }()
-	err = <-errCh
+	var runtimeFailures <-chan error
+	if s.runtime != nil {
+		runtimeFailures = s.runtime.Failures()
+	}
+	select {
+	case err = <-errCh:
+	case err = <-runtimeFailures:
+	}
 	if errors.Is(err, http.ErrServerClosed) || (err == nil && s.stopping.Load()) {
 		return nil
 	}
@@ -583,15 +600,29 @@ func (s *Server) Start(addr string) error {
 //  2. httpServer.Shutdown — blocks until in-flight HTTP handlers exit.
 //     New connections are rejected immediately; long-running requests
 //     get the deadline.
-//  3. cancel the reconcile context (in-process workers, publishers).
-//  4. close DB pool + asynq client. Project mutations are delivered through
+//  3. Stop task intake, cancel every owned loop, and join it before draining
+//     hooks or closing any dependency used by those loops.
+//  4. Drain audit/telemetry, then close leader sessions, Redis, and Postgres.
+//     Project mutations are delivered through
 //     the durable task outbox; there are no request-spawned project goroutines.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.shutdownMu.Lock()
+	defer s.shutdownMu.Unlock()
+	if s.shutdownDone {
+		return s.shutdownErr
+	}
 	s.stopping.Store(true)
 	var shutdownErrs []error
+	runtimeJoined := true
 	if s.hub != nil {
 		drained := s.hub.Drain()
 		s.logger.Info("tunnel hub drained", "agents_disconnected", drained)
+	}
+	if err := s.httpServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		shutdownErrs = append(shutdownErrs, fmt.Errorf("http server: %w", err))
+	}
+	if s.runtime != nil {
+		s.runtime.MarkStopping()
 	}
 	if s.tunnelWorker != nil {
 		s.tunnelWorker.Shutdown()
@@ -599,16 +630,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.charlieRuntime != nil {
 		if err := s.charlieRuntime.Shutdown(ctx); err != nil {
 			charlie.LogOperationalFailure(ctx, s.logger, "runtime.shutdown_failed", "")
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("Charlie runtime: %w", err))
 		}
 	}
 	if s.charlieBridge != nil {
 		s.charlieBridge.Close()
 	}
-	if err := s.httpServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		shutdownErrs = append(shutdownErrs, fmt.Errorf("http server: %w", err))
-	}
-	if s.cancel != nil {
-		s.cancel()
+	if s.runtime != nil {
+		s.runtime.BeginStop()
+		if err := s.runtime.Wait(ctx); err != nil {
+			shutdownErrs = append(shutdownErrs, err)
+			runtimeJoined = false
+		}
 	}
 	for _, hook := range s.shutdownHooks {
 		if err := hook.fn(ctx); err != nil {
@@ -616,16 +649,30 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			shutdownErrs = append(shutdownErrs, fmt.Errorf("%s: %w", hook.name, err))
 		}
 	}
+	if !runtimeJoined {
+		s.logger.Error("runtime loops did not join; leaving dependency pools open for process exit")
+		s.shutdownErr = errors.Join(shutdownErrs...)
+		s.shutdownDone = true
+		return s.shutdownErr
+	}
 	if s.taskLeader != nil {
 		s.taskLeader.Close()
 	}
-	if s.db != nil {
-		s.db.Close()
+	for _, closer := range s.resourceClosers {
+		if err := closer.fn(ctx); err != nil {
+			s.logger.Warn("runtime resource close failed", "component", closer.name, "error", err)
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("%s: %w", closer.name, err))
+		}
 	}
 	if s.queue != nil {
 		_ = s.queue.Close()
 	}
-	return errors.Join(shutdownErrs...)
+	if s.db != nil {
+		s.db.Close()
+	}
+	s.shutdownErr = errors.Join(shutdownErrs...)
+	s.shutdownDone = true
+	return s.shutdownErr
 }
 
 // ServeHTTP implements http.Handler, useful for testing.

@@ -178,7 +178,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 			if client, ok := opt.MakeRedisClient().(*redis.Client); ok && client != nil {
 				bus.AttachRedis(client, events.DefaultRedisChannel, logger,
 					events.WithRedisRelayQueueCapacity(cfg.EventRelayQueueCapacity))
-				go bus.StartRedisRelay(ctx)
+				c.eventRelayClient = client
 				logger.Info("events bus redis fan-out enabled",
 					"channel", events.DefaultRedisChannel,
 					"queue_capacity", bus.RelayStatus().Capacity)

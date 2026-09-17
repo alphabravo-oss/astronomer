@@ -38,28 +38,34 @@ func StartReporter(ctx context.Context, queries ReporterQuerier, log *slog.Logge
 	if queries == nil {
 		return
 	}
+	go RunReporter(ctx, queries, log)
+}
+
+// RunReporter blocks until ctx is cancelled so production can supervise and
+// join it before PostgreSQL closes.
+func RunReporter(ctx context.Context, queries ReporterQuerier, log *slog.Logger) {
+	if queries == nil {
+		return
+	}
 	if log == nil {
 		log = slog.Default()
 	}
 	MustRegister()
 
 	tick := time.NewTicker(defaultReporterInterval)
-
-	go func() {
-		defer tick.Stop()
-		// Run once immediately so the gauge series populates on first
-		// scrape rather than waiting for the first tick.
-		runOnce(ctx, queries, log)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-tick.C:
-				runOnce(ctx, queries, log)
-			}
-		}
-	}()
+	defer tick.Stop()
 	log.Debug("started quota usage reporter", "interval", defaultReporterInterval)
+	// Run once immediately so the gauge series populates on first scrape rather
+	// than waiting for the first tick.
+	runOnce(ctx, queries, log)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			runOnce(ctx, queries, log)
+		}
+	}
 }
 
 func runOnce(ctx context.Context, queries ReporterQuerier, log *slog.Logger) {

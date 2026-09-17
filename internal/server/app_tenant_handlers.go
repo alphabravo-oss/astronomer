@@ -45,8 +45,6 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	if redisClient, ok := redisOpt.MakeRedisClient().(redis.UniversalClient); ok && redisClient != nil {
 		runtimeRedisClient = redisClient
 		securityCacheCoordinator = cacheinvalidate.New(redisClient, securityTarget, cfg.ProcessHostname, cacheinvalidate.DefaultPeriod, logger)
-		go securityCacheCoordinator.Run(ctx)
-		go func() { <-ctx.Done(); _ = redisClient.Close() }()
 	} else if cfg.ServerReplicas > 1 {
 		securityCacheCoordinator = cacheinvalidate.New(nil, securityTarget, cfg.ProcessHostname, cacheinvalidate.DefaultPeriod, logger)
 		logger.Error("distributed security cache invalidation is unavailable in a multi-replica deployment")

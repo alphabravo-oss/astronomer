@@ -214,30 +214,37 @@ func main() {
 	})
 
 	if srv.DB() != nil {
-		db.StartMetricsReporter(ctx, srv.DB().Pool(), logger)
+		if err := srv.AddRuntimeLoop("database-metrics-reporter", true, func(ctx context.Context) error {
+			db.RunMetricsReporter(ctx, srv.DB().Pool(), logger)
+			return nil
+		}); err != nil {
+			logger.Error("failed to register database metrics reporter", "error", err)
+			os.Exit(1)
+		}
+	}
+	if cfg.ServerMetricsAddr != "" {
+		if err := srv.AddRuntimeLoop("metrics-listener", true, func(ctx context.Context) error {
+			return server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger)
+		}); err != nil {
+			logger.Error("failed to register metrics listener", "error", err)
+			os.Exit(1)
+		}
 	}
 
-	type runtimeResult struct {
-		component string
-		err       error
-	}
-	runtimeResults := make(chan runtimeResult, 2)
-	go func() { runtimeResults <- runtimeResult{component: "server", err: srv.Start(":8000")} }()
-	if cfg.ServerMetricsAddr != "" {
-		go func() {
-			runtimeResults <- runtimeResult{component: "metrics listener", err: server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger)}
-		}()
-	}
+	runtimeResults := make(chan error, 1)
+	go func() { runtimeResults <- srv.Start(":8000") }()
 	runtimeFailed := false
+	runtimeJoined := false
 	select {
 	case <-ctx.Done():
 	case result := <-runtimeResults:
+		runtimeJoined = true
 		if ctx.Err() == nil {
 			runtimeFailed = true
-			if result.err == nil {
-				result.err = fmt.Errorf("%s exited unexpectedly", result.component)
+			if result == nil {
+				result = fmt.Errorf("server exited unexpectedly")
 			}
-			observability.WithEvent(logger, "server_runtime_error").Error("runtime component exited", "component", result.component, "error", result.err)
+			observability.WithEvent(logger, "server_runtime_error").Error("runtime component exited", "error", result)
 		}
 		stop()
 	}
@@ -249,6 +256,18 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		observability.WithEvent(logger, "server_shutdown_error").Error("shutdown error", "error", err)
 		runtimeFailed = true
+	}
+	if !runtimeJoined {
+		select {
+		case err := <-runtimeResults:
+			if err != nil {
+				observability.WithEvent(logger, "server_runtime_error").Error("server listener stopped with error", "error", err)
+				runtimeFailed = true
+			}
+		case <-shutdownCtx.Done():
+			observability.WithEvent(logger, "server_shutdown_error").Error("server listener did not join", "error", shutdownCtx.Err())
+			runtimeFailed = true
+		}
 	}
 
 	observability.WithEvent(logger, "server_stopped").Info("server stopped")

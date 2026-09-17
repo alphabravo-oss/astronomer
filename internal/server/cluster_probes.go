@@ -51,35 +51,37 @@ type clusterProbeQuerier interface {
 // deadline and wraps only at the end of the estate. A new leader starts a new
 // pass; insertions behind the cursor are picked up on the following pass.
 func startClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester) {
+	go runClusterProbeReconciler(ctx, logger, queries, requester)
+}
+
+func runClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester) {
 	if logger == nil || queries == nil || requester == nil {
 		return
 	}
-	go func() {
-		// Short initial delay so the first sweep doesn't race tunnel
-		// registration on cold start.
-		initial := time.NewTimer(5 * time.Second)
+	// Short initial delay so the first sweep doesn't race tunnel registration
+	// on cold start.
+	initial := time.NewTimer(5 * time.Second)
+	select {
+	case <-ctx.Done():
+		initial.Stop()
+		return
+	case <-initial.C:
+	}
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	var cursor uuid.UUID
+	for {
+		runCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		if err := sweepClusterProbes(runCtx, logger, queries, requester, &cursor); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.Warn("cluster probe sweep failed", "error", err)
+		}
+		cancel()
 		select {
 		case <-ctx.Done():
-			initial.Stop()
 			return
-		case <-initial.C:
+		case <-ticker.C:
 		}
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		var cursor uuid.UUID
-		for {
-			runCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-			if err := sweepClusterProbes(runCtx, logger, queries, requester, &cursor); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
-				logger.Warn("cluster probe sweep failed", "error", err)
-			}
-			cancel()
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
+	}
 }
 
 func sweepClusterProbes(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, cursor *uuid.UUID) error {

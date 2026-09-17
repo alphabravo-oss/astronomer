@@ -501,6 +501,16 @@ func StartMetricsReporter(ctx context.Context, pool *pgxpool.Pool, log *slog.Log
 	if pool == nil {
 		return
 	}
+	go RunMetricsReporter(ctx, pool, log)
+}
+
+// RunMetricsReporter blocks until ctx is cancelled. Production registers it
+// with the server runtime supervisor so PostgreSQL remains open until the
+// reporter has completed.
+func RunMetricsReporter(ctx context.Context, pool *pgxpool.Pool, log *slog.Logger) {
+	if pool == nil {
+		return
+	}
 
 	registerDBMetrics()
 	prev := poolMetricsSnapshot{}
@@ -559,20 +569,17 @@ func StartMetricsReporter(ctx context.Context, pool *pgxpool.Pool, log *slog.Log
 
 	record()
 
-	go func() {
-		ticker := time.NewTicker(15 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				record()
-			}
-		}
-	}()
-
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
 	if log != nil {
 		log.Debug("started db metrics reporter")
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			record()
+		}
 	}
 }

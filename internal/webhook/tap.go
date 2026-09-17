@@ -72,8 +72,17 @@ func (t *Tap) Start(ctx context.Context) {
 	if t == nil || t.q == nil || t.bus == nil {
 		return
 	}
+	go t.Run(ctx)
+}
+
+// Run blocks until the bus subscription ends. Production uses this entry
+// point so shutdown joins the consumer before closing its database.
+func (t *Tap) Run(ctx context.Context) {
+	if t == nil || t.q == nil || t.bus == nil {
+		return
+	}
 	ch := t.bus.Subscribe(ctx, events.AcceptAll)
-	go t.run(ctx, ch)
+	t.run(ctx, ch)
 }
 
 // HandleEvent is the per-event hot path. Public so tests can drive the

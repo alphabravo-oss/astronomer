@@ -113,7 +113,8 @@ func (c *productionComposition) composeCoreRouterDependencies(cfg *config.Config
 			Queries:     queries,
 			Readyz: newReadinessHandler(database, queue, hub).
 				withLocatorError(c.locatorReadinessErr).
-				withSecurityCacheCoordinator(c.securityCacheCoordinator, cfg.ServerReplicas > 1),
+				withSecurityCacheCoordinator(c.securityCacheCoordinator, cfg.ServerReplicas > 1).
+				withCriticalRuntime(c.runtime),
 		},
 		ClusterResources: ClusterResourceDependencies{
 			Clusters:              c.clusterHandler,

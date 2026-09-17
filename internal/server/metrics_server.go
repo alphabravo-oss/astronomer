@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -25,16 +26,27 @@ func StartMetricsServer(ctx context.Context, addr string, log *slog.Logger) erro
 		ReadHeaderTimeout: 15 * time.Second,
 	}
 
-	go func() {
-		<-ctx.Done()
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	observability.WithEvent(log, "server_metrics_listener_started").Info("starting server metrics listener", "addr", addr)
+	result := make(chan error, 1)
+	go func() { result <- srv.Serve(ln) }()
+	select {
+	case err := <-result:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
 		if err := srv.Shutdown(context.Background()); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			observability.WithEvent(log, "server_metrics_listener_shutdown_error").Warn("server metrics listener shutdown failed", "error", err)
 		}
-	}()
-
-	observability.WithEvent(log, "server_metrics_listener_started").Info("starting server metrics listener", "addr", addr)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+		err := <-result
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
 	}
-	return nil
 }

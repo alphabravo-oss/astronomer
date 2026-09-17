@@ -11,7 +11,7 @@ import (
 // phase owns one dependency domain; productionComposition is the typed hand-off
 // into route composition and background-runtime startup.
 func NewApp(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Server, error) {
-	composition := &productionComposition{}
+	composition := &productionComposition{runtime: newRuntimeSupervisor(logger)}
 	phases := []func(context.Context, *config.Config, *slog.Logger) error{
 		composition.initializePersistence,
 		composition.initializeCoreHandlers,

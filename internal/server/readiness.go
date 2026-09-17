@@ -48,6 +48,12 @@ type securityCacheHealthProvider interface {
 	Started() bool
 }
 
+type criticalRuntimeHealthProvider interface {
+	Healthy() bool
+	Started() bool
+	HealthError() string
+}
+
 type readinessCheck struct {
 	OK                bool   `json:"ok"`
 	Error             string `json:"error,omitempty"`
@@ -70,12 +76,20 @@ type readinessHandler struct {
 	expectedSchemaVersion int64
 	securityCache         securityCacheHealthProvider
 	securityCacheRequired bool
+	criticalRuntime       criticalRuntimeHealthProvider
 }
 
 func (h *readinessHandler) withSecurityCacheCoordinator(provider securityCacheHealthProvider, required bool) *readinessHandler {
 	if h != nil {
 		h.securityCache = provider
 		h.securityCacheRequired = required
+	}
+	return h
+}
+
+func (h *readinessHandler) withCriticalRuntime(provider criticalRuntimeHealthProvider) *readinessHandler {
+	if h != nil {
+		h.criticalRuntime = provider
 	}
 	return h
 }
@@ -213,6 +227,16 @@ func (h *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			statusCode = http.StatusServiceUnavailable
 		}
 		checks["security_cache_invalidation"] = check
+	}
+
+	if h.criticalRuntime != nil {
+		ready := h.criticalRuntime.Started() && h.criticalRuntime.Healthy()
+		check := readinessCheck{OK: ready}
+		if !ready {
+			check.Error = h.criticalRuntime.HealthError()
+			statusCode = http.StatusServiceUnavailable
+		}
+		checks["critical_runtime"] = check
 	}
 
 	body := map[string]any{

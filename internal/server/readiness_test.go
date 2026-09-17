@@ -30,6 +30,16 @@ type fakeSecurityCacheHealth struct{ started, healthy bool }
 func (f fakeSecurityCacheHealth) Started() bool { return f.started }
 func (f fakeSecurityCacheHealth) Healthy() bool { return f.healthy }
 
+type fakeCriticalRuntimeHealth struct {
+	started bool
+	healthy bool
+	err     string
+}
+
+func (f fakeCriticalRuntimeHealth) Started() bool       { return f.started }
+func (f fakeCriticalRuntimeHealth) Healthy() bool       { return f.healthy }
+func (f fakeCriticalRuntimeHealth) HealthError() string { return f.err }
+
 func (f fakeHubStatus) ConnectedClusters() []string { return f.clusters }
 
 func TestReadinessHandlerOK(t *testing.T) {
@@ -176,6 +186,27 @@ func TestReadinessRequiresInitialSecurityCacheEpochStateInHA(t *testing.T) {
 	local.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("single-replica local-only readiness = %d, want 200", rec.Code)
+	}
+}
+
+func TestReadinessFailsOnCriticalRuntimeExit(t *testing.T) {
+	h := newReadinessHandler(fakeDBHealth{}, fakeQueuePing{}, fakeHubStatus{}).
+		withCriticalRuntime(fakeCriticalRuntimeHealth{
+			started: true,
+			err:     "critical runtime tunnel-queue-worker: worker crashed",
+		})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("critical runtime failure status = %d, want 503", rec.Code)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	check := body["checks"].(map[string]any)["critical_runtime"].(map[string]any)
+	if check["ok"] != false || check["error"] != "critical runtime tunnel-queue-worker: worker crashed" {
+		t.Fatalf("critical_runtime check = %#v", check)
 	}
 }
 

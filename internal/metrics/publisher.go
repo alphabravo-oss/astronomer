@@ -157,8 +157,27 @@ func (p *Publisher) Start(ctx context.Context) {
 	if p == nil {
 		return
 	}
-	go p.runMetricsLoop(ctx)
-	go p.runStatusSweepLoop(ctx)
+	go p.Run(ctx)
+}
+
+// Run blocks until both publisher loops have stopped. It is the production
+// lifecycle entry point; Start remains for compatibility with lightweight
+// callers that deliberately own only the parent context.
+func (p *Publisher) Run(ctx context.Context) {
+	if p == nil {
+		return
+	}
+	var loops sync.WaitGroup
+	loops.Add(2)
+	go func() {
+		defer loops.Done()
+		p.runMetricsLoop(ctx)
+	}()
+	go func() {
+		defer loops.Done()
+		p.runStatusSweepLoop(ctx)
+	}()
+	loops.Wait()
 }
 
 func (p *Publisher) runMetricsLoop(ctx context.Context) {

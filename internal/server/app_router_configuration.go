@@ -12,7 +12,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
-func (c *productionComposition) configureRouterPolicies(ctx context.Context, logger *slog.Logger, deps *RouterDependencies) {
+func (c *productionComposition) configureRouterPolicies(_ context.Context, logger *slog.Logger, deps *RouterDependencies) {
 	database := c.database
 	queries := c.queries
 
@@ -53,7 +53,6 @@ func (c *productionComposition) configureRouterPolicies(ctx context.Context, log
 
 	quotaEnforcer := quota.New(queries, logger)
 	quota.MustRegister()
-	quota.StartReporter(ctx, queries, logger)
 	scanner.MustRegisterMetrics()
 	if deps.ClusterResources.Clusters != nil {
 		deps.ClusterResources.Clusters.SetQuotaEnforcer(quotaEnforcer)
