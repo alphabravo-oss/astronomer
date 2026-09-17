@@ -15,8 +15,9 @@ spec:
     metadata:
       labels:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "worker") | nindent 8 }}
-      {{- with .Values.worker.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.worker.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
