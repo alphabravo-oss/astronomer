@@ -16,6 +16,7 @@ type requestMetadata struct {
 	forwardedProto     string
 	forwardedHost      string
 	totpEnrollOnly     bool
+	secureCookies      bool
 }
 
 func metadata(ctx context.Context) requestMetadata {
@@ -95,7 +96,14 @@ func RequestIsHTTPS(request *http.Request) bool {
 	if request == nil {
 		return false
 	}
-	return request.TLS != nil || metadata(request.Context()).forwardedProto == "https"
+	value := metadata(request.Context())
+	return request.TLS != nil || value.forwardedProto == "https" || value.secureCookies
+}
+
+// WithSecureCookiesRequired forces Secure session cookies even when TLS is
+// terminated before the request reaches the server.
+func WithSecureCookiesRequired(ctx context.Context, required bool) context.Context {
+	return withMetadata(ctx, func(value *requestMetadata) { value.secureCookies = required })
 }
 
 func WithTOTPEnrollOnly(ctx context.Context) context.Context {

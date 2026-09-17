@@ -97,11 +97,7 @@ function LoginPage() {
   });
   const loading = useStore(form.store, (state) => state.isSubmitting);
 
-  const completeTotp = (
-    _token: string,
-    _refresh: string | undefined,
-    user: User,
-  ) => {
+  const completeTotp = (user: User) => {
     login(user);
     void navigate({ to: sanitizeReturnTo(returnTo) });
   };
@@ -423,7 +419,7 @@ function TotpChallengeForm({
 }: {
   challenge: TotpChallenge;
   onCancel: () => void;
-  onSuccess: (token: string, refresh: string | undefined, user: User) => void;
+  onSuccess: (user: User) => void;
 }) {
   const [useRecovery, setUseRecovery] = useState(false);
 
@@ -446,7 +442,7 @@ function TotpChallengeForm({
           challenge.challengeToken,
           value.code,
         );
-        onSuccess(data.token, data.refresh, data.user);
+        onSuccess(data.user);
       } catch (err) {
         setSubmissionError(
           err instanceof Error ? err.message : "The request failed. Try again.",

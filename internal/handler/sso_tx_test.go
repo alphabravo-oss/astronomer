@@ -36,6 +36,9 @@ func (f *fakeTTLSSOQueries) GetUserByIDForUpdate(context.Context, uuid.UUID) (sq
 func (f *fakeTTLSSOQueries) InsertSSOSession(context.Context, sqlc.InsertSSOSessionParams) error {
 	return nil
 }
+func (f *fakeTTLSSOQueries) CreateRefreshSession(context.Context, sqlc.CreateRefreshSessionParams) error {
+	return nil
+}
 func (f *fakeTTLSSOQueries) UpsertAuditOutbox(context.Context, sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
 	return sqlc.AuditOutbox{}, nil
 }
@@ -89,6 +92,9 @@ func (q *stagedSSOTx) GetUserByIDForUpdate(context.Context, uuid.UUID) (sqlc.Use
 		user.IsActive = false
 	}
 	return user, q.step("lock")
+}
+func (q *stagedSSOTx) CreateRefreshSession(context.Context, sqlc.CreateRefreshSessionParams) error {
+	return q.step("refresh_session")
 }
 func (q *stagedSSOTx) UpsertUserIDPGroups(_ context.Context, p sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error) {
 	if !p.ConnectorID.Valid || p.ConnectorID.Bytes != q.connector {

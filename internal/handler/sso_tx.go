@@ -21,6 +21,7 @@ type SSOCallbackTx interface {
 	audit.OutboxQuerier
 	GetUserByIDForUpdate(context.Context, uuid.UUID) (sqlc.User, error)
 	InsertSSOSession(context.Context, sqlc.InsertSSOSessionParams) error
+	CreateRefreshSession(context.Context, sqlc.CreateRefreshSessionParams) error
 }
 
 type ssoRunTxFunc func(context.Context, func(SSOCallbackTx) error) error
@@ -77,6 +78,9 @@ func (h *SSOHandler) commitSSOCallback(r *http.Request, provider string, info *a
 			return err
 		}
 		if err := h.persistSSOSession(r.Context(), q, user.ID, provider, pair, info); err != nil {
+			return err
+		}
+		if err := createRefreshSession(r.Context(), q, user.ID, pair); err != nil {
 			return err
 		}
 		return auditSSOCallback(r, q, user, provider, info, provisioned, linked, result)

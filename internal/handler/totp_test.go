@@ -456,8 +456,8 @@ func TestLogin_TOTPChallengeWithValidCode(t *testing.T) {
 	var verifyResp map[string]any
 	_ = json.NewDecoder(w.Body).Decode(&verifyResp)
 	data := verifyResp["data"].(map[string]any)
-	if data["token"] == nil || data["token"] == "" {
-		t.Error("missing session token after verify")
+	if _, exposed := data["token"]; exposed {
+		t.Error("TOTP verify exposed session token to JavaScript")
 	}
 	if !responseHasCookie(w.Result(), auth.SessionCookieName, true) {
 		t.Fatalf("expected HttpOnly %s cookie after verify", auth.SessionCookieName)
@@ -680,9 +680,10 @@ func TestRefreshEnforcesEnrollment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mint refresh: %v", err)
 	}
-	body := mustJSON(t, map[string]string{"refresh": refresh})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
+	req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refresh})
+	req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
+	req.Header.Set("X-CSRF-Token", "csrf-token")
 	w := httptest.NewRecorder()
 	authH.Refresh(w, req)
 

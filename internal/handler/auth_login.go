@@ -142,30 +142,39 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mintCtx := h.applySessionTimeoutFromSettings(r.Context())
-	accessToken, refreshToken, err := h.jwt.GenerateTokenPairContext(mintCtx, user.ID)
+	pair, err := h.jwt.PrepareTokenPairContext(mintCtx)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to prepare session")
+		return
+	}
+	_, err = executeMutation(r, h.runTx,
+		func(q AuthMutationTx) (sqlc.User, error) {
+			if err := createRefreshSession(r.Context(), q, user.ID, pair); err != nil {
+				return sqlc.User{}, err
+			}
+			return user, nil
+		},
+		func(committed sqlc.User) mutationAuditEvent {
+			return mutationAuditEvent{action: "auth.login", resourceType: "user", resourceID: committed.ID.String(),
+				resourceName: committed.Username, status: http.StatusOK, detail: map[string]any{"identifier_type": "email"}}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			"The browser session could not be persisted")
+		return
+	}
+	accessToken, refreshToken, err := h.jwt.SignPreparedTokenPair(user.ID, pair)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate session")
 		return
 	}
 
-	// Update last_login (best-effort; don't fail the login if this errors)
+	// Update last_login after session commit; identity history does not weaken
+	// the durable session/audit transaction if this best-effort write fails.
 	_ = h.queries.UpdateUserLastLogin(ctx, user.ID)
 
-	resp := LoginResponse{
-		Token:   accessToken,
-		Refresh: refreshToken,
-		User:    userToResponse(user),
-	}
-
-	if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true},
-		"auth.login", "user", user.ID.String(), user.Username, map[string]any{"identifier_type": "email"}); auditErr != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
-			"Mandatory audit storage is unavailable; the session was not issued")
-		return
-	}
-
 	setBrowserSessionCookies(w, r, accessToken, refreshToken)
-	RespondJSON(w, http.StatusOK, resp)
+	RespondJSON(w, http.StatusOK, LoginResponse{User: userToResponse(user)})
 }
 
 func normalizeLoginEmail(value string) (string, error) {

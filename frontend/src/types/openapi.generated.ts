@@ -3513,9 +3513,7 @@ export interface OpenAPIComponents {
         };
     LoginResponse: {
           "data"?: {
-            "token"?: string;
-            "refresh"?: string;
-            "user"?: OpenAPIComponents['schemas']['User'];
+            "user": OpenAPIComponents['schemas']['User'];
           };
         };
     MTLSBreakdownResponse: {
@@ -13039,14 +13037,11 @@ export interface OpenAPIOperations {
   "postAuthRefresh": {
     method: "POST";
     path: "/api/v1/auth/refresh/";
-    arguments: {
-        "body"?: {
-          "refresh"?: string;
-        };
-      };
+    arguments: Record<string, never>;
     response: {
-        "token"?: string;
-        "refresh"?: string;
+        "data": {
+          "detail": string;
+        };
       };
   };
   "getAuthLogoutDone": {

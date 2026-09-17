@@ -32,7 +32,7 @@
   "postgresql": {
     "migration_mode": "versioned_incremental",
     "minimum_upgrade_schema": 1,
-    "reversible_through_schema": 46,
+    "reversible_through_schema": 47,
     "supported_majors": [
       16,
       17
@@ -41,7 +41,7 @@
       "1.0.x",
       "1.1.x"
     ],
-    "target_schema": 46,
+    "target_schema": 47,
     "tls_required_in_production": true
   },
   "release_line": "1.1.x",

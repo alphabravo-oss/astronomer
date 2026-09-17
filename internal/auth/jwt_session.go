@@ -23,6 +23,7 @@ type PreparedTokenPair struct {
 func (p PreparedTokenPair) AccessID() string         { return p.accessID }
 func (p PreparedTokenPair) RefreshID() string        { return p.refreshID }
 func (p PreparedTokenPair) FamilyID() uuid.UUID      { return p.familyID }
+func (p PreparedTokenPair) IssuedAt() time.Time      { return p.issuedAt }
 func (p PreparedTokenPair) RefreshExpiry() time.Time { return p.refreshExpiry }
 
 func (m *JWTManager) PrepareTokenPairContext(ctx context.Context) (PreparedTokenPair, error) {
@@ -37,6 +38,23 @@ func (m *JWTManager) PrepareTokenPairContext(ctx context.Context) (PreparedToken
 	}, nil
 }
 
+// PrepareRotationContext reserves fresh JTIs inside an existing browser
+// session family. Rotation preserves the family's absolute refresh expiry.
+func (m *JWTManager) PrepareRotationContext(ctx context.Context, familyID uuid.UUID, familyExpiry time.Time) (PreparedTokenPair, error) {
+	pair, err := m.PrepareTokenPairContext(ctx)
+	if err != nil {
+		return PreparedTokenPair{}, err
+	}
+	if familyID == uuid.Nil || !time.Now().Before(familyExpiry) {
+		return PreparedTokenPair{}, errors.New("refresh session family is invalid or expired")
+	}
+	pair.familyID = familyID
+	if familyExpiry.Before(pair.refreshExpiry) {
+		pair.refreshExpiry = familyExpiry.UTC().Truncate(time.Second)
+	}
+	return pair, nil
+}
+
 // SignPreparedTokenPair must be called after the session transaction commits.
 func (m *JWTManager) SignPreparedTokenPair(userID uuid.UUID, p PreparedTokenPair) (string, string, error) {
 	if m == nil || m.KeyCount() == 0 || userID == uuid.Nil || p.accessID == "" ||
@@ -44,7 +62,7 @@ func (m *JWTManager) SignPreparedTokenPair(userID uuid.UUID, p PreparedTokenPair
 		return "", "", errors.New("session metadata is invalid or expired")
 	}
 	sign := func(id string, kind TokenType, expiry time.Time) (string, error) {
-		claims := Claims{UserID: userID, TokenType: kind, SessionFamilyID: p.familyID,
+		claims := Claims{UserID: userID, TokenType: kind, SessionFamilyID: p.familyID, BrowserSession: true,
 			RegisteredClaims: m.registeredClaims(userID, id, p.issuedAt, expiry)}
 		return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secretKeys[0])
 	}

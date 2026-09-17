@@ -81,6 +81,10 @@ func (tx *totpTestTransaction) fail(operation string) error {
 	return nil
 }
 
+func (tx *totpTestTransaction) CreateRefreshSession(context.Context, sqlc.CreateRefreshSessionParams) error {
+	return tx.fail("refresh_session")
+}
+
 func (tx *totpTestTransaction) GetUserByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.User, error) {
 	if err := tx.fail("lock"); err != nil {
 		return sqlc.User{}, err

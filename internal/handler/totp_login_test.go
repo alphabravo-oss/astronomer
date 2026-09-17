@@ -69,7 +69,23 @@ func TestTOTPEnrollmentReadOutageBlocksSessionMint(t *testing.T) {
 					t.Fatal(err)
 				}
 				endpoint = h.Refresh
-				body = map[string]string{"refresh": refresh}
+				body = nil
+				r := httptest.NewRequest(http.MethodPost, "/", nil)
+				r.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refresh})
+				r.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
+				r.Header.Set("X-CSRF-Token", "csrf-token")
+				w := httptest.NewRecorder()
+				endpoint(w, r)
+				if w.Code != http.StatusServiceUnavailable {
+					t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+				}
+				if len(w.Result().Cookies()) != 0 || strings.Contains(w.Body.String(), "challenge_token") || strings.Contains(w.Body.String(), "\"token\"") {
+					t.Fatal("enrollment outage issued an authentication credential")
+				}
+				if lookup.calls != 1 {
+					t.Fatalf("enrollment lookups=%d, want 1", lookup.calls)
+				}
+				return
 			}
 			r := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(mustJSON(t, body)))
 			w := httptest.NewRecorder()

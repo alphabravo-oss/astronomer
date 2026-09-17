@@ -482,6 +482,9 @@ type Querier interface {
 	CreateProjectRole(ctx context.Context, arg CreateProjectRoleParams) (ProjectRole, error)
 	CreateProjectRoleBinding(ctx context.Context, arg CreateProjectRoleBindingParams) (ProjectRoleBinding, error)
 	CreatePrometheusDatasource(ctx context.Context, arg CreatePrometheusDatasourceParams) (PrometheusDatasource, error)
+	// Browser refresh-session families. Only SHA-256 lookup hashes are retained;
+	// raw JTIs and family IDs remain inside the signed JWT and browser cookie.
+	CreateRefreshSession(ctx context.Context, arg CreateRefreshSessionParams) error
 	CreateResourceOperationIdempotent(ctx context.Context, arg CreateResourceOperationIdempotentParams) (ResourceOperation, error)
 	CreateRestoreOperation(ctx context.Context, arg CreateRestoreOperationParams) (RestoreOperation, error)
 	// SCIM 2.0 provisioning queries. Bearer-token auth +
@@ -1168,6 +1171,7 @@ type Querier interface {
 	InsertWebhookDelivery(ctx context.Context, arg InsertWebhookDeliveryParams) (WebhookDelivery, error)
 	InvalidateAllTokens(ctx context.Context, arg InvalidateAllTokensParams) error
 	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
+	IsRefreshSessionFamilyRevoked(ctx context.Context, familyHash []byte) (bool, error)
 	// Latest CIS scan per cluster in one pass, mirroring the per-cluster
 	// "ORDER BY created_at DESC LIMIT 1" selection but batched across the
 	// whole fleet for the compliance-posture rollup.
@@ -2019,6 +2023,7 @@ type Querier interface {
 	// without bound. Returning the rowcount lets the worker emit it as a
 	// metric.
 	PurgeExpiredJWTRevocations(ctx context.Context) (int64, error)
+	PurgeExpiredRefreshSessions(ctx context.Context) (int64, error)
 	// Called by the same nightly retention task that GCs jwt_revocations.
 	// Bounded by the JWT's natural expiry — once the JWT is unusable, the
 	// row's id_token_hint is moot too.
@@ -2121,6 +2126,7 @@ type Querier interface {
 	//      to enumerate them — the JWT validator rejects any token whose
 	//      iat predates the cutoff.
 	RevokeJWT(ctx context.Context, arg RevokeJWTParams) error
+	RevokeRefreshSessionFamily(ctx context.Context, arg RevokeRefreshSessionFamilyParams) (int64, error)
 	RevokeSCIMToken(ctx context.Context, id uuid.UUID) (int64, error)
 	// Performs the grace rotation atomically: the current token_hash moves to
 	// previous_token_hash (so the old token keeps validating until the agent
@@ -2128,6 +2134,7 @@ type Querier interface {
 	// last_rotated_at is stamped and rotation_pending_at is cleared.
 	RotateClusterAgentToken(ctx context.Context, arg RotateClusterAgentTokenParams) (ClusterAgentToken, error)
 	RotateDeliverySourceCredential(ctx context.Context, arg RotateDeliverySourceCredentialParams) (RotateDeliverySourceCredentialRow, error)
+	RotateRefreshSession(ctx context.Context, arg RotateRefreshSessionParams) (string, error)
 	// Compare-and-set on the empty ciphertext: two schedulers (server + dedicated
 	// worker both run this task) racing on the same row must not have the loser
 	// overwrite a freshly-sealed envelope with a re-encryption of a document it

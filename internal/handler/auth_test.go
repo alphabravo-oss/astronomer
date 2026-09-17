@@ -43,6 +43,7 @@ type authTestMutationTx struct {
 	passwordResets PasswordResetStore
 	audit          *recordingAuthAuditWriter
 	audits         []sqlc.UpsertAuditOutboxParams
+	rotationStatus string
 }
 
 func (tx *authTestMutationTx) GetUserByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -129,6 +130,21 @@ func (tx *authTestMutationTx) RevokeAPIToken(ctx context.Context, id uuid.UUID) 
 		return fmt.Errorf("auth test transaction: token store is not configured")
 	}
 	return tx.tokens.RevokeAPIToken(ctx, id)
+}
+
+func (tx *authTestMutationTx) CreateRefreshSession(context.Context, sqlc.CreateRefreshSessionParams) error {
+	return nil
+}
+
+func (tx *authTestMutationTx) RotateRefreshSession(context.Context, sqlc.RotateRefreshSessionParams) (string, error) {
+	if tx.rotationStatus != "" {
+		return tx.rotationStatus, nil
+	}
+	return refreshRotationRotated, nil
+}
+
+func (tx *authTestMutationTx) RevokeRefreshSessionFamily(context.Context, sqlc.RevokeRefreshSessionFamilyParams) (int64, error) {
+	return 1, nil
 }
 
 func (tx *authTestMutationTx) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
@@ -385,11 +401,11 @@ func TestLogin(t *testing.T) {
 				t.Fatalf("expected 'data' wrapper, got: %v", body)
 			}
 
-			if data["token"] == nil || data["token"] == "" {
-				t.Fatal("expected non-empty token")
+			if _, exposed := data["token"]; exposed {
+				t.Fatal("browser login exposed access token to JavaScript")
 			}
-			if data["refresh"] == nil || data["refresh"] == "" {
-				t.Fatal("expected non-empty refresh token")
+			if _, exposed := data["refresh"]; exposed {
+				t.Fatal("browser login exposed refresh token to JavaScript")
 			}
 			if !responseHasCookie(w.Result(), auth.SessionCookieName, true) {
 				t.Fatalf("expected HttpOnly %s cookie", auth.SessionCookieName)
@@ -434,13 +450,15 @@ func TestRefresh(t *testing.T) {
 			t.Fatal("expected non-empty token pair")
 		}
 
-		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
+		users := newMockQuerier(user)
+		handler := NewAuthHandler(users, jwtMgr)
 		auditWriter := &recordingAuthAuditWriter{}
-		handler.SetAuditWriter(auditWriter)
+		wireAuthTestMutationTx(handler, &authTestMutationTx{users: users, audit: auditWriter})
 
-		body := fmt.Sprintf(`{"refresh":%q}`, refreshToken)
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
+		req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refreshToken})
+		req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
+		req.Header.Set("X-CSRF-Token", "csrf-token")
 
 		w := httptest.NewRecorder()
 		handler.Refresh(w, req)
@@ -463,6 +481,17 @@ func TestRefresh(t *testing.T) {
 		if !responseHasCookie(w.Result(), auth.RefreshCookieName, true) {
 			t.Fatalf("expected refreshed %s cookie", auth.RefreshCookieName)
 		}
+		var response map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		data := response["data"].(map[string]any)
+		if _, exposed := data["token"]; exposed {
+			t.Fatal("refresh exposed access token to JavaScript")
+		}
+		if _, exposed := data["refresh"]; exposed {
+			t.Fatal("refresh exposed refresh token to JavaScript")
+		}
 	})
 
 	t.Run("successful refresh can use HttpOnly refresh cookie", func(t *testing.T) {
@@ -471,8 +500,9 @@ func TestRefresh(t *testing.T) {
 			t.Fatalf("generate token pair: %v", err)
 		}
 
-		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
-		handler.SetAuditWriter(&recordingAuthAuditWriter{})
+		users := newMockQuerier(user)
+		handler := NewAuthHandler(users, jwtMgr)
+		wireAuthTestMutationTx(handler, &authTestMutationTx{users: users})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
 		req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refreshToken})
 		req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
@@ -512,8 +542,10 @@ func TestRefresh(t *testing.T) {
 		auditWriter := &recordingAuthAuditWriter{}
 		handler.SetAuditWriter(auditWriter)
 
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", strings.NewReader(`{"refresh":"bad-token"}`))
-		req.Header.Set("Content-Type", "application/json")
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
+		req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: "bad-token"})
+		req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
+		req.Header.Set("X-CSRF-Token", "csrf-token")
 
 		w := httptest.NewRecorder()
 		handler.Refresh(w, req)
@@ -526,6 +558,47 @@ func TestRefresh(t *testing.T) {
 		}
 		if auditWriter.rows[0].Action != "auth.refresh_failed" {
 			t.Fatalf("action = %q, want auth.refresh_failed", auditWriter.rows[0].Action)
+		}
+	})
+
+	t.Run("JSON bearer is not accepted", func(t *testing.T) {
+		_, refreshToken, err := jwtMgr.GenerateTokenPair(user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		handler := NewAuthHandler(newMockQuerier(user), jwtMgr)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", strings.NewReader(fmt.Sprintf(`{"refresh":%q}`, refreshToken)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		handler.Refresh(w, req)
+		if w.Code != http.StatusUnauthorized || strings.Contains(w.Body.String(), refreshToken) {
+			t.Fatalf("cookie-only refresh status/body = %d/%s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("refresh reuse revokes family and emits mandatory audit", func(t *testing.T) {
+		_, refreshToken, err := jwtMgr.GenerateTokenPair(user.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		users := newMockQuerier(user)
+		auditWriter := &recordingAuthAuditWriter{}
+		handler := NewAuthHandler(users, jwtMgr)
+		wireAuthTestMutationTx(handler, &authTestMutationTx{users: users, audit: auditWriter, rotationStatus: refreshRotationReused})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
+		req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refreshToken})
+		req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
+		req.Header.Set("X-CSRF-Token", "csrf-token")
+		w := httptest.NewRecorder()
+		handler.Refresh(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("reuse status = %d, body=%s", w.Code, w.Body.String())
+		}
+		if len(auditWriter.rows) != 1 || auditWriter.rows[0].Action != "auth.refresh_reuse_detected" {
+			t.Fatalf("reuse audit = %#v", auditWriter.rows)
+		}
+		if cookieByName(t, w.Result(), auth.RefreshCookieName).MaxAge != -1 {
+			t.Fatal("reuse did not clear refresh cookie")
 		}
 	})
 }

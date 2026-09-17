@@ -262,11 +262,6 @@ type enrollConfirmRequest struct {
 type enrollConfirmResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
 	Enrolled      bool     `json:"enrolled"`
-	// Token/Refresh are populated ONLY when the caller reached confirm via the
-	// forced-enrollment challenge (they had no session). Completing enrollment
-	// logs them in, so we mint and return the real session pair here.
-	Token   string `json:"token,omitempty"`
-	Refresh string `json:"refresh,omitempty"`
 }
 
 // EnrollConfirm handles POST /api/v1/auth/totp/enroll/confirm/.
@@ -393,6 +388,9 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 			if err := q.UpdateUserLastLogin(r.Context(), userID); err != nil {
 				return err
 			}
+			if err := createRefreshSession(r.Context(), q, userID, session); err != nil {
+				return err
+			}
 		}
 		return recordAuditOutboxAs(r, q, pgtype.UUID{Bytes: userID, Valid: true},
 			"auth.totp.enrolled", "user", userID.String(), authUser.Username, http.StatusOK,
@@ -414,12 +412,13 @@ func (h *TOTPHandler) EnrollConfirm(w http.ResponseWriter, r *http.Request) {
 	// session pair and log them in — otherwise they'd complete enrollment and
 	// still be stuck at a login wall.
 	if enrollOnly {
-		resp.Token, resp.Refresh, err = h.jwt.SignPreparedTokenPair(userID, session)
+		accessToken, refreshToken, signErr := h.jwt.SignPreparedTokenPair(userID, session)
+		err = signErr
 		if err != nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate session")
 			return
 		}
-		setBrowserSessionCookies(w, r, resp.Token, resp.Refresh)
+		setBrowserSessionCookies(w, r, accessToken, refreshToken)
 	}
 	RespondJSON(w, http.StatusOK, resp)
 }

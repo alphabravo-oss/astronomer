@@ -48,7 +48,7 @@ func TestInteractiveSessionMintPathsUseContextProvider(t *testing.T) {
 					return true
 				}
 				switch sel.Sel.Name {
-				case "GenerateTokenPairContext", "PrepareTokenPairContext":
+				case "GenerateTokenPairContext", "PrepareTokenPairContext", "PrepareRotationContext":
 					contextCalls++
 				case "GenerateTokenPair", "GenerateAccessToken", "GenerateAccessTokenContext":
 					legacyCalls++

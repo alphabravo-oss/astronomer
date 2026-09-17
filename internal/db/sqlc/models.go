@@ -2605,6 +2605,24 @@ type ReadAuditPolicy struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+type RefreshSessionFamily struct {
+	FamilyHash   []byte             `json:"family_hash"`
+	UserID       uuid.UUID          `json:"user_id"`
+	CreatedAt    time.Time          `json:"created_at"`
+	ExpiresAt    time.Time          `json:"expires_at"`
+	RevokedAt    pgtype.Timestamptz `json:"revoked_at"`
+	RevokeReason string             `json:"revoke_reason"`
+}
+
+type RefreshSessionToken struct {
+	JtiHash           []byte             `json:"jti_hash"`
+	FamilyHash        []byte             `json:"family_hash"`
+	CreatedAt         time.Time          `json:"created_at"`
+	ExpiresAt         time.Time          `json:"expires_at"`
+	ConsumedAt        pgtype.Timestamptz `json:"consumed_at"`
+	ReplacedByJtiHash []byte             `json:"replaced_by_jti_hash"`
+}
+
 type RepairJobState struct {
 	JobName                   string             `json:"job_name"`
 	Scope                     string             `json:"scope"`

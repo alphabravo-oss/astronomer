@@ -31,6 +31,9 @@ unclassified column fails CI.
 | `password_reset_tokens.token_hash` | Token hash | Plaintext is returned once. |
 | `password_reset_tokens.password_hash_at_issue` | Password-hash snapshot | Invalidates reset tokens after a password change. |
 | `scim_tokens.token_hash` | Token hash | Plaintext is returned once. |
+| `refresh_session_families.family_hash` | SHA-256 lookup hash | Hash of the random JWT session-family ID; raw family IDs are never stored. |
+| `refresh_session_tokens.jti_hash` | SHA-256 lookup hash | One-time refresh-token lookup; raw JTIs are never stored. |
+| `refresh_session_tokens.replaced_by_jti_hash` | SHA-256 lookup hash | Rotation lineage without retaining a bearer identifier. |
 | `charlie_connections.local_trust_material_encrypted` | Versioned authenticated ciphertext | Astronomer-owned local CA/private-key and bridge/MCP TLS material only. |
 | `charlie_action_receipts.arguments_encrypted` | Versioned authenticated ciphertext | Bounded postcondition-reconciliation input; excluded from logs and support bundles. |
 | `charlie_action_receipts.result_encrypted` | Versioned authenticated ciphertext | Bounded idempotent replay result; excluded from logs and support bundles. |

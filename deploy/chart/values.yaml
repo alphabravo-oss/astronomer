@@ -405,7 +405,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 46
+    targetVersion: 47
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -444,6 +444,10 @@ config:
   # Seeded into platform_configuration.server_url on first boot. Leave empty
   # to skip the seed and set it later through platform settings.
   serverURL: ""
+  # Exact trust context embedded in every Astronomer JWT. Use install-specific
+  # values when signing keys are shared across environments.
+  jwtIssuer: "astronomer"
+  jwtAudience: "astronomer-browser"
   # Empty => derive from image.agent (registry-aware). This also accepts an
   # exact repository@sha256:digest; agentImageTag remains the release version.
   agentImageRepository: ""

@@ -24,6 +24,10 @@ func (unavailableRevocationChecker) IsJWTRevoked(context.Context, string) (bool,
 	return false, errors.New("revocation store unavailable")
 }
 
+func (unavailableRevocationChecker) IsSessionFamilyRevoked(context.Context, uuid.UUID) (bool, error) {
+	return false, errors.New("revocation store unavailable")
+}
+
 func (unavailableRevocationChecker) UserTokensInvalidatedAt(context.Context, uuid.UUID) (time.Time, bool, error) {
 	return time.Time{}, false, errors.New("revocation store unavailable")
 }

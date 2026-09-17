@@ -23,6 +23,8 @@ Production-specific invariants are enforced at startup by
 | `DB_MAX_CONN_IDLE_MINUTES` | `DBMaxConnIdleMin` | integer | Go zero value | No |
 | `DB_HEALTH_CHECK_PERIOD_SECONDS` | `DBHealthCheckPeriodSec` | integer | Go zero value | No |
 | `SECRET_KEY` | `SecretKey` | string | Go zero value | Yes |
+| `JWT_ISSUER` | `JWTIssuer` | string | `astronomer` | No |
+| `JWT_AUDIENCE` | `JWTAudience` | string | `astronomer-browser` | No |
 | `ENV` | `Env` | string | `development` | No |
 | `DEBUG` | `Debug` | boolean | `false` | No |
 | `HOSTNAME` | `ProcessHostname` | string | Go zero value | No |

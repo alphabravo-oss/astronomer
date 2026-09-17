@@ -55,6 +55,10 @@ type Claims struct {
 	UserID          uuid.UUID `json:"user_id"`
 	TokenType       TokenType `json:"token_type"`
 	SessionFamilyID uuid.UUID `json:"session_family_id,omitempty"`
+	// BrowserSession marks cookie sessions whose family is checked against
+	// durable storage. Non-browser/internal access JWTs are the explicit
+	// exception; opaque API tokens use a separate authentication boundary.
+	BrowserSession bool `json:"browser_session,omitempty"`
 	// Purpose narrows what a PurposeToken is allowed to do. Empty on
 	// regular access / refresh tokens. The verify handler is the only
 	// thing that should accept a non-empty Purpose; the regular auth
@@ -75,6 +79,7 @@ type Claims struct {
 // set AND the token's iat is before it, the token is rejected.
 type RevocationChecker interface {
 	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
+	IsSessionFamilyRevoked(ctx context.Context, familyID uuid.UUID) (bool, error)
 	UserTokensInvalidatedAt(ctx context.Context, userID uuid.UUID) (time.Time, bool, error)
 }
 
@@ -419,12 +424,12 @@ func (m *JWTManager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 // handlers use this through GenerateTokenPairContext; the context-free method
 // remains for non-request callers and compatibility.
 func (m *JWTManager) GenerateAccessTokenContext(ctx context.Context, userID uuid.UUID) (string, error) {
-	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(ctx), uuid.New())
+	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(ctx), uuid.New(), false)
 }
 
 // GenerateRefreshToken creates a refresh token
 func (m *JWTManager) GenerateRefreshToken(userID uuid.UUID) (string, error) {
-	return m.generateToken(userID, RefreshToken, m.refreshTokenLifetime, uuid.New())
+	return m.generateToken(userID, RefreshToken, m.refreshTokenLifetime, uuid.New(), true)
 }
 
 // GeneratePurposeToken creates a short-lived JWT whose only legitimate use
@@ -515,6 +520,9 @@ func (m *JWTManager) ValidateTokenContext(ctx context.Context, tokenString strin
 			if claims.Purpose != "" {
 				return nil, fmt.Errorf("invalid token: session token has purpose claim")
 			}
+			if claims.TokenType == RefreshToken && !claims.BrowserSession {
+				return nil, fmt.Errorf("invalid token: refresh token is not a browser session")
+			}
 		case PurposeToken:
 			if strings.TrimSpace(claims.Purpose) == "" {
 				return nil, fmt.Errorf("invalid token: purpose token has no purpose")
@@ -584,6 +592,15 @@ func (m *JWTManager) checkRevocationsUncached(ctx context.Context, claims *Claim
 		}
 		if revoked {
 			return fmt.Errorf("invalid token: token revoked")
+		}
+	}
+	if claims.BrowserSession {
+		revoked, err := checker.IsSessionFamilyRevoked(ctx, claims.SessionFamilyID)
+		if err != nil {
+			return fmt.Errorf("%w: session family lookup", ErrRevocationUnavailable)
+		}
+		if revoked {
+			return fmt.Errorf("invalid token: session family revoked")
 		}
 	}
 
@@ -836,12 +853,12 @@ func (m *JWTManager) InvalidateJWTAllLocal() {
 }
 
 // generateToken is the internal token generation helper
-func (m *JWTManager) generateToken(userID uuid.UUID, tokenType TokenType, lifetime time.Duration, familyID uuid.UUID) (string, error) {
+func (m *JWTManager) generateToken(userID uuid.UUID, tokenType TokenType, lifetime time.Duration, familyID uuid.UUID, browserSession bool) (string, error) {
 	now := time.Now()
 
 	claims := Claims{
 		RegisteredClaims: m.registeredClaims(userID, uuid.NewString(), now, now.Add(lifetime)),
-		UserID:           userID, TokenType: tokenType, SessionFamilyID: familyID,
+		UserID:           userID, TokenType: tokenType, SessionFamilyID: familyID, BrowserSession: browserSession,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

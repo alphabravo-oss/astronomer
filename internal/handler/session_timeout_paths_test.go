@@ -84,8 +84,10 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GenerateRefreshToken: %v", err)
 		}
-		body, _ := json.Marshal(map[string]string{"refresh": refresh})
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
+		req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refresh})
+		req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
+		req.Header.Set("X-CSRF-Token", "csrf-token")
 		w := httptest.NewRecorder()
 
 		h.Refresh(w, req)

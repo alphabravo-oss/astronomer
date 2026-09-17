@@ -40,3 +40,14 @@ func TestTrustedRequestMetadata(t *testing.T) {
 		t.Fatal("direct TLS request metadata was not preserved")
 	}
 }
+
+func TestRequestIsHTTPSCanForceProductionCookieSecurity(t *testing.T) {
+	request := httptest.NewRequest("GET", "http://astronomer.example/", nil)
+	if RequestIsHTTPS(request) {
+		t.Fatal("plain request unexpectedly secure")
+	}
+	request = request.WithContext(WithSecureCookiesRequired(request.Context(), true))
+	if !RequestIsHTTPS(request) {
+		t.Fatal("production cookie security flag was ignored")
+	}
+}

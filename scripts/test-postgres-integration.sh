@@ -49,6 +49,7 @@ export BUILTIN_PROVISIONER_TEST_DATABASE_URL="$database_url"
 export DELIVERY_ROLLOUT_TEST_DATABASE_URL="$database_url"
 export HEARTBEAT_TEST_DATABASE_URL="$database_url"
 export INACTIVE_USER_RETENTION_TEST_DATABASE_URL="$database_url"
+export REFRESH_SESSION_TEST_DATABASE_URL="$database_url"
 
 expected=(
   TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders
@@ -65,6 +66,7 @@ expected=(
   TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease
   TestRecordAgentHeartbeatAtomicWrite
   TestDeactivateInactiveUsersPostgresSemantics
+  TestRefreshSessionConcurrentRotationAndReplayRevokesFamily
 )
 pattern="^($(IFS='|'; printf '%s' "${expected[*]}"))$"
 race_args=()

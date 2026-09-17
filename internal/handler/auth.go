@@ -110,6 +110,9 @@ type AuthMutationTx interface {
 	UpdateUserPassword(context.Context, sqlc.UpdateUserPasswordParams) error
 	CreateAPIToken(context.Context, sqlc.CreateAPITokenParams) (sqlc.ApiToken, error)
 	RevokeAPIToken(context.Context, uuid.UUID) error
+	CreateRefreshSession(context.Context, sqlc.CreateRefreshSessionParams) error
+	RotateRefreshSession(context.Context, sqlc.RotateRefreshSessionParams) (string, error)
+	RevokeRefreshSessionFamily(context.Context, sqlc.RevokeRefreshSessionFamilyParams) (int64, error)
 }
 
 type authRunTxFunc func(context.Context, func(AuthMutationTx) error) error
@@ -485,9 +488,7 @@ type UserResponse struct {
 
 // LoginResponse matches the Python AstronomerTokenObtainPairSerializer.
 type LoginResponse struct {
-	Token   string       `json:"token"`
-	Refresh string       `json:"refresh"`
-	User    UserResponse `json:"user"`
+	User UserResponse `json:"user"`
 }
 
 const browserRefreshCookieMaxAge = int((7 * 24 * time.Hour) / time.Second)
@@ -548,11 +549,6 @@ func newBrowserCSRFToken() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil
-}
-
-// openapi:request-operation postAuthRefresh
-type refreshRequest struct {
-	Refresh string `json:"refresh"`
 }
 
 func userToResponse(user sqlc.User) UserResponse {

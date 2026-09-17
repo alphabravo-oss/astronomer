@@ -112,7 +112,7 @@
           "additionalProperties": false,
           "properties": {
             "minimumUpgradeVersion": { "const": 1 },
-            "targetVersion": { "const": 46 }
+            "targetVersion": { "const": 47 }
           },
           "required": ["minimumUpgradeVersion", "targetVersion"]
         }
@@ -163,6 +163,8 @@
         "debug": { "type": "string", "enum": ["true", "false"] },
         "logLevel": { "type": "string", "enum": ["debug", "info", "warn", "warning", "error"] },
         "serverURL": { "type": "string" },
+        "jwtIssuer": { "type": "string", "minLength": 1 },
+        "jwtAudience": { "type": "string", "minLength": 1 },
         "corsAllowedOrigins": { "type": "string" },
         "trustedProxyCIDRs": { "type": "array", "items": { "type": "string", "pattern": "^[0-9A-Fa-f:.]+/[0-9]{1,3}$" }, "uniqueItems": true },
         "apiK8sProxyRateLimitRPS": { "type": "number", "exclusiveMinimum": 0 },
@@ -593,7 +595,7 @@
               "databaseSchema": {
                 "properties": {
                   "minimumUpgradeVersion": { "const": 1 },
-                  "targetVersion": { "const": 46 }
+                  "targetVersion": { "const": 47 }
                 },
                 "required": ["minimumUpgradeVersion", "targetVersion"]
               }

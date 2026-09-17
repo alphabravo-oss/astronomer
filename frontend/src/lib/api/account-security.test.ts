@@ -49,8 +49,6 @@ describe("account security generated API boundary", () => {
   it("maps a successful login's raw user wire shape", async () => {
     operations.login.mockResolvedValue({
       data: {
-        token: "access",
-        refresh: "refresh",
         user: {
           id: "user-1",
           username: "operator",
@@ -68,7 +66,6 @@ describe("account security generated API boundary", () => {
     ).resolves.toEqual(
       expect.objectContaining({
         kind: "ok",
-        token: "access",
         user: expect.objectContaining({
           id: "user-1",
           displayName: "Ada Lovelace",

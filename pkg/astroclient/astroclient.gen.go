@@ -7564,12 +7564,7 @@ type LoginRequest struct {
 // LoginResponse defines model for LoginResponse.
 type LoginResponse struct {
 	Data *struct {
-		// Refresh Refresh JWT (~7d TTL)
-		Refresh *string `json:"refresh,omitempty"`
-
-		// Token Access JWT (~1h TTL)
-		Token *string `json:"token,omitempty"`
-		User  *User   `json:"user,omitempty"`
+		User User `json:"user"`
 	} `json:"data,omitempty"`
 }
 
@@ -11396,12 +11391,6 @@ type PostAuthPasswordResetRequestJSONBody struct {
 	Email *openapi_types.Email `json:"email,omitempty"`
 }
 
-// PostAuthRefreshJSONBody defines parameters for PostAuthRefresh.
-type PostAuthRefreshJSONBody struct {
-	// Refresh Refresh JWT. Optional when the refresh cookie is present.
-	Refresh *string `json:"refresh,omitempty"`
-}
-
 // GetAuthTokensParams defines parameters for GetAuthTokens.
 type GetAuthTokensParams struct {
 	// Limit Page size.
@@ -13685,9 +13674,6 @@ type PostAuthPasswordResetCompleteJSONRequestBody PostAuthPasswordResetCompleteJ
 
 // PostAuthPasswordResetRequestJSONRequestBody defines body for PostAuthPasswordResetRequest for application/json ContentType.
 type PostAuthPasswordResetRequestJSONRequestBody PostAuthPasswordResetRequestJSONBody
-
-// PostAuthRefreshJSONRequestBody defines body for PostAuthRefresh for application/json ContentType.
-type PostAuthRefreshJSONRequestBody PostAuthRefreshJSONBody
 
 // PostAuthTokensJSONRequestBody defines body for PostAuthTokens for application/json ContentType.
 type PostAuthTokensJSONRequestBody PostAuthTokensJSONBody
@@ -20135,10 +20121,8 @@ type ClientInterface interface {
 
 	PostAuthPasswordResetRequest(ctx context.Context, body PostAuthPasswordResetRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostAuthRefreshWithBody request with any body
-	PostAuthRefreshWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostAuthRefresh(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// PostAuthRefresh request
+	PostAuthRefresh(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAuthTokens request
 	GetAuthTokens(ctx context.Context, params *GetAuthTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -25561,20 +25545,8 @@ func (c *Client) PostAuthPasswordResetRequest(ctx context.Context, body PostAuth
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostAuthRefreshWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthRefreshRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAuthRefresh(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthRefreshRequest(c.Server, body)
+func (c *Client) PostAuthRefresh(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthRefreshRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -44395,19 +44367,8 @@ func NewPostAuthPasswordResetRequestRequestWithBody(server string, contentType s
 	return req, nil
 }
 
-// NewPostAuthRefreshRequest calls the generic PostAuthRefresh builder with application/json body
-func NewPostAuthRefreshRequest(server string, body PostAuthRefreshJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostAuthRefreshRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewPostAuthRefreshRequestWithBody generates requests for PostAuthRefresh with any type of body
-func NewPostAuthRefreshRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+// NewPostAuthRefreshRequest generates requests for PostAuthRefresh
+func NewPostAuthRefreshRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -44425,12 +44386,10 @@ func NewPostAuthRefreshRequestWithBody(server string, contentType string, body i
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), body)
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -75129,10 +75088,8 @@ type ClientWithResponsesInterface interface {
 
 	PostAuthPasswordResetRequestWithResponse(ctx context.Context, body PostAuthPasswordResetRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthPasswordResetRequestResponse, error)
 
-	// PostAuthRefreshWithBodyWithResponse request with any body
-	PostAuthRefreshWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
-
-	PostAuthRefreshWithResponse(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
+	// PostAuthRefreshWithResponse request
+	PostAuthRefreshWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
 
 	// GetAuthTokensWithResponse request
 	GetAuthTokensWithResponse(ctx context.Context, params *GetAuthTokensParams, reqEditors ...RequestEditorFn) (*GetAuthTokensResponse, error)
@@ -82929,11 +82886,9 @@ type PostAuthRefreshResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Refresh New refresh JWT
-		Refresh *string `json:"refresh,omitempty"`
-
-		// Token New access JWT
-		Token *string `json:"token,omitempty"`
+		Data struct {
+			Detail string `json:"detail"`
+		} `json:"data"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
@@ -100931,17 +100886,9 @@ func (c *ClientWithResponses) PostAuthPasswordResetRequestWithResponse(ctx conte
 	return ParsePostAuthPasswordResetRequestResponse(rsp)
 }
 
-// PostAuthRefreshWithBodyWithResponse request with arbitrary body returning *PostAuthRefreshResponse
-func (c *ClientWithResponses) PostAuthRefreshWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
-	rsp, err := c.PostAuthRefreshWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAuthRefreshResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostAuthRefreshWithResponse(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
-	rsp, err := c.PostAuthRefresh(ctx, body, reqEditors...)
+// PostAuthRefreshWithResponse request returning *PostAuthRefreshResponse
+func (c *ClientWithResponses) PostAuthRefreshWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
+	rsp, err := c.PostAuthRefresh(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -119032,11 +118979,9 @@ func ParsePostAuthRefreshResponse(rsp *http.Response) (*PostAuthRefreshResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Refresh New refresh JWT
-			Refresh *string `json:"refresh,omitempty"`
-
-			// Token New access JWT
-			Token *string `json:"token,omitempty"`
+			Data struct {
+				Detail string `json:"detail"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err

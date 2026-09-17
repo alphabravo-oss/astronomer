@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -26,16 +27,19 @@ func (f *fakeCacheCoordinator) Broadcast(context.Context, cacheinvalidate.Kind, 
 type fakeRevocationChecker struct {
 	mu          sync.Mutex
 	revoked     map[string]bool
+	families    map[uuid.UUID]bool
 	cutoff      map[uuid.UUID]time.Time
 	revErr      error
+	familyErr   error
 	cutoffErr   error
 	revokeCalls int
 }
 
 func newFakeRevocationChecker() *fakeRevocationChecker {
 	return &fakeRevocationChecker{
-		revoked: make(map[string]bool),
-		cutoff:  make(map[uuid.UUID]time.Time),
+		revoked:  make(map[string]bool),
+		families: make(map[uuid.UUID]bool),
+		cutoff:   make(map[uuid.UUID]time.Time),
 	}
 }
 
@@ -47,6 +51,15 @@ func (f *fakeRevocationChecker) IsJWTRevoked(_ context.Context, jti string) (boo
 		return false, f.revErr
 	}
 	return f.revoked[jti], nil
+}
+
+func (f *fakeRevocationChecker) IsSessionFamilyRevoked(_ context.Context, familyID uuid.UUID) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.familyErr != nil {
+		return false, f.familyErr
+	}
+	return f.families[familyID], nil
 }
 
 func (f *fakeRevocationChecker) UserTokensInvalidatedAt(_ context.Context, userID uuid.UUID) (time.Time, bool, error) {
@@ -69,6 +82,39 @@ func (f *fakeRevocationChecker) invalidate(userID uuid.UUID, at time.Time) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.cutoff[userID] = at
+}
+
+func TestValidateTokenRejectsRevokedBrowserFamilyButExemptsNonBrowserAccess(t *testing.T) {
+	mgr := MustNewJWTManager("family-revocation-secret", 15)
+	mgr.SetValidationCacheTTL(0)
+	checker := newFakeRevocationChecker()
+	mgr.SetRevocationChecker(checker)
+	userID := uuid.New()
+	access, _, err := mgr.GenerateTokenPair(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := mgr.ValidateToken(access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checker.mu.Lock()
+	checker.families[claims.SessionFamilyID] = true
+	checker.mu.Unlock()
+	if _, err := mgr.ValidateToken(access); err == nil || !strings.Contains(err.Error(), "family revoked") {
+		t.Fatalf("ValidateToken(revoked family) error = %v", err)
+	}
+
+	checker.mu.Lock()
+	checker.familyErr = errors.New("family store unavailable")
+	checker.mu.Unlock()
+	serviceAccess, err := mgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims, err := mgr.ValidateToken(serviceAccess); err != nil || claims.BrowserSession {
+		t.Fatalf("non-browser access validation = %#v, %v", claims, err)
+	}
 }
 
 func TestValidateToken_RejectsRevokedJTI(t *testing.T) {

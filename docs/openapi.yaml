@@ -9,9 +9,10 @@ info:
     scans, kubectl shell sessions, helm catalog, and platform admin.
 
     Auth: all endpoints under `/api/v1/` outside `/auth/` and the
-    `/internal/` namespace require either a session JWT issued by
-    POST `/auth/login/` or a personal API token. Pass the token as
-    `Authorization: Bearer <token>`.
+    `/internal/` namespace require either the HttpOnly browser session created
+    by POST `/auth/login/` or a personal API token. Browser JWTs are cookie-only
+    and are never returned to JavaScript. Non-browser automation passes its
+    personal API token as `Authorization: Bearer <token>`.
 
     RBAC: write endpoints check the caller's permissions against the
     platform RBAC engine. Routes annotated `superuser` require
@@ -35,13 +36,13 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        JWT issued by `POST /api/v1/auth/login/` (session token) or
-        personal API token from `/api/v1/settings/tokens/`.
+        Non-browser personal API token from `/api/v1/settings/tokens/`.
+        Browser sessions use HttpOnly cookies and do not expose their JWT.
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Alias of bearerJWT; session JWT or personal API token.
+      description: Alias of bearerJWT for non-browser personal API tokens.
     gitHubWebhookSignature:
       type: apiKey
       in: header
@@ -4052,14 +4053,9 @@ components:
         data:
           type: object
           properties:
-            token:
-              type: string
-              description: Access JWT (~1h TTL)
-            refresh:
-              type: string
-              description: Refresh JWT (~7d TTL)
             user:
               $ref: '#/components/schemas/User'
+          required: [user]
     AuthUserRoleBinding:
       type: object
       additionalProperties: false
@@ -18615,8 +18611,9 @@ paths:
         - Auth
       summary: Email/password login
       description: |
-        Returns a JWT access token + refresh token. Rate-limited at
-        5/minute per source IP. If TOTP is required for the account
+        Establishes an HttpOnly access/refresh cookie session and returns only
+        the authenticated user projection. Bearer values are never exposed to
+        browser JavaScript. Rate-limited at 5/minute per source IP. If TOTP is required for the account
         the response carries a `challenge_token` instead and the
         client must POST to `/auth/totp/verify/`.
       security: []
@@ -30423,37 +30420,29 @@ paths:
       x-astronomer-rbac: "public"
       x-astronomer-route-class: public-api
       operationId: postAuthRefresh
-      summary: Exchange a refresh token for a new access/refresh pair
+      summary: Rotate the HttpOnly browser session
       description: |
-        PUBLIC. Accepts `{refresh}` in the body, or falls back to the
-        `astronomer_refresh` cookie (CSRF-validated). Returns a new token pair.
+        PUBLIC. Requires the HttpOnly `astronomer_refresh` cookie plus the
+        double-submit CSRF header/cookie. JSON bearer refresh tokens are not
+        accepted. Rotated access and refresh values are returned only through
+        Set-Cookie headers.
       tags:
         - auth
       security: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                refresh:
-                  type: string
-                  description: Refresh JWT. Optional when the refresh cookie is present.
       responses:
         '200':
-          description: New token pair (raw, unwrapped).
+          description: Browser session rotated.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  token:
-                    type: string
-                    description: New access JWT
-                  refresh:
-                    type: string
-                    description: New refresh JWT
+                  data:
+                    type: object
+                    properties:
+                      detail: {type: string}
+                    required: [detail]
+                required: [data]
         '401':
           description: Missing/invalid/expired refresh token, wrong token type, or CSRF required.
           content:
@@ -30761,8 +30750,8 @@ paths:
       summary: Verify a TOTP/recovery code and obtain a session
       description: |
         PUBLIC, rate-limited. Proof of identity is the `challenge_token` issued
-        by Login. On success returns the same shape as Login (token, refresh,
-        user). Tries the TOTP code first, then falls back to a recovery code
+        by Login. On success establishes HttpOnly session cookies and returns
+        only the user projection. Tries the TOTP code first, then falls back to a recovery code
         unless `use_recovery` is set.
       tags:
         - auth
@@ -30788,7 +30777,7 @@ paths:
                   description: Force recovery-code path (e.g. lost device).
       responses:
         '200':
-          description: Session pair + user (same shape as Login).
+          description: Cookie session established; user returned (same shape as Login).
           content:
             application/json:
               schema:

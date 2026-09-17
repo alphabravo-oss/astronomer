@@ -109,6 +109,11 @@ func NewRouter(cfg *config.Config, deps RouterDependencies) chi.Router {
 	// Middleware
 	r.Use(appmiddleware.RequestID)
 	r.Use(appmiddleware.TrustedRealIP(cfg.TrustedProxyCIDRs))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			next.ServeHTTP(w, request.WithContext(reqctx.WithSecureCookiesRequired(request.Context(), config.IsProduction(cfg))))
+		})
+	})
 	r.Use(appmiddleware.SecurityHeaders)
 	r.Use(appmiddleware.RequestLogger)
 	r.Use(chimiddleware.Recoverer)

@@ -113,7 +113,7 @@ api.interceptors.response.use(
       }
       isRefreshing = true;
       try {
-        const response = await axios.post(
+        await axios.post(
           `${API_BASE}/auth/refresh/`,
           {},
           {
@@ -121,8 +121,6 @@ api.interceptors.response.use(
             withCredentials: true,
           },
         );
-        if (!(response.data?.data || response.data)?.token)
-          throw new Error("Refresh did not return an access token");
         processQueue(null, true);
         return api(originalRequest);
       } catch (refreshError) {

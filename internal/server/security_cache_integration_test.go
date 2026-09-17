@@ -32,6 +32,9 @@ func (s *sharedRevocations) IsJWTRevoked(_ context.Context, jti string) (bool, e
 	s.reads++
 	return s.revoked[jti], nil
 }
+func (s *sharedRevocations) IsSessionFamilyRevoked(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
+}
 func (s *sharedRevocations) UserTokensInvalidatedAt(_ context.Context, userID uuid.UUID) (time.Time, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

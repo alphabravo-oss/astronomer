@@ -31,6 +31,7 @@ type TOTPMutationTx interface {
 	RecordFailedLoginAttempt(ctx context.Context, arg sqlc.RecordFailedLoginAttemptParams) (sqlc.User, error)
 	ResetFailedLoginCount(ctx context.Context, id uuid.UUID) error
 	ConsumeJWTChallenge(ctx context.Context, arg sqlc.ConsumeJWTChallengeParams) (int64, error)
+	CreateRefreshSession(context.Context, sqlc.CreateRefreshSessionParams) error
 }
 
 type totpRunTxFunc func(context.Context, func(TOTPMutationTx) error) error

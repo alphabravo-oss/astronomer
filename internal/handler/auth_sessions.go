@@ -3,7 +3,6 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,28 +20,22 @@ import (
 )
 
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	var req refreshRequest
-	if r.Body != nil && r.ContentLength != 0 {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
-			return
-		}
-	}
-	if strings.TrimSpace(req.Refresh) == "" {
-		if c, err := r.Cookie(auth.RefreshCookieName); err == nil {
-			if !auth.ValidateCSRF(r) {
-				RespondRequestError(w, r, http.StatusUnauthorized, apierror.CSRFRequired, "CSRF token is required")
-				return
-			}
-			req.Refresh = c.Value
-		}
-	}
-	if strings.TrimSpace(req.Refresh) == "" {
+	// Browser refresh is cookie-only. Accepting a bearer value in JSON exposes
+	// the long-lived credential to JavaScript and defeats the HttpOnly boundary.
+	cookie, err := r.Cookie(auth.RefreshCookieName)
+	if err != nil || strings.TrimSpace(cookie.Value) == "" {
+		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.refresh_failed", "user", "", "", map[string]any{
+			"reason": "missing_cookie",
+		})
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
 		return
 	}
+	if !auth.ValidateCSRF(r) {
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.CSRFRequired, "CSRF token is required")
+		return
+	}
 
-	claims, err := h.jwt.ValidateToken(req.Refresh)
+	claims, err := h.jwt.ValidateTokenContext(r.Context(), cookie.Value)
 	if err != nil {
 		recordAuditAs(r, h.audit, pgtype.UUID{}, "auth.refresh_failed", "user", "", "", map[string]any{
 			"reason": "invalid_token",
@@ -72,23 +65,55 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mintCtx := h.applySessionTimeoutFromSettings(r.Context())
-	accessToken, refreshToken, err := h.jwt.GenerateTokenPairContext(mintCtx, user.ID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TokenError, "Failed to generate token")
+	if claims.ExpiresAt == nil {
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
 		return
 	}
-
-	if auditErr := h.recordCredentialAuditAs(r, pgtype.UUID{Bytes: user.ID, Valid: true}, "auth.refresh", "user", user.ID.String(), user.Username, nil); auditErr != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.AuditUnavailable,
-			"Mandatory audit storage is unavailable; the refreshed session was not issued")
+	pair, err := h.jwt.PrepareRotationContext(mintCtx, claims.SessionFamilyID, claims.ExpiresAt.Time)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		return
+	}
+	rotatedAt := time.Now().UTC()
+	status, err := executeMutation(r, h.runTx,
+		func(q AuthMutationTx) (string, error) {
+			return rotateRefreshSession(r.Context(), q, claims, pair, rotatedAt)
+		},
+		func(result string) mutationAuditEvent {
+			action := "auth.refresh_failed"
+			httpStatus := http.StatusUnauthorized
+			detail := map[string]any{"result": result, "session_family_hash": refreshFamilyHashString(claims.SessionFamilyID)}
+			if result == refreshRotationRotated {
+				action = "auth.refresh"
+				httpStatus = http.StatusOK
+			} else if result == refreshRotationReused {
+				action = "auth.refresh_reuse_detected"
+			}
+			return mutationAuditEvent{action: action, resourceType: "user", resourceID: user.ID.String(),
+				resourceName: user.Username, status: httpStatus, detail: detail}
+		})
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusServiceUnavailable, apierror.AuditUnavailable,
+			"The browser session could not be rotated")
+		return
+	}
+	if status != refreshRotationRotated {
+		if status == refreshRotationReused {
+			auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("family", "refresh_token_reuse")...).Inc()
+			h.jwt.InvalidateUser(r.Context(), user.ID)
+		}
+		clearBrowserSessionCookies(w, r)
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.InvalidToken, "Invalid refresh token")
+		return
+	}
+	accessToken, refreshToken, err := h.jwt.SignPreparedTokenPair(user.ID, pair)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TokenError, "Failed to generate session")
 		return
 	}
 
 	setBrowserSessionCookies(w, r, accessToken, refreshToken)
-	RespondJSON(w, http.StatusOK, map[string]string{
-		"token":   accessToken,
-		"refresh": refreshToken,
-	})
+	RespondJSON(w, http.StatusOK, map[string]string{"detail": "Session refreshed"})
 }
 
 // Logout handles POST /api/v1/auth/logout/.
@@ -148,6 +173,14 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 						}
 						if err := q.InvalidateAllTokens(r.Context(), invalidateParams); err != nil {
 							return logoutMutationResult{}, err
+						}
+						if claims.BrowserSession && claims.SessionFamilyID != uuid.Nil {
+							if _, err := q.RevokeRefreshSessionFamily(r.Context(), sqlc.RevokeRefreshSessionFamilyParams{
+								FamilyHash: hashRefreshFamily(claims.SessionFamilyID),
+								RevokedAt:  pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}, Reason: "user_logout",
+							}); err != nil {
+								return logoutMutationResult{}, err
+							}
 						}
 						return logoutMutationResult{jti: claims.ID, userID: claims.UserID, expiresAt: expiresAt}, nil
 					},

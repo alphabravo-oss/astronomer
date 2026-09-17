@@ -157,6 +157,9 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		if err := q.UpdateUserLastLogin(r.Context(), userID); err != nil {
 			return err
 		}
+		if err := createRefreshSession(r.Context(), q, userID, session); err != nil {
+			return err
+		}
 		action := "auth.totp.verified"
 		if usedRecovery {
 			action = "auth.totp.recovery_code_consumed"
@@ -195,11 +198,7 @@ func (h *TOTPHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	auth.TOTPVerifiesTotal.WithLabelValues(observability.MetricValues(outcome)...).Inc()
 
 	setBrowserSessionCookies(w, r, accessToken, refreshToken)
-	RespondJSON(w, http.StatusOK, LoginResponse{
-		Token:   accessToken,
-		Refresh: refreshToken,
-		User:    userToResponse(user),
-	})
+	RespondJSON(w, http.StatusOK, LoginResponse{User: userToResponse(user)})
 }
 
 func (h *TOTPHandler) recordFailedTOTPAttempt(ctx context.Context, q TOTPMutationTx, user sqlc.User) (bool, error) {
