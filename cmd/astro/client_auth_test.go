@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/astrocli"
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/spf13/cobra"
 )
 
@@ -107,22 +109,69 @@ func TestBearerOverridePrecedence(t *testing.T) {
 	}
 }
 
-func TestLoginPersistsSessionAndLogoutClearsIt(t *testing.T) {
+func TestLoginMintsAPITokenAndLogoutRevokesIt(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("ASTRO_CONFIG_HOME", configDir)
+	const (
+		apiToken   = "astro_cli-token"
+		apiTokenID = "292b3f19-e8ae-482f-b065-1d2338ce9391"
+		csrfToken  = "csrf-value"
+		session    = "http-only-session"
+	)
+	var revokeCalls atomic.Int32
+	var sessionLogoutCalls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/auth/login/" {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/login/":
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode login body: %v", err)
+			}
+			if body["email"] != "admin" || body["password"] != "correct-horse" {
+				t.Errorf("login body = %#v", body)
+			}
+			http.SetCookie(w, &http.Cookie{Name: auth.SessionCookieName, Value: session, Path: "/", HttpOnly: true})
+			http.SetCookie(w, &http.Cookie{Name: auth.CSRFCookieName, Value: csrfToken, Path: "/"})
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("{\"data\":{\"user\":{\"username\":\"admin\",\"email\":\"admin@example.com\",\"is_superuser\":true}}}"))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/tokens/":
+			cookie, err := r.Cookie(auth.SessionCookieName)
+			if err != nil || cookie.Value != session || r.Header.Get("X-CSRF-Token") != csrfToken {
+				t.Error("API token request did not use the CSRF-bound browser session")
+			}
+			var body struct {
+				Name          string   `json:"name"`
+				ExpiresInDays int      `json:"expires_in_days"`
+				Scopes        []string `json:"scopes"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode token body: %v", err)
+			}
+			if !strings.HasPrefix(body.Name, "astro-cli-") || body.ExpiresInDays != cliTokenLifetimeDays ||
+				len(body.Scopes) != 1 || body.Scopes[0] != auth.ScopeAdmin {
+				t.Errorf("token body = %#v", body)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"data":{"id":"` + apiTokenID + `","token":"` + apiToken + `"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/logout/":
+			cookie, err := r.Cookie(auth.SessionCookieName)
+			if err != nil || cookie.Value != session || r.Header.Get("X-CSRF-Token") != csrfToken {
+				t.Error("browser session cleanup did not use the CSRF-bound session")
+			}
+			sessionLogoutCalls.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"detail":"Logged out"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/auth/tokens/"+apiTokenID+"/":
+			if r.Header.Get("Authorization") != "Bearer "+apiToken {
+				t.Errorf("revoke authorization = %q", r.Header.Get("Authorization"))
+			}
+			revokeCalls.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+		default:
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
 		}
-		var body map[string]string
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Errorf("decode login body: %v", err)
-		}
-		if body["email"] != "admin" || body["password"] != "correct-horse" {
-			t.Errorf("login body = %#v", body)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{\"data\":{\"token\":\"access\",\"refresh\":\"refresh\",\"user\":{\"username\":\"admin\",\"email\":\"admin@example.com\",\"is_superuser\":true}}}"))
 	}))
 	defer server.Close()
 
@@ -140,7 +189,7 @@ func TestLoginPersistsSessionAndLogoutClearsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ServerURL != server.URL || cfg.AccessToken != "access" || cfg.RefreshToken != "refresh" || cfg.Username != "admin" {
+	if cfg.ServerURL != server.URL || cfg.AccessToken != apiToken || cfg.APITokenID != apiTokenID || cfg.RefreshToken != "" || cfg.Username != "admin" {
 		t.Fatalf("persisted config = %#v", cfg)
 	}
 	info, err := os.Stat(filepath.Join(configDir, astrocli.ConfigFileName))
@@ -161,8 +210,14 @@ func TestLoginPersistsSessionAndLogoutClearsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.AccessToken != "" || cfg.RefreshToken != "" || cfg.Username != "" {
+	if cfg.AccessToken != "" || cfg.APITokenID != "" || cfg.RefreshToken != "" || cfg.Username != "" {
 		t.Fatalf("logout retained credentials: %#v", cfg)
+	}
+	if revokeCalls.Load() != 1 {
+		t.Fatalf("remote revoke calls = %d, want 1", revokeCalls.Load())
+	}
+	if sessionLogoutCalls.Load() != 1 {
+		t.Fatalf("browser session cleanup calls = %d, want 1", sessionLogoutCalls.Load())
 	}
 }
 
@@ -199,7 +254,7 @@ func TestWhoamiUsesLiveIdentity(t *testing.T) {
 	}
 }
 
-func TestLoginRejectsResponseWithoutToken(t *testing.T) {
+func TestLoginRejectsResponseWithoutBrowserSession(t *testing.T) {
 	t.Setenv("ASTRO_CONFIG_HOME", t.TempDir())
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -210,7 +265,7 @@ func TestLoginRejectsResponseWithoutToken(t *testing.T) {
 	cmd := newLoginCmd()
 	cmd.SetArgs([]string{"--server", server.URL, "--user", "admin", "--password", "pw"})
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "no token") {
+	if err == nil || !strings.Contains(err.Error(), "no CSRF-bound browser session") {
 		t.Fatalf("error = %v", err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -15,18 +16,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/astrocli"
 )
 
-// loginResponse mirrors the /api/v1/auth/login/ response envelope.
-type loginResponse struct {
-	Data struct {
-		Token   string `json:"token"`
-		Refresh string `json:"refresh"`
-		User    struct {
-			Username    string `json:"username"`
-			Email       string `json:"email"`
-			IsSuperuser bool   `json:"is_superuser"`
-		} `json:"user"`
-	} `json:"data"`
-}
+const cliTokenLifetimeDays = 30
 
 func newLoginCmd() *cobra.Command {
 	var serverFlag, userFlag, passwordFlag string
@@ -35,10 +25,13 @@ func newLoginCmd() *cobra.Command {
 		Use:   "login",
 		Short: "Authenticate to an Astronomer server",
 		Long: `login prompts for username + password (or reads them from
---user / --password / $ASTRO_PASSWORD), POSTs to /api/v1/auth/login/,
-and persists the returned JWT to ~/.config/astronomer/config.yaml.
+--user / --password / $ASTRO_PASSWORD), establishes a cookie-bound browser
+session, and exchanges it for a 30-day API token stored in
+~/.config/astronomer/config.yaml.
 
-The persisted token is used for every subsequent astro command.`,
+The persisted token is used for every subsequent astro command and is revoked
+remotely by astro logout. Browser access and refresh JWTs are never exposed to
+the CLI.`,
 		Example: `  astro login --server https://astronomer.example.com
   astro login --user admin --password "$(pass astronomer/admin)"
   ASTRO_PASSWORD=… astro login --user admin`,
@@ -89,27 +82,31 @@ The persisted token is used for every subsequent astro command.`,
 				password = string(pw)
 			}
 
-			client := astrocli.NewClient(server, "")
-			var resp loginResponse
-			err = client.Do(cmd.Context(), "POST", "/api/v1/auth/login/", map[string]any{
-				"email":    username,
-				"password": password,
-			}, &resp)
+			previousServer := cfg.ServerURL
+			previousToken := cfg.AccessToken
+			previousTokenID := cfg.APITokenID
+			tokenName := "astro-cli-" + time.Now().UTC().Format("20060102T150405Z")
+			issued, err := astrocli.IssuePasswordAPIToken(
+				cmd.Context(), server, username, password, tokenName, cliTokenLifetimeDays,
+			)
 			if err != nil {
 				return fmt.Errorf("login failed: %w", err)
 			}
-			if resp.Data.Token == "" {
-				return fmt.Errorf("login response carried no token — check server compatibility")
-			}
 
 			cfg.ServerURL = server
-			cfg.AccessToken = resp.Data.Token
-			cfg.RefreshToken = resp.Data.Refresh
-			cfg.Username = resp.Data.User.Username
+			cfg.AccessToken = issued.Token
+			cfg.APITokenID = issued.ID
+			cfg.RefreshToken = ""
+			cfg.Username = issued.Username
 			if err := astrocli.SaveConfig(cfg); err != nil {
+				_ = astrocli.RevokeAPIToken(cmd.Context(), server, issued.Token, issued.ID)
 				return fmt.Errorf("persist config: %w", err)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Logged in to %s as %s\n", server, resp.Data.User.Username)
+			if err := astrocli.RevokeAPIToken(cmd.Context(), previousServer, previousToken, previousTokenID); err != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Warning: previous CLI token could not be revoked: %v\n", err)
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Logged in to %s as %s (API token expires in %d days)\n",
+				server, issued.Username, cliTokenLifetimeDays)
 			return err
 		},
 	}
@@ -128,11 +125,16 @@ func newLogoutCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			revokeErr := astrocli.RevokeAPIToken(cmd.Context(), cfg.ServerURL, cfg.AccessToken, cfg.APITokenID)
 			cfg.AccessToken = ""
+			cfg.APITokenID = ""
 			cfg.RefreshToken = ""
 			cfg.Username = ""
 			if err := astrocli.SaveConfig(cfg); err != nil {
 				return err
+			}
+			if revokeErr != nil {
+				return fmt.Errorf("local credentials cleared, but remote API token revocation failed: %w", revokeErr)
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
 			return err

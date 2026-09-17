@@ -23,6 +23,7 @@ func TestBootstrapAdminAPITokenUsesCookieSessionAndRevokes(t *testing.T) {
 	tokenID := uuid.New()
 	var mu sync.Mutex
 	revokeCalls := 0
+	sessionLogoutCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/login/":
@@ -55,6 +56,18 @@ func TestBootstrapAdminAPITokenUsesCookieSessionAndRevokes(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{"id": tokenID.String(), "token": wantToken}})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/logout/":
+			session, err := r.Cookie(auth.SessionCookieName)
+			if err != nil || session.Value != wantSession || r.Header.Get("X-CSRF-Token") != wantCSRF {
+				t.Error("browser session cleanup did not use the CSRF-bound session")
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			mu.Lock()
+			sessionLogoutCalls++
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"detail":"Logged out"}`))
 		case r.Method == http.MethodDelete && r.URL.Path == "/api/v1/auth/tokens/"+tokenID.String()+"/":
 			if r.Header.Get("Authorization") != "Bearer "+wantToken {
 				t.Error("ephemeral token revocation did not authenticate with the minted token")
@@ -84,6 +97,9 @@ func TestBootstrapAdminAPITokenUsesCookieSessionAndRevokes(t *testing.T) {
 	defer mu.Unlock()
 	if revokeCalls != 1 {
 		t.Fatalf("revocation calls = %d, want 1", revokeCalls)
+	}
+	if sessionLogoutCalls != 1 {
+		t.Fatalf("browser session cleanup calls = %d, want 1", sessionLogoutCalls)
 	}
 }
 

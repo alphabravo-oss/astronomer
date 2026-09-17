@@ -31,7 +31,7 @@ func TestSortedConfigKeysAreStable(t *testing.T) {
 	if !slices.IsSorted(keys) {
 		t.Fatalf("config keys are not sorted: %v", keys)
 	}
-	want := []string{"access_token", "refresh_token", "server_url", "username"}
+	want := []string{"access_token", "api_token_id", "refresh_token", "server_url", "username"}
 	if !slices.Equal(keys, want) {
 		t.Fatalf("config keys = %v, want %v", keys, want)
 	}
@@ -42,6 +42,7 @@ func TestConfigSetGetAndCurrentRedaction(t *testing.T) {
 	t.Setenv("ASTRO_CONFIG_HOME", configHome)
 	if err := astrocli.SaveConfig(&astrocli.Config{
 		AccessToken:  "access-secret",
+		APITokenID:   "token-id",
 		RefreshToken: "refresh-secret",
 	}); err != nil {
 		t.Fatal(err)
@@ -75,7 +76,8 @@ func TestConfigSetGetAndCurrentRedaction(t *testing.T) {
 		"https://console.example",
 		"operator",
 		"Access token:  (set)",
-		"Refresh token: (set)",
+		"API token ID:  token-id",
+		"Legacy refresh: (set)",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("current output %q missing %q", output, want)
@@ -83,6 +85,13 @@ func TestConfigSetGetAndCurrentRedaction(t *testing.T) {
 	}
 	if strings.Contains(output, "access-secret") || strings.Contains(output, "refresh-secret") {
 		t.Fatalf("current table leaked a token: %q", output)
+	}
+	output, err = executeConfigCommand(t, "get", "access_token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(output) != "(set)" || strings.Contains(output, "access-secret") {
+		t.Fatalf("config get leaked a token: %q", output)
 	}
 
 	info, err := os.Stat(filepath.Join(configHome, astrocli.ConfigFileName))
@@ -118,8 +127,11 @@ func TestConfigCurrentStructuredOutputIsExplicit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output, `"access_token": "automation-token"`) {
+	if !strings.Contains(output, `"access_token": "(set)"`) {
 		t.Fatalf("structured output = %q", output)
+	}
+	if strings.Contains(output, "automation-token") {
+		t.Fatalf("structured output leaked a token: %q", output)
 	}
 }
 
