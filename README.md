@@ -182,6 +182,10 @@ npm ci
 npm run dev
 ```
 
+The Vite development server binds to `127.0.0.1` by default. Set
+`VITE_DEV_HOST=0.0.0.0` explicitly only when running it inside an isolated
+development container that must publish the port.
+
 `make dev` starts Postgres, Redis, migrations, the Go server on port 8001,
 and the worker. Vite serves the operator console on port 3000 and proxies API
 and WebSocket traffic to the Go server. Use `make dev-full` when the
@@ -195,7 +199,7 @@ hosted collector.
 | Command | What it proves | Requirements / exclusions |
 |---|---|---|
 | `make verify-enterprise VERIFY_SCOPE=backend` | Go formatting, build, vet, unit/race tests, architecture and generated-document contracts. | Go and the tools checked by the script; not stateful failure qualification. |
-| `make verify-enterprise VERIFY_SCOPE=frontend` | TypeScript, zero-warning lint, unit behavior tests, dependency audit and production bundle budgets. | Node 22 and `npm ci`; no browser or live-cluster acceptance. |
+| `make verify-enterprise VERIFY_SCOPE=frontend` | TypeScript, zero-warning lint, unit behavior tests, dependency audit and production bundle budgets. | Node 24.21.0 and `npm ci`; no browser or live-cluster acceptance. |
 | `make verify-enterprise VERIFY_SCOPE=helm` | Chart lint/render, release artifacts and deployment contracts. | Helm and the script's deployment-tool prerequisites; no live installation. |
 | `make verify-enterprise VERIFY_SCOPE=api-contract` | OpenAPI quality, route/request coverage and generated-client freshness. | Go and Node; focused contract diagnostics. |
 | `make verify-enterprise VERIFY_SCOPE=all` | All static backend, frontend and Helm scopes. | Does **not** substitute for the stateful/browser lanes below. |

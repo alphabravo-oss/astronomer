@@ -29,6 +29,7 @@ const DEFAULT_USER_PREFERENCES: UserPreferencesFixture = {
 
 type SeedAuthOptions = {
   preferences?: Partial<UserPreferencesFixture>;
+  preserveStorageState?: boolean;
 };
 
 /** Convert the persisted camelCase session fixture into the exact /auth/me wire contract. */
@@ -149,6 +150,7 @@ export async function seedAuth(
       },
     });
   });
+  if (options.preserveStorageState) return;
   await context.addCookies([
     {
       name: SESSION_COOKIE,

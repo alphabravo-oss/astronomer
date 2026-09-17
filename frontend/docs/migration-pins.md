@@ -5,8 +5,9 @@ Canonical source of versions for P1.1 (package.json + lockfile) and P4.8
 package.json must match this list exactly. Do not bump versions here without
 re-running the audit preflight below.
 
-Initially resolved on 2026-07-15; application dependency pins below were
-requalified on 2026-09-11 against registry.npmjs.org using Node 22.22.2.
+Initially resolved on 2026-07-15; application dependency pins below were most
+recently requalified on 2026-09-17 against registry.npmjs.org using Node
+24.21.0 and npm 11.19.0.
 
 ## Pinned package list
 
@@ -47,9 +48,10 @@ plugin release, never by forcing the peer graph or dropping lint enforcement.
 
 ## Audit preflight result
 
-2026-09-11: `npm install --strict-peer-deps` on Node 22.22.2 / npm 10.9.7
-resolved the current application graph without peer warnings, audited 755
-packages, and reported zero vulnerabilities. `npm outdated` lists only the
+2026-09-17: `npm ci --strict-peer-deps` on Node 24.21.0 / npm 11.19.0
+resolved the current application graph without peer warnings, audited 754
+packages, and reported zero vulnerabilities. The same runtime passed all 205
+unit files / 1,207 tests and the production build. `npm outdated` lists only the
 peer-blocked TypeScript and ESLint/@eslint/js major upgrades described above.
 Table 9 uses native feature composition and `useTable`, without the former
 snapshot controller. The aligned wterm runtime is loaded only when a console
@@ -73,11 +75,11 @@ remaining in this graph is `whatwg-encoding@3.1.1`, transitively used by jsdom.
 
 ## Base image digests (D16)
 
-- `node:22-alpine` current multi-arch index digest (for the P6.1 Dockerfile pin):
-  `node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2`
-  Trivy (HIGH/CRITICAL): 0 CRITICAL, 2 HIGH — CVE-2026-33671 (picomatch) and
-  CVE-2026-48815 (sigstore), both in the bundled npm CLI's node_modules (build
-  stage only; nothing from this image ships in the final nginx stage).
+- `node:24-alpine` multi-arch index digest resolved on 2026-09-17 for the
+  Dockerfile build stage:
+  `node:24-alpine@sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81`.
+  The release image scan still evaluates the final nginx stage; Node and npm
+  are build-only and do not ship in that runtime image.
 - `nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10`
   (the repo's current pin in `deploy/nginx/Dockerfile.nginx`) **no longer scans
   clean**: Trivy reports **2 CRITICAL + 35 HIGH** (libxml2, musl, openssl,

@@ -7,6 +7,7 @@ import {
   SESSION_COOKIE,
   seedAuth,
 } from "./helpers/auth";
+import { EMPTY_AUTH_STATE } from "./helpers/auth-state";
 
 type SmokeUser = {
   id: string;
@@ -532,27 +533,31 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
-test("redirects unauthenticated dashboard users and supports login/logout", async ({
-  page,
-}) => {
-  await page.goto("/dashboard");
-  await expect(page).toHaveURL(/\/auth\/login/);
-  await expect(
-    page.getByRole("heading", { name: /sign in to astronomer/i }),
-  ).toBeVisible();
+test.describe("fresh-session authentication", () => {
+  test.use({ storageState: EMPTY_AUTH_STATE });
 
-  await page.getByPlaceholder("you@example.com").fill("admin@example.com");
-  await page.getByPlaceholder("Enter your password").fill("password");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  test("redirects unauthenticated dashboard users and supports login/logout", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL(/\/auth\/login/);
+    await expect(
+      page.getByRole("heading", { name: /sign in to astronomer/i }),
+    ).toBeVisible();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(
-    page.getByRole("heading", { name: /platform overview/i }),
-  ).toBeVisible();
+    await page.getByPlaceholder("you@example.com").fill("admin@example.com");
+    await page.getByPlaceholder("Enter your password").fill("password");
+    await page.getByRole("button", { name: /sign in/i }).click();
 
-  await page.getByRole("button", { name: /user menu/i }).click();
-  await page.getByRole("button", { name: /sign out/i }).click();
-  await expect(page).toHaveURL(/\/auth\/login/);
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(
+      page.getByRole("heading", { name: /platform overview/i }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /user menu/i }).click();
+    await page.getByRole("button", { name: /sign out/i }).click();
+    await expect(page).toHaveURL(/\/auth\/login/);
+  });
 });
 
 test("cluster registration wizard creates a cluster and advances to connect step", async ({

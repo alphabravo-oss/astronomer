@@ -11,6 +11,7 @@ import {
   getSupportBundleOperation,
 } from "@/lib/api/support-bundles";
 import { queryKeys } from "@/lib/query-keys";
+import { BUILD_INFO } from "@/lib/env";
 
 export function SupportTab() {
   const [operationId, setOperationId] = useState<string | null>(null);
@@ -41,7 +42,8 @@ export function SupportTab() {
     if (!operationId) return;
     setDownloading(true);
     try {
-      const { blob, filename } = await downloadSupportBundleArtifact(operationId);
+      const { blob, filename } =
+        await downloadSupportBundleArtifact(operationId);
       downloadBlob(blob, filename);
       toastSuccess("Support bundle downloaded");
     } catch (err) {
@@ -57,6 +59,31 @@ export function SupportTab() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">
+            Build information
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Include these immutable build details when reporting a problem.
+          </p>
+        </div>
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          {[
+            ["Version", BUILD_INFO.version],
+            ["Commit", BUILD_INFO.commit],
+            ["Build date", BUILD_INFO.date],
+            ["Build Node", BUILD_INFO.node],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd className="mt-0.5 break-all font-mono text-xs text-foreground">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
       <div className="rounded-lg border border-border bg-card p-6 space-y-4">
         <div className="flex items-start gap-3">
           <LifeBuoy className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
@@ -76,11 +103,15 @@ export function SupportTab() {
             </p>
           </div>
         </div>
-        {operationId && (operationQuery.isLoading || operationQuery.isError) && (
-          <QueryStates query={operationQuery} permission="support_bundles:read">
-            {() => null}
-          </QueryStates>
-        )}
+        {operationId &&
+          (operationQuery.isLoading || operationQuery.isError) && (
+            <QueryStates
+              query={operationQuery}
+              permission="support_bundles:read"
+            >
+              {() => null}
+            </QueryStates>
+          )}
         <ActionButton
           intent="primary"
           icon={

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { ADMIN_AUTH_STATE } from "./tests/e2e/helpers/auth-state";
 
 const port = Number(process.env.PLAYWRIGHT_PORT || 3100);
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
@@ -13,6 +14,7 @@ export default defineConfig({
     ? [["html", { outputFolder: htmlOutputDir, open: "never" }]]
     : undefined,
   timeout: 30_000,
+  retries: 0,
   expect: {
     timeout: 10_000,
   },
@@ -35,9 +37,16 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "role-auth-setup",
+      testDir: "./tests/e2e-setup",
+      testMatch: /role-auth\.setup\.ts/,
+    },
+    {
       name: "chromium",
+      dependencies: ["role-auth-setup"],
       use: {
         ...devices["Desktop Chrome"],
+        storageState: ADMIN_AUTH_STATE,
         launchOptions: chromiumExecutable
           ? { executablePath: chromiumExecutable, chromiumSandbox: false }
           : undefined,
@@ -45,8 +54,10 @@ export default defineConfig({
     },
     {
       name: "mobile-chromium",
+      dependencies: ["role-auth-setup"],
       use: {
         ...devices["Pixel 7"],
+        storageState: ADMIN_AUTH_STATE,
         launchOptions: chromiumExecutable
           ? { executablePath: chromiumExecutable, chromiumSandbox: false }
           : undefined,
@@ -54,8 +65,10 @@ export default defineConfig({
     },
     {
       name: "tablet-chromium",
+      dependencies: ["role-auth-setup"],
       use: {
         ...devices["Desktop Chrome"],
+        storageState: ADMIN_AUTH_STATE,
         viewport: { width: 1024, height: 768 },
         launchOptions: chromiumExecutable
           ? { executablePath: chromiumExecutable, chromiumSandbox: false }
@@ -69,8 +82,10 @@ export default defineConfig({
       name: "route-smoke",
       testDir: "./tests/e2e-smoke",
       fullyParallel: true,
+      dependencies: ["role-auth-setup"],
       use: {
         ...devices["Desktop Chrome"],
+        storageState: ADMIN_AUTH_STATE,
         launchOptions: chromiumExecutable
           ? { executablePath: chromiumExecutable, chromiumSandbox: false }
           : undefined,
@@ -80,8 +95,10 @@ export default defineConfig({
       name: "route-smoke-mobile",
       testDir: "./tests/e2e-smoke",
       fullyParallel: true,
+      dependencies: ["role-auth-setup"],
       use: {
         ...devices["Pixel 7"],
+        storageState: ADMIN_AUTH_STATE,
         launchOptions: chromiumExecutable
           ? { executablePath: chromiumExecutable, chromiumSandbox: false }
           : undefined,

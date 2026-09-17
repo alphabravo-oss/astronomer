@@ -41,12 +41,13 @@ terminal runtime is absent from the dashboard's initial static import closure;
 tabs remain mounted across tab switches. React's native boolean `inert` prop
 replaces the terminal container's former string/type-cast workaround.
 
-Verification after the migration: typecheck and zero-warning ESLint pass;
-201 frontend test files / 1,195 tests pass; production build emits 367 chunks.
+Verification after the migration and Node 24 qualification: typecheck and
+zero-warning ESLint pass; 205 frontend test files / 1,207 tests pass; the
+production build and moderate dependency audit pass with zero vulnerabilities.
 The unchanged eager-closure gate measures 371,809 gzip bytes for bootstrap,
 379,526 for login, and 453,230 for the app (ceilings 418,816 / 428,032 /
 489,472). Strict-peer installation, audit, and focused table/terminal/console
-tests also pass under the declared Node 22.22.2 runtime.
+tests also pass under the declared Node 24.21.0 runtime.
 
 The tooling blockers were retried, not inferred from application compile errors:
 
@@ -67,9 +68,9 @@ Recheck these exact registry commands before changing the two retained tooling
 majors. Accessibility and typed lint remain enabled; bypassing their peer
 contracts is not an upgrade.
 
-The supported Node 22 floor is `22.22.2`, matching jsdom 30's declared engine;
-`frontend/.nvmrc` and `package.json` agree. A lower patch version is not a
-supported verification environment.
+The supported Node 24 floor is `24.21.0`; `frontend/.nvmrc`, package engines,
+the digest-pinned Docker builder, and active workflows agree. A lower patch
+version is not a supported verification environment.
 
 `govulncheck ./...` reported no reachable vulnerabilities when this ledger was
 created. Any future reachable advisory fails the security gate regardless of

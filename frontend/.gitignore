@@ -11,6 +11,7 @@
 # testing
 /coverage
 /test-results
+/playwright/.auth
 /tests/e2e-smoke/*.generated.json
 /gallery
 
