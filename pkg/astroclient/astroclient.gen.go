@@ -5573,6 +5573,7 @@ type DeliveryEstateCluster struct {
 	DegradedCount       int64              `json:"degraded_count"`
 	DisplayName         string             `json:"display_name"`
 	DriftedCount        int64              `json:"drifted_count"`
+	Environment         string             `json:"environment"`
 	FailedCount         int64              `json:"failed_count"`
 	FluxVersion         string             `json:"flux_version"`
 	Id                  openapi_types.UUID `json:"id"`
