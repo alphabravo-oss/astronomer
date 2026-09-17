@@ -41,7 +41,15 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 	defer ticker.Stop()
 	client := &http.Client{Timeout: 15 * time.Second}
 	base := strings.TrimRight(cfg.server, "/")
-	runMandatoryAuditOperations(ctx, profile.MaxOperations, ticker.C, func(sequence int) {
+	// maxOperations is a safety cap, not a target. Starting immediately means
+	// exactly duration*rate operations cover the whole interval; attempting the
+	// cap beyond that target schedules one more mutation on the cancellation
+	// boundary and can manufacture a transport rejection after a healthy run.
+	operationLimit := mandatoryAuditTargetOperations(cfg.duration, profile.RatePerSecond)
+	if operationLimit > profile.MaxOperations {
+		operationLimit = profile.MaxOperations
+	}
+	runMandatoryAuditOperations(ctx, operationLimit, ticker.C, func(sequence int) {
 		clusterID := cfg.fixtureClusterIDs[sequence%len(cfg.fixtureClusterIDs)]
 		requestID := uuid.NewString()
 		body, err := json.Marshal(map[string]any{

@@ -36,3 +36,19 @@ func TestMandatoryAuditScheduleDoesNotStartAfterCancellation(t *testing.T) {
 		t.Fatalf("operation sequences = %v, want %v", sequences, want)
 	}
 }
+
+func TestMandatoryAuditTargetEndsBeforeDeadlineTick(t *testing.T) {
+	// A 10-second, 1/s window needs operations at t=0..9s: ten operations,
+	// never an eleventh at t=10s where cancellation and the tick race.
+	ticks := make(chan time.Time, 10)
+	for range 10 {
+		ticks <- time.Now()
+	}
+	var sequences []int
+	runMandatoryAuditOperations(context.Background(), mandatoryAuditTargetOperations(10*time.Second, 1), ticks, func(sequence int) {
+		sequences = append(sequences, sequence)
+	})
+	if len(sequences) != 10 || sequences[0] != 0 || sequences[len(sequences)-1] != 9 {
+		t.Fatalf("operation sequences = %v, want 0..9", sequences)
+	}
+}
