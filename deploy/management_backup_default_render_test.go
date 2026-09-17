@@ -10,7 +10,8 @@ import (
 // until S3 credentials are wired. The chart gates the CronJob render on
 // managementBackup.s3.credentialsSecretRef.name so an unconfigured install
 // (the default values.yaml render) produces no backup workload instead of
-// hard-failing. Wiring the creds in turns both CronJobs on with no other flags.
+// hard-failing. Wiring the destination and authenticated-encryption identity
+// turns the writer and restore drill on.
 func TestManagementBackup_DefaultOnButInertWithoutCredentials(t *testing.T) {
 	// Default values.yaml only: enabled=true but no bucket/creds. Must render
 	// cleanly with NO backup or restore-drill CronJob.
@@ -22,11 +23,13 @@ func TestManagementBackup_DefaultOnButInertWithoutCredentials(t *testing.T) {
 		t.Fatalf("restore-drill CronJob rendered without credentials wired:\n%s", out)
 	}
 
-	// Wiring only the credentials secret (no enabled flags, proving they
-	// default on) must render BOTH CronJobs.
+	// Wiring the required destination and encryption boundary (without enabled
+	// flags, proving they default on) must render both workloads.
 	withCreds := helmTemplate(t,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
+		"managementBackup.encryption.sourceIdentity=test-installation",
+		"managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap",
 	)
 	if !strings.Contains(withCreds, "name: astronomer-management-backup") {
 		t.Fatalf("backup CronJob did not render with credentials wired:\n%s", withCreds)

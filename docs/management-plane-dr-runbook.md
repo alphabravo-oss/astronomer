@@ -3,8 +3,9 @@
 This runbook covers restoring **Astronomer Go's own Postgres database** from a
 nightly `pg_dump` taken by the `managementBackup` CronJob (see
 `deploy/chart/templates/management-plane-backup-cronjob.yaml`). It is the
-counterpart to that backup: the CronJob writes a custom-format dump to S3;
-this document is how you put it back.
+counterpart to that backup: the CronJob writes an AES-256-GCM-encrypted custom
+dump, an encrypted key bundle, and an authenticated manifest to Object-Locked
+S3 storage; this document is how you put it back.
 
 The concise lifecycle and evidence checklist lives in
 [management backup and restore](runbooks/management-backup-and-restore.md).
@@ -94,13 +95,20 @@ the Fernet/JWT key that decrypts it — that key lives in a Kubernetes Secret
 that Secret is gone brings back rows that are permanently undecryptable.
 
 The chart closes this gap when you wire
-`managementBackup.encryptionKeyBackup.wrappingSecretRef.name`:
+`managementBackup.encryption.wrappingSecretRef.name` and a stable
+`managementBackup.encryption.sourceIdentity`:
 
-- Every backup run also captures the `<release>-secrets` Secret, **symmetrically
-  encrypted with a separately-held wrapping passphrase** before upload, and
-  stores it under `<prefix>/<release>/keys/<timestamp>.keys.tar.enc` (a tier
-  distinct from `daily/weekly/monthly`). The key is **never** written to S3 in
-  plaintext next to the data it protects.
+- Every dump and key bundle is encrypted client-side with a streaming,
+  versioned AES-256-GCM envelope. The key bundle is stored under
+  `<prefix>/<release>/keys/<timestamp>.keys.tar.aead`; plaintext is removed
+  before upload.
+- A closed, HMAC-SHA256-authenticated manifest binds the ciphertext digests and
+  sizes, object names, source installation, Helm release, chart version, and
+  database schema version. Restore verifies the manifest and both payloads
+  before decrypting or invoking `pg_restore`.
+- The writer validates bucket Object Lock and its default retention before
+  `pg_dump`. It has a write-only identity; the distinct retention CronJob has
+  the delete-capable identity and supports dry-run review.
 - The weekly restore-drill (`managementRestoreDrill.decryptCheck`) downloads the
   latest wrapped key bundle, unwraps it with the **same** passphrase, and
   Fernet-verifies one known encrypted column in the restored DB. If it can't
@@ -126,30 +134,38 @@ The chart closes this gap when you wire
    makes the key backup unrecoverable**, and rotating it invalidates every
    previously-wrapped bundle (keep the old passphrase until the retention window
    of bundles wrapped under it has rolled off).
-3. Wire both halves so backup and drill agree:
+3. Wire the authenticated backup boundary and distinct retention identity:
 
    ```
-   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap \
-   --set managementRestoreDrill.decryptCheck.wrappingSecretRef.name=astronomer-key-wrap
+   --set managementBackup.encryption.sourceIdentity=prod-us-east-1 \
+   --set managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap \
+   --set managementBackup.retention.credentialsSecretRef.name=astronomer-backup-retention
    ```
 
-4. The drill's decrypt verification needs `openssl` and `python3` (stdlib only)
-   in the backup image; the default `pgdump-s3` image ships both.
+4. The first-party `astronomer-dr` image contains the exact `dr-crypto`,
+   PostgreSQL, and AWS CLI toolchain used by both writer and drill.
 
 **Recovering the key during a real restore onto a new cluster:**
 
 ```bash
-# Fetch the newest wrapped key bundle (read-only).
-aws s3 cp "$(aws s3api list-objects-v2 --bucket <bucket> \
-  --prefix astronomer-pg/<release>/keys/ --query 'Contents[-1].Key' --output text \
-  | xargs -I{} echo s3://<bucket>/{})" ./keys.tar.enc
-
-# Unwrap with the separately-held passphrase, then read the Fernet key.
-openssl enc -d -aes-256-cbc -pbkdf2 -in keys.tar.enc -out keys.tar \
-  -pass pass:"<wrapping-passphrase>"
-mkdir keys && tar -C keys -xf keys.tar
+# Download the selected manifest and the exact two object keys it names. Run
+# manifest-verify with the expected release/namespace/source and both payload
+# files before either decrypt command (the automated drill is the reference).
+dr-crypto decrypt --input keys.tar.aead --output keys.tar \
+  --passphrase-file ./wrapping-passphrase --expect-purpose key-bundle \
+  --expect-context '<context copied from the authenticated backup set>'
+dr-crypto key-bundle-extract --input keys.tar --output ./keys
 cat keys/ASTRONOMER_ENCRYPTION_KEY   # feed this into secrets.encryptionKey
 ```
+
+Pre-GA `.keys.tar.enc` AES-CBC bundles are read-only legacy inputs and are not
+accepted by the automated restore drill because they cannot be authenticated.
+Manual compatibility ends on **2027-09-17**. Before then,
+`dr-crypto legacy-key-bundle-decrypt --sunset 2027-09-17` can read the former
+OpenSSL envelope; immediately pass its output through `key-bundle-extract` in
+an isolated environment and create a current AEAD backup. The automated drill
+never accepts CBC, and an unauthenticated bundle is never promoted directly
+into production.
 
 Restore `secrets.encryptionKey` (and `secrets.secretKey` from
 `keys/SECRET_KEY`) into the new install **before** you restore the database, so
@@ -195,14 +211,18 @@ Before starting, confirm you have:
       aws s3 ls s3://<bucket>/astronomer-pg/<release>/daily/ | sort
       ```
 
-      Pick the most recent dump that pre-dates the corruption, and download it:
+      Pick the most recent `.manifest.json` that pre-dates the corruption.
+      Authenticate it with `dr-crypto manifest-verify`, download only the exact
+      archive/key objects it names, and run verification again with
+      `--archive-file` and `--key-bundle-file` before decryption:
 
       ```bash
-      aws s3 cp s3://<bucket>/astronomer-pg/<release>/daily/<timestamp>.pgcustom ./astronomer.pgcustom
+      aws s3 cp s3://<bucket>/astronomer-pg/<release>/daily/<timestamp>.manifest.json ./backup.manifest.json
       ```
 
-      `pg_restore -l ./astronomer.pgcustom | head` should show a table of
-      contents — if it errors, the dump is truncated and you must pick another.
+      Only after authenticated decryption should `pg_restore -l
+      ./astronomer.pgcustom` show a table of contents. Any manifest, digest, AEAD,
+      source, or context failure rejects the recovery point.
 
 ---
 
@@ -534,36 +554,10 @@ WAL-based PITR.
 
 ---
 
-## Appendix: emergency one-liner restore (managed Postgres)
+## No emergency unauthenticated shortcut
 
-For an operator who is comfortable enough to skip the runbook narrative:
-
-```bash
-# 0. Save the encryption key.
-kubectl -n astronomer get secret astronomer-secrets \
-  -o jsonpath='{.data.ASTRONOMER_ENCRYPTION_KEY}' | base64 -d > /tmp/enc.key
-
-# 1. Freeze.
-kubectl -n astronomer scale deploy/astronomer-server deploy/astronomer-worker --replicas=0
-kubectl -n astronomer patch cronjob astronomer-management-backup \
-  -p '{"spec":{"suspend":true}}'
-
-# 2. Fetch the dump.
-aws s3 cp \
-  s3://my-astronomer-backups/astronomer-pg/astronomer/daily/<stamp>.pgcustom \
-  ./astronomer.pgcustom
-
-# 3. Drop + recreate + restore.
-PGURL='postgres://...'
-psql "${PGURL%/*}/postgres" -c "DROP DATABASE astronomer;"
-psql "${PGURL%/*}/postgres" -c "CREATE DATABASE astronomer OWNER astronomer;"
-pg_restore --dbname "$PGURL" --no-owner --no-acl --jobs=4 ./astronomer.pgcustom
-
-# 4. Thaw.
-kubectl -n astronomer scale deploy/astronomer-server deploy/astronomer-worker --replicas=3
-kubectl -n astronomer patch cronjob astronomer-management-backup \
-  -p '{"spec":{"suspend":false}}'
-```
-
-If anything in the one-liner version surprises you, read the long version
-above instead.
+There is deliberately no direct `aws s3 cp ...pgcustom | pg_restore` shortcut.
+Select and authenticate the manifest, verify both named ciphertext payloads,
+AEAD-decrypt into private scratch space, and inspect `pg_restore -l` before the
+freeze/drop/recreate steps above. Skipping that order defeats the tamper and
+wrong-source protections the backup format exists to provide.

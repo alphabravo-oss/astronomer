@@ -527,6 +527,37 @@ spec:
           port: 443
         - protocol: TCP
           port: 80
+{{- end }}
+{{- end }}
+{{- if and .Values.managementBackup.enabled .Values.managementBackup.retention.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.retention.credentialsSecretRef.name }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-management-backup-retention
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "management-backup-retention") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "management-backup-retention") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- range $cidr := $objectStoreEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
     {{- end }}
 {{- end }}
 {{- if and .Values.managementRestoreDrill.enabled .Values.managementBackup.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name }}

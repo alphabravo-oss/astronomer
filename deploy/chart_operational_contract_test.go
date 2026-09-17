@@ -52,6 +52,9 @@ var productionWiringSets = []string{
 	// operators must inventory the target cluster's actual addresses.
 	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
 	"networkPolicy.objectStoreEgressCIDRs[0]=10.50.0.0/16",
+	"managementBackup.encryption.sourceIdentity=test-production-installation",
+	"managementBackup.encryption.wrappingSecretRef.name=backup-wrap",
+	"managementBackup.retention.credentialsSecretRef.name=backup-retention-creds",
 	"image.server.digest=" + productionTestImageDigest,
 	"image.worker.digest=" + productionTestImageDigest,
 	"image.agent.digest=" + productionTestImageDigest,
@@ -100,7 +103,6 @@ func TestProductionWorkloadImagesAreDigestOnly(t *testing.T) {
 	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=backup-creds",
-		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=backup-wrap",
 	)
 	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{filepath.Join("chart", "values-production.yaml")}, sets...))
 	count := 0
@@ -137,7 +139,6 @@ func TestProductionRejectsMissingActiveImageDigest(t *testing.T) {
 	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=backup-creds",
-		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=backup-wrap",
 	)
 	errOut := helmTemplateExpectError(t, []string{filepath.Join("chart", "values-production.yaml")}, sets...)
 	if !strings.Contains(errOut, "frontend.image.digest must be an exact sha256 digest") {
@@ -978,38 +979,43 @@ func TestProductionRequiresBackupsWired(t *testing.T) {
 func TestProductionRequiresKeyWrapWhenBackupsEnabled(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 
-	// S3 wired, wrapping secret empty → preflight must refuse.
-	s3Only := append([]string{}, productionWiringSets...)
+	// S3 wired, wrapping secret empty → schema/preflight must refuse.
+	s3Only := make([]string, 0, len(productionWiringSets)+2)
+	for _, set := range productionWiringSets {
+		if !strings.HasPrefix(set, "managementBackup.encryption.wrappingSecretRef.name=") {
+			s3Only = append(s3Only, set)
+		}
+	}
 	s3Only = append(s3Only,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws",
 	)
 	errOut := helmTemplateExpectError(t, []string{prodValues}, s3Only...)
-	if !strings.Contains(errOut, "wrappingSecretRef") && !strings.Contains(errOut, "encryptionKeyBackup") {
-		t.Fatalf("production render with S3 but no key wrap did not mention wrappingSecretRef/encryptionKeyBackup:\n%s", errOut)
+	if !strings.Contains(errOut, "wrappingSecretRef") {
+		t.Fatalf("production render with S3 but no AEAD key did not mention wrappingSecretRef:\n%s", errOut)
 	}
 
-	// Explicit opt-out of key backup (still with S3) → render must succeed,
-	// but the key-backup path stays inert.
+	// A production database-only backup is not a recoverable backup and cannot
+	// be opted out independently.
 	optOut := append([]string{}, s3Only...)
-	optOut = append(optOut, "managementBackup.encryptionKeyBackup.enabled=false")
-	out := helmTemplateWithValueFiles(t, []string{prodValues}, optOut...)
-	if !strings.Contains(out, "name: astronomer-management-backup") {
-		t.Fatalf("S3-wired backup CronJob should render when key backup is explicitly disabled:\n%s", out)
-	}
-	if strings.Contains(out, "- name: KEYBACKUP_ENABLED") {
-		t.Fatalf("encryptionKeyBackup.enabled=false must not arm KEYBACKUP_ENABLED:\n%s", out)
+	optOut = append(optOut,
+		"managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap",
+		"managementBackup.encryptionKeyBackup.enabled=false",
+	)
+	errOut = helmTemplateExpectError(t, []string{prodValues}, optOut...)
+	if !strings.Contains(errOut, "encryptionKeyBackup.enabled must remain true") {
+		t.Fatalf("production render accepted a database-only backup:\n%s", errOut)
 	}
 
-	// Full wiring (S3 + wrap) → backup CronJob renders with key-backup armed.
+	// Full wiring renders the authenticated backup writer.
 	full := append([]string{}, s3Only...)
-	full = append(full, "managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap")
-	out = helmTemplateWithValueFiles(t, []string{prodValues}, full...)
+	full = append(full, "managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap")
+	out := helmTemplateWithValueFiles(t, []string{prodValues}, full...)
 	if !strings.Contains(out, "name: astronomer-management-backup") {
 		t.Fatalf("fully-wired production backup CronJob missing:\n%s", out)
 	}
-	if !strings.Contains(out, "- name: KEYBACKUP_ENABLED") {
-		t.Fatalf("fully-wired production render should arm key backup:\n%s", out)
+	if !strings.Contains(out, "dr-crypto manifest-create") || !strings.Contains(out, "--purpose database-dump") {
+		t.Fatalf("fully-wired production render should use authenticated client-side encryption:\n%s", out)
 	}
 	if !strings.Contains(out, `secretName: "astronomer-key-wrap"`) {
 		t.Fatalf("fully-wired production render should mount wrapping secret:\n%s", out)
@@ -1017,22 +1023,21 @@ func TestProductionRequiresKeyWrapWhenBackupsEnabled(t *testing.T) {
 }
 
 // OPS-01: production with backups + S3 wired but no key-wrap secret must fail.
-func TestProductionRequiresEncryptionKeyWrapWhenBackupsEnabled(t *testing.T) {
+func TestProductionRequiresSeparateRetentionIdentity(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 	sets := append([]string{}, productionWiringSets...)
 	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
-		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
-		// wrap name left empty on purpose
+		"managementBackup.s3.credentialsSecretRef.name=backup-retention-creds",
 	)
 	errOut := helmTemplateExpectError(t, []string{prodValues}, sets...)
-	if !strings.Contains(errOut, "wrappingSecretRef") && !strings.Contains(errOut, "encryptionKeyBackup") {
-		t.Fatalf("production render with S3 but no key wrap must fail on wrap custody:\n%s", errOut)
+	if !strings.Contains(errOut, "different Secrets") {
+		t.Fatalf("production render reused the writer identity for retention:\n%s", errOut)
 	}
 
-	// With wrap wired, production render succeeds.
+	// A distinct write-only and delete-capable identity pair renders.
 	okSets := append([]string{}, sets...)
-	okSets = append(okSets, "managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap")
+	okSets = append(okSets, "managementBackup.s3.credentialsSecretRef.name=astronomer-backup-writer")
 	_ = helmTemplateWithValueFiles(t, []string{prodValues}, okSets...)
 }
 

@@ -346,6 +346,7 @@ jobs:
           - agent
           - migrate
           - shell
+          - dr
           - frontend
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -359,16 +360,16 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.component == 'frontend' && 'frontend' || '.' }}
-          file: ${{ matrix.component == 'server' && 'deploy/docker/Dockerfile.server' || matrix.component == 'worker' && 'deploy/docker/Dockerfile.worker' || matrix.component == 'agent' && 'deploy/docker/Dockerfile.agent' || matrix.component == 'migrate' && 'deploy/docker/Dockerfile.migrate' || matrix.component == 'shell' && 'deploy/docker/Dockerfile.shell' || 'frontend/Dockerfile' }}
+          file: ${{ matrix.component == 'server' && 'deploy/docker/Dockerfile.server' || matrix.component == 'worker' && 'deploy/docker/Dockerfile.worker' || matrix.component == 'agent' && 'deploy/docker/Dockerfile.agent' || matrix.component == 'migrate' && 'deploy/docker/Dockerfile.migrate' || matrix.component == 'shell' && 'deploy/docker/Dockerfile.shell' || matrix.component == 'dr' && 'deploy/docker/Dockerfile.dr' || 'frontend/Dockerfile' }}
           load: true
-          tags: ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || 'astronomer-frontend' }}:ci
+          tags: ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || matrix.component == 'dr' && 'astronomer-dr' || 'astronomer-frontend' }}:ci
           provenance: false
           sbom: false
 
       - name: Scan image
         uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
         with:
-          image-ref: ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || 'astronomer-frontend' }}:ci
+          image-ref: ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || matrix.component == 'dr' && 'astronomer-dr' || 'astronomer-frontend' }}:ci
           format: table
           vuln-type: os,library
           severity: HIGH,CRITICAL
@@ -383,7 +384,7 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          syft ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || 'astronomer-frontend' }}:ci \
+          syft ${{ matrix.component == 'server' && 'astronomer-go-server' || matrix.component == 'worker' && 'astronomer-go-worker' || matrix.component == 'agent' && 'astronomer-go-agent' || matrix.component == 'migrate' && 'astronomer-go-migrate' || matrix.component == 'shell' && 'astronomer-shell' || matrix.component == 'dr' && 'astronomer-dr' || 'astronomer-frontend' }}:ci \
             -o spdx-json \
             > sbom-${{ matrix.component }}.spdx.json
           test -s sbom-${{ matrix.component }}.spdx.json

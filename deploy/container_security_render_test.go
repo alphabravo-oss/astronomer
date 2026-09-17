@@ -34,6 +34,10 @@ func TestChartRendersHardenedBackupJobSecurityContexts(t *testing.T) {
 	values := []byte(`
 managementBackup:
   enabled: true
+  encryption:
+    sourceIdentity: test-installation
+    wrappingSecretRef:
+      name: backup-wrap
   s3:
     bucket: astronomer-backups
     credentialsSecretRef:

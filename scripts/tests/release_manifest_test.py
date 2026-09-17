@@ -98,7 +98,7 @@ class ReleaseManifestTest(unittest.TestCase):
         self.assertEqual(GENERATOR.encode(first), GENERATOR.encode(second))
         schema = SCHEMA_VALIDATOR.load_json(ROOT / "deploy/release/release-manifest.schema.json")
         SCHEMA_VALIDATOR.validate_schema(first, schema, schema)
-        self.assertEqual(len(first["astronomer"]["images"]), 6)
+        self.assertEqual(len(first["astronomer"]["images"]), 7)
         self.assertEqual(len(first["flux"]["controllers"]), 3)
         self.assertEqual(first["charlie"]["qualified_version"], "v1.0.63")
         self.assertTrue(first["charlie"]["artifact_signing_policy"]["certificate_identity"].endswith("v1.0.63"))

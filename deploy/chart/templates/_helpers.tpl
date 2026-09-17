@@ -128,8 +128,8 @@ human-readable target version used by fleet upgrade status.
 
 {{/*
 Third-party image helper. T23 FEATURES-051126 — air-gapped installs
-mirror third-party images (postgres, redis, kubectl, busybox, pgdump-s3
-sidecar, frontend) into the operator's internal registry. Each image
+mirror runtime images (postgres, redis, kubectl, busybox, DR helper,
+frontend) into the operator's internal registry. Each image
 config supports an optional .registry override; when unset, falls back
 to .Values.image.registry; when that's also unset, the image is left
 unprefixed. Pass dict { repository: $repo, tag: $tag, digest: $digest,
@@ -552,25 +552,39 @@ rendered manifest.
       {{- if not .Values.managementBackup.s3.credentialsSecretRef.name }}
         {{- $errs = append $errs "  - managementBackup.s3.credentialsSecretRef.name is empty but managementBackup.enabled=true — provide the S3 credentials Secret (see values-production.yaml) or set managementBackup.enabled=false to explicitly opt out." }}
       {{- end }}
+      {{- if ne (.Values.managementBackup.immutability.mode | default "") "objectLock" }}
+        {{- $errs = append $errs "  - managementBackup.immutability.mode must be objectLock in production; the writer validates bucket Object Lock and its default retention rule before creating a backup." }}
+      {{- end }}
+      {{- if not .Values.managementBackup.encryption.sourceIdentity }}
+        {{- $errs = append $errs "  - managementBackup.encryption.sourceIdentity must be a stable, unique installation identity used to bind authenticated backup manifests." }}
+      {{- end }}
+      {{- if not .Values.managementBackup.encryption.wrappingSecretRef.name }}
+        {{- $errs = append $errs "  - managementBackup.encryption.wrappingSecretRef.name is required for client-side AES-256-GCM dump/key encryption and manifest authentication." }}
+      {{- end }}
+      {{- if .Values.managementBackup.retention.enabled }}
+        {{- if not .Values.managementBackup.retention.credentialsSecretRef.name }}
+          {{- $errs = append $errs "  - managementBackup.retention.credentialsSecretRef.name is required when retention is enabled; use a dedicated delete-capable identity." }}
+        {{- else if eq .Values.managementBackup.retention.credentialsSecretRef.name .Values.managementBackup.s3.credentialsSecretRef.name }}
+          {{- $errs = append $errs "  - managementBackup retention and writer credentials must reference different Secrets so the writer cannot delete backups." }}
+        {{- end }}
+      {{- end }}
       {{- $objectStoreCIDRs := .Values.networkPolicy.objectStoreEgressCIDRs | default (list) }}
       {{- if eq (len $objectStoreCIDRs) 0 }}
         {{- $errs = append $errs "  - networkPolicy.objectStoreEgressCIDRs must identify the backup object-store endpoint network when managementBackup.enabled=true; backup and restore pods receive no general Internet egress." }}
       {{- else if or (has "0.0.0.0/0" $objectStoreCIDRs) (has "::/0" $objectStoreCIDRs) }}
         {{- $errs = append $errs "  - networkPolicy.objectStoreEgressCIDRs must not contain 0.0.0.0/0 or ::/0 in production; use the object-store endpoint's narrow CIDR ranges." }}
       {{- end }}
-      {{- /* OPS-01: key wrap custody is required when backups are enabled so a
-           restore onto a new cluster can decrypt Fernet columns. Empty
-           wrappingSecretRef leaves CronJobs green but key backup inert. */ -}}
+      {{- /* Key backup is mandatory with production DB backup; the same
+           separately-held AEAD key authenticates the dump, key bundle, and
+           closed manifest. */ -}}
       {{- $keyBackupOn := true }}
       {{- if hasKey .Values.managementBackup "encryptionKeyBackup" }}
         {{- if hasKey .Values.managementBackup.encryptionKeyBackup "enabled" }}
           {{- $keyBackupOn = .Values.managementBackup.encryptionKeyBackup.enabled }}
         {{- end }}
       {{- end }}
-      {{- if $keyBackupOn }}
-        {{- if not (and .Values.managementBackup.encryptionKeyBackup .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name) }}
-          {{- $errs = append $errs "  - managementBackup.encryptionKeyBackup.wrappingSecretRef.name is empty but managementBackup.enabled=true — production DR requires encryption-key custody (see values-production.yaml and docs/management-plane-dr-runbook.md). Create a separate wrap Secret and set the name, or set managementBackup.encryptionKeyBackup.enabled=false to explicitly opt out of key backup (restored Fernet data will be undecryptable on a new cluster)." }}
-        {{- end }}
+      {{- if not $keyBackupOn }}
+        {{- $errs = append $errs "  - managementBackup.encryptionKeyBackup.enabled must remain true in production; a database-only backup cannot decrypt restored application data." }}
       {{- end }}
     {{- end }}
     {{- if .Values.managementLogging.enabled }}

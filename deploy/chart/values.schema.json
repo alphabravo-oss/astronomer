@@ -441,12 +441,43 @@
       "additionalProperties": true,
       "properties": {
         "enabled": { "type": "boolean" },
+        "retention": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "schedule": { "type": "string", "minLength": 1 },
+            "dryRun": { "type": "boolean" },
+            "daily": { "type": "integer", "minimum": 1 },
+            "weekly": { "type": "integer", "minimum": 1 },
+            "monthly": { "type": "integer", "minimum": 1 },
+            "credentialsSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+          }
+        },
         "s3": {
           "type": "object",
           "additionalProperties": true,
           "properties": {
             "bucket": { "type": "string" },
             "credentialsSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+          }
+        },
+        "immutability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "minimumRetentionDays"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["objectLock"] },
+            "minimumRetentionDays": { "type": "integer", "minimum": 1, "maximum": 36500 }
+          }
+        },
+        "encryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceIdentity", "wrappingSecretRef"],
+          "properties": {
+            "sourceIdentity": { "type": "string", "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._:/-]{0,252}$" },
+            "wrappingSecretRef": { "$ref": "#/definitions/secretKeyRef" }
           }
         }
       }
@@ -590,9 +621,41 @@
                     }
                   },
                   "required": ["bucket", "credentialsSecretRef"]
+                },
+                "immutability": {
+                  "properties": {
+                    "mode": { "const": "objectLock" },
+                    "minimumRetentionDays": { "type": "integer", "minimum": 1 }
+                  },
+                  "required": ["mode", "minimumRetentionDays"]
+                },
+                "encryption": {
+                  "properties": {
+                    "sourceIdentity": { "type": "string", "minLength": 1 },
+                    "wrappingSecretRef": {
+                      "required": ["name"],
+                      "properties": { "name": { "type": "string", "minLength": 1 } }
+                    }
+                  },
+                  "required": ["sourceIdentity", "wrappingSecretRef"]
+                },
+                "retention": {
+                  "if": {
+                    "properties": { "enabled": { "const": true } },
+                    "required": ["enabled"]
+                  },
+                  "then": {
+                    "properties": {
+                      "credentialsSecretRef": {
+                        "required": ["name"],
+                        "properties": { "name": { "type": "string", "minLength": 1 } }
+                      }
+                    },
+                    "required": ["credentialsSecretRef"]
+                  }
                 }
               },
-              "required": ["s3"]
+              "required": ["s3", "immutability", "encryption", "retention"]
             }
           },
           "networkPolicy": {

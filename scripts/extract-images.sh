@@ -16,7 +16,7 @@
 #   1) base values plus the explicit local-development profile
 #   2) production-like optional components (Dex, management backup with a
 #      dummy S3 target + key wrap, management logging) so air-gapped prod
-#      installs don't miss dex / pgdump-s3 / fluent-bit.
+#      installs don't miss dex / astronomer-dr / fluent-bit.
 # Results are unioned. The agent image and digest-pinned downstream controller
 # images are added explicitly because they run only in managed clusters and do
 # not appear in a management-plane Deployment.
@@ -79,16 +79,21 @@ dev_images="$(
 # Production-like optional components, rendered under the explicit development
 # profile because image discovery does not have an operator's production
 # infrastructure inputs. These stay off in values.yaml, but production values
-# (or operator overrides) turn them on. Backup/restore images stay out of this
-# public inventory: the default pgdump-s3 image is a private company package
-# and cannot be digest-resolved by the public release runner.
+# (or operator overrides) turn them on. Dummy Secret names activate the
+# first-party DR writer, retention, and restore images without carrying any
+# credential value into the render.
 prod_like_images="$(
     extract_images \
         -f "$CHART_DIR/values.yaml" \
         -f "$CHART_DIR/values-dev.yaml" \
         --set dex.enabled=true \
         --set managementLogging.enabled=true \
-        --set managementLogging.endpoint=http://loki.observability.svc:3100
+        --set managementLogging.endpoint=http://loki.observability.svc:3100 \
+        --set managementBackup.s3.bucket=image-inventory \
+        --set managementBackup.s3.credentialsSecretRef.name=image-inventory-writer \
+        --set managementBackup.encryption.sourceIdentity=image-inventory \
+        --set managementBackup.encryption.wrappingSecretRef.name=image-inventory-wrap \
+        --set managementBackup.retention.credentialsSecretRef.name=image-inventory-retention
 )"
 
 images="$(printf '%s\n%s' "$dev_images" "$prod_like_images" | sed '/^$/d' | LC_ALL=C sort -u)"

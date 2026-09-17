@@ -74,7 +74,7 @@ Requires Skopeo. Default is `linux/amd64` only.
 ```
 
 Pass `--all-platforms` for the full multi-arch index. Pass `--first-party`
-to copy only the six Astronomer images (smoke / smaller USB).
+to copy only the seven Astronomer images (smoke / smaller USB).
 
 ## 3. Dark site — load images
 
@@ -148,8 +148,8 @@ def container_images(manifest: dict[str, Any], *, first_party: bool = False) -> 
         return images
     wanted = {item["reference"].removeprefix("oci://") for item in manifest["astronomer"]["images"]}
     filtered = [reference for reference in images if reference in wanted]
-    if len(filtered) != 6:
-        raise KitError("release manifest must list exactly six first-party container images")
+    if len(filtered) != 7:
+        raise KitError("release manifest must list exactly seven first-party container images")
     return filtered
 
 

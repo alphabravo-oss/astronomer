@@ -111,8 +111,6 @@ func TestValuesSchemaAcceptsProductionWiring(t *testing.T) {
 	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
-		// OPS-01: production preflight requires key-wrap when backups are on.
-		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
 	)
 	out := helmTemplateWithValueFiles(t, []string{prodValues}, sets...)
 	assertRenderedContains(t, out,

@@ -122,6 +122,7 @@ jobs:
           - { name: agent,    context: .,        dockerfile: deploy/docker/Dockerfile.agent,   imageName: astronomer-go-agent }
           - { name: migrate,  context: .,        dockerfile: deploy/docker/Dockerfile.migrate, imageName: astronomer-go-migrate }
           - { name: shell,    context: .,        dockerfile: deploy/docker/Dockerfile.shell,   imageName: astronomer-shell, skip_files: /usr/local/bin/kubectl }
+          - { name: dr,       context: .,        dockerfile: deploy/docker/Dockerfile.dr,      imageName: astronomer-dr }
           - { name: frontend, context: frontend, dockerfile: frontend/Dockerfile,              imageName: astronomer-frontend }
     steps:
       - name: Checkout
@@ -702,7 +703,8 @@ jobs:
             AGENT:agent:astronomer-go-agent \
             MIGRATE:migrate:astronomer-go-migrate \
             FRONTEND:frontend:astronomer-frontend \
-            SHELL:shell:astronomer-shell; do
+            SHELL:shell:astronomer-shell \
+            DR:dr:astronomer-dr; do
             key="${pair%%:*}"
             rest="${pair#*:}"
             component="${rest%%:*}"
@@ -769,6 +771,8 @@ jobs:
             --set-string redis.image.digest="$REDIS_DIGEST" \
             --set-string dex.image.digest="$DEX_DIGEST" \
             --set-string managementRestoreDrill.sidecar.image.digest="$POSTGRES_DIGEST" \
+            --set-string managementBackup.image.digest="$DR_DIGEST" \
+            --set-string managementRestoreDrill.image.digest="$DR_DIGEST" \
             --set-string managementLogging.image.digest="$LOGGING_DIGEST" \
             --set-string config.agentImageRepository="$AGENT_REF" \
             --set-string config.agentImageTag="$IMAGE_TAG" \

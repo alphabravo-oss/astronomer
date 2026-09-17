@@ -522,7 +522,9 @@ verify_helm() {
     --set delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0 \
     --set managementBackup.s3.bucket=astronomer-backups \
     --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
-    --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap
+    --set managementBackup.encryption.sourceIdentity=test-production-installation \
+    --set managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap \
+    --set managementBackup.retention.credentialsSecretRef.name=astronomer-backup-retention
 
   step "Helm chart contract tests"
   run_logged helm-contract-tests go test ./deploy/ -count=1

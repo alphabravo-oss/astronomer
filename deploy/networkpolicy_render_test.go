@@ -195,11 +195,15 @@ func TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase(t *testing
 				"dex.migration.phase=fresh",
 				"managementBackup.s3.bucket=enterprise-backups",
 				"managementBackup.s3.credentialsSecretRef.name=enterprise-backup-credentials",
+				"managementBackup.encryption.sourceIdentity=test-installation",
+				"managementBackup.encryption.wrappingSecretRef.name=enterprise-backup-wrap",
+				"managementBackup.retention.credentialsSecretRef.name=enterprise-retention-credentials",
 				"managementLogging.enabled=true",
 				"managementLogging.endpoint=https://logs.example.invalid",
 			},
 			requiredKinds: []string{
 				"CronJob/astronomer-management-backup",
+				"CronJob/astronomer-management-backup-retention",
 				"CronJob/astronomer-restore-drill",
 				"DaemonSet/astronomer-mgmt-logging",
 			},
@@ -247,6 +251,9 @@ func TestOptionalProductionWorkloadsHaveDedicatedNarrowPolicies(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t,
 		"managementBackup.s3.bucket=enterprise-backups",
 		"managementBackup.s3.credentialsSecretRef.name=enterprise-backup-credentials",
+		"managementBackup.encryption.sourceIdentity=test-installation",
+		"managementBackup.encryption.wrappingSecretRef.name=enterprise-backup-wrap",
+		"managementBackup.retention.credentialsSecretRef.name=enterprise-retention-credentials",
 		"managementLogging.enabled=true",
 		"managementLogging.endpoint=https://logs.example.invalid",
 		"managementLogging.networkPolicyPorts[0]=8443",
@@ -262,6 +269,7 @@ func TestOptionalProductionWorkloadsHaveDedicatedNarrowPolicies(t *testing.T) {
 		forbid    []string
 	}{
 		{name: "astronomer-management-backup", component: "management-backup", want: []string{"10.50.0.0/24", "5432", "443", "80"}, forbid: []string{"10.60.0.0/24", "6443"}},
+		{name: "astronomer-management-backup-retention", component: "management-backup-retention", want: []string{"10.50.0.0/24", "443", "80"}, forbid: []string{"10.60.0.0/24", "5432", "6443"}},
 		{name: "astronomer-restore-drill", component: "restore-drill", want: []string{"10.50.0.0/24", "5432", "443", "80"}, forbid: []string{"10.60.0.0/24", "6443"}},
 		{name: "astronomer-management-logging", component: "management-logging", want: []string{"10.60.0.0/24", "10.40.0.0/24", "8443", "6443"}, forbid: []string{"10.50.0.0/24", "5432", "80"}},
 	} {
@@ -542,7 +550,6 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
 	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
-		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
 	)
 	out := helmTemplateWithValueFiles(t, []string{prodValues}, sets...)
 	if strings.Contains(out, `cidr: "0.0.0.0/0"`) {

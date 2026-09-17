@@ -49,7 +49,7 @@ def subject(name: str, kind: str) -> dict:
 
 
 def manifest() -> dict:
-    names = ("agent", "frontend", "migrate", "server", "shell", "worker")
+    names = ("agent", "dr", "frontend", "migrate", "server", "shell", "worker")
     images = [subject(name, "container_image") for name in names]
     return {
         "schema_version": 1,
@@ -71,7 +71,6 @@ def manifest() -> dict:
                     "valkey/valkey:8-alpine": f"docker.io/valkey/valkey@{DIGEST}",
                     "dexidp/dex:v2.41.1": f"docker.io/dexidp/dex@{DIGEST}",
                     "fluent/fluent-bit:3.2.4": f"docker.io/fluent/fluent-bit@{DIGEST}",
-                    "ghcr.io/alphabravocompany/pgdump-s3:16-awscli": f"ghcr.io/alphabravocompany/pgdump-s3@{DIGEST}",
                 }.items()
             ],
         },
@@ -141,7 +140,7 @@ class AirgapKitTest(unittest.TestCase):
         self.assertNotIn(f"source.example.test/team/chart@{DIGEST}", lines)
         first_party = KIT.images_txt(manifest(), first_party=True)
         first_lines = [line for line in first_party.splitlines() if line and not line.startswith("#")]
-        self.assertEqual(len(first_lines), 6)
+        self.assertEqual(len(first_lines), 7)
         self.assertTrue(all(line.startswith("source.example.test/team/") for line in first_lines))
 
     def test_destination_rewrite_matches_mirror_plan(self) -> None:

@@ -953,12 +953,19 @@ managementBackup:
   ttlSecondsAfterFinished: 86400
   # Local scratch space for the dump file. Tune up for large DBs.
   scratchSizeLimit: 8Gi
-  # Retention per tier. Daily is the rolling window; on Sundays the dump is
-  # also copied into weekly/, on the 1st of the month into monthly/.
+  # Retention runs as a distinct CronJob with credentials that are not mounted
+  # into the backup writer. Keep dryRun=true until its candidate list has been
+  # reviewed, then opt into deletions. Object Lock remains the final authority.
   retention:
+    enabled: true
+    schedule: "30 3 * * *"
+    dryRun: true
     daily: 30
     weekly: 12
     monthly: 6
+    credentialsSecretRef:
+      name: ""
+      key: "credentials"
   s3:
     # Required when enabled=true.
     bucket: ""
@@ -977,6 +984,20 @@ managementBackup:
     credentialsSecretRef:
       name: ""
       key: "credentials"
+  # Production backups are accepted only when the target bucket has Object
+  # Lock enabled with a default retention rule at least this long. The writer
+  # validates that contract before pg_dump or any upload.
+  immutability:
+    mode: "objectLock"
+    minimumRetentionDays: 30
+  # One separately-held high-entropy secret protects both AES-256-GCM payload
+  # envelopes and the authenticated manifest. It must not be accessible to the
+  # object-store writer/retention principals outside this pod.
+  encryption:
+    sourceIdentity: ""
+    wrappingSecretRef:
+      name: ""
+      key: "passphrase"
   # ---------------------------------------------------------------------------
   # F4 (HIGH · DR): back up the Fernet/JWT encryption-key Secret WITH the DB.
   # ---------------------------------------------------------------------------
@@ -989,34 +1010,24 @@ managementBackup:
   # first, so the key is never written to S3 in plaintext next to the data it
   # protects. Key custody steps: docs/management-plane-dr-runbook.md.
   encryptionKeyBackup:
-    # Default on, but INERT until wrappingSecretRef.name is set (the chart
-    # refuses to upload the key in plaintext). When unset a NOTES/preflight
-    # warning fires so the DR gap is visible rather than silent.
+    # Default on, but the workload is inert until encryption.wrappingSecretRef
+    # and sourceIdentity are set. Production rejects disabling this because a
+    # database-only recovery point cannot decrypt application data.
     enabled: true
     # Independent in-cluster backup bundle Secret. Empty => use the runtime core
     # Secret and alias secrets.*KeyKey to canonical restore filenames. A nonempty
     # override is a separate contract and MUST already contain canonical keys
     # SECRET_KEY and ASTRONOMER_ENCRYPTION_KEY; all its other keys are preserved.
     secretName: ""
-    # Secret holding the wrapping passphrase used to encrypt the key bundle
-    # before upload. HOLD THIS SEPARATELY from the S3 backup credentials and the
-    # DB — ideally a different cloud account / KMS / offline vault. Whoever holds
-    # only the S3 bucket must NOT also hold this, or the separation is moot.
-    wrappingSecretRef:
-      name: ""
-      key: "passphrase"
     # S3 sub-tier (under <prefix>/<release>/) the wrapped key bundles land in.
     # Deliberately distinct from daily/weekly/monthly so key custody is separable.
     keyPrefix: "keys"
-    # How many wrapped key bundles to retain. Keys rotate rarely, so keep a
-    # generous history so an older dump can still be paired with its key.
-    retention: 30
-  # Image bundling postgresql-client + aws-cli. Built and published by
-  # Astronomer at ghcr.io/alphabravocompany/pgdump-s3; override to an
-  # internally mirrored image when air-gapped.
+  # First-party DR image bundling postgresql-client, aws-cli, and the audited
+  # authenticated-envelope helper. Override with a digest-pinned mirror when
+  # air-gapped.
   image:
-    repository: ghcr.io/alphabravocompany/pgdump-s3
-    tag: "16-awscli"
+    repository: ghcr.io/alphabravo-oss/astronomer-dr
+    tag: "v1.1.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
@@ -1103,20 +1114,13 @@ managementRestoreDrill:
     # A known Fernet-encrypted delivery credential to sample when one exists.
     table: "delivery_sources"
     column: "credential_encrypted"
-    # The SAME wrapping-passphrase Secret managementBackup.encryptionKeyBackup
-    # used to wrap the key bundle. Empty => the decrypt check is skipped (the
-    # drill can't unwrap the key), and a warning is emitted. Set it to make the
-    # drill actually prove decryptability.
-    wrappingSecretRef:
-      name: ""
-      key: "passphrase"
     # Must match managementBackup.encryptionKeyBackup.keyPrefix.
     keyPrefix: "keys"
   # Image bundling postgresql-client + aws-cli — reuse the same image
   # as managementBackup so the drill can run wherever the backup runs.
   image:
-    repository: ghcr.io/alphabravocompany/pgdump-s3
-    tag: "16-awscli"
+    repository: ghcr.io/alphabravo-oss/astronomer-dr
+    tag: "v1.1.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry

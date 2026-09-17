@@ -1,5 +1,5 @@
 .PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all local-ci-install local-ci-pr local-ci-pr-representative check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
-        docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
+        docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-dr docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
         validate-live-b6 validate-live-delivery validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects verify-agent-identity-live
@@ -53,6 +53,7 @@ IMG_FRONTEND = $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG)
 # Owned end-to-end (alpine + kubectl from dl.k8s.io) so we don't depend
 # on a third-party registry whose tag schedule we can't control.
 IMG_SHELL    = $(IMG_REGISTRY)/astronomer-shell:$(IMG_TAG)
+IMG_DR       = $(IMG_REGISTRY)/astronomer-dr:$(IMG_TAG)
 
 # Key material for `make helm-install`. The chart ships NO defaults — it used to
 # ship a working JWT signing key and Fernet key, which made every default install
@@ -305,7 +306,10 @@ docker-build-frontend: ## Build frontend (Vite dashboard) image from frontend/
 docker-build-shell: ## Build astronomer-shell (in-cluster kubectl shell pod) image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.shell -t $(IMG_SHELL) .
 
-docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell ## Build all images
+docker-build-dr: ## Build authenticated management backup/restore image
+	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.dr -t $(IMG_DR) .
+
+docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-dr ## Build all images
 
 # Backward-compat alias: `make docker-build` still builds the server image.
 docker-build: docker-build-server ## (alias) build server image
@@ -317,7 +321,7 @@ k3d-load: ## Import a Docker image into the k3d cluster (IMG=<image:tag> CLUSTER
 	k3d image import $(IMG) -c $(CLUSTER)
 
 k3d-import-all: docker-build-all ## Build & import all images into k3d
-	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) $(IMG_FRONTEND) $(IMG_SHELL) -c $(CLUSTER)
+	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) $(IMG_FRONTEND) $(IMG_SHELL) $(IMG_DR) -c $(CLUSTER)
 
 k3d-bootstrap: ## Bootstrap a local k3d cluster + apply manifests (CLUSTER=$(CLUSTER))
 	CLUSTER=$(CLUSTER) IMG_TAG=$(IMG_TAG) IMG_REGISTRY=$(IMG_REGISTRY) ./scripts/k3d-bootstrap.sh

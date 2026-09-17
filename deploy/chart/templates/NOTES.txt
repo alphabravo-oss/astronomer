@@ -109,10 +109,12 @@ Nightly pg_dump is ENABLED.
   Endpoint    : {{ . }}
   {{- end }}
   Retention   : daily={{ .Values.managementBackup.retention.daily }} weekly={{ .Values.managementBackup.retention.weekly }} monthly={{ .Values.managementBackup.retention.monthly }}
-{{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
-  Key backup  : ENABLED — the Fernet/JWT key Secret is wrapped with a separately
-                held passphrase and stored under {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" }}/. A restore onto a
-                new cluster can decrypt agent tokens / SSO secrets / delivery credentials.
+{{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryption.wrappingSecretRef.name }}
+  Encryption  : AES-256-GCM client-side envelopes plus authenticated manifests.
+  Key backup  : ENABLED — the Fernet/JWT key Secret is protected by the separately
+                held encryption secret and stored under {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" }}/.
+  Immutability: Object Lock validated before every writer run.
+  Retention   : separate identity; dry-run={{ .Values.managementBackup.retention.dryRun }}
 {{- else }}
 
   WARNING: encryption-key backup is NOT wired (F4). pg_dump alone is NOT a
@@ -120,7 +122,8 @@ Nightly pg_dump is ENABLED.
   agent tokens / SSO secrets / delivery credentials are permanently UNDECRYPTABLE,
   because the Fernet key lives in a Secret, not in Postgres. Wire it:
 
-    --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=<secret>
+    --set managementBackup.encryption.wrappingSecretRef.name=<secret> \
+    --set managementBackup.encryption.sourceIdentity=<stable-installation-id>
 
   and hold that wrapping passphrase in SEPARATE custody from the S3 backup
   credentials. See docs/management-plane-dr-runbook.md ("Key custody").

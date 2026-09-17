@@ -11,6 +11,7 @@ import (
 func TestDockerfileBaseImagesAreDigestPinned(t *testing.T) {
 	dockerfiles := []string{
 		"docker/Dockerfile.agent",
+		"docker/Dockerfile.dr",
 		"docker/Dockerfile.migrate",
 		"docker/Dockerfile.server",
 		"docker/Dockerfile.shell",
@@ -97,6 +98,7 @@ func TestShellDockerfileCopiesDexValidatorLocalDependencyClosure(t *testing.T) {
 func TestFirstPartyDockerfilesDeclareFinalImageIdentity(t *testing.T) {
 	dockerfiles := []string{
 		"docker/Dockerfile.agent",
+		"docker/Dockerfile.dr",
 		"docker/Dockerfile.migrate",
 		"docker/Dockerfile.server",
 		"docker/Dockerfile.shell",
@@ -141,6 +143,7 @@ func TestOSSRuntimeImagesUseImmutableBasePackagesAndDropRoot(t *testing.T) {
 		{dockerfile: "docker/Dockerfile.server", user: "USER nobody"},
 		{dockerfile: "docker/Dockerfile.worker", user: "USER nobody"},
 		{dockerfile: "docker/Dockerfile.agent", user: "USER nobody"},
+		{dockerfile: "docker/Dockerfile.dr", user: "USER 65534:65534"},
 		{dockerfile: "docker/Dockerfile.migrate", user: "USER nobody"},
 		{dockerfile: "docker/Dockerfile.shell", user: "USER 1001:1001"},
 		{dockerfile: "../frontend/Dockerfile", user: "USER 1001"},

@@ -13,7 +13,7 @@ maintained by hand and is not committed with build-specific digests.
   exact upstream Flux release, controller images, APIs, signatures, and source.
 - `deploy/bundles/catalog.json` binds every built-in chart, chart digest, image,
   target namespace, and required capability.
-- Release CI supplies the source commit; packaged chart; six image identities;
+- Release CI supplies the source commit; packaged chart; seven image identities;
   resolved runtime-image identities; Flux and bundle OCI subjects; and Charlie
   version, subject, capability disclosure digest, and signing identity.
 
@@ -27,7 +27,7 @@ The tag workflow in `.github/workflows/release.yaml`:
 
 1. verifies the public repository, exact `vX.Y.Z` tag, chart versions, source
    ancestry, Charlie qualification inputs, and disk headroom;
-2. builds the six multi-platform images once, records their manifest-list
+2. builds the seven multi-platform images once, records their manifest-list
    digests, signs them, and attaches SPDX and SLSA attestations;
 3. reproducibly builds and publishes the signed Flux distribution and built-in
    bundle OCI artifacts;

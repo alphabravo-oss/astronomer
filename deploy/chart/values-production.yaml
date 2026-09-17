@@ -350,9 +350,15 @@ managementBackup:
   enabled: true
   schedule: "0 3 * * *"
   retention:
+    enabled: true
+    schedule: "30 3 * * *"
+    dryRun: true  # review candidates, then explicitly set false
     daily: 30
     weekly: 12
     monthly: 6
+    credentialsSecretRef:
+      name: ""   # REQUIRED and MUST differ from writer credentials
+      key: "credentials"
   s3:
     bucket: ""    # REQUIRED — operator supplies via --set
     region: "us-east-1"
@@ -361,6 +367,14 @@ managementBackup:
     credentialsSecretRef:
       name: ""   # REQUIRED — operator supplies via --set
       key: "credentials"
+  immutability:
+    mode: "objectLock"
+    minimumRetentionDays: 30
+  encryption:
+    sourceIdentity: ""  # REQUIRED stable installation identity, e.g. prod-us-east-1
+    wrappingSecretRef:
+      name: ""   # REQUIRED — separate custody from both S3 identities
+      key: "passphrase"
   # F4 (HIGH · DR): back up the Fernet/JWT encryption key WITH the DB, wrapped
   # with a SEPARATELY-held passphrase. Without this a restore onto a new cluster
   # is undecryptable. STRONGLY recommended in production. Create the wrapping
@@ -369,14 +383,11 @@ managementBackup:
   #   kubectl -n astronomer create secret generic astronomer-key-wrap \
   #     --from-literal=passphrase="$(openssl rand -base64 48)"
   #
-  #   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap
+  #   --set managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap
   #
   # See docs/management-plane-dr-runbook.md ("Key custody").
   encryptionKeyBackup:
     enabled: true
-    wrappingSecretRef:
-      name: ""   # REQUIRED for key backup — hold in SEPARATE custody from S3 creds
-      key: "passphrase"
 
 # The weekly restore-drill proves the dump is restorable AND — once the key
 # backup above is wired — that the backed-up key actually DECRYPTS the restored
@@ -385,5 +396,3 @@ managementRestoreDrill:
   enabled: true
   decryptCheck:
     enabled: true
-    wrappingSecretRef:
-      name: ""   # set to the SAME secret as encryptionKeyBackup.wrappingSecretRef.name

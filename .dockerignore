@@ -7,6 +7,7 @@ frontend/.next
 frontend/dist
 out
 .claude
+.local-ci
 bin
 keyrotate
 worker

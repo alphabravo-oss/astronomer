@@ -536,15 +536,16 @@ function EncryptionCard({ data }: { data: ManagementBackupStatusView }) {
       </div>
       {wrapped ? (
         <p className="text-xs text-muted-foreground">
-          The platform encryption key is wrapped and stored with each dump. A
-          restore onto a new cluster can decrypt agent tokens and SSO secrets.
+          The dump and platform key bundle use authenticated client-side
+          encryption and a source-bound manifest. A restore can reject tampering
+          before it touches PostgreSQL.
         </p>
       ) : (
         <p className="text-xs text-status-warning">
-          Dumps are running without a wrapped copy of the encryption key.
-          Restoring onto a new cluster would leave encrypted columns
-          undecryptable. Set
-          managementBackup.encryptionKeyBackup.wrappingSecretRef in Helm values.
+          Authenticated backup encryption is not configured. Restoring onto a
+          new cluster would leave encrypted columns undecryptable. Set
+          managementBackup.encryption.wrappingSecretRef and sourceIdentity in
+          Helm values.
         </p>
       )}
     </div>
