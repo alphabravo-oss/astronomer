@@ -155,6 +155,7 @@ GET /api/v1/admin/webhooks/{id}/deliveries/{delivery_id}
 GET /api/v1/alerting/channels
 GET /api/v1/alerting/channels/{id}
 GET /api/v1/alerting/events
+GET /api/v1/alerting/events/summary
 GET /api/v1/alerting/events/{id}
 GET /api/v1/alerting/rules
 GET /api/v1/alerting/rules/{id}
@@ -233,6 +234,7 @@ GET /api/v1/cluster-templates
 GET /api/v1/cluster-templates/{id}
 GET /api/v1/cluster-templates/{id}/clusters
 GET /api/v1/clusters
+GET /api/v1/clusters/summary
 GET /api/v1/clusters/{cluster_id}/apiserver-allowlist
 GET /api/v1/clusters/{cluster_id}/apiserver-allowlist/preview
 GET /api/v1/clusters/{cluster_id}/apiserver-allowlist/snapshots

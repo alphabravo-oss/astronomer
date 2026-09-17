@@ -69,7 +69,6 @@ func TestTOTPEnrollmentReadOutageBlocksSessionMint(t *testing.T) {
 					t.Fatal(err)
 				}
 				endpoint = h.Refresh
-				body = nil
 				r := httptest.NewRequest(http.MethodPost, "/", nil)
 				r.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refresh})
 				r.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})

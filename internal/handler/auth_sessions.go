@@ -83,10 +83,11 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 			action := "auth.refresh_failed"
 			httpStatus := http.StatusUnauthorized
 			detail := map[string]any{"result": result, "session_family_hash": refreshFamilyHashString(claims.SessionFamilyID)}
-			if result == refreshRotationRotated {
+			switch result {
+			case refreshRotationRotated:
 				action = "auth.refresh"
 				httpStatus = http.StatusOK
-			} else if result == refreshRotationReused {
+			case refreshRotationReused:
 				action = "auth.refresh_reuse_detected"
 			}
 			return mutationAuditEvent{action: action, resourceType: "user", resourceID: user.ID.String(),

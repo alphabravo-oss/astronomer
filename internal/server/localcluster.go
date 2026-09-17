@@ -271,12 +271,14 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 				// collection pauses while the embedded tunnel is down.
 				tunnelClient.SetConnectionListener(health.SetConnected)
 				health.SetConnected(true)
-				runRuntimeLoopGroup(ctx,
+				if err := runRuntimeLoopGroup(ctx,
 					namedRuntimeLoop{name: "local-agent-state-subscriber", run: subscriber.Run},
 					namedRuntimeLoop{name: "local-agent-health", run: func(ctx context.Context) {
 						health.Start(ctx, tunnelClient.SendFunc(ctx))
 					}},
-				)
+				); err != nil {
+					logger.Error("embedded local agent observer stopped", "error", err)
+				}
 			}},
 			namedRuntimeLoop{name: "local-agent-tunnel", run: func(ctx context.Context) {
 				logger.Info("starting embedded local agent",

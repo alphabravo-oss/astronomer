@@ -39,21 +39,10 @@ type clusterProbeQuerier interface {
 	UpsertClusterCondition(ctx context.Context, arg sqlc.UpsertClusterConditionParams) (sqlc.ClusterCondition, error)
 }
 
-// startClusterProbeReconciler runs probe-based cluster conditions
-// (AgentReachable, GatewayAPISupported) from the server process. These
-// require the tunnel-backed K8sRequester which only the server has — the
-// worker process has no access to the tunnel registry, so its
-// cluster:health_check task only maintains heartbeat-derived conditions.
-//
-// Ticks every 60s, pages through active clusters, runs cheap probes through the
-// tunnel with bounded fan-out, and upserts one cluster_conditions row per
-// (cluster_id, type). The in-memory keyset cursor survives each tick's 45s
-// deadline and wraps only at the end of the estate. A new leader starts a new
-// pass; insertions behind the cursor are picked up on the following pass.
-func startClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester) {
-	go runClusterProbeReconciler(ctx, logger, queries, requester)
-}
-
+// runClusterProbeReconciler maintains probe-based cluster conditions
+// (AgentReachable, GatewayAPISupported) from the server process. These require
+// the tunnel-backed K8sRequester which only the server has. It is owned and
+// joined by the server runtime instead of starting an untracked goroutine.
 func runClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester) {
 	if logger == nil || queries == nil || requester == nil {
 		return
