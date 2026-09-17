@@ -460,6 +460,13 @@ func newWorkerTunnelK8sFixture() *workerTunnelK8sFixture {
 	return &workerTunnelK8sFixture{calls: make(map[string]int), unique: make(map[string]map[[32]byte]struct{})}
 }
 
+func (f *workerTunnelK8sFixture) SupportsCapability(_ context.Context, _ string, capability string) (bool, error) {
+	if capability != protocol.AgentCapabilityMutate {
+		return false, fmt.Errorf("unexpected worker integration capability %q", capability)
+	}
+	return true, nil
+}
+
 func (f *workerTunnelK8sFixture) Do(_ context.Context, clusterID, method, path string, body []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
 	key := method + " " + clusterID + " " + path
 	digest := sha256.Sum256(body)

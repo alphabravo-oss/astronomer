@@ -154,7 +154,7 @@ WITH scan AS (
         cluster_scan_name, initiated_by_id, next_poll_at, poll_deadline
     )
     VALUES (
-        sqlc.arg(cluster_id), sqlc.arg(scan_type), 'running', '{}'::jsonb, '[]'::jsonb,
+        sqlc.arg(cluster_id), sqlc.arg(scan_type), 'running', '{}'::jsonb, '{}'::jsonb,
         sqlc.arg(cluster_scan_name), sqlc.arg(initiated_by_id),
         now() + interval '30 seconds', now() + interval '35 minutes'
     )

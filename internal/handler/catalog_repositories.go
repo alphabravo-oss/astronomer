@@ -545,10 +545,7 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 			Name:         chartName,
 		})
 		if err != nil {
-			keywordsJSON, _ := json.Marshal(keywords)
-			if len(keywordsJSON) == 0 {
-				keywordsJSON = []byte(`[]`)
-			}
+			keywordsJSON, _ := json.Marshal(nonNilSlice(keywords))
 			maintList := make([]map[string]string, 0, len(maintainers))
 			for _, m := range maintainers {
 				maintList = append(maintList, map[string]string{"name": m.Name, "email": m.Email, "url": m.URL})
@@ -601,10 +598,7 @@ func (h *CatalogHandler) fetchAndIngestRepoIndex(ctx context.Context, repo sqlc.
 				continue
 			}
 			known[v.Version] = struct{}{}
-			urlsJSON, _ := json.Marshal(v.URLs)
-			if len(urlsJSON) == 0 {
-				urlsJSON = []byte(`[]`)
-			}
+			urlsJSON, _ := json.Marshal(nonNilSlice(v.URLs))
 			row := chartVersionIngestRow{
 				Version:    v.Version,
 				AppVersion: v.AppVersion,

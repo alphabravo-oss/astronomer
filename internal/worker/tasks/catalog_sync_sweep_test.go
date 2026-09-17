@@ -40,6 +40,7 @@ type catalogSweepQuerier struct {
 	failures   []sqlc.UpdateHelmRepositorySyncFailureParams
 	audits     []sqlc.CreateAuditLogV1Params
 	charts     []sqlc.CreateHelmChartParams
+	versions   []sqlc.CreateHelmChartVersionParams
 }
 
 func (q *catalogSweepQuerier) ListEnabledHelmRepositories(context.Context) ([]sqlc.HelmRepository, error) {
@@ -77,6 +78,7 @@ func (q *catalogSweepQuerier) GetHelmChartVersion(context.Context, sqlc.GetHelmC
 }
 
 func (q *catalogSweepQuerier) CreateHelmChartVersion(_ context.Context, arg sqlc.CreateHelmChartVersionParams) (sqlc.HelmChartVersion, error) {
+	q.versions = append(q.versions, arg)
 	return sqlc.HelmChartVersion{ID: uuid.New(), ChartID: arg.ChartID, Version: arg.Version}, nil
 }
 
@@ -227,6 +229,11 @@ func TestHandleCatalogSyncIsolatesPerRepoFailure(t *testing.T) {
 	}
 	if len(q.charts) != 3 {
 		t.Fatalf("expected 3 repositories to ingest charts, got %d", len(q.charts))
+	}
+	for _, version := range q.versions {
+		if string(version.Urls) != "[]" {
+			t.Fatalf("catalog version without upstream URLs encoded as %s, want []", version.Urls)
+		}
 	}
 
 	// The failure is recorded against THAT repo, and only that repo.

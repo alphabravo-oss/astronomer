@@ -152,10 +152,7 @@ func IngestOCIRepo(ctx context.Context, q OCIQuerier, repo sqlc.HelmRepository, 
 			Name:         chartName,
 		})
 		if dbErr != nil {
-			keywordsJSON, _ := json.Marshal(meta.Keywords)
-			if len(keywordsJSON) == 0 {
-				keywordsJSON = []byte(`[]`)
-			}
+			keywordsJSON, _ := json.Marshal(append([]string{}, meta.Keywords...))
 			maintList := make([]map[string]string, 0, len(meta.Maintainers))
 			for _, m := range meta.Maintainers {
 				maintList = append(maintList, map[string]string{"name": m.Name, "email": m.Email, "url": m.URL})

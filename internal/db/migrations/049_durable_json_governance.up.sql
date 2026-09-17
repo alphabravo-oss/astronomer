@@ -81,6 +81,7 @@ FROM (VALUES
     ('apiserver_allowlist_snapshots', 'effective_cidrs', 'array', 'additive'),
     ('audit_export_operations', 'request_spec', 'object', 'additive'),
     ('cluster_deployments', 'previous_overrides', 'object', 'additive'),
+    ('component_bundle_versions', 'requirements', 'array', 'additive'),
     ('compliance_baseline_applications', 'previous_state', 'object', 'additive'),
     ('compliance_baselines', 'spec', 'object', 'additive'),
     ('delivery_rollouts', 'frozen_plan', 'object', 'additive'),
@@ -88,6 +89,7 @@ FROM (VALUES
     ('delivery_system_rollouts', 'strategy', 'object', 'additive'),
     ('logging_outputs', 'configuration', 'object', 'additive'),
     ('notification_channels', 'configuration', 'object', 'additive'),
+    ('security_scan_results', 'results', 'object', 'additive'),
     ('siem_forward_queue', 'payload', 'object', 'opaque'),
     ('ui_extensions', 'manifest', 'object', 'additive')
 ) AS override(table_name, column_name, json_type, compatibility_mode)
