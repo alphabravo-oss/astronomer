@@ -37,7 +37,7 @@
   observability, accessibility, release qualification.
 - **Planned at:** `5567da3bbba8c72bb95924f1824f5c100d147058`, 2026-09-16,
   plus the preserved dirty integration tree described above. Execution was
-  reconciled through `11a243bf251b770299dc375e74d8e8247e2dbf4d` on
+  reconciled through `176fb894` on
   2026-09-17.
 - **Branch:** `advisor/016-production-ga-closure`.
 
@@ -89,9 +89,9 @@ The stale live-code observations from the original review have been closed by
 the implementation commits recorded below. The plan remains active for these
 observed residuals:
 
-- The final clean candidate must be rebuilt and redeployed after the scale
-  scheduler and declarative bundled-PostgreSQL changes at `1c7fdfe8` and
-  `11a243bf`, then receive one final static/stateful replay.
+- The final clean candidate must be rebuilt and redeployed after the elapsed-
+  time scale scheduler and fail-closed engineering evaluator at `176fb894`,
+  then receive one final static/stateful replay.
 - Estate-100 is not yet a pass. The 2026-09-17 exact-image local run completed
   its 30-minute window with good latency, bounded resources, successful
   100-agent reconnect, and conserved accepted audit intents, but failed the
@@ -155,7 +155,14 @@ observed residuals:
   correlated telemetry. Later qualification repairs cover restart, PostgreSQL
   and Redis outages, failover, tunnel HA, reconnect accounting, credential
   bootstrap, and measured-window scheduling. Estate-100 must pass before a
-  higher rung starts.
+  higher rung starts. `176fb894` subsequently makes scheduling elapsed-time
+  exact without synchronized 10 ms bursts, makes engineering reports enforce
+  the same numerical conservation as certification, and waits for a fresh
+  post-drain outbox gauge. A two-minute 100-agent/500-RPS local preflight then
+  delivered exactly 60,000 requests at 499.96 RPS, 50 ms cluster-list p99,
+  55 ms resource p99, zero new empty-pool acquires, 600/600/600 conserved
+  audit operations, and 100/100 reconnect recovery. It is a smoke result, not
+  the required retained 30-minute rung.
 - **Phase 5, automated implementation complete locally:** `9719a216`,
   `b8fb7feb`, `a85db0f6`, `db38d75f`, `e4c036f4`, `5dfdf2ae`,
   `02637f37`, `94dc0aef`, and `3a47f9b2` close authoritative fleet/workload/

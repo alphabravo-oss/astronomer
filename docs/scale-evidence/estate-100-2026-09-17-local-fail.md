@@ -105,6 +105,17 @@ instead of relying on a manual database alteration. The final exact candidate
 must be rebuilt, deployed, and rerun for the full 30-minute window. These fixes
 are not retroactive proof that this failed run passes.
 
+Subsequent short preflight work found that the initial 100-Hz correction still
+released five requests together every 10 ms and that engineering-mode reports
+did not enforce every numerical conservation rule. Commit `176fb894` derives
+the scheduled target from elapsed time at up to 1,000 Hz, fails engineering
+runs on rate/duration/state-event/audit gaps, and waits for a fresh post-drain
+outbox metric. With a 150-maximum/50-warm application pool, the two-minute
+estate-shaped preflight delivered exactly 60,000 requests at 499.96 RPS with
+50 ms cluster-list p99, zero new empty-pool acquires, and 600/600/600 audit
+conservation. That short result validates the corrective direction but is not
+a substitute for the required full rerun.
+
 ## Qualification caveat
 
 This was an unsigned local engineering run and did not supply the protected
