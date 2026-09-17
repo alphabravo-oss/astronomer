@@ -258,7 +258,7 @@ func (h *InternalK8sHandler) Handle(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusPreconditionFailed)
 			return
 		}
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusServiceUnavailable)
 		return
 	}
 

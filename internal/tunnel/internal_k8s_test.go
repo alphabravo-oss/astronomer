@@ -55,6 +55,33 @@ func TestInternalK8sHandlerCapabilityUsesConnectAdmissionWithoutAgentMessage(t *
 	}
 }
 
+func TestInternalK8sHandler_SendFailureReturnsServiceUnavailable(t *testing.T) {
+	hub := NewHub(slog.Default())
+	agent := &AgentConnection{
+		ClusterID: "c-send-full",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, 1),
+	}
+	agent.sendCh <- &protocol.Message{Type: protocol.MsgHeartbeat}
+	hub.agents.Set(agent.ClusterID, agent)
+	h := NewInternalK8sHandler(hub, InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
+
+	payload := protocol.K8sRequestPayload{Method: http.MethodGet, Path: "/api/v1/events"}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/k8s/"+agent.ClusterID, bytes.NewReader(body))
+	if err := SignInternalK8sRequest(req, "the-right-psk", agent.ClusterID, body); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	k8sInternalHandlerRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("send failure status = %d, want 503: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestInternalK8sHandler_DisabledWhenPSKEmpty(t *testing.T) {
 	h := NewInternalK8sHandler(NewHub(slog.Default()), InternalRequestKeyring{}, slog.Default())
 	body, _ := json.Marshal(protocol.K8sRequestPayload{Method: http.MethodGet, Path: "/api/v1/pods"})
