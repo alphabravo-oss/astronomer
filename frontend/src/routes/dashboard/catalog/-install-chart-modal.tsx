@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { HelmValuesForm } from "@/components/catalog/helm-values-form";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppForm, useStore } from "@/lib/form";
-import { useClusters } from "@/lib/hooks/clusters";
 import { useInstallHelmChart } from "@/lib/hooks/catalog";
 import { useLocation } from "@tanstack/react-router";
 import {
@@ -49,10 +48,6 @@ function InstallChartForm({
   onOperationStarted,
 }: InstallChartModalProps) {
   const installChart = useInstallHelmChart();
-  const { data: clustersData } = useClusters({ pageSize: 100 });
-  const clusters = (clustersData?.data || []).filter((cluster) =>
-    allowedClusterIds.includes(cluster.id),
-  );
   const schema = useMemo(() => {
     // Inline $ref/$defs first so generator-style schemas (cert-manager etc.) render.
     const resolved = resolveSchemaRefs(version.valuesSchema);
@@ -163,20 +158,15 @@ function InstallChartForm({
         </label>
         <form.Field name="clusterId">
           {(field) => (
-            <Select
+            <RemoteClusterPicker
               id="field-60f181fe-140"
-              aria-label="Target Cluster"
+              ariaLabel="Target Cluster"
               value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
+              onChange={field.handleChange}
               onBlur={field.handleBlur}
-            >
-              <option value="">Select a cluster...</option>
-              {clusters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.displayName} ({c.name})
-                </option>
-              ))}
-            </Select>
+              allowedClusterIds={allowedClusterIds}
+              placeholder="Select a cluster…"
+            />
           )}
         </form.Field>
       </div>

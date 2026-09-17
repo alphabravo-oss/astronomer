@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { useClusters } from "@/lib/hooks/clusters";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { useCluster } from "@/lib/hooks/clusters";
 import { useCISProfiles, useCreateCISScan } from "@/components/security/hooks";
 import { CIS_NOT_INSTALLED_HINT } from "@/components/security/cis-scans-tab";
 import { distributionDisplayName, cn } from "@/lib/utils";
@@ -46,18 +47,11 @@ function NewScanWizardPage() {
   const [clusterId, setClusterId] = useState<string>("");
   const [selectedProfile, setProfile] = useState<string>("");
 
-  const { data: clustersPage, isLoading: clustersLoading } = useClusters({
-    pageSize: 200,
-  });
+  const { data: cluster } = useCluster(clusterId);
   const { data: profilesData, isLoading: profilesLoading } = useCISProfiles(
     clusterId || undefined,
   );
   const createScan = useCreateCISScan();
-
-  const cluster = useMemo(
-    () => clustersPage?.data.find((c) => c.id === clusterId),
-    [clustersPage, clusterId],
-  );
 
   // Pre-select the recommended profile whenever the cluster (or its profile
   // list) changes — but never overwrite an explicit user choice.
@@ -145,50 +139,16 @@ function NewScanWizardPage() {
                 tunnel-managed agent.
               </p>
             </div>
-            {clustersLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-12 rounded-md bg-muted animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {(clustersPage?.data ?? []).map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setClusterId(c.id)}
-                    className={cn(
-                      "w-full flex items-center justify-between rounded-md border px-4 py-3 text-left transition-colors",
-                      clusterId === c.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-accent",
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {c.displayName || c.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {distributionDisplayName(c.distribution)} ·{" "}
-                        {c.environment} · {c.status}
-                      </p>
-                    </div>
-                    {clusterId === c.id && (
-                      <CheckCircle2 className="h-4 w-4 text-primary" />
-                    )}
-                  </button>
-                ))}
-                {(clustersPage?.data ?? []).length === 0 && (
-                  <p className="text-sm text-muted-foreground py-8 text-center">
-                    No clusters registered. Register a cluster first.
-                  </p>
-                )}
-              </div>
-            )}
+            <RemoteClusterPicker
+              id="cis-scan-cluster"
+              ariaLabel="Cluster to scan"
+              value={clusterId}
+              onChange={(id) => {
+                setClusterId(id);
+                setProfile("");
+              }}
+              placeholder="Search for a cluster…"
+            />
           </div>
         )}
 

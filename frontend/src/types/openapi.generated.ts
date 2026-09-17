@@ -2144,6 +2144,7 @@ export interface OpenAPIComponents {
           "id": string;
           "name": string;
           "display_name": string;
+          "environment": string;
           "is_local": boolean;
           "connected": boolean;
           "stale": boolean;

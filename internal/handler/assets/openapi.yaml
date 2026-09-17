@@ -10759,11 +10759,12 @@ components:
     DeliveryEstateCluster:
       type: object
       additionalProperties: false
-      required: [id, name, display_name, is_local, connected, stale, privilege_profile, kubernetes_version, agent_version, flux_version, compatibility_status, inventory_ready, inventory_error_code, assignment_count, ready_count, failed_count, degraded_count, drifted_count, last_heartbeat, inventory_observed_at, last_observed_at]
+      required: [id, name, display_name, environment, is_local, connected, stale, privilege_profile, kubernetes_version, agent_version, flux_version, compatibility_status, inventory_ready, inventory_error_code, assignment_count, ready_count, failed_count, degraded_count, drifted_count, last_heartbeat, inventory_observed_at, last_observed_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
         display_name: {type: string}
+        environment: {type: string}
         is_local: {type: boolean}
         connected: {type: boolean}
         stale: {type: boolean}

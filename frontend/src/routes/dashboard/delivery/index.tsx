@@ -13,7 +13,7 @@ import {
   Unplug,
   X,
 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { MetricCard } from "@/components/ui/metric-card";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -45,7 +45,6 @@ import {
   type DeliveryEstateCount,
 } from "@/lib/api/delivery-system";
 import { queryKeys } from "@/lib/query-keys";
-import { useClusters } from "@/lib/hooks/clusters";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
@@ -187,14 +186,6 @@ function FleetDeliveryOverview({
   );
   const focus = search.get("focus") ?? "";
   const clusters = estate?.clusters ?? [];
-  const clusterList = useClusters({ pageSize: 200 });
-  const environmentById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const item of clusterList.data?.data ?? []) {
-      if (item.id && item.environment) map.set(item.id, item.environment);
-    }
-    return map;
-  }, [clusterList.data?.data]);
   const visible = focus
     ? clusters.filter((cluster) => clusterMatchesFocus(cluster, focus))
     : clusters;
@@ -240,10 +231,10 @@ function FleetDeliveryOverview({
       header: "Environment",
       accessor: (row) => (
         <span className="text-xs capitalize text-muted-foreground">
-          {environmentById.get(row.id) || "—"}
+          {row.environment || "—"}
         </span>
       ),
-      sortAccessor: (row) => environmentById.get(row.id) || "",
+      sortAccessor: (row) => row.environment || "",
     },
     {
       key: "role",

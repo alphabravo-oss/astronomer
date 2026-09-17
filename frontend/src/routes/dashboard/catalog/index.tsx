@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
-import { useClusters } from "@/lib/hooks/clusters";
+import { useCluster } from "@/lib/hooks/clusters";
 import { useProjects } from "@/lib/hooks/projects";
 import {
   useHelmRepositories,
@@ -89,21 +89,10 @@ function CatalogPage() {
   });
   const installedQuery = useInstalledCharts();
   const reposQuery = useHelmRepositories();
-  const presetClustersQuery = useClusters({ pageSize: 100 });
+  const presetClusterQuery = useCluster(presetClusterIdPage);
   const charts = chartsQuery.data;
   const installed = installedQuery.data;
   const repos = reposQuery.data;
-  const presetClusterData = presetClustersQuery.data;
-  const clusterNames = useMemo(
-    () =>
-      Object.fromEntries(
-        (presetClusterData?.data || []).map((cluster) => [
-          cluster.id,
-          cluster.displayName || cluster.name,
-        ]),
-      ),
-    [presetClusterData],
-  );
   const repositoryNames = useMemo(
     () => new Map((repos || []).map((repo) => [repo.id, repo.name])),
     [repos],
@@ -116,15 +105,7 @@ function CatalogPage() {
       })),
     [charts, repositoryNames],
   );
-  const presetCluster = useMemo(
-    () =>
-      presetClusterIdPage
-        ? (presetClusterData?.data || []).find(
-            (c) => c.id === presetClusterIdPage,
-          )
-        : undefined,
-    [presetClusterIdPage, presetClusterData],
-  );
+  const presetCluster = presetClusterQuery.data;
 
   const syncRepo = useSyncHelmRepository();
   const deleteRepo = useDeleteHelmRepository();
@@ -328,7 +309,6 @@ function CatalogPage() {
               <InstalledTab
                 installed={installed}
                 loading={false}
-                clusterNames={clusterNames}
                 onRollback={(id, revision) => rollback.mutate({ id, revision })}
                 onUninstall={(id) => uninstall.mutateAsync(id)}
                 uninstallPending={uninstall.isPending}

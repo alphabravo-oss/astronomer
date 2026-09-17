@@ -1,7 +1,6 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate, useLocation } from "@tanstack/react-router";
-import { useClusters } from "@/lib/hooks/clusters";
 import { useProjects } from "@/lib/hooks/projects";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -240,14 +239,11 @@ export function deliveryPageRowCount(
   return pageRowCount(page);
 }
 
-export function deliveryProjectLabel(
-  project: { displayName: string; name: string; clusterId?: string },
-  clusterNames: Map<string, string>,
-) {
-  const clusterName = project.clusterId
-    ? clusterNames.get(project.clusterId)
-    : undefined;
-  return clusterName || project.displayName || project.name;
+export function deliveryProjectLabel(project: {
+  displayName: string;
+  name: string;
+}) {
+  return project.displayName || project.name;
 }
 
 export function DeliveryShell({
@@ -270,16 +266,6 @@ export function DeliveryShell({
   children: ReactNode;
 }) {
   const { clusterId } = useDeliveryWorkspace();
-  const clusters = useClusters({ pageSize: 200 });
-  const clusterNames = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const cluster of clusters.data?.data ?? []) {
-      if (cluster.id && (cluster.displayName || cluster.name)) {
-        names.set(cluster.id, cluster.displayName || cluster.name);
-      }
-    }
-    return names;
-  }, [clusters.data?.data]);
   // Cluster delivery layout already owns the tab strip. Detail pages that
   // still sit on /dashboard/delivery/... only need a way back to the fleet.
   if (clusterId) return children;
@@ -309,7 +295,7 @@ export function DeliveryShell({
               <option value="">Select a project</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
-                  {deliveryProjectLabel(project, clusterNames)}
+                  {deliveryProjectLabel(project)}
                 </option>
               ))}
             </select>

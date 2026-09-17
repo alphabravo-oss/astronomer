@@ -971,6 +971,7 @@ SELECT
     c.id,
     c.name,
     c.display_name,
+    c.environment,
     c.is_local,
     c.status,
     c.kubernetes_version,

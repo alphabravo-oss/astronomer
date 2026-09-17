@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toastError } from "@/lib/toast";
 import { Server, Info, AlertTriangle } from "lucide-react";
 import { createCluster, updateCluster } from "@/lib/api/clusters";
 import { setRegistrationOptions } from "@/lib/api/cluster-registration";
-import { useClusters } from "@/lib/hooks/clusters";
+import { useClusterSearch } from "@/lib/hooks/cluster-search";
 import { useAppForm, useStore } from "@/lib/form";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -26,11 +27,6 @@ function RegisterClusterWizardPage() {
   const navigate = useNavigate();
   const { clusterId } = Route.useSearch();
   const [draftClusterId, setDraftClusterId] = useState<string | null>(null);
-
-  // Live name-availability check: cluster names are unique, so warn before
-  // submit rather than letting the create POST come back 409.
-  const { data: clustersData } = useClusters({ pageSize: 1000 });
-  const existingClusters = clustersData?.data ?? [];
 
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
@@ -56,15 +52,7 @@ function RegisterClusterWizardPage() {
       setSubmissionError(null);
       // Old guard (`if (!form.name || nameTaken) return`) — the submit button's
       // disabled gate below is the same condition; re-checked here 1:1.
-      if (
-        !value.name ||
-        existingClusters.some(
-          (cluster) =>
-            cluster.id !== draftClusterId &&
-            cluster.name.toLowerCase() === value.name,
-        )
-      )
-        return;
+      if (!value.name || nameTaken) return;
       try {
         const annotations = {
           "astronomer.io/agent-privilege-profile": value.privilegeProfile,
@@ -135,6 +123,10 @@ function RegisterClusterWizardPage() {
   });
 
   const name = useStore(form.store, (s) => s.values.name);
+  // Name availability is a bounded server search; the create endpoint remains
+  // the final uniqueness authority if another registration races this check.
+  const [debouncedName] = useDebouncedValue(name.trim(), { wait: 250 });
+  const nameMatches = useClusterSearch(debouncedName, debouncedName.length > 0);
   const submitting = useStore(form.store, (s) => s.isSubmitting);
   const privilegeProfile = useStore(
     form.store,
@@ -142,9 +134,12 @@ function RegisterClusterWizardPage() {
   );
   const nameTaken =
     name.length > 0 &&
-    existingClusters.some(
-      (cluster) =>
-        cluster.id !== draftClusterId && cluster.name.toLowerCase() === name,
+    (nameMatches.data?.pages ?? []).some((page) =>
+      page.data.some(
+        (cluster) =>
+          cluster.id !== draftClusterId &&
+          cluster.name.toLowerCase() === name.trim().toLowerCase(),
+      ),
     );
   const isViewer = privilegeProfile === "viewer";
 

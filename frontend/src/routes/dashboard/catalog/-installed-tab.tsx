@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useCluster } from "@/lib/hooks/clusters";
 import { formatRelativeTime } from "@/lib/utils";
 import type { InstalledChart } from "@/types";
 import { RotateCcw, Trash2 } from "lucide-react";
@@ -9,14 +10,12 @@ import { RotateCcw, Trash2 } from "lucide-react";
 export function InstalledTab({
   installed,
   loading,
-  clusterNames,
   onRollback,
   onUninstall,
   uninstallPending,
 }: {
   installed: InstalledChart[] | undefined;
   loading: boolean;
-  clusterNames: Readonly<Record<string, string>>;
   onRollback: (id: string, revision: number) => void;
   onUninstall: (id: string) => void | Promise<void>;
   uninstallPending?: boolean;
@@ -49,11 +48,7 @@ export function InstalledTab({
     {
       key: "cluster",
       header: "Cluster",
-      accessor: (row) => (
-        <span className="text-sm text-muted-foreground" title={row.clusterId}>
-          {clusterNames[row.clusterId] || row.clusterId.slice(0, 8)}
-        </span>
-      ),
+      accessor: (row) => <InstalledClusterName clusterId={row.clusterId} />,
     },
     {
       key: "namespace",
@@ -172,5 +167,14 @@ export function InstalledTab({
         }
       />
     </>
+  );
+}
+
+function InstalledClusterName({ clusterId }: { clusterId: string }) {
+  const { data: cluster } = useCluster(clusterId);
+  return (
+    <span className="text-sm text-muted-foreground" title={clusterId}>
+      {cluster?.displayName || cluster?.name || clusterId.slice(0, 8)}
+    </span>
   );
 }

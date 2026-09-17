@@ -629,6 +629,10 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/alerting/events/summary"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/alerting/events/{id}"
   },
   {
@@ -1266,6 +1270,10 @@
   {
     "method": "POST",
     "pattern": "/api/v1/clusters"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/summary"
   },
   {
     "method": "GET",

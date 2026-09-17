@@ -20,7 +20,8 @@ import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { useClusters } from "@/lib/hooks/clusters";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { useCluster } from "@/lib/hooks/clusters";
 import {
   useDexSettings,
   useUpdateDexSettings,
@@ -31,8 +32,6 @@ import { cn } from "@/lib/utils";
 
 function DexSettingsPage() {
   const { data: settings, isLoading } = useDexSettings();
-  const { data: clustersData } = useClusters({ pageSize: 100 });
-  const clusters = clustersData?.data ?? [];
 
   const updateMutation = useUpdateDexSettings();
   const applyMutation = useApplyDexConfig();
@@ -77,6 +76,7 @@ function DexSettingsPage() {
   });
   // Read the live form values for the summary + the save gate (`!issuer.trim()`).
   const values = useStore(form.store, (s) => s.values);
+  const { data: selectedCluster } = useCluster(values.clusterId);
 
   useEffect(() => {
     if (!settings) return;
@@ -160,7 +160,9 @@ function DexSettingsPage() {
 
       <DexSummary
         values={values}
-        clusters={clusters}
+        clusterName={
+          selectedCluster?.displayName || selectedCluster?.name || "— none —"
+        }
         onEdit={() => setEditing(true)}
       />
 
@@ -202,21 +204,29 @@ function DexSettingsPage() {
                 />
               )}
             </form.AppField>
-            <form.AppField name="clusterId">
+            <form.Field name="clusterId">
               {(field) => (
-                <field.SelectField
-                  label="Target cluster"
-                  helper="Where the runtime Secret is updated on Apply."
-                >
-                  <option value="">— None —</option>
-                  {clusters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.displayName || c.name}
-                    </option>
-                  ))}
-                </field.SelectField>
+                <div className="space-y-1.5">
+                  <label
+                    className="text-sm font-medium text-foreground"
+                    htmlFor="dex-settings-cluster"
+                  >
+                    Target cluster
+                  </label>
+                  <RemoteClusterPicker
+                    id="dex-settings-cluster"
+                    ariaLabel="Target cluster"
+                    value={field.state.value}
+                    onChange={field.handleChange}
+                    onBlur={field.handleBlur}
+                    placeholder="Select a cluster…"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Where the runtime Secret is updated on Apply.
+                  </p>
+                </div>
               )}
-            </form.AppField>
+            </form.Field>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <form.AppField name="namespace">
                 {(field) => <field.TextField label="Namespace" />}
@@ -325,7 +335,7 @@ function DexSettingsPage() {
 
 function DexSummary({
   values,
-  clusters,
+  clusterName,
   onEdit,
 }: {
   values: {
@@ -336,14 +346,10 @@ function DexSummary({
     idTokenExpiry: string;
     refreshTokenExpiry: string;
   };
-  clusters: Array<{ id: string; name: string; displayName?: string }>;
+  clusterName: string;
   onEdit: () => void;
 }) {
   const configured = !!values.issuer.trim();
-  const clusterName =
-    clusters.find((c) => c.id === values.clusterId)?.displayName ||
-    clusters.find((c) => c.id === values.clusterId)?.name ||
-    "— none —";
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">

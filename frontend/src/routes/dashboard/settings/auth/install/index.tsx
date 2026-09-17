@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/auth/install/ — Dex install wizard.
@@ -17,15 +18,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  Loader2,
-  Server,
-  Globe,
-} from "lucide-react";
-import { useClusters } from "@/lib/hooks/clusters";
+import { ArrowLeft, ArrowRight, Check, Globe } from "lucide-react";
+import { useCluster } from "@/lib/hooks/clusters";
 import { useAppForm, useStore } from "@/lib/form";
 import { useUpdateDexSettings } from "@/components/auth/hooks";
 import { ActionButton } from "@/components/ui/action-button";
@@ -37,11 +31,6 @@ type Step = 1 | 2 | 3;
 
 function InstallDexPage() {
   const navigate = useNavigate();
-  const { data: clustersData, isLoading: clustersLoading } = useClusters({
-    pageSize: 100,
-  });
-  const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
-
   const settingsMutation = useUpdateDexSettings();
 
   const [step, setStep] = useState<Step>(1);
@@ -51,7 +40,7 @@ function InstallDexPage() {
   const form = useAppForm({
     defaultValues: { clusterId: "", issuerUrl: "" },
     onSubmit: async ({ value }) => {
-      const cluster = clusters.find((c) => c.id === value.clusterId);
+      const cluster = clusterQuery.data;
       if (!cluster) return;
       try {
         // Persist the issuer + cluster identity for the in-band Dex Deployment
@@ -69,15 +58,8 @@ function InstallDexPage() {
   });
   const clusterId = useStore(form.store, (s) => s.values.clusterId);
   const issuerUrl = useStore(form.store, (s) => s.values.issuerUrl);
-
-  const cluster = clusters.find((c) => c.id === clusterId);
-
-  // Default cluster + issuer suggestion as soon as data lands.
-  useEffect(() => {
-    if (!clusterId && clusters.length > 0) {
-      form.setFieldValue("clusterId", clusters[0].id);
-    }
-  }, [form, clusters, clusterId]);
+  const clusterQuery = useCluster(clusterId);
+  const cluster = clusterQuery.data;
 
   useEffect(() => {
     if (cluster && !issuerUrl) {
@@ -114,12 +96,23 @@ function InstallDexPage() {
         {step === 1 && (
           <form.Field name="clusterId">
             {(field) => (
-              <ClusterPicker
-                clusters={clusters}
-                loading={clustersLoading}
-                value={field.state.value}
-                onChange={field.handleChange}
-              />
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Choose a cluster
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Most setups deploy Dex on the management cluster.
+                  </p>
+                </div>
+                <RemoteClusterPicker
+                  id="dex-target-cluster"
+                  ariaLabel="Dex target cluster"
+                  value={field.state.value}
+                  onChange={field.handleChange}
+                  placeholder="Search for a cluster…"
+                />
+              </div>
             )}
           </form.Field>
         )}
@@ -227,95 +220,6 @@ function Stepper({ step }: { step: Step }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function EmptyClusters() {
-  const navigate = useNavigate();
-  return (
-    <div className="text-center py-10">
-      <Server className="h-8 w-8 mx-auto text-muted-foreground" />
-      <p className="text-sm text-foreground mt-3">
-        No clusters registered yet.
-      </p>
-      <p className="text-xs text-muted-foreground mt-1">
-        Register a cluster first — Dex needs somewhere to live.
-      </p>
-      <ActionButton
-        size="sm"
-        intent="primary"
-        className="mt-4"
-        onClick={() => void navigate({ to: "/dashboard/clusters/register" })}
-      >
-        Register Cluster
-      </ActionButton>
-    </div>
-  );
-}
-
-function ClusterPicker({
-  clusters,
-  loading,
-  value,
-  onChange,
-}: {
-  clusters: Cluster[];
-  loading: boolean;
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-  if (clusters.length === 0) {
-    return <EmptyClusters />;
-  }
-  return (
-    <div className="space-y-3">
-      <div>
-        <p className="text-sm font-medium text-foreground">Choose a cluster</p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Most setups deploy Dex on the management cluster.
-        </p>
-      </div>
-      <div className="space-y-2">
-        {clusters.map((c) => {
-          const active = value === c.id;
-          return (
-            <button
-              type="button"
-              key={c.id}
-              onClick={() => onChange(c.id)}
-              className={cn(
-                "w-full flex items-center justify-between px-4 py-3 rounded-lg border text-left transition-colors",
-                active
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-background hover:bg-accent/30",
-              )}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <Server className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {c.displayName || c.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {c.environment} · {c.kubernetesVersion || c.distribution}
-                  </p>
-                </div>
-              </div>
-              {active && (
-                <Check className="h-4 w-4 text-primary shrink-0" />
-              )}
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }

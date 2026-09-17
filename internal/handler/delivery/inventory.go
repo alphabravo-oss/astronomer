@@ -151,6 +151,7 @@ type DeliveryEstateCluster struct {
 	ID                  uuid.UUID  `json:"id"`
 	Name                string     `json:"name"`
 	DisplayName         string     `json:"display_name"`
+	Environment         string     `json:"environment"`
 	IsLocal             bool       `json:"is_local"`
 	Connected           bool       `json:"connected"`
 	Stale               bool       `json:"stale"`
@@ -277,6 +278,7 @@ func estateClusterFromRow(row sqlc.ListDeliveryEstateClustersRow, now time.Time)
 		ID:                  row.ID,
 		Name:                row.Name,
 		DisplayName:         displayName,
+		Environment:         row.Environment,
 		IsLocal:             row.IsLocal,
 		Connected:           row.Connected,
 		Stale:               estateRowIsStale(row, now),

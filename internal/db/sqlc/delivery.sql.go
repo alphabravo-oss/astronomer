@@ -3072,6 +3072,7 @@ SELECT
     c.id,
     c.name,
     c.display_name,
+    c.environment,
     c.is_local,
     c.status,
     c.kubernetes_version,
@@ -3130,6 +3131,7 @@ type ListDeliveryEstateClustersRow struct {
 	ID                  uuid.UUID          `json:"id"`
 	Name                string             `json:"name"`
 	DisplayName         string             `json:"display_name"`
+	Environment         string             `json:"environment"`
 	IsLocal             bool               `json:"is_local"`
 	Status              string             `json:"status"`
 	KubernetesVersion   string             `json:"kubernetes_version"`
@@ -3173,6 +3175,7 @@ func (q *Queries) ListDeliveryEstateClusters(ctx context.Context, limit int32) (
 			&i.ID,
 			&i.Name,
 			&i.DisplayName,
+			&i.Environment,
 			&i.IsLocal,
 			&i.Status,
 			&i.KubernetesVersion,

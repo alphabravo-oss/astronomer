@@ -1,4 +1,3 @@
-
 /**
  * Multi-cluster / multi-namespace selector for cloud-credential target refs.
  *
@@ -7,9 +6,10 @@
  * come from the existing project list / per-cluster namespace endpoints so
  * we don't have to bake any project context into the parent.
  */
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import { useClusters, useClusterNamespaces } from "@/lib/hooks/clusters";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { useCluster, useClusterNamespaces } from "@/lib/hooks/clusters";
 import { cn } from "@/lib/utils";
 import type { CloudCredentialTargetRef } from "@/lib/api/project-detail";
 
@@ -19,14 +19,6 @@ interface TargetRefsEditorProps {
 }
 
 export function TargetRefsEditor({ value, onChange }: TargetRefsEditorProps) {
-  const { data: clustersPage } = useClusters({ pageSize: 100 });
-  const clusters = useMemo(() => clustersPage?.data ?? [], [clustersPage]);
-
-  // Used to drive the "add cluster" picker dropdown.
-  const remainingClusters = useMemo(
-    () => clusters.filter((c) => !value.some((r) => r.clusterId === c.id)),
-    [clusters, value],
-  );
   const [pendingCluster, setPendingCluster] = useState("");
 
   const addCluster = () => {
@@ -49,39 +41,25 @@ export function TargetRefsEditor({ value, onChange }: TargetRefsEditorProps) {
         <p className="text-xs text-muted-foreground">No clusters added yet.</p>
       )}
 
-      {value.map((ref) => {
-        const cluster = clusters.find((c) => c.id === ref.clusterId);
-        return (
-          <ClusterRefRow
-            key={ref.clusterId}
-            ref_={ref}
-            clusterDisplayName={
-              cluster?.displayName ||
-              cluster?.name ||
-              ref.clusterName ||
-              ref.clusterId
-            }
-            onRemove={() => removeCluster(ref.clusterId)}
-            onNamespacesChange={(ns) => updateNamespaces(ref.clusterId, ns)}
-          />
-        );
-      })}
+      {value.map((ref) => (
+        <ClusterRefRow
+          key={ref.clusterId}
+          ref_={ref}
+          onRemove={() => removeCluster(ref.clusterId)}
+          onNamespacesChange={(ns) => updateNamespaces(ref.clusterId, ns)}
+        />
+      ))}
 
       {/* Add cluster picker */}
       <div className="flex items-center gap-2">
-        <select
-          aria-label="Cluster to add"
+        <RemoteClusterPicker
+          ariaLabel="Cluster to add"
           value={pendingCluster}
-          onChange={(e) => setPendingCluster(e.target.value)}
-          className="flex-1 h-9 px-3 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-1 focus:ring-ring"
-        >
-          <option value="">Add a cluster…</option>
-          {remainingClusters.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.displayName || c.name}
-            </option>
-          ))}
-        </select>
+          onChange={setPendingCluster}
+          excludedClusterIds={value.map((ref) => ref.clusterId)}
+          placeholder="Add a cluster…"
+          className="flex-1"
+        />
         <button
           type="button"
           onClick={addCluster}
@@ -98,17 +76,18 @@ export function TargetRefsEditor({ value, onChange }: TargetRefsEditorProps) {
 
 function ClusterRefRow({
   ref_,
-  clusterDisplayName,
   onRemove,
   onNamespacesChange,
 }: {
   ref_: CloudCredentialTargetRef;
-  clusterDisplayName: string;
   onRemove: () => void;
   onNamespacesChange: (ns: string[]) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const { data: cluster } = useCluster(ref_.clusterId);
   const { data: namespaces, isLoading } = useClusterNamespaces(ref_.clusterId);
+  const clusterDisplayName =
+    cluster?.displayName || cluster?.name || ref_.clusterName || ref_.clusterId;
 
   const toggle = (ns: string) => {
     onNamespacesChange(

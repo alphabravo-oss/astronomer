@@ -75,26 +75,19 @@ describe("useDeliveryPageIndex", () => {
 });
 
 describe("deliveryProjectLabel", () => {
-  it("uses the cluster name when the project is bound to a known cluster", () => {
+  it("uses the project display name", () => {
     expect(
-      deliveryProjectLabel(
-        {
-          name: "astronomer-system",
-          displayName: "Astronomer System",
-          clusterId: "cluster-a",
-        },
-        new Map([["cluster-a", "fleet-a"]]),
-      ),
-    ).toBe("fleet-a");
+      deliveryProjectLabel({
+        name: "astronomer-system",
+        displayName: "Astronomer System",
+      }),
+    ).toBe("Astronomer System");
   });
 
-  it("falls back to the project display name when the cluster is unknown", () => {
-    expect(
-      deliveryProjectLabel(
-        { name: "platform", displayName: "Platform", clusterId: "missing" },
-        new Map(),
-      ),
-    ).toBe("Platform");
+  it("falls back to the project name", () => {
+    expect(deliveryProjectLabel({ name: "platform", displayName: "" })).toBe(
+      "platform",
+    );
   });
 });
 

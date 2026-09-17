@@ -622,7 +622,8 @@ test("catalog install modal remains usable on responsive viewports", async ({
   const installDialog = page.getByRole("dialog", {
     name: /install kube prometheus stack/i,
   });
-  await installDialog.getByLabel("Target Cluster").selectOption(cluster.id);
+  await installDialog.getByRole("combobox", { name: "Target Cluster" }).click();
+  await installDialog.getByRole("option", { name: /Prod East/ }).click();
   await expect(installDialog).toBeVisible();
   await installDialog.getByLabel("Release Name").fill("platform-monitoring");
   await expect(installDialog).toBeVisible();

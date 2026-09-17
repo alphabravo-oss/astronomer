@@ -3,6 +3,7 @@ import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { PrincipalPicker } from "@/components/rbac/principal-picker";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { cn } from "@/lib/utils";
 import { toastError } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
@@ -14,14 +15,8 @@ import {
   useProjectRoles,
   useRoleTemplates,
 } from "@/lib/hooks/rbac";
-import { useClusters } from "@/lib/hooks/clusters";
 import { useProjects } from "@/lib/hooks/projects";
-import {
-  clusterLabel,
-  isValidNamespace,
-  projectLabel,
-  roleTitle,
-} from "./-utils";
+import { isValidNamespace, projectLabel, roleTitle } from "./-utils";
 
 export function CreateClusterBindingModal({
   onClose,
@@ -32,12 +27,10 @@ export function CreateClusterBindingModal({
   const { data: clusterRoles } = useClusterRoles();
   const { data: projectRoles } = useProjectRoles();
   const { data: templates } = useRoleTemplates();
-  const { data: clustersData } = useClusters({ pageSize: 200 });
   const { data: projectsData } = useProjects({ pageSize: 200 });
   const createBinding = useCreateAccessBinding();
   const applyTemplate = useApplyProjectRoleTemplate();
 
-  const clusters = clustersData?.data || [];
   const projects = projectsData?.data || [];
 
   const form = useAppForm({
@@ -241,19 +234,14 @@ export function CreateClusterBindingModal({
             </label>
             <form.Field name="clusterId">
               {(field) => (
-                <Select
+                <RemoteClusterPicker
                   id="field-b53e75b3-173"
+                  ariaLabel="Cluster"
                   value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
+                  onChange={field.handleChange}
                   onBlur={field.handleBlur}
-                >
-                  <option value="">Select a cluster…</option>
-                  {clusters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {clusterLabel(c)}
-                    </option>
-                  ))}
-                </Select>
+                  placeholder="Select a cluster…"
+                />
               )}
             </form.Field>
           </div>

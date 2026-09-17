@@ -295,6 +295,21 @@ async function chooseNextOption(pageContext: Page, label: string) {
   await pageContext.keyboard.press("Enter");
 }
 
+async function chooseRemoteCluster(pageContext: Page, label: string) {
+  const picker = pageContext.getByRole("combobox", { name: label });
+  await picker.focus();
+  await pageContext.keyboard.press("Enter");
+  await expect(
+    pageContext.getByRole("searchbox", { name: "Search clusters" }),
+  ).toBeFocused();
+  await expect(
+    pageContext
+      .getByRole("listbox", { name: "Cluster search results" })
+      .getByRole("option"),
+  ).toHaveCount(1);
+  await pageContext.keyboard.press("Enter");
+}
+
 test("keyboard-only RBAC binding creation submits the selected scope", async ({
   page,
 }) => {
@@ -316,7 +331,7 @@ test("keyboard-only RBAC binding creation submits the selected scope", async ({
   await principal.focus();
   await page.keyboard.press("Enter");
   await chooseNextOption(page, "Role");
-  await chooseNextOption(page, "Cluster");
+  await chooseRemoteCluster(page, "Cluster");
   const submit = dialog.getByRole("button", { name: "Create Binding" });
   await expect(submit).toBeEnabled();
   await submit.focus();
@@ -341,9 +356,7 @@ test("keyboard-only CIS wizard selects, reviews, and starts a scan", async ({
     page.getByRole("heading", { name: "Run CIS Scan" }),
   ).toBeVisible();
 
-  const cluster = page.getByRole("button", { name: /Production EKS/ });
-  await cluster.focus();
-  await page.keyboard.press("Enter");
+  await chooseRemoteCluster(page, "Cluster to scan");
   const next = page.getByRole("button", { name: "Next" });
   await next.focus();
   await page.keyboard.press("Enter");
