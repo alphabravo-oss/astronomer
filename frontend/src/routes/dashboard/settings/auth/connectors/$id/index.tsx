@@ -10,9 +10,9 @@ import { createFileRoute } from "@tanstack/react-router";
  *     and we don't accidentally clobber stored secrets on a no-op save.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { useParams, useRouter } from "@/lib/navigation";
-import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
   useDexConnector,
@@ -28,13 +28,15 @@ import {
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { QueryStates } from "@/components/ui/query-states";
 import { getConnectorMeta } from "@/components/auth/connector-meta";
 
 function EditConnectorPage() {
-  const params = useParams();
+  const params = Route.useParams();
   const id = String(params?.id ?? "");
-  const router = useRouter();
-  const { data: connector, isLoading } = useDexConnector(id);
+  const navigate = useNavigate();
+  const connectorQuery = useDexConnector(id);
+  const { data: connector, isLoading } = connectorQuery;
   const { data: types = [] } = useDexConnectorTypes();
   const updateMutation = useUpdateDexConnector();
   const deleteMutation = useDeleteDexConnector();
@@ -43,24 +45,32 @@ function EditConnectorPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  if (isLoading) {
+  if (isLoading || connectorQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-48">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={connectorQuery}
+        permission="auth_connectors:read"
+        notFound={
+          <div className="max-w-2xl mx-auto text-center py-12 space-y-3">
+            <p className="text-sm text-foreground">Connector not found.</p>
+          </div>
+        }
+      >
+        {() => null}
+      </QueryStates>
     );
   }
   if (!connector) {
     return (
       <div className="max-w-2xl mx-auto text-center py-12 space-y-3">
         <p className="text-sm text-foreground">Connector not found.</p>
-        <Link
-          href="/dashboard/settings/auth"
+        <RouterLink
+          to="/dashboard/settings/auth"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Auth
-        </Link>
+        </RouterLink>
       </div>
     );
   }
@@ -92,7 +102,7 @@ function EditConnectorPage() {
   const handleDelete = async () => {
     try {
       await deleteMutation.mutateAsync(connector.id);
-      router.push("/dashboard/settings/auth");
+      void navigate({ to: "/dashboard/settings/auth" });
     } catch {
       /* toast handles the error */
     }
@@ -100,13 +110,13 @@ function EditConnectorPage() {
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/settings/auth"
+      <RouterLink
+        to="/dashboard/settings/auth"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to Auth
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Auth · Edit Connector"

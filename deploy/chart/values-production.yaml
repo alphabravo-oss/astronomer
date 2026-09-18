@@ -30,7 +30,8 @@
 #   3. Turns on TLS at the Gateway. You must either (a) provide a
 #      pre-existing `tls.secretName` containing tls.crt + tls.key, or
 #      (b) flip gateway.tls.certManager.enabled=true and point it at a
-#      ClusterIssuer (Let's Encrypt / internal CA / etc).
+#      ClusterIssuer (Let's Encrypt / internal CA / etc), or (c) attach to a
+#      platform Gateway that already terminates TLS with externalGateway.
 #   4. Disables the legacy Ingress block. The Gateway API path is the
 #      only supported production surface; the Ingress was a transitional
 #      compatibility layer.
@@ -55,11 +56,18 @@ preflight:
   enabled: true
 
 # ── Resource topology ─────────────────────────────────────────────────────
+image:
+  requireDigest: true
+
 server:
   replicaCount: 3
   podDisruptionBudget:
     enabled: true
     minAvailable: 2
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: DoNotSchedule
   resources:
     requests:
       cpu: 250m
@@ -73,6 +81,10 @@ worker:
   podDisruptionBudget:
     enabled: true
     minAvailable: 2
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: DoNotSchedule
   resources:
     requests:
       cpu: 250m
@@ -87,6 +99,10 @@ frontend:
   podDisruptionBudget:
     enabled: true
     minAvailable: 2
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: DoNotSchedule
   resources:
     requests:
       cpu: 100m
@@ -96,13 +112,22 @@ frontend:
       memory: 1Gi
 
 # ── External datastores ───────────────────────────────────────────────────
-# Bundled Postgres + Redis are explicitly off. A non-empty
-# dsnSecretRef/address is the contract this profile relies on; the chart's
-# secret templates pull from these, and the server's DSN-builder skips the
-# in-chart Service hostnames when bundled.enabled=false.
+# The production profile provisions CloudNativePG and Valkey Sentinel. Switch
+# either mode to external when provider-managed datastores are preferred.
 postgres:
+  mode: cloudNativePG
   bundled:
     enabled: false
+  cloudNativePG:
+    instances: 3
+    parameters:
+      max_connections: "300"
+    synchronousReplication:
+      enabled: true
+      number: 1
+  pool:
+    maxConns: 12
+    minConns: 2
   # Configure via --set on install:
   #   --set postgres.external.dsnSecretRef.name=<secret>
   #   --set postgres.external.dsnSecretRef.key=<key>
@@ -122,8 +147,21 @@ postgres:
     minimumMonthlyBackups: 6
 
 redis:
+  mode: sentinel
   bundled:
-    enabled: false
+    enabled: true
+  storage:
+    # AOF rewrites temporarily need additional space. This applies to new
+    # production Sentinel installs; existing PVCs must be expanded through
+    # the storage provider because StatefulSet claim templates are immutable.
+    size: 5Gi
+  sentinel:
+    replicas: 3
+    sentinels: 3
+    quorum: 2
+    passwordSecretRef:
+      name: astronomer-valkey-auth
+      key: password
   # Redis is a hard dependency of the asynq job queue. Both the server and
   # worker will fail to start if REDIS_URL is unparseable — silent fallback
   # was removed in FEATURES-051126 T02 because it masked misconfig in
@@ -185,6 +223,12 @@ gateway:
 #   # BYO certificate (you manage rotation):
 #   --set tls.source=secret \
 #   --set tls.secretName=astronomer-tls   # pre-created with tls.crt + tls.key
+#
+#   # Existing shared Gateway (certificate and LB managed by the platform):
+#   --set gateway.create=false \
+#   --set gateway.name=public \
+#   --set gateway.namespace=platform-gateway \
+#   --set tls.source=externalGateway
 tls:
   source: secret           # operator MUST override to selfSigned/letsEncrypt or pre-create the Secret
   secretName: ""
@@ -225,6 +269,13 @@ secrets:
 dex:
   enabled: true
   replicaCount: 2
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: DoNotSchedule
   runtimeSecretName: ""
 
 # F8 (C-04): in production the render FAILS unless bootstrap.password is pinned
@@ -257,12 +308,12 @@ metrics:
     scrapeTimeout: 10s
 
 # ── Flux-native delivery ──────────────────────────────────────────────────
-# Flux controllers are installed only on managed clusters from the signed
-# release distribution; they are not a dependency of this chart. Release
-# packaging normally injects immutable OCI references. Air-gapped operators
-# may provide a verified absolute disconnectedAssetPath for the distribution.
+# Flux controllers run on every delivery target. This chart bootstraps the
+# pinned embedded distribution on the local cluster; downstream agents install
+# the same signed distribution during enrollment.
 delivery:
   enabled: true
+  localFluxBootstrap: true
   artifacts:
     privateRegistry: ""
     registryRewrites: {}
@@ -311,6 +362,10 @@ networkPolicy:
   # Required: CIDR coverage for the Service ClusterIP and API endpoint/nodes.
   kubernetesAPIEgressCIDRs: []
   identityProviderEgressCIDRs: []
+  # Required while managementBackup.enabled=true: the S3/API endpoint network.
+  objectStoreEgressCIDRs: []
+  # Required only when managementLogging.enabled=true.
+  loggingSinkEgressCIDRs: []
 
 # ── Management-plane DR ───────────────────────────────────────────────────
 # Nightly pg_dump of Astronomer's own Postgres pushed to S3. The companion
@@ -343,9 +398,15 @@ managementBackup:
   enabled: true
   schedule: "0 3 * * *"
   retention:
+    enabled: true
+    schedule: "30 3 * * *"
+    dryRun: true  # review candidates, then explicitly set false
     daily: 30
     weekly: 12
     monthly: 6
+    credentialsSecretRef:
+      name: ""   # REQUIRED and MUST differ from writer credentials
+      key: "credentials"
   s3:
     bucket: ""    # REQUIRED — operator supplies via --set
     region: "us-east-1"
@@ -354,6 +415,14 @@ managementBackup:
     credentialsSecretRef:
       name: ""   # REQUIRED — operator supplies via --set
       key: "credentials"
+  immutability:
+    mode: "objectLock"
+    minimumRetentionDays: 30
+  encryption:
+    sourceIdentity: ""  # REQUIRED stable installation identity, e.g. prod-us-east-1
+    wrappingSecretRef:
+      name: ""   # REQUIRED — separate custody from both S3 identities
+      key: "passphrase"
   # F4 (HIGH · DR): back up the Fernet/JWT encryption key WITH the DB, wrapped
   # with a SEPARATELY-held passphrase. Without this a restore onto a new cluster
   # is undecryptable. STRONGLY recommended in production. Create the wrapping
@@ -362,14 +431,11 @@ managementBackup:
   #   kubectl -n astronomer create secret generic astronomer-key-wrap \
   #     --from-literal=passphrase="$(openssl rand -base64 48)"
   #
-  #   --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap
+  #   --set managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap
   #
   # See docs/management-plane-dr-runbook.md ("Key custody").
   encryptionKeyBackup:
     enabled: true
-    wrappingSecretRef:
-      name: ""   # REQUIRED for key backup — hold in SEPARATE custody from S3 creds
-      key: "passphrase"
 
 # The weekly restore-drill proves the dump is restorable AND — once the key
 # backup above is wired — that the backed-up key actually DECRYPTS the restored
@@ -378,5 +444,3 @@ managementRestoreDrill:
   enabled: true
   decryptCheck:
     enabled: true
-    wrappingSecretRef:
-      name: ""   # set to the SAME secret as encryptionKeyBackup.wrappingSecretRef.name

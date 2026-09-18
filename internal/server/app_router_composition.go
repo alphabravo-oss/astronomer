@@ -18,27 +18,30 @@ type routerComposition struct {
 }
 
 func (c *productionComposition) composeRouter(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*routerComposition, error) {
-	deps := c.composeCoreRouterDependencies(cfg, logger)
+	deps, err := c.composeCoreRouterDependencies(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
 	c.composeAdministrativeRouterDependencies(cfg, &deps)
 	c.composeManagementRouterDependencies(cfg, logger, &deps)
 	c.composePlatformRouterDependencies(cfg, logger, &deps)
 	c.configureRouterPolicies(ctx, logger, &deps)
-	c.configureRouterStreams(cfg, logger, &deps)
+	c.configureRouterStreamAdapters(logger, &deps)
 
 	if c.nativeRBACAuthz != nil {
-		deps.NativeAuthz = c.nativeRBACAuthz
-		deps.NativeRBAC = c.nativeRBACHandler
+		deps.ClusterResources.NativeAuthz = c.nativeRBACAuthz
+		deps.ClusterResources.NativeRBAC = c.nativeRBACHandler
 	}
-	if err := validateProductionSecurityWiring(cfg, deps); err != nil {
-		c.database.Close()
-		return nil, err
-	}
-	if err := validateManagementBackupStartup(cfg.ManagementBackupEnabled, deps.AdminDrill); err != nil {
+	if err := validateManagementBackupStartup(cfg.ManagementBackupEnabled, deps.AdminPlatform.AdminDrill); err != nil {
 		c.database.Close()
 		return nil, err
 	}
 
-	router := NewRouter(cfg, deps)
+	router, err := NewProductionRouter(cfg, deps)
+	if err != nil {
+		c.database.Close()
+		return nil, err
+	}
 	deferredReplayers, err := newDeferredHTTPReplayers(router, c.jwtManager, c.encryptor, c.queries)
 	if err != nil {
 		c.database.Close()
@@ -49,35 +52,25 @@ func (c *productionComposition) composeRouter(ctx context.Context, cfg *config.C
 }
 
 func (c *productionComposition) composeAdministrativeRouterDependencies(cfg *config.Config, deps *RouterDependencies) {
-	database := c.database
-	queries := c.queries
-	redisOpt := c.redisOpt
-	bus := c.bus
-	encryptor := c.encryptor
-	localK8s := c.localK8s
-	localNamespace := c.localNamespace
+	platformHealth := handler.NewPlatformHealthHandler(c.database.Pool())
+	platformHealth.SetAsynqInspector(asynq.NewInspector(c.redisOpt))
 
-	admin := RouterDependencies{
-		PlatformHealth: func() *handler.PlatformHealthHandler {
-			h := handler.NewPlatformHealthHandler(database.Pool())
-			h.SetAsynqInspector(asynq.NewInspector(redisOpt))
-			return h
-		}(),
-		AdminQueues: func() *handler.AdminQueuesHandler {
-			h := handler.NewAdminQueuesHandler(asynq.NewInspector(redisOpt), queries)
-			h.SetEventBus(bus)
-			h.SetRunTx(sqlcMutationTxRunner[handler.AdminQueueMutationTx](database))
-			return h
-		}(),
-		AdminTaskOutbox: func() *handler.AdminTaskOutboxHandler {
-			h := handler.NewAdminTaskOutboxHandler(queries)
-			h.SetRunTx(sqlcMutationTxRunner[handler.AdminTaskOutboxMutationTx](database))
-			return h
-		}(),
-		AdminDrill: newManagementBackupHandler(cfg.ManagementBackupEnabled, queries, database, encryptor, localK8s, localNamespace),
-	}
-	deps.PlatformHealth = admin.PlatformHealth
-	deps.AdminQueues = admin.AdminQueues
-	deps.AdminTaskOutbox = admin.AdminTaskOutbox
-	deps.AdminDrill = admin.AdminDrill
+	adminQueues := handler.NewAdminQueuesHandler(asynq.NewInspector(c.redisOpt), c.queries)
+	adminQueues.SetEventBus(c.bus)
+	adminQueues.SetRunTx(sqlcMutationTxRunner[handler.AdminQueueMutationTx](c.database))
+
+	adminTaskOutbox := handler.NewAdminTaskOutboxHandler(c.queries)
+	adminTaskOutbox.SetRunTx(sqlcMutationTxRunner[handler.AdminTaskOutboxMutationTx](c.database))
+
+	deps.AdminPlatform.PlatformHealth = platformHealth
+	deps.AdminPlatform.AdminQueues = adminQueues
+	deps.AdminPlatform.AdminTaskOutbox = adminTaskOutbox
+	deps.AdminPlatform.AdminDrill = newManagementBackupHandler(
+		cfg,
+		c.queries,
+		c.database,
+		c.encryptor,
+		c.localK8s,
+		c.localNamespace,
+	)
 }

@@ -18,6 +18,7 @@ import (
 )
 
 type bundleQueryFake struct {
+	audits             []sqlc.UpsertAuditOutboxParams
 	countFn            func(context.Context, uuid.UUID) (int64, error)
 	listFn             func(context.Context, sqlc.ListComponentBundlesParams) ([]sqlc.ComponentBundle, error)
 	createFn           func(context.Context, sqlc.CreateComponentBundleParams) (sqlc.ComponentBundle, error)
@@ -29,7 +30,17 @@ type bundleQueryFake struct {
 	getVersionFn       func(context.Context, sqlc.GetComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error)
 	getSourceFn        func(context.Context, sqlc.GetDeliverySourceParams) (sqlc.GetDeliverySourceRow, error)
 	createResolutionFn func(context.Context, sqlc.CreateDeliverySourceResolutionAndOutboxParams) (sqlc.CreateDeliverySourceResolutionAndOutboxRow, error)
-	failVersionFn      func(context.Context, sqlc.FailComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error)
+}
+
+func (f *bundleQueryFake) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.audits = append(f.audits, arg)
+	return sqlc.AuditOutbox{ID: arg.ID}, nil
+}
+
+func newBundleHandlerWithTestTransaction(q *bundleQueryFake) *BundleHandler {
+	h := NewBundleHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(BundleMutationTx) error) error { return fn(q) })
+	return h
 }
 
 func (f *bundleQueryFake) CountComponentBundles(ctx context.Context, id uuid.UUID) (int64, error) {
@@ -109,13 +120,6 @@ func (f *bundleQueryFake) CreateDeliverySourceResolutionAndOutbox(ctx context.Co
 	return f.createResolutionFn(ctx, arg)
 }
 
-func (f *bundleQueryFake) FailComponentBundleVersion(ctx context.Context, arg sqlc.FailComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error) {
-	if f.failVersionFn == nil {
-		panic("unexpected FailComponentBundleVersion")
-	}
-	return f.failVersionFn(ctx, arg)
-}
-
 func TestBundleDeleteIsProjectScopedAndBlocksMissingRows(t *testing.T) {
 	projectID, bundleID := uuid.New(), uuid.New()
 	var deleted sqlc.DeleteComponentBundleParams
@@ -131,7 +135,7 @@ func TestBundleDeleteIsProjectScopedAndBlocksMissingRows(t *testing.T) {
 	request := requestWithPathParams(http.MethodDelete, "/api/v1/delivery/bundles/"+bundleID.String()+"?project_id="+projectID.String(), nil, map[string]string{"id": bundleID.String()})
 	request.Header.Set("Idempotency-Key", "bundle-delete-1")
 	recorder := httptest.NewRecorder()
-	NewBundleHandler(fake).Delete(recorder, request)
+	newBundleHandlerWithTestTransaction(fake).Delete(recorder, request)
 	if recorder.Code != http.StatusNoContent || deleted.ID != bundleID || deleted.ProjectID != projectID {
 		t.Fatalf("status=%d deleted=%#v body=%s", recorder.Code, deleted, recorder.Body.String())
 	}
@@ -140,7 +144,7 @@ func TestBundleDeleteIsProjectScopedAndBlocksMissingRows(t *testing.T) {
 	missing := requestWithPathParams(http.MethodDelete, "/api/v1/delivery/bundles/"+uuid.New().String()+"?project_id="+projectID.String(), nil, map[string]string{"id": uuid.New().String()})
 	missing.Header.Set("Idempotency-Key", "bundle-delete-missing")
 	missingRecorder := httptest.NewRecorder()
-	NewBundleHandler(fake).Delete(missingRecorder, missing)
+	newBundleHandlerWithTestTransaction(fake).Delete(missingRecorder, missing)
 	if missingRecorder.Code != http.StatusNotFound {
 		t.Fatalf("missing delete status=%d body=%s", missingRecorder.Code, missingRecorder.Body.String())
 	}
@@ -161,7 +165,7 @@ func TestBundleCreateAndListAreProjectScopedAndPaginated(t *testing.T) {
 	body := `{"name":"platform-ingress","description":"Pinned ingress component"}`
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/bundles?project_id="+projectID.String(), strings.NewReader(body))
 	recorder := httptest.NewRecorder()
-	NewBundleHandler(fake).Create(recorder, request)
+	newBundleHandlerWithTestTransaction(fake).Create(recorder, request)
 	if recorder.Code != http.StatusCreated || !strings.Contains(recorder.Body.String(), bundleID.String()) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -182,8 +186,8 @@ func TestBundleCreateAndListAreProjectScopedAndPaginated(t *testing.T) {
 	}
 	request = httptest.NewRequest(http.MethodGet, "/api/v1/delivery/bundles?project_id="+projectID.String()+"&limit=5&offset=2", nil)
 	recorder = httptest.NewRecorder()
-	NewBundleHandler(fake).List(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"total_known":true`) {
+	newBundleHandlerWithTestTransaction(fake).List(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"pagination":{"total":`) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
@@ -204,7 +208,7 @@ func TestBundleCreateRejectsUnknownFieldsAndScopeMismatch(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, test.target, strings.NewReader(test.body))
 			recorder := httptest.NewRecorder()
-			NewBundleHandler(&bundleQueryFake{}).Create(recorder, request)
+			newBundleHandlerWithTestTransaction(&bundleQueryFake{}).Create(recorder, request)
 			if recorder.Code != http.StatusBadRequest {
 				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 			}
@@ -257,7 +261,7 @@ func TestCreateBundleVersionPersistsImmutableCredentialFreeSnapshot(t *testing.T
 	}
 	request := requestWithPathParams(http.MethodPost, "/api/v1/delivery/bundles/"+bundleID.String()+"/versions", strings.NewReader(string(body)), map[string]string{"id": bundleID.String()})
 	recorder := httptest.NewRecorder()
-	NewBundleHandler(fake).CreateVersion(recorder, request)
+	newBundleHandlerWithTestTransaction(fake).CreateVersion(recorder, request)
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -310,7 +314,7 @@ func TestCreateBundleVersionRejectsCrossProjectSourceBeforeWrite(t *testing.T) {
 	}
 	request := requestWithPathParams(http.MethodPost, "/api/v1/delivery/bundles/"+bundleID.String()+"/versions", strings.NewReader(string(body)), map[string]string{"id": bundleID.String()})
 	recorder := httptest.NewRecorder()
-	NewBundleHandler(fake).CreateVersion(recorder, request)
+	newBundleHandlerWithTestTransaction(fake).CreateVersion(recorder, request)
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -332,7 +336,7 @@ func TestCreateBundleVersionValidationAndUnknownFields(t *testing.T) {
 	for _, body := range []string{string(invalidJSON), unknownJSON} {
 		request := requestWithPathParams(http.MethodPost, "/api/v1/delivery/bundles/"+bundleID.String()+"/versions", strings.NewReader(body), map[string]string{"id": bundleID.String()})
 		recorder := httptest.NewRecorder()
-		NewBundleHandler(&bundleQueryFake{}).CreateVersion(recorder, request)
+		newBundleHandlerWithTestTransaction(&bundleQueryFake{}).CreateVersion(recorder, request)
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 		}
@@ -353,13 +357,13 @@ func TestGetBundleVersionRejectsNestedBundleConfusion(t *testing.T) {
 	target := "/api/v1/delivery/bundles/" + requestedBundleID.String() + "/versions/" + versionID.String() + "?project_id=" + projectID.String()
 	request := requestWithPathParams(http.MethodGet, target, nil, map[string]string{"id": requestedBundleID.String(), "versionId": versionID.String()})
 	recorder := httptest.NewRecorder()
-	NewBundleHandler(fake).GetVersion(recorder, request)
+	newBundleHandlerWithTestTransaction(fake).GetVersion(recorder, request)
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 
-func TestBundleVersionResolutionFailureIsCompensated(t *testing.T) {
+func TestBundleVersionResolutionFailureRollsBackWithoutCompensation(t *testing.T) {
 	projectID := uuid.New()
 	bundleID := uuid.New()
 	sourceID := uuid.New()
@@ -367,7 +371,6 @@ func TestBundleVersionResolutionFailureIsCompensated(t *testing.T) {
 	now := time.Now().UTC()
 	requestValue := validCreateBundleVersionRequest(projectID, sourceID)
 	body, _ := json.Marshal(requestValue)
-	compensated := false
 	fake := &bundleQueryFake{
 		getFn: func(context.Context, sqlc.GetComponentBundleParams) (sqlc.ComponentBundle, error) {
 			return sqlc.ComponentBundle{ID: bundleID, ProjectID: projectID, Name: "bundle", CreatedAt: now, UpdatedAt: now}, nil
@@ -381,16 +384,21 @@ func TestBundleVersionResolutionFailureIsCompensated(t *testing.T) {
 		createResolutionFn: func(context.Context, sqlc.CreateDeliverySourceResolutionAndOutboxParams) (sqlc.CreateDeliverySourceResolutionAndOutboxRow, error) {
 			return sqlc.CreateDeliverySourceResolutionAndOutboxRow{}, errors.New("queue unavailable")
 		},
-		failVersionFn: func(_ context.Context, arg sqlc.FailComponentBundleVersionParams) (sqlc.ComponentBundleVersion, error) {
-			compensated = arg.ID == versionID && arg.LastErrorCode == "resolution_enqueue_failed"
-			return sqlc.ComponentBundleVersion{}, nil
-		},
 	}
 	request := requestWithPathParams(http.MethodPost, "/api/v1/delivery/bundles/"+bundleID.String()+"/versions", strings.NewReader(string(body)), map[string]string{"id": bundleID.String()})
 	recorder := httptest.NewRecorder()
-	NewBundleHandler(fake).CreateVersion(recorder, request)
-	if recorder.Code != http.StatusInternalServerError || !compensated {
-		t.Fatalf("status=%d compensated=%v body=%s", recorder.Code, compensated, recorder.Body.String())
+	h := NewBundleHandler(fake)
+	committed := false
+	h.SetRunTx(func(_ context.Context, fn func(BundleMutationTx) error) error {
+		if err := fn(fake); err != nil {
+			return err
+		}
+		committed = true
+		return nil
+	})
+	h.CreateVersion(recorder, request)
+	if recorder.Code != http.StatusInternalServerError || committed || len(fake.audits) != 0 {
+		t.Fatalf("status=%d committed=%v body=%s", recorder.Code, committed, recorder.Body.String())
 	}
 }
 
@@ -414,8 +422,8 @@ func TestListBundleVersionsPreflightsProjectAndBoundsPage(t *testing.T) {
 	target := "/api/v1/delivery/bundles/" + bundleID.String() + "/versions?project_id=" + projectID.String() + "&limit=2"
 	request := requestWithPathParams(http.MethodGet, target, nil, map[string]string{"id": bundleID.String()})
 	recorder := httptest.NewRecorder()
-	NewBundleHandler(fake).ListVersions(recorder, request)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"total_known":false`) {
+	newBundleHandlerWithTestTransaction(fake).ListVersions(recorder, request)
+	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"total":`) || !strings.Contains(recorder.Body.String(), `"has_more":false`) {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }

@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -38,6 +39,17 @@ func (q *Queries) CountGitOpsRegisteredClustersBySource(ctx context.Context, sou
 	return count, err
 }
 
+const countGitOpsSources = `-- name: CountGitOpsSources :one
+SELECT count(*) FROM gitops_registration_sources
+`
+
+func (q *Queries) CountGitOpsSources(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countGitOpsSources)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countGitOpsTombstonedBySource = `-- name: CountGitOpsTombstonedBySource :one
 SELECT COUNT(*) FROM gitops_registered_clusters
 WHERE source_id = $1 AND status = 'tombstoned'
@@ -53,26 +65,30 @@ func (q *Queries) CountGitOpsTombstonedBySource(ctx context.Context, sourceID uu
 const createGitOpsSource = `-- name: CreateGitOpsSource :one
 INSERT INTO gitops_registration_sources (
     name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
-    sync_mode, sync_interval_seconds, on_delete, enabled, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    sync_mode, sync_interval_seconds, on_delete, enabled, created_by,
+    webhook_provider, webhook_secret_encrypted
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
           sync_mode, sync_interval_seconds, on_delete,
           last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at, allow_mass_decommission
+          created_by, created_at, updated_at, allow_mass_decommission,
+          webhook_provider, webhook_secret_encrypted
 `
 
 type CreateGitOpsSourceParams struct {
-	Name                string      `json:"name"`
-	RepoUrl             string      `json:"repo_url"`
-	Branch              string      `json:"branch"`
-	PathPrefix          string      `json:"path_prefix"`
-	AuthMode            string      `json:"auth_mode"`
-	AuthEncrypted       string      `json:"auth_encrypted"`
-	SyncMode            string      `json:"sync_mode"`
-	SyncIntervalSeconds int32       `json:"sync_interval_seconds"`
-	OnDelete            string      `json:"on_delete"`
-	Enabled             bool        `json:"enabled"`
-	CreatedBy           pgtype.UUID `json:"created_by"`
+	Name                   string      `json:"name"`
+	RepoUrl                string      `json:"repo_url"`
+	Branch                 string      `json:"branch"`
+	PathPrefix             string      `json:"path_prefix"`
+	AuthMode               string      `json:"auth_mode"`
+	AuthEncrypted          string      `json:"auth_encrypted"`
+	SyncMode               string      `json:"sync_mode"`
+	SyncIntervalSeconds    int32       `json:"sync_interval_seconds"`
+	OnDelete               string      `json:"on_delete"`
+	Enabled                bool        `json:"enabled"`
+	CreatedBy              pgtype.UUID `json:"created_by"`
+	WebhookProvider        string      `json:"webhook_provider"`
+	WebhookSecretEncrypted string      `json:"webhook_secret_encrypted"`
 }
 
 func (q *Queries) CreateGitOpsSource(ctx context.Context, arg CreateGitOpsSourceParams) (GitopsRegistrationSource, error) {
@@ -88,6 +104,8 @@ func (q *Queries) CreateGitOpsSource(ctx context.Context, arg CreateGitOpsSource
 		arg.OnDelete,
 		arg.Enabled,
 		arg.CreatedBy,
+		arg.WebhookProvider,
+		arg.WebhookSecretEncrypted,
 	)
 	var i GitopsRegistrationSource
 	err := row.Scan(
@@ -109,8 +127,29 @@ func (q *Queries) CreateGitOpsSource(ctx context.Context, arg CreateGitOpsSource
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AllowMassDecommission,
+		&i.WebhookProvider,
+		&i.WebhookSecretEncrypted,
 	)
 	return i, err
+}
+
+const createGitOpsWebhookReceipt = `-- name: CreateGitOpsWebhookReceipt :one
+INSERT INTO gitops_webhook_receipts (source_id, content_digest)
+VALUES ($1, $2)
+ON CONFLICT (source_id, content_digest) DO NOTHING
+RETURNING received_at
+`
+
+type CreateGitOpsWebhookReceiptParams struct {
+	SourceID      uuid.UUID `json:"source_id"`
+	ContentDigest string    `json:"content_digest"`
+}
+
+func (q *Queries) CreateGitOpsWebhookReceipt(ctx context.Context, arg CreateGitOpsWebhookReceiptParams) (time.Time, error) {
+	row := q.db.QueryRow(ctx, createGitOpsWebhookReceipt, arg.SourceID, arg.ContentDigest)
+	var received_at time.Time
+	err := row.Scan(&received_at)
+	return received_at, err
 }
 
 const deleteGitOpsRegisteredCluster = `-- name: DeleteGitOpsRegisteredCluster :exec
@@ -135,7 +174,8 @@ const getGitOpsSource = `-- name: GetGitOpsSource :one
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission
+       created_by, created_at, updated_at, allow_mass_decommission,
+       webhook_provider, webhook_secret_encrypted
 FROM gitops_registration_sources
 WHERE id = $1
 `
@@ -162,6 +202,8 @@ func (q *Queries) GetGitOpsSource(ctx context.Context, id uuid.UUID) (GitopsRegi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AllowMassDecommission,
+		&i.WebhookProvider,
+		&i.WebhookSecretEncrypted,
 	)
 	return i, err
 }
@@ -170,7 +212,8 @@ const getGitOpsSourceByName = `-- name: GetGitOpsSourceByName :one
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission
+       created_by, created_at, updated_at, allow_mass_decommission,
+       webhook_provider, webhook_secret_encrypted
 FROM gitops_registration_sources
 WHERE name = $1
 `
@@ -197,6 +240,8 @@ func (q *Queries) GetGitOpsSourceByName(ctx context.Context, name string) (Gitop
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AllowMassDecommission,
+		&i.WebhookProvider,
+		&i.WebhookSecretEncrypted,
 	)
 	return i, err
 }
@@ -205,7 +250,8 @@ const listEnabledGitOpsSources = `-- name: ListEnabledGitOpsSources :many
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission
+       created_by, created_at, updated_at, allow_mass_decommission,
+       webhook_provider, webhook_secret_encrypted
 FROM gitops_registration_sources
 WHERE enabled = true
 ORDER BY name ASC
@@ -239,6 +285,8 @@ func (q *Queries) ListEnabledGitOpsSources(ctx context.Context) ([]GitopsRegistr
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AllowMassDecommission,
+			&i.WebhookProvider,
+			&i.WebhookSecretEncrypted,
 		); err != nil {
 			return nil, err
 		}
@@ -334,15 +382,111 @@ func (q *Queries) ListGitOpsRegisteredClustersBySource(ctx context.Context, sour
 	return items, nil
 }
 
-const listGitOpsSources = `-- name: ListGitOpsSources :many
+const listGitOpsRegisteredClustersBySourcePage = `-- name: ListGitOpsRegisteredClustersBySourcePage :many
+SELECT g.cluster_id, g.source_id, g.repo_path, g.last_yaml_sha,
+       g.last_applied_at, g.status, g.tombstoned_at, g.created_at, g.updated_at,
+       c.name AS cluster_name, c.display_name
+FROM gitops_registered_clusters g
+LEFT JOIN clusters c ON c.id = g.cluster_id
+WHERE g.source_id = $1
+ORDER BY g.repo_path ASC, g.cluster_id ASC
+LIMIT $3 OFFSET $2
+`
 
-SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
+type ListGitOpsRegisteredClustersBySourcePageParams struct {
+	SourceID    uuid.UUID `json:"source_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
+
+type ListGitOpsRegisteredClustersBySourcePageRow struct {
+	ClusterID     uuid.UUID          `json:"cluster_id"`
+	SourceID      uuid.UUID          `json:"source_id"`
+	RepoPath      string             `json:"repo_path"`
+	LastYamlSha   string             `json:"last_yaml_sha"`
+	LastAppliedAt time.Time          `json:"last_applied_at"`
+	Status        string             `json:"status"`
+	TombstonedAt  pgtype.Timestamptz `json:"tombstoned_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
+	ClusterName   pgtype.Text        `json:"cluster_name"`
+	DisplayName   pgtype.Text        `json:"display_name"`
+}
+
+// Admin list projection joins display metadata in the same bounded query,
+// avoiding both an unbounded reconciliation read and per-row cluster lookups.
+func (q *Queries) ListGitOpsRegisteredClustersBySourcePage(ctx context.Context, arg ListGitOpsRegisteredClustersBySourcePageParams) ([]ListGitOpsRegisteredClustersBySourcePageRow, error) {
+	rows, err := q.db.Query(ctx, listGitOpsRegisteredClustersBySourcePage, arg.SourceID, arg.QueryOffset, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGitOpsRegisteredClustersBySourcePageRow{}
+	for rows.Next() {
+		var i ListGitOpsRegisteredClustersBySourcePageRow
+		if err := rows.Scan(
+			&i.ClusterID,
+			&i.SourceID,
+			&i.RepoPath,
+			&i.LastYamlSha,
+			&i.LastAppliedAt,
+			&i.Status,
+			&i.TombstonedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ClusterName,
+			&i.DisplayName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGitOpsSourcesPage = `-- name: ListGitOpsSourcesPage :many
+
+SELECT id, name, repo_url, branch, path_prefix, auth_mode,
+       (auth_encrypted <> '') AS auth_configured,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission
+       created_by, created_at, updated_at, allow_mass_decommission,
+       webhook_provider, (webhook_secret_encrypted <> '') AS webhook_configured
 FROM gitops_registration_sources
-ORDER BY name ASC
+ORDER BY name ASC, id ASC
+LIMIT $2 OFFSET $1
 `
+
+type ListGitOpsSourcesPageParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
+
+type ListGitOpsSourcesPageRow struct {
+	ID                    uuid.UUID          `json:"id"`
+	Name                  string             `json:"name"`
+	RepoUrl               string             `json:"repo_url"`
+	Branch                string             `json:"branch"`
+	PathPrefix            string             `json:"path_prefix"`
+	AuthMode              string             `json:"auth_mode"`
+	AuthConfigured        bool               `json:"auth_configured"`
+	SyncMode              string             `json:"sync_mode"`
+	SyncIntervalSeconds   int32              `json:"sync_interval_seconds"`
+	OnDelete              string             `json:"on_delete"`
+	LastSyncedAt          pgtype.Timestamptz `json:"last_synced_at"`
+	LastSyncedSha         string             `json:"last_synced_sha"`
+	LastError             string             `json:"last_error"`
+	Enabled               bool               `json:"enabled"`
+	CreatedBy             pgtype.UUID        `json:"created_by"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	AllowMassDecommission bool               `json:"allow_mass_decommission"`
+	WebhookProvider       string             `json:"webhook_provider"`
+	WebhookConfigured     bool               `json:"webhook_configured"`
+}
 
 // GitOps cluster registration sources + tracked clusters (migration 060).
 //
@@ -352,15 +496,16 @@ ORDER BY name ASC
 // the 24h grace via ListExpiredTombstones, enqueueing
 // cluster:decommission for each. The handler tier owns CRUD over the
 // sources themselves and the per-source /clusters/ + /preview/ readers.
-func (q *Queries) ListGitOpsSources(ctx context.Context) ([]GitopsRegistrationSource, error) {
-	rows, err := q.db.Query(ctx, listGitOpsSources)
+// List projection intentionally excludes both encrypted credential columns.
+func (q *Queries) ListGitOpsSourcesPage(ctx context.Context, arg ListGitOpsSourcesPageParams) ([]ListGitOpsSourcesPageRow, error) {
+	rows, err := q.db.Query(ctx, listGitOpsSourcesPage, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GitopsRegistrationSource{}
+	items := []ListGitOpsSourcesPageRow{}
 	for rows.Next() {
-		var i GitopsRegistrationSource
+		var i ListGitOpsSourcesPageRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -368,7 +513,7 @@ func (q *Queries) ListGitOpsSources(ctx context.Context) ([]GitopsRegistrationSo
 			&i.Branch,
 			&i.PathPrefix,
 			&i.AuthMode,
-			&i.AuthEncrypted,
+			&i.AuthConfigured,
 			&i.SyncMode,
 			&i.SyncIntervalSeconds,
 			&i.OnDelete,
@@ -380,6 +525,8 @@ func (q *Queries) ListGitOpsSources(ctx context.Context) ([]GitopsRegistrationSo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AllowMassDecommission,
+			&i.WebhookProvider,
+			&i.WebhookConfigured,
 		); err != nil {
 			return nil, err
 		}
@@ -465,27 +612,32 @@ SET name                  = $2,
     on_delete             = $10,
     enabled               = $11,
     allow_mass_decommission = $12,
+    webhook_provider       = $13,
+    webhook_secret_encrypted = $14,
     updated_at            = now()
 WHERE id = $1
 RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
           sync_mode, sync_interval_seconds, on_delete,
           last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at, allow_mass_decommission
+          created_by, created_at, updated_at, allow_mass_decommission,
+          webhook_provider, webhook_secret_encrypted
 `
 
 type UpdateGitOpsSourceParams struct {
-	ID                    uuid.UUID `json:"id"`
-	Name                  string    `json:"name"`
-	RepoUrl               string    `json:"repo_url"`
-	Branch                string    `json:"branch"`
-	PathPrefix            string    `json:"path_prefix"`
-	AuthMode              string    `json:"auth_mode"`
-	AuthEncrypted         string    `json:"auth_encrypted"`
-	SyncMode              string    `json:"sync_mode"`
-	SyncIntervalSeconds   int32     `json:"sync_interval_seconds"`
-	OnDelete              string    `json:"on_delete"`
-	Enabled               bool      `json:"enabled"`
-	AllowMassDecommission bool      `json:"allow_mass_decommission"`
+	ID                     uuid.UUID `json:"id"`
+	Name                   string    `json:"name"`
+	RepoUrl                string    `json:"repo_url"`
+	Branch                 string    `json:"branch"`
+	PathPrefix             string    `json:"path_prefix"`
+	AuthMode               string    `json:"auth_mode"`
+	AuthEncrypted          string    `json:"auth_encrypted"`
+	SyncMode               string    `json:"sync_mode"`
+	SyncIntervalSeconds    int32     `json:"sync_interval_seconds"`
+	OnDelete               string    `json:"on_delete"`
+	Enabled                bool      `json:"enabled"`
+	AllowMassDecommission  bool      `json:"allow_mass_decommission"`
+	WebhookProvider        string    `json:"webhook_provider"`
+	WebhookSecretEncrypted string    `json:"webhook_secret_encrypted"`
 }
 
 func (q *Queries) UpdateGitOpsSource(ctx context.Context, arg UpdateGitOpsSourceParams) (GitopsRegistrationSource, error) {
@@ -502,6 +654,8 @@ func (q *Queries) UpdateGitOpsSource(ctx context.Context, arg UpdateGitOpsSource
 		arg.OnDelete,
 		arg.Enabled,
 		arg.AllowMassDecommission,
+		arg.WebhookProvider,
+		arg.WebhookSecretEncrypted,
 	)
 	var i GitopsRegistrationSource
 	err := row.Scan(
@@ -523,6 +677,8 @@ func (q *Queries) UpdateGitOpsSource(ctx context.Context, arg UpdateGitOpsSource
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AllowMassDecommission,
+		&i.WebhookProvider,
+		&i.WebhookSecretEncrypted,
 	)
 	return i, err
 }

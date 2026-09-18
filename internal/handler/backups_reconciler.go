@@ -40,7 +40,14 @@ func (h *BackupHandler) StartReconciler(ctx context.Context) {
 	if h == nil || h.queries == nil || h.requester == nil {
 		return
 	}
-	go h.runReconciler(ctx)
+	go h.RunReconciler(ctx)
+}
+
+func (h *BackupHandler) RunReconciler(ctx context.Context) {
+	if h == nil || h.queries == nil || h.requester == nil {
+		return
+	}
+	h.runReconciler(ctx)
 }
 
 func (h *BackupHandler) runReconciler(ctx context.Context) {

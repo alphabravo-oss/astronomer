@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -128,6 +127,26 @@ func (r *report) evaluate() {
 		}
 	}
 
+	stormQualifies := false
+	if r.cfg.reconnectStorm.Enabled {
+		storm := r.rec.reconnectStorm
+		budget := reconnectStormRecoveryBudget(r.cfg.reconnectStorm)
+		switch {
+		case storm.StartedAt.IsZero():
+			r.Reasons = append(r.Reasons, "reconnect storm was configured but never started")
+		case storm.RecoveredAt.IsZero():
+			r.Reasons = append(r.Reasons, "reconnect storm did not recover before the workload ended")
+		case storm.ReconnectedAgents != storm.TargetAgents:
+			r.Reasons = append(r.Reasons,
+				fmt.Sprintf("reconnect storm recovered %d/%d targeted agents", storm.ReconnectedAgents, storm.TargetAgents))
+		case storm.RecoveredAt.Sub(storm.StartedAt) > budget:
+			r.Reasons = append(r.Reasons,
+				fmt.Sprintf("reconnect storm recovery %s exceeded %s", storm.RecoveredAt.Sub(storm.StartedAt).Round(time.Millisecond), budget))
+		default:
+			stormQualifies = true
+		}
+	}
+
 	// 4. DLQ growth — measured as worker_queue_pending at end. Asynq's
 	//    "pending" is the queued-but-not-running count, which is what we
 	//    want for "is the worker keeping up?".
@@ -184,6 +203,41 @@ func (r *report) evaluate() {
 	if lag := peakValue(r.rec.scrapeSeries["event_relay_lag_seconds"]); lag > r.thresh.eventLagMaxSeconds {
 		r.Reasons = append(r.Reasons, fmt.Sprintf("event relay lag %.1fs exceeded %.1fs", lag, r.thresh.eventLagMaxSeconds))
 	}
+	totalRequests, failedRequests := 0, 0
+	for name, count := range r.rec.httpCount {
+		totalRequests += count
+		failedRequests += r.rec.httpErrors[name]
+		for status, statusCount := range r.rec.httpStatus[name] {
+			if stormQualifies && status == 503 {
+				statusCount -= r.rec.reconnectStorm.AgentRoute503ByName[name]
+				if statusCount < 0 {
+					statusCount = 0
+				}
+			}
+			if status < 200 || status >= 300 {
+				failedRequests += statusCount
+			}
+		}
+	}
+	if stormQualifies {
+		transient503s := 0
+		for _, count := range r.rec.reconnectStorm.AgentRoute503ByName {
+			transient503s += count
+		}
+		if transient503s > 0 {
+			r.Reasons = append(r.Reasons, fmt.Sprintf(
+				"INFO: reconnect storm produced %d expected agent-route 503 responses during bounded %s recovery",
+				transient503s, r.rec.reconnectStorm.RecoveredAt.Sub(r.rec.reconnectStorm.StartedAt).Round(time.Millisecond)))
+		}
+	}
+	if totalRequests > 0 {
+		if ratio := float64(failedRequests) / float64(totalRequests); ratio > r.thresh.httpErrorRatioMax {
+			r.Reasons = append(r.Reasons,
+				fmt.Sprintf("HTTP failure ratio %.6f exceeded %.6f (%d/%d)", ratio, r.thresh.httpErrorRatioMax, failedRequests, totalRequests))
+		}
+	}
+
+	auditConfigured := r.evaluateWorkloadConservation(totalRequests)
 	if r.cfg.certification {
 		if r.cfg.skipAgents || len(r.cfg.fixtureClusterIDs) == 0 {
 			r.Reasons = append(r.Reasons, "certification requires provisioned connected fixture clusters")
@@ -193,87 +247,12 @@ func (r *report) evaluate() {
 				r.Reasons = append(r.Reasons, "required scenario has no samples: "+scenario.name)
 			}
 		}
-		totalRequests, failedRequests := 0, 0
-		for name, count := range r.rec.httpCount {
-			totalRequests += count
-			failedRequests += r.rec.httpErrors[name]
-			for status, statusCount := range r.rec.httpStatus[name] {
-				if status < 200 || status >= 300 {
-					failedRequests += statusCount
-				}
-			}
-		}
 		if totalRequests == 0 {
 			r.Reasons = append(r.Reasons, "certification produced zero HTTP requests")
-		} else if ratio := float64(failedRequests) / float64(totalRequests); ratio > r.thresh.httpErrorRatioMax {
-			r.Reasons = append(r.Reasons,
-				fmt.Sprintf("HTTP failure ratio %.6f exceeded %.6f (%d/%d)", ratio, r.thresh.httpErrorRatioMax, failedRequests, totalRequests))
 		}
-		observed := time.Duration(0)
-		if !r.rec.startedAt.IsZero() && !r.rec.endedAt.IsZero() {
-			observed = r.rec.endedAt.Sub(r.rec.startedAt)
-		}
-		if r.cfg.duration > 0 && float64(observed)/float64(r.cfg.duration) < r.thresh.durationRatioMin {
-			r.Reasons = append(r.Reasons,
-				fmt.Sprintf("observed duration %s was below %.2f of declared %s", observed.Round(time.Second), r.thresh.durationRatioMin, r.cfg.duration))
-		}
-		expectedRequests := float64(r.cfg.rps) * minDuration(observed, r.cfg.duration).Seconds() * r.thresh.achievedRPSMin
-		if float64(totalRequests) < expectedRequests {
-			r.Reasons = append(r.Reasons,
-				fmt.Sprintf("recorded requests %d were below %.0f required for %.2f of target RPS", totalRequests, expectedRequests, r.thresh.achievedRPSMin))
-		}
-		for kind, declared := range map[string]int{
-			"PodList":        r.cfg.resources.PodsPerCluster,
-			"DeploymentList": r.cfg.resources.DeploymentsPerCluster,
-			"ServiceList":    r.cfg.resources.ServicesPerCluster,
-		} {
-			if declared > 0 && r.rec.resourceCardinality[kind] != declared {
-				r.Reasons = append(r.Reasons,
-					fmt.Sprintf("%s cardinality %d did not match declared %d", kind, r.rec.resourceCardinality[kind], declared))
-			}
-		}
-		if r.cfg.resources.EventsPerSecond > 0 {
-			expectedEvents := float64(r.cfg.resources.EventsPerSecond) * minDuration(observed, r.cfg.duration).Seconds() * r.thresh.eventRateRatioMin
-			if float64(r.rec.stateEventsEmitted) < expectedEvents {
-				r.Reasons = append(r.Reasons,
-					fmt.Sprintf("state events emitted %d were below %.0f required for %.2f of declared rate", r.rec.stateEventsEmitted, expectedEvents, r.thresh.eventRateRatioMin))
-			}
-		}
-		if r.cfg.mandatoryAudit.RatePerSecond <= 0 || r.cfg.mandatoryAudit.MaxOperations <= 0 {
+		if !auditConfigured {
 			r.Reasons = append(r.Reasons, "certification profile does not declare a mandatory-audit workload")
 		} else {
-			conservation := r.rec.auditConservation
-			auditWindow := conservation.WindowEndedAt.Sub(conservation.WindowStartedAt)
-			if auditWindow < 0 {
-				auditWindow = 0
-			}
-			requiredWindow := minDuration(observed, r.cfg.duration) * time.Duration(r.thresh.durationRatioMin*1000) / 1000
-			expectedAttempts := int(math.Ceil(
-				float64(r.cfg.mandatoryAudit.RatePerSecond) * minDuration(observed, r.cfg.duration).Seconds() * r.thresh.durationRatioMin,
-			))
-			if conservation.Attempted < expectedAttempts {
-				r.Reasons = append(r.Reasons,
-					fmt.Sprintf("mandatory-audit attempts %d were below %d required to sustain %d/s for the certified window",
-						conservation.Attempted, expectedAttempts, r.cfg.mandatoryAudit.RatePerSecond))
-			}
-			interval := time.Second / time.Duration(r.cfg.mandatoryAudit.RatePerSecond)
-			coverage := conservation.LastAcceptedAt.Sub(conservation.FirstAcceptedAt) + 2*interval
-			if coverage > auditWindow {
-				coverage = auditWindow
-			}
-			if auditWindow < requiredWindow || conservation.FirstAcceptedAt.IsZero() || conservation.LastAcceptedAt.IsZero() || coverage < requiredWindow {
-				r.Reasons = append(r.Reasons,
-					fmt.Sprintf("mandatory-audit activity covered %s of a %s window; need at least %s",
-						coverage.Round(time.Second), auditWindow.Round(time.Second), requiredWindow.Round(time.Second)))
-			}
-			if !conservation.Reconciled || conservation.Accepted != conservation.IntentsObserved ||
-				conservation.Accepted != conservation.CanonicalRows || conservation.Rejected != 0 ||
-				conservation.Duplicates != 0 || conservation.Lost != 0 {
-				r.Reasons = append(r.Reasons,
-					fmt.Sprintf("mandatory-audit conservation failed: accepted=%d intents=%d canonical=%d rejected=%d duplicates=%d lost=%d",
-						conservation.Accepted, conservation.IntentsObserved, conservation.CanonicalRows,
-						conservation.Rejected, conservation.Duplicates, conservation.Lost))
-			}
 			for _, evidence := range []struct {
 				name string
 				got  int
@@ -287,18 +266,6 @@ func (r *report) evaluate() {
 					r.Reasons = append(r.Reasons,
 						fmt.Sprintf("certification audit evidence %s has %d samples; need at least 2", evidence.name, evidence.got))
 				}
-			}
-			if delta := counterDelta(r.rec.scrapeSeries["audit_dropped_total"]); delta != 0 {
-				r.Reasons = append(r.Reasons, fmt.Sprintf("audit dropped counter grew by %.0f", delta))
-			}
-			if delta := counterDelta(r.rec.scrapeSeries["audit_write_failures_total"]); delta != 0 {
-				r.Reasons = append(r.Reasons, fmt.Sprintf("audit write-failure counter grew by %.0f", delta))
-			}
-			if dead := lastValue(r.rec.scrapeSeries["audit_outbox_dead_rows"]); dead != 0 {
-				r.Reasons = append(r.Reasons, fmt.Sprintf("audit outbox has %.0f dead rows", dead))
-			}
-			if active := lastValue(r.rec.scrapeSeries["audit_outbox_active_rows"]); active != 0 {
-				r.Reasons = append(r.Reasons, fmt.Sprintf("audit outbox did not drain: %.0f active rows", active))
 			}
 		}
 		if missing := loadCertificationMetadata().missing(); len(missing) > 0 {
@@ -342,6 +309,14 @@ func (r *report) evaluate() {
 	} else {
 		r.Verdict = "pass"
 	}
+}
+
+func reconnectStormRecoveryBudget(storm reconnectStormConfig) time.Duration {
+	jitter := storm.JitterDuration
+	if jitter <= 0 {
+		jitter = 15 * time.Second
+	}
+	return jitter + 30*time.Second
 }
 
 func minDuration(a, b time.Duration) time.Duration {
@@ -451,7 +426,7 @@ func (r *report) WriteFile(path string) error {
 	fmt.Fprintf(&sb, "| open-FD terminal/baseline absolute growth | <= %.0f |\n", r.thresh.openFDGrowthMax)
 	fmt.Fprintf(&sb, "| oldest worker queue item | <= %.0fs |\n", r.thresh.queueAgeMaxSeconds)
 	fmt.Fprintf(&sb, "| event relay lag | <= %.0fs |\n", r.thresh.eventLagMaxSeconds)
-	fmt.Fprintf(&sb, "| HTTP failure ratio | <= %.6f |\n", r.thresh.httpErrorRatioMax)
+	fmt.Fprintf(&sb, "| HTTP failure ratio outside bounded reconnect | <= %.6f |\n", r.thresh.httpErrorRatioMax)
 	fmt.Fprintf(&sb, "| achieved request rate | >= %.2f of target |\n", r.thresh.achievedRPSMin)
 	fmt.Fprintf(&sb, "| observed duration | >= %.2f of configured |\n", r.thresh.durationRatioMin)
 	fmt.Fprintf(&sb, "| emitted state-event rate | >= %.2f of declared |\n", r.thresh.eventRateRatioMin)
@@ -495,7 +470,9 @@ func (r *report) WriteFile(path string) error {
 	fmt.Fprintf(&sb, "| Deployment cardinality | %d | %d |\n", r.cfg.resources.DeploymentsPerCluster, r.rec.resourceCardinality["DeploymentList"])
 	fmt.Fprintf(&sb, "| Service cardinality | %d | %d |\n", r.cfg.resources.ServicesPerCluster, r.rec.resourceCardinality["ServiceList"])
 	fmt.Fprintf(&sb, "| State events / second | %d | %d total |\n", r.cfg.resources.EventsPerSecond, r.rec.stateEventsEmitted)
-	fmt.Fprintf(&sb, "| Mandatory audit attempted | %d | %d |\n", r.cfg.mandatoryAudit.MaxOperations, r.rec.auditConservation.Attempted)
+	auditTarget := mandatoryAuditTargetOperations(r.cfg.duration, r.cfg.mandatoryAudit.RatePerSecond)
+	fmt.Fprintf(&sb, "| Mandatory audit attempts (target; safety cap) | %d; %d | %d |\n",
+		auditTarget, r.cfg.mandatoryAudit.MaxOperations, r.rec.auditConservation.Attempted)
 	fmt.Fprintf(&sb, "| Mandatory audit accepted/intents/canonical | equal | %d/%d/%d |\n",
 		r.rec.auditConservation.Accepted, r.rec.auditConservation.IntentsObserved, r.rec.auditConservation.CanonicalRows)
 	fmt.Fprintf(&sb, "| Mandatory audit rejected/duplicate/lost | 0/0/0 | %d/%d/%d |\n",
@@ -534,6 +511,19 @@ func (r *report) WriteFile(path string) error {
 	fmt.Fprintf(&sb, "| Successful CONNECT_ACKs | %d |\n", r.rec.connectCount)
 	fmt.Fprintf(&sb, "| Disconnects (reconnect attempts) | %d |\n", r.rec.disconnectCount)
 	fmt.Fprintf(&sb, "| Connected at end (gauge) | %.0f |\n", lastValue(r.rec.scrapeSeries["agent_connections"]))
+	if r.cfg.reconnectStorm.Enabled {
+		recovery := "not recovered"
+		if !r.rec.reconnectStorm.StartedAt.IsZero() && !r.rec.reconnectStorm.RecoveredAt.IsZero() {
+			recovery = r.rec.reconnectStorm.RecoveredAt.Sub(r.rec.reconnectStorm.StartedAt).Round(time.Millisecond).String()
+		}
+		transient503s := 0
+		for _, count := range r.rec.reconnectStorm.AgentRoute503ByName {
+			transient503s += count
+		}
+		fmt.Fprintf(&sb, "| Reconnect storm recovered | %d/%d in %s |\n",
+			r.rec.reconnectStorm.ReconnectedAgents, r.rec.reconnectStorm.TargetAgents, recovery)
+		fmt.Fprintf(&sb, "| Agent-route 503s inside recovery window | %d |\n", transient503s)
+	}
 	sb.WriteString("\n")
 
 	// ── Server resource peaks
@@ -832,7 +822,8 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 		samples := r.rec.httpSamples[name]
 		scenarios[name] = map[string]any{
 			"requests": count, "errors": r.rec.httpErrors[name], "status_codes": r.rec.httpStatus[name],
-			"p50_ms": percentile(samples, .50).Milliseconds(), "p95_ms": percentile(samples, .95).Milliseconds(),
+			"bounded_reconnect_503s": r.rec.reconnectStorm.AgentRoute503ByName[name],
+			"p50_ms":                 percentile(samples, .50).Milliseconds(), "p95_ms": percentile(samples, .95).Milliseconds(),
 			"p99_ms": percentile(samples, .99).Milliseconds(),
 		}
 	}
@@ -848,7 +839,10 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 	}
 	conservation := map[string]any{
 		"run_id": r.rec.auditConservation.RunID, "attempted": r.rec.auditConservation.Attempted,
-		"accepted": r.rec.auditConservation.Accepted, "rejected": r.rec.auditConservation.Rejected,
+		"rate_per_second":       r.cfg.mandatoryAudit.RatePerSecond,
+		"target_operations":     mandatoryAuditTargetOperations(r.cfg.duration, r.cfg.mandatoryAudit.RatePerSecond),
+		"safety_cap_operations": r.cfg.mandatoryAudit.MaxOperations,
+		"accepted":              r.rec.auditConservation.Accepted, "rejected": r.rec.auditConservation.Rejected,
 		"intents_observed": r.rec.auditConservation.IntentsObserved, "canonical_rows": r.rec.auditConservation.CanonicalRows,
 		"duplicates": r.rec.auditConservation.Duplicates, "lost": r.rec.auditConservation.Lost,
 		"reconciled":          r.rec.auditConservation.Reconciled,
@@ -888,6 +882,16 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 			"terminal_window_average": terminal, "sufficient_evidence": ok,
 		}
 	}
+	reconnectStorm := map[string]any{
+		"configured":           r.cfg.reconnectStorm.Enabled,
+		"target_agents":        r.rec.reconnectStorm.TargetAgents,
+		"reconnected_agents":   r.rec.reconnectStorm.ReconnectedAgents,
+		"started_at":           optionalTimestamp(r.rec.reconnectStorm.StartedAt),
+		"recovered_at":         optionalTimestamp(r.rec.reconnectStorm.RecoveredAt),
+		"recovery_duration_ms": optionalDurationMilliseconds(r.rec.reconnectStorm.StartedAt, r.rec.reconnectStorm.RecoveredAt),
+		"recovery_budget_ms":   reconnectStormRecoveryBudget(r.cfg.reconnectStorm).Milliseconds(),
+		"agent_route_503s":     r.rec.reconnectStorm.AgentRoute503ByName,
+	}
 	rawScrapes := map[string]any{}
 	for name, series := range r.rec.scrapeSeries {
 		points := make([]map[string]any, 0, len(series))
@@ -909,6 +913,7 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 		"resource_cardinality": cardinality, "state_events_emitted": r.rec.stateEventsEmitted,
 		"mandatory_audit": conservation, "audit_metrics": auditMetrics,
 		"component_metrics": componentMetrics,
+		"reconnect_storm":   reconnectStorm,
 		"scrape_series":     rawScrapes,
 		"leak_evidence":     leakEvidence,
 		"thresholds": map[string]any{
@@ -926,6 +931,20 @@ func (r *report) writeMachineArtifacts(path string, markdown []byte, metadata ce
 	digest := sha256.Sum256(markdown)
 	digestLine := fmt.Sprintf("%x  %s\n", digest, filepath.Base(path))
 	return os.WriteFile(path+".sha256", []byte(digestLine), 0o644)
+}
+
+func optionalTimestamp(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func optionalDurationMilliseconds(start, end time.Time) int64 {
+	if start.IsZero() || end.IsZero() || end.Before(start) {
+		return 0
+	}
+	return end.Sub(start).Milliseconds()
 }
 
 func componentRateEvidence(series []scrapePoint, unit string, declaredLoad float64) map[string]any {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,13 +20,14 @@ import (
 )
 
 func TestCharlieOperationRouteUsesCanonicalTrailingSlash(t *testing.T) {
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		CharlieOperations: handler.NewCharlieOperationHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{AdminPlatform: AdminPlatformDependencies{CharlieOperations: handler.NewCharlieOperationHandler(nil)}})
 
 	found := false
 	if err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		if method == http.MethodGet && route == "/api/v1/charlie/operations/{operation_id}/" {
+		// Protected routes live below a fail-closed child router, which chi.Walk
+		// represents with a wildcard mount segment. The contract under test is
+		// the canonical trailing slash on the operation route itself.
+		if method == http.MethodGet && strings.HasSuffix(route, "/charlie/operations/{operation_id}/") {
 			found = true
 		}
 		return nil
@@ -95,14 +97,7 @@ func TestCharlieAdminRoutesRejectNonAdminWithoutManagePermission(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:               jwt,
-		RBACEngine:        rbac.NewEngine(),
-		RBACQueries:       routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceCharlie, rbac.VerbRead)},
-		SettingsCache:     handler.NewSettingsCache(charlieEnabledSettings{}, time.Minute),
-		CharlieAdmin:      handler.NewCharlieAdminHandler(nil, nil),
-		CharlieOnboarding: handler.NewCharlieOnboardingHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwt, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceCharlie, rbac.VerbRead)}, SettingsCache: handler.NewSettingsCache(charlieEnabledSettings{}, time.Minute)}, AdminPlatform: AdminPlatformDependencies{CharlieAdmin: handler.NewCharlieAdminHandler(nil, nil), CharlieOnboarding: handler.NewCharlieOnboardingHandler(nil)}})
 
 	eventID := "22222222-2222-4222-8222-222222222222"
 	ruleID := "11111111-1111-4111-8111-111111111111"

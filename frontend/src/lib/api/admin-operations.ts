@@ -13,6 +13,7 @@ import {
   postAdminQueuesByQueueDlqByIdRetry,
 } from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
+import { mapPage } from "@/lib/api/pagination";
 import type { PaginatedResponse } from "@/types";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 
@@ -123,17 +124,13 @@ export async function listTaskOutbox(
     query: { status: status || undefined, limit: 100 },
     signal,
   });
-  const count = response.count ?? response.data?.length ?? 0;
-  return {
-    data: (response.data ?? []) as TaskOutboxEntry[],
-    total: count,
-    count,
-    next: response.next ?? null,
-    previous: response.previous ?? null,
-    page: 1,
-    pageSize: 100,
-    totalPages: Math.max(1, Math.ceil(count / 100)),
-  };
+  return mapPage(
+    {
+      data: (response.data ?? []) as TaskOutboxEntry[],
+      pagination: response.pagination,
+    },
+    (item) => item,
+  );
 }
 
 export async function retryTaskOutbox(

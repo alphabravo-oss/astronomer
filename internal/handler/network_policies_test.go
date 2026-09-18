@@ -188,6 +188,11 @@ func (f *fakeNetPolHandlerQuerier) CreateNetworkPolicyApplication(_ context.Cont
 	f.applications[id] = app
 	return app, nil
 }
+func newNetworkPolicyHandlerForTest(q *fakeNetPolHandlerQuerier) *NetworkPolicyHandler {
+	h := NewNetworkPolicyHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(NetworkPolicyMutationTx) error) error { return fn(q) })
+	return h
+}
 func (f *fakeNetPolHandlerQuerier) DeleteNetworkPolicyApplication(_ context.Context, id uuid.UUID) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -296,7 +301,7 @@ func TestNetPolHandler_TestApply_RejectsBuiltinTemplateEdit(t *testing.T) {
 	q.templates[tmpl.ID] = tmpl
 	q.bySlug[tmpl.Slug] = tmpl.ID
 
-	h := NewNetworkPolicyHandler(q)
+	h := newNetworkPolicyHandlerForTest(q)
 	body, _ := json.Marshal(CreateNetworkPolicyTemplateRequest{
 		Name:         "Evil",
 		SpecTemplate: tmpl.SpecTemplate,
@@ -323,7 +328,7 @@ func TestNetPolHandler_CloneFromBuiltin_CreatesCustom(t *testing.T) {
 	q.templates[src.ID] = src
 	q.bySlug[src.Slug] = src.ID
 
-	h := NewNetworkPolicyHandler(q)
+	h := newNetworkPolicyHandlerForTest(q)
 	body, _ := json.Marshal(CreateNetworkPolicyTemplateRequest{
 		CloneFrom: src.Slug,
 		Slug:      "my_deny",
@@ -362,7 +367,7 @@ func TestNetPolHandler_Delete_RevokesInClusterResource(t *testing.T) {
 	}
 	q.applications[app.ID] = app
 
-	h := NewNetworkPolicyHandler(q)
+	h := newNetworkPolicyHandlerForTest(q)
 	rk := &captureRequester{status: 200}
 	h.SetK8sRequester(rk)
 
@@ -469,7 +474,7 @@ func TestNetPolHandler_RequiresClusterUpdate(t *testing.T) {
 // the router layer. The handler doesn't enforce a separate permission.
 func TestNetPolHandler_RequiresSuperuser_OnTemplates(t *testing.T) {
 	q := newFakeNetPolHandlerQuerier()
-	h := NewNetworkPolicyHandler(q)
+	h := newNetworkPolicyHandlerForTest(q)
 	body, _ := json.Marshal(CreateNetworkPolicyTemplateRequest{
 		Slug:         "my_custom",
 		Name:         "My Custom",

@@ -1,33 +1,50 @@
 import { useState } from "react";
-import { Download, LifeBuoy } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { CheckCircle2, Download, LifeBuoy, LoaderCircle } from "lucide-react";
 import { downloadBlob } from "@/lib/utils";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
+import { QueryStates } from "@/components/ui/query-states";
+import {
+  createSupportBundle,
+  downloadSupportBundleArtifact,
+  getSupportBundleOperation,
+} from "@/lib/api/support-bundles";
+import { queryKeys } from "@/lib/query-keys";
+import { BUILD_INFO } from "@/lib/env";
 
-// SupportTab renders the "Download support bundle" button. The bundle
-// itself is a streaming zip from /api/v1/support-bundle/; superusers only.
-// Errors are surfaced via toast.
 export function SupportTab() {
+  const [operationId, setOperationId] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
 
+  const createMutation = useMutation({
+    mutationFn: () => createSupportBundle(),
+    onSuccess: (operation) => setOperationId(operation.id),
+    onError: (error) => toastError(error.message),
+  });
+  const operationQuery = useQuery({
+    queryKey: queryKeys.settings.supportBundleOperation(operationId),
+    queryFn: ({ signal }) => getSupportBundleOperation(operationId!, signal),
+    enabled: operationId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "succeeded" || status === "failed" ? false : 2000;
+    },
+  });
+  const operation = operationQuery.data;
+  const collecting =
+    createMutation.isPending ||
+    operation?.status === "pending" ||
+    operation?.status === "running" ||
+    operation?.status === "retrying";
+
   const handleDownload = async () => {
+    if (!operationId) return;
     setDownloading(true);
     try {
-      // Use the shared axios instance so the JWT/auth interceptor stamps
-      // the request; force a binary response so axios doesn't try to JSON-
-      // decode the zip stream.
-      const { default: api } = await import("@/lib/api");
-      const res = await api.get("/support-bundle", {
-        responseType: "blob",
-        timeout: 120000,
-      });
-      // Server already proposes a filename via Content-Disposition; if axios
-      // didn't surface it, fall back to a sane default.
-      const disposition = res.headers?.["content-disposition"] || "";
-      const match = /filename="([^"]+)"/.exec(disposition);
-      const filename =
-        match?.[1] || `astronomer-support-bundle-${Date.now()}.zip`;
-      downloadBlob(new Blob([res.data], { type: "application/zip" }), filename);
+      const { blob, filename } =
+        await downloadSupportBundleArtifact(operationId);
+      downloadBlob(blob, filename);
       toastSuccess("Support bundle downloaded");
     } catch (err) {
       const message =
@@ -43,17 +60,41 @@ export function SupportTab() {
   return (
     <div className="max-w-2xl space-y-6">
       <div className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">
+            Build information
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Include these immutable build details when reporting a problem.
+          </p>
+        </div>
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          {[
+            ["Version", BUILD_INFO.version],
+            ["Commit", BUILD_INFO.commit],
+            ["Build date", BUILD_INFO.date],
+            ["Build Node", BUILD_INFO.node],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd className="mt-0.5 break-all font-mono text-xs text-foreground">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
         <div className="flex items-start gap-3">
-          <LifeBuoy className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <LifeBuoy className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-foreground">
               Support bundle
             </h3>
             <p className="text-sm text-muted-foreground">
-              Downloads a zip with platform metadata, cluster rows, recent audit
-              log entries, and the last 200 lines of logs from each
-              control-plane pod. Useful when filing a bug or escalating to
-              support.
+              Collects platform metadata, recent audit entries, Kubernetes
+              events, Helm state, and bounded control-plane logs in a durable
+              background operation. You can leave this page while it runs.
             </p>
             <p className="text-xs text-muted-foreground">
               Passwords, CA certs, encrypted tokens, credential-shaped values,
@@ -62,14 +103,56 @@ export function SupportTab() {
             </p>
           </div>
         </div>
+        {operationId &&
+          (operationQuery.isLoading || operationQuery.isError) && (
+            <QueryStates
+              query={operationQuery}
+              permission="support_bundles:read"
+            >
+              {() => null}
+            </QueryStates>
+          )}
         <ActionButton
           intent="primary"
-          icon={<Download className="h-4 w-4" />}
-          loading={downloading}
-          onClick={handleDownload}
+          icon={
+            operation?.status === "succeeded" ? (
+              <Download className="h-4 w-4" />
+            ) : (
+              <LoaderCircle className="h-4 w-4" />
+            )
+          }
+          loading={collecting || downloading}
+          onClick={
+            operation?.status === "succeeded"
+              ? handleDownload
+              : () => createMutation.mutate()
+          }
         >
-          Download support bundle
+          {operation?.status === "succeeded"
+            ? "Download support bundle"
+            : collecting
+              ? "Collecting support bundle"
+              : "Generate support bundle"}
         </ActionButton>
+        {operation && (
+          <div
+            className="flex items-center gap-2 text-xs text-muted-foreground"
+            aria-live="polite"
+          >
+            {operation.status === "succeeded" ? (
+              <CheckCircle2 className="h-4 w-4 text-status-success" />
+            ) : collecting ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : null}
+            <span>
+              {operation.status === "failed"
+                ? `Collection failed: ${operation.error_code || "generation_failed"}`
+                : operation.status === "succeeded"
+                  ? `Ready · ${(operation.size / 1024 / 1024).toFixed(1)} MiB · retained for 24 hours`
+                  : `Status: ${operation.status} · attempt ${Math.max(1, operation.attempt_count)}`}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

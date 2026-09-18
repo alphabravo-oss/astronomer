@@ -2,7 +2,7 @@
  * Control-plane (etcd) snapshot API client — pairs with the be-etcd handler
  * mounted under `/api/v1/clusters/{cluster_id}/control-plane-snapshots/…`.
  *
- * Unlike the Velero workload snapshots in ./cluster-detail.ts, these capture
+ * Unlike the Velero workload snapshots in ./cluster-velero.ts, these capture
  * the cluster's etcd/control-plane state. Restore is deliberately NOT
  * automated: the API returns human-readable runbook guidance and the operator
  * performs the restore out-of-band, so there is no "restore now" mutation here.
@@ -22,6 +22,8 @@ import {
   getControlPlaneSnapshotRestoreGuidance as getControlPlaneSnapshotRestoreGuidanceOperation,
   listControlPlaneSnapshots as listControlPlaneSnapshotsOperation,
 } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
+import type { PaginatedResponse } from "@/types";
 import { createIdempotencyKey } from "@/lib/api/idempotency";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 
@@ -88,13 +90,15 @@ export interface RestoreGuidance {
 
 export async function listControlPlaneSnapshots(
   clusterId: string,
+  params: { limit?: number; offset?: number } = {},
   signal?: AbortSignal,
-): Promise<ControlPlaneSnapshot[]> {
+): Promise<PaginatedResponse<ControlPlaneSnapshot>> {
   const response = await listControlPlaneSnapshotsOperation({
     path: { cluster_id: clusterId },
+    query: params,
     signal,
   });
-  return (response.data?.items ?? []).map(snapshotFromWire);
+  return mapPage(response, snapshotFromWire);
 }
 
 export async function getControlPlaneSnapshot(
@@ -142,13 +146,18 @@ export async function getControlPlaneSnapshotRestoreGuidance(
     snapshotId,
     distribution: wire.distribution,
     steps: wire.steps,
-    guidance: [wire.summary, wire.warning, wire.docs_url].filter(Boolean).join("\n\n"),
+    guidance: [wire.summary, wire.warning, wire.docs_url]
+      .filter(Boolean)
+      .join("\n\n"),
   };
 }
 
-type ControlPlaneSnapshotWire = OpenAPIComponents["schemas"]["ControlPlaneSnapshotWire"];
+type ControlPlaneSnapshotWire =
+  OpenAPIComponents["schemas"]["ControlPlaneSnapshotWire"];
 
-function snapshotFromWire(wire: ControlPlaneSnapshotWire): ControlPlaneSnapshot {
+function snapshotFromWire(
+  wire: ControlPlaneSnapshotWire,
+): ControlPlaneSnapshot {
   return {
     id: wire.id,
     clusterId: wire.cluster_id,

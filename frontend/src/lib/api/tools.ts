@@ -7,6 +7,8 @@ import {
   postToolsBySlugAdopt,
   postToolsBySlugInstall,
   postToolsBySlugPreview,
+  postToolsBySlugRollback,
+  postToolsOperationsByIdRetry,
   putToolsBySlugUpgrade,
 } from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
@@ -24,6 +26,7 @@ import type { OpenAPIComponents } from "@/types/openapi.generated";
 type Schemas = OpenAPIComponents["schemas"];
 
 const TOOL_CATEGORIES = new Set<ToolCategory>([
+  "storage",
   "auth",
   "backup",
   "logging",
@@ -76,6 +79,9 @@ export function mapClusterTool(wire: Schemas["ClusterTool"]): ClusterTool {
       repoUrl: chart.repo_url,
       namespace: chart.namespace,
       order: chart.order,
+      releaseName: chart.release_name,
+      version: chart.version,
+      valuesKey: chart.values_key,
     })),
     versionConstraint: wire.version_constraint,
     defaultNamespace: wire.default_namespace,
@@ -115,6 +121,7 @@ function mapToolPreview(wire: Schemas["ToolPreview"]): ToolPreviewResponse {
     charts: wire.charts.map((chart) => ({
       chartName: chart.chart_name,
       chartVersion: chart.chart_version,
+      releaseName: chart.release_name,
       namespace: chart.namespace,
       valuesYaml: chart.values_yaml,
     })),
@@ -195,6 +202,30 @@ export async function uninstallTool(
     body: data,
   });
   return requireData(response, "uninstallTool");
+}
+
+export async function rollbackTool(
+  slug: string,
+  data: { cluster_id: string },
+): Promise<ToolOperation> {
+  return requireData(
+    await postToolsBySlugRollback({
+      path: { slug },
+      headerParams: idempotencyHeaderParams(),
+      body: data,
+    }),
+    "rollbackTool",
+  );
+}
+
+export async function retryToolOperation(id: string): Promise<ToolOperation> {
+  return requireData(
+    await postToolsOperationsByIdRetry({
+      path: { id },
+      headerParams: idempotencyHeaderParams(),
+    }),
+    "retryToolOperation",
+  );
 }
 
 export async function adoptTool(

@@ -2,9 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RestoreModal } from "./restore-modal";
 import type { BackupRun } from "@/types";
 
-// Router is only used for the post-success redirect; a no-op push is enough.
-vi.mock("@/lib/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+// Navigation is only used for the post-success redirect.
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => vi.fn(),
 }));
 
 // Capture the restore-creation call so we can assert on the request body.

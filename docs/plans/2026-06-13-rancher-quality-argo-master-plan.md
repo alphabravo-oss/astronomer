@@ -1,5 +1,7 @@
 # Rancher-Quality Argo-Based Management Master Plan
 
+> **Status: superseded.** The Argo-based architecture was replaced by Flux-native delivery. See `docs/architecture/decisions/flux-native-delivery.md` and advisor review 010.
+
 Date: 2026-06-13
 Status: In progress
 Scope: Rancher-quality management for adopted clusters, using Argo CD instead of Fleet, with cluster provisioning intentionally excluded.

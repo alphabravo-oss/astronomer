@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countNativeRBACRulesByUser = `-- name: CountNativeRBACRulesByUser :one
+SELECT count(*) FROM native_rbac_rules WHERE user_id = $1
+`
+
+func (q *Queries) CountNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countNativeRBACRulesByUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createNativeRBACRule = `-- name: CreateNativeRBACRule :one
 
 INSERT INTO native_rbac_rules (
@@ -171,6 +182,53 @@ ORDER BY created_at DESC
 // a user's full rule set, newest first. The hot-path caller caches the result.
 func (q *Queries) ListNativeRBACRulesByUser(ctx context.Context, userID uuid.UUID) ([]NativeRbacRule, error) {
 	rows, err := q.db.Query(ctx, listNativeRBACRulesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NativeRbacRule{}
+	for rows.Next() {
+		var i NativeRbacRule
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ClusterID,
+			&i.Namespace,
+			&i.ApiGroup,
+			&i.Resource,
+			&i.Verbs,
+			&i.CreatedAt,
+			&i.CreatedByID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNativeRBACRulesByUserPage = `-- name: ListNativeRBACRulesByUserPage :many
+SELECT id, user_id, cluster_id, namespace, api_group, resource, verbs,
+       created_at, created_by_id
+FROM native_rbac_rules
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListNativeRBACRulesByUserPageParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	QueryOffset int32     `json:"query_offset"`
+	QueryLimit  int32     `json:"query_limit"`
+}
+
+// Bounded admin authoring view. Authorization evaluation deliberately keeps
+// using ListNativeRBACRulesByUser so it evaluates the complete cached rule set.
+func (q *Queries) ListNativeRBACRulesByUserPage(ctx context.Context, arg ListNativeRBACRulesByUserPageParams) ([]NativeRbacRule, error) {
+	rows, err := q.db.Query(ctx, listNativeRBACRulesByUserPage, arg.UserID, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}

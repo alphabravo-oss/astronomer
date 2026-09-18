@@ -44,6 +44,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/events"
 )
 
 // Task type constants. Re-exported in internal/worker/worker.go for the
@@ -190,6 +191,7 @@ type ClusterSnapshotDeps struct {
 	Queries ClusterSnapshotPollQuerier
 	Driver  VeleroSnapshotDriver
 	Log     *slog.Logger
+	Bus     *events.Bus
 }
 
 // terminalSnapshotPhases is the set of Velero BackupStatus.Phase values
@@ -398,7 +400,7 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		// Velero removed the CR (TTL sweep, operator kubectl delete).
 		// Move the row to the terminal "Deleted" phase so the cleanup
 		// worker can drop it. Stop polling.
-		return deps.Queries.MarkSnapshotPhase(ctx, sqlc.MarkSnapshotPhaseParams{
+		if err := deps.Queries.MarkSnapshotPhase(ctx, sqlc.MarkSnapshotPhaseParams{
 			ID:             row.ID,
 			Phase:          "Deleted",
 			StartTime:      row.StartTime,
@@ -406,7 +408,11 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 			WarningsCount:  row.WarningsCount,
 			ErrorsCount:    row.ErrorsCount,
 			LastPollError:  "",
-		})
+		}); err != nil {
+			return err
+		}
+		events.PublishChanged(deps.Bus, "snapshot", row.ClusterID.String(), row.ID.String(), map[string]any{"kind": "snapshot"})
+		return nil
 	}
 
 	nextPhase := status.Phase
@@ -444,6 +450,9 @@ func pollOneSnapshot(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clu
 		// the worker calls into a thin shim so we don't pull in the
 		// prometheus client direct here.
 		recordSnapshotOutcome(row.ClusterID.String(), outcomeForPhase(nextPhase))
+	}
+	if row.Phase != nextPhase {
+		events.PublishChanged(deps.Bus, "snapshot", row.ClusterID.String(), row.ID.String(), map[string]any{"kind": "snapshot"})
 	}
 	return nil
 }
@@ -493,7 +502,7 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 			}
 			return nil
 		}
-		return deps.Queries.MarkRestorePhase(ctx, sqlc.MarkRestorePhaseParams{
+		if err := deps.Queries.MarkRestorePhase(ctx, sqlc.MarkRestorePhaseParams{
 			ID:             row.ID,
 			Phase:          "Deleted",
 			StartTime:      row.StartTime,
@@ -501,7 +510,11 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 			WarningsCount:  row.WarningsCount,
 			ErrorsCount:    row.ErrorsCount,
 			LastPollError:  "",
-		})
+		}); err != nil {
+			return err
+		}
+		events.PublishChanged(deps.Bus, "snapshot", row.TargetClusterID.String(), row.ID.String(), map[string]any{"kind": "restore"})
+		return nil
 	}
 	nextPhase := status.Phase
 	if nextPhase == "" {
@@ -515,7 +528,7 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 	if !status.CompletionTime.IsZero() {
 		ct = pgtype.Timestamptz{Time: status.CompletionTime, Valid: true}
 	}
-	return deps.Queries.MarkRestorePhase(ctx, sqlc.MarkRestorePhaseParams{
+	if err := deps.Queries.MarkRestorePhase(ctx, sqlc.MarkRestorePhaseParams{
 		ID:             row.ID,
 		Phase:          nextPhase,
 		StartTime:      st,
@@ -523,7 +536,13 @@ func pollOneRestore(ctx context.Context, deps ClusterSnapshotDeps, row sqlc.Clus
 		WarningsCount:  int32(status.Warnings),
 		ErrorsCount:    int32(status.Errors),
 		LastPollError:  status.ValidationError,
-	})
+	}); err != nil {
+		return err
+	}
+	if row.Phase != nextPhase {
+		events.PublishChanged(deps.Bus, "snapshot", row.TargetClusterID.String(), row.ID.String(), map[string]any{"kind": "restore"})
+	}
+	return nil
 }
 
 // ----------------------------------------------------------------------
@@ -636,6 +655,7 @@ func fireScheduledSnapshot(ctx context.Context, deps ClusterSnapshotDeps, sched 
 	if err != nil {
 		return fmt.Errorf("create snapshot row: %w", err)
 	}
+	events.PublishChanged(deps.Bus, "snapshot", row.ClusterID.String(), row.ID.String(), map[string]any{"kind": "snapshot"})
 
 	if err := deps.Driver.CreateSnapshot(ctx, row); err != nil {
 		// Leave desired state retryable. The poller repairs every New row
@@ -705,7 +725,9 @@ func (runtime ClusterSnapshotRuntime) HandleClusterSnapshotCleanupExpired(ctx co
 			if err := deps.Queries.DeleteClusterSnapshot(ctx, row.ID); err != nil {
 				logSnapshotErr(deps.Log, "delete expired snapshot "+row.ID.String(), err)
 				batchErr = errors.Join(batchErr, fmt.Errorf("delete expired snapshot %s: %w", row.ID, err))
+				continue
 			}
+			events.PublishChanged(deps.Bus, "snapshot", row.ClusterID.String(), row.ID.String(), map[string]any{"kind": "snapshot"})
 		}
 		return batchErr
 	})
@@ -728,54 +750,4 @@ func NewClusterSnapshotDispatchScheduledTask() (*asynq.Task, error) {
 // NewClusterSnapshotCleanupExpiredTask returns the cleanup task.
 func NewClusterSnapshotCleanupExpiredTask() (*asynq.Task, error) {
 	return asynq.NewTask(ClusterSnapshotCleanupExpiredType, nil), nil
-}
-
-// ----------------------------------------------------------------------
-// Metric / log shim
-// ----------------------------------------------------------------------
-
-// recordSnapshotOutcome is the worker-side hook into the handler's
-// cluster_snapshots_total Counter. We resolve it through a function
-// variable so the handler package wires it once at startup (avoiding
-// a tasks → handler import cycle).
-var recordSnapshotOutcome = func(clusterID, outcome string) {
-	// no-op until the handler wires SetSnapshotOutcomeRecorder.
-}
-
-// SetSnapshotOutcomeRecorder swaps the metric callback. Called once
-// from the handler package at startup.
-func SetSnapshotOutcomeRecorder(fn func(clusterID, outcome string)) {
-	if fn == nil {
-		return
-	}
-	recordSnapshotOutcome = fn
-}
-
-// setInFlightSnapshotGauge is the worker-side hook into the handler's
-// cluster_snapshots_in_flight GaugeVec. Resolved through a function
-// variable (like recordSnapshotOutcome) so the handler package wires it
-// once at startup without a tasks → handler import cycle. No-op until wired.
-var setInFlightSnapshotGauge = func(clusterID string, count float64) {}
-
-// SetInFlightSnapshotGaugeSetter swaps the in-flight gauge callback.
-// Called once from the handler package at startup.
-func SetInFlightSnapshotGaugeSetter(fn func(clusterID string, count float64)) {
-	if fn == nil {
-		return
-	}
-	setInFlightSnapshotGauge = fn
-}
-
-func logSnapshotErr(log *slog.Logger, msg string, err error) {
-	if err == nil {
-		return
-	}
-	if log == nil {
-		return
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		// Don't spam the log on graceful shutdown.
-		return
-	}
-	log.Warn("cluster snapshot worker", "phase", msg, "error", err.Error())
 }

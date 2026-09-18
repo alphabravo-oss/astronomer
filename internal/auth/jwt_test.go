@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -197,7 +198,7 @@ func TestJWTManager(t *testing.T) {
 			},
 		},
 		{
-			name: "default access lifetime is 60 minutes when zero provided",
+			name: "default access lifetime is 15 minutes when zero provided",
 			run: func(t *testing.T) {
 				mgr := MustNewJWTManager(secretKey, 0)
 
@@ -211,8 +212,8 @@ func TestJWTManager(t *testing.T) {
 					t.Fatalf("ValidateToken() error = %v", err)
 				}
 
-				// Expiry should be approximately 60 minutes from now
-				expectedExpiry := time.Now().Add(60 * time.Minute)
+				// Expiry should be approximately 15 minutes from now.
+				expectedExpiry := time.Now().Add(15 * time.Minute)
 				diff := claims.ExpiresAt.Sub(expectedExpiry)
 				if diff < -5*time.Second || diff > 5*time.Second {
 					t.Errorf("expiry %v not within 5s of expected %v", claims.ExpiresAt.Time, expectedExpiry)
@@ -234,7 +235,7 @@ func TestJWTManager(t *testing.T) {
 					t.Fatalf("ValidateToken() error = %v", err)
 				}
 
-				expectedExpiry := time.Now().Add(60 * time.Minute)
+				expectedExpiry := time.Now().Add(15 * time.Minute)
 				diff := claims.ExpiresAt.Sub(expectedExpiry)
 				if diff < -5*time.Second || diff > 5*time.Second {
 					t.Errorf("expiry %v not within 5s of expected %v", claims.ExpiresAt.Time, expectedExpiry)
@@ -251,7 +252,7 @@ func TestJWTManager(t *testing.T) {
 // AUTH-R02: session.timeout_minutes provider is applied at access-token mint
 // without requiring each caller to SetAccessTokenTTL first.
 func TestAccessTokenTTLProviderAppliedAtMint(t *testing.T) {
-	mgr := MustNewJWTManager("ttl-provider-secret", 60) // boot default 60m
+	mgr := MustNewJWTManager("ttl-provider-secret", 15)
 	mgr.SetAccessTokenTTLProvider(func(context.Context) time.Duration {
 		return 15 * time.Minute
 	})
@@ -270,8 +271,8 @@ func TestAccessTokenTTLProviderAppliedAtMint(t *testing.T) {
 		t.Errorf("expiry %v not within 5s of provider TTL %v (diff %v)", claims.ExpiresAt.Time, expected, diff)
 	}
 	// Boot TTL unchanged; provider only affects mint.
-	if mgr.AccessTokenTTL() != 60*time.Minute {
-		t.Errorf("AccessTokenTTL() = %v, want 60m base", mgr.AccessTokenTTL())
+	if mgr.AccessTokenTTL() != 15*time.Minute {
+		t.Errorf("AccessTokenTTL() = %v, want 15m base", mgr.AccessTokenTTL())
 	}
 }
 
@@ -280,6 +281,96 @@ func TestNewJWTManagerBoundsBootSessionTimeout(t *testing.T) {
 		mgr := MustNewJWTManager("test-secret", minutes)
 		if got := mgr.AccessTokenTTL(); got != sessionpolicy.DefaultMinutes*time.Minute {
 			t.Errorf("MustNewJWTManager(_, %d) TTL = %s, want %s", minutes, got, sessionpolicy.DefaultMinutes*time.Minute)
+		}
+	}
+}
+
+func TestValidateTokenRejectsDifferentHMACAlgorithm(t *testing.T) {
+	const secret = "exact-algorithm-test-secret"
+	mgr := MustNewJWTManager(secret, sessionpolicy.DefaultMinutes)
+	token, err := mgr.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _, err := jwt.NewParser().ParseUnverified(token, &Claims{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged := jwt.NewWithClaims(jwt.SigningMethodHS384, parsed.Claims)
+	wrongAlgorithmToken, err := forged.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.ValidateToken(wrongAlgorithmToken); err == nil || !strings.Contains(err.Error(), "signing method") {
+		t.Fatalf("ValidateToken(HS384) error = %v, want exact-algorithm rejection", err)
+	}
+}
+
+func TestJWTManagerEnforcesTrustAndSessionContext(t *testing.T) {
+	const secret = "strict-context-test-secret"
+	mgr, err := NewJWTManagerWithConfig(JWTConfig{
+		SecretKey: secret, AccessLifetimeMinutes: 15,
+		Issuer: "https://control.example.test", Audience: "astronomer-console",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	userID := uuid.New()
+	access, refresh, err := mgr.GenerateTokenPair(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessClaims, err := mgr.ValidateToken(access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refreshClaims, err := mgr.ValidateToken(refresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accessClaims.Issuer != "https://control.example.test" || accessClaims.Subject != userID.String() ||
+		len(accessClaims.Audience) != 1 || accessClaims.Audience[0] != "astronomer-console" || accessClaims.ID == "" {
+		t.Fatalf("access trust context is incomplete: %#v", accessClaims.RegisteredClaims)
+	}
+	if accessClaims.SessionFamilyID == uuid.Nil || accessClaims.SessionFamilyID != refreshClaims.SessionFamilyID {
+		t.Fatalf("token pair family mismatch: %s / %s", accessClaims.SessionFamilyID, refreshClaims.SessionFamilyID)
+	}
+
+	sign := func(claims Claims) string {
+		t.Helper()
+		raw, signErr := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+		if signErr != nil {
+			t.Fatal(signErr)
+		}
+		return raw
+	}
+	tests := map[string]func(*Claims){
+		"wrong issuer":     func(c *Claims) { c.Issuer = "other" },
+		"wrong audience":   func(c *Claims) { c.Audience = jwt.ClaimStrings{"other"} },
+		"subject mismatch": func(c *Claims) { c.Subject = uuid.NewString() },
+		"missing jti":      func(c *Claims) { c.ID = "" },
+		"missing family":   func(c *Claims) { c.SessionFamilyID = uuid.Nil },
+		"unsupported type": func(c *Claims) { c.TokenType = TokenType("admin") },
+		"session purpose":  func(c *Claims) { c.Purpose = "totp_challenge" },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			claims := *accessClaims
+			mutate(&claims)
+			if _, validateErr := mgr.ValidateToken(sign(claims)); validateErr == nil {
+				t.Fatal("validation accepted malformed trust/session context")
+			}
+		})
+	}
+}
+
+func TestNewJWTManagerWithConfigRejectsEmptyTrustContext(t *testing.T) {
+	for _, cfg := range []JWTConfig{
+		{SecretKey: "secret", Audience: "audience"},
+		{SecretKey: "secret", Issuer: "issuer"},
+	} {
+		if _, err := NewJWTManagerWithConfig(cfg); err == nil {
+			t.Fatalf("NewJWTManagerWithConfig(%+v) succeeded", cfg)
 		}
 	}
 }

@@ -11,6 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -21,7 +23,9 @@ import (
 // (its sendFn kept succeeding while the tunnel WS stayed up). The fix sends
 // MsgLogStop on loop exit so agent/logs.go:HandleLogStop cancels the session.
 func TestHandleLogsSendsLogStopOnClose(t *testing.T) {
-	clusterID := uuid.New().String()
+	clusterUUID := uuid.New()
+	clusterID := clusterUUID.String()
+	userID := uuid.New()
 
 	hub := NewHub(slog.Default())
 	agent := &AgentConnection{
@@ -32,7 +36,18 @@ func TestHandleLogsSendsLogStopOnClose(t *testing.T) {
 	}
 	hub.agents.Set(clusterID, agent)
 
-	lc := NewLogsConsumer(hub, slog.Default())
+	tickets := auth.NewStreamTicketStore(time.Minute)
+	ticket, _, err := tickets.Issue(userID, auth.StreamKindLogs, clusterUUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lc := &LogsConsumer{
+		hub:         hub,
+		log:         slog.Default(),
+		tickets:     tickets,
+		rbacEngine:  rbac.NewEngine(),
+		rbacQuerier: &mockRBACQuerier{bindings: clusterWideBinding(clusterUUID)},
+	}
 
 	router := chi.NewRouter()
 	router.HandleFunc("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", lc.HandleLogs)
@@ -42,7 +57,7 @@ func TestHandleLogsSendsLogStopOnClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	wsURL := "ws" + srv.URL[4:] + "/api/v1/ws/logs/" + clusterID + "/default/web-0/app/?follow=true"
+	wsURL := "ws" + srv.URL[4:] + "/api/v1/ws/logs/" + clusterID + "/default/web-0/app/?follow=true&ticket=" + ticket
 	conn, _, err := websocket.Dial(ctx, wsURL, nil)
 	if err != nil {
 		t.Fatalf("websocket dial: %v", err)

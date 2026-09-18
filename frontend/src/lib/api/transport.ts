@@ -92,26 +92,26 @@ api.interceptors.response.use(
     }>,
   ) => {
     const originalRequest = error.config as AstronomerRequestConfig;
+    const isSessionEndpoint =
+      originalRequest?.url?.includes("/auth/login") ||
+      originalRequest?.url?.includes("/auth/refresh");
     if (
       error.response?.status === 401 &&
       !originalRequest?._retry &&
-      typeof window !== "undefined"
+      typeof window !== "undefined" &&
+      !isSessionEndpoint
     ) {
-      if (
-        originalRequest.url?.includes("/auth/login") ||
-        originalRequest.url?.includes("/auth/refresh")
-      ) {
-        return Promise.reject(error);
-      }
+      // Mark queued followers as well as the refresh owner. A second 401 must
+      // surface to the caller instead of re-entering the refresh flow.
+      originalRequest._retry = true;
       if (isRefreshing) {
         return new Promise<void>((resolve, reject) =>
           failedQueue.push({ resolve, reject }),
         ).then(() => api(originalRequest));
       }
-      originalRequest._retry = true;
       isRefreshing = true;
       try {
-        const response = await axios.post(
+        await axios.post(
           `${API_BASE}/auth/refresh/`,
           {},
           {
@@ -119,8 +119,6 @@ api.interceptors.response.use(
             withCredentials: true,
           },
         );
-        if (!(response.data?.data || response.data)?.token)
-          throw new Error("Refresh did not return an access token");
         processQueue(null, true);
         return api(originalRequest);
       } catch (refreshError) {
@@ -145,7 +143,11 @@ api.interceptors.response.use(
       code?: string;
       response?: typeof error.response;
     };
-    enriched.status = error.response?.status;
+    // A request that never received an HTTP response is a transport failure,
+    // not an API error with an unknown shape. Preserve that distinction for
+    // query surfaces so they can render an offline/reconnect state while
+    // ordinary application errors remain error states.
+    enriched.status = error.response?.status ?? 0;
     enriched.code =
       error.response?.data?.error?.code ?? error.response?.data?.code;
     enriched.response = error.response;

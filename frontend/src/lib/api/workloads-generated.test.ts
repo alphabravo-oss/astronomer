@@ -1,5 +1,7 @@
 import type { MockedFunction } from "vitest";
 import {
+  getClustersByClusterIdNamespaces,
+  getClustersByClusterIdPods,
   getClustersByClusterIdWorkloads,
   getWorkloadsPodsByClusterIdByNamespaceByPodLogs,
   patchClustersByClusterIdWorkloadsByKindByNamespaceByNameScale,
@@ -7,6 +9,8 @@ import {
 } from "@/lib/api/generated/client";
 import {
   getPodLogs,
+  getClusterPods,
+  getClusterNamespaces,
   getWorkloads,
   restartWorkload,
   scaleWorkload,
@@ -28,6 +32,12 @@ vi.mock("@/lib/api/generated/client", () => ({
 
 const mockedList = getClustersByClusterIdWorkloads as MockedFunction<
   typeof getClustersByClusterIdWorkloads
+>;
+const mockedNamespaces = getClustersByClusterIdNamespaces as MockedFunction<
+  typeof getClustersByClusterIdNamespaces
+>;
+const mockedPods = getClustersByClusterIdPods as MockedFunction<
+  typeof getClustersByClusterIdPods
 >;
 const mockedLogs =
   getWorkloadsPodsByClusterIdByNamespaceByPodLogs as MockedFunction<
@@ -67,13 +77,18 @@ describe("workloads generated API boundary", () => {
   it("translates page pagination to limit/offset and restores the view page", async () => {
     mockedList.mockResolvedValueOnce({
       data: [wireWorkload],
-      count: 41,
-      next: "/next",
-      previous: "/previous",
+      pagination: {
+        total: 41,
+        limit: 20,
+        offset: 40,
+        has_more: false,
+        next_offset: null,
+      },
     });
 
     const result = await getWorkloads("cluster-1", {
       namespace: "default",
+      sort: "name_desc",
       page: 3,
       pageSize: 20,
     });
@@ -86,16 +101,96 @@ describe("workloads generated API boundary", () => {
         namespace: "default",
         kind: undefined,
         search: undefined,
+        sort: "name_desc",
       },
       signal: undefined,
     });
     expect(result).toMatchObject({
-      total: 41,
-      page: 3,
-      pageSize: 20,
-      totalPages: 3,
+      pagination: {
+        total: 41,
+        limit: 20,
+        offset: 40,
+        has_more: false,
+        next_offset: null,
+      },
     });
     expect(result.data[0].name).toBe("api");
+  });
+
+  it("loads every authorized namespace page beyond the former first 20", async () => {
+    mockedNamespaces.mockImplementation(async ({ query }) => {
+      const offset = query?.offset ?? 0;
+      const count = offset === 0 ? 200 : 25;
+      return {
+        data: Array.from({ length: count }, (_, index) => ({
+          name: `namespace-${offset + index + 1}`,
+          clusterId: "cluster-1",
+          status: "Active",
+          createdAt: "2026-08-24T00:00:00Z",
+        })),
+        pagination: {
+          total: 225,
+          limit: 200,
+          offset,
+          has_more: offset === 0,
+          next_offset: offset === 0 ? 200 : null,
+        },
+      };
+    });
+
+    const namespaces = await getClusterNamespaces("cluster-1");
+
+    expect(namespaces).toHaveLength(225);
+    expect(namespaces.at(-1)?.name).toBe("namespace-225");
+    expect(mockedNamespaces.mock.calls.map(([args]) => args.query)).toEqual([
+      { limit: 200, offset: 0 },
+      { limit: 200, offset: 200 },
+    ]);
+  });
+
+  it("sends pod paging, search, sort, and health to the server", async () => {
+    mockedPods.mockResolvedValueOnce({
+      data: [
+        {
+          name: "api-1",
+          namespace: "default",
+          clusterId: "cluster-1",
+          phase: "Running",
+          status: "Running",
+          createdAt: "2026-09-18T00:00:00Z",
+        },
+      ],
+      pagination: {
+        total: 101,
+        limit: 20,
+        offset: 40,
+        has_more: true,
+        next_offset: 60,
+      },
+    });
+
+    const result = await getClusterPods("cluster-1", {
+      limit: 20,
+      offset: 40,
+      search: "api",
+      sort: "restarts_desc",
+      health: "restarted",
+    });
+
+    expect(mockedPods).toHaveBeenCalledWith({
+      path: { cluster_id: "cluster-1" },
+      query: {
+        namespace: undefined,
+        limit: 20,
+        offset: 40,
+        search: "api",
+        sort: "restarts_desc",
+        health: "restarted",
+      },
+      signal: undefined,
+    });
+    expect(result.pagination.total).toBe(101);
+    expect(result.data[0].name).toBe("api-1");
   });
 
   it("sends caller-stable idempotency on scale and maps the receipt", async () => {

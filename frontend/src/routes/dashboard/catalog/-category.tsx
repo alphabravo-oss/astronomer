@@ -36,7 +36,7 @@ export function CategoryChip({
   return (
     <span
       className={cn(
-        "rounded font-medium",
+        "rounded-sm font-medium",
         categoryColors[category] || categoryColors.other,
         className,
       )}

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useDraft } from "@/lib/hooks/use-draft";
 import {
   ChevronDown,
   Download,
@@ -10,7 +11,7 @@ import {
   TerminalSquare,
   X,
 } from "lucide-react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { PageHeader, PageShell } from "@/components/ui/page";
@@ -21,8 +22,12 @@ import {
   ActivityDetailsDrawer,
   type ActivityDetailField,
 } from "@/components/audit/activity-details-drawer";
-import { useAuditLogs, useClusters, useProjects, useUsers } from "@/lib/hooks";
-import { getAuditLogExportURL } from "@/lib/api";
+import { useAuditLogs } from "@/lib/hooks/audit";
+import { pageRowCount } from "@/lib/api/pagination";
+import { useClusters } from "@/lib/hooks/clusters";
+import { useProjects } from "@/lib/hooks/projects";
+import { useUsers } from "@/lib/hooks/user-settings";
+import { getAuditLogExportURL } from "@/lib/api/audit";
 import { cn, formatDate, formatRelativeTime } from "@/lib/utils";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import type { AuditLogEntry } from "@/types";
@@ -42,7 +47,7 @@ function AuditLogPage() {
   const [qInput, setQInput] = useState("");
   const [qDebounced] = useDebouncedValue(qInput, { wait: 200 });
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useDraft(0, qDebounced);
   const [selected, setSelected] = useState<AuditLogEntry | null>(null);
 
   const queryParams = useMemo(
@@ -55,7 +60,7 @@ function AuditLogPage() {
   const { data: projectsData } = useProjects({ pageSize: 200 });
 
   const rows = auditQuery.data?.data || [];
-  const total = auditQuery.data?.count ?? auditQuery.data?.total ?? rows.length;
+  const total = pageRowCount(auditQuery.data);
   const users = useMemo(() => usersData?.data ?? [], [usersData?.data]);
   const clusters = useMemo(
     () => clustersData?.data ?? [],
@@ -92,10 +97,6 @@ function AuditLogPage() {
     limit: 500,
     offset: 0,
   });
-
-  useEffect(() => {
-    setPage(0);
-  }, [qDebounced]);
 
   const updateFilter = <K extends keyof AuditFilters>(
     key: K,
@@ -157,7 +158,7 @@ function AuditLogPage() {
             </div>
             <span
               className={cn(
-                "mt-1 inline-flex rounded px-1.5 py-0.5 text-2xs",
+                "mt-1 inline-flex rounded-sm px-1.5 py-0.5 text-2xs",
                 actionClassStyle(row.actionClass),
               )}
             >
@@ -240,13 +241,13 @@ function AuditLogPage() {
         }
         actions={
           <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/audit/shell-sessions"
+            <RouterLink
+              to="/dashboard/audit/shell-sessions"
               className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
             >
               <TerminalSquare className="h-4 w-4" />
               Shell sessions
-            </Link>
+            </RouterLink>
             <a
               href={exportHref}
               className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-accent"
@@ -287,7 +288,7 @@ function AuditLogPage() {
             <Select
               value={filters.audience}
               onChange={(e) => updateFilter("audience", e.target.value)}
-              className="w-[10.5rem]"
+              containerClassName="w-[10.5rem]"
               aria-label="Activity"
             >
               <option value="people">People</option>
@@ -297,7 +298,7 @@ function AuditLogPage() {
             <Select
               value={filters.actionClass}
               onChange={(e) => updateFilter("actionClass", e.target.value)}
-              className="w-[8.5rem]"
+              containerClassName="w-[8.5rem]"
               aria-label="Event class"
             >
               <option value="all">All kinds</option>
@@ -308,7 +309,7 @@ function AuditLogPage() {
             <Select
               value={filters.result}
               onChange={(e) => updateFilter("result", e.target.value)}
-              className="w-[8.5rem]"
+              containerClassName="w-[8.5rem]"
               aria-label="Result"
             >
               <option value="all">Any result</option>
@@ -479,8 +480,14 @@ function AuditLogPage() {
         pageSize={PAGE_SIZE}
         loading={auditQuery.isLoading}
         isError={auditQuery.isError}
+        error={auditQuery.error}
+        permission="audit:read"
         onRetry={() => auditQuery.refetch()}
-        emptyMessage="No audit events match"
+        emptyState={{
+          title: "No audit events available",
+          description:
+            "New observations will appear here as they are reported.",
+        }}
         onRowClick={setSelected}
         serverSide={{
           rowCount: total,
@@ -518,8 +525,7 @@ function targetName(row: AuditLogEntry): string {
 }
 
 function rowDetail(row: AuditLogEntry): Record<string, unknown> {
-  const detail = row.detail || row.details;
-  return detail && typeof detail === "object" ? detail : {};
+  return row.detail && typeof row.detail === "object" ? row.detail : {};
 }
 
 function detailString(row: AuditLogEntry, ...keys: string[]): string {

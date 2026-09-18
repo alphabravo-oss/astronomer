@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import * as apiClient from "@/lib/api";
+import {
+  getLoggingOutputs,
+  createLoggingOutput,
+  getLoggingAttachStatus,
+  attachAstronomerLogs,
+  testLoggingOutput,
+  getLoggingPipelines,
+  createLoggingPipeline,
+  getLoggingOperations,
+  getLoggingOperation,
+  retryLoggingOperation,
+} from "@/lib/api/logging";
 import { liveFallback } from "@/lib/live/status-store";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
@@ -13,15 +24,14 @@ import type { LoggingOperation, LoggingOutput, LoggingPipeline } from "@/types";
 export function useLoggingOutputs() {
   return useQuery({
     queryKey: queryKeys.logging.outputs,
-    queryFn: () => apiClient.getLoggingOutputs(),
+    queryFn: () => getLoggingOutputs(),
   });
 }
 
 export function useCreateLoggingOutput() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<LoggingOutput>) =>
-      apiClient.createLoggingOutput(data),
+    mutationFn: (data: Partial<LoggingOutput>) => createLoggingOutput(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.logging.outputs });
       toastSuccess("Logging output created");
@@ -35,7 +45,7 @@ export function useCreateLoggingOutput() {
 export function useLoggingAttachStatus(clusterId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.logging.attachStatus(clusterId ?? ""),
-    queryFn: () => apiClient.getLoggingAttachStatus(clusterId as string),
+    queryFn: () => getLoggingAttachStatus(clusterId as string),
     enabled: Boolean(clusterId),
   });
 }
@@ -44,7 +54,7 @@ export function useAttachAstronomerLogs(clusterId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (rotate?: boolean) =>
-      apiClient.attachAstronomerLogs(clusterId, Boolean(rotate)),
+      attachAstronomerLogs(clusterId, Boolean(rotate)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.logging.all });
       queryClient.invalidateQueries({
@@ -60,7 +70,7 @@ export function useAttachAstronomerLogs(clusterId: string) {
 
 export function useTestLoggingOutput() {
   return useMutation({
-    mutationFn: (id: string) => apiClient.testLoggingOutput(id),
+    mutationFn: (id: string) => testLoggingOutput(id),
     onSuccess: (data) => {
       if (data.success) {
         toastSuccess("Test connection successful");
@@ -77,15 +87,14 @@ export function useTestLoggingOutput() {
 export function useLoggingPipelines(clusterId?: string) {
   return useQuery({
     queryKey: queryKeys.logging.pipelines(clusterId),
-    queryFn: () => apiClient.getLoggingPipelines({ clusterId, limit: 200 }),
+    queryFn: () => getLoggingPipelines({ clusterId, limit: 200 }),
   });
 }
 
 export function useCreateLoggingPipeline() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<LoggingPipeline>) =>
-      apiClient.createLoggingPipeline(data),
+    mutationFn: (data: Partial<LoggingPipeline>) => createLoggingPipeline(data),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.logging.pipelinesAll,
@@ -108,7 +117,7 @@ export function useLoggingOperations(params?: {
 }) {
   return useQuery<LoggingOperation[]>({
     queryKey: queryKeys.logging.operations(params),
-    queryFn: () => apiClient.getLoggingOperations(params),
+    queryFn: () => getLoggingOperations(params),
     // `logging_operation.changed` drives freshness while the stream is open;
     // poll so pending -> running -> completed transitions still appear when
     // it is down.
@@ -119,7 +128,7 @@ export function useLoggingOperations(params?: {
 export function useLoggingOperation(id: string) {
   return useQuery<LoggingOperation>({
     queryKey: queryKeys.logging.operation(id),
-    queryFn: () => apiClient.getLoggingOperation(id),
+    queryFn: () => getLoggingOperation(id),
     enabled: !!id,
     refetchInterval: liveFallback(5000),
   });
@@ -128,7 +137,7 @@ export function useLoggingOperation(id: string) {
 export function useRetryLoggingOperation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.retryLoggingOperation(id),
+    mutationFn: (id: string) => retryLoggingOperation(id),
     onSuccess: () => {
       // Invalidate every cached list (parameterized keys) and the detail rows.
       queryClient.invalidateQueries({

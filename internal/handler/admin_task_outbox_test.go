@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type fakeAdminTaskOutboxQuerier struct {
@@ -108,7 +108,7 @@ func makeAdminTaskOutboxRequest(method, path string, callerID uuid.UUID) *http.R
 	if method != http.MethodGet {
 		req.Header.Set("Idempotency-Key", "task-outbox-test")
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:    callerID.String(),
 		Email: "admin@example.com",
 	})
@@ -164,14 +164,14 @@ func TestAdminTaskOutboxListFiltersAndHidesPayload(t *testing.T) {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 	var body struct {
-		Data  []map[string]any `json:"data"`
-		Count int64            `json:"count"`
+		Data       []map[string]any `json:"data"`
+		Pagination paging.Metadata  `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Count != 1 || len(body.Data) != 1 {
-		t.Fatalf("count/data = %d/%d, want 1/1", body.Count, len(body.Data))
+	if exactPageTotal(t, body.Pagination) != 1 || len(body.Data) != 1 {
+		t.Fatalf("count/data = %d/%d, want 1/1", exactPageTotal(t, body.Pagination), len(body.Data))
 	}
 	if _, ok := body.Data[0]["payload"]; ok {
 		t.Fatalf("task outbox list must not expose raw payload")
@@ -198,14 +198,14 @@ func TestAdminTaskOutboxListDeadReturnsOnlyDead(t *testing.T) {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 	var body struct {
-		Data  []map[string]any `json:"data"`
-		Count int64            `json:"count"`
+		Data       []map[string]any `json:"data"`
+		Pagination paging.Metadata  `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Count != 1 || len(body.Data) != 1 {
-		t.Fatalf("count/data = %d/%d, want 1/1", body.Count, len(body.Data))
+	if exactPageTotal(t, body.Pagination) != 1 || len(body.Data) != 1 {
+		t.Fatalf("count/data = %d/%d, want 1/1", exactPageTotal(t, body.Pagination), len(body.Data))
 	}
 	if got := body.Data[0]["status"].(string); got != "dead" {
 		t.Fatalf("status = %q, want dead", got)

@@ -5,8 +5,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * breaches and worst-cap utilization let operators spot hot plans without
  * clicking through.
  */
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ExternalLink, Gauge, Plus } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
@@ -24,7 +24,7 @@ function enforcementBadge(e: QuotaPlanView["enforcement"]) {
   return (
     <span
       className={cn(
-        "text-xs px-2 py-0.5 rounded border font-medium capitalize",
+        "text-xs px-2 py-0.5 rounded-sm border font-medium capitalize",
         palette[e],
       )}
     >
@@ -67,7 +67,7 @@ function UtilizationBar({ pct }: { pct: number }) {
 }
 
 function QuotaPlansTable() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data: plans, isLoading } = useQuotaPlans();
   const { data: usage } = useQuotaUsage();
 
@@ -142,28 +142,31 @@ function QuotaPlansTable() {
       keyExtractor={(row) => row.name}
       loading={isLoading}
       onRowClick={(row) =>
-        router.push(
-          `/dashboard/settings/quotas/${encodeURIComponent(row.name)}`,
-        )
+        void navigate({
+          to: `/dashboard/settings/quotas/${encodeURIComponent(row.name)}`,
+        })
       }
-      emptyMessage="No quota plans defined"
+      emptyState={{
+        title: "No quota plans defined",
+        description: "Create the first item to configure this feature.",
+      }}
       searchPlaceholder="Search plans..."
     />
   );
 }
 
 function QuotasPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Quotas"
           title="Quota plans"
@@ -172,14 +175,18 @@ function QuotasPage() {
             <>
               <ActionButton
                 icon={<ExternalLink className="h-3.5 w-3.5" />}
-                onClick={() => router.push("/dashboard/settings/quotas/usage")}
+                onClick={() =>
+                  void navigate({ to: "/dashboard/settings/quotas/usage" })
+                }
               >
                 Deployment-wide usage
               </ActionButton>
               <ActionButton
                 intent="primary"
                 icon={<Plus className="h-4 w-4" />}
-                onClick={() => router.push("/dashboard/settings/quotas/new")}
+                onClick={() =>
+                  void navigate({ to: "/dashboard/settings/quotas/new" })
+                }
               >
                 New plan
               </ActionButton>

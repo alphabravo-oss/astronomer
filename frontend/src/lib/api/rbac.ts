@@ -1,4 +1,7 @@
 import {
+  deleteRbacClusterRolesById,
+  deleteRbacGlobalRolesById,
+  deleteRbacProjectRolesById,
   deleteRbacClusterRoleBindingsById,
   deleteRbacGlobalRoleBindingsById,
   deleteRbacProjectRoleBindingsById,
@@ -8,15 +11,22 @@ import {
   getRbacGlobalRoleBindings,
   getRbacGlobalRoles,
   getRbacMyPermissions,
+  getRbacPrincipals,
   getRbacProjectRoleBindings,
   getRbacProjectRoles,
+  getRbacTemplates,
   postRbacClusterRoleBindings,
   postRbacClusterRoles,
   postRbacGlobalRoleBindings,
   postRbacGlobalRoles,
   postRbacPermissionPreview,
+  postRbacPrincipalsMaterialize,
   postRbacProjectRoleBindings,
   postRbacProjectRoles,
+  postProjectsByIdApplyRbacTemplate,
+  putRbacClusterRolesById,
+  putRbacGlobalRolesById,
+  putRbacProjectRolesById,
 } from "@/lib/api/generated/client";
 import type {
   AccessBinding,
@@ -32,7 +42,13 @@ import type {
   PolicyRule,
   ProjectRole,
 } from "@/types";
-import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type {
+  OpenAPIComponents,
+  PrincipalMaterialized,
+  PrincipalSearchResponse,
+} from "@/types/openapi.generated";
+
+export type { PrincipalSearchItem } from "@/types/openapi.generated";
 
 type Schemas = OpenAPIComponents["schemas"];
 type RoleWire = Schemas["RBACRole"];
@@ -42,6 +58,24 @@ type ClusterBindingWire = Schemas["RBACClusterRoleBinding"];
 type ProjectBindingWire = Schemas["RBACProjectRoleBinding"];
 type EffectiveWire = Schemas["RBACEffectivePermissions"];
 type PreviewWire = Schemas["RBACPermissionPreview"];
+
+export async function searchPrincipals(
+  query: string,
+  signal?: AbortSignal,
+): Promise<PrincipalSearchResponse> {
+  const response = await getRbacPrincipals({ query: { q: query }, signal });
+  return requireData(response, "searchPrincipals");
+}
+
+export async function materializePrincipal(input: {
+  connectorId: string;
+  subject: string;
+}): Promise<PrincipalMaterialized> {
+  const response = await postRbacPrincipalsMaterialize({
+    body: { connector_id: input.connectorId, subject: input.subject },
+  });
+  return requireData(response, "materializePrincipal");
+}
 
 const RBAC_LIST_LIMIT = 200;
 
@@ -80,14 +114,14 @@ export function mapRole(wire: RoleWire): GlobalRole {
   };
 }
 
-interface CreateRoleInput {
+export interface RoleInput {
   name: string;
   displayName: string;
   description?: string;
   rules: Array<PolicyRule | Record<string, unknown>>;
 }
 
-function roleRequest(input: CreateRoleInput): Schemas["RBACRoleRequest"] {
+function roleRequest(input: RoleInput): Schemas["RBACRoleRequest"] {
   return {
     name: input.name,
     display_name: input.displayName,
@@ -104,46 +138,137 @@ function roleRequest(input: CreateRoleInput): Schemas["RBACRoleRequest"] {
   };
 }
 
-export async function getGlobalRoles(): Promise<GlobalRole[]> {
+export async function getGlobalRoles(
+  signal?: AbortSignal,
+): Promise<GlobalRole[]> {
   const response = await getRbacGlobalRoles({
     query: { limit: RBAC_LIST_LIMIT },
+    signal,
   });
   return (response.data ?? []).map(mapRole);
 }
 
-export async function getClusterRoles(): Promise<ClusterRole[]> {
+export async function getClusterRoles(
+  signal?: AbortSignal,
+): Promise<ClusterRole[]> {
   const response = await getRbacClusterRoles({
     query: { limit: RBAC_LIST_LIMIT },
+    signal,
   });
   return (response.data ?? []).map(mapRole);
 }
 
-export async function getProjectRoles(): Promise<ProjectRole[]> {
+export async function getProjectRoles(
+  signal?: AbortSignal,
+): Promise<ProjectRole[]> {
   const response = await getRbacProjectRoles({
     query: { limit: RBAC_LIST_LIMIT },
+    signal,
   });
   return (response.data ?? []).map(mapRole);
 }
 
-export async function createGlobalRole(
-  input: CreateRoleInput,
-): Promise<GlobalRole> {
+export async function createGlobalRole(input: RoleInput): Promise<GlobalRole> {
   const response = await postRbacGlobalRoles({ body: roleRequest(input) });
   return mapRole(requireData(response, "createGlobalRole"));
 }
 
 export async function createClusterRole(
-  input: CreateRoleInput,
+  input: RoleInput,
 ): Promise<ClusterRole> {
   const response = await postRbacClusterRoles({ body: roleRequest(input) });
   return mapRole(requireData(response, "createClusterRole"));
 }
 
 export async function createProjectRole(
-  input: CreateRoleInput,
+  input: RoleInput,
 ): Promise<ProjectRole> {
   const response = await postRbacProjectRoles({ body: roleRequest(input) });
   return mapRole(requireData(response, "createProjectRole"));
+}
+
+export type RoleScope = "global" | "cluster" | "project";
+
+export async function updateRole(
+  scope: RoleScope,
+  id: string,
+  input: RoleInput,
+): Promise<GlobalRole | ClusterRole | ProjectRole> {
+  const args = { path: { id }, body: roleRequest(input) };
+  switch (scope) {
+    case "global":
+      return mapRole(
+        requireData(await putRbacGlobalRolesById(args), "updateGlobalRole"),
+      );
+    case "cluster":
+      return mapRole(
+        requireData(await putRbacClusterRolesById(args), "updateClusterRole"),
+      );
+    case "project":
+      return mapRole(
+        requireData(await putRbacProjectRolesById(args), "updateProjectRole"),
+      );
+  }
+}
+
+export async function deleteRole(scope: RoleScope, id: string): Promise<void> {
+  switch (scope) {
+    case "global":
+      await deleteRbacGlobalRolesById({ path: { id } });
+      return;
+    case "cluster":
+      await deleteRbacClusterRolesById({ path: { id } });
+      return;
+    case "project":
+      await deleteRbacProjectRolesById({ path: { id } });
+  }
+}
+
+export interface RoleTemplate {
+  name: string;
+  displayName: string;
+  description: string;
+  scope: RoleScope;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  inherits: string[];
+  systemManaged: boolean;
+  category: string;
+  rules: PolicyRule[];
+}
+
+export async function listRoleTemplates(
+  signal?: AbortSignal,
+): Promise<RoleTemplate[]> {
+  const response = await getRbacTemplates({ signal });
+  return (response.data?.templates ?? []).map((template) => ({
+    name: template.name ?? "",
+    displayName: template.display_name ?? template.name ?? "",
+    description: template.description ?? "",
+    scope: template.scope ?? "project",
+    riskLevel: template.risk_level ?? "low",
+    inherits: template.inherits ?? [],
+    systemManaged: template.system_managed ?? false,
+    category: template.category ?? "",
+    rules: (template.rules ?? []).map((rule) => ({
+      resource: rule.resource,
+      verbs: rule.verbs ?? [],
+    })),
+  }));
+}
+
+export async function applyProjectRoleTemplate(input: {
+  projectId: string;
+  templateName: string;
+  userId: string;
+}): Promise<AccessBinding> {
+  const response = await postProjectsByIdApplyRbacTemplate({
+    path: { id: input.projectId },
+    body: { template_name: input.templateName, user_id: input.userId },
+  });
+  return mapAccessBinding(
+    "project",
+    requireData(response, "applyProjectRoleTemplate"),
+  );
 }
 
 function mapAccessBinding(
@@ -165,35 +290,40 @@ function mapAccessBinding(
   };
 }
 
-export async function listClusterRoleBindings(params?: {
-  cluster_id?: string;
-}): Promise<AccessBinding[]> {
+export async function listClusterRoleBindings(
+  params?: {
+    cluster_id?: string;
+  },
+  signal?: AbortSignal,
+): Promise<AccessBinding[]> {
   const response = await getRbacClusterRoleBindings({
     query: { limit: RBAC_LIST_LIMIT, cluster_id: params?.cluster_id },
+    signal,
   });
-  return (response.data ?? []).map((wire) =>
-    mapAccessBinding("cluster", wire),
-  );
+  return (response.data ?? []).map((wire) => mapAccessBinding("cluster", wire));
 }
 
-export async function listGlobalRoleBindings(): Promise<AccessBinding[]> {
+export async function listGlobalRoleBindings(
+  signal?: AbortSignal,
+): Promise<AccessBinding[]> {
   const response = await getRbacGlobalRoleBindings({
     query: { limit: RBAC_LIST_LIMIT },
+    signal,
   });
-  return (response.data ?? []).map((wire) =>
-    mapAccessBinding("global", wire),
-  );
+  return (response.data ?? []).map((wire) => mapAccessBinding("global", wire));
 }
 
-export async function listProjectRoleBindings(params?: {
-  project_id?: string;
-}): Promise<AccessBinding[]> {
+export async function listProjectRoleBindings(
+  params?: {
+    project_id?: string;
+  },
+  signal?: AbortSignal,
+): Promise<AccessBinding[]> {
   const response = await getRbacProjectRoleBindings({
     query: { limit: RBAC_LIST_LIMIT, project_id: params?.project_id },
+    signal,
   });
-  return (response.data ?? []).map((wire) =>
-    mapAccessBinding("project", wire),
-  );
+  return (response.data ?? []).map((wire) => mapAccessBinding("project", wire));
 }
 
 export async function createClusterRoleBinding(input: {
@@ -312,8 +442,7 @@ function mapContext(
     clusterId: wire.cluster_id,
     projectId: wire.project_id,
     namespace: wire.namespace,
-    namespaceScopedBindingsSupported:
-      wire.namespace_scoped_bindings_supported,
+    namespaceScopedBindingsSupported: wire.namespace_scoped_bindings_supported,
     warnings: wire.warnings,
   };
 }
@@ -332,8 +461,12 @@ export function mapEffectivePermissions(
 
 export async function getMyEffectivePermissions(
   params?: EffectivePermissionParams,
+  signal?: AbortSignal,
 ): Promise<EffectivePermissionResponse> {
-  const response = await getRbacMyPermissions({ query: effectiveQuery(params) });
+  const response = await getRbacMyPermissions({
+    query: effectiveQuery(params),
+    signal,
+  });
   return mapEffectivePermissions(
     requireData(response, "getMyEffectivePermissions"),
   );
@@ -342,10 +475,12 @@ export async function getMyEffectivePermissions(
 export async function getEffectivePermissionsForUser(
   userId: string,
   params?: EffectivePermissionParams,
+  signal?: AbortSignal,
 ): Promise<EffectivePermissionResponse> {
   const response = await getRbacEffectivePermissionsByUserId({
     path: { user_id: userId },
     query: effectiveQuery(params),
+    signal,
   });
   return mapEffectivePermissions(
     requireData(response, "getEffectivePermissionsForUser"),

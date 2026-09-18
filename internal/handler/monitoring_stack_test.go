@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -185,11 +187,32 @@ func (q *stackLifecycleQuerier) ListClusters(context.Context, sqlc.ListClustersP
 	rows := []sqlc.Cluster{{
 		ID:                uuid.MustParse(stackTestClusterID),
 		Name:              "local",
+		DisplayName:       "Production West",
+		Environment:       "production",
+		Region:            "us-west-2",
+		Provider:          "k3s",
+		ClusterUid:        "kube-system-uid",
 		IsLocal:           true,
 		KubernetesVersion: "v1.31.4",
-		LastHeartbeat:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}}
 	return append(rows, q.extraClusters...), nil
+}
+
+func (q *stackLifecycleQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
+	clusters, _ := q.ListClusters(context.Background(), sqlc.ListClustersParams{})
+	for _, cluster := range clusters {
+		if cluster.ID == id {
+			return cluster, nil
+		}
+	}
+	return sqlc.Cluster{}, pgx.ErrNoRows
+}
+
+func (q *stackLifecycleQuerier) ListClusterLivenessForClusters(context.Context, []uuid.UUID) ([]sqlc.ClusterLiveness, error) {
+	return []sqlc.ClusterLiveness{{
+		ClusterID:     uuid.MustParse(stackTestClusterID),
+		LastHeartbeat: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}}, nil
 }
 
 func (q *stackLifecycleQuerier) GetClusterMonitoringContext(context.Context, uuid.UUID) (sqlc.GetClusterMonitoringContextRow, error) {
@@ -237,7 +260,7 @@ func newStackLifecycleHandler(t *testing.T) (*MonitoringHandler, *stackLifecycle
 		clusterErr: pgx.ErrNoRows,
 	}
 	k8s := grafanaPassingK8sFake(t)
-	h := NewMonitoringHandlerWithDeps(q, k8s, stackLifecycleHelmStub{})
+	h := newMonitoringHandlerWithDepsForTest(q, k8s, stackLifecycleHelmStub{})
 	h.SetServerURL("https://astronomer.example.com")
 	h.SetGrafanaProxyImage("ghcr.io/alphabravo-oss/astronomer-go-server:test-pr3")
 	return h, q
@@ -323,7 +346,7 @@ func (c stackLifecycleCase) request() *http.Request {
 		rc.URLParams.Add(k, v)
 	}
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rc)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{
+	ctx = reqctx.WithUser(ctx, &reqctx.User{
 		ID:         uuid.NewString(),
 		AuthMethod: "jwt",
 	})
@@ -605,6 +628,108 @@ func TestClusterStackResolvesClusterIDFromTheRoutedParam(t *testing.T) {
 			t.Fatalf("clusterId = %q, want %q", body.Data.ClusterID, stackTestClusterID)
 		}
 	})
+}
+
+func TestClusterStackPreviewPinsFleetProvenanceAndKubernetesLabelInventory(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	rec := httptest.NewRecorder()
+	request := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(rec, request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data struct {
+			Values map[string]any `json:"values"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	prometheus := body.Data.Values["prometheus"].(map[string]any)
+	spec := prometheus["prometheusSpec"].(map[string]any)
+	pvcSpec := spec["storageSpec"].(map[string]any)["volumeClaimTemplate"].(map[string]any)["spec"].(map[string]any)
+	if _, exists := pvcSpec["storageClassName"]; exists {
+		t.Fatalf("default storageClassName = %#v, want omitted so Kubernetes selects the cluster default", pvcSpec["storageClassName"])
+	}
+	labels := spec["externalLabels"].(map[string]any)
+	if len(labels) != 1 || labels["cluster_id"] != stackTestClusterID {
+		t.Fatalf("externalLabels = %#v, want immutable cluster_id only", labels)
+	}
+	ruleMaps := body.Data.Values["additionalPrometheusRulesMap"].(map[string]any)
+	metadataRule := ruleMaps["astronomer-cluster-metadata"].(map[string]any)
+	groups := metadataRule["groups"].([]any)
+	rules := groups[0].(map[string]any)["rules"].([]any)
+	infoLabels := rules[0].(map[string]any)["labels"].(map[string]any)
+	for key, want := range map[string]string{
+		"cluster_id": stackTestClusterID, "cluster_name": "Production West",
+		"environment": "production", "region": "us-west-2", "provider": "k3s",
+		"kubernetes_cluster_uid": "kube-system-uid",
+	} {
+		if got := infoLabels[key]; got != want {
+			t.Errorf("astronomer_cluster_info label %s = %v, want %q", key, got, want)
+		}
+	}
+	kubeState := body.Data.Values["kube-state-metrics"].(map[string]any)
+	allowlist := kubeState["metricLabelsAllowlist"].([]any)
+	if len(allowlist) < 3 {
+		t.Fatalf("metricLabelsAllowlist = %#v, want namespace/node/pod and workload entries", allowlist)
+	}
+}
+
+func TestClusterStackPreviewPreservesExplicitStorageClass(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	rec := httptest.NewRecorder()
+	request := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{"storageClass":"fast-rwo"}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(rec, request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data struct {
+			Values map[string]any `json:"values"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	spec := body.Data.Values["prometheus"].(map[string]any)["prometheusSpec"].(map[string]any)
+	pvcSpec := spec["storageSpec"].(map[string]any)["volumeClaimTemplate"].(map[string]any)["spec"].(map[string]any)
+	if got := pvcSpec["storageClassName"]; got != "fast-rwo" {
+		t.Fatalf("storageClassName = %#v, want fast-rwo", got)
+	}
+}
+
+func TestClusterStackRejectsCallerControlledFleetIdentity(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	for name, body := range map[string]string{
+		"label name":  `{"clusterLabel":"pretend_cluster"}`,
+		"label value": `{"clusterLabelValue":"another-cluster"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			request := (stackLifecycleCase{
+				method: http.MethodPost,
+				target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+				body:   body,
+				params: map[string]string{"id": stackTestClusterID},
+			}).request()
+			h.PreviewStack(rec, request)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
 }
 
 // --- the audit contract -------------------------------------------------------

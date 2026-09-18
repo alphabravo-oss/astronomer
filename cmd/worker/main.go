@@ -12,9 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist"
 	allowlistproviders "github.com/alphabravocompany/astronomer-go/internal/apisvr/allowlist/providers"
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db"
@@ -29,6 +31,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
@@ -52,7 +55,7 @@ func (unavailableDeliveryDecryptor) DecryptBytes(string) ([]byte, error) {
 
 func allowPrivateRCWebhooks(cfg *config.Config) bool {
 	return cfg != nil && !strings.EqualFold(strings.TrimSpace(cfg.Env), "production") &&
-		strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_RC_ALLOW_PRIVATE_WEBHOOKS")), "true")
+		cfg.RCAllowPrivateWebhooks
 }
 
 func webhookHTTPClient(cfg *config.Config) *http.Client {
@@ -66,8 +69,25 @@ func webhookHTTPClient(cfg *config.Config) *http.Client {
 	return httpclient.SafeClient(30 * time.Second)
 }
 
+func alertNotificationTxRunner(database *db.DB) tasks.AlertNotificationRunTx {
+	return func(ctx context.Context, fn func(tasks.AlertNotificationMutationTx) error) error {
+		tx, err := database.Pool().Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin alert notification transaction: %w", err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if err := fn(sqlc.New(tx)); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit alert notification transaction: %w", err)
+		}
+		return nil
+	}
+}
+
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	observability.WithEvent(log, "worker_starting").Info("starting astronomer worker binary",
@@ -121,9 +141,17 @@ func main() {
 	// incoming task payloads (planned follow-up in this same sprint),
 	// so when both processes point at the same OTLP endpoint a single
 	// trace can span HTTP → asynq → worker DB queries → tunnel calls.
-	tracingCfg := observability.TracingFromEnv()
+	tracingCfg := observability.TracingConfig{
+		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		ServiceName: cfg.OTELServiceName, ServiceVersion: cfg.OTELServiceVersion,
+		SamplerRatio: cfg.OTELSamplerRatio,
+	}
 	tracingCfg.ServiceName = "astronomer-worker"
 	tracingCfg.ServiceVersion = version.Version
+	tracingCfg.Environment = cfg.Env
+	tracingCfg.ServiceNamespace = "astronomer"
+	tracingCfg.ServiceInstanceID = cfg.ProcessHostname
 	otelShutdown, err := observability.InitTracing(context.Background(), log, tracingCfg)
 	if err != nil {
 		log.Error("failed to init otel tracing", "error", err)
@@ -138,7 +166,7 @@ func main() {
 	}()
 
 	database, err := db.ConnectWithConfig(context.Background(), cfg.DatabaseURL, db.PoolConfig{
-		MaxConns:          cfg.DBMaxConns,
+		MaxConns:          workerDBMaxConns(cfg.DBMaxConns, cfg.WorkerConcurrency),
 		MinConns:          cfg.DBMinConns,
 		MaxConnLifetime:   time.Duration(cfg.DBMaxConnLifetimeMin) * time.Minute,
 		MaxConnIdleTime:   time.Duration(cfg.DBMaxConnIdleMin) * time.Minute,
@@ -149,6 +177,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer database.Close()
+	taskLeader, leaderErr := leader.NewDedicated(context.Background(), database.Pool(), log)
+	if leaderErr != nil {
+		log.Error("failed to initialize leader-election pool", "error", leaderErr)
+		os.Exit(1)
+	}
+	defer taskLeader.Close()
 	// C-01: fail fast on a corrupt schema_migrations row set (dirty=true or
 	// multi-row drift), same guard the server runs in NewApp. A worker that
 	// keeps sweeping against an indeterminate schema hides the .247-class
@@ -179,7 +213,7 @@ func main() {
 	// evaluator handing notification:send tasks to the notification
 	// dispatcher). This is the worker process that runs HandleAlertEvaluation,
 	// so it must be able to enqueue.
-	runtimeRedisOpt, redisOptErr := asynq.ParseRedisURI(cfg.RedisURL)
+	runtimeRedisOpt, redisOptErr := redisconn.Parse(cfg.RedisURL)
 	if redisOptErr != nil {
 		log.Error("failed to parse redis uri for runtime enqueuer", "error", redisOptErr)
 		os.Exit(1)
@@ -199,10 +233,10 @@ func main() {
 	backupQueries := sqlc.New(database.Pool())
 	backupExecutor := handler.NewAdminDrillHandler(backupQueries)
 	backupExecutor.SetEncryptor(platformEncryptor)
-	backupExecutor.SetBackupRuntime(os.Getenv("MANAGEMENT_BACKUP_IMAGE"), os.Getenv("MANAGEMENT_BACKUP_SERVICE_ACCOUNT"))
+	backupExecutor.SetBackupRuntime(cfg.ManagementBackupImage, cfg.ManagementBackupServiceAccount)
 	if restCfg, kErr := rest.InClusterConfig(); kErr == nil {
 		if client, clientErr := kubernetes.NewForConfig(restCfg); clientErr == nil {
-			backupExecutor.SetKubernetes(client, os.Getenv("POD_NAMESPACE"), os.Getenv("RELEASE_NAME"))
+			backupExecutor.SetKubernetes(client, cfg.PodNamespace, cfg.ReleaseName)
 		}
 	}
 	coreRuntime := tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
@@ -215,15 +249,17 @@ func main() {
 		SystemOIDCIssuer:              cfg.DeliveryFluxDistributionOIDCIssuer,
 		SystemOIDCIdentity:            cfg.DeliveryFluxDistributionCertificateIdentity,
 		PlatformName:                  "Astronomer",
+		ChartRecommendationPolicy:     catalog.NewRecommendationPolicy(cfg.ChartRatingBayesianAverage, cfg.ChartRatingBayesianWeight),
 		AuditLogRetentionMonths:       cfg.AuditLogRetentionMonths,
 		ClusterTombstoneRetentionDays: cfg.ClusterTombstoneRetentionDays,
 		RegistrationTokenTTLHours:     cfg.RegistrationTokenTTLHours,
-		Leader:                        leader.New(database.Pool(), log),
+		Leader:                        taskLeader,
 		Enqueuer:                      runtimeEnqueuer,
 		Bus:                           eventBus,
 		CatalogDecryptor:              tasks.CatalogDecryptorFor(platformEncryptor),
 		MonitoringCipher:              tasks.MonitoringCipherFor(platformEncryptor),
 		ManagementBackup:              backupExecutor,
+		AlertNotificationRunTx:        alertNotificationTxRunner(database),
 	}}
 	allowlistQueries := sqlc.New(database.Pool())
 	var allowlistMaterializer allowlistproviders.CloudCredentialMaterializer
@@ -244,10 +280,11 @@ func main() {
 	allowlistRegistry.Register(allowlistproviders.NewDOKSProvider(allowlistMaterializer))
 	allowlistRegistry.Register(allowlistproviders.NewSelfManagedProvider())
 	allowlistRuntime := tasks.ApiserverAllowlistRuntime{Deps: tasks.ApiserverAllowlistReconcileDeps{
-		Queries:       allowlistQueries,
-		Registry:      allowlistRegistry,
-		ClusterShaper: allowlistproviders.ClusterFromSQLC,
-		AuditWriter:   allowlistQueries,
+		Queries:          allowlistQueries,
+		Registry:         allowlistRegistry,
+		ClusterShaper:    allowlistproviders.ClusterFromSQLC,
+		AuditWriter:      allowlistQueries,
+		AstronomerEgress: allowlist.ParseAstronomerEgress(cfg.TunnelEgressCIDRs),
 	}}
 	deliveryQueries := sqlc.New(database.Pool())
 	deliveryVerifier, deliveryVerifierErr := deliveryresolver.NewExecVerifier(cfg.DeliverySourceTrustDirectory)
@@ -330,8 +367,18 @@ func main() {
 		q := sqlc.New(database.Pool())
 		provider := email.NewSQLSettingsProvider(q, platformEncryptor, 5*time.Second)
 		sender := email.NewSender(provider, platformEncryptor, log)
-		sender.SetBrandingProvider(email.NewPlatformConfigBrandingProvider(q, ""))
+		branding := email.NewPlatformConfigBrandingProvider(q, "")
+		sender.SetBrandingProvider(branding)
 		emailDispatchDeps = tasks.EmailDeps{Queries: q, Sender: sender, Provider: provider}
+		notificationEmails := email.NewEnqueuer(q, branding, log)
+		notificationEmails.SetOverrideLookup(func(ctx context.Context, key string) (email.Overrides, bool) {
+			resolved, resolveErr := notify.Resolve(ctx, q, key)
+			if resolveErr != nil || !resolved.HasOverride {
+				return email.Overrides{}, false
+			}
+			return email.Overrides{Subject: resolved.Subject, BodyText: resolved.Body}, true
+		})
+		coreRuntime.Deps.NotificationEmail = notificationEmails
 	} else {
 		log.Warn("email dispatch disabled: ASTRONOMER_ENCRYPTION_KEY is not set")
 	}
@@ -390,7 +437,7 @@ func main() {
 		Delivery: deliveryRuntime, Dispatch: dispatchRuntime, Alerts: alertRuntime,
 		Maintenance: maintenanceRuntime, Allowlists: allowlistRuntime, GitOps: gitopsRuntime,
 	}
-	w, werr := worker.NewWorker(cfg.RedisURL, log, standaloneRuntime, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, log))
+	w, werr := worker.NewWorker(cfg.RedisURL, cfg.WorkerConcurrency, log, standaloneRuntime, worker.NewTerminalFailureErrorHandler(queueTerminalPublisher, log))
 	if werr != nil {
 		log.Error("failed to start worker", "error", werr)
 		os.Exit(1)
@@ -437,7 +484,7 @@ func main() {
 	// Start worker and scheduler in background goroutines.
 	errCh := make(chan error, 3)
 	go func() {
-		if err := w.Start(); err != nil {
+		if err := w.Run(ctx); err != nil {
 			errCh <- fmt.Errorf("worker: %w", err)
 		}
 	}()
@@ -489,4 +536,23 @@ func main() {
 	auditCancel()
 
 	observability.WithEvent(log, "worker_stopped").Info("astronomer-worker stopped")
+}
+
+// workerDBMaxConns keeps the standalone worker's SQL capacity above its job
+// concurrency. Leader leases use a separate pool, so this headroom is reserved
+// for task queries, dispatch bookkeeping, and metrics rather than pinned locks.
+// An explicit operator value is authoritative.
+func workerDBMaxConns(configured int32, concurrency int) int32 {
+	if configured > 0 {
+		return configured
+	}
+	const (
+		minimum  = int32(25)
+		headroom = int32(8)
+	)
+	derived := int32(concurrency) + headroom
+	if derived < minimum {
+		return minimum
+	}
+	return derived
 }

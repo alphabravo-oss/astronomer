@@ -84,7 +84,7 @@ initialize_evidence() {
   : >"$TOOLS_FILE"
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   local tree_json
-  tree_json="$(python3 scripts/hash-source-tree.py --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
+  tree_json="$(python3 "$ROOT_DIR/scripts/hash-source-tree.py" --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
   read -r SOURCE_TREE_SHA256 SOURCE_FILE_COUNT < <(
     python3 -c 'import json,sys; value=json.load(sys.stdin); print(value["source_tree_sha256"], value["source_file_count"])' <<<"$tree_json"
   )
@@ -149,7 +149,7 @@ finalize_evidence() {
   local status="passed"
   (( exit_code == 0 )) || status="failed"
   local finished_tree_json finished_tree_sha256 finished_file_count tree_stable="true"
-  finished_tree_json="$(python3 scripts/hash-source-tree.py --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
+  finished_tree_json="$(python3 "$ROOT_DIR/scripts/hash-source-tree.py" --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
   read -r finished_tree_sha256 finished_file_count < <(
     python3 -c 'import json,sys; value=json.load(sys.stdin); print(value["source_tree_sha256"], value["source_file_count"])' <<<"$finished_tree_json"
   )
@@ -252,8 +252,10 @@ require_frontend_dependencies() {
 verify_contract_artifacts() {
   step "Documentation links, lifecycle classification, and terminology"
   run_logged documentation-contract node scripts/check-docs.mjs
+  run_logged configuration-reference node scripts/generate-config-docs.mjs
+  run_logged configuration-generator-tests node --test scripts/generate-config-docs.test.mjs
 
-  step "Changed-code and legacy-hotspot complexity budgets"
+  step "Repository-wide file and function complexity budgets"
   run_logged complexity-budget node scripts/check-complexity-budget.mjs
 
   step "Go and frontend dependency-direction boundaries"
@@ -297,6 +299,9 @@ verify_contract_artifacts() {
 
   step "Error-code documentation"
   run_logged error-code-docs node scripts/error-code-docs.mjs --check
+
+  step "astro CLI documentation"
+  run_logged cli-docs node scripts/generate-cli-docs.mjs
 
   step "Route metadata JSON"
   run_logged route-metadata-json python3 -c \
@@ -356,6 +361,7 @@ verify_backend() {
   step "Migration safety"
   run_logged migration-safety ./scripts/check-migrations.sh
   run_logged migration-policy-self-test ./scripts/check-migrations-test.sh
+  run_logged data-governance python3 ./scripts/check-data-governance.py
 
   step "sqlc generated-code drift"
   run_logged sqlc-generated ./scripts/check-sqlc-generated.sh
@@ -365,6 +371,9 @@ verify_backend() {
 
   step "Go vet"
   run_logged go-vet go vet ./...
+
+  step "Reachable Go vulnerability scan"
+  run_logged go-vulnerability-scan make vulncheck
 
   step "Go lint (pinned golangci-lint against .golangci.yml)"
   run_logged go-lint ./scripts/check-go-lint.sh
@@ -413,6 +422,7 @@ verify_frontend() {
   run_logged frontend-type-check npm run type-check
 
   step "Frontend unit tests"
+  run_logged frontend-formatter-tests npm run format:test
   run_logged frontend-unit-tests npm test
 
   step "Frontend production build"
@@ -461,10 +471,17 @@ verify_helm() {
   )
 
   step "Helm lint"
-  run_logged helm-lint helm lint deploy/chart "${render_keys[@]}"
+  # Base values are deliberately production-safe and incomplete until an
+  # operator supplies external infrastructure. Lint the explicit disposable
+  # profile here; the fully wired production render below validates the
+  # production branch of the schema with concrete inputs.
+  run_logged helm-lint helm lint deploy/chart \
+    -f deploy/chart/values-dev.yaml \
+    "${render_keys[@]}"
 
   step "Development Helm render"
   render_helm helm-development helm template astronomer deploy/chart \
+    --kube-version 1.35.0 \
     "${render_keys[@]}" \
     --set frontend.enabled=true \
     --set dex.enabled=true \
@@ -472,6 +489,7 @@ verify_helm() {
 
   step "Fully wired production Helm render"
   render_helm helm-production helm template astronomer deploy/chart \
+    --kube-version 1.35.0 \
     -f deploy/chart/values-production.yaml \
     --set config.serverURL=https://astronomer.example.com \
     --set 'gateway.hosts={astronomer.example.com}' \
@@ -486,6 +504,20 @@ verify_helm() {
     --set 'networkPolicy.externalPostgresEgressCIDRs={10.20.0.0/16}' \
     --set 'networkPolicy.externalRedisEgressCIDRs={10.30.0.0/16}' \
     --set 'networkPolicy.kubernetesAPIEgressCIDRs={10.40.0.0/14}' \
+    --set 'networkPolicy.objectStoreEgressCIDRs={10.50.0.0/16}' \
+    --set image.server.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set image.worker.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set image.agent.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set image.migrate.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set utilities.busybox.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set postgres.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set redis.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set preflight.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set frontend.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set dex.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set managementBackup.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set managementRestoreDrill.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set managementRestoreDrill.sidecar.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
     --set delivery.artifacts.fluxDistribution.ociRepository=ghcr.io/example/astronomer/flux-distribution \
     --set delivery.artifacts.fluxDistribution.digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
     --set delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0 \
@@ -494,7 +526,9 @@ verify_helm() {
     --set delivery.artifacts.builtInBundles.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0 \
     --set managementBackup.s3.bucket=astronomer-backups \
     --set managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws \
-    --set managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap
+    --set managementBackup.encryption.sourceIdentity=test-production-installation \
+    --set managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap \
+    --set managementBackup.retention.credentialsSecretRef.name=astronomer-backup-retention
 
   step "Helm chart contract tests"
   run_logged helm-contract-tests go test ./deploy/ -count=1

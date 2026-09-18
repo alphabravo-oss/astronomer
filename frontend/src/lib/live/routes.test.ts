@@ -58,6 +58,7 @@ const WIRE_TYPES = [
   "template_binding.changed",
   "registry.changed",
   "snapshot.changed",
+  "service_mesh.changed",
   // P4.9 coverage-completion publishers.
   "alerting.changed",
   "charlie_finding.changed",
@@ -97,10 +98,11 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
   "cluster.k8s_changed": [
     qk.clusters.podsAll(CID),
     qk.workloads.byCluster(CID),
+    qk.generic.counts(CID),
   ], // kind: Pod fixture
   "cluster.registration.step": [qk.clusterPages.registrationStatus(CID)],
   "cluster.registration.phase": [qk.clusterPages.registrationStatus(CID)],
-  "sys.ping": [],
+  "sys.ping": [qk.charlie.adminAgent, qk.charlie.adminDiagnostics],
   [AUDIT_PREFIX]: [qk.activityAll],
   // P4.5 domain publishers — fixture carries clusterId + id.
   "backup.changed": [qk.backups.all, qk.backups.b2All],
@@ -143,6 +145,12 @@ const EVENT_CASES: Record<string, QueryKey[]> = {
     qk.clusterPages.snapshots(CID),
     qk.clusterPages.snapshotSchedules(CID),
     qk.clusterPages.veleroStatus(CID),
+  ],
+  "service_mesh.changed": [
+    qk.clusterPages.serviceMeshDetection(CID),
+    qk.clusterPages.serviceMeshInventory(CID),
+    qk.clusterPages.serviceMeshMtls(CID),
+    qk.clusterPages.serviceMeshHeader(CID),
   ],
   // P4.9 — the shared fixture carries no `kind`, so alerting.changed hits
   // its whole-domain fallback here; per-kind rows are asserted separately.
@@ -217,6 +225,10 @@ const KIND_CASES: Record<string, QueryKey[]> = {
   ],
   Ingress: [qk.networking.ingresses(CID)],
   NetworkPolicy: [qk.networking.networkPolicies(CID)],
+  ResourceQuota: [
+    qk.generic.resources(CID, "resourcequotas"),
+    qk.projects.details,
+  ],
   PersistentVolume: [qk.storage.pvs(CID)],
   PersistentVolumeClaim: [qk.storage.pvcs(CID)],
   StorageClass: [qk.storage.storageClasses(CID)],
@@ -323,9 +335,6 @@ describe("K8S_KIND_ROUTES", () => {
   it("defaults unmapped kinds to the generic resource list", () => {
     expect(defaultK8sRoute(CID, fixture("ServiceAccount"))).toEqual([
       qk.generic.resources(CID, "serviceaccounts"),
-    ]);
-    expect(defaultK8sRoute(CID, fixture("ResourceQuota"))).toEqual([
-      qk.generic.resources(CID, "resourcequotas"),
     ]);
     expect(defaultK8sRoute(CID, fixture("PodDisruptionBudget"))).toEqual([
       qk.generic.resources(CID, "poddisruptionbudgets"),

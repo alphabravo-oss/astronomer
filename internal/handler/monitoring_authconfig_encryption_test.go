@@ -147,7 +147,7 @@ func TestUpdateBackendConfigPreservesCredentialWhenAuthConfigOmitted(t *testing.
 	enc := newMonitoringTestEncryptor(t)
 	q := &monitoringAuthConfigQuerier{backend: sealedMonitoringBackend(t, enc,
 		`{"token":"`+monitoringTestToken+`","operationPolicies":{"maxRetryAttempts":3}}`)}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(enc)
 
 	// A body with no authConfig at all: the operator is changing the timeout.
@@ -173,7 +173,7 @@ func TestUpdateBackendConfigReplacesCredentialButKeepsSharedStackMetadata(t *tes
 	enc := newMonitoringTestEncryptor(t)
 	q := &monitoringAuthConfigQuerier{backend: sealedMonitoringBackend(t, enc,
 		`{"token":"`+monitoringTestToken+`","sharedThanos":{"namespace":"monitoring","releaseName":"thanos"}}`)}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(enc)
 
 	body := `{"queryUrl":"https://thanos.example/","authType":"bearer","authConfig":{"token":"rotated-token"}}`
@@ -221,7 +221,7 @@ func TestUpdateBackendConfigResponseNeverCarriesTheCredential(t *testing.T) {
 
 	t.Run("authConfig omitted", func(t *testing.T) {
 		q := &monitoringAuthConfigQuerier{backend: sealedMonitoringBackend(t, enc, stored)}
-		h := NewMonitoringHandlerWithQueries(q, nil)
+		h := newMonitoringHandlerWithQueriesForTest(q, nil)
 		h.SetEncryptor(enc)
 
 		rr := httptest.NewRecorder()
@@ -235,7 +235,7 @@ func TestUpdateBackendConfigResponseNeverCarriesTheCredential(t *testing.T) {
 
 	t.Run("authConfig supplied", func(t *testing.T) {
 		q := &monitoringAuthConfigQuerier{backend: sealedMonitoringBackend(t, enc, stored)}
-		h := NewMonitoringHandlerWithQueries(q, nil)
+		h := newMonitoringHandlerWithQueriesForTest(q, nil)
 		h.SetEncryptor(enc)
 
 		rr := httptest.NewRecorder()
@@ -296,7 +296,7 @@ func TestUpdateSharedThanosMetadataPreservesCredential(t *testing.T) {
 	enc := newMonitoringTestEncryptor(t)
 	backend := sealedMonitoringBackend(t, enc, `{"token":"`+monitoringTestToken+`"}`)
 	q := &monitoringAuthConfigQuerier{backend: backend}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(enc)
 
 	if err := h.updateSharedThanosMetadata(context.Background(), backend, SharedThanosStackRequest{
@@ -318,7 +318,7 @@ func TestUpdateSharedAlertmanagerMetadataPreservesCredential(t *testing.T) {
 	enc := newMonitoringTestEncryptor(t)
 	backend := sealedMonitoringBackend(t, enc, `{"token":"`+monitoringTestToken+`"}`)
 	q := &monitoringAuthConfigQuerier{backend: backend}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(enc)
 
 	if err := h.updateSharedAlertmanagerMetadata(context.Background(), backend, SharedAlertmanagerRequest{
@@ -367,7 +367,7 @@ func TestUpdateSharedGrafanaMetadataPreservesCredential(t *testing.T) {
 	enc := newMonitoringTestEncryptor(t)
 	backend := sealedMonitoringBackend(t, enc, `{"token":"`+monitoringTestToken+`"}`)
 	q := &monitoringAuthConfigQuerier{backend: backend}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(enc)
 
 	if err := h.updateSharedGrafanaMetadata(context.Background(), backend, SharedGrafanaRequest{
@@ -396,7 +396,7 @@ func TestUpdateSharedLokiMetadataPreservesCredential(t *testing.T) {
 	enc := newMonitoringTestEncryptor(t)
 	backend := sealedMonitoringBackend(t, enc, `{"token":"`+monitoringTestToken+`"}`)
 	q := &monitoringAuthConfigQuerier{backend: backend}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(enc)
 
 	if err := h.updateSharedLokiMetadata(context.Background(), backend, SharedLokiRequest{
@@ -426,7 +426,7 @@ func TestMonitoringWritesAbortWhenTheCredentialCannotBeDecrypted(t *testing.T) {
 
 	t.Run("updateSharedThanosMetadata", func(t *testing.T) {
 		q := &monitoringAuthConfigQuerier{backend: backend}
-		h := NewMonitoringHandlerWithQueries(q, nil)
+		h := newMonitoringHandlerWithQueriesForTest(q, nil)
 		h.SetEncryptor(wrongEnc)
 		if err := h.updateSharedThanosMetadata(context.Background(), backend, SharedThanosStackRequest{}, "installing"); err == nil {
 			t.Fatal("expected an error, not a write that drops the credential")
@@ -438,7 +438,7 @@ func TestMonitoringWritesAbortWhenTheCredentialCannotBeDecrypted(t *testing.T) {
 
 	t.Run("updateSharedAlertmanagerMetadata", func(t *testing.T) {
 		q := &monitoringAuthConfigQuerier{backend: backend}
-		h := NewMonitoringHandlerWithQueries(q, nil)
+		h := newMonitoringHandlerWithQueriesForTest(q, nil)
 		h.SetEncryptor(wrongEnc)
 		if err := h.updateSharedAlertmanagerMetadata(context.Background(), backend, SharedAlertmanagerRequest{}, "installing"); err == nil {
 			t.Fatal("expected an error, not a write that drops the credential")
@@ -450,7 +450,7 @@ func TestMonitoringWritesAbortWhenTheCredentialCannotBeDecrypted(t *testing.T) {
 
 	t.Run("updateSharedGrafanaMetadata", func(t *testing.T) {
 		q := &monitoringAuthConfigQuerier{backend: backend}
-		h := NewMonitoringHandlerWithQueries(q, nil)
+		h := newMonitoringHandlerWithQueriesForTest(q, nil)
 		h.SetEncryptor(wrongEnc)
 		if err := h.updateSharedGrafanaMetadata(context.Background(), backend, SharedGrafanaRequest{}, "installing"); err == nil {
 			t.Fatal("expected an error, not a write that drops the credential")
@@ -474,7 +474,7 @@ func TestMonitoringWritesAbortWhenTheCredentialCannotBeDecrypted(t *testing.T) {
 
 	t.Run("UpdateBackendConfig", func(t *testing.T) {
 		q := &monitoringAuthConfigQuerier{backend: backend}
-		h := NewMonitoringHandlerWithQueries(q, nil)
+		h := newMonitoringHandlerWithQueriesForTest(q, nil)
 		h.SetEncryptor(wrongEnc)
 		rr := httptest.NewRecorder()
 		h.UpdateBackendConfig(rr, httptest.NewRequest(http.MethodPut, "/api/v1/settings/monitoring/backend/",
@@ -492,7 +492,7 @@ func TestMonitoringWritesAbortWhenTheCredentialCannotBeDecrypted(t *testing.T) {
 func TestUpdateBackendConfigCreatesTheFirstBackend(t *testing.T) {
 	enc := newMonitoringTestEncryptor(t)
 	q := &monitoringAuthConfigQuerier{getErr: pgx.ErrNoRows}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(enc)
 
 	rr := httptest.NewRecorder()
@@ -513,7 +513,7 @@ func TestGetBackendConfigNeverReturnsCredentialOrCiphertext(t *testing.T) {
 	backend := sealedMonitoringBackend(t, enc,
 		`{"token":"`+monitoringTestToken+`","operationPolicies":{"maxRetryAttempts":3}}`)
 	q := &monitoringAuthConfigQuerier{backend: backend}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(enc)
 
 	rr := httptest.NewRecorder()
@@ -556,7 +556,7 @@ func TestGetBackendConfigRedactsAPreMigrationRow(t *testing.T) {
 		AuthType:   "bearer",
 		AuthConfig: json.RawMessage(`{"token":"` + monitoringTestToken + `"}`),
 	}}
-	h := NewMonitoringHandlerWithQueries(q, nil)
+	h := newMonitoringHandlerWithQueriesForTest(q, nil)
 	h.SetEncryptor(newMonitoringTestEncryptor(t))
 
 	rr := httptest.NewRecorder()

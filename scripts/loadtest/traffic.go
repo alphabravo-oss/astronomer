@@ -12,8 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm reconnectStormConfig, duration time.Duration, log *slog.Logger) {
@@ -39,6 +37,18 @@ func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm
 		jitter = 15 * time.Second
 	}
 	log.Warn("triggering reconnect storm", "agents", limit, "jitter", jitter)
+	if limit == 0 {
+		return
+	}
+	type reconnectTarget struct {
+		agent      *syntheticAgent
+		generation uint64
+	}
+	targets := make(chan reconnectTarget, limit)
+	rec := agents[0].rec
+	if rec != nil {
+		rec.beginReconnectStorm(limit)
+	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < limit; i++ {
 		agent := agents[i]
@@ -46,10 +56,44 @@ func scheduleReconnectStorm(ctx context.Context, agents []*syntheticAgent, storm
 		go func() {
 			select {
 			case <-ctx.Done():
+				return
 			case <-time.After(delay):
-				agent.CloseForStorm()
+				targets <- reconnectTarget{agent: agent, generation: agent.CloseForStorm()}
 			}
 		}()
+	}
+
+	closed := make([]reconnectTarget, 0, limit)
+	for len(closed) < limit {
+		select {
+		case <-ctx.Done():
+			return
+		case target := <-targets:
+			closed = append(closed, target)
+		}
+	}
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		reconnected := 0
+		for _, target := range closed {
+			if target.agent.ConnectionGeneration() > target.generation {
+				reconnected++
+			}
+		}
+		if reconnected == limit {
+			if rec != nil {
+				rec.finishReconnectStorm(reconnected)
+			}
+			log.Info("reconnect storm recovered", "agents", reconnected)
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 
@@ -62,6 +106,53 @@ func waitForSyntheticAgents(ctx context.Context, agents []*syntheticAgent) error
 		}
 	}
 	return nil
+}
+
+// runSyntheticAgentRamp starts agents in bounded handshake batches and waits
+// for the entire estate to become ready. rampCtx bounds both acquiring a slot
+// and waiting for readiness; lifetimeCtx keeps successfully connected agents
+// alive for the subsequent workload window.
+func runSyntheticAgentRamp(
+	rampCtx context.Context,
+	lifetimeCtx context.Context,
+	agents []*syntheticAgent,
+	concurrency int,
+	agentWG *sync.WaitGroup,
+	runAgent func(context.Context, *syntheticAgent),
+) error {
+	if concurrency < 1 {
+		return fmt.Errorf("agent ramp concurrency must be >= 1, got %d", concurrency)
+	}
+	if runAgent == nil {
+		return fmt.Errorf("agent ramp runner is required")
+	}
+
+	sem := make(chan struct{}, concurrency)
+	for _, agent := range agents {
+		if err := rampCtx.Err(); err != nil {
+			return err
+		}
+		select {
+		case sem <- struct{}{}:
+		case <-rampCtx.Done():
+			return rampCtx.Err()
+		}
+
+		agentWG.Add(1)
+		go func() {
+			defer agentWG.Done()
+			runAgent(lifetimeCtx, agent)
+		}()
+		go func() {
+			select {
+			case <-agent.ready:
+			case <-rampCtx.Done():
+			}
+			<-sem
+		}()
+	}
+
+	return waitForSyntheticAgents(rampCtx, agents)
 }
 
 // emitSyntheticStateEvents drives the profile's estate-wide eventsPerSecond
@@ -155,31 +246,75 @@ func maxInt(a, b int) int {
 	return b
 }
 
+const workloadTicksPerSecond = 1000
+
+// workloadTarget converts elapsed wall time into the cumulative number of
+// requests that should have been scheduled by the end of the current tick.
+// Deriving the target from elapsed time (instead of counting ticker messages)
+// preserves the declared rate when Go coalesces or drops timer wake-ups. The
+// maximum caps catch-up at the exact measured-window request count.
+func workloadTarget(rps int, slotEnd time.Duration, maximum int) int {
+	if rps <= 0 || slotEnd <= 0 || maximum <= 0 {
+		return 0
+	}
+	numerator := slotEnd.Nanoseconds() * int64(rps)
+	target := int((numerator + int64(time.Second) - 1) / int64(time.Second))
+	if target > maximum {
+		return maximum
+	}
+	return target
+}
+
 // driveWorkload maintains cfg.rps requests per second until scheduleCtx is
 // done. Requests retain requestCtx so the declared window does not cancel
 // already-started work; all in-flight work is joined before returning.
 func driveWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token string, rec *recorder, log *slog.Logger) {
-	limiter := rate.NewLimiter(rate.Limit(cfg.rps), cfg.rps)
+	if cfg.rps <= 0 {
+		return
+	}
 	scs := defaultScenarios()
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	client := &http.Client{Timeout: 30 * time.Second}
 	var sequence atomic.Uint64
 	var inflight sync.WaitGroup
 	defer inflight.Wait()
+	ticksPerSecond := minInt(cfg.rps, workloadTicksPerSecond)
+	tickInterval := time.Second / time.Duration(ticksPerSecond)
+	ticker := time.NewTicker(tickInterval)
+	defer ticker.Stop()
+	startedAt := time.Now()
+	maximum := workloadTarget(cfg.rps, cfg.duration, int(^uint(0)>>1))
+	scheduled := 0
+	launchThrough := func(target int) {
+		for scheduled < target {
+			sc := pickScenario(scs, rng.Float64())
+			clusterID := ""
+			if len(cfg.fixtureClusterIDs) > 0 {
+				clusterID = cfg.fixtureClusterIDs[(sequence.Add(1)-1)%uint64(len(cfg.fixtureClusterIDs))]
+			}
+			scheduled++
+			inflight.Add(1)
+			go func() {
+				defer inflight.Done()
+				doRequest(requestCtx, client, cfg.server, token, sc, clusterID, rec)
+			}()
+		}
+	}
+
+	// Open the measured window at the declared rate, bounded to at most one
+	// scheduler micro-batch instead of a full second of traffic.
+	launchThrough(workloadTarget(cfg.rps, tickInterval, maximum))
 	for {
-		if err := limiter.Wait(scheduleCtx); err != nil {
+		select {
+		case <-scheduleCtx.Done():
 			return
+		case tick := <-ticker.C:
+			if scheduleCtx.Err() != nil {
+				return
+			}
+			slotEnd := tick.Sub(startedAt) + tickInterval
+			launchThrough(workloadTarget(cfg.rps, slotEnd, maximum))
 		}
-		sc := pickScenario(scs, rng.Float64())
-		clusterID := ""
-		if len(cfg.fixtureClusterIDs) > 0 {
-			clusterID = cfg.fixtureClusterIDs[(sequence.Add(1)-1)%uint64(len(cfg.fixtureClusterIDs))]
-		}
-		inflight.Add(1)
-		go func() {
-			defer inflight.Done()
-			doRequest(requestCtx, client, cfg.server, token, sc, clusterID, rec)
-		}()
 	}
 }
 

@@ -27,6 +27,7 @@ parallel:
 The scopes are intentionally additive rather than quick approximations:
 
 - `backend` runs migration safety, sqlc generated drift, `go build`, `go vet`,
+  reachable-vulnerability analysis with pinned `govulncheck`,
   `scripts/check-go-lint.sh` (golangci-lint, pinned, against `.golangci.yml`),
   the complete normal and race suites, and API/OpenAPI/generated/embed/route/
   error-code contracts.
@@ -61,6 +62,36 @@ the Docker-based physical-replication drill does not make the default local
 `make verify-enterprise` loop impractically slow. Run the identical lane with
 `make test-postgres-failover-certification`; CI retains its schema-versioned
 RPO/RTO evidence and database logs for 90 days.
+
+## Local CI before pushing
+
+[Local CI](https://github.com/redwoodjs/local-ci) runs the official GitHub
+Actions runner against the current working tree and is the pre-push emulator
+for `pr-validation.yaml`. Its npm package is lockfile-pinned under
+`tools/local-ci/`; `.github/local-ci.Dockerfile` pins and extends the official
+runner image with the build tools used by this repository.
+
+Run one entry from each matrix during iteration, then the complete matrix at a
+phase or pull-request boundary:
+
+```bash
+make local-ci-pr-representative
+make local-ci-pr
+```
+
+Both targets cap concurrency at two jobs by default; override with
+`LOCAL_CI_JOBS=<n>`. They prewarm the locked frontend dependencies once before
+parallel jobs. Disposable runner workspaces live in the ignored `.local-ci/`
+directory so release-capacity checks measure the same filesystem that funds the
+local run; override `LOCAL_CI_WORKING_DIR` when another suitably sized
+filesystem should be used. Local CI is diagnostic preflight, not release
+evidence: GitHub's protected checks and the external cloud, DR, scale,
+accessibility, and approval workflows still run once against the candidate that
+is ready to merge.
+
+Do not place credentials in `.env.local-ci`. The file is ignored defensively,
+but Astronomer's protected qualification workflows must run on GitHub with
+their environment-scoped secrets and retained evidence.
 
 ## Active workflows
 
@@ -120,6 +151,12 @@ cannot execute locally. Release integrity is decided by the protected
 `release.yaml`/`resume-release.yaml` promotion jobs, which download and verify
 the exact signed RC, cloud, scale/audit/sizing, Rancher automated+human, and
 assistive-technology evidence named by the digest-bound release approval.
+
+`make verify-all` is the explicit local aggregate for the static gate plus the
+stateful, race, tunnel-HA, PostgreSQL failover, Playwright, visual, and live
+browser lanes. It requires Docker, browser dependencies, and substantially more
+time than the static gate; unlike `verify-enterprise`, it does not represent
+those external qualifications as merely pending.
 
 ### `release.yaml` — qualified immutable release pipeline (T12)
 

@@ -9,7 +9,18 @@
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import * as apiClient from "@/lib/api";
+import {
+  getDexConnectorTypes,
+  getDexConnectors,
+  getDexConnector,
+  createDexConnector,
+  updateDexConnector,
+  deleteDexConnector,
+  getDexSettings,
+  updateDexSettings,
+  applyDexConfig,
+  registerDexAsSSO,
+} from "@/lib/api/dex";
 import type {
   DexConnectorWriteRequest,
   DexSettingsWriteRequest,
@@ -36,7 +47,7 @@ export const dexQueryKeys = {
 export function useDexConnectorTypes() {
   return useQuery({
     queryKey: dexQueryKeys.connectorTypes,
-    queryFn: () => apiClient.getDexConnectorTypes(),
+    queryFn: () => getDexConnectorTypes(),
     // The registry is process-static on the backend; cache aggressively.
     staleTime: 5 * 60 * 1000,
   });
@@ -45,14 +56,14 @@ export function useDexConnectorTypes() {
 export function useDexConnectors() {
   return useQuery({
     queryKey: dexQueryKeys.connectors,
-    queryFn: () => apiClient.getDexConnectors(),
+    queryFn: () => getDexConnectors(),
   });
 }
 
 export function useDexConnector(id: string | undefined) {
   return useQuery({
     queryKey: dexQueryKeys.connector(id || ""),
-    queryFn: () => apiClient.getDexConnector(id as string),
+    queryFn: () => getDexConnector(id as string),
     enabled: !!id,
   });
 }
@@ -60,8 +71,7 @@ export function useDexConnector(id: string | undefined) {
 export function useCreateDexConnector() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: DexConnectorWriteRequest) =>
-      apiClient.createDexConnector(data),
+    mutationFn: (data: DexConnectorWriteRequest) => createDexConnector(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.connectors });
       toastSuccess("Connector created");
@@ -81,7 +91,7 @@ export function useUpdateDexConnector() {
     }: {
       id: string;
       data: Partial<DexConnectorWriteRequest>;
-    }) => apiClient.updateDexConnector(id, data),
+    }) => updateDexConnector(id, data),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.connectors });
       qc.invalidateQueries({ queryKey: dexQueryKeys.connector(vars.id) });
@@ -96,7 +106,7 @@ export function useUpdateDexConnector() {
 export function useDeleteDexConnector() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiClient.deleteDexConnector(id),
+    mutationFn: (id: string) => deleteDexConnector(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.connectors });
       toastSuccess("Connector deleted");
@@ -110,15 +120,14 @@ export function useDeleteDexConnector() {
 export function useDexSettings() {
   return useQuery({
     queryKey: dexQueryKeys.settings,
-    queryFn: () => apiClient.getDexSettings(),
+    queryFn: () => getDexSettings(),
   });
 }
 
 export function useUpdateDexSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: DexSettingsWriteRequest) =>
-      apiClient.updateDexSettings(data),
+    mutationFn: (data: DexSettingsWriteRequest) => updateDexSettings(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.settings });
       toastSuccess("Dex settings saved");
@@ -132,7 +141,7 @@ export function useUpdateDexSettings() {
 export function useApplyDexConfig() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => apiClient.applyDexConfig(),
+    mutationFn: () => applyDexConfig(),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.settings });
       if (isDexRuntimeApplied(data))
@@ -147,8 +156,7 @@ export function useApplyDexConfig() {
 export function useRegisterDexAsSSO() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: DexRegisterAsSSORequest) =>
-      apiClient.registerDexAsSSO(data),
+    mutationFn: (data: DexRegisterAsSSORequest) => registerDexAsSSO(data),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: dexQueryKeys.settings });
       if (isDexRuntimeApplied(data))

@@ -815,7 +815,7 @@ func TestApply_PatchesMetadataOnlyRuntimeSecretAndRollsByResourceVersion(t *test
 		ID: cid, Name: "azure", Type: "microsoft", Config: connectorCfg, Enabled: true,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	h.SetK8sRequester(&stubK8sRequester{respFn: proxyToHTTPTest(mockK8s)})
 
@@ -874,7 +874,7 @@ func TestApply_FixedPointDoesNotMutateOrRollout(t *testing.T) {
 		ClusterID: pgtype.UUID{Bytes: clusterID, Valid: true}, PublicClients: json.RawMessage(`[]`),
 		Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
 	}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	rendered, err := h.renderDexConfig(*q.settings, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -922,7 +922,7 @@ func TestPreparePhaseCrashRetryStagesSecretWithoutDeploymentCutover(t *testing.T
 		Namespace: "dex", ReleaseName: "dex", DeploymentName: "dex", ServiceName: "dex", RuntimeSecretName: "runtime",
 		RuntimePhase: "prepare", RuntimeGeneration: 4, PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`),
 	}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	rendered, err := h.renderDexConfig(*q.settings, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -976,7 +976,7 @@ func TestPreparePhaseCrashRetryStagesSecretWithoutDeploymentCutover(t *testing.T
 func TestApplyRuntimeSecret_FailsClosedWhenChartIdentityMissing(t *testing.T) {
 	q := newFakeDexQuerier()
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetK8sRequester(&stubK8sRequester{respFn: func(_ stubReq) (*protocol.K8sResponsePayload, error) {
 		return &protocol.K8sResponsePayload{StatusCode: http.StatusNotFound}, nil
 	}})
@@ -997,7 +997,7 @@ func TestApplyRuntimeSecret_RefusesUnownedNameCollision(t *testing.T) {
 	raw, _ := json.Marshal(unowned)
 	q := newFakeDexQuerier()
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
 		if req.Method != http.MethodGet {
 			t.Fatalf("unexpected mutation %s", req.Method)
@@ -1021,7 +1021,7 @@ func TestApplyRuntimeSecret_ReconcilesOwnedMetadataAndPreservesForeignFields(t *
 	var patchBody []byte
 	q := newFakeDexQuerier()
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
 		if req.Method == http.MethodGet {
 			return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64StdEncode(raw)}, nil
@@ -1053,7 +1053,7 @@ func TestApply_503WhenNoK8sRequester(t *testing.T) {
 		Expiry:        json.RawMessage(`{}`),
 		Extra:         json.RawMessage(`{}`),
 	}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/apply/", nil)
 	w := httptest.NewRecorder()
 	h.Apply(w, req)
@@ -1069,7 +1069,7 @@ func TestCreateAndGetConnector_RedactsSecret(t *testing.T) {
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh"}
 	keyStr, _ := auth.GenerateKey()
 	enc, _ := auth.NewEncryptor(keyStr)
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 
 	body := map[string]any{
@@ -1140,7 +1140,7 @@ func TestCreateAndGetConnector_RedactsSecret(t *testing.T) {
 func TestDexConnectorUpdateAndDeleteAreAudited(t *testing.T) {
 	q := newFakeDexQuerier()
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, RuntimeGeneration: 1, RuntimePhase: "fresh"}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	connectorID := uuid.New()
 	cfg, _ := json.Marshal(map[string]any{
 		"tenant":       "t",
@@ -1207,7 +1207,7 @@ func TestConnectorMutationApplyRestoresOnlyPreviouslyEnabledSSO(t *testing.T) {
 	if err != nil || staged.RuntimeGeneration != 2 || q.ssoByProv["dex"].IsEnabled {
 		t.Fatalf("staged=%#v err=%v sso=%#v", staged, err, q.ssoByProv["dex"])
 	}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	configureVerifiedDexRuntime(t, q, h)
 	recorder := httptest.NewRecorder()
 	h.Apply(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/apply/", nil))
@@ -1236,7 +1236,7 @@ func TestConnectorMutationFailureAndManualDisableRemainFailClosed(t *testing.T) 
 
 func TestCreateConnector_400OnMissingRequired(t *testing.T) {
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	body := map[string]any{
 		"type": "microsoft",
 		"name": "azure",
@@ -1259,7 +1259,7 @@ func TestCreateConnector_400OnMissingRequired(t *testing.T) {
 
 func TestCreateConnector_RejectsUppercaseLDAPBeforeRegistryLookup(t *testing.T) {
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	body := []byte(`{"name":"corp-ldap","type":"LDAP","config":{"host":"ldap.example.com:636","bindDN":"cn=svc","bindPW":"secret","userSearch":{"baseDN":"dc=example","username":"uid","idAttr":"uid","emailAttr":"mail"}}}`)
 	w := httptest.NewRecorder()
 	h.CreateConnector(w, httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/connectors/", bytes.NewReader(body)))
@@ -1289,7 +1289,7 @@ func TestRegisterAsSSO_CreatesProviderRow(t *testing.T) {
 		Expiry:        json.RawMessage(`{}`),
 		Extra:         json.RawMessage(`{}`),
 	}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	configureVerifiedDexRuntime(t, q, h)
 
@@ -1414,7 +1414,7 @@ func TestRegisterAsSSO_AtomicFailurePreservesCredentialPair(t *testing.T) {
 		AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`), AutoCreateUsers: true,
 	}
 	q.upsertErr = errors.New("atomic statement failed")
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	configureVerifiedDexRuntime(t, q, h)
 	body, _ := json.Marshal(map[string]any{"client_id": "astronomer", "client_secret": "new-secret"})
@@ -1449,7 +1449,7 @@ func TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges(t *t
 		Config: json.RawMessage(`{"issuer_url":"https://dex.example.com"}`), ClientID: "astronomer",
 		ClientSecretEncrypted: oldCipher, AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`), AutoCreateUsers: true,
 	}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	h.rolloutTimeout = 5 * time.Millisecond
 	h.rolloutPollInterval = time.Millisecond
@@ -1476,7 +1476,7 @@ func TestRegisterAsSSORolloutFailureLeavesProviderDisabledAndRetryConverges(t *t
 
 func TestRenderDexConfig_DefaultsRedirectURI(t *testing.T) {
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	key, _ := auth.GenerateKey()
 	enc, _ := auth.NewEncryptor(key)
 	h.SetEncryptor(enc)
@@ -1532,7 +1532,7 @@ func containsString(items []string, want string) bool {
 
 func TestUpdateSettings_RejectsMissingIssuer(t *testing.T) {
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	body, _ := json.Marshal(map[string]any{"namespace": "dex"})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/auth/dex/settings/", bytes.NewReader(body))
 	w := httptest.NewRecorder()
@@ -1556,7 +1556,7 @@ func TestGetSettings_BackfillsEnvelopeWithoutScrubbingCompatibilityCopy(t *testi
 	}
 	key, _ := auth.GenerateKey()
 	enc, _ := auth.NewEncryptor(key)
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	configureVerifiedDexRuntime(t, q, h)
 	recorder := httptest.NewRecorder()
@@ -1602,7 +1602,7 @@ func TestLegacyDexExtensionsFailClosedWithoutCanaryDisclosure(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			q := newFakeDexQuerier()
 			q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example.com", PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: clients, PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, Expiry: fixture.expiry, Extra: fixture.extra}
-			h := NewDexHandler(q)
+			h := wireDexMutationFixture(NewDexHandler(q), q)
 			h.SetEncryptor(enc)
 			recorder := httptest.NewRecorder()
 			h.GetSettings(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -1619,8 +1619,8 @@ func TestLegacyDexExtensionsFailClosedWithoutCanaryDisclosure(t *testing.T) {
 func TestBundledSettingsBindPreservesChartIdentityAndRuntimeConfiguration(t *testing.T) {
 	q := newFakeDexQuerier()
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://old.example.com/dex", Namespace: "platform-system", ReleaseName: "elite-dex", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", RuntimePhase: "fresh", PublicClients: json.RawMessage(`[]`), Expiry: json.RawMessage(`{"idTokens":"2h"}`), Extra: json.RawMessage(`{"logger":{"level":"info"}}`), RuntimeGeneration: 7}
-	h := NewDexHandler(q)
-	h.bundledIdentity = &dexRuntimeIdentity{Namespace: "platform-system", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", MigrationPhase: "fresh"}
+	h := wireDexMutationFixture(NewDexHandler(q), q)
+	h.bundledIdentity = &DexRuntimeIdentity{Namespace: "platform-system", ChartReleaseName: "elite", DeploymentName: "elite-dex", ServiceName: "elite-dex", RuntimeSecretName: "elite-dex-runtime", MigrationPhase: "fresh"}
 	clusterID := uuid.NewString()
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/auth/dex/settings/", strings.NewReader(`{"issuer_url":"https://platform.example.com/dex","cluster_id":"`+clusterID+`"}`))
 	w := httptest.NewRecorder()
@@ -1646,7 +1646,7 @@ func TestBundledSettingsBindPreservesChartIdentityAndRuntimeConfiguration(t *tes
 
 func TestCustomDexRuntimeIdentityRoundTripsEndToEnd(t *testing.T) {
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	clusterID := uuid.NewString()
 	body := `{"issuer_url":"https://dex.customer.example/auth","cluster_id":"` + clusterID + `","namespace":"customer-auth","release_name":"customer-dex","chart_release_name":"customer-stack","deployment_name":"customer-dex-server","service_name":"customer-dex-http","runtime_secret_name":"customer-dex-runtime"}`
 	w := httptest.NewRecorder()
@@ -1674,7 +1674,7 @@ func TestStaleGenerationCannotEnableDexSSOOrOverwriteNewerSecret(t *testing.T) {
 	secret.Metadata.ResourceVersion = "9"
 	raw, _ := json.Marshal(secret)
 	patched := false
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
 		if req.Method == http.MethodPatch {
 			patched = true
@@ -1738,7 +1738,7 @@ func TestDexGenerationCASStopsAfterInterleavedExternalReads(t *testing.T) {
 		secret.Metadata.ResourceVersion = "1"
 		raw, _ := json.Marshal(secret)
 		patched := false
-		h := NewDexHandler(q)
+		h := wireDexMutationFixture(NewDexHandler(q), q)
 		h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
 			if req.Method == http.MethodPatch {
 				patched = true
@@ -1757,7 +1757,7 @@ func TestDexGenerationCASStopsAfterInterleavedExternalReads(t *testing.T) {
 		deployment := map[string]any{"metadata": map[string]any{"generation": 1, "resourceVersion": "7"}, "spec": map[string]any{"template": map[string]any{"metadata": map[string]any{"annotations": map[string]any{}}}}}
 		raw, _ := json.Marshal(deployment)
 		patched := false
-		h := NewDexHandler(q)
+		h := wireDexMutationFixture(NewDexHandler(q), q)
 		h.SetK8sRequester(&stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
 			if req.Method == http.MethodPatch {
 				patched = true
@@ -1775,7 +1775,7 @@ func TestLoadPublicClientsMixedVersionAuthorityAndCutover(t *testing.T) {
 	key, _ := auth.GenerateKey()
 	enc, _ := auth.NewEncryptor(key)
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	staleEnvelope, _ := enc.Encrypt(`[{"id":"stale","redirectURIs":["https://platform.example/stale"],"secret":"stale"}]`)
 	freshEnvelope, _ := enc.Encrypt(`[{"id":"fresh","redirectURIs":["https://platform.example/fresh"],"secret":"fresh"}]`)
@@ -1805,7 +1805,7 @@ func TestLoadPublicClientsMixedVersionAuthorityAndCutover(t *testing.T) {
 	})
 
 	t.Run("post-cutover encrypted clients fail closed without encryptor", func(t *testing.T) {
-		withoutKey := NewDexHandler(q)
+		withoutKey := wireDexMutationFixture(NewDexHandler(q), q)
 		row := sqlc.DexSetting{ID: dexSettingsSingletonID, PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: freshEnvelope, PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}
 		if _, _, err := withoutKey.loadPublicClients(context.Background(), row); err == nil {
 			t.Fatal("expected missing encryptor failure")
@@ -1815,7 +1815,7 @@ func TestLoadPublicClientsMixedVersionAuthorityAndCutover(t *testing.T) {
 
 func TestCreateConnector_FailsClosedWithoutEncryptor(t *testing.T) {
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	raw, _ := json.Marshal(map[string]any{
 		"type": "oidc", "name": "unsafe", "config": map[string]any{
 			"issuer": "https://idp.example.com", "clientID": "id", "clientSecret": "must-not-store",
@@ -1832,7 +1832,7 @@ func TestDexClosedSchemasRejectSecretShapedBypassesAndTypeTransition(t *testing.
 	key, _ := auth.GenerateKey()
 	enc, _ := auth.NewEncryptor(key)
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	for name, body := range map[string]map[string]any{
 		"connector unknown secret":     {"type": "oidc", "name": "unsafe", "config": map[string]any{"issuer": "https://idp.example", "clientID": "id", "clientSecret": "known", "futurePassword": "synthetic-canary"}},
@@ -1878,7 +1878,7 @@ func TestRegisterAsSSOPlatformConfigFailurePreservesPair(t *testing.T) {
 	oldClients, _ := enc.Encrypt(`[{"id":"astronomer","secret":"old"}]`)
 	q.settings = &sqlc.DexSetting{ID: dexSettingsSingletonID, IssuerUrl: "https://dex.example", PublicClients: json.RawMessage(`[]`), PublicClientsEncrypted: oldClients, PublicClientsCutoverAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}, Expiry: json.RawMessage(`{}`), Extra: json.RawMessage(`{}`)}
 	q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", ClientSecretEncrypted: oldServer, AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`)}
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	h.SetEncryptor(enc)
 	configureVerifiedDexRuntime(t, q, h)
 	raw, _ := json.Marshal(map[string]any{"client_secret": "new"})
@@ -1909,7 +1909,7 @@ func TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure(
 				q.ssoByProv["dex"] = sqlc.SsoConfiguration{ID: uuid.New(), Provider: "dex", ClientSecretEncrypted: "invalid", AllowedOrganizations: json.RawMessage(`[]`), AllowedDomains: json.RawMessage(`[]`)}
 				body = map[string]any{}
 			}
-			h := NewDexHandler(q)
+			h := wireDexMutationFixture(NewDexHandler(q), q)
 			h.SetEncryptor(enc)
 			configureVerifiedDexRuntime(t, q, h)
 			beforeSettings := *q.settings
@@ -1927,14 +1927,14 @@ func TestRegisterAsSSORejectsEmptyPlatformURLMalformedEnvelopeAndDecryptFailure(
 
 func TestUpdateSettingsAuditsDexSettingsUpdate(t *testing.T) {
 	q := newFakeDexQuerier()
-	h := NewDexHandler(q)
+	h := wireDexMutationFixture(NewDexHandler(q), q)
 	clusterID := uuid.New()
 	body, _ := json.Marshal(map[string]any{
-		"issuer_url":     "https://dex.example.com/",
-		"cluster_id":     clusterID.String(),
-		"namespace":      "dex",
-		"release_name":   "dex",
-		"configmap_name": "astronomer-dex-config",
+		"issuer_url":          "https://dex.example.com/",
+		"cluster_id":          clusterID.String(),
+		"namespace":           "dex",
+		"release_name":        "dex",
+		"runtime_secret_name": "astronomer-dex-config",
 	})
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/auth/dex/settings/", bytes.NewReader(body))
 	w := httptest.NewRecorder()

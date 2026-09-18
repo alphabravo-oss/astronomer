@@ -48,6 +48,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -58,6 +60,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 )
@@ -68,7 +71,8 @@ type VaultConnectionQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetProjectByID(ctx context.Context, id uuid.UUID) (sqlc.Project, error)
 
-	ListVaultConnections(ctx context.Context) ([]sqlc.VaultConnection, error)
+	ListVaultConnectionsPage(ctx context.Context, arg sqlc.ListVaultConnectionsPageParams) ([]sqlc.ListVaultConnectionsPageRow, error)
+	CountVaultConnections(ctx context.Context) (int64, error)
 	GetVaultConnectionByID(ctx context.Context, id uuid.UUID) (sqlc.VaultConnection, error)
 	GetVaultConnectionByName(ctx context.Context, name string) (sqlc.VaultConnection, error)
 	CreateVaultConnection(ctx context.Context, arg sqlc.CreateVaultConnectionParams) (sqlc.VaultConnection, error)
@@ -127,15 +131,12 @@ type vaultHealthPersistence struct {
 
 func (h *VaultHandler) persistHealthResult(r *http.Request, result vaultHealthPersistence) error {
 	params := sqlc.UpdateVaultConnectionHealthParams{ID: result.connection.ID, LastHealthOk: result.ok, LastError: result.lastError}
-	_, err := executeVaultMutation(r, h,
+	_, err := executeMutation(r, h.runTx,
 		func(q VaultMutationTx) (vaultHealthPersistence, error) {
 			return result, q.UpdateVaultConnectionHealth(r.Context(), params)
 		},
-		func() (vaultHealthPersistence, error) {
-			return result, h.queries.UpdateVaultConnectionHealth(r.Context(), params)
-		},
-		func(result vaultHealthPersistence) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(result vaultHealthPersistence) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: result.action, resourceType: "vault_connection", resourceID: result.connection.ID.String(), resourceName: result.connection.Name,
 				status: http.StatusOK, detail: result.detail,
 			}
@@ -173,36 +174,6 @@ func (h *VaultHandler) SetRunTx(runTx vaultRunTxFunc) {
 
 func (h *VaultHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
 
-func executeVaultMutation[T any](r *http.Request, h *VaultHandler, mutate func(VaultMutationTx) (T, error), fallback func() (T, error), describe func(T) clusterAuditEvent) (T, error) {
-	var zero T
-	if h == nil {
-		return zero, errors.New("vault handler is nil")
-	}
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q VaultMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(result)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return result, err
-	}
-	result, err := fallback()
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	writer := h.auditor
-	if writer == nil {
-		writer = h.queries
-	}
-	recordAudit(r, writer, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
 func (h *VaultHandler) SetEncryptor(e *auth.Encryptor) {
 	if h != nil {
 		h.encryptor = e
@@ -285,16 +256,27 @@ func (h *VaultHandler) List(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.gateSuperuser(w, r); !ok {
 		return
 	}
-	rows, err := h.queries.ListVaultConnections(r.Context())
+	limit, offset := queryLimitOffset(r, 20)
+	rows, err := h.queries.ListVaultConnectionsPage(r.Context(), sqlc.ListVaultConnectionsPageParams{
+		QueryLimit: int32(limit), QueryOffset: int32(offset),
+	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list vault connections")
 		return
 	}
 	out := make([]VaultConnectionResponse, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, h.toResponse(row, true))
+		out = append(out, toVaultConnectionListResponse(row))
 	}
-	RespondJSON(w, http.StatusOK, map[string]any{"items": out})
+	total, err := h.queries.CountVaultConnections(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to count vault connections")
+		return
+	}
+	RespondJSON(w, http.StatusOK, struct {
+		Items      []VaultConnectionResponse `json:"items"`
+		Pagination paging.Metadata           `json:"pagination"`
+	}{Items: out, Pagination: paging.Exact(total, limit, offset, len(out))})
 }
 
 // Get handles GET /api/v1/admin/vault-connections/{id}/.
@@ -375,13 +357,12 @@ func (h *VaultHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Enabled:       enabled,
 		CreatedBy:     createdBy,
 	}
-	row, err := executeVaultMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q VaultMutationTx) (sqlc.VaultConnection, error) {
 			return q.CreateVaultConnection(r.Context(), params)
 		},
-		func() (sqlc.VaultConnection, error) { return h.queries.CreateVaultConnection(r.Context(), params) },
-		func(row sqlc.VaultConnection) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(row sqlc.VaultConnection) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.vault_connection.created", resourceType: "vault_connection", resourceID: row.ID.String(), resourceName: row.Name,
 				status: http.StatusCreated, detail: map[string]any{"addr": row.Addr, "auth_method": row.AuthMethod, "namespace": row.Namespace},
 			}
@@ -468,13 +449,12 @@ func (h *VaultHandler) Update(w http.ResponseWriter, r *http.Request) {
 		DefaultMount:  mount,
 		Enabled:       enabled,
 	}
-	row, err := executeVaultMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q VaultMutationTx) (sqlc.VaultConnection, error) {
 			return q.UpdateVaultConnection(r.Context(), params)
 		},
-		func() (sqlc.VaultConnection, error) { return h.queries.UpdateVaultConnection(r.Context(), params) },
-		func(row sqlc.VaultConnection) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(row sqlc.VaultConnection) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.vault_connection.updated", resourceType: "vault_connection", resourceID: row.ID.String(), resourceName: row.Name,
 				status: http.StatusOK, detail: map[string]any{"addr": row.Addr, "auth_method": row.AuthMethod},
 			}
@@ -504,15 +484,12 @@ func (h *VaultHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Vault connection not found")
 		return
 	}
-	_, err = executeVaultMutation(r, h,
+	_, err = executeMutation(r, h.runTx,
 		func(q VaultMutationTx) (sqlc.VaultConnection, error) {
 			return existing, q.DeleteVaultConnection(r.Context(), id)
 		},
-		func() (sqlc.VaultConnection, error) {
-			return existing, h.queries.DeleteVaultConnection(r.Context(), id)
-		},
-		func(existing sqlc.VaultConnection) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(existing sqlc.VaultConnection) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.vault_connection.deleted", resourceType: "vault_connection", resourceID: id.String(), resourceName: existing.Name,
 				status: http.StatusNoContent,
 			}
@@ -666,7 +643,7 @@ func (h *VaultHandler) GetProjectDefault(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		// Some route conventions use "project_id" instead of "id"; try
 		// the alternate path param too.
-		projectID, err = uuid.Parse(chi.URLParam(r, "project_id"))
+		projectID, err = reqctx.ProjectID(r)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 			return
@@ -699,7 +676,7 @@ func (h *VaultHandler) GetProjectDefault(w http.ResponseWriter, r *http.Request)
 func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request) {
 	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		projectID, err = uuid.Parse(chi.URLParam(r, "project_id"))
+		projectID, err = reqctx.ProjectID(r)
 		if err != nil {
 			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid project ID")
 			return
@@ -734,19 +711,16 @@ func (h *VaultHandler) PutProjectDefault(w http.ResponseWriter, r *http.Request)
 		ID:                       projectID,
 		DefaultVaultConnectionID: ptr,
 	}
-	_, err = executeVaultMutation(r, h,
+	_, err = executeMutation(r, h.runTx,
 		func(q VaultMutationTx) (pgtype.UUID, error) {
 			return ptr, q.SetProjectDefaultVaultConnection(r.Context(), params)
 		},
-		func() (pgtype.UUID, error) {
-			return ptr, h.queries.SetProjectDefaultVaultConnection(r.Context(), params)
-		},
-		func(ptr pgtype.UUID) clusterAuditEvent {
+		func(ptr pgtype.UUID) mutationAuditEvent {
 			connectionID := any(nil)
 			if ptr.Valid {
 				connectionID = uuid.UUID(ptr.Bytes).String()
 			}
-			return clusterAuditEvent{
+			return mutationAuditEvent{
 				action: "project.default_vault_connection.set", resourceType: "project", resourceID: projectID.String(),
 				status: http.StatusOK, detail: map[string]any{"connection_id": connectionID},
 			}
@@ -809,6 +783,41 @@ func (h *VaultHandler) toResponse(row sqlc.VaultConnection, redact bool) VaultCo
 		auth, _ := h.decryptAuthMap(row)
 		for k, v := range auth {
 			resp.Auth[k] = v
+		}
+	}
+	return resp
+}
+
+// toVaultConnectionListResponse maps the credential-free list projection.
+// Method-specific non-secret fields remain available from the detail endpoint;
+// list requests expose only whether encrypted auth is configured.
+func toVaultConnectionListResponse(row sqlc.ListVaultConnectionsPageRow) VaultConnectionResponse {
+	resp := VaultConnectionResponse{
+		ID:            row.ID,
+		Name:          row.Name,
+		Description:   row.Description,
+		Addr:          row.Addr,
+		AuthMethod:    row.AuthMethod,
+		Auth:          map[string]string{},
+		Namespace:     row.Namespace,
+		TLSSkipVerify: row.TlsSkipVerify,
+		CACertPEM:     row.CaCertPem,
+		DefaultMount:  row.DefaultMount,
+		Enabled:       row.Enabled,
+		LastHealthOK:  row.LastHealthOk,
+		LastError:     row.LastError,
+		CreatedAt:     row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:     row.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	if row.LastHealthAt.Valid {
+		resp.LastHealthAt = row.LastHealthAt.Time.UTC().Format(time.RFC3339)
+	}
+	if row.AuthConfigured {
+		switch row.AuthMethod {
+		case "token":
+			resp.Auth["token"] = avault.SentinelEncrypted
+		case "approle":
+			resp.Auth["secret_id"] = avault.SentinelEncrypted
 		}
 	}
 	return resp

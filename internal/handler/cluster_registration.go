@@ -46,34 +46,17 @@ type ClusterRegistrationMutationTx interface {
 
 type clusterRegistrationRunTxFunc func(context.Context, func(ClusterRegistrationMutationTx) error) error
 
-func executeClusterRegistrationMutation[T any](r *http.Request, h *ClusterRegistrationHandler, mutate func(ClusterRegistrationQuerier, *registration.Service) (T, error), describe func(T) clusterAuditEvent) (T, error) {
-	var zero T
-	if h.runTx != nil {
-		var result T
-		flush := func() {}
-		err := h.runTx(r.Context(), func(q ClusterRegistrationMutationTx) error {
-			service, flushEffects := h.service.Buffered(q)
-			flush = flushEffects
-			var mutationErr error
-			result, mutationErr = mutate(q, service)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(result)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		if err == nil {
-			flush()
-		}
-		return result, err
+func executeClusterRegistrationMutation[T any](r *http.Request, h *ClusterRegistrationHandler, mutate func(ClusterRegistrationQuerier, *registration.Service) (T, error), describe func(T) mutationAuditEvent) (T, error) {
+	flush := func() {}
+	result, err := executeMutation(r, h.runTx, func(q ClusterRegistrationMutationTx) (T, error) {
+		service, flushEffects := h.service.Buffered(q)
+		flush = flushEffects
+		return mutate(q, service)
+	}, describe)
+	if err == nil {
+		flush()
 	}
-	result, err := mutate(h.queries, h.service)
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.auditQueries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
+	return result, err
 }
 
 // ClusterRegistrationHandler bundles the wizard endpoints.
@@ -82,10 +65,6 @@ type ClusterRegistrationHandler struct {
 	service *registration.Service
 	bus     *events.Bus
 	runTx   clusterRegistrationRunTxFunc
-	// auditQueries lets recordAudit write through. Same querier
-	// works for both since *sqlc.Queries implements the broader
-	// audit surface, so we just pass the same interface.
-	auditQueries any
 }
 
 type clusterRegistrationMutationResult struct {
@@ -111,6 +90,13 @@ func getClusterRegistrationStepForMutation(ctx context.Context, q ClusterRegistr
 func (h *ClusterRegistrationHandler) SetRunTx(runTx clusterRegistrationRunTxFunc) {
 	if h != nil {
 		h.runTx = runTx
+		if runTx == nil {
+			h.service.SetRunTx(nil)
+			return
+		}
+		h.service.SetRunTx(func(ctx context.Context, fn func(registration.Querier) error) error {
+			return runTx(ctx, func(q ClusterRegistrationMutationTx) error { return fn(q) })
+		})
 	}
 }
 
@@ -137,10 +123,9 @@ func NewClusterRegistrationHandler(q ClusterRegistrationQuerier, bus *events.Bus
 		pub = busAdapter{b: bus}
 	}
 	return &ClusterRegistrationHandler{
-		queries:      q,
-		service:      registration.New(q, pub),
-		bus:          bus,
-		auditQueries: q,
+		queries: q,
+		service: registration.New(q, pub),
+		bus:     bus,
 	}
 }
 
@@ -159,9 +144,8 @@ func (h *ClusterRegistrationHandler) Service() *registration.Service {
 
 // GetStatus handles GET /clusters/{id}/registration/status/.
 func (h *ClusterRegistrationHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	status, err := h.service.LoadStatus(r.Context(), id)
@@ -179,9 +163,8 @@ func (h *ClusterRegistrationHandler) GetStatus(w http.ResponseWriter, r *http.Re
 // PutOptions handles PUT /clusters/{id}/registration/options/.
 // Body: {"install_baseline": bool}
 func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	// openapi:request SetOptionsRequest
@@ -196,7 +179,7 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "install_baseline is required")
 		return
 	}
-	_, err = executeClusterRegistrationMutation(r, h,
+	_, err := executeClusterRegistrationMutation(r, h,
 		func(q ClusterRegistrationQuerier, service *registration.Service) (clusterRegistrationMutationResult, error) {
 			cluster, getErr := q.GetClusterByID(r.Context(), id)
 			if getErr != nil {
@@ -205,8 +188,8 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 			record, setErr := service.SetInstallBaseline(r.Context(), id, *req.InstallBaseline)
 			return clusterRegistrationMutationResult{cluster: cluster, record: record}, setErr
 		},
-		func(result clusterRegistrationMutationResult) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(result clusterRegistrationMutationResult) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "cluster.registration.options", resourceType: "cluster", resourceID: id.String(), resourceName: result.cluster.Name, status: http.StatusOK,
 				detail: map[string]any{"install_baseline": result.record.InstallBaseline.Valid && result.record.InstallBaseline.Bool},
 			}
@@ -233,9 +216,8 @@ func (h *ClusterRegistrationHandler) PutOptions(w http.ResponseWriter, r *http.R
 // is deliberately not started here: the authenticated agent must first report
 // a Ready, compatible Flux inventory.
 func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	_, advErr := executeClusterRegistrationMutation(r, h,
@@ -247,8 +229,8 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 			record, advanceErr := service.Advance(r.Context(), id, registration.EventConfirm)
 			return clusterRegistrationMutationResult{cluster: cluster, record: record}, advanceErr
 		},
-		func(result clusterRegistrationMutationResult) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(result clusterRegistrationMutationResult) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "cluster.registration.confirm", resourceType: "cluster", resourceID: id.String(), resourceName: result.cluster.Name, status: http.StatusOK,
 				detail: map[string]any{"install_baseline": result.record.InstallBaseline.Valid && result.record.InstallBaseline.Bool},
 			}
@@ -275,9 +257,8 @@ func (h *ClusterRegistrationHandler) PostConfirm(w http.ResponseWriter, r *http.
 // observation creates a new idempotent delivery rollout; there is no hidden
 // cluster-template or Helm task path.
 func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
@@ -308,8 +289,8 @@ func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Re
 			}
 			return clusterRegistrationMutationResult{record: record, step: step}, nil
 		},
-		func(result clusterRegistrationMutationResult) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(result clusterRegistrationMutationResult) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "cluster.registration.retry", resourceType: "cluster", resourceID: id.String(), status: http.StatusOK,
 				detail: map[string]any{"step_id": result.step.ID.String(), "step_name": result.step.StepName},
 			}
@@ -336,9 +317,8 @@ func (h *ClusterRegistrationHandler) PostRetry(w http.ResponseWriter, r *http.Re
 
 // PostCancel handles POST /clusters/{id}/registration/cancel/. Superuser-only.
 func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	if _, ok := requireSuperuser(w, r, h.queries, superuserGateConfig{
@@ -347,13 +327,13 @@ func (h *ClusterRegistrationHandler) PostCancel(w http.ResponseWriter, r *http.R
 	}); !ok {
 		return
 	}
-	_, err = executeClusterRegistrationMutation(r, h,
+	_, err := executeClusterRegistrationMutation(r, h,
 		func(_ ClusterRegistrationQuerier, service *registration.Service) (clusterRegistrationMutationResult, error) {
 			record, advanceErr := service.Advance(r.Context(), id, registration.EventCancel, registration.WithError("cancelled by superuser"))
 			return clusterRegistrationMutationResult{record: record}, advanceErr
 		},
-		func(clusterRegistrationMutationResult) clusterAuditEvent {
-			return clusterAuditEvent{action: "cluster.registration.cancel", resourceType: "cluster", resourceID: id.String(), status: http.StatusOK}
+		func(clusterRegistrationMutationResult) mutationAuditEvent {
+			return mutationAuditEvent{action: "cluster.registration.cancel", resourceType: "cluster", resourceID: id.String(), status: http.StatusOK}
 		},
 	)
 	if err != nil {

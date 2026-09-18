@@ -1,7 +1,6 @@
-"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +15,7 @@ import { cn } from "@/lib/utils";
  * the global command palette.
  */
 export function GlobalSearch() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
   // "/" focuses the search input unless the user is already typing in a
@@ -45,7 +44,7 @@ export function GlobalSearch() {
     const target = q
       ? `/dashboard/search?name=${encodeURIComponent(q)}`
       : "/dashboard/search";
-    router.push(target);
+    void navigate({ to: target });
   };
 
   return (
@@ -70,13 +69,13 @@ export function GlobalSearch() {
         className={cn(
           "w-full h-8 pl-8 pr-12 rounded-md border border-border bg-background text-sm",
           "text-foreground placeholder:text-muted-foreground",
-          "focus:outline-none focus:ring-1 focus:ring-ring focus:border-ring",
+          "focus:outline-hidden focus:ring-1 focus:ring-ring focus:border-ring",
           "transition-colors",
         )}
       />
       <kbd
         className="absolute right-2 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5
-          px-1.5 py-0.5 rounded border border-border text-[10px] text-muted-foreground font-mono pointer-events-none"
+          px-1.5 py-0.5 rounded-sm border border-border text-[10px] text-muted-foreground font-mono pointer-events-none"
       >
         /
       </kbd>

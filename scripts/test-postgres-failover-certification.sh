@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+. scripts/lib/docker-test-endpoint.sh
 
 for tool in docker go openssl python3 tee; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
@@ -19,6 +20,7 @@ primary_volume="astronomer-postgres-failover-primary-$suffix"
 replica_volume="astronomer-postgres-failover-replica-$suffix"
 credential="$(openssl rand -hex 18)"
 postgres_image="${POSTGRES_FAILOVER_IMAGE:-pgvector/pgvector:pg16}"
+pg_hba_host_path="$(docker_test_host_path "$root/scripts/testdata/postgres-failover/pg_hba.conf")"
 artifact_dir="${POSTGRES_FAILOVER_ARTIFACT_DIR:-${TMPDIR:-/tmp}/astronomer-postgres-failover-$suffix}"
 work_dir="$(mktemp -d)"
 test_status=1
@@ -114,8 +116,8 @@ docker run -d --name "$primary_container" \
   -e POSTGRES_PASSWORD="$credential" \
   -e POSTGRES_DB=postgres_failover \
   -v "$primary_volume:/var/lib/postgresql/data" \
-  -v "$root/scripts/testdata/postgres-failover/pg_hba.conf:/qualification/pg_hba.conf:ro" \
-  -p 127.0.0.1::5432 \
+  -v "$pg_hba_host_path:/qualification/pg_hba.conf:ro" \
+  -p "${DOCKER_TEST_BIND_HOST}::5432" \
   "$postgres_image" \
   -c wal_level=replica \
   -c max_wal_senders=8 \
@@ -136,7 +138,7 @@ for attempt in $(seq 1 90); do
 done
 
 primary_port="$(docker port "$primary_container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
-primary_url="postgres://postgres_failover:${credential}@127.0.0.1:${primary_port}/postgres_failover?sslmode=disable"
+primary_url="postgres://postgres_failover:${credential}@${DOCKER_TEST_CONNECT_HOST}:${primary_port}/postgres_failover?sslmode=disable"
 
 bootstrap_stage="schema_migration"
 go build -trimpath -o "$work_dir/migrator" ./cmd/migrator 2>&1 | tee "$artifact_dir/build-migrator.log"
@@ -164,8 +166,8 @@ docker run -d --name "$replica_container" \
   -e POSTGRES_PASSWORD="$credential" \
   -e POSTGRES_DB=postgres_failover \
   -v "$replica_volume:/var/lib/postgresql/data" \
-  -v "$root/scripts/testdata/postgres-failover/pg_hba.conf:/qualification/pg_hba.conf:ro" \
-  -p 127.0.0.1::5432 \
+  -v "$pg_hba_host_path:/qualification/pg_hba.conf:ro" \
+  -p "${DOCKER_TEST_BIND_HOST}::5432" \
   "$postgres_image" \
   -c hot_standby=on \
   -c hba_file=/qualification/pg_hba.conf >/dev/null
@@ -184,7 +186,7 @@ for attempt in $(seq 1 90); do
 done
 
 replica_port="$(docker port "$replica_container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
-replica_url="postgres://postgres_failover:${credential}@127.0.0.1:${replica_port}/postgres_failover?sslmode=disable"
+replica_url="postgres://postgres_failover:${credential}@${DOCKER_TEST_CONNECT_HOST}:${replica_port}/postgres_failover?sslmode=disable"
 
 # Convert the already-streaming replica to synchronous acknowledgement before
 # any RPO canary is committed. This makes the zero-row RPO threshold meaningful:

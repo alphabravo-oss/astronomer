@@ -254,10 +254,11 @@ async function mockApi(page: Page, family: ResourceFamily) {
 }
 
 for (const family of families) {
-  test(`${family.kind} detail supports overview, conditions, and YAML`, async ({
-    context,
-    page,
-  }) => {
+  const expectation =
+    family.kind === "Namespace"
+      ? "detail supports the namespace operations workspace"
+      : "detail supports overview, conditions, and YAML";
+  test(`${family.kind} ${expectation}`, async ({ context, page }) => {
     await mockApi(page, family);
     await seedAuth(context, page, adminUser);
     await page.goto(detailPath(family));
@@ -265,6 +266,18 @@ for (const family of families) {
     await expect(
       page.getByRole("heading", { name: objectName(family) }),
     ).toBeVisible();
+
+    if (family.kind === "Namespace") {
+      await expect(
+        page.getByText("Namespace-scoped operations and resources"),
+      ).toBeVisible();
+      await expect(page.getByText("Metadata")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: /Workloads 0/ }),
+      ).toBeVisible();
+      return;
+    }
+
     await expect(page.getByText(`Kind: ${family.kind}`)).toBeVisible();
     await expect(page.getByText("astronomer-e2e")).toBeVisible();
 

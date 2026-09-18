@@ -13,10 +13,11 @@ import {
   postBackupsSchedules,
   postBackupsSchedulesByIdTriggerNow,
   postBackupsStorage,
-  postBackupsStorageByIdTest,
+  postBackupsStorageByIdTestConnection,
   putBackupsSchedulesById,
   putBackupsStorageById,
 } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
 import type {
   BackupRestore,
   BackupRun,
@@ -59,31 +60,6 @@ function pageQuery(params?: PageInput): { limit?: number; offset?: number } {
   return {
     limit,
     offset: limit === undefined ? undefined : (page - 1) * limit,
-  };
-}
-
-function pageResponse<T>(
-  response: {
-    data?: T[];
-    count?: number;
-    next?: string | null;
-    previous?: string | null;
-  },
-  params?: PageInput,
-): PaginatedResponse<T> {
-  const data = response.data ?? [];
-  const total = response.count ?? data.length;
-  const pageSize = params?.page_size ?? Math.max(data.length, 1);
-  const page = Math.max(1, params?.page ?? 1);
-  return {
-    data,
-    count: total,
-    total,
-    next: response.next ?? null,
-    previous: response.previous ?? null,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
   };
 }
 
@@ -204,8 +180,10 @@ export async function b2ListStorageLocations(
   params?: PageInput & { cluster_id?: string },
 ): Promise<PaginatedResponse<BackupStorageLocation>> {
   const response = await getBackupsStorage({ query: pageQuery(params) });
-  const data = (response.data ?? []).map(mapBackupStorage);
-  return pageResponse({ ...response, data }, params);
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapBackupStorage,
+  );
 }
 
 export async function b2GetStorageLocation(
@@ -252,7 +230,7 @@ export async function b2TestStorageLocation(
   id: string,
 ): Promise<TestStorageResult> {
   const wire = requireData(
-    await postBackupsStorageByIdTest({ path: { id } }),
+    await postBackupsStorageByIdTestConnection({ path: { id } }),
     "test storage",
   );
   return { success: wire.success ?? false, message: wire.message ?? "" };
@@ -262,8 +240,10 @@ export async function b2ListSchedules(
   params?: PageInput & { cluster_id?: string },
 ): Promise<PaginatedResponse<BackupScheduleRow>> {
   const response = await getBackupsSchedules({ query: pageQuery(params) });
-  const data = (response.data ?? []).map(mapBackupSchedule);
-  return pageResponse({ ...response, data }, params);
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapBackupSchedule,
+  );
 }
 
 export async function b2GetSchedule(id: string): Promise<BackupScheduleRow> {
@@ -338,8 +318,10 @@ export async function b2ListRuns(
   },
 ): Promise<PaginatedResponse<BackupRun>> {
   const response = await getBackups({ query: pageQuery(params) });
-  const data = (response.data ?? []).map(mapBackupRun);
-  return pageResponse({ ...response, data }, params);
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapBackupRun,
+  );
 }
 
 export async function b2GetRun(id: string): Promise<BackupRun> {
@@ -352,8 +334,10 @@ export async function b2ListRestores(
   params?: PageInput,
 ): Promise<PaginatedResponse<BackupRestore>> {
   const response = await getBackupsRestores({ query: pageQuery(params) });
-  const data = (response.data ?? []).map(mapBackupRestore);
-  return pageResponse({ ...response, data }, params);
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapBackupRestore,
+  );
 }
 
 export async function b2GetRestore(id: string): Promise<BackupRestore> {

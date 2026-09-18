@@ -329,7 +329,12 @@ func simulateRollouts(ctx context.Context, candidates []placement.Candidate) (ro
 	}
 	plan, err := planner.Create(ctx, rollout.CreateRequest{TargetID: targetID, ExpectedTargetGeneration: 1,
 		PreviewDigest: preview.PreviewDigest, ConfirmAllClusters: true, Strategy: strategy,
-		Actor: "qualification@astronomer.invalid", IdempotencyKey: "qualification-rollout"})
+		Actor: "qualification@astronomer.invalid", IdempotencyKey: "qualification-rollout",
+		Audit: audit.Intent{
+			Event:     audit.Event{Action: "delivery.rollout.created", ResourceType: "delivery_rollout"},
+			DedupeKey: "qualification:delivery-rollout-created",
+		},
+	})
 	if err != nil {
 		return rolloutSimulationResult{}, err
 	}
@@ -468,6 +473,7 @@ func simulateStatusStorm(ctx context.Context, clusters, eventsPerCluster int) (s
 		}
 		payload := protocol.DeliveryStatusV2{ProtocolVersion: protocol.DeliveryProtocolVersion,
 			ClusterID: fixedUUID(2, uint64(cluster+1)).String(), SessionSequence: int64(eventsPerCluster), Deployments: coalesced}
+		payload.StatusDigest = payload.SemanticDigest()
 		if err := payload.Validate(); err != nil {
 			return result, fmt.Errorf("cluster %d coalesced payload: %w", cluster, err)
 		}

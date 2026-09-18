@@ -141,11 +141,29 @@ func (t *BusTap) Start(ctx context.Context) {
 	if t == nil || t.q == nil {
 		return
 	}
-	if t.bus != nil {
-		ch := t.bus.Subscribe(ctx)
-		go t.runBus(ctx, ch)
+	go t.Run(ctx)
+}
+
+// Run blocks until both the bus reader and PostgreSQL inserter have stopped.
+func (t *BusTap) Run(ctx context.Context) {
+	if t == nil || t.q == nil {
+		return
 	}
-	go t.runInserter(ctx)
+	var loops sync.WaitGroup
+	if t.bus != nil {
+		ch := t.bus.Subscribe(ctx, events.AcceptAll)
+		loops.Add(1)
+		go func() {
+			defer loops.Done()
+			t.runBus(ctx, ch)
+		}()
+	}
+	loops.Add(1)
+	go func() {
+		defer loops.Done()
+		t.runInserter(ctx)
+	}()
+	loops.Wait()
 }
 
 // HandleEvent is the per-event hot path. Public so tests can drive the

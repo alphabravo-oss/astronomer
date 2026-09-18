@@ -141,24 +141,27 @@ func (q *Queries) CountClustersForScopes(ctx context.Context, clusterIds []uuid.
 }
 
 const createCluster = `-- name: CreateCluster :one
-INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, api_server_url, ca_certificate, created_by_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
+INSERT INTO clusters (name, display_name, description, environment, region, provider, distribution, labels, annotations, api_server_url, ca_certificate, created_by_id, badge_text, badge_color, agent_overrides)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides
 `
 
 type CreateClusterParams struct {
-	Name          string          `json:"name"`
-	DisplayName   string          `json:"display_name"`
-	Description   string          `json:"description"`
-	Environment   string          `json:"environment"`
-	Region        string          `json:"region"`
-	Provider      string          `json:"provider"`
-	Distribution  string          `json:"distribution"`
-	Labels        json.RawMessage `json:"labels"`
-	Annotations   json.RawMessage `json:"annotations"`
-	ApiServerUrl  string          `json:"api_server_url"`
-	CaCertificate string          `json:"ca_certificate"`
-	CreatedByID   pgtype.UUID     `json:"created_by_id"`
+	Name           string          `json:"name"`
+	DisplayName    string          `json:"display_name"`
+	Description    string          `json:"description"`
+	Environment    string          `json:"environment"`
+	Region         string          `json:"region"`
+	Provider       string          `json:"provider"`
+	Distribution   string          `json:"distribution"`
+	Labels         json.RawMessage `json:"labels"`
+	Annotations    json.RawMessage `json:"annotations"`
+	ApiServerUrl   string          `json:"api_server_url"`
+	CaCertificate  string          `json:"ca_certificate"`
+	CreatedByID    pgtype.UUID     `json:"created_by_id"`
+	BadgeText      string          `json:"badge_text"`
+	BadgeColor     string          `json:"badge_color"`
+	AgentOverrides json.RawMessage `json:"agent_overrides"`
 }
 
 func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (Cluster, error) {
@@ -175,6 +178,9 @@ func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (C
 		arg.ApiServerUrl,
 		arg.CaCertificate,
 		arg.CreatedByID,
+		arg.BadgeText,
+		arg.BadgeColor,
+		arg.AgentOverrides,
 	)
 	var i Cluster
 	err := row.Scan(
@@ -192,7 +198,6 @@ func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (C
 		&i.Annotations,
 		&i.Distribution,
 		&i.AgentVersion,
-		&i.LastHeartbeat,
 		&i.KubernetesVersion,
 		&i.NodeCount,
 		&i.CreatedByID,
@@ -212,6 +217,9 @@ func (q *Queries) CreateCluster(ctx context.Context, arg CreateClusterParams) (C
 		&i.ExternalRefNamespace,
 		&i.ExternalRefName,
 		&i.ObservedGeneration,
+		&i.BadgeText,
+		&i.BadgeColor,
+		&i.AgentOverrides,
 	)
 	return i, err
 }
@@ -359,7 +367,24 @@ func (q *Queries) DeleteExpiredRegistrationTokens(ctx context.Context) (int64, e
 }
 
 const ensureLocalCluster = `-- name: EnsureLocalCluster :one
-WITH inserted AS (
+WITH upgraded AS (
+    -- Flux-native delivery is the default for the management cluster. Older
+    -- installs created the singleton before that contract existed and left
+    -- install_baseline NULL/ready, which permanently skipped provisioning.
+    -- Preserve an explicit operator choice, but enroll legacy local rows.
+    UPDATE clusters
+    SET install_baseline = true,
+        registration_phase = CASE
+            WHEN registration_phase = 'ready' THEN 'connected'
+            ELSE registration_phase
+        END,
+        registration_completed_at = CASE
+            WHEN registration_phase = 'ready' THEN NULL
+            ELSE registration_completed_at
+        END
+    WHERE is_local = true AND install_baseline IS NULL
+    RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides
+), inserted AS (
     INSERT INTO clusters (
         name,
         display_name,
@@ -370,6 +395,7 @@ WITH inserted AS (
         kubernetes_version,
         node_count,
         is_local,
+        install_baseline,
         environment,
         provider
     )
@@ -383,15 +409,21 @@ WITH inserted AS (
         $7::varchar,
         $8::integer,
         true,
+        true,
         'production',
         'other'
     WHERE NOT EXISTS (SELECT 1 FROM clusters WHERE is_local = true)
     ON CONFLICT DO NOTHING
-    RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
+    RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides
 )
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM inserted
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM inserted
 UNION ALL
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE is_local = true AND NOT EXISTS (SELECT 1 FROM inserted)
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM upgraded WHERE NOT EXISTS (SELECT 1 FROM inserted)
+UNION ALL
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
+WHERE is_local = true
+  AND NOT EXISTS (SELECT 1 FROM inserted)
+  AND NOT EXISTS (SELECT 1 FROM upgraded)
 LIMIT 1
 `
 
@@ -421,7 +453,6 @@ type EnsureLocalClusterRow struct {
 	Annotations             json.RawMessage    `json:"annotations"`
 	Distribution            string             `json:"distribution"`
 	AgentVersion            string             `json:"agent_version"`
-	LastHeartbeat           pgtype.Timestamptz `json:"last_heartbeat"`
 	KubernetesVersion       string             `json:"kubernetes_version"`
 	NodeCount               int32              `json:"node_count"`
 	CreatedByID             pgtype.UUID        `json:"created_by_id"`
@@ -441,6 +472,9 @@ type EnsureLocalClusterRow struct {
 	ExternalRefNamespace    string             `json:"external_ref_namespace"`
 	ExternalRefName         string             `json:"external_ref_name"`
 	ObservedGeneration      int64              `json:"observed_generation"`
+	BadgeText               string             `json:"badge_text"`
+	BadgeColor              string             `json:"badge_color"`
+	AgentOverrides          json.RawMessage    `json:"agent_overrides"`
 }
 
 // Idempotently create-or-return the singleton "local" cluster row that
@@ -476,7 +510,6 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 		&i.Annotations,
 		&i.Distribution,
 		&i.AgentVersion,
-		&i.LastHeartbeat,
 		&i.KubernetesVersion,
 		&i.NodeCount,
 		&i.CreatedByID,
@@ -496,6 +529,9 @@ func (q *Queries) EnsureLocalCluster(ctx context.Context, arg EnsureLocalCluster
 		&i.ExternalRefNamespace,
 		&i.ExternalRefName,
 		&i.ObservedGeneration,
+		&i.BadgeText,
+		&i.BadgeColor,
+		&i.AgentOverrides,
 	)
 	return i, err
 }
@@ -558,9 +594,11 @@ func (q *Queries) GetClusterAgentTokenByToken(ctx context.Context, dollar_1 stri
 }
 
 const getClusterByID = `-- name: GetClusterByID :one
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE id = $1
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters WHERE id = $1 AND decommissioned_at IS NULL
 `
 
+// Public/runtime lookups are active-only by default so a retained tombstone
+// cannot accidentally become an actionable target.
 func (q *Queries) GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, error) {
 	row := q.db.QueryRow(ctx, getClusterByID, id)
 	var i Cluster
@@ -579,7 +617,6 @@ func (q *Queries) GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, er
 		&i.Annotations,
 		&i.Distribution,
 		&i.AgentVersion,
-		&i.LastHeartbeat,
 		&i.KubernetesVersion,
 		&i.NodeCount,
 		&i.CreatedByID,
@@ -599,12 +636,15 @@ func (q *Queries) GetClusterByID(ctx context.Context, id uuid.UUID) (Cluster, er
 		&i.ExternalRefNamespace,
 		&i.ExternalRefName,
 		&i.ObservedGeneration,
+		&i.BadgeText,
+		&i.BadgeColor,
+		&i.AgentOverrides,
 	)
 	return i, err
 }
 
 const getClusterByIDForUpdate = `-- name: GetClusterByIDForUpdate :one
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE id = $1 AND decommissioned_at IS NULL FOR UPDATE
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters WHERE id = $1 AND decommissioned_at IS NULL FOR UPDATE
 `
 
 // Cluster PATCH semantics merge omitted fields with the current row. Lock the
@@ -628,7 +668,6 @@ func (q *Queries) GetClusterByIDForUpdate(ctx context.Context, id uuid.UUID) (Cl
 		&i.Annotations,
 		&i.Distribution,
 		&i.AgentVersion,
-		&i.LastHeartbeat,
 		&i.KubernetesVersion,
 		&i.NodeCount,
 		&i.CreatedByID,
@@ -648,12 +687,65 @@ func (q *Queries) GetClusterByIDForUpdate(ctx context.Context, id uuid.UUID) (Cl
 		&i.ExternalRefNamespace,
 		&i.ExternalRefName,
 		&i.ObservedGeneration,
+		&i.BadgeText,
+		&i.BadgeColor,
+		&i.AgentOverrides,
+	)
+	return i, err
+}
+
+const getClusterByIDIncludingDecommissioned = `-- name: GetClusterByIDIncludingDecommissioned :one
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters WHERE id = $1
+`
+
+// Historical lifecycle code may need the retained identity after the public
+// cluster has disappeared. Keep this deliberately explicit at every callsite.
+func (q *Queries) GetClusterByIDIncludingDecommissioned(ctx context.Context, id uuid.UUID) (Cluster, error) {
+	row := q.db.QueryRow(ctx, getClusterByIDIncludingDecommissioned, id)
+	var i Cluster
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.DisplayName,
+		&i.Description,
+		&i.Status,
+		&i.ApiServerUrl,
+		&i.CaCertificate,
+		&i.Environment,
+		&i.Region,
+		&i.Provider,
+		&i.Labels,
+		&i.Annotations,
+		&i.Distribution,
+		&i.AgentVersion,
+		&i.KubernetesVersion,
+		&i.NodeCount,
+		&i.CreatedByID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsLocal,
+		&i.DecommissionedAt,
+		&i.ClusterUid,
+		&i.GroupID,
+		&i.RegistrationPhase,
+		&i.RegistrationStartedAt,
+		&i.RegistrationCompletedAt,
+		&i.InstallBaseline,
+		&i.ManagedBy,
+		&i.ExternalRefApiVersion,
+		&i.ExternalRefKind,
+		&i.ExternalRefNamespace,
+		&i.ExternalRefName,
+		&i.ObservedGeneration,
+		&i.BadgeText,
+		&i.BadgeColor,
+		&i.AgentOverrides,
 	)
 	return i, err
 }
 
 const getClusterByName = `-- name: GetClusterByName :one
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE name = $1 AND decommissioned_at IS NULL
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters WHERE name = $1 AND decommissioned_at IS NULL
 `
 
 func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, error) {
@@ -674,7 +766,6 @@ func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, e
 		&i.Annotations,
 		&i.Distribution,
 		&i.AgentVersion,
-		&i.LastHeartbeat,
 		&i.KubernetesVersion,
 		&i.NodeCount,
 		&i.CreatedByID,
@@ -694,6 +785,90 @@ func (q *Queries) GetClusterByName(ctx context.Context, name string) (Cluster, e
 		&i.ExternalRefNamespace,
 		&i.ExternalRefName,
 		&i.ObservedGeneration,
+		&i.BadgeText,
+		&i.BadgeColor,
+		&i.AgentOverrides,
+	)
+	return i, err
+}
+
+const getClusterEstateSummary = `-- name: GetClusterEstateSummary :one
+SELECT
+  count(*)::bigint AS clusters_total,
+  count(*) FILTER (WHERE c.status = 'active')::bigint AS clusters_active,
+  count(*) FILTER (WHERE c.status = 'error')::bigint AS clusters_warning,
+  count(*) FILTER (WHERE c.status = 'disconnected')::bigint AS clusters_disconnected,
+  COALESCE(sum(COALESCE(h.node_count, c.node_count)), 0)::bigint AS nodes_total,
+  COALESCE(sum(COALESCE(h.pod_count, 0)), 0)::bigint AS pods_total
+FROM clusters c
+LEFT JOIN cluster_health_statuses h ON h.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+`
+
+type GetClusterEstateSummaryRow struct {
+	ClustersTotal        int64 `json:"clusters_total"`
+	ClustersActive       int64 `json:"clusters_active"`
+	ClustersWarning      int64 `json:"clusters_warning"`
+	ClustersDisconnected int64 `json:"clusters_disconnected"`
+	NodesTotal           int64 `json:"nodes_total"`
+	PodsTotal            int64 `json:"pods_total"`
+}
+
+// Authoritative overview totals for every active (non-tombstoned) cluster.
+// The latest persisted health row owns pod/node observations when present;
+// clusters.node_count is the compatibility fallback for agents that have not
+// published a health sample yet. Keep the status buckets aligned with the
+// public Cluster enum: "error" is attention/warning, while "disconnected" is
+// reported separately.
+func (q *Queries) GetClusterEstateSummary(ctx context.Context) (GetClusterEstateSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getClusterEstateSummary)
+	var i GetClusterEstateSummaryRow
+	err := row.Scan(
+		&i.ClustersTotal,
+		&i.ClustersActive,
+		&i.ClustersWarning,
+		&i.ClustersDisconnected,
+		&i.NodesTotal,
+		&i.PodsTotal,
+	)
+	return i, err
+}
+
+const getClusterEstateSummaryForScopes = `-- name: GetClusterEstateSummaryForScopes :one
+SELECT
+  count(*)::bigint AS clusters_total,
+  count(*) FILTER (WHERE c.status = 'active')::bigint AS clusters_active,
+  count(*) FILTER (WHERE c.status = 'error')::bigint AS clusters_warning,
+  count(*) FILTER (WHERE c.status = 'disconnected')::bigint AS clusters_disconnected,
+  COALESCE(sum(COALESCE(h.node_count, c.node_count)), 0)::bigint AS nodes_total,
+  COALESCE(sum(COALESCE(h.pod_count, 0)), 0)::bigint AS pods_total
+FROM clusters c
+LEFT JOIN cluster_health_statuses h ON h.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+  AND c.id = ANY($1::uuid[])
+`
+
+type GetClusterEstateSummaryForScopesRow struct {
+	ClustersTotal        int64 `json:"clusters_total"`
+	ClustersActive       int64 `json:"clusters_active"`
+	ClustersWarning      int64 `json:"clusters_warning"`
+	ClustersDisconnected int64 `json:"clusters_disconnected"`
+	NodesTotal           int64 `json:"nodes_total"`
+	PodsTotal            int64 `json:"pods_total"`
+}
+
+// Predicate-identical scoped variant. A collection-scoped caller must never
+// learn counts or capacity outside the exact cluster allow-set.
+func (q *Queries) GetClusterEstateSummaryForScopes(ctx context.Context, clusterIds []uuid.UUID) (GetClusterEstateSummaryForScopesRow, error) {
+	row := q.db.QueryRow(ctx, getClusterEstateSummaryForScopes, clusterIds)
+	var i GetClusterEstateSummaryForScopesRow
+	err := row.Scan(
+		&i.ClustersTotal,
+		&i.ClustersActive,
+		&i.ClustersWarning,
+		&i.ClustersDisconnected,
+		&i.NodesTotal,
+		&i.PodsTotal,
 	)
 	return i, err
 }
@@ -885,6 +1060,80 @@ func (q *Queries) ListClusterConditions(ctx context.Context, clusterID uuid.UUID
 	return items, nil
 }
 
+const listClusterHealthStatusesForClusters = `-- name: ListClusterHealthStatusesForClusters :many
+SELECT id, cluster_id, cpu_usage_percent, memory_usage_percent, pod_count, node_count, conditions, last_check, created_at, updated_at, last_metrics_at
+FROM cluster_health_statuses
+WHERE cluster_id = ANY($1::uuid[])
+`
+
+// Batch form used by fleet-wide alert evaluation. Missing rows deliberately
+// stay missing so callers can distinguish "no health sample" from a zeroed
+// health sample without issuing one point lookup per cluster.
+func (q *Queries) ListClusterHealthStatusesForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]ClusterHealthStatus, error) {
+	rows, err := q.db.Query(ctx, listClusterHealthStatusesForClusters, clusterIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClusterHealthStatus{}
+	for rows.Next() {
+		var i ClusterHealthStatus
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.CpuUsagePercent,
+			&i.MemoryUsagePercent,
+			&i.PodCount,
+			&i.NodeCount,
+			&i.Conditions,
+			&i.LastCheck,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastMetricsAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClusterProbeTargets = `-- name: ListClusterProbeTargets :many
+SELECT id FROM clusters
+WHERE decommissioned_at IS NULL AND status = 'active' AND id > $1::uuid
+ORDER BY id
+LIMIT $2
+`
+
+type ListClusterProbeTargetsParams struct {
+	AfterID  uuid.UUID `json:"after_id"`
+	PageSize int32     `json:"page_size"`
+}
+
+// Resume bounded probe sweeps by stable identity, independent of fleet churn.
+func (q *Queries) ListClusterProbeTargets(ctx context.Context, arg ListClusterProbeTargetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listClusterProbeTargets, arg.AfterID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []uuid.UUID{}
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusterRegistryConfigs = `-- name: ListClusterRegistryConfigs :many
 
 SELECT id, cluster_id, private_registry_url, registry_username, registry_password, insecure, ca_bundle, created_at, updated_at, namespaces, inject_default_sa, secret_name, last_applied_at, last_apply_error, registry_password_encrypted FROM cluster_registry_configs
@@ -932,8 +1181,57 @@ func (q *Queries) ListClusterRegistryConfigs(ctx context.Context, clusterID uuid
 	return items, nil
 }
 
+const listClusterRuntimeTargets = `-- name: ListClusterRuntimeTargets :many
+SELECT c.id, c.status, c.is_local, l.last_heartbeat
+FROM clusters c
+LEFT JOIN cluster_liveness l ON l.cluster_id = c.id
+WHERE c.decommissioned_at IS NULL
+ORDER BY c.created_at DESC, c.id DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListClusterRuntimeTargetsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListClusterRuntimeTargetsRow struct {
+	ID            uuid.UUID          `json:"id"`
+	Status        string             `json:"status"`
+	IsLocal       bool               `json:"is_local"`
+	LastHeartbeat pgtype.Timestamptz `json:"last_heartbeat"`
+}
+
+// Narrow projection for periodic server-side metrics/status/probe sweeps. These
+// loops need only liveness identity, not credential PEM or the JSONB metadata
+// carried by the full clusters row.
+func (q *Queries) ListClusterRuntimeTargets(ctx context.Context, arg ListClusterRuntimeTargetsParams) ([]ListClusterRuntimeTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listClusterRuntimeTargets, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClusterRuntimeTargetsRow{}
+	for rows.Next() {
+		var i ListClusterRuntimeTargetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.IsLocal,
+			&i.LastHeartbeat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClusters = `-- name: ListClusters :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters WHERE decommissioned_at IS NULL ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2
 `
 
 type ListClustersParams struct {
@@ -967,7 +1265,6 @@ func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]C
 			&i.Annotations,
 			&i.Distribution,
 			&i.AgentVersion,
-			&i.LastHeartbeat,
 			&i.KubernetesVersion,
 			&i.NodeCount,
 			&i.CreatedByID,
@@ -987,6 +1284,89 @@ func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]C
 			&i.ExternalRefNamespace,
 			&i.ExternalRefName,
 			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClustersAfter = `-- name: ListClustersAfter :many
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
+WHERE decommissioned_at IS NULL
+  AND (
+    NOT $1::boolean
+    OR (created_at, id) < ($2::timestamptz, $3::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $4
+`
+
+type ListClustersAfterParams struct {
+	HasCursor      bool      `json:"has_cursor"`
+	AfterCreatedAt time.Time `json:"after_created_at"`
+	AfterID        uuid.UUID `json:"after_id"`
+	QueryLimit     int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListClustersAfter(ctx context.Context, arg ListClustersAfterParams) ([]Cluster, error) {
+	rows, err := q.db.Query(ctx, listClustersAfter,
+		arg.HasCursor,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Cluster{}
+	for rows.Next() {
+		var i Cluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.Status,
+			&i.ApiServerUrl,
+			&i.CaCertificate,
+			&i.Environment,
+			&i.Region,
+			&i.Provider,
+			&i.Labels,
+			&i.Annotations,
+			&i.Distribution,
+			&i.AgentVersion,
+			&i.KubernetesVersion,
+			&i.NodeCount,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.IsLocal,
+			&i.DecommissionedAt,
+			&i.ClusterUid,
+			&i.GroupID,
+			&i.RegistrationPhase,
+			&i.RegistrationStartedAt,
+			&i.RegistrationCompletedAt,
+			&i.InstallBaseline,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
 		); err != nil {
 			return nil, err
 		}
@@ -999,7 +1379,7 @@ func (q *Queries) ListClusters(ctx context.Context, arg ListClustersParams) ([]C
 }
 
 const listClustersByStatus = `-- name: ListClustersByStatus :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters WHERE status = $1 AND decommissioned_at IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $2
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters WHERE status = $1 AND decommissioned_at IS NULL ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $2
 `
 
 type ListClustersByStatusParams struct {
@@ -1032,7 +1412,6 @@ func (q *Queries) ListClustersByStatus(ctx context.Context, arg ListClustersBySt
 			&i.Annotations,
 			&i.Distribution,
 			&i.AgentVersion,
-			&i.LastHeartbeat,
 			&i.KubernetesVersion,
 			&i.NodeCount,
 			&i.CreatedByID,
@@ -1052,6 +1431,9 @@ func (q *Queries) ListClustersByStatus(ctx context.Context, arg ListClustersBySt
 			&i.ExternalRefNamespace,
 			&i.ExternalRefName,
 			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
 		); err != nil {
 			return nil, err
 		}
@@ -1107,7 +1489,7 @@ func (q *Queries) ListClustersDueForAgentTokenRotation(ctx context.Context, rowL
 }
 
 const listClustersFiltered = `-- name: ListClustersFiltered :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
 WHERE decommissioned_at IS NULL
   AND ($1::text = '' OR status = $1)
   AND ($2::text = '' OR provider = $2)
@@ -1164,7 +1546,6 @@ func (q *Queries) ListClustersFiltered(ctx context.Context, arg ListClustersFilt
 			&i.Annotations,
 			&i.Distribution,
 			&i.AgentVersion,
-			&i.LastHeartbeat,
 			&i.KubernetesVersion,
 			&i.NodeCount,
 			&i.CreatedByID,
@@ -1184,6 +1565,105 @@ func (q *Queries) ListClustersFiltered(ctx context.Context, arg ListClustersFilt
 			&i.ExternalRefNamespace,
 			&i.ExternalRefName,
 			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClustersFilteredAfter = `-- name: ListClustersFilteredAfter :many
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
+WHERE decommissioned_at IS NULL
+  AND ($1::text = '' OR status = $1)
+  AND ($2::text = '' OR provider = $2)
+  AND ($3::text = '' OR environment = $3)
+  AND (
+    $4::text = ''
+    OR name ILIKE '%' || $4 || '%'
+    OR display_name ILIKE '%' || $4 || '%'
+  )
+  AND (
+    NOT $5::boolean
+    OR (created_at, id) < ($6::timestamptz, $7::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $8
+`
+
+type ListClustersFilteredAfterParams struct {
+	FilterStatus      string    `json:"filter_status"`
+	FilterProvider    string    `json:"filter_provider"`
+	FilterEnvironment string    `json:"filter_environment"`
+	FilterSearch      string    `json:"filter_search"`
+	HasCursor         bool      `json:"has_cursor"`
+	AfterCreatedAt    time.Time `json:"after_created_at"`
+	AfterID           uuid.UUID `json:"after_id"`
+	QueryLimit        int32     `json:"query_limit"`
+}
+
+func (q *Queries) ListClustersFilteredAfter(ctx context.Context, arg ListClustersFilteredAfterParams) ([]Cluster, error) {
+	rows, err := q.db.Query(ctx, listClustersFilteredAfter,
+		arg.FilterStatus,
+		arg.FilterProvider,
+		arg.FilterEnvironment,
+		arg.FilterSearch,
+		arg.HasCursor,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Cluster{}
+	for rows.Next() {
+		var i Cluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.Status,
+			&i.ApiServerUrl,
+			&i.CaCertificate,
+			&i.Environment,
+			&i.Region,
+			&i.Provider,
+			&i.Labels,
+			&i.Annotations,
+			&i.Distribution,
+			&i.AgentVersion,
+			&i.KubernetesVersion,
+			&i.NodeCount,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.IsLocal,
+			&i.DecommissionedAt,
+			&i.ClusterUid,
+			&i.GroupID,
+			&i.RegistrationPhase,
+			&i.RegistrationStartedAt,
+			&i.RegistrationCompletedAt,
+			&i.InstallBaseline,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
 		); err != nil {
 			return nil, err
 		}
@@ -1196,7 +1676,7 @@ func (q *Queries) ListClustersFiltered(ctx context.Context, arg ListClustersFilt
 }
 
 const listClustersFilteredForScopes = `-- name: ListClustersFilteredForScopes :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
 WHERE decommissioned_at IS NULL
   AND id = ANY($1::uuid[])
   AND ($2::text = '' OR status = $2)
@@ -1253,7 +1733,6 @@ func (q *Queries) ListClustersFilteredForScopes(ctx context.Context, arg ListClu
 			&i.Annotations,
 			&i.Distribution,
 			&i.AgentVersion,
-			&i.LastHeartbeat,
 			&i.KubernetesVersion,
 			&i.NodeCount,
 			&i.CreatedByID,
@@ -1273,6 +1752,108 @@ func (q *Queries) ListClustersFilteredForScopes(ctx context.Context, arg ListClu
 			&i.ExternalRefNamespace,
 			&i.ExternalRefName,
 			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClustersFilteredForScopesAfter = `-- name: ListClustersFilteredForScopesAfter :many
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY($1::uuid[])
+  AND ($2::text = '' OR status = $2)
+  AND ($3::text = '' OR provider = $3)
+  AND ($4::text = '' OR environment = $4)
+  AND (
+    $5::text = ''
+    OR name ILIKE '%' || $5 || '%'
+    OR display_name ILIKE '%' || $5 || '%'
+  )
+  AND (
+    NOT $6::boolean
+    OR (created_at, id) < ($7::timestamptz, $8::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $9
+`
+
+type ListClustersFilteredForScopesAfterParams struct {
+	ClusterIds        []uuid.UUID `json:"cluster_ids"`
+	FilterStatus      string      `json:"filter_status"`
+	FilterProvider    string      `json:"filter_provider"`
+	FilterEnvironment string      `json:"filter_environment"`
+	FilterSearch      string      `json:"filter_search"`
+	HasCursor         bool        `json:"has_cursor"`
+	AfterCreatedAt    time.Time   `json:"after_created_at"`
+	AfterID           uuid.UUID   `json:"after_id"`
+	QueryLimit        int32       `json:"query_limit"`
+}
+
+func (q *Queries) ListClustersFilteredForScopesAfter(ctx context.Context, arg ListClustersFilteredForScopesAfterParams) ([]Cluster, error) {
+	rows, err := q.db.Query(ctx, listClustersFilteredForScopesAfter,
+		arg.ClusterIds,
+		arg.FilterStatus,
+		arg.FilterProvider,
+		arg.FilterEnvironment,
+		arg.FilterSearch,
+		arg.HasCursor,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Cluster{}
+	for rows.Next() {
+		var i Cluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.Status,
+			&i.ApiServerUrl,
+			&i.CaCertificate,
+			&i.Environment,
+			&i.Region,
+			&i.Provider,
+			&i.Labels,
+			&i.Annotations,
+			&i.Distribution,
+			&i.AgentVersion,
+			&i.KubernetesVersion,
+			&i.NodeCount,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.IsLocal,
+			&i.DecommissionedAt,
+			&i.ClusterUid,
+			&i.GroupID,
+			&i.RegistrationPhase,
+			&i.RegistrationStartedAt,
+			&i.RegistrationCompletedAt,
+			&i.InstallBaseline,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
 		); err != nil {
 			return nil, err
 		}
@@ -1285,10 +1866,10 @@ func (q *Queries) ListClustersFilteredForScopes(ctx context.Context, arg ListClu
 }
 
 const listClustersForScopes = `-- name: ListClustersForScopes :many
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation FROM clusters
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
 WHERE decommissioned_at IS NULL
   AND id = ANY($1::uuid[])
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $2
 `
 
@@ -1327,7 +1908,6 @@ func (q *Queries) ListClustersForScopes(ctx context.Context, arg ListClustersFor
 			&i.Annotations,
 			&i.Distribution,
 			&i.AgentVersion,
-			&i.LastHeartbeat,
 			&i.KubernetesVersion,
 			&i.NodeCount,
 			&i.CreatedByID,
@@ -1347,6 +1927,92 @@ func (q *Queries) ListClustersForScopes(ctx context.Context, arg ListClustersFor
 			&i.ExternalRefNamespace,
 			&i.ExternalRefName,
 			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClustersForScopesAfter = `-- name: ListClustersForScopesAfter :many
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
+WHERE decommissioned_at IS NULL
+  AND id = ANY($1::uuid[])
+  AND (
+    NOT $2::boolean
+    OR (created_at, id) < ($3::timestamptz, $4::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListClustersForScopesAfterParams struct {
+	ClusterIds     []uuid.UUID `json:"cluster_ids"`
+	HasCursor      bool        `json:"has_cursor"`
+	AfterCreatedAt time.Time   `json:"after_created_at"`
+	AfterID        uuid.UUID   `json:"after_id"`
+	QueryLimit     int32       `json:"query_limit"`
+}
+
+func (q *Queries) ListClustersForScopesAfter(ctx context.Context, arg ListClustersForScopesAfterParams) ([]Cluster, error) {
+	rows, err := q.db.Query(ctx, listClustersForScopesAfter,
+		arg.ClusterIds,
+		arg.HasCursor,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Cluster{}
+	for rows.Next() {
+		var i Cluster
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.Status,
+			&i.ApiServerUrl,
+			&i.CaCertificate,
+			&i.Environment,
+			&i.Region,
+			&i.Provider,
+			&i.Labels,
+			&i.Annotations,
+			&i.Distribution,
+			&i.AgentVersion,
+			&i.KubernetesVersion,
+			&i.NodeCount,
+			&i.CreatedByID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.IsLocal,
+			&i.DecommissionedAt,
+			&i.ClusterUid,
+			&i.GroupID,
+			&i.RegistrationPhase,
+			&i.RegistrationStartedAt,
+			&i.RegistrationCompletedAt,
+			&i.InstallBaseline,
+			&i.ManagedBy,
+			&i.ExternalRefApiVersion,
+			&i.ExternalRefKind,
+			&i.ExternalRefNamespace,
+			&i.ExternalRefName,
+			&i.ObservedGeneration,
+			&i.BadgeText,
+			&i.BadgeColor,
+			&i.AgentOverrides,
 		); err != nil {
 			return nil, err
 		}
@@ -1577,21 +2243,27 @@ UPDATE clusters SET
     labels = $6,
     annotations = $7,
     api_server_url = COALESCE($8, api_server_url),
-    ca_certificate = COALESCE($9, ca_certificate)
+    ca_certificate = COALESCE($9, ca_certificate),
+    badge_text = COALESCE($10, badge_text),
+    badge_color = COALESCE($11, badge_color),
+    agent_overrides = $12
 WHERE id = $1
-RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, last_heartbeat, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation
+RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides
 `
 
 type UpdateClusterParams struct {
-	ID            uuid.UUID       `json:"id"`
-	DisplayName   string          `json:"display_name"`
-	Description   string          `json:"description"`
-	Environment   string          `json:"environment"`
-	Region        string          `json:"region"`
-	Labels        json.RawMessage `json:"labels"`
-	Annotations   json.RawMessage `json:"annotations"`
-	ApiServerUrl  pgtype.Text     `json:"api_server_url"`
-	CaCertificate pgtype.Text     `json:"ca_certificate"`
+	ID             uuid.UUID       `json:"id"`
+	DisplayName    string          `json:"display_name"`
+	Description    string          `json:"description"`
+	Environment    string          `json:"environment"`
+	Region         string          `json:"region"`
+	Labels         json.RawMessage `json:"labels"`
+	Annotations    json.RawMessage `json:"annotations"`
+	ApiServerUrl   pgtype.Text     `json:"api_server_url"`
+	CaCertificate  pgtype.Text     `json:"ca_certificate"`
+	BadgeText      pgtype.Text     `json:"badge_text"`
+	BadgeColor     pgtype.Text     `json:"badge_color"`
+	AgentOverrides json.RawMessage `json:"agent_overrides"`
 }
 
 func (q *Queries) UpdateCluster(ctx context.Context, arg UpdateClusterParams) (Cluster, error) {
@@ -1605,6 +2277,9 @@ func (q *Queries) UpdateCluster(ctx context.Context, arg UpdateClusterParams) (C
 		arg.Annotations,
 		arg.ApiServerUrl,
 		arg.CaCertificate,
+		arg.BadgeText,
+		arg.BadgeColor,
+		arg.AgentOverrides,
 	)
 	var i Cluster
 	err := row.Scan(
@@ -1622,7 +2297,6 @@ func (q *Queries) UpdateCluster(ctx context.Context, arg UpdateClusterParams) (C
 		&i.Annotations,
 		&i.Distribution,
 		&i.AgentVersion,
-		&i.LastHeartbeat,
 		&i.KubernetesVersion,
 		&i.NodeCount,
 		&i.CreatedByID,
@@ -1642,41 +2316,11 @@ func (q *Queries) UpdateCluster(ctx context.Context, arg UpdateClusterParams) (C
 		&i.ExternalRefNamespace,
 		&i.ExternalRefName,
 		&i.ObservedGeneration,
+		&i.BadgeText,
+		&i.BadgeColor,
+		&i.AgentOverrides,
 	)
 	return i, err
-}
-
-const updateClusterHeartbeat = `-- name: UpdateClusterHeartbeat :exec
-UPDATE clusters SET
-    last_heartbeat = now(),
-    agent_version = COALESCE(NULLIF($1::text, ''), agent_version),
-    kubernetes_version = COALESCE(NULLIF($2::text, ''), kubernetes_version),
-    node_count = CASE WHEN $3::int > 0 THEN $3::int ELSE node_count END,
-    distribution = COALESCE(NULLIF($4::text, ''), distribution)
-WHERE id = $5
-`
-
-type UpdateClusterHeartbeatParams struct {
-	AgentVersion      string    `json:"agent_version"`
-	KubernetesVersion string    `json:"kubernetes_version"`
-	NodeCount         int32     `json:"node_count"`
-	Distribution      string    `json:"distribution"`
-	ID                uuid.UUID `json:"id"`
-}
-
-// last_heartbeat ALWAYS advances (liveness, decoupled from inventory per H11),
-// but inventory columns are keep-last-good (L11): a degraded/minimal beat sends
-// empty/zero inventory and must NOT clobber prior values. A full beat carries
-// real values and updates normally.
-func (q *Queries) UpdateClusterHeartbeat(ctx context.Context, arg UpdateClusterHeartbeatParams) error {
-	_, err := q.db.Exec(ctx, updateClusterHeartbeat,
-		arg.AgentVersion,
-		arg.KubernetesVersion,
-		arg.NodeCount,
-		arg.Distribution,
-		arg.ID,
-	)
-	return err
 }
 
 const updateClusterRegistryConfig = `-- name: UpdateClusterRegistryConfig :one
@@ -1762,16 +2406,26 @@ func (q *Queries) UpdateClusterStatus(ctx context.Context, arg UpdateClusterStat
 }
 
 const updateClusterStatusOnHeartbeat = `-- name: UpdateClusterStatusOnHeartbeat :execrows
-UPDATE clusters SET status = $1
-WHERE id = $2
-  AND decommissioned_at IS NULL
+WITH current_liveness AS (
+  SELECT last_heartbeat
+  FROM cluster_liveness
+  WHERE cluster_id = $2
+)
+UPDATE clusters c SET status = $1
+WHERE c.id = $2
+  AND c.decommissioned_at IS NULL
   AND (
     ($1 = 'active'
-      AND last_heartbeat IS NOT NULL
-      AND last_heartbeat >= now() - interval '2 minutes')
+      AND EXISTS (
+        SELECT 1 FROM current_liveness
+        WHERE last_heartbeat >= now() - interval '2 minutes'
+      ))
     OR
     ($1 = 'disconnected'
-      AND (last_heartbeat IS NULL OR last_heartbeat < now() - interval '2 minutes'))
+      AND NOT EXISTS (
+        SELECT 1 FROM current_liveness
+        WHERE last_heartbeat >= now() - interval '2 minutes'
+      ))
   )
 `
 

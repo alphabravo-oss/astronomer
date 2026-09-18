@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 )
@@ -26,13 +28,13 @@ import (
 func APITokenScopeEnforce(required string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, _ := GetAuthenticatedUser(r.Context())
+			user, _ := reqctx.AuthenticatedUser(r.Context())
 			// JWT sessions skip scope enforcement — see godoc.
 			if user == nil || user.AuthMethod != "api_token" {
 				next.ServeHTTP(w, r)
 				return
 			}
-			tok, ok := GetAuthenticatedAPIToken(r.Context())
+			tok, ok := auth.AuthenticatedAPIToken(r.Context())
 			if !ok || tok == nil {
 				// The auth middleware ran without DB queries (tests,
 				// unconfigured deployment). We can't enforce scopes
@@ -97,8 +99,8 @@ func RequireWriteScopeForMutations(required string) func(http.Handler) http.Hand
 			// JWT sessions (no api_token row) and legacy empty-scope tokens
 			// fall through to APITokenScopeEnforce, preserving the existing
 			// bypass/opt-in contract.
-			if user, _ := GetAuthenticatedUser(r.Context()); user != nil && user.AuthMethod == "api_token" {
-				if tok, ok := GetAuthenticatedAPIToken(r.Context()); ok && tok != nil {
+			if user, _ := reqctx.AuthenticatedUser(r.Context()); user != nil && user.AuthMethod == "api_token" {
+				if tok, ok := auth.AuthenticatedAPIToken(r.Context()); ok && tok != nil {
 					if scopes, err := auth.ParseTokenScopes(tok.Scopes); err == nil && auth.IsReadOnlyScopeSet(scopes) {
 						auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("scope")...).Inc()
 						scopeDenied(w, "Read-only token cannot perform a mutating request")

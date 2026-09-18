@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "@/lib/navigation";
-import { Link } from "@/lib/link";
-import { useClusters } from "@/lib/hooks";
+import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
+import { useCluster } from "@/lib/hooks/clusters";
 import { useCISProfiles, useCreateCISScan } from "@/components/security/hooks";
 import { CIS_NOT_INSTALLED_HINT } from "@/components/security/cis-scans-tab";
 import { distributionDisplayName, cn } from "@/lib/utils";
@@ -41,23 +42,16 @@ const STEPS: { n: WizardStep; label: string }[] = [
 ];
 
 function NewScanWizardPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [step, setStep] = useState<WizardStep>(1);
   const [clusterId, setClusterId] = useState<string>("");
-  const [profile, setProfile] = useState<string>("");
+  const [selectedProfile, setProfile] = useState<string>("");
 
-  const { data: clustersPage, isLoading: clustersLoading } = useClusters({
-    pageSize: 200,
-  });
+  const { data: cluster } = useCluster(clusterId);
   const { data: profilesData, isLoading: profilesLoading } = useCISProfiles(
     clusterId || undefined,
   );
   const createScan = useCreateCISScan();
-
-  const cluster = useMemo(
-    () => clustersPage?.data.find((c) => c.id === clusterId),
-    [clustersPage, clusterId],
-  );
 
   // Pre-select the recommended profile whenever the cluster (or its profile
   // list) changes — but never overwrite an explicit user choice.
@@ -66,14 +60,12 @@ function NewScanWizardPage() {
     return defaultProfileForDistribution(cluster.distribution || "");
   }, [cluster]);
 
-  useEffect(() => {
-    if (!profilesData) return;
-    const items = profilesData.items ?? [];
-    if (items.length === 0) return;
-    if (profile && items.some((p) => p.name === profile)) return;
-    const recommended = items.find((p) => p.name === recommendedName);
-    setProfile((recommended ?? items[0]).name);
-  }, [profilesData, recommendedName, profile]);
+  const profileItems = profilesData?.items ?? [];
+  const profile =
+    profileItems.find((item) => item.name === selectedProfile)?.name ??
+    profileItems.find((item) => item.name === recommendedName)?.name ??
+    profileItems[0]?.name ??
+    "";
 
   const canAdvance = step === 1 ? !!clusterId : step === 2 ? !!profile : true;
 
@@ -83,19 +75,19 @@ function NewScanWizardPage() {
       cluster_id: clusterId,
       profile: profile || undefined,
     });
-    router.push(`/dashboard/security/scans/${scan.id}`);
+    void navigate({ to: `/dashboard/security/scans/${scan.id}` });
   }
 
   return (
     <PageShell>
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link
-          href="/dashboard/security"
+        <RouterLink
+          to="/dashboard/security"
           className="hover:text-foreground transition-colors"
         >
           Security
-        </Link>
+        </RouterLink>
         <ChevronRight className="h-3.5 w-3.5" />
         <span className="text-foreground">New CIS Scan</span>
       </div>
@@ -147,50 +139,16 @@ function NewScanWizardPage() {
                 tunnel-managed agent.
               </p>
             </div>
-            {clustersLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-12 rounded-md bg-muted animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {(clustersPage?.data ?? []).map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setClusterId(c.id)}
-                    className={cn(
-                      "w-full flex items-center justify-between rounded-md border px-4 py-3 text-left transition-colors",
-                      clusterId === c.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-accent",
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {c.displayName || c.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {distributionDisplayName(c.distribution)} ·{" "}
-                        {c.environment} · {c.status}
-                      </p>
-                    </div>
-                    {clusterId === c.id && (
-                      <CheckCircle2 className="h-4 w-4 text-primary" />
-                    )}
-                  </button>
-                ))}
-                {(clustersPage?.data ?? []).length === 0 && (
-                  <p className="text-sm text-muted-foreground py-8 text-center">
-                    No clusters registered. Register a cluster first.
-                  </p>
-                )}
-              </div>
-            )}
+            <RemoteClusterPicker
+              id="cis-scan-cluster"
+              ariaLabel="Cluster to scan"
+              value={clusterId}
+              onChange={(id) => {
+                setClusterId(id);
+                setProfile("");
+              }}
+              placeholder="Search for a cluster…"
+            />
           </div>
         )}
 
@@ -208,7 +166,7 @@ function NewScanWizardPage() {
 
             {profilesData?.source === "fallback" && (
               <div className="rounded-md border border-status-warning/30 bg-status-warning/5 p-3 flex items-start gap-2.5">
-                <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
                 <p className="text-xs text-status-warning">
                   {CIS_NOT_INSTALLED_HINT}
                 </p>
@@ -241,7 +199,7 @@ function NewScanWizardPage() {
                       )}
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <ShieldCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <ShieldCheck className="h-4 w-4 text-muted-foreground shrink-0" />
                         <div className="min-w-0">
                           <p className="text-sm font-mono text-foreground truncate">
                             {p.name}
@@ -253,7 +211,7 @@ function NewScanWizardPage() {
                           )}
                         </div>
                         {recommended && (
-                          <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                          <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary font-medium">
                             Recommended
                           </span>
                         )}
@@ -297,7 +255,7 @@ function NewScanWizardPage() {
 
             {createScan.isError && (
               <div className="rounded-md border border-status-error/30 bg-status-error/5 p-3 flex items-start gap-2.5">
-                <ShieldAlert className="h-4 w-4 text-status-error flex-shrink-0 mt-0.5" />
+                <ShieldAlert className="h-4 w-4 text-status-error shrink-0 mt-0.5" />
                 <p className="text-xs text-status-error">
                   {(createScan.error as Error)?.message ??
                     "Failed to start scan."}
@@ -315,7 +273,7 @@ function NewScanWizardPage() {
           onClick={() =>
             step > 1
               ? setStep((s) => (s - 1) as WizardStep)
-              : router.push("/dashboard/security")
+              : void navigate({ to: "/dashboard/security" })
           }
           disabled={createScan.isPending}
         >

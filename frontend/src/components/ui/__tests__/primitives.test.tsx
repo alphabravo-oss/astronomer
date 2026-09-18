@@ -18,13 +18,25 @@ describe("form primitives", () => {
   it("renders a native select and textarea on the same chrome", () => {
     render(
       <>
-        <Select aria-label="Provider">
+        <Select aria-label="Provider" containerClassName="max-w-xs">
           <option value="aws">AWS</option>
         </Select>
         <Textarea aria-label="Notes" />
       </>,
     );
-    expect(screen.getByLabelText("Provider")).toHaveClass("h-9", "rounded-md");
+    expect(screen.getByLabelText("Provider")).toHaveClass(
+      "h-9",
+      "rounded-md",
+      "appearance-none",
+      "pr-9",
+    );
+    expect(screen.getByLabelText("Provider").nextElementSibling).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByLabelText("Provider").parentElement).toHaveClass(
+      "max-w-xs",
+    );
     expect(screen.getByLabelText("Notes")).toHaveClass("min-h-[120px]");
   });
 });

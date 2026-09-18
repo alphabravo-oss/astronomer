@@ -42,7 +42,10 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	}
 
 	queries := sqlc.New(database.Pool())
-	jwtManager, jwtErr := auth.NewJWTManager(cfg.SecretKey, cfg.SessionTimeoutMinutes)
+	jwtManager, jwtErr := auth.NewJWTManagerWithConfig(auth.JWTConfig{
+		SecretKey: cfg.SecretKey, AccessLifetimeMinutes: cfg.SessionTimeoutMinutes,
+		Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience,
+	})
 	if jwtErr != nil {
 		database.Close()
 		return jwtErr
@@ -85,7 +88,7 @@ func (c *productionComposition) initializePersistence(ctx context.Context, cfg *
 	// dex_settings row so the operator's first connector + Apply works
 	// without a manual settings step. No-op when dex.enabled=false (legacy
 	// operator-managed Dex flow stays in effect).
-	if _, err := SeedBundledDexSettings(ctx, queries, logger); err != nil {
+	if _, err := SeedBundledDexSettings(ctx, queries, logger, cfg); err != nil {
 		logger.Warn("dex bootstrap: seed failed", "error", err)
 	}
 	// Surface drift between legacy sso_configurations and the new

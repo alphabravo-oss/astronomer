@@ -48,8 +48,7 @@ func TestExecHandoffDoesNotConsumeTicketBeforeForward(t *testing.T) {
 		clusterID: strings.TrimPrefix(upstream.URL, "http://"),
 	}))
 
-	ec := NewExecConsumer(hub, slog.Default())
-	ec.SetStreamTickets(tickets)
+	ec := &ExecConsumer{hub: hub, log: slog.Default(), tickets: tickets}
 
 	router := chi.NewRouter()
 	router.HandleFunc("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", ec.HandleExec)
@@ -94,8 +93,7 @@ func TestLogsHandoffDoesNotConsumeTicketBeforeForward(t *testing.T) {
 		clusterID: strings.TrimPrefix(upstream.URL, "http://"),
 	}))
 
-	lc := NewLogsConsumer(hub, slog.Default())
-	lc.SetStreamTickets(tickets)
+	lc := &LogsConsumer{hub: hub, log: slog.Default(), tickets: tickets}
 
 	router := chi.NewRouter()
 	router.HandleFunc("/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", lc.HandleLogs)
@@ -132,8 +130,7 @@ func TestExecOwnerPodConsumesTicket(t *testing.T) {
 	}
 
 	hub := NewHub(slog.Default()) // no locator → single pod, terminates locally
-	ec := NewExecConsumer(hub, slog.Default())
-	ec.SetStreamTickets(tickets)
+	ec := &ExecConsumer{hub: hub, log: slog.Default(), tickets: tickets}
 
 	router := chi.NewRouter()
 	router.HandleFunc("/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", ec.HandleExec)

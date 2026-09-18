@@ -1,8 +1,6 @@
-// Package connectauth holds the shared agent CONNECT credential checks used by
-// both the legacy hub tunnel (internal/tunnel) and the remotedialer path
-// (internal/tunnel2). Keeping the A3 registration-token adoption gate and
-// durable hashed-token acceptance in one place prevents auth drift between
-// connect surfaces (SEC-R01).
+// Package connectauth holds the agent CONNECT credential checks used by the
+// production tunnel. Keeping registration-token adoption and durable
+// hashed-token acceptance in one place gives the connection path one policy.
 package connectauth
 
 import (
@@ -31,8 +29,7 @@ type TokenLookup interface {
 }
 
 // Result is a successful Validate outcome. Side effects (mark-used, mint
-// durable, rotate, touch, stamp adopted) remain the caller's responsibility —
-// tunnel2 only needs accept/deny, while the hub performs the full exchange.
+// durable, rotate, touch, stamp adopted) remain the hub's responsibility.
 type Result struct {
 	Kind              string
 	RegistrationToken sqlc.ClusterRegistrationToken

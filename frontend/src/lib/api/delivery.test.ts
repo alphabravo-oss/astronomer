@@ -1,16 +1,20 @@
 import * as generated from "@/lib/api/generated/client";
+import { actOnClusterDeployment } from "@/lib/api/delivery-deployments";
 import {
-  actOnClusterDeployment,
   createDeliverySource,
-  createDeliveryTarget,
-  getDeliveryEstate,
   listDeliverySources,
-  previewDeliveryTarget,
-  startDeliveryRollout,
   type CreateDeliverySourceRequest,
+} from "@/lib/api/delivery-sources";
+import {
+  createDeliveryTarget,
+  previewDeliveryTarget,
   type DeliveryTargetRequest,
+} from "@/lib/api/delivery-targets";
+import {
+  startDeliveryRollout,
   type RolloutStrategyRequest,
-} from "./delivery";
+} from "@/lib/api/delivery-rollouts";
+import { getDeliveryEstate } from "@/lib/api/delivery-system";
 
 vi.mock("@/lib/api/generated/client", async (importOriginal) => {
   const actual =
@@ -21,7 +25,7 @@ vi.mock("@/lib/api/generated/client", async (importOriginal) => {
     postDeliverySources: vi.fn(),
     postDeliveryTargetsByIdPreview: vi.fn(),
     postDeliveryTargetsByIdRollouts: vi.fn(),
-    getDeliveryEstate: vi.fn(),
+    getDeliveryFleet: vi.fn(),
     executeOpenAPIOperationWithResponse: vi.fn(),
   };
 });
@@ -43,10 +47,13 @@ describe("delivery generated API boundary", () => {
   it("passes project filters and cancellation to the generated list operation", async () => {
     vi.mocked(generated.getDeliverySources).mockResolvedValueOnce({
       data: [],
-      count: 0,
-      next: null,
-      previous: null,
-      total_known: true,
+      pagination: {
+        total: 0,
+        limit: 25,
+        offset: 50,
+        has_more: false,
+        next_offset: null,
+      },
     });
     const controller = new AbortController();
 
@@ -162,6 +169,7 @@ describe("delivery generated API boundary", () => {
                 "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             },
           },
+          overrides: {},
         },
         placement_digest:
           "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -273,10 +281,10 @@ describe("delivery generated API boundary", () => {
   });
 
   it("maps the estate scoreboard from raw wire casing", async () => {
-    vi.mocked(generated.getDeliveryEstate).mockResolvedValueOnce({
+    vi.mocked(generated.getDeliveryFleet).mockResolvedValueOnce({
       data: {
         summary: {
-          adopted_clusters: 2,
+          managed_clusters: 2,
           flux_ready: 2,
           incompatible: 0,
           disconnected: 0,
@@ -299,7 +307,7 @@ describe("delivery generated API boundary", () => {
 
     await expect(getDeliveryEstate()).resolves.toEqual(
       expect.objectContaining({
-        summary: expect.objectContaining({ adoptedClusters: 2, fluxReady: 2 }),
+        summary: expect.objectContaining({ managedClusters: 2, fluxReady: 2 }),
       }),
     );
   });

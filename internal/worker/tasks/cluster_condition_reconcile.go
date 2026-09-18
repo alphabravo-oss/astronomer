@@ -45,6 +45,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
@@ -102,6 +103,8 @@ var ccrBackoff = []time.Duration{
 // in-backoff skip rows can't starve the gate.
 const ccrDailyCap = 12
 
+const ccrQueryPageSize int32 = 200
+
 // HandleClusterConditionReconcile is the asynq handler invoked by the
 // periodic scheduler. Returns nil on a successful sweep — per-row
 // errors are logged and recorded in the attempts table; they don't
@@ -111,18 +114,8 @@ func HandleClusterConditionReconcile(ctx context.Context, _ *asynq.Task) error {
 		if runtimeDependencies(ctx).Queries == nil {
 			return fmt.Errorf("cluster condition reconcile runtime is not configured")
 		}
-		rows, err := runtimeDependencies(ctx).Queries.ListClusterConditionsByStatus(ctx, ccrStatusFalse)
-		if err != nil {
+		if err := reconcileConditionPages(ctx, ccrStatusFalse, nil); err != nil {
 			return fmt.Errorf("list false conditions: %w", err)
-		}
-		for _, row := range rows {
-			if err := reconcileOneCondition(ctx, row); err != nil {
-				runtimeLogger(ctx).WarnContext(ctx, "cluster condition reconcile failed",
-					"cluster_id", row.ClusterID.String(),
-					"type", row.Type,
-					"error", err,
-				)
-			}
 		}
 		// Problem-when-True conditions. Most conditions encode the failure
 		// as status=False (Connected=False → disconnected), but a handful
@@ -133,24 +126,43 @@ func HandleClusterConditionReconcile(ctx context.Context, _ *asynq.Task) error {
 		// forever. Scan the True set too, but dispatch ONLY the types whose
 		// True state is remediable so a Connected=True (healthy) row isn't
 		// mistakenly routed into the connectivity remedy.
-		trueRows, err := runtimeDependencies(ctx).Queries.ListClusterConditionsByStatus(ctx, ccrStatusTrue)
-		if err != nil {
+		if err := reconcileConditionPages(ctx, ccrStatusTrue, func(row sqlc.ClusterCondition) bool {
+			return ccrRemediableWhenTrue(row.Type)
+		}); err != nil {
 			return fmt.Errorf("list true conditions: %w", err)
 		}
-		for _, row := range trueRows {
-			if !ccrRemediableWhenTrue(row.Type) {
+		return nil
+	})
+}
+
+// reconcileConditionPages keyset-pages a status sweep so the worker never
+// materializes an estate-sized condition set. The cursor columns are immutable
+// during remediation, so rows remain stable even when a remedy changes status.
+func reconcileConditionPages(ctx context.Context, status string, include func(sqlc.ClusterCondition) bool) error {
+	afterTime := time.Unix(0, 0).UTC()
+	afterID := uuid.Nil
+	for {
+		rows, err := runtimeDependencies(ctx).Queries.ListClusterConditionsByStatus(ctx, sqlc.ListClusterConditionsByStatusParams{
+			Status: status, AfterTransitionTime: afterTime, AfterID: afterID, QueryLimit: ccrQueryPageSize,
+		})
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if include != nil && !include(row) {
 				continue
 			}
 			if err := reconcileOneCondition(ctx, row); err != nil {
 				runtimeLogger(ctx).WarnContext(ctx, "cluster condition reconcile failed",
-					"cluster_id", row.ClusterID.String(),
-					"type", row.Type,
-					"error", err,
-				)
+					"cluster_id", row.ClusterID.String(), "type", row.Type, "error", err)
 			}
 		}
-		return nil
-	})
+		if len(rows) < int(ccrQueryPageSize) {
+			return nil
+		}
+		last := rows[len(rows)-1]
+		afterTime, afterID = last.LastTransitionTime, last.ID
+	}
 }
 
 // ccrRemediableWhenTrue reports whether a condition of the given type is
@@ -318,7 +330,7 @@ func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) err
 	// agent has reconnected (a heartbeat within the freshness window) the
 	// tunnel is back and reissuing a token would be wasted, confusing
 	// traffic. Skip and record it so the next tick re-evaluates cheaply.
-	cluster, err := runtimeDependencies(ctx).Queries.GetClusterByID(ctx, row.ClusterID)
+	_, err := runtimeDependencies(ctx).Queries.GetClusterByID(ctx, row.ClusterID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Cluster gone — condition is stale, nothing to remediate.
@@ -328,11 +340,15 @@ func remediateConnectedFalse(ctx context.Context, row sqlc.ClusterCondition) err
 		}
 		return insertAttempt(ctx, row, ccrActionTokenReissued, ccrOutcomeFail, "get_cluster: "+err.Error(), nil)
 	}
-	if cluster.LastHeartbeat.Valid && time.Since(cluster.LastHeartbeat.Time) <= ccrConnectedFreshWindow {
+	liveness, err := runtimeDependencies(ctx).Queries.GetClusterLiveness(ctx, row.ClusterID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return insertAttempt(ctx, row, ccrActionTokenReissued, ccrOutcomeFail, "get_cluster_liveness: "+err.Error(), nil)
+	}
+	if liveness.LastHeartbeat.Valid && time.Since(liveness.LastHeartbeat.Time) <= ccrConnectedFreshWindow {
 		return insertAttempt(ctx, row, ccrActionNoopReconnected, ccrOutcomeSkip, "", map[string]any{
 			"reason":            "agent_reconnected",
-			"last_heartbeat":    cluster.LastHeartbeat.Time.UTC().Format(time.RFC3339),
-			"heartbeat_age_sec": int(time.Since(cluster.LastHeartbeat.Time).Seconds()),
+			"last_heartbeat":    liveness.LastHeartbeat.Time.UTC().Format(time.RFC3339),
+			"heartbeat_age_sec": int(time.Since(liveness.LastHeartbeat.Time).Seconds()),
 			"window_sec":        int(ccrConnectedFreshWindow.Seconds()),
 		})
 	}

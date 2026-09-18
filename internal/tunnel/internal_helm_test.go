@@ -25,7 +25,7 @@ func helmHandlerRouter(h *InternalHelmHandler) http.Handler {
 }
 
 func TestInternalHelmHandler_DisabledWhenPSKEmpty(t *testing.T) {
-	h := NewInternalHelmHandler(NewHub(slog.Default()), "", slog.Default())
+	h := NewInternalHelmHandler(NewHub(slog.Default()), InternalRequestKeyring{}, slog.Default())
 	body, _ := json.Marshal(InternalHelmRequest{MsgType: protocol.MsgHelmInstall})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c1", bytes.NewReader(body))
 	w := httptest.NewRecorder()
@@ -40,11 +40,14 @@ func TestInternalHelmHandler_DisabledWhenPSKEmpty(t *testing.T) {
 // the in-band sibling-pod source marker (what an external caller reaching
 // the handler through a misconfigured catch-all would present) is rejected.
 func TestInternalHelmHandler_ForbidsValidPSKWithoutSiblingSource(t *testing.T) {
-	h := NewInternalHelmHandler(NewHub(slog.Default()), "the-right-psk", slog.Default())
+	h := NewInternalHelmHandler(NewHub(slog.Default()), InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
 	body, _ := json.Marshal(InternalHelmRequest{MsgType: protocol.MsgHelmUninstall})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c1", bytes.NewReader(body))
-	// Valid PSK, but NO X-Astronomer-Internal-Source header.
-	req.Header.Set(InternalPSKHeader, "the-right-psk")
+	if err := SignInternalHelmRequest(req, "the-right-psk", "c1", body); err != nil {
+		t.Fatal(err)
+	}
+	// Valid envelope, but NO X-Astronomer-Internal-Source header.
+	req.Header.Del(InternalSourceHeader)
 	w := httptest.NewRecorder()
 	helmHandlerRouter(h).ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden {
@@ -53,11 +56,12 @@ func TestInternalHelmHandler_ForbidsValidPSKWithoutSiblingSource(t *testing.T) {
 }
 
 func TestInternalHelmHandler_ForbidsBadPSK(t *testing.T) {
-	h := NewInternalHelmHandler(NewHub(slog.Default()), "the-right-psk", slog.Default())
+	h := NewInternalHelmHandler(NewHub(slog.Default()), InternalRequestKeyring{Current: "the-right-psk"}, slog.Default())
 	body, _ := json.Marshal(InternalHelmRequest{MsgType: protocol.MsgHelmInstall})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c1", bytes.NewReader(body))
-	req.Header.Set(InternalSourceHeader, InternalSourceValue)
-	req.Header.Set(InternalPSKHeader, "wrong")
+	if err := SignInternalHelmRequest(req, "wrong", "c1", body); err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	helmHandlerRouter(h).ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden {
@@ -66,11 +70,12 @@ func TestInternalHelmHandler_ForbidsBadPSK(t *testing.T) {
 }
 
 func TestInternalHelmHandler_RejectsBadMsgType(t *testing.T) {
-	h := NewInternalHelmHandler(NewHub(slog.Default()), "psk", slog.Default())
+	h := NewInternalHelmHandler(NewHub(slog.Default()), InternalRequestKeyring{Current: "psk"}, slog.Default())
 	body, _ := json.Marshal(InternalHelmRequest{MsgType: protocol.MsgK8sRequest})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c1", bytes.NewReader(body))
-	req.Header.Set(InternalSourceHeader, InternalSourceValue)
-	req.Header.Set(InternalPSKHeader, "psk")
+	if err := SignInternalHelmRequest(req, "psk", "c1", body); err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	helmHandlerRouter(h).ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -80,14 +85,15 @@ func TestInternalHelmHandler_RejectsBadMsgType(t *testing.T) {
 
 func TestInternalHelmHandler_NoAgentReturns503(t *testing.T) {
 	hub := NewHub(slog.Default())
-	h := NewInternalHelmHandler(hub, "psk", slog.Default())
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
 	body, _ := json.Marshal(InternalHelmRequest{
 		MsgType: protocol.MsgHelmInstall,
 		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/no-such-cluster", bytes.NewReader(body))
-	req.Header.Set(InternalSourceHeader, InternalSourceValue)
-	req.Header.Set(InternalPSKHeader, "psk")
+	if err := SignInternalHelmRequest(req, "psk", "no-such-cluster", body); err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	helmHandlerRouter(h).ServeHTTP(w, req)
 	if w.Code != http.StatusServiceUnavailable {
@@ -95,6 +101,98 @@ func TestInternalHelmHandler_NoAgentReturns503(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "Cluster agent not connected") {
 		t.Errorf("expected disconnect message, got %q", w.Body.String())
+	}
+}
+
+func TestInternalHelmHandler_SendFailureReturnsServiceUnavailable(t *testing.T) {
+	hub := NewHub(slog.Default())
+	agent := &AgentConnection{
+		ClusterID: "c-helm-send-full",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, 1),
+		cancel:    func() {},
+	}
+	agent.sendCh <- &protocol.Message{Type: protocol.MsgHeartbeat}
+	hub.agents.Set(agent.ClusterID, agent)
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
+
+	body, _ := json.Marshal(InternalHelmRequest{
+		MsgType: protocol.MsgHelmInstall,
+		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/"+agent.ClusterID, bytes.NewReader(body))
+	if err := SignInternalHelmRequest(req, "psk", agent.ClusterID, body); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	helmHandlerRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("send failure status = %d, want 503: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInternalHelmHandler_UnsupportedCapabilityReturnsPreconditionFailed(t *testing.T) {
+	hub := NewHub(slog.Default())
+	agent := &AgentConnection{
+		ClusterID:    "c-helm-no-capability",
+		Capabilities: map[string]struct{}{},
+		Streams:      NewStreamManager(256),
+		sendCh:       make(chan *protocol.Message, sendChannelSize),
+		cancel:       func() {},
+	}
+	hub.agents.Set(agent.ClusterID, agent)
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
+
+	body, _ := json.Marshal(InternalHelmRequest{
+		MsgType: protocol.MsgHelmInstall,
+		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/"+agent.ClusterID, bytes.NewReader(body))
+	if err := SignInternalHelmRequest(req, "psk", agent.ClusterID, body); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	helmHandlerRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusPreconditionFailed {
+		t.Fatalf("unsupported capability status = %d, want 412: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestInternalHelmHandler_ReplacedAgentStreamReturnsServiceUnavailable(t *testing.T) {
+	hub := NewHub(slog.Default())
+	oldAgent := &AgentConnection{
+		ClusterID: "c-helm-replaced",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, sendChannelSize),
+		cancel:    func() {},
+	}
+	hub.agents.Set(oldAgent.ClusterID, oldAgent)
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
+
+	go func() {
+		<-oldAgent.sendCh
+		newAgent := &AgentConnection{
+			ClusterID: oldAgent.ClusterID,
+			Streams:   NewStreamManager(256),
+			sendCh:    make(chan *protocol.Message, sendChannelSize),
+			cancel:    func() {},
+		}
+		replaced := hub.agents.Set(oldAgent.ClusterID, newAgent)
+		replaced.Streams.CloseAll()
+	}()
+
+	body, _ := json.Marshal(InternalHelmRequest{
+		MsgType: protocol.MsgHelmStatus,
+		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/"+oldAgent.ClusterID, bytes.NewReader(body))
+	if err := SignInternalHelmRequest(req, "psk", oldAgent.ClusterID, body); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	helmHandlerRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("replaced stream status = %d, want 503: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -111,7 +209,7 @@ func TestInternalHelmHandler_RoundTrip(t *testing.T) {
 	}
 	hub.agents.Set("c-helm", agent)
 
-	h := NewInternalHelmHandler(hub, "psk", slog.Default())
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
 
 	// Drain the outbound message and reply via the stream the handler
 	// just created.
@@ -141,8 +239,9 @@ func TestInternalHelmHandler_RoundTrip(t *testing.T) {
 		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c-helm", bytes.NewReader(body))
-	req.Header.Set(InternalSourceHeader, InternalSourceValue)
-	req.Header.Set(InternalPSKHeader, "psk")
+	if err := SignInternalHelmRequest(req, "psk", "c-helm", body); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	req = req.WithContext(ctx)
@@ -170,15 +269,16 @@ func TestInternalHelmHandler_TimeoutReturns504(t *testing.T) {
 		cancel:    func() {},
 	}
 	hub.agents.Set("c-slow", agent)
-	h := NewInternalHelmHandler(hub, "psk", slog.Default())
+	h := NewInternalHelmHandler(hub, InternalRequestKeyring{Current: "psk"}, slog.Default())
 
 	body, _ := json.Marshal(InternalHelmRequest{
 		MsgType: protocol.MsgHelmStatus,
 		Payload: protocol.HelmRequestPayload{ReleaseName: "rel", Namespace: "ns"},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/internal/tunnel/helm/c-slow", bytes.NewReader(body))
-	req.Header.Set(InternalSourceHeader, InternalSourceValue)
-	req.Header.Set(InternalPSKHeader, "psk")
+	if err := SignInternalHelmRequest(req, "psk", "c-slow", body); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	req = req.WithContext(ctx)

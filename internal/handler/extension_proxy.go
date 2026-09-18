@@ -6,12 +6,14 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // §HostMounts — enabled-extensions endpoint.
@@ -307,7 +309,7 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 	// double-submit. For a browser session this is already enforced upstream by
 	// the Auth middleware on every unsafe-method cookie request; we re-assert it
 	// here so a misrouted/ticket-less POST cannot mutate without the token.
-	if ds.Method == "POST" && ticket == "" && !middleware.ValidateCSRF(r) {
+	if ds.Method == "POST" && ticket == "" && !auth.ValidateCSRF(r) {
 		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "CSRF validation failed")
 		return
 	}
@@ -354,7 +356,7 @@ func (h *ExtensionHandler) ProxyData(w http.ResponseWriter, r *http.Request) {
 }
 
 // resolveCaller authenticates the request to a concrete (userID, clusterID).
-// A browser session uses GetAuthenticatedUser; an X-Extension-Ticket (Tier 2)
+// A browser session uses reqctx.AuthenticatedUser; an X-Extension-Ticket (Tier 2)
 // is validated single-use against the ticket store and is scoped to this
 // extension+dataSource+cluster. On failure it writes the response and returns
 // ok=false.
@@ -382,7 +384,7 @@ func (h *ExtensionHandler) resolveCaller(r *http.Request, req extProxyRequest, d
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Unknown data source")
 		return uuid.Nil, uuid.Nil, false
 	}
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return uuid.Nil, uuid.Nil, false

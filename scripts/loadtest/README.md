@@ -12,18 +12,22 @@ add a row to the doc.
 ## Quick start
 
 ```bash
-# 1. Have a running server (local dev: `make dev` + `make run` in one terminal).
-# 2. Get an admin JWT and put it in a file:
-curl -s -X POST http://localhost:8080/api/v1/auth/login/ \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"admin@example.com","password":"..."}' | jq -r .access_token > /tmp/jwt
-# 3. Run the harness:
-make load-test LOADTEST_TOKEN=/tmp/jwt LOADTEST_CLUSTERS=100 LOADTEST_RPS=200 LOADTEST_DURATION=10m
+# 1. Have the complete management plane running: server and worker. `make dev`
+#    exposes the API on 8001 and metrics on 9090. A server-only run cannot
+#    drain the transactional audit/task outboxes and is never qualification.
+# 2. For local engineering only, let the harness exchange the cookie-only
+#    browser login for an ephemeral one-day API token held only in memory.
+#    The token is revoked during cleanup. Keep the password outside shell
+#    arguments (a file descriptor or mode-0600 file):
+make load-test LOADTEST_SERVER=http://localhost:8001 LOADTEST_METRICS_SERVER=http://localhost:9090 \
+  LOADTEST_LOGIN_EMAIL=admin@example.com LOADTEST_LOGIN_PASSWORD_FILE=/secure/password \
+  LOADTEST_CLUSTERS=100 LOADTEST_RPS=200 LOADTEST_DURATION=10m
 
 # Or run a named enterprise fleet profile:
 go run ./scripts/loadtest \
-  -server http://localhost:8080 \
-  -token /tmp/jwt \
+  -server http://localhost:8001 \
+  -metrics-server http://localhost:9090 \
+  -token /secure/admin-api-token \
   -profile scripts/loadtest/profiles/small.yaml \
   -out loadtest-small.md
 ```
@@ -34,11 +38,14 @@ Output is `loadtest-report.md` (override with `LOADTEST_OUT=...`).
 
 | Flag | Env var | Default | Purpose |
 |---|---|---|---|
-| `-server` | `LOADTEST_SERVER` | `http://localhost:8080` | Management-plane base URL |
+| `-server` | `LOADTEST_SERVER` | `http://localhost:8001` | Management-plane base URL |
+| `-metrics-server` | `LOADTEST_METRICS_SERVER` | value of `-server` | Prometheus metrics base URL when metrics use a separate listener or Service |
 | `-clusters` | `LOADTEST_CLUSTERS` | `50` | Synthetic agent count |
-| `-rps` | `LOADTEST_RPS` | `100` | Aggregate HTTP request rate (token bucket) |
+| `-rps` | `LOADTEST_RPS` | `100` | Aggregate HTTP request rate (bounded, credit-conserving microbatches) |
 | `-duration` | `LOADTEST_DURATION` | `5m` | How long to drive load |
-| `-token` | `LOADTEST_TOKEN` | _(empty)_ | Path to an admin Bearer JWT used for fixture provisioning and HTTP workload requests; never used as an agent credential |
+| `-token` | `LOADTEST_TOKEN` | _(empty)_ | Path to a pre-provisioned admin API bearer token used for fixture provisioning and HTTP workload requests; never used as an agent credential |
+| `-login-email` | `LOADTEST_LOGIN_EMAIL` | _(empty)_ | Local engineering only: browser-login email used to mint an in-memory one-day API token; forbidden in certification |
+| `-login-password-file` | `LOADTEST_LOGIN_PASSWORD_FILE` | _(empty)_ | Local engineering only: password file or inherited file descriptor; bearer material is never written by the harness |
 | `-out` | `LOADTEST_OUT` | `loadtest-report.md` | Markdown report path |
 | `-profile` | `LOADTEST_PROFILE` | _(empty)_ | YAML profile that sets clusters, RPS, duration, resource cardinality, reconnect storm, and drill labels |
 | `-audit-observer-dsn` | `LOADTEST_AUDIT_OBSERVER_DATABASE_URL_FILE` | _(empty)_ | Path to a read-only PostgreSQL DSN used to independently reconcile durable audit intents; required for certification |
@@ -85,9 +92,16 @@ must populate `LOADTEST_COMMIT`, `LOADTEST_IMAGES`, `LOADTEST_CHART_VALUES`,
 `LOADTEST_COMPONENT_REPLICAS` must be a JSON object with positive `server`,
 `worker`, `tunnel`, and `audit` replica counts; the report binds these counts
 to the component rate samples used by the offline sizing reducer.
+The target deployment's per-caller API rate limits must be sized for the
+profile's declared RPS. Keep production defaults in ordinary environments;
+capacity jobs should raise `config.apiK8sProxyRateLimitRPS` and
+`config.apiK8sProxyRateLimitBurst` explicitly in their retained values file.
 Certification also requires the profile's bounded `mandatoryAudit` workload to
 remain active for at least 98% of the certified window. `maxOperations` must be
-large enough to sustain the declared rate for the full duration. Every accepted
+large enough to sustain the declared rate for the full duration; it is a safety
+cap, not the expected attempt count. The expected count is `ratePerSecond ×
+duration`, with the first operation issued when the workload window opens.
+Every accepted
 mutation is independently observed through a separate read-only PostgreSQL
 connection against `audit_outbox`, then reconciled through the public audit API
 by correlation ID, exact action, and resource type. An HTTP 2xx is not counted
@@ -111,7 +125,7 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
 | `LOADTEST_THRESH_OPEN_FD_GROWTH` | `64` | maximum absolute post-warm-up/terminal open-FD growth |
 | `LOADTEST_THRESH_QUEUE_AGE_SECONDS` | `60` | Oldest pending worker task age |
 | `LOADTEST_THRESH_EVENT_LAG_SECONDS` | `30` | Distributed event/cache relay lag |
-| `LOADTEST_THRESH_HTTP_ERROR_RATIO` | `0` | Maximum transport plus non-2xx response ratio |
+| `LOADTEST_THRESH_HTTP_ERROR_RATIO` | `0` | Maximum transport plus non-2xx response ratio outside a bounded intentional reconnect window |
 | `LOADTEST_THRESH_ACHIEVED_RPS_RATIO` | `0.95` | Minimum observed/target request-rate ratio |
 | `LOADTEST_THRESH_DURATION_RATIO` | `0.98` | Minimum observed/configured workload-window ratio |
 | `LOADTEST_THRESH_EVENT_RATE_RATIO` | `0.95` | Minimum emitted/declared state-event-rate ratio |
@@ -142,13 +156,25 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
    - on disconnect, retries with jittered exponential backoff (matches
      `internal/agent/tunnel.go BackoffDurationWithJitter`)
 
+   A configured reconnect storm records its exact start, targeted agents, full
+   recovery, and recovery duration. HTTP 503 responses from agent-routed
+   resource scenarios are reported separately while that bounded drill is in
+   progress; they do not consume the steady-state HTTP error budget only when
+   every targeted agent reconnects within `jitter + 30s`. Transport failures,
+   non-agent routes, responses after recovery, and an incomplete or slow
+   reconnect still fail the run.
+
    The agent code is a slim reimplementation (not a `TunnelClient` import)
    because that package transitively pulls in `client-go` and friends. The
    wire format is identical — see `pkg/protocol/types.go`.
 
-4. **HTTP workload**: a global `golang.org/x/time/rate.Limiter` token bucket
-   shapes the aggregate rate to `-rps`. Each tick draws a scenario from the
-   weighted mix in `scenarios.go`:
+4. **HTTP workload**: a credit-conserving scheduler running at up to 1,000 Hz
+   shapes the aggregate rate to `-rps`. Rates through 1,000 RPS emit at most one
+   request per tick; higher rates use bounded microbatches. The first request
+   cannot unlock a one-second burst, and fractional credits are conserved
+   across ticks. Each scheduled request runs concurrently and is joined after
+   the measured window. Each request draws a scenario from the weighted mix in
+   `scenarios.go`:
 
    | Scenario | Weight | Path |
    |---|---|---|
@@ -159,10 +185,10 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
    | cluster_events | 5% | `/api/v1/clusters/{real_fixture_id}/k8s/api/v1/events` |
    | auth_me | 20% | `/api/v1/auth/me/` |
    | project_list | 10% | `/api/v1/projects/` |
-   | audit_logs | 10% | `/api/v1/audit-logs/` |
+   | audit_logs | 10% | `/api/v1/audit/` |
    | admin_queues | 5% | `/api/v1/admin/queues/` |
 
-5. **Scrape**: every 15 seconds, `GET /metrics` and pluck the metrics listed
+5. **Scrape**: every 15 seconds, `GET /metrics` from `-metrics-server` and pluck the metrics listed
    in `metrics.go::scrapedMetrics`. The driver also snapshots its own
    `runtime.NumGoroutine` and `HeapAlloc` so the report has a baseline for
    the harness itself. Certification requires at least eight server samples
@@ -171,7 +197,10 @@ The pass/fail verdict is heuristic and the thresholds are tunable:
 
 6. **Report**: the verdict block is the first non-frontmatter line in the
    output file, in the form `VERDICT: pass` / `VERDICT: fail`. Grep for
-   `^VERDICT:` in CI.
+   `^VERDICT:` in CI. Rate, duration, resource cardinality, state-event, HTTP,
+   and mandatory-audit conservation are enforced in local engineering reports
+   as well as certification; certification adds signed provenance, drill, and
+   evidence-density requirements rather than weakening local verdicts.
 
 The certification workflow binds the report, report JSON and digest, rendered
 values, raw qualification JSON, drill JSON, and deterministic baseline row in

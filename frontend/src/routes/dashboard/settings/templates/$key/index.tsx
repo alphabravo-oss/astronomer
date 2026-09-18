@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * /dashboard/settings/templates/[key] — split-view template editor.
  *
@@ -20,8 +21,9 @@ import {
  * a 400 with `missing` when applicable; we surface those names inline.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Eye,
@@ -33,8 +35,15 @@ import {
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { useAppForm } from "@/lib/form";
+import { Textarea } from "@/components/ui/textarea";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
-import { EmptyState } from "@/components/ui/empty-state";
+import { StatePanel } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  settingsKeys,
+  useNotificationTemplate,
+} from "@/components/settings/hooks";
 import {
   getNotificationTemplate,
   previewNotificationTemplate,
@@ -53,18 +62,18 @@ function NotificationTemplateEditorPage() {
 }
 
 function NotificationTemplateEditor() {
-  const params = useParams();
+  const params = Route.useParams();
   const key = decodeURIComponent(String(params?.key ?? ""));
-  const [detail, setDetail] = useState<NotificationTemplateDetailView | null>(
-    null,
-  );
+  const queryClient = useQueryClient();
+  const templateQuery = useNotificationTemplate(key);
+  const detail = templateQuery.data ?? null;
   const [preview, setPreview] =
     useState<NotificationTemplatePreviewResultView | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [previewMissing, setPreviewMissing] = useState<string[] | null>(null);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
 
   // Override subject/body/enabled + the sample-variables JSON live on one
   // form; save uses the first three, Preview reads all of them.
@@ -80,7 +89,10 @@ function NotificationTemplateEditor() {
           body_format: detail.bodyFormat,
           enabled: value.enabled,
         });
-        setDetail(updated);
+        queryClient.setQueryData(
+          settingsKeys.notificationTemplate(key),
+          updated,
+        );
         toastSuccess("Template override saved");
       } catch (err) {
         toastApiError("", err, "Save failed");
@@ -91,49 +103,24 @@ function NotificationTemplateEditor() {
   });
 
   useEffect(() => {
-    if (!key) return;
-    const controller = new AbortController();
-    let cancelled = false;
-    (async () => {
-      try {
-        const d = await getNotificationTemplate(key, {
-          signal: controller.signal,
-        });
-        if (cancelled) return;
-        setDetail(d);
-        form.reset({
-          subject: d.subject,
-          body: d.body,
-          enabled: d.enabled,
-          samples: seedSamples(d),
-        });
-      } catch (err) {
-        toastApiError("", err, "Failed to load template");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [form, key]);
+    const d = templateQuery.data;
+    if (!d) return;
+    form.reset({
+      subject: d.subject,
+      body: d.body,
+      enabled: d.enabled,
+      samples: seedSamples(d),
+    });
+  }, [form, templateQuery.data]);
 
   const handleReset = async () => {
     if (!detail) return;
-    if (
-      !window.confirm(
-        "Revert to the built-in default? Any saved override will be deleted.",
-      )
-    ) {
-      return;
-    }
     setSaving(true);
     try {
       await resetNotificationTemplate(key);
       // Re-fetch so the page shows the default again.
       const d = await getNotificationTemplate(key);
-      setDetail(d);
+      queryClient.setQueryData(settingsKeys.notificationTemplate(key), d);
       form.reset({
         subject: d.subject,
         body: d.body,
@@ -141,6 +128,7 @@ function NotificationTemplateEditor() {
         samples: form.state.values.samples,
       });
       toastSuccess("Reverted to default");
+      setResetOpen(false);
     } catch (err) {
       toastApiError("", err, "Reset failed");
     } finally {
@@ -185,33 +173,41 @@ function NotificationTemplateEditor() {
 
   const variableList = useMemo(() => detail?.variables ?? [], [detail]);
 
-  if (loading) {
+  if (
+    templateQuery.isLoading ||
+    templateQuery.isError ||
+    templateQuery.data === undefined ||
+    detail === null
+  ) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-      </div>
-    );
-  }
-  if (!detail) {
-    return (
-      <EmptyState
-        icon={FileText}
-        title="Template not found"
-        description="The notification template key may be invalid or no longer available."
-        actionLabel="Back to templates"
-        actionHref="/dashboard/settings/templates"
-      />
+      <QueryStates
+        query={templateQuery}
+        loadingTitle="Loading notification template"
+        permission="settings:read"
+        errorTitle="Failed to load notification template"
+        notFound={
+          <StatePanel
+            icon={FileText}
+            title="Template not found"
+            description="The notification template key may be invalid or no longer available."
+            actionLabel="Back to templates"
+            actionHref="/dashboard/settings/templates"
+          />
+        }
+      >
+        {null}
+      </QueryStates>
     );
   }
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/settings/templates"
+      <RouterLink
+        to="/dashboard/settings/templates"
         className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
       >
         <ArrowLeft className="h-4 w-4" /> Notification templates
-      </Link>
+      </RouterLink>
 
       <PageHeader
         title={detail.key}
@@ -219,14 +215,14 @@ function NotificationTemplateEditor() {
           <>
             {detail.description}
             <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="px-2 py-0.5 rounded bg-muted">
+              <span className="px-2 py-0.5 rounded-sm bg-muted">
                 {detail.channel}
               </span>
-              <span className="px-2 py-0.5 rounded bg-muted">
+              <span className="px-2 py-0.5 rounded-sm bg-muted">
                 {detail.bodyFormat}
               </span>
               {detail.hasOverride && (
-                <span className="px-2 py-0.5 rounded bg-status-success/15 text-status-success">
+                <span className="px-2 py-0.5 rounded-sm bg-status-success/15 text-status-success">
                   override active
                 </span>
               )}
@@ -262,7 +258,7 @@ function NotificationTemplateEditor() {
           </label>
           <form.Field name="subject">
             {(field) => (
-              <input
+              <Input
                 id="field-4e945644-222"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -280,7 +276,7 @@ function NotificationTemplateEditor() {
           </label>
           <form.Field name="body">
             {(field) => (
-              <textarea
+              <Textarea
                 id="field-4e945644-236"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -294,7 +290,7 @@ function NotificationTemplateEditor() {
           <div className="flex items-center gap-2 text-sm">
             <form.Field name="enabled">
               {(field) => (
-                <input
+                <Input
                   id="enabled"
                   type="checkbox"
                   checked={field.state.value}
@@ -324,7 +320,7 @@ function NotificationTemplateEditor() {
             </button>
             <button
               type="button"
-              onClick={handleReset}
+              onClick={() => setResetOpen(true)}
               disabled={saving || !detail.hasOverride}
               className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
             >
@@ -392,7 +388,7 @@ function NotificationTemplateEditor() {
           </label>
           <form.Field name="samples">
             {(field) => (
-              <textarea
+              <Textarea
                 id="field-4e945644-324"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -422,7 +418,7 @@ function NotificationTemplateEditor() {
               {previewMissing.map((m) => (
                 <code
                   key={m}
-                  className="px-1 mx-0.5 rounded bg-status-warning/20"
+                  className="px-1 mx-0.5 rounded-sm bg-status-warning/20"
                 >
                   {m}
                 </code>
@@ -458,6 +454,24 @@ function NotificationTemplateEditor() {
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={resetOpen}
+        onClose={() => setResetOpen(false)}
+        onConfirm={() => void handleReset()}
+        title="Reset notification template"
+        description="This deletes the saved override and restores the built-in template."
+        confirmText="Reset to default"
+        variant="destructive"
+        loading={saving}
+        impact={{
+          scope: detail.key,
+          consequences: [
+            "The custom subject, body, and enabled state will be discarded.",
+            "Future notifications will use the built-in template immediately.",
+          ],
+          recovery: "Create and save a new override.",
+        }}
+      />
     </PageShell>
   );
 }

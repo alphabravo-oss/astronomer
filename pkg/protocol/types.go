@@ -271,6 +271,10 @@ type AgentUpgradePayload struct {
 	// replacement agent to report Ready before rolling back. Zero means the
 	// agent's own default.
 	RolloutTimeoutSeconds int `json:"rollout_timeout_seconds,omitempty"`
+	// AgentOverrides is the validated canonical configuration stored with the
+	// upgrade plan. ConfigurationDigest binds it to that operator-approved plan.
+	AgentOverrides      json.RawMessage `json:"agent_overrides,omitempty"`
+	ConfigurationDigest string          `json:"configuration_digest,omitempty"`
 }
 
 // Agent self-upgrade result phases. Phase is the authoritative outcome signal
@@ -325,13 +329,15 @@ type AgentUpgradeResultPayload struct {
 
 // Message is the envelope for all tunnel communication.
 type Message struct {
-	Type      MessageType     `json:"type"`
-	StreamID  string          `json:"stream_id,omitempty"`
-	RequestID string          `json:"request_id,omitempty"`
-	ClusterID string          `json:"cluster_id,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
-	Payload   json.RawMessage `json:"payload,omitempty"`
-	Error     string          `json:"error,omitempty"`
+	Type        MessageType     `json:"type"`
+	StreamID    string          `json:"stream_id,omitempty"`
+	RequestID   string          `json:"request_id,omitempty"`
+	ClusterID   string          `json:"cluster_id,omitempty"`
+	Timestamp   time.Time       `json:"timestamp"`
+	Traceparent string          `json:"traceparent,omitempty"`
+	Tracestate  string          `json:"tracestate,omitempty"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
+	Error       string          `json:"error,omitempty"`
 }
 
 // ConnectPayload is sent by the agent when establishing a connection.
@@ -376,9 +382,27 @@ type K8sRequestPayload struct {
 	Path    string            `json:"path"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    string            `json:"body,omitempty"` // base64 encoded
+	// GrafanaAuth is server-minted authentication for the dedicated shared
+	// Grafana proxy. It is deliberately separate from Headers: browser-supplied
+	// headers are allow-listed at both tunnel hops, while this value originates
+	// only from the authenticated monitoring handler. Agents inject it only into
+	// Kubernetes Service proxy requests.
+	GrafanaAuth *GrafanaProxyAuth `json:"grafana_auth,omitempty"`
 
 	CallerIdentity
 }
+
+// GrafanaProxyAuth carries either the proxy's signed session cookie or a
+// one-use bootstrap ticket. The raw values are credentials: never log them.
+type GrafanaProxyAuth struct {
+	Cookie string `json:"cookie,omitempty"`
+	Ticket string `json:"ticket,omitempty"`
+}
+
+const (
+	GrafanaProxyCookieName   = "grafana_auth"
+	GrafanaProxyTicketHeader = "X-Astronomer-Grafana-Ticket"
+)
 
 // K8sResponsePayload represents the result of a proxied Kubernetes API request.
 type K8sResponsePayload struct {
@@ -431,6 +455,7 @@ const K8sChunkSizeBytes = 256 * 1024
 
 // HelmRequestPayload represents a Helm operation request.
 type HelmRequestPayload struct {
+	Description string         `json:"description,omitempty"`
 	ReleaseName string         `json:"release_name"`
 	Namespace   string         `json:"namespace"`
 	ChartURL    string         `json:"chart_url,omitempty"`

@@ -1,11 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
-import { useRouter, useSearchParams } from "@/lib/navigation";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
-import {
-  useClusters,
-  useProjects,
-} from "@/lib/hooks";
+import { useCluster } from "@/lib/hooks/clusters";
+import { useProjects } from "@/lib/hooks/projects";
 import {
   useHelmRepositories,
   useSyncHelmRepository,
@@ -16,15 +14,18 @@ import {
   useRollbackChart,
 } from "@/lib/hooks/catalog";
 import { ActionButton } from "@/components/ui/action-button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { QueryStates } from "@/components/ui/query-states";
 import { Select } from "@/components/ui/select";
 import { TabStrip, Tabs, TabsContent } from "@/components/ui/tabs";
 import type { HelmChart, HelmChartCategory, HelmChartVersion } from "@/types";
-import { Package, Plus } from "lucide-react";
+import { Package, Plus, SearchX } from "lucide-react";
 import { AddRepositoryModal } from "./-add-repository-modal";
 import { BrowseTab } from "./-browse-tab";
 import { ChartDetailModal } from "./-chart-detail-modal";
 import { InstallChartModal } from "./-install-chart-modal";
+import { CatalogOperationTimeline } from "@/components/catalog/catalog-operation-timeline";
 import { InstalledTab } from "./-installed-tab";
 import { RepositoriesTab } from "./-repositories-tab";
 
@@ -37,8 +38,10 @@ function CatalogPage() {
   const [selectedCategory, setSelectedCategory] = useState<
     HelmChartCategory | "all"
   >("all");
-  const initialSearchParams = useSearchParams();
-  const router = useRouter();
+  const initialSearchParams = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
+  const navigate = useNavigate();
   const projectsQuery = useProjects({ pageSize: 200 });
   const projects = projectsQuery.data?.data ?? [];
   const requestedProjectId = initialSearchParams?.get("project") ?? "";
@@ -58,9 +61,10 @@ function CatalogPage() {
     const next = new URLSearchParams(initialSearchParams);
     if (nextProjectId) next.set("project", nextProjectId);
     else next.delete("project");
-    router.replace(
-      `/dashboard/catalog${next.size ? `?${next.toString()}` : ""}`,
-    );
+    void navigate({
+      to: `/dashboard/catalog${next.size ? `?${next.toString()}` : ""}`,
+      replace: true,
+    });
     setSelectedChart(null);
     setShowInstallModal(false);
     setInstallChart(null);
@@ -76,25 +80,19 @@ function CatalogPage() {
     chart: HelmChart;
     version: HelmChartVersion;
   } | null>(null);
+  const [operationId, setOperationId] = useState<string | null>(null);
 
-  const { data: charts, isLoading: chartsLoading } = useHelmCharts({
+  const chartsQuery = useHelmCharts({
     projectId,
     category: selectedCategory !== "all" ? selectedCategory : undefined,
     search: searchQuery || undefined,
   });
-  const { data: installed, isLoading: installedLoading } = useInstalledCharts();
-  const { data: repos, isLoading: reposLoading } = useHelmRepositories();
-  const { data: presetClusterData } = useClusters({ pageSize: 100 });
-  const clusterNames = useMemo(
-    () =>
-      Object.fromEntries(
-        (presetClusterData?.data || []).map((cluster) => [
-          cluster.id,
-          cluster.displayName || cluster.name,
-        ]),
-      ),
-    [presetClusterData],
-  );
+  const installedQuery = useInstalledCharts();
+  const reposQuery = useHelmRepositories();
+  const presetClusterQuery = useCluster(presetClusterIdPage);
+  const charts = chartsQuery.data;
+  const installed = installedQuery.data;
+  const repos = reposQuery.data;
   const repositoryNames = useMemo(
     () => new Map((repos || []).map((repo) => [repo.id, repo.name])),
     [repos],
@@ -107,15 +105,7 @@ function CatalogPage() {
       })),
     [charts, repositoryNames],
   );
-  const presetCluster = useMemo(
-    () =>
-      presetClusterIdPage
-        ? (presetClusterData?.data || []).find(
-            (c) => c.id === presetClusterIdPage,
-          )
-        : undefined,
-    [presetClusterIdPage, presetClusterData],
-  );
+  const presetCluster = presetClusterQuery.data;
 
   const syncRepo = useSyncHelmRepository();
   const deleteRepo = useDeleteHelmRepository();
@@ -152,6 +142,29 @@ function CatalogPage() {
     },
   ];
 
+  if (
+    projectsQuery.isLoading ||
+    projectsQuery.isError ||
+    projectsQuery.data === undefined
+  ) {
+    return (
+      <PageShell>
+        <PageHeader
+          title="Catalog"
+          description="Shared Helm repositories and charts."
+        />
+        <QueryStates
+          query={projectsQuery}
+          loadingTitle="Loading catalog projects"
+          permission="projects:read"
+          errorTitle="Failed to load catalog projects"
+        >
+          {null}
+        </QueryStates>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell>
       <div>
@@ -166,7 +179,7 @@ function CatalogPage() {
                   aria-label="Catalog project"
                   value={projectId}
                   onChange={(event) => setProjectId(event.target.value)}
-                  className="min-w-56"
+                  containerClassName="min-w-56"
                   disabled={projectsQuery.isLoading}
                 >
                   <option value="">Select a project</option>
@@ -190,7 +203,7 @@ function CatalogPage() {
           }
         />
         {presetClusterIdPage && (
-          <div className="mt-2 inline-flex items-center gap-2 text-xs px-2 py-1 rounded bg-accent/40 text-foreground">
+          <div className="mt-2 inline-flex items-center gap-2 text-xs px-2 py-1 rounded-sm bg-accent/40 text-foreground">
             <Package className="h-3.5 w-3.5" />
             Installing onto{" "}
             <span className="font-medium">
@@ -211,37 +224,125 @@ function CatalogPage() {
         />
 
         <TabsContent>
-          {activeTab === "browse" && (
-            <BrowseTab
-              projectId={projectId}
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              selectedCategory={selectedCategory}
-              onSelectedCategoryChange={setSelectedCategory}
-              charts={catalogCharts}
-              chartsLoading={chartsLoading}
-              onSelectChart={setSelectedChart}
-            />
-          )}
+          {activeTab === "browse" &&
+            (!projectId ? (
+              <BrowseTab
+                projectId={projectId}
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                selectedCategory={selectedCategory}
+                onSelectedCategoryChange={setSelectedCategory}
+                charts={catalogCharts}
+                chartsLoading={false}
+                onSelectChart={setSelectedChart}
+              />
+            ) : (
+              <QueryStates
+                query={chartsQuery}
+                loadingTitle="Loading charts"
+                permission="catalog:read"
+                errorTitle="Failed to load charts"
+                isEmpty={(rows) => rows.length === 0}
+                empty={
+                  <EmptyState
+                    icon={
+                      searchQuery || selectedCategory !== "all"
+                        ? SearchX
+                        : Package
+                    }
+                    title={
+                      searchQuery || selectedCategory !== "all"
+                        ? "No charts match these filters"
+                        : "No charts available"
+                    }
+                    description={
+                      searchQuery || selectedCategory !== "all"
+                        ? "Clear the search and category filter to browse the complete catalog."
+                        : "Add and sync a Helm repository before browsing charts."
+                    }
+                    actionLabel={
+                      searchQuery || selectedCategory !== "all"
+                        ? "Clear filters"
+                        : "Manage repositories"
+                    }
+                    onAction={() => {
+                      if (searchQuery || selectedCategory !== "all") {
+                        setSearchQuery("");
+                        setSelectedCategory("all");
+                      } else {
+                        setActiveTab("repositories");
+                      }
+                    }}
+                  />
+                }
+              >
+                <BrowseTab
+                  projectId={projectId}
+                  searchQuery={searchQuery}
+                  onSearchQueryChange={setSearchQuery}
+                  selectedCategory={selectedCategory}
+                  onSelectedCategoryChange={setSelectedCategory}
+                  charts={catalogCharts}
+                  chartsLoading={false}
+                  onSelectChart={setSelectedChart}
+                />
+              </QueryStates>
+            ))}
 
           {activeTab === "installed" && (
-            <InstalledTab
-              installed={installed}
-              loading={installedLoading}
-              clusterNames={clusterNames}
-              onRollback={(id, revision) => rollback.mutate({ id, revision })}
-              onUninstall={(id) => uninstall.mutate(id)}
-            />
+            <QueryStates
+              query={installedQuery}
+              loadingTitle="Loading installed charts"
+              permission="catalog:read"
+              errorTitle="Failed to load installed charts"
+              isEmpty={(rows) => rows.length === 0}
+              empty={
+                <EmptyState
+                  icon={Package}
+                  title="No charts installed"
+                  description="Browse the catalog to install a chart on an adopted cluster."
+                  actionLabel="Browse charts"
+                  onAction={() => setActiveTab("browse")}
+                />
+              }
+            >
+              <InstalledTab
+                installed={installed}
+                loading={false}
+                onRollback={(id, revision) => rollback.mutate({ id, revision })}
+                onUninstall={(id) => uninstall.mutateAsync(id)}
+                uninstallPending={uninstall.isPending}
+              />
+            </QueryStates>
           )}
 
           {activeTab === "repositories" && (
-            <RepositoriesTab
-              repos={repos}
-              loading={reposLoading}
-              onSync={(id) => syncRepo.mutate(id)}
-              onDelete={(id) => deleteRepo.mutate(id)}
-              syncPending={syncRepo.isPending}
-            />
+            <QueryStates
+              query={reposQuery}
+              loadingTitle="Loading repositories"
+              permission="catalog:read"
+              errorTitle="Failed to load repositories"
+              isEmpty={(rows) => rows.length === 0}
+              empty={
+                <EmptyState
+                  icon={Package}
+                  title="No repositories configured"
+                  description="Add a Helm repository, then sync it to make charts available to projects."
+                  actionLabel="Add repository"
+                  actionIcon={Plus}
+                  onAction={() => setShowRepoModal(true)}
+                />
+              }
+            >
+              <RepositoriesTab
+                repos={repos}
+                loading={false}
+                onSync={(id) => syncRepo.mutate(id)}
+                onDelete={(id) => deleteRepo.mutateAsync(id)}
+                syncPending={syncRepo.isPending}
+                deletePending={deleteRepo.isPending}
+              />
+            </QueryStates>
           )}
         </TabsContent>
       </Tabs>
@@ -265,11 +366,17 @@ function CatalogPage() {
           allowedClusterIds={allowedClusterIds}
           chart={installChart.chart}
           version={installChart.version}
+          onOperationStarted={setOperationId}
           onClose={() => {
             setShowInstallModal(false);
             setInstallChart(null);
           }}
         />
+      )}
+      {operationId && (
+        <div className="fixed bottom-4 right-4 z-40 w-full max-w-xl shadow-lg">
+          <CatalogOperationTimeline operationId={operationId} />
+        </div>
       )}
 
       {showRepoModal && (

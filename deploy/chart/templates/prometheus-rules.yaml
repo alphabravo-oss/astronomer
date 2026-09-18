@@ -798,6 +798,28 @@ spec:
             description: "Rotate the source credential, increment its epoch, verify the immutable source again, and retry only the failed resolution."
             runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/delivery-control-plane.md#credential-rotation-and-revocation
 
+        - alert: AstronomerCatalogSynchronizationFailed
+          expr: sum(increase(astronomer_catalog_sync_total{result!="success"}[15m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+            component: catalog
+          annotations:
+            summary: "Application catalog synchronization failed"
+            description: "Astronomer retained the last-known-good catalog. Inspect transport, immutable digest, trust policy, proxy, and CA configuration before retrying."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/catalog-and-applications.md#catalog-synchronization
+
+        - alert: AstronomerCatalogSynchronizationStale
+          expr: time() - astronomer_catalog_last_success_timestamp_seconds > 86400
+          for: 15m
+          labels:
+            severity: warning
+            component: catalog
+          annotations:
+            summary: "Application catalog has not synchronized successfully for 24 hours"
+            description: "Installed applications continue reconciling, but new catalog metadata and releases may be stale."
+            runbook_url: {{ .Values.metrics.prometheusRule.runbookBaseURL }}/catalog-and-applications.md#stale-last-known-good-catalog
+
     - name: astronomer.observability.alerts
       rules:
         # ── Shared Grafana down ─────────────────────────────────────────

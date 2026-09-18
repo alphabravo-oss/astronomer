@@ -43,7 +43,7 @@ class ReleaseManifestTest(unittest.TestCase):
         self.inventory = self.root / "images.txt"
         self.inventory.write_text(
             "\n".join(
-                f"registry.example.test/astronomer/{repository}:v1.1.0"
+                f"registry.example.test/astronomer/{repository}:v1.2.0"
                 for repository in sorted(GENERATOR.FIRST_PARTY.values())
             )
             + "\nthird.example.test/database/postgres:16\n",
@@ -55,7 +55,7 @@ class ReleaseManifestTest(unittest.TestCase):
             encoding="utf-8",
         )
         self.chart = self.root / "Chart.yaml"
-        self.chart.write_text("version: 1.1.0\nappVersion: \"1.1.0\"\n", encoding="utf-8")
+        self.chart.write_text("version: 1.2.0\nappVersion: \"1.2.0\"\n", encoding="utf-8")
         self.chart_package = self.root / "astronomer-1.1.0.tgz"
         self.chart_package.write_bytes(b"chart")
         self.flux_archive = self.root / "flux.tar.gz"
@@ -68,7 +68,7 @@ class ReleaseManifestTest(unittest.TestCase):
 
     def args(self) -> argparse.Namespace:
         return argparse.Namespace(
-            version="v1.1.0",
+            version="v1.2.0",
             source_commit="1" * 40,
             source_date_epoch=1_700_000_000,
             chart_reference=f"registry.example.test/charts/astronomer@{digest('b')}",
@@ -98,7 +98,7 @@ class ReleaseManifestTest(unittest.TestCase):
         self.assertEqual(GENERATOR.encode(first), GENERATOR.encode(second))
         schema = SCHEMA_VALIDATOR.load_json(ROOT / "deploy/release/release-manifest.schema.json")
         SCHEMA_VALIDATOR.validate_schema(first, schema, schema)
-        self.assertEqual(len(first["astronomer"]["images"]), 6)
+        self.assertEqual(len(first["astronomer"]["images"]), 7)
         self.assertEqual(len(first["flux"]["controllers"]), 3)
         self.assertEqual(first["charlie"]["qualified_version"], "v1.0.63")
         self.assertTrue(first["charlie"]["artifact_signing_policy"]["certificate_identity"].endswith("v1.0.63"))

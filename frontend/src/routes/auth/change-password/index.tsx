@@ -1,7 +1,9 @@
+import { Input } from "@/components/ui/input";
+import { FormShell } from "@/components/ui/form-shell";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { useState } from "react";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { Orbit, Eye, EyeOff, KeyRound, ArrowRight } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { changeOwnPassword } from "@/lib/api/auth";
@@ -15,12 +17,13 @@ import { ActionButton } from "@/components/ui/action-button";
 // while the flag is set.
 
 function ChangePasswordPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { user, updateUser, logout } = useAuthStore();
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
     defaultValues: { current: "", next: "", confirm: "" },
     validators: {
@@ -36,12 +39,16 @@ function ChangePasswordPage() {
           : undefined,
     },
     onSubmit: async ({ value }) => {
+      setSubmissionError(null);
       try {
         await changeOwnPassword(value.current, value.next);
         updateUser({ must_change_password: false, mustChangePassword: false });
         toastSuccess("Password updated");
-        router.push("/dashboard");
+        void navigate({ to: "/dashboard" });
       } catch (err) {
+        setSubmissionError(
+          err instanceof Error ? err.message : "The request failed. Try again.",
+        );
         toastApiError("", err, "Failed to update password");
       }
     },
@@ -81,13 +88,16 @@ function ChangePasswordPage() {
           )}
         </div>
 
-        <form
+        <FormShell
           onSubmit={(e) => {
             e.preventDefault();
             void form.handleSubmit();
           }}
-          className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
+          className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-xs"
         >
+          <form.AppForm>
+            <form.FormErrorSummary serverError={submissionError} />
+          </form.AppForm>
           <form.Field name="current">
             {(field) => (
               <PasswordField
@@ -174,14 +184,14 @@ function ChangePasswordPage() {
               type="button"
               onClick={() => {
                 logout();
-                router.push("/auth/login");
+                void navigate({ to: "/auth/login" });
               }}
               className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               Sign out
             </button>
           )}
-        </form>
+        </FormShell>
       </div>
     </div>
   );
@@ -214,14 +224,14 @@ function PasswordField({
         {label}
       </label>
       <div className="relative">
-        <input
+        <Input
           id={id}
           type={visible ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           autoComplete={id === "current" ? "current-password" : "new-password"}
           data-initial-focus={autoFocus}
-          className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
+          className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-ring transition-colors"
         />
         <button
           type="button"

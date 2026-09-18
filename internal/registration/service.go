@@ -57,81 +57,13 @@ type Publisher interface {
 // write a step row + publish an event after every DB write — they
 // invoke one Service method.
 type Service struct {
-	q   Querier
-	pub Publisher
+	q                 Querier
+	pub               Publisher
+	runTx             RunTx
+	transactionScoped bool
 	// metrics is an optional hook for the Prometheus gauges. Set via
 	// SetMetricsHook; nil-safe.
 	metrics MetricsHook
-}
-
-type bufferedPublishEvent struct {
-	eventType string
-	data      any
-}
-
-type bufferedPhaseMetric struct {
-	clusterID string
-	from      string
-	to        string
-}
-
-type bufferedDurationMetric struct {
-	clusterID string
-	outcome   string
-	baseline  bool
-	seconds   float64
-}
-
-// bufferedSideEffects captures process-local SSE and metrics effects while a
-// caller executes registration writes inside a database transaction. Flush is
-// called only after commit, so a rolled-back transition cannot leak a phase or
-// timeline event to clients.
-type bufferedSideEffects struct {
-	pub       Publisher
-	metrics   MetricsHook
-	events    []bufferedPublishEvent
-	phases    []bufferedPhaseMetric
-	durations []bufferedDurationMetric
-}
-
-func (b *bufferedSideEffects) Publish(eventType string, data any) {
-	b.events = append(b.events, bufferedPublishEvent{eventType: eventType, data: data})
-}
-
-func (b *bufferedSideEffects) RecordPhaseTransition(clusterID, from, to string) {
-	b.phases = append(b.phases, bufferedPhaseMetric{clusterID: clusterID, from: from, to: to})
-}
-
-func (b *bufferedSideEffects) RecordDuration(clusterID, outcome string, baseline bool, seconds float64) {
-	b.durations = append(b.durations, bufferedDurationMetric{clusterID: clusterID, outcome: outcome, baseline: baseline, seconds: seconds})
-}
-
-func (b *bufferedSideEffects) flush() {
-	if b.pub != nil {
-		for _, event := range b.events {
-			b.pub.Publish(event.eventType, event.data)
-		}
-	}
-	if b.metrics != nil {
-		for _, phase := range b.phases {
-			b.metrics.RecordPhaseTransition(phase.clusterID, phase.from, phase.to)
-		}
-		for _, duration := range b.durations {
-			b.metrics.RecordDuration(duration.clusterID, duration.outcome, duration.baseline, duration.seconds)
-		}
-	}
-}
-
-// Buffered returns a transaction-scoped service that uses q for every read and
-// write and buffers non-database effects. The returned flush function must be
-// called exactly once after the surrounding transaction commits; it is safe to
-// discard on rollback.
-func (s *Service) Buffered(q Querier) (*Service, func()) {
-	if s == nil {
-		return New(q, nil), func() {}
-	}
-	buffer := &bufferedSideEffects{pub: s.pub, metrics: s.metrics}
-	return &Service{q: q, pub: buffer, metrics: buffer}, buffer.flush
 }
 
 // MetricsHook is the bridge to Prometheus. The handler / wiring layer
@@ -204,10 +136,19 @@ type StepInput struct {
 // UpdateStep is the counterpart for in-flight mutations (tool install
 // progress).
 func (s *Service) WriteStep(ctx context.Context, clusterID uuid.UUID, in StepInput) (sqlc.ClusterRegistrationStep, error) {
+	return runInTransaction(ctx, s, func(txService *Service) (sqlc.ClusterRegistrationStep, error) {
+		return txService.writeStep(ctx, clusterID, in)
+	})
+}
+
+func (s *Service) writeStep(ctx context.Context, clusterID uuid.UUID, in StepInput) (sqlc.ClusterRegistrationStep, error) {
 	if s == nil || s.q == nil {
 		return sqlc.ClusterRegistrationStep{}, fmt.Errorf("registration service not configured")
 	}
-	order, _ := s.q.MaxStepOrderForCluster(ctx, clusterID)
+	order, err := s.q.MaxStepOrderForCluster(ctx, clusterID)
+	if err != nil {
+		return sqlc.ClusterRegistrationStep{}, fmt.Errorf("read registration step order: %w", err)
+	}
 	order++
 	var startedAt, completedAt pgtype.Timestamptz
 	now := time.Now().UTC()
@@ -220,9 +161,10 @@ func (s *Service) WriteStep(ctx context.Context, clusterID uuid.UUID, in StepInp
 	detail := json.RawMessage(`{}`)
 	if len(in.Detail) > 0 {
 		b, err := json.Marshal(in.Detail)
-		if err == nil {
-			detail = b
+		if err != nil {
+			return sqlc.ClusterRegistrationStep{}, fmt.Errorf("encode registration step detail: %w", err)
 		}
+		detail = b
 	}
 	progress := in.ProgressPct
 	if in.Status == "success" || in.Status == "skipped" {
@@ -259,6 +201,12 @@ type UpdateStepInput struct {
 }
 
 func (s *Service) UpdateStep(ctx context.Context, in UpdateStepInput) (sqlc.ClusterRegistrationStep, error) {
+	return runInTransaction(ctx, s, func(txService *Service) (sqlc.ClusterRegistrationStep, error) {
+		return txService.updateStep(ctx, in)
+	})
+}
+
+func (s *Service) updateStep(ctx context.Context, in UpdateStepInput) (sqlc.ClusterRegistrationStep, error) {
 	if s == nil || s.q == nil {
 		return sqlc.ClusterRegistrationStep{}, fmt.Errorf("registration service not configured")
 	}
@@ -276,9 +224,11 @@ func (s *Service) UpdateStep(ctx context.Context, in UpdateStepInput) (sqlc.Clus
 	}
 	var detail json.RawMessage
 	if len(in.Detail) > 0 {
-		if b, err := json.Marshal(in.Detail); err == nil {
-			detail = b
+		b, err := json.Marshal(in.Detail)
+		if err != nil {
+			return sqlc.ClusterRegistrationStep{}, fmt.Errorf("encode registration step detail: %w", err)
 		}
+		detail = b
 	}
 	step, err := s.q.UpdateClusterRegistrationStep(ctx, sqlc.UpdateClusterRegistrationStepParams{
 		ID:           in.StepID,
@@ -306,6 +256,12 @@ func (s *Service) UpdateStep(ctx context.Context, in UpdateStepInput) (sqlc.Clus
 // when the cluster is already in the target phase is a no-op (no DB
 // write, no event).
 func (s *Service) Advance(ctx context.Context, clusterID uuid.UUID, ev Event, opts ...AdvanceOption) (sqlc.ClusterRegistrationRecord, error) {
+	return runInTransaction(ctx, s, func(txService *Service) (sqlc.ClusterRegistrationRecord, error) {
+		return txService.advance(ctx, clusterID, ev, opts...)
+	})
+}
+
+func (s *Service) advance(ctx context.Context, clusterID uuid.UUID, ev Event, opts ...AdvanceOption) (sqlc.ClusterRegistrationRecord, error) {
 	if s == nil || s.q == nil {
 		return sqlc.ClusterRegistrationRecord{}, fmt.Errorf("registration service not configured")
 	}
@@ -510,7 +466,12 @@ func WithError(msg string) AdvanceOption {
 // `connected` are no-ops (the phase machine treats them as such).
 func (s *Service) OnAgentConnected(ctx context.Context, clusterID uuid.UUID, agentVersion string) error {
 	if s == nil || s.q == nil {
-		return nil
+		return fmt.Errorf("registration service not configured")
+	}
+	if !s.transactionScoped {
+		return s.withinTransaction(ctx, func(txService *Service) error {
+			return txService.OnAgentConnected(ctx, clusterID, agentVersion)
+		})
 	}
 	rec, err := s.Advance(ctx, clusterID, EventAgentConnected, WithDetail(map[string]any{
 		"agent_version": agentVersion,
@@ -539,7 +500,9 @@ func (s *Service) OnAgentConnected(ctx context.Context, clusterID uuid.UUID, age
 	// as nothing-to-provision.
 	if rec.RegistrationPhase == string(PhaseConnected) {
 		if !rec.InstallBaseline.Valid || !rec.InstallBaseline.Bool {
-			_, _ = s.Advance(ctx, clusterID, EventNoProvisioning)
+			if _, err := s.Advance(ctx, clusterID, EventNoProvisioning); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -550,7 +513,12 @@ func (s *Service) OnAgentConnected(ctx context.Context, clusterID uuid.UUID, age
 // cluster is already provisioning are an idempotent no-op.
 func (s *Service) OnDeliveryApplyStart(ctx context.Context, clusterID uuid.UUID) error {
 	if s == nil || s.q == nil {
-		return nil
+		return fmt.Errorf("registration service not configured")
+	}
+	if !s.transactionScoped {
+		return s.withinTransaction(ctx, func(txService *Service) error {
+			return txService.OnDeliveryApplyStart(ctx, clusterID)
+		})
 	}
 	rec, err := s.q.GetClusterRegistrationRecord(ctx, clusterID)
 	if err != nil {
@@ -559,14 +527,18 @@ func (s *Service) OnDeliveryApplyStart(ctx context.Context, clusterID uuid.UUID)
 	if rec.RegistrationPhase == string(PhaseProvisioning) || rec.RegistrationPhase == string(PhaseFailed) {
 		return nil
 	}
-	_ = s.q.CloseRunningStepsForCluster(ctx, sqlc.CloseRunningStepsForClusterParams{
+	if err := s.q.CloseRunningStepsForCluster(ctx, sqlc.CloseRunningStepsForClusterParams{
 		ClusterID: clusterID,
 		StepName:  "delivery_applying",
-	})
-	_, _ = s.WriteStep(ctx, clusterID, StepInput{
+	}); err != nil {
+		return fmt.Errorf("close stale delivery timeline steps: %w", err)
+	}
+	if _, err := s.WriteStep(ctx, clusterID, StepInput{
 		StepName: "delivery_applying",
 		Status:   "running",
-	})
+	}); err != nil {
+		return fmt.Errorf("write delivery timeline step: %w", err)
+	}
 	if _, err := s.Advance(ctx, clusterID, EventDeliveryApplying, WithSkipAutoStep()); err != nil {
 		if s.isIllegal(err) {
 			return nil
@@ -595,7 +567,12 @@ func (s *Service) isIllegal(err error) bool {
 // ready after all built-in cluster deployments report Ready.
 func (s *Service) OnDeliveryApplySuccess(ctx context.Context, clusterID uuid.UUID) error {
 	if s == nil || s.q == nil {
-		return nil
+		return fmt.Errorf("registration service not configured")
+	}
+	if !s.transactionScoped {
+		return s.withinTransaction(ctx, func(txService *Service) error {
+			return txService.OnDeliveryApplySuccess(ctx, clusterID)
+		})
 	}
 	if err := s.q.FinishRunningStepsForCluster(ctx, sqlc.FinishRunningStepsForClusterParams{
 		ClusterID:    clusterID,
@@ -605,10 +582,12 @@ func (s *Service) OnDeliveryApplySuccess(ctx context.Context, clusterID uuid.UUI
 	}); err != nil {
 		return fmt.Errorf("finish delivery_applying timeline step: %w", err)
 	}
-	_, _ = s.WriteStep(ctx, clusterID, StepInput{
+	if _, err := s.WriteStep(ctx, clusterID, StepInput{
 		StepName: "delivery_applied",
 		Status:   "success",
-	})
+	}); err != nil {
+		return fmt.Errorf("write delivery success timeline step: %w", err)
+	}
 	if _, err := s.Advance(ctx, clusterID, EventDeliveryApplied, WithSkipAutoStep()); err != nil {
 		if errors.Is(err, ErrIllegalTransition) {
 			return nil
@@ -625,7 +604,12 @@ func (s *Service) OnDeliveryApplySuccess(ctx context.Context, clusterID uuid.UUI
 // provisioning to failed. Retry remains an explicit operator action.
 func (s *Service) OnDeliveryApplyFailure(ctx context.Context, clusterID uuid.UUID, errMsg string) error {
 	if s == nil || s.q == nil {
-		return nil
+		return fmt.Errorf("registration service not configured")
+	}
+	if !s.transactionScoped {
+		return s.withinTransaction(ctx, func(txService *Service) error {
+			return txService.OnDeliveryApplyFailure(ctx, clusterID, errMsg)
+		})
 	}
 	if err := s.q.FinishRunningStepsForCluster(ctx, sqlc.FinishRunningStepsForClusterParams{
 		ClusterID:    clusterID,
@@ -635,11 +619,13 @@ func (s *Service) OnDeliveryApplyFailure(ctx context.Context, clusterID uuid.UUI
 	}); err != nil {
 		return fmt.Errorf("finish failed delivery_applying timeline step: %w", err)
 	}
-	_, _ = s.WriteStep(ctx, clusterID, StepInput{
+	if _, err := s.WriteStep(ctx, clusterID, StepInput{
 		StepName:     "delivery_failed",
 		Status:       "failed",
 		ErrorMessage: errMsg,
-	})
+	}); err != nil {
+		return fmt.Errorf("write delivery failure timeline step: %w", err)
+	}
 	if _, err := s.Advance(ctx, clusterID, EventDeliveryFailed, WithSkipAutoStep()); err != nil {
 		if errors.Is(err, ErrIllegalTransition) {
 			return nil
@@ -656,6 +642,12 @@ func (s *Service) OnDeliveryApplyFailure(ctx context.Context, clusterID uuid.UUI
 // stays NULL when the operator hasn't decided yet; FALSE / TRUE are
 // recorded as their explicit values.
 func (s *Service) SetInstallBaseline(ctx context.Context, clusterID uuid.UUID, value bool) (sqlc.ClusterRegistrationRecord, error) {
+	return runInTransaction(ctx, s, func(txService *Service) (sqlc.ClusterRegistrationRecord, error) {
+		return txService.setInstallBaseline(ctx, clusterID, value)
+	})
+}
+
+func (s *Service) setInstallBaseline(ctx context.Context, clusterID uuid.UUID, value bool) (sqlc.ClusterRegistrationRecord, error) {
 	if s == nil || s.q == nil {
 		return sqlc.ClusterRegistrationRecord{}, fmt.Errorf("registration service not configured")
 	}

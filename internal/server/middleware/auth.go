@@ -3,53 +3,23 @@ package middleware
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/google/uuid"
 )
 
 // authContextKey is an unexported type for auth-related context keys.
-type authContextKey string
-
-const (
-	// SessionCookieName carries the browser access JWT.
-	SessionCookieName = "astronomer_session"
-	// RefreshCookieName carries the browser refresh JWT.
-	RefreshCookieName = "astronomer_refresh"
-	// CSRFCookieName is the readable double-submit token used for unsafe
-	// browser requests; it carries no authentication authority by itself.
-	CSRFCookieName = "astronomer_csrf"
-)
-
-const (
-	userContextKey     authContextKey = "authenticated_user"
-	apiTokenContextKey authContextKey = "authenticated_api_token"
-)
-
-// AuthenticatedUser represents the user extracted from auth.
-type AuthenticatedUser struct {
-	ID       string
-	Email    string
-	Username string
-	// AuthMethod indicates how the user was authenticated ("jwt" or "api_token").
-	AuthMethod string
-}
-
-// TokenUserQuerier resolves API tokens to concrete users.
-type TokenUserQuerier interface {
-	GetTokenByHash(ctx context.Context, tokenHash string) (sqlc.ApiToken, error)
-	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
-	UpdateAPITokenLastUsed(ctx context.Context, id uuid.UUID) error
-}
-
 // APITokenLastSeenUpdater is the optional capability used by the IP-
 // allowlist enforcer to stamp the last-seen remote IP onto the token
 // row. Wired through TokenUserQuerier in production via *sqlc.Queries;
@@ -58,32 +28,14 @@ type APITokenLastSeenUpdater interface {
 	UpdateAPITokenLastSeenIP(ctx context.Context, arg sqlc.UpdateAPITokenLastSeenIPParams) error
 }
 
-// GetAuthenticatedUser extracts the authenticated user from context.
-func GetAuthenticatedUser(ctx context.Context) (*AuthenticatedUser, bool) {
-	u, ok := ctx.Value(userContextKey).(*AuthenticatedUser)
-	return u, ok
-}
-
-// GetAuthenticatedAPIToken returns the validated API token row when the
-// current request was authenticated via API token. Returns (nil, false)
-// for JWT-authenticated requests (the dashboard / browser SPA). Used
-// by APITokenScopeEnforce so the scope check doesn't re-query the DB.
-func GetAuthenticatedAPIToken(ctx context.Context) (*sqlc.ApiToken, bool) {
-	t, ok := ctx.Value(apiTokenContextKey).(*sqlc.ApiToken)
-	return t, ok
-}
-
-// SetAuthenticatedAPITokenForTest injects an API token row into the
-// context. Tests use this to drive APITokenScopeEnforce without
-// running the full Auth middleware.
-func SetAuthenticatedAPITokenForTest(ctx context.Context, tok *sqlc.ApiToken) context.Context {
-	return context.WithValue(ctx, apiTokenContextKey, tok)
-}
-
 // authError writes a JSON 401 error response.
 func authError(w http.ResponseWriter, code, message string) {
+	authErrorStatus(w, http.StatusUnauthorized, code, message)
+}
+
+func authErrorStatus(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
+	w.WriteHeader(status)
 	resp := map[string]interface{}{
 		"error": map[string]string{
 			"code":    code,
@@ -102,27 +54,6 @@ func isSafeMethod(method string) bool {
 	}
 }
 
-// ValidateCSRF checks the browser double-submit token. It is intentionally
-// exported so public cookie-consuming handlers such as /auth/refresh can apply
-// the same rule even though they are not behind AuthWithQueries.
-func ValidateCSRF(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
-	header := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
-	if header == "" {
-		return false
-	}
-	cookie, err := r.Cookie(CSRFCookieName)
-	if err != nil || strings.TrimSpace(cookie.Value) == "" {
-		return false
-	}
-	if len(header) != len(cookie.Value) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(header), []byte(cookie.Value)) == 1
-}
-
 // Auth creates middleware that authenticates requests via JWT or API token.
 //
 // Check order:
@@ -137,13 +68,13 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 // HttpOnly session cookie, using DB lookups when provided. Authorization
 // headers take precedence so headless API-token callers are unaffected even
 // when a browser cookie is also present.
-func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func(http.Handler) http.Handler {
+func AuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
 			usedSessionCookie := false
 			if header == "" {
-				if c, err := r.Cookie(SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
+				if c, err := r.Cookie(auth.SessionCookieName); err == nil && strings.TrimSpace(c.Value) != "" {
 					header = "Bearer " + c.Value
 					usedSessionCookie = true
 				} else {
@@ -151,7 +82,7 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 					return
 				}
 			}
-			if usedSessionCookie && !isSafeMethod(r.Method) && !ValidateCSRF(r) {
+			if usedSessionCookie && !isSafeMethod(r.Method) && !auth.ValidateCSRF(r) {
 				authError(w, "csrf_required", "CSRF token is required")
 				return
 			}
@@ -168,29 +99,45 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 				return
 			}
 
-			var user *AuthenticatedUser
+			var user *reqctx.User
 			var apiTokenForCtx *sqlc.ApiToken
 
 			if strings.HasPrefix(token, "astro_") {
 				hash := sha256.Sum256([]byte(token))
 				tokenHash := hex.EncodeToString(hash[:])
 				if queries == nil {
-					user = &AuthenticatedUser{
+					user = &reqctx.User{
 						ID:         "api_token:" + tokenHash[:12],
 						AuthMethod: "api_token",
 					}
 				} else {
-					apiToken, err := queries.GetTokenByHash(r.Context(), tokenHash)
+					resolve := func(ctx context.Context) (auth.APITokenAuthentication, error) {
+						apiToken, err := queries.GetTokenByHash(ctx, tokenHash)
+						if err != nil {
+							return auth.APITokenAuthentication{}, err
+						}
+						dbUser, err := queries.GetUserByID(ctx, apiToken.UserID)
+						if err != nil || !dbUser.IsActive {
+							if err == nil {
+								err = errors.New("user is inactive")
+							}
+							return auth.APITokenAuthentication{}, err
+						}
+						return auth.APITokenAuthentication{Token: apiToken, Identity: sessionIdentityFromDatabase(dbUser)}, nil
+					}
+					var authentication auth.APITokenAuthentication
+					var err error
+					if jwtManager != nil {
+						authentication, err = jwtManager.ResolveAPITokenAuthentication(r.Context(), tokenHash, resolve)
+					} else {
+						authentication, err = resolve(r.Context())
+					}
 					if err != nil {
 						authError(w, "authentication_required", "Invalid or expired token")
 						return
 					}
+					apiToken := authentication.Token
 					if apiToken.ExpiresAt.Valid && apiToken.ExpiresAt.Time.Before(time.Now()) {
-						authError(w, "authentication_required", "Invalid or expired token")
-						return
-					}
-					dbUser, err := queries.GetUserByID(r.Context(), apiToken.UserID)
-					if err != nil || !dbUser.IsActive {
 						authError(w, "authentication_required", "Invalid or expired token")
 						return
 					}
@@ -201,39 +148,42 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 					// check.
 					if strings.TrimSpace(apiToken.AllowedCidrs) != "" {
 						nets, perr := auth.ParseAllowedCIDRs(apiToken.AllowedCidrs)
-						if perr != nil || !auth.IPAllowed(nets, auth.RemoteIPForRequest(r)) {
+						if perr != nil || !auth.IPAllowed(nets, netIP(reqctx.ClientIP(r))) {
 							auth.APITokenDeniedTotal.WithLabelValues(observability.MetricValues("ip")...).Inc()
 							authError(w, "ip_not_allowlisted", "Token not permitted from this IP address")
 							return
 						}
 					}
-					_ = queries.UpdateAPITokenLastUsed(r.Context(), apiToken.ID)
-					// Best-effort last-seen IP stamp — never fail the
-					// request on a write error. Cast through the
-					// optional capability interface so test fakes that
-					// don't expose the new method still satisfy
-					// TokenUserQuerier.
-					if updater, ok := queries.(APITokenLastSeenUpdater); ok && updater != nil {
-						if ip := auth.RemoteIPForRequest(r); ip != nil {
-							_ = updater.UpdateAPITokenLastSeenIP(r.Context(), sqlc.UpdateAPITokenLastSeenIPParams{
-								ID:               apiToken.ID,
-								LastSeenRemoteIp: ip.String(),
-							})
+					clientIP := reqctx.ClientIP(r)
+					if jwtManager == nil || jwtManager.ClaimAPITokenActivity(tokenHash) {
+						_ = queries.UpdateAPITokenLastUsed(r.Context(), apiToken.ID)
+						// Best-effort last-seen IP stamp — never fail the
+						// request on a write error. Cast through the
+						// optional capability interface so test fakes that
+						// don't expose the new method still satisfy
+						// TokenUserQuerier.
+						if updater, ok := queries.(APITokenLastSeenUpdater); ok && updater != nil {
+							if ip := clientIP; ip != nil {
+								_ = updater.UpdateAPITokenLastSeenIP(r.Context(), sqlc.UpdateAPITokenLastSeenIPParams{
+									ID:               apiToken.ID,
+									LastSeenRemoteIp: ip.String(),
+								})
+							}
 						}
 					}
-					user = &AuthenticatedUser{
-						ID:         dbUser.ID.String(),
-						Email:      dbUser.Email,
-						Username:   dbUser.Username,
-						AuthMethod: "api_token",
-					}
+					user = requestUserFromSessionIdentity(authentication.Identity, "api_token")
 					tok := apiToken
 					apiTokenForCtx = &tok
 				}
 			} else {
 				// JWT path
-				claims, err := jwtManager.ValidateToken(token)
+				claims, err := jwtManager.ValidateTokenContext(r.Context(), token)
 				if err != nil {
+					if errors.Is(err, auth.ErrRevocationUnavailable) {
+						w.Header().Set("Retry-After", "2")
+						authErrorStatus(w, http.StatusServiceUnavailable, "authentication_dependency_unavailable", "Authentication state is temporarily unavailable")
+						return
+					}
 					authError(w, "authentication_required", "Invalid or expired token")
 					return
 				}
@@ -246,7 +196,7 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 					return
 				}
 
-				user = &AuthenticatedUser{
+				user = &reqctx.User{
 					ID:         claims.UserID.String(),
 					AuthMethod: "jwt",
 				}
@@ -257,24 +207,59 @@ func AuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func
 					// Previously the lookup error was ignored and IsActive
 					// was never checked, so a live JWT outlived the account
 					// change until its own natural expiry.
-					dbUser, err := queries.GetUserByID(r.Context(), claims.UserID)
-					if err != nil || !dbUser.IsActive {
+					identity, resolveErr := jwtManager.ResolveSessionIdentity(r.Context(), claims.ID, claims.UserID, func(ctx context.Context) (auth.SessionIdentity, error) {
+						dbUser, lookupErr := queries.GetUserByID(ctx, claims.UserID)
+						if lookupErr != nil {
+							return auth.SessionIdentity{}, lookupErr
+						}
+						if !dbUser.IsActive {
+							return auth.SessionIdentity{}, errors.New("user is inactive")
+						}
+						return sessionIdentityFromDatabase(dbUser), nil
+					})
+					if resolveErr != nil {
 						authError(w, "authentication_required", "Invalid or expired token")
 						return
 					}
-					user.Email = dbUser.Email
-					user.Username = dbUser.Username
+					user = requestUserFromSessionIdentity(identity, "jwt")
 				}
 			}
 
-			ctx := context.WithValue(r.Context(), userContextKey, user)
+			ctx := reqctx.WithUser(r.Context(), user)
 			if apiTokenForCtx != nil {
-				ctx = context.WithValue(ctx, apiTokenContextKey, apiTokenForCtx)
+				ctx = auth.WithAuthenticatedAPIToken(ctx, apiTokenForCtx)
 			}
 			setRequestLogActor(ctx, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func sessionIdentityFromDatabase(user sqlc.User) auth.SessionIdentity {
+	return auth.SessionIdentity{
+		UserID: user.ID, Email: user.Email, Username: user.Username,
+		FirstName: user.FirstName, LastName: user.LastName,
+		IsActive: user.IsActive, IsStaff: user.IsStaff, IsSuperuser: user.IsSuperuser,
+		MustChangePassword: user.MustChangePassword, DateJoined: user.DateJoined,
+		LastLogin: user.LastLogin.Time, HasLastLogin: user.LastLogin.Valid,
+	}
+}
+
+func requestUserFromSessionIdentity(identity auth.SessionIdentity, method string) *reqctx.User {
+	return &reqctx.User{
+		ID: identity.UserID.String(), Email: identity.Email, Username: identity.Username,
+		AuthMethod: method, FirstName: identity.FirstName, LastName: identity.LastName,
+		IsActive: identity.IsActive, IsStaff: identity.IsStaff, IsSuperuser: identity.IsSuperuser,
+		MustChangePassword: identity.MustChangePassword, DateJoined: identity.DateJoined,
+		LastLogin: identity.LastLogin, HasLastLogin: identity.HasLastLogin, Resolved: true,
+	}
+}
+
+func netIP(address *netip.Addr) net.IP {
+	if address == nil {
+		return nil
+	}
+	return net.IP(address.AsSlice())
 }
 
 // RequireAuth is an alias for Auth that makes it explicit at the call site
@@ -284,12 +269,6 @@ func RequireAuth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 }
 
 // RequireAuthWithQueries is the DB-backed variant used in production.
-func RequireAuthWithQueries(jwtManager *auth.JWTManager, queries TokenUserQuerier) func(http.Handler) http.Handler {
+func RequireAuthWithQueries(jwtManager *auth.JWTManager, queries auth.TokenUserQuerier) func(http.Handler) http.Handler {
 	return AuthWithQueries(jwtManager, queries)
-}
-
-// SetAuthenticatedUserForTest injects an AuthenticatedUser into the context.
-// This is intended for use in tests only.
-func SetAuthenticatedUserForTest(ctx context.Context, user *AuthenticatedUser) context.Context {
-	return context.WithValue(ctx, userContextKey, user)
 }

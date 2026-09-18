@@ -59,6 +59,44 @@ type bearerTokenSource struct {
 
 const tokenCacheTTL = 30 * time.Second
 
+const maxGrafanaProxyCredentialBytes = 8 << 10
+
+// applyGrafanaProxyAuth injects credentials only for the dedicated internal
+// grafana-proxy Service. Ordinary browser headers never reach this function:
+// the server places these values in a typed tunnel field after authenticating
+// and authorizing the user. Keeping the target check here prevents that field
+// from becoming a generic credential-injection primitive.
+func applyGrafanaProxyAuth(req *http.Request, auth *protocol.GrafanaProxyAuth) {
+	if req == nil || req.URL == nil || auth == nil || !isGrafanaServiceProxyPath(req.URL.Path) {
+		return
+	}
+	if validGrafanaProxyCredential(auth.Cookie) {
+		req.Header.Set("Cookie", protocol.GrafanaProxyCookieName+"="+auth.Cookie)
+	}
+	if validGrafanaProxyCredential(auth.Ticket) {
+		req.Header.Set(protocol.GrafanaProxyTicketHeader, auth.Ticket)
+	}
+}
+
+func isGrafanaServiceProxyPath(path string) bool {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for i := 0; i+2 < len(parts); i++ {
+		if parts[i] != "services" || parts[i+2] != "proxy" {
+			continue
+		}
+		servicePort := parts[i+1]
+		return strings.HasPrefix(servicePort, "http:") && strings.HasSuffix(servicePort, "-grafana-proxy:8080")
+	}
+	return false
+}
+
+func validGrafanaProxyCredential(value string) bool {
+	if value == "" || len(value) > maxGrafanaProxyCredentialBytes {
+		return false
+	}
+	return !strings.ContainsAny(value, "\r\n\x00; ")
+}
+
 func newBearerTokenSource(path, fallback string) *bearerTokenSource {
 	return &bearerTokenSource{path: path, fallback: fallback}
 }
@@ -229,6 +267,7 @@ func (p *K8sProxy) HandleStreamRequest(ctx context.Context, msg *protocol.Messag
 		}
 		httpReq.Header.Set(k, v)
 	}
+	applyGrafanaProxyAuth(httpReq, req.GrafanaAuth)
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
@@ -468,6 +507,7 @@ func (p *K8sProxy) executeUpstream(ctx context.Context, msg *protocol.Message) (
 		}
 		httpReq.Header.Set(k, v)
 	}
+	applyGrafanaProxyAuth(httpReq, req.GrafanaAuth)
 
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {

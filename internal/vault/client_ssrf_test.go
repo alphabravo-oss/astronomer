@@ -28,6 +28,7 @@ func TestDefaultClientFactory_BlocksLoopbackDial(t *testing.T) {
 	httpClient := vc.api.CloneConfig().HttpClient
 	if httpClient == nil {
 		t.Fatal("vault HttpClient must be set")
+		return
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -116,16 +116,12 @@ func TestWorkloadOperationAndAuditCommitTogether(t *testing.T) {
 			})
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/c/workloads/deployment/apps/web/restart/", nil)
 
-			_, err := executeWorkloadMutation(request, h,
+			_, err := executeMutation(request, h.runTx,
 				func(q WorkloadMutationTx) (sqlc.WorkloadOperation, error) {
 					return createWorkloadOperation(request.Context(), q, "workload", "c:deployment:apps:web", "restart", workloadOperationEnvelope{ClusterID: uuid.NewString(), Kind: "deployment", Namespace: "apps", Name: "web"}, sqlc.CreateWorkloadOperationParams{}.CreatedByID)
 				},
-				func() (sqlc.WorkloadOperation, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.WorkloadOperation{}, nil
-				},
-				func(op sqlc.WorkloadOperation) clusterAuditEvent {
-					return clusterAuditEvent{action: "workload.restart", resourceType: "workload", resourceID: "deployment/apps/web", status: http.StatusAccepted, detail: map[string]any{"operation_id": op.ID.String()}}
+				func(op sqlc.WorkloadOperation) mutationAuditEvent {
+					return mutationAuditEvent{action: "workload.restart", resourceType: "workload", resourceID: "deployment/apps/web", status: http.StatusAccepted, detail: map[string]any{"operation_id": op.ID.String()}}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)

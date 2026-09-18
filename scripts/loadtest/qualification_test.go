@@ -25,6 +25,17 @@ func TestResourceScenariosRequireFixtureID(t *testing.T) {
 	}
 }
 
+func TestDefaultScenariosUseCanonicalMountedRoutes(t *testing.T) {
+	for _, scenario := range defaultScenarios() {
+		if strings.Contains(scenario.path, "audit-logs") {
+			t.Fatalf("scenario %s uses retired audit route %q", scenario.name, scenario.path)
+		}
+		if scenario.name == "audit_logs" && scenario.path != "/api/v1/audit/" {
+			t.Fatalf("audit scenario path = %q, want canonical /api/v1/audit/", scenario.path)
+		}
+	}
+}
+
 func TestSyntheticResourcesMatchDeclaredCardinality(t *testing.T) {
 	rec := newRecorder()
 	agent := &syntheticAgent{rec: rec, resources: scaleResources{

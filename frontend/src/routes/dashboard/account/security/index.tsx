@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 
 /**
@@ -35,6 +36,7 @@ import { formatRelativeTime, cn, downloadBlob } from "@/lib/utils";
 import { useAppForm, useStore } from "@/lib/form";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { QueryStates } from "@/components/ui/query-states";
 import {
   getTotpStatus,
   startTotpEnrollment,
@@ -49,7 +51,7 @@ const TOTP_STATUS_KEY = ["account", "security", "totp", "status"] as const;
 
 function AccountSecurityPage() {
   const qc = useQueryClient();
-  const { data: status, isLoading } = useQuery<TotpStatus>({
+  const statusQuery = useQuery<TotpStatus>({
     queryKey: TOTP_STATUS_KEY,
     queryFn: getTotpStatus,
   });
@@ -57,6 +59,7 @@ function AccountSecurityPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [disableOpen, setDisableOpen] = useState(false);
   const [regenOpen, setRegenOpen] = useState(false);
+  const status = statusQuery.data;
 
   const refresh = () => qc.invalidateQueries({ queryKey: TOTP_STATUS_KEY });
 
@@ -67,19 +70,17 @@ function AccountSecurityPage() {
         description="Two-factor authentication and recovery codes for your account."
       />
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : status?.enrolled ? (
-        <EnrolledCard
-          status={status}
-          onDisable={() => setDisableOpen(true)}
-          onRegenerate={() => setRegenOpen(true)}
-        />
-      ) : (
-        <NotEnrolledCard onEnable={() => setWizardOpen(true)} />
-      )}
+      <QueryStates query={statusQuery} permission="account:read">
+        {(loadedStatus) => loadedStatus.enrolled ? (
+          <EnrolledCard
+            status={loadedStatus}
+            onDisable={() => setDisableOpen(true)}
+            onRegenerate={() => setRegenOpen(true)}
+          />
+        ) : (
+          <NotEnrolledCard onEnable={() => setWizardOpen(true)} />
+        )}
+      </QueryStates>
 
       {wizardOpen && (
         <EnrollmentWizard
@@ -122,7 +123,7 @@ function NotEnrolledCard({ onEnable }: { onEnable: () => void }) {
   return (
     <div className="rounded-lg border border-border bg-card p-6">
       <div className="flex items-start gap-4">
-        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-status-warning/10 flex items-center justify-center">
+        <div className="shrink-0 h-10 w-10 rounded-full bg-status-warning/10 flex items-center justify-center">
           <Shield className="h-5 w-5 text-status-warning" />
         </div>
         <div className="flex-1 min-w-0">
@@ -159,7 +160,7 @@ function EnrolledCard({
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-6">
         <div className="flex items-start gap-4">
-          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-status-success/10 flex items-center justify-center">
+          <div className="shrink-0 h-10 w-10 rounded-full bg-status-success/10 flex items-center justify-center">
             <ShieldCheck className="h-5 w-5 text-status-success" />
           </div>
           <div className="flex-1 min-w-0">
@@ -195,7 +196,7 @@ function EnrolledCard({
           </div>
           <button
             onClick={onRegenerate}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-border text-sm font-medium text-foreground hover:bg-accent transition-colors flex-shrink-0"
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-border text-sm font-medium text-foreground hover:bg-accent transition-colors shrink-0"
           >
             <RefreshCw className="h-4 w-4" />
             Regenerate
@@ -291,7 +292,7 @@ function EnrollmentWizard({
                   Can&apos;t scan? Show setup URL
                 </summary>
                 <div className="mt-2 flex items-stretch gap-2">
-                  <code className="flex-1 min-w-0 px-2 py-1.5 rounded bg-muted text-xs font-mono text-foreground overflow-x-auto whitespace-nowrap">
+                  <code className="flex-1 min-w-0 px-2 py-1.5 rounded-sm bg-muted text-xs font-mono text-foreground overflow-x-auto whitespace-nowrap">
                     {enrollment.otpauthUrl}
                   </code>
                   <button
@@ -299,7 +300,7 @@ function EnrollmentWizard({
                       navigator.clipboard.writeText(enrollment.otpauthUrl);
                       toastSuccess("Copied");
                     }}
-                    className="inline-flex items-center justify-center h-8 w-8 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-sm border border-border text-muted-foreground hover:text-foreground hover:bg-accent"
                     title="Copy"
                   >
                     <Copy className="h-3.5 w-3.5" />
@@ -311,14 +312,14 @@ function EnrollmentWizard({
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
             <button
               onClick={onClose}
-              className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
+              className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
             >
               Cancel
             </button>
             <button
               onClick={() => setStep("verify")}
               disabled={!enrollment}
-              className="inline-flex items-center h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex items-center h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
             >
               I&apos;ve added it
             </button>
@@ -391,6 +392,9 @@ function VerifyStepForm({
 
   return (
     <div className="space-y-4">
+      <form.AppForm>
+        <form.FormErrorSummary serverError={confirmMut.error?.message} />
+      </form.AppForm>
       <p className="text-sm text-muted-foreground">
         Enter the 6-digit code your authenticator app is showing right now.
       </p>
@@ -406,21 +410,21 @@ function VerifyStepForm({
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
         <button
           onClick={onBack}
-          className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
+          className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
         >
           Back
         </button>
         <div className="flex items-center gap-2">
           <button
             onClick={onCancel}
-            className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
+            className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             Cancel
           </button>
           <button
             onClick={() => void form.handleSubmit()}
             disabled={code.length !== 6 || confirmMut.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             {confirmMut.isPending && (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -478,9 +482,12 @@ function DisableDialog({
 
   return (
     <ModalShell onClose={onClose} title="Disable two-factor authentication">
+      <form.AppForm>
+        <form.FormErrorSummary serverError={mut.error?.message} />
+      </form.AppForm>
       <div className="space-y-4">
         <div className="flex items-start gap-3 p-3 rounded-md bg-status-warning/10 border border-status-warning/30">
-          <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
           <p className="text-xs text-status-warning">
             Disabling 2FA removes a layer of protection from your account.
             You&apos;ll need to enter your password and a current 6-digit code
@@ -497,13 +504,14 @@ function DisableDialog({
           <form.Field name="password">
             {(field) => (
               <div className="relative">
-                <input
+                <Input
+                  name={field.name}
                   id="field-25a26509-455"
                   type={showPassword ? "text" : "password"}
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  className="w-full h-10 px-3 pr-10 rounded-md border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full h-10 px-3 pr-10 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                   autoComplete="current-password"
                 />
                 <button
@@ -543,14 +551,14 @@ function DisableDialog({
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
           <button
             onClick={onClose}
-            className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
+            className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             Cancel
           </button>
           <button
             onClick={() => void form.handleSubmit()}
             disabled={!password || code.length !== 6 || mut.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded bg-status-error text-background text-sm font-medium hover:bg-status-error/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-sm bg-status-error text-background text-sm font-medium hover:bg-status-error/90 disabled:opacity-50"
           >
             {mut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Disable 2FA
@@ -597,6 +605,9 @@ function RegenerateDialog({
 
   return (
     <ModalShell onClose={onClose} title="Regenerate recovery codes">
+      <form.AppForm>
+        <form.FormErrorSummary serverError={mut.error?.message} />
+      </form.AppForm>
       {codes ? (
         <RecoveryCodesBlock
           codes={codes}
@@ -622,14 +633,14 @@ function RegenerateDialog({
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
             <button
               onClick={onClose}
-              className="inline-flex items-center h-9 px-3 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
+              className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
             >
               Cancel
             </button>
             <button
               onClick={() => void form.handleSubmit()}
               disabled={code.length !== 6 || mut.isPending}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
             >
               {mut.isPending && (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -676,7 +687,7 @@ function RecoveryCodesBlock({
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3 p-3 rounded-md bg-status-warning/10 border border-status-warning/30">
-        <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
         <p className="text-xs text-status-warning">
           Save these 10 single-use recovery codes somewhere safe. They will{" "}
           <strong>not</strong> be shown again. Each one lets you log in once
@@ -691,25 +702,25 @@ function RecoveryCodesBlock({
       <div className="flex items-center gap-2">
         <button
           onClick={copy}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded border border-border text-sm font-medium text-foreground hover:bg-accent"
+          className="inline-flex items-center gap-2 h-9 px-3 rounded-sm border border-border text-sm font-medium text-foreground hover:bg-accent"
         >
           <Copy className="h-4 w-4" />
           Copy
         </button>
         <button
           onClick={download}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded border border-border text-sm font-medium text-foreground hover:bg-accent"
+          className="inline-flex items-center gap-2 h-9 px-3 rounded-sm border border-border text-sm font-medium text-foreground hover:bg-accent"
         >
           <Download className="h-4 w-4" />
           Download as text
         </button>
       </div>
       <label className="flex items-center gap-2 text-sm text-foreground">
-        <input
+        <Input
           type="checkbox"
           checked={acknowledged}
           onChange={(e) => onAcknowledge(e.target.checked)}
-          className="rounded border-border"
+          className="rounded-sm border-border"
         />
         I&apos;ve saved my recovery codes somewhere safe
       </label>
@@ -717,7 +728,7 @@ function RecoveryCodesBlock({
         <button
           onClick={onFinish}
           disabled={!acknowledged}
-          className="inline-flex items-center h-9 px-4 rounded bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Done
         </button>
@@ -742,7 +753,7 @@ function CodeInput({
   // Single 6-char numeric input: simpler than 6 separate boxes, paste works
   // out of the box, and it still feels good with `inputMode=numeric`.
   return (
-    <input
+    <Input
       id={id}
       type="text"
       inputMode="numeric"
@@ -752,7 +763,7 @@ function CodeInput({
       data-initial-focus={autoFocus}
       onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
       placeholder="123 456"
-      className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      className="w-full h-12 px-3 rounded-md border border-border bg-background text-center text-2xl font-mono tracking-[0.4em] text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
       autoComplete="one-time-code"
     />
   );

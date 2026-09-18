@@ -22,12 +22,13 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/time/rate"
@@ -49,6 +50,8 @@ const (
 	ClassExecLogs APIRateLimitClass = "exec-logs"
 	// ClassHelm covers helm install/upgrade/uninstall write endpoints.
 	ClassHelm APIRateLimitClass = "helm"
+	// ClassSCIM bounds public provisioning traffic per trusted client IP.
+	ClassSCIM APIRateLimitClass = "scim"
 	// ClassCharlieChat is retained for chart/config compatibility only.
 	// Authenticated Charlie routes no longer apply it.
 	ClassCharlieChat APIRateLimitClass = "charlie-chat"
@@ -70,8 +73,25 @@ var defaultLimits = map[APIRateLimitClass]APIRateLimitConfig{
 	ClassK8sProxy: {RatePerSecond: 1.0, Burst: 20},
 	ClassExecLogs: {RatePerSecond: 30.0 / 60.0, Burst: 5}, // 30 new sessions/min
 	ClassHelm:     {RatePerSecond: 5.0 / 60.0, Burst: 2},
+	ClassSCIM:     {RatePerSecond: 10.0, Burst: 100},
 	// Unused on routes (see routes_charlie.go). Kept so config keys still parse.
 	ClassCharlieChat: {RatePerSecond: 1e9, Burst: 1_000_000},
+}
+
+// APIRateLimitConfigs returns an independent copy of the production defaults
+// with explicit overrides applied. Non-positive overrides are ignored so a
+// malformed deployment value cannot silently disable a security boundary.
+func APIRateLimitConfigs(overrides map[APIRateLimitClass]APIRateLimitConfig) map[APIRateLimitClass]APIRateLimitConfig {
+	configs := make(map[APIRateLimitClass]APIRateLimitConfig, len(defaultLimits))
+	for class, cfg := range defaultLimits {
+		configs[class] = cfg
+	}
+	for class, cfg := range overrides {
+		if cfg.RatePerSecond > 0 && cfg.Burst > 0 {
+			configs[class] = cfg
+		}
+	}
+	return configs
 }
 
 // defaultClusterCeilings is the aggregate (all-users-combined) per-cluster
@@ -279,18 +299,33 @@ func (l *apiRateLimiter) startJanitor(ctx context.Context, interval time.Duratio
 	}()
 }
 
-// APIRateLimit returns chi middleware that enforces the named class.
-// Bucket store and janitor live for the lifetime of the supplied ctx.
-// Multiple calls (one per class) share state through the closure-bound
-// limiter; in practice operators want a single shared limiter so
-// passing the same configs map keeps wiring trivial.
-func APIRateLimit(ctx context.Context, class APIRateLimitClass, configs map[APIRateLimitClass]APIRateLimitConfig) func(http.Handler) http.Handler {
-	return apiRateLimitWith(ctx, class, configs, time.Now)
+// APIRateLimiter owns one shared bucket store for every endpoint class in a
+// router. Construct it once per server process, then reuse Middleware for each
+// route so a caller cannot evade a class quota by switching endpoints.
+type APIRateLimiter struct {
+	store *apiRateLimiter
+}
+
+func NewAPIRateLimiter(ctx context.Context, configs map[APIRateLimitClass]APIRateLimitConfig) *APIRateLimiter {
+	store := newAPIRateLimiter(configs, time.Now)
+	store.startJanitor(ctx, 0)
+	return &APIRateLimiter{store: store}
+}
+
+func (l *APIRateLimiter) Middleware(class APIRateLimitClass) func(http.Handler) http.Handler {
+	if l == nil || l.store == nil {
+		panic("nil API rate limiter")
+	}
+	return apiRateLimitMiddleware(l.store, class)
 }
 
 func apiRateLimitWith(ctx context.Context, class APIRateLimitClass, configs map[APIRateLimitClass]APIRateLimitConfig, now func() time.Time) func(http.Handler) http.Handler {
 	limiter := newAPIRateLimiter(configs, now)
 	limiter.startJanitor(ctx, 0)
+	return apiRateLimitMiddleware(limiter, class)
+}
+
+func apiRateLimitMiddleware(limiter *apiRateLimiter, class APIRateLimitClass) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Per-cluster aggregate ceiling first: a saturated tunnel must
@@ -350,16 +385,11 @@ func apiRateLimitKey(r *http.Request) string {
 	if r == nil {
 		return "unknown"
 	}
-	if u, ok := GetAuthenticatedUser(r.Context()); ok && u != nil {
+	if u, ok := reqctx.AuthenticatedUser(r.Context()); ok && u != nil {
 		return "u:" + u.ID
 	}
-	addr := strings.TrimSpace(r.RemoteAddr)
-	host, _, err := net.SplitHostPort(addr)
-	if err == nil {
-		return "ip:" + host
-	}
-	if addr != "" {
-		return "ip:" + addr
+	if address := reqctx.ClientIP(r); address != nil {
+		return "ip:" + address.String()
 	}
 	return "unknown"
 }

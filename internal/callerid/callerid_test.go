@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -46,7 +48,7 @@ func TestOriginZeroValueIsNeitherUserNorMachine(t *testing.T) {
 
 func TestResolvePrecedence(t *testing.T) {
 	userID := uuid.New()
-	userCtx := middleware.SetAuthenticatedUserForTest(context.Background(), &middleware.AuthenticatedUser{ID: userID.String()})
+	userCtx := reqctx.WithUser(context.Background(), &reqctx.User{ID: userID.String()})
 
 	t.Run("authenticated session yields the user subject", func(t *testing.T) {
 		got := Resolve(userCtx)
@@ -87,7 +89,7 @@ func TestResolvePrecedence(t *testing.T) {
 // TestResolveNeverCarriesAClientSuppliedRequestID closes the one route by which
 // a client could influence the identity envelope.
 //
-// PRE-FIX: RequestID was copied from middleware.GetCorrelationID, which returns
+// PRE-FIX: RequestID was copied from reqctx.CorrelationID, which returns
 // whatever the caller put in X-Correlation-Id / X-Request-ID verbatim. Under
 // Option D that value would ride downstream as
 // Impersonate-Extra-Astronomer-Request and land in the apiserver audit event
@@ -101,9 +103,9 @@ func TestResolveNeverCarriesAClientSuppliedRequestID(t *testing.T) {
 		var identity protocol.CallerIdentity
 		var correlation string
 		h := middleware.RequestID(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			ctx := middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{ID: userID.String()})
+			ctx := reqctx.WithUser(r.Context(), &reqctx.User{ID: userID.String()})
 			identity = Resolve(ctx)
-			correlation = middleware.GetCorrelationID(ctx)
+			correlation = reqctx.CorrelationID(ctx)
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/", nil)
 		if clientCorrelationID != "" {

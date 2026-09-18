@@ -1,3 +1,4 @@
+import { Select } from "@/components/ui/select";
 import {
   useCallback,
   useEffect,
@@ -74,6 +75,14 @@ function useLoggingQueryState(
     () => namespaceList(namespaces),
     [namespaces],
   );
+  const queryParams = useMemo(
+    () => ({ query, limit, namespaceValues, start, end }),
+    [query, limit, namespaceValues, start, end],
+  );
+  const queryParamsRef = useRef(queryParams);
+  useEffect(() => {
+    queryParamsRef.current = queryParams;
+  }, [queryParams]);
 
   const runQuery = useCallback(
     async (tail = liveTail) => {
@@ -82,16 +91,17 @@ function useLoggingQueryState(
       setLoading(true);
       setError("");
       try {
+        const params = queryParamsRef.current;
         const now = new Date();
         setResult(
           await queryLoggingOutput(output.id, {
-            query,
-            limit,
-            namespaces: namespaceValues,
+            query: params.query,
+            limit: params.limit,
+            namespaces: params.namespaceValues,
             start: tail
               ? new Date(now.getTime() - 5 * 60_000).toISOString()
-              : fromUTCDateTimeInput(start),
-            end: tail ? now.toISOString() : fromUTCDateTimeInput(end),
+              : fromUTCDateTimeInput(params.start),
+            end: tail ? now.toISOString() : fromUTCDateTimeInput(params.end),
             direction: "backward",
           }),
         );
@@ -104,7 +114,7 @@ function useLoggingQueryState(
         setLoading(false);
       }
     },
-    [end, limit, liveTail, namespaceValues, output.id, query, start],
+    [liveTail, output.id],
   );
 
   useEffect(() => {
@@ -184,8 +194,23 @@ function useSavedSearchController(
   }, [output.id, setError]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let cancelled = false;
+    void getLoggingSavedSearches(output.id)
+      .then((nextSearches) => {
+        if (!cancelled) setSearches(nextSearches);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load saved searches",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [output.id, setError]);
 
   const select = (id: string) => {
     setSelectedId(id);
@@ -402,7 +427,7 @@ function SavedSearchControls({
         <label htmlFor="logging-saved-search" className="text-sm font-medium">
           Saved search
         </label>
-        <select
+        <Select
           id="logging-saved-search"
           value={controller.selectedId}
           onChange={(event) => controller.select(event.target.value)}
@@ -414,7 +439,7 @@ function SavedSearchControls({
               {saved.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <div className="space-y-1.5">
         <label htmlFor="logging-saved-name" className="text-sm font-medium">

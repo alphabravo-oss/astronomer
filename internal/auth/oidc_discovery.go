@@ -61,6 +61,10 @@ type OIDCClaims struct {
 	Picture           string   `json:"picture"`
 	Groups            []string `json:"groups"`
 	HostedDomain      string   `json:"hd"`
+	FederatedClaims   struct {
+		ConnectorID string `json:"connector_id"`
+		UserID      string `json:"user_id"`
+	} `json:"federated_claims"`
 }
 
 // OIDCDiscoveryClient fetches and caches OIDC discovery documents and the

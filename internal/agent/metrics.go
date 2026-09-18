@@ -47,6 +47,16 @@ var (
 		observability.MetricLabels("class"),
 	)
 
+	agentTunnelMessagesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "astronomer",
+			Subsystem: "agent",
+			Name:      "tunnel_messages_total",
+			Help:      "Inbound tunnel messages handled by message type and outcome. Sampled observations carry trace exemplars.",
+		},
+		observability.MetricLabels("type", "status"),
+	)
+
 	agentInflightActive = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "astronomer",
@@ -83,6 +93,7 @@ func init() {
 		agentStateUpdatesHandledTotal,
 		agentTunnelSendDroppedTotal,
 		agentTunnelSendQueueDepth,
+		agentTunnelMessagesTotal,
 		agentInflightActive,
 		agentInflightRejectedTotal,
 		agentResponseBufferBytes,

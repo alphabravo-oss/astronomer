@@ -81,7 +81,7 @@ jobs:
 
           artifacts="$(gh api --paginate "repos/${REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.expired == false) | .name')"
-          for name in chart delivery-artifacts server worker agent migrate shell frontend; do
+          for name in chart delivery-artifacts server worker agent migrate shell dr frontend; do
             case "$name" in
               chart) expected="chart-${TAG}" ;;
               delivery-artifacts) expected="delivery-artifacts-${TAG}" ;;
@@ -292,7 +292,8 @@ jobs:
             AGENT:agent:astronomer-go-agent \
             MIGRATE:migrate:astronomer-go-migrate \
             FRONTEND:frontend:astronomer-frontend \
-            SHELL:shell:astronomer-shell; do
+            SHELL:shell:astronomer-shell \
+            DR:dr:astronomer-dr; do
             key="${pair%%:*}"
             rest="${pair#*:}"
             component="${rest%%:*}"
@@ -313,7 +314,6 @@ jobs:
           POSTGRES|postgres:16-alpine
           REDIS|valkey/valkey:8-alpine
           DEX|dexidp/dex:v2.41.1
-          BACKUP|ghcr.io/alphabravocompany/pgdump-s3:16-awscli
           LOGGING|fluent/fluent-bit:3.2.4
           EOF
 
@@ -359,8 +359,8 @@ jobs:
             --set-string postgres.image.digest="$POSTGRES_DIGEST" \
             --set-string redis.image.digest="$REDIS_DIGEST" \
             --set-string dex.image.digest="$DEX_DIGEST" \
-            --set-string managementBackup.image.digest="$BACKUP_DIGEST" \
-            --set-string managementRestoreDrill.image.digest="$BACKUP_DIGEST" \
+            --set-string managementBackup.image.digest="$DR_DIGEST" \
+            --set-string managementRestoreDrill.image.digest="$DR_DIGEST" \
             --set-string managementRestoreDrill.sidecar.image.digest="$POSTGRES_DIGEST" \
             --set-string managementLogging.image.digest="$LOGGING_DIGEST" \
             --set-string config.agentImageRepository="$AGENT_REF" \
@@ -464,7 +464,7 @@ jobs:
           test -s runtime-image-evidence.sigstore.json
           test -s runtime-image-evidence.tar.gz
           test -s values-production.yaml
-          for component in server worker agent migrate shell frontend; do
+          for component in server worker agent migrate shell dr frontend; do
             test -s "sbom-${component}.spdx.json"
             jq -e . "sbom-${component}.spdx.json" >/dev/null
             test -s "${component}.digest"

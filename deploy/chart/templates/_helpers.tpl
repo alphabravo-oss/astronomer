@@ -128,8 +128,8 @@ human-readable target version used by fleet upgrade status.
 
 {{/*
 Third-party image helper. T23 FEATURES-051126 — air-gapped installs
-mirror third-party images (postgres, redis, kubectl, busybox, pgdump-s3
-sidecar, frontend) into the operator's internal registry. Each image
+mirror runtime images (postgres, redis, kubectl, busybox, DR helper,
+frontend) into the operator's internal registry. Each image
 config supports an optional .registry override; when unset, falls back
 to .Values.image.registry; when that's also unset, the image is left
 unprefixed. Pass dict { repository: $repo, tag: $tag, digest: $digest,
@@ -162,11 +162,13 @@ Computed DATABASE_URL — uses chart-managed Postgres unless overridden.
 {{- define "astronomer.databaseURL" -}}
 {{- if .Values.postgres.external.dsnSecretRef.name -}}
 {{- "" -}}
+{{- else if eq (include "astronomer.postgresMode" .) "cloudNativePG" -}}
+{{- "" -}}
 {{- else if .Values.postgres.external.dsn -}}
 {{- .Values.postgres.external.dsn -}}
 {{- else if .Values.config.databaseURL -}}
 {{- .Values.config.databaseURL -}}
-{{- else if not .Values.postgres.bundled.enabled -}}
+{{- else if eq (include "astronomer.postgresMode" .) "external" -}}
 {{- fail "postgres.bundled.enabled=false requires postgres.external.dsn, postgres.external.dsnSecretRef, or config.databaseURL" -}}
 {{- else -}}
 {{- printf "postgres://%s:%s@%s-postgres:%d/%s?sslmode=disable" .Values.postgres.user .Values.postgres.password (include "astronomer.fullname" .) (int .Values.postgres.port) .Values.postgres.database -}}
@@ -179,6 +181,8 @@ Computed REDIS_URL.
 {{- define "astronomer.redisURL" -}}
 {{- if .Values.redis.external.urlSecretRef.name -}}
 {{- "" -}}
+{{- else if eq (include "astronomer.redisMode" .) "sentinel" -}}
+{{- printf "redis-sentinel://%s-redis-sentinel:%d?master=%s&db=%d&password_env=REDIS_PASSWORD" (include "astronomer.fullname" .) 26379 .Values.redis.sentinel.masterName (int .Values.redis.external.database) -}}
 {{- else if .Values.redis.external.address -}}
 {{- $scheme := ternary "rediss" "redis" .Values.redis.external.tls -}}
 {{- $auth := "" -}}
@@ -188,7 +192,7 @@ Computed REDIS_URL.
 {{- printf "%s://%s%s/%d" $scheme $auth .Values.redis.external.address (int .Values.redis.external.database) -}}
 {{- else if .Values.config.redisURL -}}
 {{- .Values.config.redisURL -}}
-{{- else if not .Values.redis.bundled.enabled -}}
+{{- else if eq (include "astronomer.redisMode" .) "external" -}}
 {{- fail "redis.bundled.enabled=false requires redis.external.address, redis.external.urlSecretRef, or config.redisURL" -}}
 {{- else -}}
 {{- printf "redis://%s-redis:%d/0" (include "astronomer.fullname" .) (int .Values.redis.port) -}}
@@ -201,11 +205,67 @@ Computed REDIS_URL.
 {{- end }}
 
 {{- define "astronomer.postgresBundledEnabled" -}}
-{{- .Values.postgres.bundled.enabled -}}
+{{- eq (include "astronomer.postgresMode" .) "bundled" -}}
 {{- end }}
 
 {{- define "astronomer.redisBundledEnabled" -}}
-{{- .Values.redis.bundled.enabled -}}
+{{- eq (include "astronomer.redisMode" .) "standalone" -}}
+{{- end }}
+
+{{- define "astronomer.postgresMode" -}}
+{{- if .Values.postgres.mode -}}
+{{- .Values.postgres.mode -}}
+{{- else if .Values.postgres.bundled.enabled -}}
+bundled
+{{- else -}}
+external
+{{- end -}}
+{{- end }}
+
+{{- define "astronomer.redisMode" -}}
+{{- if .Values.redis.mode -}}
+{{- .Values.redis.mode -}}
+{{- else if .Values.redis.bundled.enabled -}}
+standalone
+{{- else -}}
+external
+{{- end -}}
+{{- end }}
+
+{{- define "astronomer.redisPasswordSecretName" -}}
+{{- if eq (include "astronomer.redisMode" .) "sentinel" -}}
+{{- default (printf "%s-valkey-auth" (include "astronomer.fullname" .)) .Values.redis.sentinel.passwordSecretRef.name -}}
+{{- else -}}
+{{- .Values.redis.external.passwordSecretRef.name -}}
+{{- end -}}
+{{- end }}
+
+{{- define "astronomer.redisPasswordSecretKey" -}}
+{{- if eq (include "astronomer.redisMode" .) "sentinel" -}}
+{{- default "password" .Values.redis.sentinel.passwordSecretRef.key -}}
+{{- else -}}
+{{- .Values.redis.external.passwordSecretRef.key -}}
+{{- end -}}
+{{- end }}
+
+{{- define "astronomer.cnpgClusterName" -}}
+{{- default (printf "%s-postgres" (include "astronomer.fullname" .)) .Values.postgres.cloudNativePG.clusterName -}}
+{{- end }}
+
+{{- define "astronomer.databaseSecretName" -}}
+{{- if .Values.postgres.external.dsnSecretRef.name -}}
+{{- .Values.postgres.external.dsnSecretRef.name -}}
+{{- else if eq (include "astronomer.postgresMode" .) "cloudNativePG" -}}
+{{- printf "%s-app" (include "astronomer.cnpgClusterName" .) -}}
+{{- end -}}
+{{- end }}
+
+{{- define "astronomer.databaseSecretKey" -}}
+{{- if .Values.postgres.external.dsnSecretRef.name -}}
+{{- .Values.postgres.external.dsnSecretRef.key -}}
+{{- else if eq (include "astronomer.postgresMode" .) "cloudNativePG" -}}
+uri
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -226,14 +286,20 @@ podAntiAffinity:
 {{- end }}
 
 {{/*
-Default topology spread constraints for HA components. These target zones when
-available and fall back to scheduler best-effort semantics.
+Default topology spread constraints for HA components. Hostname spreading is
+the portable three-node HA contract; production can make it hard with
+DoNotSchedule while development remains best effort.
 */}}
 {{- define "astronomer.componentTopologySpread" -}}
 {{- if .enabled }}
 - maxSkew: {{ .maxSkew }}
-  topologyKey: topology.kubernetes.io/zone
+  topologyKey: kubernetes.io/hostname
   whenUnsatisfiable: {{ .whenUnsatisfiable }}
+  # Spread each ReplicaSet independently. Without this, a rolling update can
+  # satisfy skew while old pods exist, then leave the surviving revision
+  # concentrated on fewer nodes after the old ReplicaSet scales to zero.
+  matchLabelKeys:
+    - pod-template-hash
   labelSelector:
     matchLabels:
       {{- include "astronomer.componentSelectorLabels" (dict "context" .context "component" .component) | nindent 6 }}
@@ -243,7 +309,7 @@ available and fall back to scheduler best-effort semantics.
 {{/*
 TLS helpers — single source of truth that gateway.* and ingress.* templates
 read from. The mode selector is `tls.source` with values:
-  none | selfSigned | letsEncrypt | secret
+  none | selfSigned | letsEncrypt | secret | externalGateway
 */}}
 
 {{- define "astronomer.tls.source" -}}
@@ -251,7 +317,27 @@ read from. The mode selector is `tls.source` with values:
 {{- end }}
 
 {{- define "astronomer.tls.enabled" -}}
-{{- if ne (include "astronomer.tls.source" .) "none" -}}true{{- end -}}
+{{- $src := include "astronomer.tls.source" . -}}
+{{- if and (ne $src "none") (ne $src "externalGateway") -}}true{{- end -}}
+{{- end }}
+
+{{/* Gateway parent used by every chart-owned HTTPRoute. */}}
+{{- define "astronomer.gateway.parentName" -}}
+{{- if .Values.gateway.create -}}
+{{- include "astronomer.fullname" . -}}
+{{- else -}}
+{{- required "gateway.name is required when gateway.create=false" .Values.gateway.name -}}
+{{- end -}}
+{{- end }}
+
+{{- define "astronomer.gateway.parentRef" -}}
+- name: {{ include "astronomer.gateway.parentName" . | quote }}
+  {{- if and (not .Values.gateway.create) .Values.gateway.namespace }}
+  namespace: {{ .Values.gateway.namespace | quote }}
+  {{- end }}
+  {{- if .Values.gateway.sectionName }}
+  sectionName: {{ .Values.gateway.sectionName | quote }}
+  {{- end }}
 {{- end }}
 
 {{- define "astronomer.tls.secretName" -}}
@@ -320,7 +406,6 @@ DNS names list for the Certificate. Unions gateway.hosts and ingress.host
 {{- end -}}
 {{- range ($names | uniq) }}
 - {{ . | quote }}
-- {{ printf "grafana.%s" . | quote }}
 {{- end -}}
 {{- end }}
 
@@ -354,6 +439,38 @@ rendered manifest.
   {{- $errs := list }}
   {{- if and .Values.tls.additionalTrustedCAs.enabled (not .Values.tls.additionalTrustedCAs.existingSecret) }}
     {{- $errs = append $errs "  - tls.additionalTrustedCAs.enabled=true requires tls.additionalTrustedCAs.existingSecret (a Secret with key tls.crt)" }}
+  {{- end }}
+  {{- if and .Values.catalog.proxy.enabled (not .Values.catalog.proxy.urlSecretRef.name) }}
+    {{- $errs = append $errs "  - catalog.proxy.enabled=true requires catalog.proxy.urlSecretRef.name" }}
+  {{- end }}
+  {{- if and .Values.catalog.proxy.enabled (not .Values.catalog.proxy.urlSecretRef.key) }}
+    {{- $errs = append $errs "  - catalog.proxy.enabled=true requires catalog.proxy.urlSecretRef.key" }}
+  {{- end }}
+  {{- if and .Values.gateway.enabled (not .Values.gateway.create) (not .Values.gateway.name) }}
+    {{- $errs = append $errs "  - gateway.name is required when gateway.enabled=true and gateway.create=false" }}
+  {{- end }}
+  {{- if and .Values.secrets.existingSecret (eq (include "astronomer.postgresMode" .) "bundled") }}
+    {{- $errs = append $errs "  - secrets.existingSecret cannot be combined with postgres.bundled.enabled=true: Kubernetes cannot interpolate the Secret's POSTGRES_PASSWORD into DATABASE_URL. Let the chart own its development Secret with --set-file secrets.secretKey/secrets.encryptionKey, or use external PostgreSQL with postgres.external.dsnSecretRef." }}
+  {{- end }}
+  {{- if and (eq (include "astronomer.tls.source" .) "externalGateway") (or (not .Values.gateway.enabled) .Values.gateway.create) }}
+    {{- $errs = append $errs "  - tls.source=externalGateway requires gateway.enabled=true and gateway.create=false" }}
+  {{- end }}
+  {{- if not (has (include "astronomer.postgresMode" .) (list "bundled" "cloudNativePG" "external")) }}
+    {{- $errs = append $errs "  - postgres.mode must be bundled, cloudNativePG, or external" }}
+  {{- end }}
+  {{- if not (has (include "astronomer.redisMode" .) (list "standalone" "sentinel" "external")) }}
+    {{- $errs = append $errs "  - redis.mode must be standalone, sentinel, or external" }}
+  {{- end }}
+  {{- if and (eq (include "astronomer.postgresMode" .) "cloudNativePG") (lt (int .Values.postgres.cloudNativePG.instances) 1) }}
+    {{- $errs = append $errs "  - postgres.cloudNativePG.instances must be at least 1" }}
+  {{- end }}
+  {{- if eq (include "astronomer.redisMode" .) "sentinel" }}
+    {{- if lt (int .Values.redis.sentinel.replicas) 3 }}
+      {{- $errs = append $errs "  - redis.sentinel.replicas must be at least 3 for automatic failover" }}
+    {{- end }}
+    {{- if lt (int .Values.redis.sentinel.sentinels) 3 }}
+      {{- $errs = append $errs "  - redis.sentinel.sentinels must be at least 3 for quorum" }}
+    {{- end }}
   {{- end }}
   {{- if gt (len $errs) 0 }}
     {{- $msg := printf "\n\nAstronomer chart input validation failed:\n%s" (join "\n" $errs) }}
@@ -452,7 +569,7 @@ rendered manifest.
 {{- define "astronomer.requireProductionInputs" -}}
   {{- if eq (default "" .Values.config.env) "production" }}
     {{- $errs := list }}
-    {{- if not (or .Values.postgres.external.dsn .Values.postgres.external.dsnSecretRef.name) }}
+    {{- if and (eq (include "astronomer.postgresMode" .) "external") (not (or .Values.postgres.external.dsn .Values.postgres.external.dsnSecretRef.name)) }}
       {{- $errs = append $errs "  - postgres.external.dsn or postgres.external.dsnSecretRef.name must be set when config.env=production (bundled Postgres is not a production posture)" }}
     {{- end }}
     {{- /* If the DSN is inline, require sslmode=require|verify-ca|verify-full.
@@ -465,13 +582,16 @@ rendered manifest.
         {{- $errs = append $errs "  - postgres.external.dsn must include sslmode=require, verify-ca, or verify-full when config.env=production (saw sslmode=disable or unset; production must encrypt DB traffic)" }}
       {{- end }}
     {{- end }}
-    {{- if .Values.postgres.bundled.enabled }}
-      {{- $errs = append $errs "  - postgres.bundled.enabled must be false when config.env=production" }}
+    {{- if eq (include "astronomer.postgresMode" .) "bundled" }}
+      {{- $errs = append $errs "  - postgres.mode=bundled is not allowed when config.env=production" }}
     {{- end }}
-    {{- if .Values.redis.bundled.enabled }}
-      {{- $errs = append $errs "  - redis.bundled.enabled must be false when config.env=production" }}
+    {{- if and (eq (include "astronomer.postgresMode" .) "cloudNativePG") (lt (int .Values.postgres.cloudNativePG.instances) 3) }}
+      {{- $errs = append $errs "  - postgres.cloudNativePG.instances must be at least 3 when config.env=production" }}
     {{- end }}
-    {{- if not (or .Values.redis.external.address .Values.redis.external.urlSecretRef.name) }}
+    {{- if eq (include "astronomer.redisMode" .) "standalone" }}
+      {{- $errs = append $errs "  - redis.mode=standalone is not allowed when config.env=production" }}
+    {{- end }}
+    {{- if and (eq (include "astronomer.redisMode" .) "external") (not (or .Values.redis.external.address .Values.redis.external.urlSecretRef.name)) }}
       {{- $errs = append $errs "  - redis.external.address or redis.external.urlSecretRef.name must be set when config.env=production" }}
     {{- end }}
     {{- if not .Values.config.serverURL }}
@@ -482,7 +602,7 @@ rendered manifest.
     {{- end }}
     {{- $tlsSrc := include "astronomer.tls.source" . }}
     {{- if eq $tlsSrc "none" }}
-      {{- $errs = append $errs "  - tls.source must be one of: selfSigned, letsEncrypt, secret (got 'none')" }}
+      {{- $errs = append $errs "  - tls.source must be one of: selfSigned, letsEncrypt, secret, externalGateway (got 'none')" }}
     {{- end }}
     {{- if eq $tlsSrc "letsEncrypt" }}
       {{- if not .Values.tls.letsEncrypt.email }}
@@ -500,6 +620,38 @@ rendered manifest.
            (mirrors postgres.external.dsnSecretRef) so the render is stable. */ -}}
     {{- if not (or .Values.bootstrap.password .Values.bootstrap.existingSecret) }}
       {{- $errs = append $errs "  - bootstrap.password or bootstrap.existingSecret must be set when config.env=production. An empty bootstrap.password re-rolls randAlphaNum on every offline render (lookup can't read the prior Secret without a live cluster), rotating the admin password. Pin bootstrap.password, or set bootstrap.existingSecret to a pre-created Secret with a 'password' key." }}
+    {{- end }}
+    {{- /* Production image identity is content-addressed. Tags remain only as
+           human-readable release metadata and development defaults. */ -}}
+    {{- if not .Values.image.requireDigest }}
+      {{- $errs = append $errs "  - image.requireDigest must be true when config.env=production" }}
+    {{- end }}
+    {{- $immutableImages := dict
+          "image.server.digest" .Values.image.server.digest
+          "image.worker.digest" .Values.image.worker.digest
+          "image.agent.digest" .Values.image.agent.digest
+          "image.migrate.digest" .Values.image.migrate.digest
+          "utilities.busybox.digest" .Values.utilities.busybox.digest
+          "postgres.image.digest" .Values.postgres.image.digest
+          "preflight.image.digest" .Values.preflight.image.digest -}}
+    {{- if .Values.frontend.enabled }}{{- $_ := set $immutableImages "frontend.image.digest" .Values.frontend.image.digest -}}{{- end }}
+    {{- if .Values.dex.enabled }}{{- $_ := set $immutableImages "dex.image.digest" .Values.dex.image.digest -}}{{- end }}
+    {{- if ne (include "astronomer.redisMode" .) "external" }}{{- $_ := set $immutableImages "redis.image.digest" .Values.redis.image.digest -}}{{- end }}
+    {{- if .Values.managementBackup.enabled }}
+      {{- $_ := set $immutableImages "managementBackup.image.digest" .Values.managementBackup.image.digest -}}
+      {{- if .Values.managementRestoreDrill.enabled }}
+        {{- $_ := set $immutableImages "managementRestoreDrill.image.digest" .Values.managementRestoreDrill.image.digest -}}
+        {{- $_ := set $immutableImages "managementRestoreDrill.sidecar.image.digest" .Values.managementRestoreDrill.sidecar.image.digest -}}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.managementLogging.enabled }}{{- $_ := set $immutableImages "managementLogging.image.digest" .Values.managementLogging.image.digest -}}{{- end }}
+    {{- range $field, $digest := $immutableImages }}
+      {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" ($digest | default "")) }}
+        {{- $errs = append $errs (printf "  - %s must be an exact sha256 digest when config.env=production" $field) }}
+      {{- end }}
+    {{- end }}
+    {{- if and .Values.kubectlShell.enabled .Values.kubectlShell.image (not (regexMatch "^[^[:space:]]+@sha256:[a-f0-9]{64}$" .Values.kubectlShell.image)) }}
+      {{- $errs = append $errs "  - kubectlShell.image must be repository@sha256:digest when explicitly overridden in production" }}
     {{- end }}
     {{- /* Migration 045 soft check: production posture is "Dex on" unless
            the operator explicitly opts into local-password-only auth. The
@@ -520,19 +672,50 @@ rendered manifest.
       {{- if not .Values.managementBackup.s3.credentialsSecretRef.name }}
         {{- $errs = append $errs "  - managementBackup.s3.credentialsSecretRef.name is empty but managementBackup.enabled=true — provide the S3 credentials Secret (see values-production.yaml) or set managementBackup.enabled=false to explicitly opt out." }}
       {{- end }}
-      {{- /* OPS-01: key wrap custody is required when backups are enabled so a
-           restore onto a new cluster can decrypt Fernet columns. Empty
-           wrappingSecretRef leaves CronJobs green but key backup inert. */ -}}
+      {{- if ne (.Values.managementBackup.immutability.mode | default "") "objectLock" }}
+        {{- $errs = append $errs "  - managementBackup.immutability.mode must be objectLock in production; the writer validates bucket Object Lock and its default retention rule before creating a backup." }}
+      {{- end }}
+      {{- if not .Values.managementBackup.encryption.sourceIdentity }}
+        {{- $errs = append $errs "  - managementBackup.encryption.sourceIdentity must be a stable, unique installation identity used to bind authenticated backup manifests." }}
+      {{- end }}
+      {{- if not .Values.managementBackup.encryption.wrappingSecretRef.name }}
+        {{- $errs = append $errs "  - managementBackup.encryption.wrappingSecretRef.name is required for client-side AES-256-GCM dump/key encryption and manifest authentication." }}
+      {{- end }}
+      {{- if .Values.managementBackup.retention.enabled }}
+        {{- if not .Values.managementBackup.retention.credentialsSecretRef.name }}
+          {{- $errs = append $errs "  - managementBackup.retention.credentialsSecretRef.name is required when retention is enabled; use a dedicated delete-capable identity." }}
+        {{- else if eq .Values.managementBackup.retention.credentialsSecretRef.name .Values.managementBackup.s3.credentialsSecretRef.name }}
+          {{- $errs = append $errs "  - managementBackup retention and writer credentials must reference different Secrets so the writer cannot delete backups." }}
+        {{- end }}
+      {{- end }}
+      {{- $objectStoreCIDRs := .Values.networkPolicy.objectStoreEgressCIDRs | default (list) }}
+      {{- if eq (len $objectStoreCIDRs) 0 }}
+        {{- $errs = append $errs "  - networkPolicy.objectStoreEgressCIDRs must identify the backup object-store endpoint network when managementBackup.enabled=true; backup and restore pods receive no general Internet egress." }}
+      {{- else if or (has "0.0.0.0/0" $objectStoreCIDRs) (has "::/0" $objectStoreCIDRs) }}
+        {{- $errs = append $errs "  - networkPolicy.objectStoreEgressCIDRs must not contain 0.0.0.0/0 or ::/0 in production; use the object-store endpoint's narrow CIDR ranges." }}
+      {{- end }}
+      {{- /* Key backup is mandatory with production DB backup; the same
+           separately-held AEAD key authenticates the dump, key bundle, and
+           closed manifest. */ -}}
       {{- $keyBackupOn := true }}
       {{- if hasKey .Values.managementBackup "encryptionKeyBackup" }}
         {{- if hasKey .Values.managementBackup.encryptionKeyBackup "enabled" }}
           {{- $keyBackupOn = .Values.managementBackup.encryptionKeyBackup.enabled }}
         {{- end }}
       {{- end }}
-      {{- if $keyBackupOn }}
-        {{- if not (and .Values.managementBackup.encryptionKeyBackup .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name) }}
-          {{- $errs = append $errs "  - managementBackup.encryptionKeyBackup.wrappingSecretRef.name is empty but managementBackup.enabled=true — production DR requires encryption-key custody (see values-production.yaml and docs/management-plane-dr-runbook.md). Create a separate wrap Secret and set the name, or set managementBackup.encryptionKeyBackup.enabled=false to explicitly opt out of key backup (restored Fernet data will be undecryptable on a new cluster)." }}
-        {{- end }}
+      {{- if not $keyBackupOn }}
+        {{- $errs = append $errs "  - managementBackup.encryptionKeyBackup.enabled must remain true in production; a database-only backup cannot decrypt restored application data." }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.managementLogging.enabled }}
+      {{- $loggingCIDRs := .Values.networkPolicy.loggingSinkEgressCIDRs | default (list) }}
+      {{- if eq (len $loggingCIDRs) 0 }}
+        {{- $errs = append $errs "  - networkPolicy.loggingSinkEgressCIDRs must identify the configured managementLogging.endpoint network when managementLogging.enabled=true." }}
+      {{- else if or (has "0.0.0.0/0" $loggingCIDRs) (has "::/0" $loggingCIDRs) }}
+        {{- $errs = append $errs "  - networkPolicy.loggingSinkEgressCIDRs must not contain 0.0.0.0/0 or ::/0 in production." }}
+      {{- end }}
+      {{- if eq (len (.Values.managementLogging.networkPolicyPorts | default (list))) 0 }}
+        {{- $errs = append $errs "  - managementLogging.networkPolicyPorts must contain the exact TCP port used by managementLogging.endpoint." }}
       {{- end }}
     {{- end }}
     {{- /* The retained namespace default-deny already selects Helm hook pods

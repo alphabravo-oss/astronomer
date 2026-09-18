@@ -7,28 +7,35 @@ import { createFileRoute } from "@tanstack/react-router";
  * ProjectNamespacesCard); the Policy / Cloud Credentials / Quota tabs handle
  * the rest of the editable surfaces.
  */
-import { Link } from "@/lib/link";
-import { useParams } from "@/lib/navigation";
-import { Loader2, Users, Server, Layers } from "lucide-react";
-import { useProject, useCurrentUser } from "@/lib/hooks";
+import { Link as RouterLink } from "@tanstack/react-router";
+
+import { Users, Server, Layers } from "lucide-react";
+import { useProject } from "@/lib/hooks/projects";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { canAssignProjectNamespaces } from "@/components/projects/hooks";
 import { ProjectNamespacesCard } from "@/components/projects/namespaces-card";
 import { formatRelativeTime } from "@/lib/utils";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
+import { QueryStates } from "@/components/ui/query-states";
 import { renderForProject } from "@/lib/api/dashboards";
 
 function ProjectOverviewPage() {
-  const params = useParams();
-  const id = params.id as string;
-  const { data: project, isLoading } = useProject(id);
+  const params = Route.useParams();
+  const id = params.id;
+  const projectQuery = useProject(id);
+  const { data: project, isLoading } = projectQuery;
   const { data: user } = useCurrentUser();
   const canEdit = canAssignProjectNamespaces(user);
 
-  if (isLoading) {
+  if (isLoading || projectQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={projectQuery}
+        permission="projects:read"
+        notFound={<p className="text-sm text-muted-foreground">Project not found.</p>}
+      >
+        {() => null}
+      </QueryStates>
     );
   }
   if (!project) {
@@ -94,12 +101,12 @@ function ProjectOverviewPage() {
           </dl>
           <p className="text-xs text-muted-foreground pt-2">
             Configure pod security and resource limits on the{" "}
-            <Link
-              href={`/dashboard/projects/${project.id}/policy`}
+            <RouterLink
+              to="/dashboard/projects/$id/policy" params={{ id: project.id }}
               className="text-foreground underline-offset-2 hover:underline"
             >
               Policy tab
-            </Link>
+            </RouterLink>
             .
           </p>
         </div>

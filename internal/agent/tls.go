@@ -38,8 +38,7 @@ func BuildTLSConfig(caCert, caChecksum string) (*tls.Config, error) {
 		return nil, fmt.Errorf("ca_checksum set without ca_cert: cannot pin a checksum without the trusted CA bundle")
 	}
 
-	// Enforce a modern floor consistent with the rest of the codebase
-	// (vault/remoteproxy/email all pin tls.VersionTLS12).
+	// Enforce a modern floor consistent with the rest of the codebase.
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	pool := x509.NewCertPool()

@@ -201,27 +201,24 @@ func EnforceMaintenanceWindow(
 	}
 	mutationContext := withOperationIdempotency(r, "deferred")
 	var row sqlc.DeferredOperation
-	if gate.runTx != nil {
-		err = gate.runTx(r.Context(), func(q MaintenanceGateMutationTx) error {
-			var createErr error
-			row, createErr = createDeferredOperation(mutationContext, q, params)
-			if createErr != nil {
-				return createErr
-			}
-			return recordAuditOutbox(r, q, "operation.deferred", "deferred_operation", row.ID.String(), opType, http.StatusAccepted, map[string]any{
-				"window_id": win.ID.String(),
-				"next_open": deferredUntil.Format(time.RFC3339),
-			})
+	if gate.runTx == nil {
+		respondMaintenanceRefuse(w, *win, now)
+		recordAudit(r, queriesForAudit(gate), "operation.blocked_by_window", "maintenance_window", win.ID.String(), win.Name, map[string]any{
+			"op_type": opType, "mode": win.Mode, "degraded": "transaction_runner_unavailable",
 		})
-	} else {
-		row, err = createDeferredOperation(mutationContext, gate.Queries, params)
-		if err == nil {
-			recordAudit(r, queriesForAudit(gate), "operation.deferred", "deferred_operation", row.ID.String(), opType, map[string]any{
-				"window_id": win.ID.String(),
-				"next_open": deferredUntil.Format(time.RFC3339),
-			})
-		}
+		return true
 	}
+	err = gate.runTx(r.Context(), func(q MaintenanceGateMutationTx) error {
+		var createErr error
+		row, createErr = createDeferredOperation(mutationContext, q, params)
+		if createErr != nil {
+			return createErr
+		}
+		return recordAuditOutbox(r, q, "operation.deferred", "deferred_operation", row.ID.String(), opType, http.StatusAccepted, map[string]any{
+			"window_id": win.ID.String(),
+			"next_open": deferredUntil.Format(time.RFC3339),
+		})
+	})
 	if err != nil {
 		// If we can't queue, refuse rather than silently letting the
 		// op through.

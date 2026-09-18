@@ -4,11 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import {
-  useClusters,
-  useProjects,
-  useUsers,
-} from "@/lib/hooks";
+import { useClusters } from "@/lib/hooks/clusters";
+import { useProjects } from "@/lib/hooks/projects";
+import { useUsers } from "@/lib/hooks/user-settings";
 import { useEffectivePermissions } from "@/lib/hooks/rbac";
 import type {
   EffectivePermissionBinding,
@@ -252,7 +250,11 @@ export function EffectiveTab() {
         loading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
-        emptyMessage="No effective permissions found"
+        emptyState={{
+          title: "No effective permissions found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
         pageSize={25}
       />
 
@@ -267,7 +269,11 @@ export function EffectiveTab() {
         loading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
-        emptyMessage="No role bindings contribute permissions"
+        emptyState={{
+          title: "No role bindings contribute permissions",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
         pageSize={10}
       />
     </div>

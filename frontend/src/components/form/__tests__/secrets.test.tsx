@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useImperativeHandle } from "react";
 import { useAppForm } from "@/lib/form";
 import { isStoredSecret, stripUntouchedSecrets } from "../secrets";
 
@@ -84,7 +85,11 @@ function MarkerHarness({
         stripUntouchedSecrets(value.config, form, ["clientSecret"], "config."),
       ),
   });
-  formRef.current = form as unknown as MarkerFormRef["current"];
+  useImperativeHandle(
+    formRef,
+    () => form as unknown as NonNullable<MarkerFormRef["current"]>,
+    [form],
+  );
   return (
     <form
       onSubmit={(e) => {

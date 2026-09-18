@@ -15,7 +15,29 @@
   value:
     - maxSkew: 1
       topologyKey: kubernetes.io/hostname
-      whenUnsatisfiable: ScheduleAnyway
+      whenUnsatisfiable: DoNotSchedule
       labelSelector:
         matchLabels:
           app: source-controller
+- op: replace
+  path: /spec/replicas
+  value: 2
+- op: remove
+  path: /spec/strategy
+- op: add
+  path: /spec/strategy
+  value:
+    # Only the elected source-controller opens the artifact server. Its warm
+    # standby remains NotReady (and outside the Service) until lease failover,
+    # which makes a conventional rolling update deadlock on readiness. Keep
+    # upstream's safe replacement strategy while retaining node-loss HA.
+    type: Recreate
+- op: replace
+  path: /spec/template/spec/containers/0/resources
+  value:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi

@@ -4,15 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
+
+type failedRecoveryEnqueuer struct{ err error }
+
+func (f failedRecoveryEnqueuer) Enqueue(*asynq.Task, ...asynq.Option) (*asynq.TaskInfo, error) {
+	return nil, f.err
+}
 
 // fakeApplyQuerier is the narrow ClusterTemplateApplyQuerier the worker
 // tests stand up. Records every mutation in-memory so assertions can
@@ -400,6 +408,27 @@ func TestClusterTemplate_DriftCheck_SmokeTest(t *testing.T) {
 	runtime := ClusterTemplateRuntime{Deps: ClusterTemplateApplyDeps{Queries: q}}
 	if err := runtime.HandleClusterTemplateDriftCheck(context.Background(), nil); err != nil {
 		t.Errorf("drift check: %v", err)
+	}
+}
+
+func TestClusterTemplate_DriftCheckReportsRecoveryEnqueueFailure(t *testing.T) {
+	clusterID := uuid.New()
+	q := newFakeApplyQuerier(
+		sqlc.Cluster{ID: clusterID, Name: "demo", Labels: json.RawMessage(`{}`)},
+		sqlc.ClusterTemplateApplication{
+			ClusterID:  clusterID,
+			TemplateID: uuid.New(),
+			Status:     "failed",
+			UpdatedAt:  timeNowMinus(failedApplyMinBackoff + time.Minute),
+		},
+	)
+	runtime := ClusterTemplateRuntime{
+		Deps:             ClusterTemplateApplyDeps{Queries: q},
+		RecoveryEnqueuer: failedRecoveryEnqueuer{err: errors.New("queue unavailable")},
+	}
+	err := runtime.HandleClusterTemplateDriftCheck(context.Background(), nil)
+	if err == nil || !strings.Contains(err.Error(), "queue unavailable") {
+		t.Fatalf("drift check error = %v, want queue failure", err)
 	}
 }
 

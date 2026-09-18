@@ -1,5 +1,6 @@
 import { useAppForm, useStore } from "@/lib/form";
-import { useCreateLoggingOutput, useClusters } from "@/lib/hooks";
+import { useCreateLoggingOutput } from "@/lib/hooks/logging";
+import { useClusters } from "@/lib/hooks/clusters";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -400,12 +401,12 @@ export function CreateOutputModal({ onClose }: { onClose: () => void }) {
       <label className="flex items-center gap-2 cursor-pointer">
         <form.Field name="enabled">
           {(field) => (
-            <input
+            <Input
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}
               onBlur={field.handleBlur}
-              className="rounded border-border text-primary focus:ring-ring"
+              className="rounded-sm border-border text-primary focus:ring-ring"
             />
           )}
         </form.Field>

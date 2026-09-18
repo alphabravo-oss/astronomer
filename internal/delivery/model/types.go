@@ -339,14 +339,24 @@ type KustomizeSpec struct {
 }
 
 type HelmSpec struct {
-	Chart           string          `json:"chart"`
-	ChartVersion    string          `json:"chart_version"`
-	ReleaseName     string          `json:"release_name"`
-	TargetNamespace string          `json:"target_namespace"`
-	Values          json.RawMessage `json:"values,omitempty"`
-	InstallRetries  uint8           `json:"install_retries"`
-	UpgradeRetries  uint8           `json:"upgrade_retries"`
-	Test            bool            `json:"test"`
+	Chart           string               `json:"chart"`
+	ChartVersion    string               `json:"chart_version"`
+	ReleaseName     string               `json:"release_name"`
+	TargetNamespace string               `json:"target_namespace"`
+	Values          json.RawMessage      `json:"values,omitempty"`
+	ValueSecretRefs []HelmValueSecretRef `json:"value_secret_refs,omitempty"`
+	InstallRetries  uint8                `json:"install_retries"`
+	UpgradeRetries  uint8                `json:"upgrade_retries"`
+	Test            bool                 `json:"test"`
+}
+
+// HelmValueSecretRef projects one key from a pre-existing Secret in the
+// assignment's Flux control namespace into a Helm values target path. Secret
+// contents never transit or persist in the management plane.
+type HelmValueSecretRef struct {
+	Name       string `json:"name"`
+	Key        string `json:"key"`
+	TargetPath string `json:"target_path"`
 }
 
 // RendererSpec is a closed discriminated union. Exactly one variant is
@@ -594,6 +604,19 @@ func (s HelmSpec) validate() error {
 		var value any
 		if err := json.Unmarshal(s.Values, &value); err != nil {
 			collector.add("values", CodeInvalid, "must be valid JSON")
+		}
+	}
+	if len(s.ValueSecretRefs) > 64 {
+		collector.add("value_secret_refs", CodeLimitExceeded, "must contain at most 64 references")
+	}
+	for index, ref := range s.ValueSecretRefs {
+		field := fmt.Sprintf("value_secret_refs[%d]", index)
+		validateDNSLabel(&collector, field+".name", ref.Name)
+		if ref.Key == "" || len(ref.Key) > 253 || containsControl(ref.Key) {
+			collector.add(field+".key", CodeInvalid, "must be a bounded Secret key")
+		}
+		if strings.TrimSpace(ref.TargetPath) == "" || len(ref.TargetPath) > 1024 || containsControl(ref.TargetPath) {
+			collector.add(field+".target_path", CodeInvalid, "must be a bounded Helm values path")
 		}
 	}
 	return collector.err()

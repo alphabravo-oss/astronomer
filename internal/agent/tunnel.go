@@ -13,6 +13,10 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/coder/websocket"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
@@ -20,6 +24,8 @@ import (
 
 // MessageHandler processes an incoming tunnel message.
 type MessageHandler func(ctx context.Context, msg *protocol.Message) (*protocol.Message, error)
+
+var agentTunnelTracer = otel.Tracer("astronomer/agent-tunnel")
 
 // frameClass is the send-path priority class of an outbound frame. Everything
 // the agent emits is multiplexed over one WebSocket, so the queueing policy —
@@ -258,7 +264,7 @@ func (tc *TunnelClient) Connect(ctx context.Context) error {
 		// the agent in CrashLoopBackOff (5-min kubelet backoff + an alarming pod
 		// status) during the join window, when the server may simply not be
 		// reachable yet. Fall into the SAME jittered reconnect loop a mid-session
-		// drop uses; only ctx cancellation ends it. Mirrors connect2/localcluster.
+		// drop uses; only ctx cancellation ends it. Mirrors localcluster.
 		tc.log.Warn("initial connection failed; entering reconnect loop", "error", err)
 		if rerr := tc.reconnectLoop(ctx); rerr != nil {
 			return rerr // only returns on ctx cancel
@@ -651,21 +657,50 @@ func (tc *TunnelClient) readLoop(ctx context.Context) {
 
 		go func(m *protocol.Message, c dispatchClass, p *dispatchPermit) {
 			defer p.finishHandler()
-			resp, err := handler(dispatchCtx, m)
+			handlerCtx, span := tc.startMessageSpan(dispatchCtx, m)
+			defer span.End()
+			logger := observability.WithTraceID(tc.log, handlerCtx)
+			resp, err := handler(handlerCtx, m)
+			status := "success"
 			synthesized := false
 			if err != nil {
-				tc.log.Error("handler error", "type", m.Type, "error", err)
+				status = "error"
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				logger.Error("handler error", "type", m.Type, "error", err)
 				resp = handlerErrorReply(m, err)
 				synthesized = true
 			}
 			if resp == nil {
+				observability.IncrementWithTraceExemplar(handlerCtx, agentTunnelMessagesTotal.WithLabelValues(observability.MetricValues(string(m.Type), status)...))
 				return
 			}
-			if sendErr := tc.sendHandlerReply(dispatchCtx, resp, c, synthesized); sendErr != nil {
-				tc.log.Error("failed to send response", "error", sendErr)
+			if sendErr := tc.sendHandlerReply(handlerCtx, resp, c, synthesized); sendErr != nil {
+				status = "error"
+				span.RecordError(sendErr)
+				span.SetStatus(codes.Error, sendErr.Error())
+				logger.Error("failed to send response", "error", sendErr)
 			}
+			observability.IncrementWithTraceExemplar(handlerCtx, agentTunnelMessagesTotal.WithLabelValues(observability.MetricValues(string(m.Type), status)...))
 		}(msg, class, permit)
 	}
+}
+
+func (tc *TunnelClient) startMessageSpan(ctx context.Context, msg *protocol.Message) (context.Context, trace.Span) {
+	ctx = observability.ContextWithTraceContext(ctx, msg.Traceparent, msg.Tracestate)
+	clusterID := ""
+	if tc != nil && tc.config != nil {
+		clusterID = tc.config.ClusterID
+	}
+	return agentTunnelTracer.Start(ctx, "agent.tunnel "+string(msg.Type),
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "astronomer-tunnel"),
+			attribute.String("messaging.operation.type", "process"),
+			attribute.String("messaging.message.type", string(msg.Type)),
+			attribute.String("astronomer.cluster_id", clusterID),
+		),
+	)
 }
 
 // handlerErrorReply renders a handler error as a routable frame. StreamID is

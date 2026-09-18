@@ -1,6 +1,6 @@
-.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet run verify verify-enterprise check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check charlie-contract-generate charlie-contract-check \
-        docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
-        migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
+.PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet vulncheck run verify verify-enterprise verify-all local-ci-install local-ci-pr local-ci-pr-representative check-build-capacity release-contract-check airgap-plan data-governance-check sqlc sqlc-generate sqlc-check sqlc-extensions-generate sqlc-extensions-check sdk sdk-check error-codes error-codes-check cli-docs cli-docs-check config-docs config-docs-check charlie-contract-generate charlie-contract-check \
+	validate-image-version docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-dr docker-build-all \
+        migrate-up migrate-down migrate-create clean dev dev-reload dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
         validate-live-b6 validate-live-delivery validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects verify-agent-identity-live
 
@@ -21,10 +21,19 @@ SQLC         ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 # Pinned golangci-lint — mirrors the sqlc pinned-tool pattern. Kept in sync with
 # the default in scripts/check-go-lint.sh, which is what CI actually invokes.
 GOLANGCI_LINT_VERSION ?= v2.12.2
+GOVULNCHECK_VERSION   ?= v1.8.0
 
 # Pinned oapi-codegen (Go SDK generator) — mirrors the sqlc pinned-tool pattern.
 OAPI_CODEGEN_VERSION ?= v2.5.0
 OAPI_CODEGEN         ?= go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
+
+# Local CI executes the real PR workflow with the official GitHub runner. The
+# npm package and runner base image are independently pinned under tools/ and
+# .github/ so this pre-push gate never executes a floating dependency.
+LOCAL_CI_BIN          = ./tools/local-ci/node_modules/.bin/local-ci
+LOCAL_CI_JOBS        ?= 2
+LOCAL_CI_PREWARM      = .github/workflows/pr-validation.yaml:frontend:install-dependencies
+LOCAL_CI_WORKING_DIR ?= $(CURDIR)/.local-ci
 
 # Image naming — override IMG_TAG=... to push semantic versions.
 # IMG_REGISTRY carries the first-party GHCR prefix so locally-built images match
@@ -44,6 +53,7 @@ IMG_FRONTEND = $(IMG_REGISTRY)/astronomer-frontend:$(IMG_TAG)
 # Owned end-to-end (alpine + kubectl from dl.k8s.io) so we don't depend
 # on a third-party registry whose tag schedule we can't control.
 IMG_SHELL    = $(IMG_REGISTRY)/astronomer-shell:$(IMG_TAG)
+IMG_DR       = $(IMG_REGISTRY)/astronomer-dr:$(IMG_TAG)
 
 # Key material for `make helm-install`. The chart ships NO defaults — it used to
 # ship a working JWT signing key and Fernet key, which made every default install
@@ -134,6 +144,9 @@ fmt: ## Format Go source files
 vet: ## Vet Go source files
 	go vet ./...
 
+vulncheck: ## Scan reachable Go code with the pinned govulncheck release
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
 openapi-embed: ## Sync the served spec asset from the source-of-truth docs/openapi.yaml
 	cp docs/openapi.yaml internal/handler/assets/openapi.yaml
 
@@ -155,6 +168,41 @@ verify: ## Run the focused API contract gate used by CI
 VERIFY_SCOPE ?= all
 verify-enterprise: ## Run enterprise verification (VERIFY_SCOPE=all|backend|frontend|helm)
 	./scripts/verify-enterprise.sh $(VERIFY_SCOPE)
+
+verify-all: ## Run static, stateful, race, failover, and browser qualification lanes
+	$(MAKE) verify-enterprise VERIFY_SCOPE=all
+	$(MAKE) test-postgres-integration
+	POSTGRES_INTEGRATION_RACE=1 $(MAKE) test-postgres-integration
+	$(MAKE) test-worker-runtime-integration
+	WORKER_INTEGRATION_RACE=1 $(MAKE) test-worker-runtime-integration
+	$(MAKE) test-process-restart-qualification
+	PROCESS_RESTART_QUALIFICATION_RACE=1 $(MAKE) test-process-restart-qualification
+	$(MAKE) test-redis-outage-recovery
+	REDIS_OUTAGE_RECOVERY_RACE=1 $(MAKE) test-redis-outage-recovery
+	$(MAKE) test-postgres-outage-qualification
+	POSTGRES_OUTAGE_QUALIFICATION_RACE=1 $(MAKE) test-postgres-outage-qualification
+	./scripts/test-tunnel-queue-ha.sh
+	$(MAKE) test-postgres-failover-certification
+	cd frontend && npm run test:e2e && npm run test:e2e:smoke && npm run test:e2e:visual
+	$(MAKE) test-live-browser
+
+$(LOCAL_CI_BIN): tools/local-ci/package.json tools/local-ci/package-lock.json
+	npm ci --prefix tools/local-ci
+
+local-ci-install: $(LOCAL_CI_BIN) ## Install the lockfile-pinned Local CI runner
+
+local-ci-pr: local-ci-install ## Run the complete pull-request workflow locally before pushing
+	AI_AGENT=1 LOCAL_CI_WORKING_DIR="$(LOCAL_CI_WORKING_DIR)" $(LOCAL_CI_BIN) run \
+		--workflow .github/workflows/pr-validation.yaml \
+		--jobs $(LOCAL_CI_JOBS) \
+		--prewarm-through $(LOCAL_CI_PREWARM)
+
+local-ci-pr-representative: local-ci-install ## Run one representative entry from each PR matrix locally
+	AI_AGENT=1 LOCAL_CI_WORKING_DIR="$(LOCAL_CI_WORKING_DIR)" $(LOCAL_CI_BIN) run \
+		--workflow .github/workflows/pr-validation.yaml \
+		--no-matrix \
+		--jobs $(LOCAL_CI_JOBS) \
+		--prewarm-through $(LOCAL_CI_PREWARM)
 
 docs-check: ## Validate current documentation links, classification, and terminology
 	node scripts/check-docs.mjs
@@ -191,13 +239,40 @@ error-codes: ## Regenerate docs/error-codes.md from internal/handler/apierror/co
 error-codes-check: ## Fail if docs/error-codes.md is stale vs the apierror catalog
 	node scripts/error-code-docs.mjs --check
 
+cli-docs: ## Regenerate the astro CLI reference from the Cobra command tree
+	node scripts/generate-cli-docs.mjs --write
+
+cli-docs-check: ## Fail if docs/cli.md is stale vs the Cobra command tree
+	node scripts/generate-cli-docs.mjs
+
+.PHONY: install-hooks
+install-hooks: ## Enable the index-aware frontend formatting pre-commit hook
+	git config core.hooksPath .githooks
+
+config-docs: ## Regenerate the configuration reference and environment example
+	node scripts/generate-config-docs.mjs --write
+
+config-docs-check: ## Check configuration docs, environment example and generator tests
+	node scripts/generate-config-docs.mjs
+	node --test scripts/generate-config-docs.test.mjs
+
 sqlc-generate: ## Generate sqlc code
 	$(SQLC) generate
+	python3 ./scripts/generate-sqlc-extensions.py write
 
 sqlc: sqlc-generate ## Alias for sqlc-generate
 
 sqlc-check: ## Regenerate sqlc and fail if generated files are stale
 	SQLC_VERSION=$(SQLC_VERSION) ./scripts/check-sqlc-generated.sh
+
+sqlc-extensions-generate: ## Generate isolated legacy sqlc extension adapters
+	python3 ./scripts/generate-sqlc-extensions.py write
+
+sqlc-extensions-check: ## Verify isolated legacy sqlc extension adapters
+	python3 ./scripts/generate-sqlc-extensions.py check
+
+data-governance-check: ## Verify JSON writer and destructive-delete ownership inventories
+	python3 ./scripts/check-data-governance.py
 
 sdk: ## Generate the typed Go SDK (pkg/astroclient) from docs/openapi.yaml via oapi-codegen
 	$(OAPI_CODEGEN) -config oapi-codegen.yaml docs/openapi.yaml
@@ -223,25 +298,36 @@ migrate-create: ## Create a new migration (NAME=<name>)
 
 # ── Docker images ────────────────────────────────────────────────────────────
 
-docker-build-server: ## Build server image
+validate-image-version:
+	@version='$(VERSION)'; version="$${version#v}"; \
+	if ! printf '%s\n' "$$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$$'; then \
+		echo "VERSION=$(VERSION) is not strict semantic versioning; agent connections would be rejected" >&2; \
+		echo "use a value such as 1.2.0-local.1 (IMG_TAG may be set independently)" >&2; \
+		exit 1; \
+	fi
+
+docker-build-server: validate-image-version ## Build server image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.server -t $(IMG_SERVER) .
 
-docker-build-agent: ## Build agent image
+docker-build-agent: validate-image-version ## Build agent image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.agent  -t $(IMG_AGENT)  .
 
-docker-build-worker: ## Build worker image
+docker-build-worker: validate-image-version ## Build worker image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.worker -t $(IMG_WORKER) .
 
 docker-build-migrate: ## Build migrate (golang-migrate + SQL files) image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.migrate -t $(IMG_MIGRATE) .
 
-docker-build-frontend: ## Build frontend (Next.js dashboard) image from frontend/
+docker-build-frontend: ## Build frontend (Vite dashboard) image from frontend/
 	docker build $(DOCKER_BUILD_ARGS) -f frontend/Dockerfile -t $(IMG_FRONTEND) frontend
 
 docker-build-shell: ## Build astronomer-shell (in-cluster kubectl shell pod) image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.shell -t $(IMG_SHELL) .
 
-docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell ## Build all images
+docker-build-dr: ## Build authenticated management backup/restore image
+	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.dr -t $(IMG_DR) .
+
+docker-build-all: docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-dr ## Build all images
 
 # Backward-compat alias: `make docker-build` still builds the server image.
 docker-build: docker-build-server ## (alias) build server image
@@ -253,7 +339,7 @@ k3d-load: ## Import a Docker image into the k3d cluster (IMG=<image:tag> CLUSTER
 	k3d image import $(IMG) -c $(CLUSTER)
 
 k3d-import-all: docker-build-all ## Build & import all images into k3d
-	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) $(IMG_FRONTEND) $(IMG_SHELL) -c $(CLUSTER)
+	k3d image import $(IMG_SERVER) $(IMG_AGENT) $(IMG_WORKER) $(IMG_MIGRATE) $(IMG_FRONTEND) $(IMG_SHELL) $(IMG_DR) -c $(CLUSTER)
 
 k3d-bootstrap: ## Bootstrap a local k3d cluster + apply manifests (CLUSTER=$(CLUSTER))
 	CLUSTER=$(CLUSTER) IMG_TAG=$(IMG_TAG) IMG_REGISTRY=$(IMG_REGISTRY) ./scripts/k3d-bootstrap.sh
@@ -329,8 +415,14 @@ k8s-delete: ## Delete the raw manifests in deploy/k8s/
 clean: ## Remove build artifacts
 	rm -rf bin/
 
-dev: ## Start dev environment (docker compose)
+dev: ## Start backend dependencies for local Vite development
 	docker compose -f deploy/docker-compose.yml up -d
+
+dev-full: ## Start backend and containerized frontend
+	docker compose -f deploy/docker-compose.yml --profile frontend up -d
+
+dev-reload: ## Rebuild and replace the migrator, server, and worker after Go/SQL changes
+	docker compose -f deploy/docker-compose.yml up -d --build migrate server worker
 
 dev-down: ## Stop dev environment
 	docker compose -f deploy/docker-compose.yml down

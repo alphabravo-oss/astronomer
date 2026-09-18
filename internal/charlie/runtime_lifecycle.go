@@ -2,6 +2,7 @@ package charlie
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -30,11 +31,15 @@ type RuntimeLifecycle struct {
 	ticker         func(time.Duration) runtimeTicker
 	interval       time.Duration
 
-	transition sync.Mutex
-	mu         sync.Mutex
-	parent     context.Context
-	work       ActivationWork
-	generation context.CancelFunc
+	transition  sync.Mutex
+	mu          sync.Mutex
+	parent      context.Context
+	work        ActivationWork
+	generation  context.CancelFunc
+	workDone    <-chan struct{}
+	controlDone <-chan struct{}
+	watchDone   <-chan struct{}
+	failures    chan error
 }
 
 func NewRuntimeLifecycle(features featureReader, queries activeConnectionReader, factory ActivationWorkFactory, control func(context.Context), closeTransport func()) (*RuntimeLifecycle, error) {
@@ -57,6 +62,7 @@ func newRuntimeLifecycle(features featureReader, queries activeConnectionReader,
 	return &RuntimeLifecycle{
 		features: features, queries: queries, factory: factory, eligible: eligible, control: control,
 		closeTransport: closeTransport, ticker: newRuntimeTicker, interval: 500 * time.Millisecond,
+		failures: make(chan error, 1),
 	}, nil
 }
 
@@ -112,26 +118,68 @@ func (l *RuntimeLifecycle) Activate(ctx context.Context) error {
 	}
 	generationCtx, cancel := context.WithCancel(parent)
 	l.work, l.generation = work, cancel
-	go work.Run(generationCtx)
+	l.workDone = startRuntimeGenerationLoop(func() { work.Run(generationCtx) })
 	if l.control != nil {
-		go l.control(generationCtx)
+		l.controlDone = startRuntimeGenerationLoop(func() { l.control(generationCtx) })
+	} else {
+		l.controlDone = closedRuntimeGenerationLoop()
 	}
-	go l.watch(generationCtx, work)
+	workDone := l.workDone
+	l.watchDone = startRuntimeGenerationLoop(func() { l.watch(generationCtx, work, workDone) })
 	return nil
 }
 
-func (l *RuntimeLifecycle) watch(ctx context.Context, generation ActivationWork) {
+// Failures reports an active generation that returned without cancellation.
+// The process runtime supervisor consumes this channel.
+func (l *RuntimeLifecycle) Failures() <-chan error {
+	if l == nil {
+		return nil
+	}
+	return l.failures
+}
+
+func startRuntimeGenerationLoop(run func()) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		run()
+	}()
+	return done
+}
+
+func closedRuntimeGenerationLoop() <-chan struct{} {
+	done := make(chan struct{})
+	close(done)
+	return done
+}
+
+func (l *RuntimeLifecycle) watch(ctx context.Context, generation ActivationWork, workDone <-chan struct{}) {
 	ticker := l.ticker(l.interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-workDone:
+			if ctx.Err() != nil {
+				return
+			}
+			err := errors.New("Charlie runtime generation exited without cancellation")
+			select {
+			case l.failures <- err:
+			default:
+			}
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			l.transition.Lock()
+			_ = l.stopGenerationWithWatch(shutdownCtx, generation, false)
+			l.transition.Unlock()
+			cancel()
+			return
 		case <-ticker.C():
 			if !l.eligible(EvaluateActivation(ctx, l.features, l.queries)) {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				l.transition.Lock()
-				_ = l.stopGeneration(shutdownCtx, generation)
+				_ = l.stopGenerationWithWatch(shutdownCtx, generation, false)
 				l.transition.Unlock()
 				cancel()
 				return
@@ -153,13 +201,19 @@ func (l *RuntimeLifecycle) Shutdown(ctx context.Context) error {
 }
 
 func (l *RuntimeLifecycle) stopGeneration(ctx context.Context, expected ActivationWork) error {
+	return l.stopGenerationWithWatch(ctx, expected, true)
+}
+
+func (l *RuntimeLifecycle) stopGenerationWithWatch(ctx context.Context, expected ActivationWork, joinWatch bool) error {
 	l.mu.Lock()
 	if expected != nil && l.work != expected {
 		l.mu.Unlock()
 		return nil
 	}
 	work, cancel := l.work, l.generation
+	workDone, controlDone, watchDone := l.workDone, l.controlDone, l.watchDone
 	l.work, l.generation = nil, nil
+	l.workDone, l.controlDone, l.watchDone = nil, nil, nil
 	if cancel != nil {
 		cancel()
 	}
@@ -172,5 +226,30 @@ func (l *RuntimeLifecycle) stopGeneration(ctx context.Context, expected Activati
 	if l.closeTransport != nil {
 		l.closeTransport()
 	}
+	for _, loop := range []struct {
+		name string
+		done <-chan struct{}
+	}{{"work", workDone}, {"control", controlDone}} {
+		if waitErr := waitRuntimeGeneration(ctx, loop.name, loop.done); waitErr != nil {
+			err = errors.Join(err, waitErr)
+		}
+	}
+	if joinWatch {
+		if waitErr := waitRuntimeGeneration(ctx, "watch", watchDone); waitErr != nil {
+			err = errors.Join(err, waitErr)
+		}
+	}
 	return err
+}
+
+func waitRuntimeGeneration(ctx context.Context, name string, done <-chan struct{}) error {
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("join Charlie %s loop: %w", name, ctx.Err())
+	}
 }

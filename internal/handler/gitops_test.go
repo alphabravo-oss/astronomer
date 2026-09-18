@@ -10,21 +10,25 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
-	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 type fakeGitOpsHandlerQuerier struct {
@@ -34,6 +38,7 @@ type fakeGitOpsHandlerQuerier struct {
 	links    map[uuid.UUID][]sqlc.GitopsRegisteredCluster
 	audits   int
 	tasks    []sqlc.UpsertTaskOutboxParams
+	receipts map[string]time.Time
 }
 
 func newFakeHandlerQuerier() *fakeGitOpsHandlerQuerier {
@@ -41,18 +46,42 @@ func newFakeHandlerQuerier() *fakeGitOpsHandlerQuerier {
 		sources:  map[uuid.UUID]sqlc.GitopsRegistrationSource{},
 		clusters: map[uuid.UUID]sqlc.Cluster{},
 		links:    map[uuid.UUID][]sqlc.GitopsRegisteredCluster{},
+		receipts: map[string]time.Time{},
 	}
 }
 
 func (f *fakeGitOpsHandlerQuerier) GetUserByID(_ context.Context, _ uuid.UUID) (sqlc.User, error) {
 	return f.user, nil
 }
-func (f *fakeGitOpsHandlerQuerier) ListGitOpsSources(_ context.Context) ([]sqlc.GitopsRegistrationSource, error) {
-	out := []sqlc.GitopsRegistrationSource{}
+func (f *fakeGitOpsHandlerQuerier) ListGitOpsSourcesPage(_ context.Context, arg sqlc.ListGitOpsSourcesPageParams) ([]sqlc.ListGitOpsSourcesPageRow, error) {
+	all := make([]sqlc.GitopsRegistrationSource, 0, len(f.sources))
 	for _, s := range f.sources {
-		out = append(out, s)
+		all = append(all, s)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].Name == all[j].Name {
+			return all[i].ID.String() < all[j].ID.String()
+		}
+		return all[i].Name < all[j].Name
+	})
+	start := min(int(arg.QueryOffset), len(all))
+	end := min(start+int(arg.QueryLimit), len(all))
+	out := make([]sqlc.ListGitOpsSourcesPageRow, 0, end-start)
+	for _, s := range all[start:end] {
+		out = append(out, sqlc.ListGitOpsSourcesPageRow{
+			ID: s.ID, Name: s.Name, RepoUrl: s.RepoUrl, Branch: s.Branch,
+			PathPrefix: s.PathPrefix, AuthMode: s.AuthMode, AuthConfigured: s.AuthEncrypted != "",
+			SyncMode: s.SyncMode, SyncIntervalSeconds: s.SyncIntervalSeconds, OnDelete: s.OnDelete,
+			LastSyncedAt: s.LastSyncedAt, LastSyncedSha: s.LastSyncedSha, LastError: s.LastError,
+			Enabled: s.Enabled, CreatedBy: s.CreatedBy, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
+			AllowMassDecommission: s.AllowMassDecommission, WebhookProvider: s.WebhookProvider,
+			WebhookConfigured: s.WebhookSecretEncrypted != "",
+		})
 	}
 	return out, nil
+}
+func (f *fakeGitOpsHandlerQuerier) CountGitOpsSources(context.Context) (int64, error) {
+	return int64(len(f.sources)), nil
 }
 func (f *fakeGitOpsHandlerQuerier) GetGitOpsSource(_ context.Context, id uuid.UUID) (sqlc.GitopsRegistrationSource, error) {
 	s, ok := f.sources[id]
@@ -71,18 +100,20 @@ func (f *fakeGitOpsHandlerQuerier) GetGitOpsSourceByName(_ context.Context, name
 }
 func (f *fakeGitOpsHandlerQuerier) CreateGitOpsSource(_ context.Context, arg sqlc.CreateGitOpsSourceParams) (sqlc.GitopsRegistrationSource, error) {
 	row := sqlc.GitopsRegistrationSource{
-		ID:                  uuid.New(),
-		Name:                arg.Name,
-		RepoUrl:             arg.RepoUrl,
-		Branch:              arg.Branch,
-		PathPrefix:          arg.PathPrefix,
-		AuthMode:            arg.AuthMode,
-		AuthEncrypted:       arg.AuthEncrypted,
-		SyncMode:            arg.SyncMode,
-		SyncIntervalSeconds: arg.SyncIntervalSeconds,
-		OnDelete:            arg.OnDelete,
-		Enabled:             arg.Enabled,
-		CreatedBy:           arg.CreatedBy,
+		ID:                     uuid.New(),
+		Name:                   arg.Name,
+		RepoUrl:                arg.RepoUrl,
+		Branch:                 arg.Branch,
+		PathPrefix:             arg.PathPrefix,
+		AuthMode:               arg.AuthMode,
+		AuthEncrypted:          arg.AuthEncrypted,
+		SyncMode:               arg.SyncMode,
+		SyncIntervalSeconds:    arg.SyncIntervalSeconds,
+		OnDelete:               arg.OnDelete,
+		Enabled:                arg.Enabled,
+		CreatedBy:              arg.CreatedBy,
+		WebhookProvider:        arg.WebhookProvider,
+		WebhookSecretEncrypted: arg.WebhookSecretEncrypted,
 	}
 	f.sources[row.ID] = row
 	return row, nil
@@ -100,15 +131,56 @@ func (f *fakeGitOpsHandlerQuerier) UpdateGitOpsSource(_ context.Context, arg sql
 	row.OnDelete = arg.OnDelete
 	row.Enabled = arg.Enabled
 	row.AllowMassDecommission = arg.AllowMassDecommission
+	row.WebhookProvider = arg.WebhookProvider
+	row.WebhookSecretEncrypted = arg.WebhookSecretEncrypted
 	f.sources[arg.ID] = row
 	return row, nil
 }
+
+func (f *fakeGitOpsHandlerQuerier) CreateGitOpsWebhookReceipt(_ context.Context, arg sqlc.CreateGitOpsWebhookReceiptParams) (time.Time, error) {
+	key := arg.SourceID.String() + ":" + arg.ContentDigest
+	if _, exists := f.receipts[key]; exists {
+		return time.Time{}, pgx.ErrNoRows
+	}
+	now := time.Now().UTC()
+	f.receipts[key] = now
+	return now, nil
+}
+
 func (f *fakeGitOpsHandlerQuerier) DeleteGitOpsSource(_ context.Context, id uuid.UUID) error {
 	delete(f.sources, id)
 	return nil
 }
 func (f *fakeGitOpsHandlerQuerier) ListGitOpsRegisteredClustersBySource(_ context.Context, sourceID uuid.UUID) ([]sqlc.GitopsRegisteredCluster, error) {
 	return f.links[sourceID], nil
+}
+func (f *fakeGitOpsHandlerQuerier) ListGitOpsRegisteredClustersBySourcePage(_ context.Context, arg sqlc.ListGitOpsRegisteredClustersBySourcePageParams) ([]sqlc.ListGitOpsRegisteredClustersBySourcePageRow, error) {
+	links := append([]sqlc.GitopsRegisteredCluster(nil), f.links[arg.SourceID]...)
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].RepoPath == links[j].RepoPath {
+			return links[i].ClusterID.String() < links[j].ClusterID.String()
+		}
+		return links[i].RepoPath < links[j].RepoPath
+	})
+	start := min(int(arg.QueryOffset), len(links))
+	end := min(start+int(arg.QueryLimit), len(links))
+	out := make([]sqlc.ListGitOpsRegisteredClustersBySourcePageRow, 0, end-start)
+	for _, link := range links[start:end] {
+		row := sqlc.ListGitOpsRegisteredClustersBySourcePageRow{
+			ClusterID: link.ClusterID, SourceID: link.SourceID, RepoPath: link.RepoPath,
+			LastYamlSha: link.LastYamlSha, LastAppliedAt: link.LastAppliedAt, Status: link.Status,
+			TombstonedAt: link.TombstonedAt, CreatedAt: link.CreatedAt, UpdatedAt: link.UpdatedAt,
+		}
+		if cluster, ok := f.clusters[link.ClusterID]; ok {
+			row.ClusterName.String, row.ClusterName.Valid = cluster.Name, true
+			row.DisplayName.String, row.DisplayName.Valid = cluster.DisplayName, true
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+func (f *fakeGitOpsHandlerQuerier) CountGitOpsRegisteredClustersBySource(_ context.Context, sourceID uuid.UUID) (int64, error) {
+	return int64(len(f.links[sourceID])), nil
 }
 func (f *fakeGitOpsHandlerQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
 	c, ok := f.clusters[id]
@@ -130,6 +202,11 @@ func (f *fakeGitOpsHandlerQuerier) UpsertTaskOutbox(_ context.Context, arg sqlc.
 	return sqlc.TaskOutbox{ID: uuid.New(), TaskType: arg.TaskType, Payload: arg.Payload}, nil
 }
 
+func (f *fakeGitOpsHandlerQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.audits++
+	return sqlc.AuditOutbox{ID: arg.ID}, nil
+}
+
 type fakeRunner struct {
 	syncCalls    int
 	previewCalls int
@@ -146,7 +223,7 @@ func (f *fakeRunner) PreviewSource(_ context.Context, _ uuid.UUID) (tasks.Previe
 
 // gitopsAuthedRequest returns an *http.Request with a fake authenticated user
 // in context. Used because the handler.gate() helper reads from
-// middleware.GetAuthenticatedUser.
+// reqctx.AuthenticatedUser.
 func gitopsAuthedRequest(method, target string, body []byte, callerID uuid.UUID) *http.Request {
 	var buf *bytes.Buffer
 	if body != nil {
@@ -155,7 +232,7 @@ func gitopsAuthedRequest(method, target string, body []byte, callerID uuid.UUID)
 		buf = bytes.NewBuffer(nil)
 	}
 	req := httptest.NewRequest(method, target, buf)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         callerID.String(),
 		AuthMethod: "jwt",
 	})
@@ -167,7 +244,7 @@ func TestGitOpsHandler_RequiresSuperuser(t *testing.T) {
 	q := newFakeHandlerQuerier()
 	q.user = sqlc.User{ID: callerID, IsSuperuser: false}
 
-	h := NewGitOpsHandler(q, &fakeRunner{}, nil)
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
 	w := httptest.NewRecorder()
 	req := gitopsAuthedRequest(http.MethodGet, "/api/v1/admin/gitops-sources/", nil, callerID)
 
@@ -198,7 +275,7 @@ func TestGitOpsHandler_ListPaginationContract(t *testing.T) {
 			CreatedAt: time.Now(), UpdatedAt: time.Now(),
 		}
 	}
-	h := NewGitOpsHandler(q, &fakeRunner{}, nil)
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
 	w := httptest.NewRecorder()
 	req := gitopsAuthedRequest(http.MethodGet, "/api/v1/admin/gitops-sources/?limit=1&offset=1", nil, callerID)
 	h.List(w, req)
@@ -207,7 +284,7 @@ func TestGitOpsHandler_ListPaginationContract(t *testing.T) {
 	}
 	var page struct {
 		Data       []gitopsSourceResponse `json:"data"`
-		Pagination Pagination             `json:"pagination"`
+		Pagination paging.Metadata        `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
 		t.Fatalf("decode page: %v", err)
@@ -217,12 +294,31 @@ func TestGitOpsHandler_ListPaginationContract(t *testing.T) {
 	}
 }
 
+func TestGitOpsHandlerRejectsEscapingPathPrefix(t *testing.T) {
+	callerID := uuid.New()
+	q := newFakeHandlerQuerier()
+	q.user = sqlc.User{ID: callerID, IsSuperuser: true}
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
+
+	body := []byte(`{"name":"escape","repo_url":"https://example.test/repo.git","path_prefix":"../../etc"}`)
+	w := httptest.NewRecorder()
+	req := gitopsAuthedRequest(http.MethodPost, "/api/v1/admin/gitops-sources/", body, callerID)
+	h.Create(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+	if len(q.sources) != 0 {
+		t.Fatalf("created %d sources for invalid path_prefix", len(q.sources))
+	}
+}
+
 func TestHandler_CreateGetPreviewRoundtrip(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeHandlerQuerier()
 	q.user = sqlc.User{ID: callerID, IsSuperuser: true}
 	runner := &fakeRunner{}
-	h := NewGitOpsHandler(q, runner, nil)
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, runner, nil), q)
 	h.SetEncryptor(testEncryptor(t))
 
 	body := []byte(`{
@@ -234,7 +330,9 @@ func TestHandler_CreateGetPreviewRoundtrip(t *testing.T) {
 		"auth": "ghp_secret",
 		"sync_mode": "interval",
 		"sync_interval_seconds": 60,
-		"on_delete": "log"
+		"on_delete": "log",
+		"webhook_provider": "github",
+		"webhook_secret": "github-webhook-secret-32-characters-minimum"
 	}`)
 	w := httptest.NewRecorder()
 	req := gitopsAuthedRequest(http.MethodPost, "/api/v1/admin/gitops-sources/", body, callerID)
@@ -259,11 +357,20 @@ func TestHandler_CreateGetPreviewRoundtrip(t *testing.T) {
 	if !created.AuthConfigured {
 		t.Fatalf("auth_configured must be true after non-empty auth")
 	}
+	if !created.WebhookConfigured || created.WebhookProvider != "github" {
+		t.Fatalf("webhook response configured/provider=%v/%q", created.WebhookConfigured, created.WebhookProvider)
+	}
 
 	// Preview should hit the runner with the row's UUID.
 	id, err := uuid.Parse(created.ID)
 	if err != nil {
 		t.Fatalf("parse id: %v", err)
+	}
+	if stored := q.sources[id].WebhookSecretEncrypted; stored == "" || strings.Contains(stored, "github-webhook-secret") {
+		t.Fatalf("webhook secret was not encrypted at rest: %q", stored)
+	}
+	if strings.Contains(w.Body.String(), "github-webhook-secret") {
+		t.Fatal("webhook plaintext leaked in create response")
 	}
 	r := chi.NewRouter()
 	r.Get("/api/v1/admin/gitops-sources/{id}/preview/", h.Preview)
@@ -283,11 +390,20 @@ func TestGitOpsSyncAndWebhookQueueDurableIntent(t *testing.T) {
 	q := newFakeHandlerQuerier()
 	q.user = sqlc.User{ID: callerID, IsSuperuser: true}
 	sourceID := uuid.New()
-	q.sources[sourceID] = sqlc.GitopsRegistrationSource{ID: sourceID, Name: "platform", RepoUrl: "https://git.example/platform", Enabled: true}
+	encryptor := testEncryptor(t)
+	webhookSecret := "github-webhook-secret-32-characters-minimum"
+	sealedSecret, err := encryptor.Encrypt(webhookSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q.sources[sourceID] = sqlc.GitopsRegistrationSource{
+		ID: sourceID, Name: "platform", RepoUrl: "https://github.com/example/platform", Enabled: true,
+		WebhookProvider: "github", WebhookSecretEncrypted: sealedSecret,
+	}
 	runner := &fakeRunner{}
 	h := NewGitOpsHandler(q, runner, nil)
 	h.SetTaskOutbox(q)
-	h.SetWebhookSecret("webhook-secret")
+	h.SetEncryptor(encryptor)
 
 	router := chi.NewRouter()
 	router.Post("/api/v1/admin/gitops-sources/{id}/sync/", h.Sync)
@@ -300,8 +416,14 @@ func TestGitOpsSyncAndWebhookQueueDurableIntent(t *testing.T) {
 	if manual.Code != http.StatusServiceUnavailable {
 		t.Fatalf("manual sync status=%d body=%s", manual.Code, manual.Body.String())
 	}
-	webhookRequest := httptest.NewRequest(http.MethodPost, "/api/v1/gitops/sources/"+sourceID.String()+"/webhook/", nil)
-	webhookRequest.Header.Set("X-Astronomer-Webhook-Secret", "webhook-secret")
+	h.SetRunTx(func(_ context.Context, fn func(GitOpsMutationTx) error) error { return fn(q) })
+	payload := []byte(`{"ref":"refs/heads/main"}`)
+	mac := hmac.New(sha256.New, []byte(webhookSecret))
+	_, _ = mac.Write(payload)
+	webhookRequest := httptest.NewRequest(http.MethodPost, "/api/v1/gitops/sources/"+sourceID.String()+"/webhook/", bytes.NewReader(payload))
+	webhookRequest.Header.Set("X-GitHub-Event", "push")
+	webhookRequest.Header.Set("X-GitHub-Delivery", "delivery-1")
+	webhookRequest.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	webhook := httptest.NewRecorder()
 	router.ServeHTTP(webhook, webhookRequest)
 	if webhook.Code != http.StatusAccepted {
@@ -318,13 +440,75 @@ func TestGitOpsSyncAndWebhookQueueDurableIntent(t *testing.T) {
 			t.Fatalf("unsafe or invalid task intent: type=%q payload=%s", task.TaskType, task.Payload)
 		}
 	}
+	replay := httptest.NewRecorder()
+	replayRequest := httptest.NewRequest(http.MethodPost, "/api/v1/gitops/sources/"+sourceID.String()+"/webhook/", bytes.NewReader(payload))
+	replayRequest.Header = webhookRequest.Header.Clone()
+	router.ServeHTTP(replay, replayRequest)
+	if replay.Code != http.StatusConflict || len(q.tasks) != 1 {
+		t.Fatalf("replay status/tasks=%d/%d, want 409/1: %s", replay.Code, len(q.tasks), replay.Body.String())
+	}
+	if q.audits != 2 {
+		t.Fatalf("accepted plus replay audit rows=%d, want 2", q.audits)
+	}
+	// The delivery header is not covered by GitHub's signature. Neither a
+	// changed ID nor age may allow the captured signed payload to run again.
+	for key := range q.receipts {
+		q.receipts[key] = time.Now().Add(-365 * 24 * time.Hour)
+	}
+	changedID := httptest.NewRequest(http.MethodPost, webhookRequest.URL.String(), bytes.NewReader(payload))
+	changedID.Header = webhookRequest.Header.Clone()
+	changedID.Header.Set("X-GitHub-Delivery", "attacker-replaced-delivery-id")
+	changedReply := httptest.NewRecorder()
+	router.ServeHTTP(changedReply, changedID)
+	if changedReply.Code != http.StatusConflict || len(q.tasks) != 1 {
+		t.Fatalf("changed-ID old replay status/tasks=%d/%d, want 409/1: %s", changedReply.Code, len(q.tasks), changedReply.Body.String())
+	}
+}
+
+func TestGitOpsWebhookRejectsMissingOrInvalidNativeSignature(t *testing.T) {
+	q := newFakeHandlerQuerier()
+	sourceID := uuid.New()
+	encryptor := testEncryptor(t)
+	sealed, err := encryptor.Encrypt("github-webhook-secret-32-characters-minimum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q.sources[sourceID] = sqlc.GitopsRegistrationSource{
+		ID: sourceID, Name: "platform", RepoUrl: "https://github.com/example/platform",
+		WebhookProvider: "github", WebhookSecretEncrypted: sealed, Enabled: true,
+	}
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
+	h.SetEncryptor(encryptor)
+	h.SetRunTx(func(_ context.Context, fn func(GitOpsMutationTx) error) error { return fn(q) })
+
+	router := chi.NewRouter()
+	router.Post("/api/v1/gitops/sources/{id}/webhook/", h.Webhook)
+	for _, signature := range []string{"", "sha256=not-hex", "sha256=" + strings.Repeat("00", sha256.Size)} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/gitops/sources/"+sourceID.String()+"/webhook/", strings.NewReader(`{"ref":"refs/heads/main"}`))
+		req.Header.Set("X-GitHub-Event", "push")
+		req.Header.Set("X-GitHub-Delivery", uuid.NewString())
+		if signature != "" {
+			req.Header.Set("X-Hub-Signature-256", signature)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("signature %q status=%d, want 401: %s", signature, rec.Code, rec.Body.String())
+		}
+	}
+	if len(q.tasks) != 0 || len(q.receipts) != 0 {
+		t.Fatalf("rejected signatures persisted tasks/receipts=%d/%d", len(q.tasks), len(q.receipts))
+	}
+	if q.audits != 3 {
+		t.Fatalf("rejected signature audit rows=%d, want 3", q.audits)
+	}
 }
 
 func TestGitOpsCredentialWritesFailClosedWithoutEncryptor(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeHandlerQuerier()
 	q.user = sqlc.User{ID: callerID, IsSuperuser: true}
-	h := NewGitOpsHandler(q, &fakeRunner{}, nil)
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
 	body := []byte(`{"name":"private","repo_url":"https://git.example/private","auth_mode":"https_token","auth":"plaintext-token","sync_mode":"manual","on_delete":"log"}`)
 	w := httptest.NewRecorder()
 	h.Create(w, gitopsAuthedRequest(http.MethodPost, "/api/v1/admin/gitops-sources/", body, callerID))
@@ -363,7 +547,7 @@ func TestHandler_UpdatePreservesAuthOnSentinel(t *testing.T) {
 		OnDelete:            "log",
 		Enabled:             true,
 	}
-	h := NewGitOpsHandler(q, &fakeRunner{}, nil)
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
 	body := []byte(`{
 		"name": "demo",
 		"repo_url": "https://example/demo",

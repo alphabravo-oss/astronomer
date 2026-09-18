@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
+. scripts/lib/docker-test-endpoint.sh
 
 for tool in docker go openssl python3; do
   command -v "$tool" >/dev/null 2>&1 || {
@@ -25,7 +26,7 @@ docker run -d --rm --name "$container" \
   -e POSTGRES_USER=integration \
   -e POSTGRES_PASSWORD="$credential" \
   -e POSTGRES_DB=integration \
-  -p 127.0.0.1::5432 \
+  -p "${DOCKER_TEST_BIND_HOST}::5432" \
   pgvector/pgvector:pg16 >/dev/null
 
 for _ in $(seq 1 60); do
@@ -34,7 +35,7 @@ for _ in $(seq 1 60); do
 done
 docker exec "$container" pg_isready -U integration -d integration >/dev/null
 port="$(docker port "$container" 5432/tcp | awk -F: 'NR == 1 { print $NF }')"
-database_url="postgres://integration:${credential}@127.0.0.1:${port}/integration?sslmode=disable"
+database_url="postgres://integration:${credential}@${DOCKER_TEST_CONNECT_HOST}:${port}/integration?sslmode=disable"
 
 go build -trimpath -o "$temporary/migrator" ./cmd/migrator
 "$temporary/migrator" -database "$database_url" -path internal/db/migrations up >/dev/null
@@ -46,6 +47,9 @@ export AGENT_UPGRADE_MATCH_TEST_DATABASE_URL="$database_url"
 export CHARLIE_VISIBILITY_TEST_DATABASE_URL="$database_url"
 export BUILTIN_PROVISIONER_TEST_DATABASE_URL="$database_url"
 export DELIVERY_ROLLOUT_TEST_DATABASE_URL="$database_url"
+export HEARTBEAT_TEST_DATABASE_URL="$database_url"
+export INACTIVE_USER_RETENTION_TEST_DATABASE_URL="$database_url"
+export REFRESH_SESSION_TEST_DATABASE_URL="$database_url"
 
 expected=(
   TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders
@@ -60,6 +64,9 @@ expected=(
   TestPostgresPlanningTransactionAndHAFencing
   TestCharlieAlertDispatchDistributedFenceBlocksDisableAcrossProcesses
   TestDistributedFenceHoldBlocksQueuedCrossReplicaAdmissionUntilTransitionRelease
+  TestRecordAgentHeartbeatAtomicWrite
+  TestDeactivateInactiveUsersPostgresSemantics
+  TestRefreshSessionConcurrentRotationAndReplayRevokesFamily
 )
 pattern="^($(IFS='|'; printf '%s' "${expected[*]}"))$"
 race_args=()

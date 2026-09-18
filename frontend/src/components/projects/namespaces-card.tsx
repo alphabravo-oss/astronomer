@@ -100,7 +100,7 @@ export function ProjectNamespacesCard({
                   aria-label={`Remove namespace ${ns}`}
                   disabled={removeMutation.isPending}
                   onClick={() => removeMutation.mutate(ns)}
-                  className="rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50"
+                  className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -128,7 +128,7 @@ export function ProjectNamespacesCard({
                   submit();
                 }
               }}
-              className="h-9 flex-1 min-w-0 rounded-md border border-border bg-background px-3 text-sm font-mono placeholder:text-muted-foreground placeholder:font-sans focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-9 flex-1 min-w-0 rounded-md border border-border bg-background px-3 text-sm font-mono placeholder:text-muted-foreground placeholder:font-sans focus:outline-hidden focus:ring-1 focus:ring-ring"
             />
             <button
               type="button"

@@ -12,11 +12,13 @@
 # Output format: one image per line, sorted, comments stripped.
 # Example line: postgres:16-alpine
 #
-# The script renders the chart twice:
-#   1) default values (dev / first-touch)
+# The script renders the chart three times:
+#   1) base values plus the explicit local-development profile
 #   2) production-like optional components (Dex, management backup with a
 #      dummy S3 target + key wrap, management logging) so air-gapped prod
-#      installs don't miss dex / pgdump-s3 / fluent-bit.
+#      installs don't miss dex / astronomer-dr / fluent-bit.
+#   3) the optional CloudNativePG database profile, whose CRD uses imageName
+#      instead of a Pod-spec image field.
 # Results are unioned. The agent image and digest-pinned downstream controller
 # images are added explicitly because they run only in managed clusters and do
 # not appear in a management-plane Deployment.
@@ -48,7 +50,8 @@ if [[ ! -f "$BUNDLE_CATALOG" ]]; then
     exit 2
 fi
 
-# Pull every `image:` reference out of a helm template render. The chart ships
+# Pull every Pod `image:` and operator CRD `imageName:` reference out of a
+# Helm template render. The chart ships
 # no key material (secrets.secretKey / secrets.encryptionKey are empty and the
 # render fails without them), so every call passes throwaway values — nothing
 # here ever reaches a cluster, we only want the image refs.
@@ -62,28 +65,50 @@ extract_images() {
         --set secrets.secretKey=extract-images-render-only \
         --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= \
         $@ \
-        | grep -oE 'image: "?[^"]+"?' \
-        | sed -E 's/^image: //; s/^"//; s/"$//'
+        | grep -oE 'image(Name)?: "?[^"]+"?' \
+        | sed -E 's/^image(Name)?: //; s/^"//; s/"$//'
 }
 
-# Default (dev) render — covers server/worker/migrate/frontend/postgres/
-# redis/shell/busybox and anything else on by default.
-dev_images="$(extract_images -f "$CHART_DIR/values.yaml")"
+# Explicit development render — covers server/worker/migrate/frontend/
+# postgres/redis/shell/busybox and anything else enabled for local use. The
+# base profile is intentionally production-safe and therefore cannot render
+# without real external-service, TLS, and artifact inputs.
+dev_images="$(
+    extract_images \
+        -f "$CHART_DIR/values.yaml" \
+        -f "$CHART_DIR/values-dev.yaml"
+)"
 
-# Production-like optional components. These stay off in values.yaml so a
-# laptop install doesn't pull them, but values-production.yaml (or an
-# operator --set) turns them on. Backup/restore images stay out of this
-# public inventory: the default pgdump-s3 image is a private company
-# package and cannot be digest-resolved by the public release runner.
+# Production-like optional components, rendered under the explicit development
+# profile because image discovery does not have an operator's production
+# infrastructure inputs. These stay off in values.yaml, but production values
+# (or operator overrides) turn them on. Dummy Secret names activate the
+# first-party DR writer, retention, and restore images without carrying any
+# credential value into the render.
 prod_like_images="$(
     extract_images \
         -f "$CHART_DIR/values.yaml" \
+        -f "$CHART_DIR/values-dev.yaml" \
         --set dex.enabled=true \
         --set managementLogging.enabled=true \
-        --set managementLogging.endpoint=http://loki.observability.svc:3100
+        --set managementLogging.endpoint=http://loki.observability.svc:3100 \
+        --set managementBackup.s3.bucket=image-inventory \
+        --set managementBackup.s3.credentialsSecretRef.name=image-inventory-writer \
+        --set managementBackup.encryption.sourceIdentity=image-inventory \
+        --set managementBackup.encryption.wrappingSecretRef.name=image-inventory-wrap \
+        --set managementBackup.retention.credentialsSecretRef.name=image-inventory-retention
 )"
 
-images="$(printf '%s\n%s' "$dev_images" "$prod_like_images" | sed '/^$/d' | LC_ALL=C sort -u)"
+# CloudNativePG is a supported production database mode but cannot be enabled
+# in the same render as the bundled development PostgreSQL StatefulSet.
+cnpg_images="$(
+    extract_images \
+        -f "$CHART_DIR/values.yaml" \
+        -f "$CHART_DIR/values-dev.yaml" \
+        --set postgres.mode=cloudNativePG
+)"
+
+images="$(printf '%s\n%s\n%s' "$dev_images" "$prod_like_images" "$cnpg_images" | sed '/^$/d' | LC_ALL=C sort -u)"
 
 # The agent image isn't in any Deployment — it's referenced when the
 # server renders the install.yaml that operators apply in a new member

@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.7
+FROM alpine:3.22@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb
+
+ARG VERSION=1.2.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+RUN apk add --no-cache \
+      aws-cli \
+      ca-certificates \
+      postgresql16-client \
+      py3-cryptography \
+      python3
+
+COPY deploy/dr/dr_crypto.py /usr/local/bin/dr-crypto
+RUN chmod 0555 /usr/local/bin/dr-crypto
+
+LABEL org.opencontainers.image.title="Astronomer management DR utility" \
+      org.opencontainers.image.description="Authenticated PostgreSQL backup, restore, and retention runtime" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.source="https://github.com/alphabravo-oss/astronomer"
+
+USER 65534:65534
+WORKDIR /tmp
+ENTRYPOINT ["/usr/local/bin/dr-crypto"]
+CMD ["--help"]

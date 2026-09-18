@@ -11,7 +11,7 @@ export function useAuditLogs(
 ) {
   return useQuery({
     queryKey: queryKeys.settings.auditLogs(params),
-    queryFn: () => apiClient.getAuditLogs(params),
+    queryFn: ({ signal }) => apiClient.getAuditLogs(params, signal),
     enabled: options?.enabled,
   });
 }
@@ -23,7 +23,7 @@ export function useAuditLogs(
 export function useActivityFeed(limit: number = 20) {
   return useQuery({
     queryKey: queryKeys.activity(limit),
-    queryFn: () => apiClient.getActivityFeed({ limit }),
+    queryFn: ({ signal }) => apiClient.getActivityFeed({ limit }, signal),
     // `audit.*` events refresh this while the stream is open. Restricted
     // users never receive them (no cluster_id → SEC-R07 fail-closed drop);
     // they heal via this fallback poll + the reconnect bulk invalidation.

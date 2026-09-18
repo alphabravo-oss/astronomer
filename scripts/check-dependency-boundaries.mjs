@@ -3,7 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repository = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const contractPath = path.join(
   repository,
   "docs/architecture/dependency-boundaries.json",
@@ -19,7 +22,9 @@ function relative(file) {
 
 function walk(directory, extensions) {
   if (!fs.existsSync(directory)) {
-    failures.push(`${relative(directory)}: configured boundary root is missing`);
+    failures.push(
+      `${relative(directory)}: configured boundary root is missing`,
+    );
     return [];
   }
   const files = [];
@@ -100,7 +105,9 @@ function checkRule(rule, extensions, extractImports) {
 }
 
 if (contract.version !== 1 || !contract.owner) {
-  failures.push("dependency boundary contract must declare version 1 and an owner");
+  failures.push(
+    "dependency boundary contract must declare version 1 and an owner",
+  );
 }
 
 for (const rule of contract.go || []) {
@@ -110,12 +117,61 @@ for (const rule of contract.frontend || []) {
   checkRule(rule, [".ts", ".tsx"], frontendImports);
 }
 
+const frontendSources = walk(path.join(repository, "frontend/src"), [
+  ".ts",
+  ".tsx",
+]);
+for (const rule of contract.restricted_imports || []) {
+  const allowedFiles = new Set(rule.allowed_files || []);
+  const restrictedImports = new Set(rule.imports || []);
+  if (restrictedImports.size === 0 || allowedFiles.size === 0) {
+    failures.push(
+      `${rule.name}: restricted import rules require imports and allowed_files`,
+    );
+    continue;
+  }
+  for (const allowedFile of allowedFiles) {
+    if (!fs.existsSync(path.join(repository, allowedFile))) {
+      failures.push(`${rule.name}: allowed file is missing: ${allowedFile}`);
+    }
+  }
+  for (const file of frontendSources) {
+    const repoFile = relative(file);
+    const imports = frontendImports(fs.readFileSync(file, "utf8"));
+    for (const importPath of imports) {
+      if (restrictedImports.has(importPath) && !allowedFiles.has(repoFile)) {
+        failures.push(
+          `${repoFile}: ${rule.name} restricts import ${importPath}`,
+        );
+      }
+    }
+  }
+}
+
+for (const rule of contract.forbidden_imports || []) {
+  const forbiddenImports = new Set(rule.imports || []);
+  if (forbiddenImports.size === 0) {
+    failures.push(`${rule.name}: forbidden import rules require imports`);
+    continue;
+  }
+  for (const file of frontendSources) {
+    const repoFile = relative(file);
+    for (const importPath of frontendImports(fs.readFileSync(file, "utf8"))) {
+      if (forbiddenImports.has(importPath)) {
+        failures.push(`${repoFile}: ${rule.name} forbids import ${importPath}`);
+      }
+    }
+  }
+}
+
 if (failures.length > 0) {
-  console.error(`dependency boundary check failed (${failures.length} finding(s)):`);
+  console.error(
+    `dependency boundary check failed (${failures.length} finding(s)):`,
+  );
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
 console.log(
-  `dependency boundaries passed: ${contract.go.length + contract.frontend.length} rules, ${filesChecked} files, ${importsChecked} imports`,
+  `dependency boundaries passed: ${contract.go.length + contract.frontend.length + (contract.restricted_imports || []).length + (contract.forbidden_imports || []).length} rules, ${filesChecked} files, ${importsChecked} imports`,
 );

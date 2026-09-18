@@ -11,7 +11,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * matches mappings regardless of source. Roles come from `useGlobalRoles`.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, Plus, Trash2, Users } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
@@ -24,7 +24,9 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { formatRelativeTime } from "@/lib/utils";
 import { useDexConnectors } from "@/components/auth/hooks";
-import { useGlobalRoles, useClusters, useProjects } from "@/lib/hooks";
+import { useGlobalRoles } from "@/lib/hooks/rbac";
+import { useClusters } from "@/lib/hooks/clusters";
+import { useProjects } from "@/lib/hooks/projects";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useCreateGroupMapping,
@@ -37,14 +39,16 @@ function GroupMappingsTable() {
   const { data, isLoading } = useGroupMappings();
   const del = useDeleteGroupMapping();
   const [showCreate, setShowCreate] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<GroupMappingView | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<GroupMappingView | null>(
+    null,
+  );
 
   const columns: Column<GroupMappingView>[] = [
     {
       key: "connector",
       header: "Connector",
       accessor: (row) => (
-        <span className="text-xs font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
+        <span className="text-xs font-mono px-2 py-0.5 rounded-sm bg-muted text-muted-foreground">
           {row.connector || "(any)"}
         </span>
       ),
@@ -62,7 +66,7 @@ function GroupMappingsTable() {
       key: "scope",
       header: "Scope",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded border border-border text-foreground capitalize">
+        <span className="text-xs px-2 py-0.5 rounded-sm border border-border text-foreground capitalize">
           {row.scope}
         </span>
       ),
@@ -106,7 +110,7 @@ function GroupMappingsTable() {
             e.stopPropagation();
             setConfirmDelete(row);
           }}
-          className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+          className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
           title="Delete mapping"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -132,7 +136,10 @@ function GroupMappingsTable() {
         columns={columns}
         keyExtractor={(row) => row.id}
         loading={isLoading}
-        emptyMessage="No group mappings configured"
+        emptyState={{
+          title: "No group mappings configured",
+          description: "Create the first item to configure this feature.",
+        }}
         searchPlaceholder="Search by group or role..."
       />
       <CreateGroupMappingModal
@@ -382,13 +389,13 @@ function GroupMappingsPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           title={
             <span className="inline-flex items-center gap-2">

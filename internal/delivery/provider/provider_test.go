@@ -31,7 +31,7 @@ type fakeQueries struct {
 	system  *sqlc.GetClusterDeliverySystemReleaseRow
 }
 
-func (f *fakeQueries) ListClusterDeliveryAssignments(context.Context, uuid.UUID) ([]sqlc.ListClusterDeliveryAssignmentsRow, error) {
+func (f *fakeQueries) ListClusterDeliveryAssignments(context.Context, sqlc.ListClusterDeliveryAssignmentsParams) ([]sqlc.ListClusterDeliveryAssignmentsRow, error) {
 	return append([]sqlc.ListClusterDeliveryAssignmentsRow(nil), f.rows...), nil
 }
 
@@ -135,6 +135,20 @@ func TestSnapshotBuildsValidatedAssignmentAndNotModified(t *testing.T) {
 	}
 	if decryptor.calls != 2 {
 		t.Fatalf("not-modified response decrypted credential material; calls=%d, want 2 from first snapshot only", decryptor.calls)
+	}
+}
+
+func TestAssignmentUsesFrozenTargetOverrides(t *testing.T) {
+	t.Parallel()
+	row := gitRow(t)
+	row.DesiredOverrides = json.RawMessage(`{"patches":["apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: customized"]}`)
+	assignment, err := (&Provider{}).assignmentMetadata(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assignment.Renderer.Kustomize == nil || len(assignment.Renderer.Kustomize.Patches) != 1 ||
+		!strings.Contains(assignment.Renderer.Kustomize.Patches[0], "customized") {
+		t.Fatalf("frozen overrides missing from assignment: %#v", assignment.Renderer)
 	}
 }
 
@@ -273,7 +287,8 @@ func gitRow(t *testing.T) sqlc.ListClusterDeliveryAssignmentsRow {
 		DesiredRevision: strings.Repeat("b", 40), ResolvedRevision: strings.Repeat("b", 40),
 		ArtifactDigest: "sha256:" + strings.Repeat("c", 64), Action: "apply", Phase: "applying",
 		Renderer: string(model.RendererKustomize), Scope: string(model.ScopeNamespace),
-		RendererSpec: mustJSON(t, renderer), ReconciliationPolicy: mustJSON(t, policy),
+		DesiredOverrides: json.RawMessage(`{}`),
+		RendererSpec:     mustJSON(t, renderer), ReconciliationPolicy: mustJSON(t, policy),
 		SourceType: string(model.SourceGit), Url: "https://git.example.test/platform/apps.git",
 		AuthMode: string(model.AuthBasic), CredentialEpoch: 1, CredentialEncrypted: "sealed",
 		CaBundleEncrypted: "sealed-ca", TrustPolicy: mustJSON(t, trust),

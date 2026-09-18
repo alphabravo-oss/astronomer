@@ -75,8 +75,10 @@ export function mapCurrentUser(wire: UserWire): User {
   };
 }
 
-export async function getCurrentUser(): Promise<User> {
-  return mapCurrentUser(requireData(await getAuthMe(), "getCurrentUser"));
+export async function getCurrentUser(signal?: AbortSignal): Promise<User> {
+  return mapCurrentUser(
+    requireData(await getAuthMe({ signal }), "getCurrentUser"),
+  );
 }
 
 export async function changeOwnPassword(

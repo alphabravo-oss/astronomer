@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -14,7 +16,7 @@ import (
 func limitedCharlieRequest(userID, sessionID string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = "192.0.2.10:1234"
-	ctx := SetAuthenticatedUserForTest(r.Context(), &AuthenticatedUser{ID: userID, AuthMethod: "jwt"})
+	ctx := reqctx.WithUser(r.Context(), &reqctx.User{ID: userID, AuthMethod: "jwt"})
 	if sessionID != "" {
 		route := chi.NewRouteContext()
 		route.URLParams.Add("session_id", sessionID)
@@ -86,7 +88,7 @@ func TestCharlieSessionLimitsEventStreamsSkipShortRequestTokens(t *testing.T) {
 	// A live event stream open must still be admitted under concurrency alone.
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/charlie/sessions/session-1/events/", nil)
 	req.RemoteAddr = "192.0.2.10:1234"
-	req = req.WithContext(SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: user, AuthMethod: "jwt"}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: user, AuthMethod: "jwt"}))
 	route := chi.NewRouteContext()
 	route.URLParams.Add("session_id", "session-1")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))

@@ -2,15 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 import { ArrowRight, ExternalLink, Server } from "lucide-react";
-import { useClusters } from "@/lib/hooks";
-import { Link } from "@/lib/link";
-import { useRouter, useSearchParams } from "@/lib/navigation";
+import { useClusters } from "@/lib/hooks/clusters";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatPercentage } from "@/lib/utils";
 import type { Cluster } from "@/types";
-import { LoadingState } from "@/components/ui/empty-state";
+import { EmptyState, LoadingState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { getSharedGrafanaStatus } from "@/lib/api/monitoring-stack";
 import { queryKeys } from "@/lib/query-keys";
 import { fleetGrafanaOpenURL } from "@/components/monitoring/stack-spec";
@@ -21,17 +22,17 @@ function clusterMetricsPath(clusterId: string, range?: string | null): string {
 }
 
 function MonitoringFleetPage() {
-  const router = useRouter();
-  const search = useSearchParams();
+  const navigate = useNavigate();
+  const search = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
   const clusterId = search.get("cluster");
   const range = search.get("range");
-  const {
-    data: clustersData,
-    isLoading,
-    isError,
-    refetch,
-  } = useClusters({ pageSize: 100 });
-  const clusters = useMemo(() => clustersData?.data ?? [], [clustersData]);
+  const clustersQuery = useClusters({ pageSize: 100 });
+  const clusters = useMemo(
+    () => clustersQuery.data?.data ?? [],
+    [clustersQuery.data],
+  );
   const grafanaQuery = useQuery({
     queryKey: queryKeys.monitoringStack.status("grafana"),
     queryFn: getSharedGrafanaStatus,
@@ -40,8 +41,8 @@ function MonitoringFleetPage() {
 
   useEffect(() => {
     if (!clusterId) return;
-    router.replace(clusterMetricsPath(clusterId, range));
-  }, [clusterId, range, router]);
+    void navigate({ to: clusterMetricsPath(clusterId, range), replace: true });
+  }, [clusterId, range, navigate]);
 
   const columns: Column<Cluster>[] = [
     {
@@ -98,13 +99,13 @@ function MonitoringFleetPage() {
       key: "open",
       header: "",
       accessor: (row) => (
-        <Link
-          href={clusterMetricsPath(row.id)}
+        <RouterLink
+          to={clusterMetricsPath(row.id)}
           className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
         >
           Metrics
           <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
+        </RouterLink>
       ),
       sortable: false,
       align: "right",
@@ -124,8 +125,6 @@ function MonitoringFleetPage() {
           grafanaOpenURL ? (
             <a
               href={grafanaOpenURL}
-              target="_blank"
-              rel="noreferrer"
               className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-accent"
             >
               <ExternalLink className="h-3.5 w-3.5" />
@@ -134,26 +133,37 @@ function MonitoringFleetPage() {
           ) : null
         }
       />
-      {clusters.length === 0 && !isLoading ? (
-        <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card">
-          <Server className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-          <p className="text-sm text-muted-foreground">
-            No clusters registered yet. Register a cluster to view metrics.
-          </p>
-        </div>
-      ) : (
+      <QueryStates
+        query={clustersQuery}
+        loadingTitle="Loading cluster metrics"
+        permission="clusters:read"
+        errorTitle="Failed to load cluster metrics"
+        isEmpty={(result) => result.data.length === 0}
+        empty={
+          <EmptyState
+            icon={Server}
+            title="No clusters registered"
+            description="Register an existing Kubernetes cluster to begin collecting and exploring metrics."
+            actionLabel="Register cluster"
+            actionHref="/dashboard/clusters/register"
+          />
+        }
+      >
         <DataTable
           data={clusters}
           columns={columns}
           keyExtractor={(row) => row.id}
           searchPlaceholder="Search clusters..."
-          loading={isLoading}
-          isError={isError}
-          onRetry={() => refetch()}
-          emptyMessage="No clusters registered yet"
-          onRowClick={(row) => router.push(clusterMetricsPath(row.id))}
+          emptyState={{
+            title: "No clusters available",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
+          onRowClick={(row) =>
+            void navigate({ to: clusterMetricsPath(row.id) })
+          }
         />
-      )}
+      </QueryStates>
     </PageShell>
   );
 }

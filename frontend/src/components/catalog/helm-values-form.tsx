@@ -1,4 +1,3 @@
-"use client";
 
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -141,7 +140,7 @@ function ScalarField({
             type="checkbox"
             checked={Boolean(value)}
             onChange={(e) => onChange(e.target.checked)}
-            className="h-4 w-4 rounded border-border"
+            className="h-4 w-4 rounded-sm border-border"
           />
           Enabled
         </label>

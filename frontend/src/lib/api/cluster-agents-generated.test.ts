@@ -30,37 +30,40 @@ describe("generated cluster agents API", () => {
   it("maps list wire casing and propagates cancellation", async () => {
     const signal = new AbortController().signal;
     vi.mocked(getClusterAgents).mockResolvedValueOnce({
-      data: {
-        summary: {
-          total_clusters: 1,
-          connected: 1,
-          degraded: 0,
-          disconnected: 0,
-          versions: { "1.0.0": 1 },
-          profiles: { operator: 1 },
-          statuses: { active: 1 },
-          compatibility: { supported: 1 },
-          server_version: "1.0.0",
-          minimum_supported_agent_version: "1.0.0",
-          minimum_compatible_agent_version: "1.0.0",
-          generated_at: "2026-08-24T00:00:00Z",
+      summary: {
+        total_clusters: 1,
+        connected: 1,
+        degraded: 0,
+        disconnected: 0,
+        versions: { "1.0.0": 1 },
+        profiles: { operator: 1 },
+        statuses: { active: 1 },
+        compatibility: { supported: 1 },
+        server_version: "1.0.0",
+        minimum_supported_agent_version: "1.0.0",
+        minimum_compatible_agent_version: "1.0.0",
+        generated_at: "2026-08-24T00:00:00Z",
+      },
+      data: [
+        {
+          cluster_id: clusterId,
+          cluster_name: "cluster-one",
+          cluster_display_name: "Cluster One",
+          cluster_status: "active",
+          is_local: false,
+          agent_status: "connected",
+          node_count: 3,
+          privilege_profile: "operator",
+          capabilities: {},
+          compatibility_status: "supported",
         },
-        items: [
-          {
-            cluster_id: clusterId,
-            cluster_name: "cluster-one",
-            cluster_display_name: "Cluster One",
-            cluster_status: "active",
-            is_local: false,
-            agent_status: "connected",
-            node_count: 3,
-            privilege_profile: "operator",
-            capabilities: {},
-            compatibility_status: "supported",
-          },
-        ],
+      ],
+      pagination: {
+        total: 1,
         limit: 100,
         offset: 0,
+        has_more: false,
+        next_offset: null,
       },
     });
 
@@ -68,7 +71,7 @@ describe("generated cluster agents API", () => {
       listClusterAgents({ limit: 100 }, { signal }),
     ).resolves.toEqual(
       expect.objectContaining({
-        items: [expect.objectContaining({ clusterId })],
+        data: [expect.objectContaining({ clusterId })],
       }),
     );
     expect(getClusterAgents).toHaveBeenCalledWith({
@@ -114,6 +117,11 @@ describe("generated cluster agents API", () => {
         target_version: "1.1.0",
         target_image: "agent:1.1.0",
         privilege_profile: "operator",
+        agent_overrides: {},
+        configuration_digest:
+          "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        plan_digest:
+          "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
         strategy: "agent_self_rollout",
         batch_size: 1,
         max_unavailable: 1,

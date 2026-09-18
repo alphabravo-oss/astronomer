@@ -2,7 +2,7 @@ import { Lock, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
 import type { User } from "@/types";
 import { adminUserHref, isUserLocked } from "./-utils";
@@ -26,7 +26,7 @@ export function UsersTab({
   onResetPassword,
   onDelete,
 }: UsersTabProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const userColumns: Column<User>[] = [
     {
@@ -34,8 +34,8 @@ export function UsersTab({
       header: "User",
       accessor: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-medium text-zinc-300">
+          <div className="w-8 h-8 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center shrink-0">
+            <span className="text-xs font-medium text-primary-foreground">
               {(row.displayName || row.username || "?").charAt(0).toUpperCase()}
             </span>
           </div>
@@ -118,21 +118,21 @@ export function UsersTab({
         <div className="flex items-center gap-1">
           <button
             onClick={() => onEdit(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Edit user"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => onResetPassword(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Reset password"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => onDelete(row)}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete user"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -152,8 +152,12 @@ export function UsersTab({
       loading={loading}
       isError={isError}
       onRetry={onRetry}
-      onRowClick={(row) => router.push(adminUserHref(row.id))}
-      emptyMessage="No users found"
+      onRowClick={(row) => void navigate({ to: adminUserHref(row.id) })}
+      emptyState={{
+        title: "No users found",
+        description:
+          "Resources will appear here when they are available in this scope.",
+      }}
     />
   );
 }

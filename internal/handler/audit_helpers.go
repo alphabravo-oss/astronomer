@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type auditWriterV1 interface {
@@ -66,15 +67,15 @@ func recordMandatoryAudit(r *http.Request, q any, action, resourceType, resource
 	return audit.RecordMandatory(r.Context(), v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
 		Request:         r,
 		Source:          "service",
-		CorrelationID:   middleware.GetCorrelationID(r.Context()),
+		CorrelationID:   reqctx.CorrelationID(r.Context()),
 		UserID:          currentUserUUID(r),
 		ActorAuthMethod: authMethodFromRequest(r),
 		Action:          action,
 		ResourceType:    resourceType,
 		ResourceID:      resourceID,
 		ResourceName:    resourceName,
-		RequestID:       middleware.GetRequestID(r.Context()),
-		IPAddress:       middleware.RemoteIPAddr(r),
+		RequestID:       reqctx.RequestID(r.Context()),
+		IPAddress:       reqctx.ClientIP(r),
 		Detail:          detail,
 	}))
 }
@@ -92,10 +93,10 @@ func recordMandatoryAuditAs(r *http.Request, q any, userID pgtype.UUID, action, 
 		return audit.ErrMandatoryPersistenceUnavailable
 	}
 	return audit.RecordMandatory(r.Context(), v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
-		Request: r, Source: "service", CorrelationID: middleware.GetCorrelationID(r.Context()),
+		Request: r, Source: "service", CorrelationID: reqctx.CorrelationID(r.Context()),
 		UserID: userID, ActorAuthMethod: authMethodFromRequest(r),
 		Action: action, ResourceType: resourceType, ResourceID: resourceID, ResourceName: resourceName,
-		RequestID: middleware.GetRequestID(r.Context()), IPAddress: middleware.RemoteIPAddr(r), Detail: detail,
+		RequestID: reqctx.RequestID(r.Context()), IPAddress: reqctx.ClientIP(r), Detail: detail,
 	}))
 }
 
@@ -110,16 +111,16 @@ func recordAuditOutboxAs(r *http.Request, q audit.OutboxQuerier, userID pgtype.U
 	if r == nil || q == nil {
 		return audit.ErrOutboxUnavailable
 	}
-	requestID := middleware.GetRequestID(r.Context())
+	requestID := reqctx.RequestID(r.Context())
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
 	event := audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
-		Request: r, Source: "service", CorrelationID: middleware.GetCorrelationID(r.Context()),
+		Request: r, Source: "service", CorrelationID: reqctx.CorrelationID(r.Context()),
 		UserID: userID, ActorAuthMethod: authMethodFromRequest(r),
 		Action: action, ResourceType: resourceType, ResourceID: resourceID,
 		ResourceName: resourceName, StatusCode: status, RequestID: requestID,
-		IPAddress: middleware.RemoteIPAddr(r), Detail: detail,
+		IPAddress: reqctx.ClientIP(r), Detail: detail,
 	})
 	dedupeSeed := requestID
 	if values := r.Header.Values("Idempotency-Key"); len(values) == 1 && validOperationIdempotencyKey(values[0]) {
@@ -166,9 +167,9 @@ func recordAuditAs(r *http.Request, q any, userID pgtype.UUID, action, resourceT
 }
 
 func emitAuditRow(ctx context.Context, r *http.Request, q any, userID pgtype.UUID, action, resourceType, resourceID, resourceName string, detail map[string]any) {
-	requestID := middleware.GetRequestID(ctx)
-	correlationID := middleware.GetCorrelationID(ctx)
-	ip := middleware.RemoteIPAddr(r)
+	requestID := reqctx.RequestID(ctx)
+	correlationID := reqctx.CorrelationID(ctx)
+	ip := reqctx.ClientIP(r)
 	if v1, ok := q.(auditWriterV1); ok && v1 != nil {
 		audit.Record(ctx, v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
 			Request:         r,
@@ -191,7 +192,7 @@ func authMethodFromRequest(r *http.Request) string {
 	if r == nil {
 		return ""
 	}
-	if user, ok := middleware.GetAuthenticatedUser(r.Context()); ok && user != nil {
+	if user, ok := reqctx.AuthenticatedUser(r.Context()); ok && user != nil {
 		return user.AuthMethod
 	}
 	return ""

@@ -92,13 +92,14 @@ func (q *resourceAuditQuerier) InvalidateAllTokens(context.Context, sqlc.Invalid
 }
 
 func TestResourceHandlerDrainDryRunIsSynchronousReadOnly(t *testing.T) {
+	clusterID := uuid.NewString()
 	requester := &resourceDrainRequester{pods: drainPodList{Items: []drainPod{
 		testDrainPod("default", "app-0", "ReplicaSet", false),
 		testDrainPod("kube-system", "node-agent", "DaemonSet", false),
 	}}}
 	h := NewResourceHandlerWithRequester(requester)
-	req := resourceRouteRequestWithBody(http.MethodPost, "/api/v1/nodes/cluster-1/node-1/drain/", map[string]string{
-		"cluster_id": "cluster-1", "node_name": "node-1",
+	req := resourceRouteRequestWithBody(http.MethodPost, "/api/v1/nodes/"+clusterID+"/node-1/drain/", map[string]string{
+		"cluster_id": clusterID, "node_name": "node-1",
 	}, `{"dry_run":true}`)
 	req.Header.Set("Idempotency-Key", "node-drain-preview")
 	recorder := httptest.NewRecorder()
@@ -118,11 +119,12 @@ func TestResourceHandlerDrainDryRunIsSynchronousReadOnly(t *testing.T) {
 }
 
 func TestResourceHandlerNamedResourceDryRunRemainsSynchronousAndAudited(t *testing.T) {
+	clusterID := uuid.NewString()
 	requester := &resourceMutationRequester{}
 	audit := &resourceAuditQuerier{}
 	h := NewResourceHandlerWithQueries(audit, requester)
-	req := resourceRouteRequestWithBody(http.MethodPut, "/api/v1/resources/cluster-1/services/default/demo/?dry_run=true", map[string]string{
-		"cluster_id": "cluster-1", "type": "services", "namespace": "default", "name": "demo",
+	req := resourceRouteRequestWithBody(http.MethodPut, "/api/v1/resources/"+clusterID+"/services/default/demo/?dry_run=true", map[string]string{
+		"cluster_id": clusterID, "type": "services", "namespace": "default", "name": "demo",
 	}, `{"metadata":{"namespace":"default","name":"demo"}}`)
 	recorder := httptest.NewRecorder()
 	h.UpdateNamedResource(recorder, req)

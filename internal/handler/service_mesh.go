@@ -30,7 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"sigs.k8s.io/yaml"
@@ -39,7 +38,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/mesh"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // ServiceMeshQuerier is the narrow DB surface this handler uses.
@@ -115,7 +113,7 @@ func (h *ServiceMeshHandler) SetAuditor(a any) {
 // SetAuthorization wires the RBAC engine. When nil the handler
 // trusts the caller's auth context (legacy behaviour); production
 // always supplies a real engine.
-func (h *ServiceMeshHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+func (h *ServiceMeshHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
 	if h == nil {
 		return
 	}
@@ -512,9 +510,8 @@ func (h *ServiceMeshHandler) requireCluster(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ServiceMeshHandler) requireClusterResource(w http.ResponseWriter, r *http.Request, resource rbac.Resource, verb rbac.Verb) (uuid.UUID, bool) {
-	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return uuid.Nil, false
 	}
 	if _, err := h.queries.GetClusterByID(r.Context(), clusterID); err != nil {

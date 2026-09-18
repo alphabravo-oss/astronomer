@@ -313,6 +313,7 @@ def install_values(manifest: dict[str, Any], document: dict[str, Any]) -> dict[s
         "migrate": ("image", "migrate"),
         "frontend": ("frontend", "image"),
         "shell": ("preflight", "image"),
+        "dr": ("managementBackup", "image"),
     }
     shell_target = ""
     for artifact in manifest["astronomer"]["images"]:
@@ -322,6 +323,8 @@ def install_values(manifest: dict[str, Any], document: dict[str, Any]) -> dict[s
         exact = set_image(path, artifact["reference"])
         if artifact["name"] == "shell":
             shell_target = exact
+        if artifact["name"] == "dr":
+            set_image(("managementRestoreDrill", "image"), artifact["reference"])
     if set(first_party_paths) != {item["name"] for item in manifest["astronomer"]["images"]}:
         raise MirrorError("release first-party image set is incomplete")
     set_nested(("kubectlShell", "image"), shell_target)
@@ -332,10 +335,6 @@ def install_values(manifest: dict[str, Any], document: dict[str, Any]) -> dict[s
         "valkey/valkey": (("redis", "image"),),
         "dexidp/dex": (("dex", "image"),),
         "fluent/fluent-bit": (("managementLogging", "image"),),
-        "ghcr.io/alphabravocompany/pgdump-s3": (
-            ("managementBackup", "image"),
-            ("managementRestoreDrill", "image"),
-        ),
     }
 
     def source_repository(reference: str) -> str:

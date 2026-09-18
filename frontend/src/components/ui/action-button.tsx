@@ -1,4 +1,3 @@
-"use client";
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
@@ -60,7 +59,7 @@ export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(
         disabled={blocked}
         title={disabledReason ?? title}
         className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+          "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
           intentClass[intent],
           sizeClass[size],
           className,

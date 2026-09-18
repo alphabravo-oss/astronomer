@@ -18,7 +18,6 @@ const (
 	EntrypointKubernetesProxy Entrypoint = iota
 	EntrypointTunnelMessage
 	EntrypointTunnelBroadcast
-	EntrypointRemoteDialer
 	entrypointCount
 )
 
@@ -181,7 +180,7 @@ func (after Snapshot) Delta(before Snapshot) []Observation {
 }
 
 func KnownEntrypoints() []Entrypoint {
-	return []Entrypoint{EntrypointKubernetesProxy, EntrypointTunnelMessage, EntrypointTunnelBroadcast, EntrypointRemoteDialer}
+	return []Entrypoint{EntrypointKubernetesProxy, EntrypointTunnelMessage, EntrypointTunnelBroadcast}
 }
 
 func KnownOperations() []Operation {
@@ -196,8 +195,6 @@ func (entrypoint Entrypoint) String() string {
 		return "tunnel_message"
 	case EntrypointTunnelBroadcast:
 		return "tunnel_broadcast"
-	case EntrypointRemoteDialer:
-		return "remote_dialer"
 	default:
 		return "unknown"
 	}

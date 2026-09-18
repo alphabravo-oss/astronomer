@@ -11,12 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type adminQueuesTestQueries struct {
@@ -103,7 +104,7 @@ func adminQueueMutationRequest(t *testing.T, h *AdminQueuesHandler, method, path
 	req := httptest.NewRequest(method, path, nil)
 	req.Header.Set("Idempotency-Key", "admin-queue-test")
 	uid := h.queries.(*adminQueuesTestQueries).user.ID
-	ctx := appmiddleware.SetAuthenticatedUserForTest(req.Context(), &appmiddleware.AuthenticatedUser{ID: uid.String(), AuthMethod: "jwt"})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: uid.String(), AuthMethod: "jwt"})
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -40,7 +41,7 @@ func TestRedactHelmRepository_StripsSecrets(t *testing.T) {
 func TestMergeAuthConfigPreservingSentinel(t *testing.T) {
 	existing := json.RawMessage(`{"username":"u","password":"real"}`)
 	incoming := json.RawMessage(`{"username":"u","password":"<encrypted>"}`)
-	merged := mergeAuthConfigPreservingSentinel(existing, incoming)
+	merged := catalog.MergeAuthConfigPreservingRedactedSecrets(existing, incoming, SecretSentinel)
 	var m map[string]any
 	if err := json.Unmarshal(merged, &m); err != nil {
 		t.Fatal(err)
@@ -53,7 +54,7 @@ func TestMergeAuthConfigPreservingSentinel(t *testing.T) {
 func TestMergeAuthConfig_NewPasswordReplaces(t *testing.T) {
 	existing := json.RawMessage(`{"password":"old"}`)
 	incoming := json.RawMessage(`{"password":"new"}`)
-	merged := mergeAuthConfigPreservingSentinel(existing, incoming)
+	merged := catalog.MergeAuthConfigPreservingRedactedSecrets(existing, incoming, SecretSentinel)
 	var m map[string]any
 	_ = json.Unmarshal(merged, &m)
 	if m["password"] != "new" {

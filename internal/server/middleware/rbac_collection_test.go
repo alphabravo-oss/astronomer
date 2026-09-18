@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -17,7 +19,7 @@ func runCollectionGate(t *testing.T, bindings []rbac.RoleBinding, query string) 
 	mw := RequireCollectionPermission(engine, querier, rbac.ResourceClusters, rbac.VerbList)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 	req := httptest.NewRequest(http.MethodGet, "/clusters/"+query, nil)
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: uuid.New().String(), Email: "u@test.com"})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.New().String(), Email: "u@test.com"})
 	rr := httptest.NewRecorder()
 	// No URL params: a collection route binds neither {id} nor {cluster_id}.
 	handler.ServeHTTP(rr, setupChiRequest(req.WithContext(ctx), nil))

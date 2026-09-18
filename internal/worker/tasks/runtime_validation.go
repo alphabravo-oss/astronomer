@@ -32,6 +32,8 @@ func (runtime CoreRuntime) ValidateStandalone(features StandaloneRuntimeFeatures
 		{name: "queries", value: runtime.Deps.Queries},
 		{name: "leader", value: runtime.Deps.Leader},
 		{name: "enqueuer", value: runtime.Deps.Enqueuer},
+		{name: "notification_email", value: runtime.Deps.NotificationEmail},
+		{name: "alert_notification_tx", value: runtime.Deps.AlertNotificationRunTx},
 		{name: "catalog_decryptor", value: runtime.Deps.CatalogDecryptor},
 		{name: "monitoring_cipher", value: runtime.Deps.MonitoringCipher},
 	}
@@ -47,6 +49,7 @@ func (runtime CoreRuntime) ValidateTunnel() error {
 		{name: "queries", value: runtime.Deps.Queries},
 		{name: "leader", value: runtime.Deps.Leader},
 		{name: "k8s_requester", value: runtime.Deps.K8s},
+		{name: "k8s_capability_checker", value: k8sCapabilityChecker(runtime.Deps.K8s)},
 		{name: "resource_decryptor", value: runtime.Deps.ResourceDecryptor},
 	})
 }
@@ -62,6 +65,8 @@ func ValidateStandaloneRuntime(features StandaloneRuntimeFeatures, coreRuntime C
 		{name: "runtime.queries", value: coreRuntime.Deps.Queries},
 		{name: "runtime.leader", value: coreRuntime.Deps.Leader},
 		{name: "runtime.enqueuer", value: coreRuntime.Deps.Enqueuer},
+		{name: "runtime.notification_email", value: coreRuntime.Deps.NotificationEmail},
+		{name: "runtime.alert_notification_tx", value: coreRuntime.Deps.AlertNotificationRunTx},
 		{name: "runtime.catalog_decryptor", value: coreRuntime.Deps.CatalogDecryptor},
 		{name: "runtime.monitoring_cipher", value: coreRuntime.Deps.MonitoringCipher},
 		{name: "apiserver_allowlist.queries", value: allowlistRuntime.Deps.Queries},
@@ -108,6 +113,7 @@ func ValidateTunnelRuntime(features TunnelRuntimeFeatures, coreRuntime CoreRunti
 		{name: "runtime.queries", value: coreRuntime.Deps.Queries},
 		{name: "runtime.leader", value: coreRuntime.Deps.Leader},
 		{name: "runtime.k8s_requester", value: coreRuntime.Deps.K8s},
+		{name: "runtime.k8s_capability_checker", value: k8sCapabilityChecker(coreRuntime.Deps.K8s)},
 		{name: "runtime.resource_decryptor", value: coreRuntime.Deps.ResourceDecryptor},
 		{name: "security_ingest.queries", value: securityRuntime.Deps.Queries},
 		{name: "security_ingest.k8s_fetcher", value: securityRuntime.Deps.K8s},
@@ -171,6 +177,11 @@ func ValidateTunnelRuntime(features TunnelRuntimeFeatures, coreRuntime CoreRunti
 	}
 
 	return validateRequiredRuntimeDependencies("tunnel worker", required)
+}
+
+func k8sCapabilityChecker(requester K8sRequester) K8sCapabilityChecker {
+	checker, _ := requester.(K8sCapabilityChecker)
+	return checker
 }
 
 func validateRequiredRuntimeDependencies(owner string, dependencies []requiredRuntimeDependency) error {

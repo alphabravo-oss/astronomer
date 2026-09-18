@@ -27,6 +27,50 @@ const bodyRowText = () =>
     .map((r) => r.textContent ?? "");
 
 describe("DataTable behavior (TanStack Table engine)", () => {
+  it("distinguishes an empty collection from a search with no matches and clears filters", async () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(row) => row.id}
+        emptyState={{
+          title: "No fruit yet",
+          description: "Add a fruit to start your collection.",
+        }}
+      />,
+    );
+    fireEvent.change(screen.getByPlaceholderText("Search..."), {
+      target: { value: "Missing" },
+    });
+    await screen.findByText("No matching results");
+    expect(screen.queryByText("No fruit yet")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    await screen.findByText("Apple");
+  });
+
+  it("uses the caller's filter reset without showing a misleading creation action", () => {
+    const reset = vi.fn();
+    render(
+      <DataTable
+        data={[]}
+        columns={columns}
+        keyExtractor={(row) => row.id}
+        filtersActive
+        onClearFilters={reset}
+        emptyState={{
+          title: "No fruit yet",
+          description: "Create a fruit.",
+          action: { label: "Add fruit", onClick: vi.fn() },
+        }}
+      />,
+    );
+    expect(screen.getByText("No matching results")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add fruit" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(reset).toHaveBeenCalledOnce();
+  });
   it("keeps source order until a column is sorted", () => {
     render(
       <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />,
@@ -64,6 +108,31 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     expect(bodyRowText()[0]).toContain("Apple");
   });
 
+  it("searches JSX cells through an explicit plain-text accessor", async () => {
+    const jsxColumns: Column<Row>[] = [
+      {
+        key: "name",
+        header: "Name",
+        accessor: (row) => <strong>{row.name}</strong>,
+        searchAccessor: (row) => row.name,
+      },
+    ];
+    render(
+      <DataTable
+        data={rows}
+        columns={jsxColumns}
+        keyExtractor={(row) => row.id}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Search..."), {
+      target: { value: "Cherry" },
+    });
+
+    await waitFor(() => expect(bodyRowText()).toHaveLength(1));
+    expect(bodyRowText()[0]).toContain("Cherry");
+  });
+
   it("paginates and navigates between pages", () => {
     render(
       <DataTable
@@ -77,7 +146,7 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     expect(bodyRowText()).toHaveLength(1);
     expect(bodyRowText()[0]).toContain("Banana");
 
-    fireEvent.click(screen.getByRole("button", { name: "2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
     expect(bodyRowText()[0]).toContain("Apple");
   });
 
@@ -115,6 +184,55 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("columnheader", { name: /name/i }),
+    ).toBeInTheDocument();
+    window.localStorage.clear();
+  });
+
+  it("starts optional columns hidden and exposes them through a themed selector", () => {
+    window.localStorage.setItem(
+      "dt:optional-table:visibility",
+      JSON.stringify({ actions: false }),
+    );
+    const optionalColumns: Column<Row>[] = [
+      columns[0],
+      { ...columns[1], hidden: true },
+      {
+        key: "actions",
+        header: "",
+        accessor: () => "Actions",
+        sortable: false,
+      },
+    ];
+
+    render(
+      <DataTable
+        data={rows}
+        columns={optionalColumns}
+        keyExtractor={(row) => row.id}
+        persistKey="optional-table"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("columnheader", { name: /size/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /columns/i }));
+    const optionalToggle = screen.getByRole("checkbox", { name: "Size" });
+    expect(optionalToggle).not.toBeChecked();
+    expect(
+      optionalToggle.parentElement?.querySelector(
+        '[data-slot="checkbox-indicator"]',
+      ),
+    ).toHaveClass("bg-background", "peer-checked:bg-primary");
+    // Structural columns with no heading (for example, row actions) remain
+    // pinned and are not rendered as a blank selector entry.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.getAllByText("Actions")).toHaveLength(rows.length);
+
+    fireEvent.click(optionalToggle);
+    expect(
+      screen.getByRole("columnheader", { name: /size/i }),
     ).toBeInTheDocument();
     window.localStorage.clear();
   });
@@ -183,10 +301,58 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     expect(bodyRowText()).toHaveLength(2);
 
     // Navigating hands the new page index back to the caller.
-    fireEvent.click(screen.getByRole("button", { name: "2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
     expect(onPaginationChange).toHaveBeenCalledWith(
       expect.objectContaining({ pageIndex: 1 }),
     );
+  });
+
+  it("delegates search to a server-paged caller without filtering the loaded page", () => {
+    const onSearchChange = vi.fn();
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(row) => row.id}
+        serverSide={{
+          rowCount: 50,
+          pagination: { pageIndex: 0, pageSize: 20 },
+          onPaginationChange: vi.fn(),
+          search: { value: "remote", onChange: onSearchChange },
+        }}
+      />,
+    );
+
+    expect(bodyRowText()).toHaveLength(rows.length);
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveValue("remote");
+    fireEvent.change(input, { target: { value: "platform" } });
+    expect(onSearchChange).toHaveBeenCalledWith("platform");
+  });
+
+  it("delegates sorting to a server-paged caller without reordering one page locally", () => {
+    const onSortingChange = vi.fn();
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(row) => row.id}
+        serverSide={{
+          rowCount: 30,
+          pagination: { pageIndex: 0, pageSize: 20 },
+          onPaginationChange: vi.fn(),
+          sorting: {
+            value: [{ id: "name", desc: false }],
+            onChange: onSortingChange,
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("columnheader", { name: /size/i }));
+
+    expect(onSortingChange).toHaveBeenCalledWith([{ id: "size", desc: false }]);
+    expect(bodyRowText()[0]).toContain("Banana");
   });
 
   it("renders drag resize handles only when resizable is enabled", () => {
@@ -299,6 +465,57 @@ describe("DataTable behavior (TanStack Table engine)", () => {
       name: `Row ${i}`,
       size: i,
     }));
+
+    it("automatically virtualizes a 5k client-side collection", () => {
+      const restore = stubLayout();
+      try {
+        const fiveThousandRows: Row[] = Array.from(
+          { length: 5_000 },
+          (_, i) => ({
+            id: String(i),
+            name: `Row ${i}`,
+            size: i,
+          }),
+        );
+        render(
+          <DataTable
+            data={fiveThousandRows}
+            columns={columns}
+            keyExtractor={(r) => r.id}
+          />,
+        );
+
+        const grid = screen.getByRole("grid");
+        expect(grid).toHaveAttribute("aria-rowcount", "5000");
+        expect(screen.getAllByRole("row").length).toBeLessThan(100);
+      } finally {
+        restore();
+      }
+    });
+
+    it("keeps server pagination authoritative when virtualization is requested", () => {
+      const onPaginationChange = vi.fn();
+      render(
+        <DataTable
+          data={rows.slice(0, 2)}
+          columns={columns}
+          keyExtractor={(r) => r.id}
+          virtualized
+          serverSide={{
+            rowCount: 10,
+            pagination: { pageIndex: 0, pageSize: 2 },
+            onPaginationChange,
+          }}
+        />,
+      );
+
+      expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+      expect(screen.getByText("Showing 1-2 of 10")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
+      expect(onPaginationChange).toHaveBeenCalledWith(
+        expect.objectContaining({ pageIndex: 1 }),
+      );
+    });
 
     it('renders a role="grid" container with aria-rowcount and only a windowed subset of rows', () => {
       const restore = stubLayout();
@@ -418,7 +635,11 @@ describe("DataTable behavior (TanStack Table engine)", () => {
             columns={columns}
             keyExtractor={(r) => r.id}
             virtualized
-            emptyMessage="Nothing here"
+            emptyState={{
+              title: "Nothing here",
+              description:
+                "Resources will appear here when they are available in this scope.",
+            }}
           />,
         );
         expect(screen.getByText("Nothing here")).toBeInTheDocument();

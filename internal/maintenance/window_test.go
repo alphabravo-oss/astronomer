@@ -54,6 +54,7 @@ func TestEvaluator_BlackoutWithinWindow(t *testing.T) {
 	}
 	if w == nil {
 		t.Fatalf("expected matched window, got nil")
+		return
 	}
 	if w.Mode != ModeBlackout {
 		t.Fatalf("want mode=blackout, got %q", w.Mode)

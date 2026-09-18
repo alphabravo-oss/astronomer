@@ -22,16 +22,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"k8s.io/client-go/kubernetes"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"k8s.io/client-go/kubernetes"
 )
 
 // AdminDrillQuerier is the slice of sqlc.Queries the handler needs.
@@ -228,7 +228,7 @@ func (h *AdminDrillHandler) ListHistory(w http.ResponseWriter, r *http.Request) 
 	for _, row := range rows {
 		out = append(out, toWireResult(row))
 	}
-	RespondPaginated(w, r, out, total)
+	paging.Write(w, out, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(out)))
 }
 
 // toWireResult converts the sqlc row (with pgtype wrappers) into the

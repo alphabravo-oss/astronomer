@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -39,23 +40,22 @@ func TestStartCRDControllerFailsClosedInProduction(t *testing.T) {
 	t.Setenv("KUBECONFIG", t.TempDir()+"/missing-kubeconfig")
 	t.Setenv("HOME", t.TempDir())
 
-	err := startCRDController(context.Background(), slog.Default(), &config.Config{Env: "production", CRDEnabled: true}, nil)
+	err := startCRDController(context.Background(), slog.Default(), &config.Config{Env: "production", CRDEnabled: true}, nil, nil)
 	if err == nil {
 		t.Fatal("expected production CRD controller bootstrap to fail without Kubernetes config")
 	}
 
-	err = startCRDController(context.Background(), slog.Default(), &config.Config{Env: "development", CRDEnabled: true}, nil)
+	err = startCRDController(context.Background(), slog.Default(), &config.Config{Env: "development", CRDEnabled: true}, nil, nil)
 	if err != nil {
 		t.Fatalf("development CRD controller bootstrap error = %v, want nil", err)
 	}
 }
 
-func TestCRDControllerNamespaceEnvDefaultsAndOverrides(t *testing.T) {
-	if got := crdWatchNamespace(); got != "astronomer-mgmt" {
+func TestCRDControllerNamespaceDefaultsAndOverrides(t *testing.T) {
+	if got := crdWatchNamespace(""); got != "astronomer-mgmt" {
 		t.Fatalf("default CRD watch namespace = %q", got)
 	}
-	t.Setenv("CRD_WATCH_NAMESPACE", "custom-mgmt")
-	if got := crdWatchNamespace(); got != "custom-mgmt" {
+	if got := crdWatchNamespace(" custom-mgmt "); got != "custom-mgmt" {
 		t.Fatalf("override CRD watch namespace = %q", got)
 	}
 }
@@ -76,7 +76,7 @@ func TestDSNEnforcesTLS(t *testing.T) {
 		{"allow", "postgres://u:p@h:5432/d?sslmode=allow", false},
 		{"prefer", "postgres://u:p@h:5432/d?sslmode=prefer", false},
 		{"missing", "postgres://u:p@h:5432/d", false},
-		{"case-insensitive REQUIRE", "postgres://u:p@h:5432/d?SSLMODE=REQUIRE", true},
+		{"uppercase lookalike rejected", "postgres://u:p@h:5432/d?SSLMODE=REQUIRE", false},
 		{"verify-full inside multi-param", "postgres://u:p@h:5432/d?application_name=astronomer&sslmode=verify-full&pool_max_conns=20", true},
 		{"empty", "", false},
 	}
@@ -100,9 +100,11 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 		DatabaseURL:                        "postgres://astronomer:astronomer@db:5432/astronomer?sslmode=require",
 		SecretKey:                          "production-jwt-signing-key",
 		EncryptionKey:                      validKey,
+		InternalPSK:                        "dedicated-internal-signing-key-with-at-least-32-chars",
 		ServerURL:                          "https://astronomer.example.com",
 		DexBundledEnabled:                  true,
 		DeliveryEnabled:                    true,
+		DeliveryLocalFluxBootstrap:         true,
 		AgentImageRepository:               "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
 		DeliveryFluxDistributionRepository: "registry.example.test/system",
 		DeliveryFluxDistributionDigest:     "sha256:" + strings.Repeat("b", 64),
@@ -121,9 +123,11 @@ func TestValidateProductionSecurityConfig(t *testing.T) {
 		DatabaseURL:                        "postgres://astronomer:astronomer@db:5432/astronomer?sslmode=require",
 		SecretKey:                          "production-jwt-signing-key",
 		EncryptionKey:                      validKey,
+		InternalPSK:                        "dedicated-internal-signing-key-with-at-least-32-chars",
 		ServerURL:                          "https://astronomer.example.com",
 		AuthLocalPasswordOnly:              true,
 		DeliveryEnabled:                    true,
+		DeliveryLocalFluxBootstrap:         true,
 		AgentImageRepository:               "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
 		DeliveryFluxDistributionRepository: "registry.example.test/system",
 		DeliveryFluxDistributionDigest:     "sha256:" + strings.Repeat("b", 64),
@@ -213,8 +217,8 @@ func TestReportInsecureDevKeysOutsideProduction(t *testing.T) {
 }
 
 func TestValidateProductionSecurityWiring(t *testing.T) {
-	if err := validateProductionSecurityWiring(&config.Config{Env: "development"}, RouterDependencies{}); err != nil {
-		t.Fatalf("development wiring should not fail closed: %v", err)
+	if err := validateProductionSecurityWiring(&config.Config{Env: "development"}, RouterDependencies{}); err == nil {
+		t.Fatal("development wiring must fail closed too")
 	}
 
 	err := validateProductionSecurityWiring(&config.Config{Env: "production"}, RouterDependencies{})
@@ -226,25 +230,48 @@ func TestValidateProductionSecurityWiring(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEncryptor(valid): %v", err)
 	}
-	valid := RouterDependencies{
-		JWT:         auth.MustNewJWTManager("production-jwt-signing-key", 60),
-		AuthQueries: productionSecurityAuthQuerier{},
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		Encryptor:   enc,
-	}
+	queries := sqlc.New(nil)
+	jwt := auth.MustNewJWTManager("production-jwt-signing-key", 15)
+	jwt.SetRevocationChecker(newSharedRevocations())
+	valid := RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwt, AuthQueries: productionSecurityAuthQuerier{}, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}, Encryptor: enc, SettingsCache: handler.NewSettingsCache(nil, time.Minute), Queries: queries, AuditWriter: queries}}
 	if err := validateProductionSecurityWiring(&config.Config{Env: "production"}, valid); err != nil {
 		t.Fatalf("valid production wiring rejected: %v", err)
+	}
+	if _, err := NewProductionRouter(&config.Config{Env: "production"}, RouterDependencies{}); err == nil {
+		t.Fatal("production router constructed without required security wiring")
+	}
+	if router, err := NewProductionRouter(&config.Config{Env: "production"}, valid); err != nil || router == nil {
+		t.Fatalf("production router rejected valid security wiring: router=%v err=%v", router, err)
+	}
+	typedNilAuditWriter := valid
+	typedNilAuditWriter.CoreAuth.AuditWriter = (*sqlc.Queries)(nil)
+	err = validateProductionSecurityWiring(&config.Config{Env: "production"}, typedNilAuditWriter)
+	if err == nil || !strings.Contains(err.Error(), "security audit writer") {
+		t.Fatalf("typed-nil security audit writer accepted: %v", err)
 	}
 
 	// A project handler that was never given an RBAC cache invalidator makes
 	// AddNamespace/RemoveNamespace's cache flush a silent no-op, so a revoked
 	// namespace keeps authorizing reads. That must fail the boot, not ship.
 	unwired := valid
-	unwired.Projects = handler.NewProjectHandler(nil)
+	unwired.ClusterResources.Projects = handler.NewProjectHandler(nil)
 	err = validateProductionSecurityWiring(&config.Config{Env: "production"}, unwired)
 	if err == nil || !strings.Contains(err.Error(), "RBAC cache invalidator") {
 		t.Fatalf("unwired project RBAC invalidator accepted: %v", err)
+	}
+
+	unwiredSCIM := valid
+	unwiredSCIM.CoreAuth.SCIM = handler.NewSCIMHandler(nil)
+	err = validateProductionSecurityWiring(&config.Config{Env: "production"}, unwiredSCIM)
+	if err == nil || !strings.Contains(err.Error(), "SCIM transactional audit") {
+		t.Fatalf("unwired SCIM mutation transaction accepted: %v", err)
+	}
+	wiredSCIM := valid
+	scimHandler := handler.NewSCIMHandler(nil)
+	scimHandler.SetRunTx(func(context.Context, func(handler.SCIMMutationTx) error) error { return nil })
+	wiredSCIM.CoreAuth.SCIM = scimHandler
+	if err := validateProductionSecurityWiring(&config.Config{Env: "production"}, wiredSCIM); err != nil {
+		t.Fatalf("wired SCIM mutation transaction rejected: %v", err)
 	}
 
 	// A TYPED NIL must be rejected too. NewSQLCRBACQuerierWithCache returns a
@@ -252,7 +279,7 @@ func TestValidateProductionSecurityWiring(t *testing.T) {
 	// non-nil and satisfies RBACCacheInvalidator, but InvalidateAll() returns at
 	// its nil-receiver guard — the exact permanent no-op this check exists to
 	// catch. Same for a querier built without a cache.
-	for name, inv := range map[string]appmiddleware.RBACQuerier{
+	for name, inv := range map[string]rbac.BindingQuerier{
 		"typed nil querier": appmiddleware.NewSQLCRBACQuerierWithCache(nil, appmiddleware.NewRBACCache()),
 		"cacheless querier": appmiddleware.NewSQLCRBACQuerierWithCache(stubProjectBindingsQuerier{}, nil),
 	} {
@@ -260,7 +287,7 @@ func TestValidateProductionSecurityWiring(t *testing.T) {
 			deps := valid
 			p := handler.NewProjectHandler(nil)
 			p.SetRBACInvalidator(inv)
-			deps.Projects = p
+			deps.ClusterResources.Projects = p
 			err := validateProductionSecurityWiring(&config.Config{Env: "production"}, deps)
 			if err == nil || !strings.Contains(err.Error(), "RBAC cache invalidator") {
 				t.Fatalf("%s accepted as a working invalidator: %v", name, err)
@@ -283,7 +310,7 @@ func TestValidateProductionSecurityWiring(t *testing.T) {
 	wired := valid
 	projects := handler.NewProjectHandler(nil)
 	projects.SetRBACInvalidator(realQuerier)
-	wired.Projects = projects
+	wired.ClusterResources.Projects = projects
 	if err := validateProductionSecurityWiring(&config.Config{Env: "production"}, wired); err != nil {
 		t.Fatalf("wired project RBAC invalidator rejected: %v", err)
 	}

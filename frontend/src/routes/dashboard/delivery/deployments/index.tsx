@@ -1,3 +1,5 @@
+import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Layers } from "lucide-react";
@@ -7,6 +9,7 @@ import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
   RedirectDeliveryList,
+  deliveryPageRowCount,
   inputClass,
   useDeliveryWorkspace,
 } from "@/components/delivery/shared";
@@ -14,11 +17,11 @@ import {
   listClusterDeployments,
   type ClusterDeployment,
   type DeploymentPhase,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-deployments";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
-import { useRouter, useSearchParams } from "@/lib/navigation";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
@@ -50,8 +53,10 @@ export function DeploymentsPage() {
     type: "project",
     id: projectId,
   });
-  const search = useSearchParams();
-  const router = useRouter();
+  const search = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
+  const navigate = useNavigate();
   const phaseValue = search.get("phase") ?? "";
   const phase = phases.includes(phaseValue as DeploymentPhase)
     ? (phaseValue as DeploymentPhase)
@@ -76,7 +81,10 @@ export function DeploymentsPage() {
       else next.delete(key);
     }
     if (workspaceClusterId) next.delete("cluster");
-    router.replace(`${listHref("deployments")}?${next.toString()}`);
+    void navigate({
+      to: `${listHref("deployments")}?${next.toString()}`,
+      replace: true,
+    });
   };
   const query = useQuery({
     queryKey: queryKeys.delivery.deployments(projectId, params),
@@ -178,12 +186,22 @@ export function DeploymentsPage() {
           keyExtractor={(row) => row.id}
           loading={query.isLoading}
           isError={query.isError}
+          error={query.error}
+          permission="delivery_deployments:list"
           onRetry={() => void query.refetch()}
           searchable={false}
-          emptyMessage="No cluster deployments match this filter"
+          filtersActive={!!phase || (!workspaceClusterId && !!clusterId)}
+          onClearFilters={() =>
+            updateSearch({ phase: "", cluster: "", page: 0 })
+          }
+          emptyState={{
+            title: "No cluster deployments yet",
+            description:
+              "Deployments appear as rollouts assign component bundles to your clusters.",
+          }}
           toolbar={
             <div className="flex flex-wrap gap-2">
-              <select
+              <Select
                 aria-label="Deployment phase"
                 value={phase ?? ""}
                 onChange={(e) =>
@@ -197,9 +215,9 @@ export function DeploymentsPage() {
                     {value}
                   </option>
                 ))}
-              </select>
+              </Select>
               {workspaceClusterId ? null : (
-                <input
+                <Input
                   aria-label="Cluster ID filter"
                   value={clusterId ?? ""}
                   onChange={(e) =>
@@ -211,9 +229,11 @@ export function DeploymentsPage() {
               )}
             </div>
           }
-          onRowClick={(row) => router.push(entityHref("deployments", row.id))}
+          onRowClick={(row) =>
+            void navigate({ to: entityHref("deployments", row.id) })
+          }
           serverSide={{
-            rowCount: query.data?.count ?? 0,
+            rowCount: deliveryPageRowCount(query.data),
             pagination: { pageIndex, pageSize },
             onPaginationChange: (next) =>
               updateSearch({ page: next.pageIndex }),

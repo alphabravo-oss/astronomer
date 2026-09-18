@@ -15,12 +15,13 @@ representative tests below.
 | Generic Secret list | `/api/v1/clusters/{cluster_id}/resources/generic/secrets/` | Adopted API through its agent | `secrets:list`; authorized reads emit value-free `cluster.secret.read`. |
 | Cross-cluster Secret search | `/api/v1/resources/search/?type=secrets` | Authorized adopted APIs through agents | Per-cluster `secrets:list`; audit records filters/counts, never Secret data. |
 | Service proxy | `/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*` | Allowlisted in-cluster Service | Cluster RBAC, API-token write scope for mutations, target allowlist and protected-namespace checks; mutations are audited. |
+| Shared Grafana proxy | `/api/v1/observability/grafana/*` | Internal `grafana-proxy` Service through the management-cluster agent | Session/bearer authentication plus `monitoring:read`; scoped identities receive mandatory PromQL/LogQL cluster filters, only the proxy's signed cookie crosses the tunnel, and mutations are audited. |
 | Exec relay | `/api/v1/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/` | Pod exec through agent | One-use stream ticket or authenticated caller plus `pods:exec`; open is audited without stream content. |
 | Log relay | `/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/` | Pod logs through agent | One-use stream ticket or authenticated caller plus log permission; open is audited without log content. |
 | Kubectl shell | `/api/v1/clusters/{id}/shell/*` and `/api/v1/ws/clusters/{cluster_id}/shell/sessions/{id}/` | Ephemeral shell pod through agent | Cluster update/shell permission, owner-bound session, TTL; lifecycle and input commands are audited, stdout/stderr is not stored. |
-| Remotedialer client | `/api/v1/connect/{cluster_id}/`, internal client, and production-disabled probe `/api/v1/clusters/{id}/v2/pods` | Adopted API | Agent-token connection authorization; every caller must independently enforce user auth/RBAC. Demo routes remain disabled in production. |
 | Internal Helm relay | `/internal/tunnel/helm/{cluster_id}` | Agent Helm executor | Private listener/NetworkPolicy plus internal PSK; calling operation owns user auth and audit. |
 | Internal Kubernetes relay | `/internal/tunnel/k8s/{cluster_id}` | Owner server pod or connected agent | Private listener/NetworkPolicy plus internal PSK and owner routing; calling route owns user auth and audit. |
+| Internal agent capability lookup | `/internal/tunnel/k8s/{cluster_id}/capabilities/{capability}` | Owner server pod's CONNECT admission set | Private listener/NetworkPolicy plus the same short-lived HMAC envelope as the Kubernetes relay; read-only lookup sends no message to the agent and lets mutation reconcilers fail closed before dispatch. |
 
 Flux-native delivery does not use a central Kubernetes reverse proxy. The
 cluster agent receives a cluster-bound, generation-fenced assignment and
@@ -50,8 +51,9 @@ control-plane runbook for that separate boundary.
 - Generic and cross-cluster Secret list authorization and value-free audit.
 - Service proxy allowlist, protected namespace, mutation scope/audit, and
   request/response header sanitation.
+- Shared Grafana same-origin RBAC, tenant-query rewriting, typed credential
+  injection, path-scoped cookie handling, and public-ingress absence.
 - Exec/log one-use ticket rejection/replay and open-event audit.
 - Shell ownership, bridge, expiry, cleanup, and command-history tests.
 - Internal Helm/Kubernetes fail-closed PSK and round-trip tests.
-- Remotedialer cluster identity and production demo-route denial.
 - High-risk route registry, authentication, CSRF, audit, and inventory coverage.

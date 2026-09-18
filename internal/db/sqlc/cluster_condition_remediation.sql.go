@@ -188,16 +188,34 @@ SELECT c.id, c.cluster_id, c.type, c.status, c.reason, c.message,
        c.last_transition_time, c.last_probe_time, c.created_at, c.updated_at
 FROM cluster_conditions c
 JOIN clusters cl ON cl.id = c.cluster_id
-WHERE c.status = $1 AND cl.decommissioned_at IS NULL
-ORDER BY c.last_transition_time ASC
+WHERE c.status = $1
+  AND cl.decommissioned_at IS NULL
+  AND (c.last_transition_time, c.id) > (
+      $2::timestamptz,
+      $3::uuid
+  )
+ORDER BY c.last_transition_time ASC, c.id ASC
+LIMIT $4
 `
+
+type ListClusterConditionsByStatusParams struct {
+	Status              string    `json:"status"`
+	AfterTransitionTime time.Time `json:"after_transition_time"`
+	AfterID             uuid.UUID `json:"after_id"`
+	QueryLimit          int32     `json:"query_limit"`
+}
 
 // Estate-wide list of conditions in the given status, used by the
 // remediation reconciler to find work each tick. Skips decommissioned
 // clusters because their conditions are about to be deleted by the
 // decommission reconciler anyway.
-func (q *Queries) ListClusterConditionsByStatus(ctx context.Context, status string) ([]ClusterCondition, error) {
-	rows, err := q.db.Query(ctx, listClusterConditionsByStatus, status)
+func (q *Queries) ListClusterConditionsByStatus(ctx context.Context, arg ListClusterConditionsByStatusParams) ([]ClusterCondition, error) {
+	rows, err := q.db.Query(ctx, listClusterConditionsByStatus,
+		arg.Status,
+		arg.AfterTransitionTime,
+		arg.AfterID,
+		arg.QueryLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

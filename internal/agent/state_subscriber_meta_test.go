@@ -107,6 +107,7 @@ func TestStateSubscriberMetadataInformerRegistration(t *testing.T) {
 
 	subscriber := NewStateSubscriber(client, sender, logger)
 	subscriber.SetMetadataClient(mc)
+	subscriber.crdAvailable = func(metadataKind) bool { return true }
 	// Secret informers (typed + Helm metadata) are opt-in by privilege
 	// profile (see cmd/agent/main.go); this test locks the full expansion
 	// set, so opt in like a secrets-allowed profile does.
@@ -165,6 +166,7 @@ func TestStateSubscriberMetadataInformerRegistration(t *testing.T) {
 	found := waitForStateUpdate(t, sender, "Namespace", "team-a", 2*time.Second)
 	if found == nil {
 		t.Fatal("expected a STATE_UPDATE for Namespace team-a, got none")
+		return
 	}
 	if found.Op != protocol.StateUpdateOpAdded {
 		t.Errorf("expected op=added, got %s", found.Op)
@@ -189,6 +191,7 @@ func TestStateSubscriberHelmSecretFilter(t *testing.T) {
 
 	subscriber := NewStateSubscriber(client, sender, logger)
 	subscriber.SetMetadataClient(mc)
+	subscriber.crdAvailable = func(metadataKind) bool { return true }
 	// The Helm-filtered Secret metadata informer is gated on watchSecrets;
 	// opt in like a secrets-allowed profile does.
 	subscriber.SetWatchSecrets(true)
@@ -244,6 +247,9 @@ func TestStateSubscriberToleratesAbsentCRD(t *testing.T) {
 
 	subscriber := NewStateSubscriber(client, sender, logger)
 	subscriber.SetMetadataClient(mc)
+	subscriber.crdAvailable = func(k metadataKind) bool {
+		return k.kind != "Backup" || !backupsAbsent.Load()
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -281,6 +287,7 @@ func TestStateSubscriberToleratesAbsentCRD(t *testing.T) {
 	found := waitForStateUpdate(t, sender, "Backup", "nightly-2026", 2*time.Second)
 	if found == nil {
 		t.Fatal("expected a STATE_UPDATE for the late-installed Backup CRD")
+		return
 	}
 	if found.APIGroup != "velero.io" {
 		t.Errorf("expected api_group=velero.io, got %q", found.APIGroup)
@@ -310,6 +317,7 @@ func TestStateSubscriberGatekeeperConstraintDiscovery(t *testing.T) {
 
 	subscriber := NewStateSubscriber(client, sender, logger)
 	subscriber.SetMetadataClient(mc)
+	subscriber.crdAvailable = func(metadataKind) bool { return true }
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -328,6 +336,7 @@ func TestStateSubscriberGatekeeperConstraintDiscovery(t *testing.T) {
 	found := waitForStateUpdate(t, sender, "Constraint", "require-team-label", 3*time.Second)
 	if found == nil {
 		t.Fatal("expected a STATE_UPDATE with normalized kind Constraint for the discovered gatekeeper resource")
+		return
 	}
 	if found.APIGroup != "constraints.gatekeeper.sh" {
 		t.Errorf("expected api_group=constraints.gatekeeper.sh, got %q", found.APIGroup)

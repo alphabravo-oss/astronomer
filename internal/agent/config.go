@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
+	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
+	"helm.sh/helm/v3/pkg/cli"
 )
 
 // caCertMountPath is where the install manifest mounts the CA Secret
@@ -48,12 +52,20 @@ type AgentConfig struct {
 	// credential material.
 	CredentialSource string `mapstructure:"-"`
 
-	ReconnectBackoff  int    `mapstructure:"reconnect_backoff"`  // Base backoff seconds (default 5)
-	MaxReconnect      int    `mapstructure:"max_reconnect"`      // Max backoff seconds (default 300)
-	HeartbeatInterval int    `mapstructure:"heartbeat_interval"` // Seconds (default 30)
-	MetricsInterval   int    `mapstructure:"metrics_interval"`   // Seconds (default 60)
-	HealthAddr        string `mapstructure:"health_addr"`        // Health server address (default :8081)
-	PrivilegeProfile  string `mapstructure:"privilege_profile"`  // viewer|operator|namespace-viewer|namespace-operator|custom|admin
+	ReconnectBackoff     int                `mapstructure:"reconnect_backoff"`  // Base backoff seconds (default 5)
+	MaxReconnect         int                `mapstructure:"max_reconnect"`      // Max backoff seconds (default 300)
+	HeartbeatInterval    int                `mapstructure:"heartbeat_interval"` // Seconds (default 30)
+	MetricsInterval      int                `mapstructure:"metrics_interval"`   // Seconds (default 60)
+	HealthAddr           string             `mapstructure:"health_addr"`        // Health server address (default :8081)
+	PrivilegeProfile     string             `mapstructure:"privilege_profile"`  // viewer|operator|namespace-viewer|namespace-operator|custom|admin
+	Environment          string             `mapstructure:"env"`                // OTel deployment.environment identity
+	Insecure             bool               `mapstructure:"-"`                  // Explicit local-development plaintext transport override
+	InCluster            bool               `mapstructure:"-"`                  // Captured once from the process environment
+	HelmRuntime          helmruntime.Config `mapstructure:"-"`                  // Captured Helm SDK process contract
+	OTELExporterEndpoint string             `mapstructure:"-"`
+	OTELExporterInsecure bool               `mapstructure:"-"`
+	OTELExporterHeaders  string             `mapstructure:"-"`
+	OTELSamplerRatio     float64            `mapstructure:"-"`
 
 	// In-flight caps on inbound tunnel dispatch. readLoop spawns one goroutine
 	// per message; these bound how many may run at once so a burst of proxied
@@ -65,7 +77,7 @@ type AgentConfig struct {
 	//     exec, log tails, Helm operations), which must not share a bound with
 	//     the unary ones or a handful of open watches would starve every API call.
 	// Env: ASTRONOMER_MAX_INFLIGHT_REQUESTS, ASTRONOMER_MAX_INFLIGHT_STREAMS.
-	MaxInflightRequests int `mapstructure:"max_inflight_requests"` // default 16
+	MaxInflightRequests int `mapstructure:"max_inflight_requests"` // default 64
 	MaxInflightStreams  int `mapstructure:"max_inflight_streams"`  // default 256
 
 	// kube-apiserver audit-log forwarding (opt-in; disabled by default).
@@ -126,6 +138,17 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	_, privilegeProfileExplicit := os.LookupEnv("ASTRONOMER_PRIVILEGE_PROFILE")
 	_, identityLayoutConfigured := os.LookupEnv("ASTRONOMER_IDENTITY_TOKEN_SECRET_NAME")
 	_, legacyTokenEnvironmentConfigured := os.LookupEnv("ASTRONOMER_AGENT_TOKEN")
+	kubernetesServiceHostConfigured := strings.TrimSpace(os.Getenv("KUBERNETES_SERVICE_HOST")) != ""
+	insecureConfigured := os.Getenv("ASTRONOMER_INSECURE") == "true"
+	helmRuntime := helmruntime.FromSettings(cli.New(), os.Getenv("HELM_DRIVER"))
+	otelSamplerRatio := 0.05
+	if raw := strings.TrimSpace(os.Getenv("OTEL_TRACES_SAMPLER_ARG")); raw != "" {
+		parsed, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parse OTEL_TRACES_SAMPLER_ARG: %w", err)
+		}
+		otelSamplerRatio = parsed
+	}
 	v := envconfig.NewViper("ASTRONOMER")
 	envconfig.SetDefaults(v,
 		envconfig.Default{Key: "server_url", Value: ""},
@@ -146,6 +169,7 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		envconfig.Default{Key: "metrics_interval", Value: 60},
 		envconfig.Default{Key: "health_addr", Value: ":8081"},
 		envconfig.Default{Key: "privilege_profile", Value: agenttemplate.PrivilegeProfileViewer},
+		envconfig.Default{Key: "env", Value: "managed-cluster"},
 		envconfig.Default{Key: "max_inflight_requests", Value: defaultMaxInflightRequests},
 		envconfig.Default{Key: "max_inflight_streams", Value: defaultMaxInflightStreams},
 		envconfig.Default{Key: "audit_enabled", Value: false},
@@ -169,6 +193,13 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	}
 	cfg.IdentityLayoutConfigured = identityLayoutConfigured
 	cfg.LegacyLayoutConfigured = !identityLayoutConfigured && legacyTokenEnvironmentConfigured
+	cfg.InCluster = kubernetesServiceHostConfigured
+	cfg.Insecure = insecureConfigured
+	cfg.HelmRuntime = helmRuntime
+	cfg.OTELExporterEndpoint = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	cfg.OTELExporterInsecure, _ = strconv.ParseBool(strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_INSECURE")))
+	cfg.OTELExporterHeaders = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS"))
+	cfg.OTELSamplerRatio = otelSamplerRatio
 
 	if cfg.ServerURL == "" {
 		return nil, fmt.Errorf("ASTRONOMER_SERVER_URL is required")
@@ -209,7 +240,7 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	// in cleartext. The ASTRONOMER_INSECURE=true escape hatch is for local dev
 	// only and logs loudly so it can never be a silent production default.
 	if !strings.HasPrefix(cfg.ServerURL, "https://") && !strings.HasPrefix(cfg.ServerURL, "wss://") {
-		if os.Getenv("ASTRONOMER_INSECURE") != "true" {
+		if !cfg.Insecure {
 			return nil, fmt.Errorf("ASTRONOMER_SERVER_URL must use https:// or wss://; got %q (set ASTRONOMER_INSECURE=true to override)", cfg.ServerURL)
 		}
 		log.Warn("INSECURE: plaintext ServerURL allowed only because ASTRONOMER_INSECURE=true; the agent token and tunnel traffic are unencrypted", "server_url", cfg.ServerURL)
@@ -229,6 +260,22 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	cfg.SystemOIDCIdentity = strings.TrimSpace(cfg.SystemOIDCIdentity)
 
 	return cfg, nil
+}
+
+// LoadUpgradeWatchdogOptions reads the standalone watchdog command's process
+// contract into a typed value. Runtime watchdog logic receives only this value.
+func LoadUpgradeWatchdogOptions() UpgradeWatchdogOptions {
+	opts := UpgradeWatchdogOptions{
+		Namespace:     os.Getenv(envWatchdogNamespace),
+		Deployment:    os.Getenv(envWatchdogDeployment),
+		OperationID:   os.Getenv(envWatchdogOperationID),
+		TargetImage:   os.Getenv(envWatchdogTargetImage),
+		RollbackImage: os.Getenv(envWatchdogRollbackImage),
+	}
+	if seconds, err := strconv.Atoi(strings.TrimSpace(os.Getenv(envWatchdogRolloutTimeout))); err == nil && seconds > 0 {
+		opts.RolloutTimeout = time.Duration(seconds) * time.Second
+	}
+	return opts
 }
 
 // resolveConfiguredPrivilegeProfile applies the same fail-closed profile

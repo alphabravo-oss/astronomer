@@ -18,7 +18,7 @@ metadata:
     {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
 spec:
   parentRefs:
-    - name: {{ include "astronomer.fullname" . }}
+    {{- include "astronomer.gateway.parentRef" . | nindent 4 }}
   hostnames:
     {{- range .Values.gateway.hosts }}
     - {{ . | quote }}

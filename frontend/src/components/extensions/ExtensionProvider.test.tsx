@@ -15,7 +15,7 @@ import type {
   ExtensionMountsResponse,
 } from "@/lib/api/extensions";
 
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api/feature-flags", () => ({
   __esModule: true,
   getFeatureFlags: vi.fn().mockResolvedValue({ "feature.extensions": true }),
 }));

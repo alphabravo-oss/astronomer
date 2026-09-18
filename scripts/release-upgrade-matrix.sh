@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+. scripts/lib/docker-test-endpoint.sh
 
 FIXTURE_DIR="scripts/testdata/upgrade-fixtures"
 mapfile -t FIXTURES < <(find "$FIXTURE_DIR" -maxdepth 1 -name '*.json' -type f | sort)
@@ -50,7 +51,7 @@ run_major() {
   local major="$1" container="astronomer-upgrade-matrix-pg${1}-$$" port
   docker run -d --rm --name "$container" \
     -e POSTGRES_PASSWORD=astro -e POSTGRES_USER=astro -e POSTGRES_DB=postgres \
-    -p 127.0.0.1::5432 "pgvector/pgvector:pg${major}" >/dev/null
+    -p "${DOCKER_TEST_BIND_HOST}::5432" "pgvector/pgvector:pg${major}" >/dev/null
   ACTIVE_CONTAINERS+=("$container")
   for _ in $(seq 1 60); do
     docker exec "$container" pg_isready -U astro -d postgres >/dev/null 2>&1 && break
@@ -67,7 +68,7 @@ run_major() {
     cluster_id="$(jq -r '.cluster_id' "$fixture")"
     database_name="fixture_${major}_${release_line//./_}"
     docker exec "$container" createdb -U astro "$database_name"
-    database_url="postgres://astro:astro@127.0.0.1:${port}/${database_name}?sslmode=disable"
+    database_url="postgres://astro:astro@${DOCKER_TEST_CONNECT_HOST}:${port}/${database_name}?sslmode=disable"
 
     echo "PostgreSQL ${major}: ${release_line} schema ${schema_version} -> ${TARGET_SCHEMA}"
     "$MIGRATE_BIN" -database "$database_url" -path internal/db/migrations up "$schema_version"
@@ -88,7 +89,7 @@ run_major() {
   local concurrent_db="concurrent_${major}" concurrent_url pid_a pid_b status_a status_b
   concurrent_db="concurrent_${major}"
   docker exec "$container" createdb -U astro "$concurrent_db"
-  concurrent_url="postgres://astro:astro@127.0.0.1:${port}/${concurrent_db}?sslmode=disable"
+  concurrent_url="postgres://astro:astro@${DOCKER_TEST_CONNECT_HOST}:${port}/${concurrent_db}?sslmode=disable"
   echo "PostgreSQL ${major}: concurrent migration installers serialize"
   "$MIGRATE_BIN" -database "$concurrent_url" -path internal/db/migrations up >"$ARTIFACT_DIR/concurrent-${major}-a.log" 2>&1 &
   pid_a=$!
@@ -112,7 +113,7 @@ run_major() {
   docker exec "$container" createdb -U astro "$interrupt_db"
   docker exec "$container" psql -X -U astro -d "$interrupt_db" -v ON_ERROR_STOP=1 \
     -c 'CREATE TABLE migration_test_control (should_sleep boolean NOT NULL); INSERT INTO migration_test_control VALUES (true);' >/dev/null
-  interrupt_url="postgres://astro:astro@127.0.0.1:${port}/${interrupt_db}?sslmode=disable"
+  interrupt_url="postgres://astro:astro@${DOCKER_TEST_CONNECT_HOST}:${port}/${interrupt_db}?sslmode=disable"
   echo "PostgreSQL ${major}: interrupted transactional migration rolls back and retries cleanly"
   "$MIGRATE_BIN" -database "$interrupt_url" -path scripts/testdata/migration-interruption up >"$ARTIFACT_DIR/interruption-${major}.log" 2>&1 &
   interrupt_pid=$!

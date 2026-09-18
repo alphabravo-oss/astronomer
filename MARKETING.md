@@ -89,7 +89,7 @@ The deeper issue is that most tooling treats the individual cluster as the unit 
 
 ## 3. Capabilities at a glance
 
-- **Fleet management.** Adopt existing clusters and provision new ones, then see and operate all of them from one console.
+- **Fleet management.** Adopt existing clusters, then see and operate all of them from one console.
 - **GitOps delivery.** Declarative, auditable application and platform delivery with continuous reconciliation.
 - **Secure agent architecture.** A lightweight in-cluster agent connects out over a single tunnel, with no inbound firewall holes and no exposed cluster APIs.
 - **Tools catalog.** Install and manage platform components through a clean configuration experience with live progress.
@@ -109,7 +109,7 @@ Each pillar below is written to stand alone. Every one includes what it is, the 
 
 ### Fleet management and cluster adoption
 
-**What it is.** Astronomer is fleet-first. Adopt a cluster you already run, or stand up a new one, and from that moment it appears in a single inventory alongside everything else you operate. Each cluster carries its real status, node inventory, workloads, installed components, distribution, Kubernetes version, and security posture, all visible without juggling contexts or credentials.
+**What it is.** Astronomer is fleet-first. Adopt a cluster you already run and it appears in a single inventory alongside everything else you operate. Each cluster carries its real status, node inventory, workloads, installed components, distribution, Kubernetes version, and security posture, all visible without juggling contexts or credentials.
 
 **Key features.**
 - Adopt existing clusters in minutes, regardless of where they run.

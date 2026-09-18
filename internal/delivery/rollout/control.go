@@ -68,23 +68,13 @@ type Controller interface {
 }
 
 type PostgresController struct {
-	pool         *pgxpool.Pool
-	now          func() time.Time
-	requireAudit bool
-}
-
-func (c *PostgresController) RequireTransactionalAudit() {
-	if c != nil {
-		c.requireAudit = true
-	}
+	pool *pgxpool.Pool
+	now  func() time.Time
 }
 
 func (c *PostgresController) persistAudit(ctx context.Context, queries *sqlc.Queries, intent audit.Intent, updated sqlc.DeliveryRollout) (bool, error) {
 	if intent.IsZero() {
-		if c.requireAudit {
-			return false, audit.ErrOutboxUnavailable
-		}
-		return false, nil
+		return false, audit.ErrOutboxUnavailable
 	}
 	if intent.Event.Detail == nil {
 		intent.Event.Detail = map[string]any{}
@@ -109,6 +99,9 @@ func NewPostgresController(pool *pgxpool.Pool, now func() time.Time) (*PostgresC
 }
 
 func (c *PostgresController) Act(ctx context.Context, request ActionRequest) (ControlResult, error) {
+	if request.Audit.IsZero() {
+		return ControlResult{}, audit.ErrOutboxUnavailable
+	}
 	if request.ProjectID == uuid.Nil || request.RolloutID == uuid.Nil || request.ExpectedFence < 1 {
 		return ControlResult{}, fail(CodeInvalidInput, "action", "project, rollout, and positive If-Match fence are required")
 	}
@@ -225,6 +218,9 @@ func (c *PostgresController) Act(ctx context.Context, request ActionRequest) (Co
 }
 
 func (c *PostgresController) Approve(ctx context.Context, request ApprovalRequest) (ControlResult, error) {
+	if request.Audit.IsZero() {
+		return ControlResult{}, audit.ErrOutboxUnavailable
+	}
 	if request.ProjectID == uuid.Nil || request.RolloutID == uuid.Nil || request.ExpectedFence < 1 || request.Cohort < -1 {
 		return ControlResult{}, fail(CodeInvalidInput, "approval", "project, rollout, positive fence, and cohort >= -1 are required")
 	}

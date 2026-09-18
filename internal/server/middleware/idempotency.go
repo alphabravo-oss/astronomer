@@ -32,10 +32,20 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/go-chi/chi/v5"
 )
 
 // idempotencyTTL is the default lifetime of a cached response. Long enough
@@ -50,16 +60,19 @@ const idempotencyTTL = 60 * time.Second
 // is generous.
 const idempotencyMaxBodyBytes = 1 << 20 // 1 MiB
 
+var errIdempotencyBodyTooLarge = errors.New("request body exceeds idempotency limit")
+
 // idempotencyEntry is a completed-or-in-flight cached response. While
 // done==nil the first request is still running and concurrent retries wait
 // on it; once closed, status/header/body are safe to replay.
 type idempotencyEntry struct {
-	done      chan struct{}
-	status    int
-	header    http.Header
-	body      []byte
-	truncated bool
-	storedAt  time.Time
+	done          chan struct{}
+	requestDigest string
+	status        int
+	header        http.Header
+	body          []byte
+	truncated     bool
+	storedAt      time.Time
 }
 
 // idempotencyStore is the keyed in-memory cache with a mutex + janitor,
@@ -89,19 +102,19 @@ func newIdempotencyStore(ttl time.Duration, now func() time.Time) *idempotencySt
 // the first (and therefore responsible for running the handler and filling
 // the entry); a false bool means an existing fresh entry was found and
 // should be waited on / replayed.
-func (s *idempotencyStore) begin(key string) (*idempotencyEntry, bool) {
+func (s *idempotencyStore) begin(key, requestDigest string) (entry *idempotencyEntry, first, conflict bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if e, ok := s.entries[key]; ok {
 		// Expired entries are treated as absent so a stale key doesn't pin a
 		// response forever; the janitor also sweeps these.
 		if s.now().Sub(e.storedAt) < s.ttl || isInFlight(e) {
-			return e, false
+			return e, false, e.requestDigest != requestDigest
 		}
 	}
-	e := &idempotencyEntry{done: make(chan struct{}), storedAt: s.now()}
+	e := &idempotencyEntry{done: make(chan struct{}), requestDigest: requestDigest, storedAt: s.now()}
 	s.entries[key] = e
-	return e, true
+	return e, true, false
 }
 
 func isInFlight(e *idempotencyEntry) bool {
@@ -235,8 +248,21 @@ func idempotencyWith(ctx context.Context, ttl time.Duration, now func() time.Tim
 				next.ServeHTTP(w, r)
 				return
 			}
+			requestDigest, err := idempotencyRequestDigest(r)
+			if err != nil {
+				if errors.Is(err, errIdempotencyBodyTooLarge) {
+					writeIdempotencyError(w, http.StatusRequestEntityTooLarge, "request_too_large", "Request body exceeds the idempotency limit")
+					return
+				}
+				writeIdempotencyError(w, http.StatusBadRequest, "invalid_request", "Unable to read request body")
+				return
+			}
 
-			entry, first := store.begin(key)
+			entry, first, conflict := store.begin(key, requestDigest)
+			if conflict {
+				writeIdempotencyError(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key was already used for a different request")
+				return
+			}
 			if !first {
 				// A concurrent first request may still be running; wait for
 				// it (bounded — the handler is under the per-route timeout),
@@ -278,6 +304,71 @@ func idempotencyWith(ctx context.Context, ttl time.Duration, now func() time.Tim
 			}
 		})
 	}
+}
+
+func writeIdempotencyError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{"code": code, "message": message},
+	})
+}
+
+func idempotencyRequestDigest(r *http.Request) (string, error) {
+	if r == nil {
+		return "", errors.New("request is nil")
+	}
+	if r.ContentLength > idempotencyMaxBodyBytes {
+		return "", errIdempotencyBodyTooLarge
+	}
+	var body []byte
+	if r.Body != nil {
+		var err error
+		body, err = io.ReadAll(io.LimitReader(r.Body, idempotencyMaxBodyBytes+1))
+		if err != nil {
+			return "", err
+		}
+		if len(body) > idempotencyMaxBodyBytes {
+			return "", errIdempotencyBodyTooLarge
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+	}
+
+	hash := sha256.New()
+	writeDigestPart := func(value string) {
+		_, _ = fmt.Fprintf(hash, "%d:", len(value))
+		_, _ = io.WriteString(hash, value)
+	}
+	writeDigestPart("astronomer-idempotency-request-v1")
+	writeDigestPart(strings.ToUpper(r.Method))
+	writeDigestPart(canonicalRequestRoute(r))
+	writeDigestPart(canonicalQuery(r))
+	_, _ = fmt.Fprintf(hash, "%d:", len(body))
+	_, _ = hash.Write(body)
+	return "v1:sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func canonicalRequestRoute(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	if routeContext := chi.RouteContext(r.Context()); routeContext != nil {
+		if pattern := strings.TrimSpace(routeContext.RoutePattern()); pattern != "" {
+			return pattern
+		}
+	}
+	return r.URL.EscapedPath()
+}
+
+func canonicalQuery(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	values := r.URL.Query()
+	for key := range values {
+		sort.Strings(values[key])
+	}
+	return values.Encode()
 }
 
 // replayIdempotent writes a cached entry to a fresh response. A truncated
@@ -328,8 +419,8 @@ func idempotencyKey(r *http.Request) string {
 		return ""
 	}
 	userScope := "anonymous"
-	if u, ok := GetAuthenticatedUser(r.Context()); ok && u != nil {
+	if u, ok := reqctx.AuthenticatedUser(r.Context()); ok && u != nil {
 		userScope = "u:" + u.ID
 	}
-	return strings.Join([]string{userScope, r.Method, r.URL.EscapedPath(), hdr}, ":")
+	return strings.Join([]string{userScope, strings.ToUpper(r.Method), canonicalRequestRoute(r), hdr}, ":")
 }

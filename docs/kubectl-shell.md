@@ -38,8 +38,8 @@ break-glass debug session — and any request that does not opt in — gets
 `get/list/watch` only, even though opening the shell already required the
 `clusters:update` route gate.
 
-The operator's *granted* verbs against `clusters/{id}` translate to the
-in-cluster Role's verbs as follows:
+The requested elevation bounds the available verbs. Every resource and verb
+is then intersected with the caller's effective grants for this cluster:
 
 | Request                                | In-cluster verbs                       | Scope     |
 | -------------------------------------- | -------------------------------------- | --------- |
@@ -53,16 +53,17 @@ Asking to elevate without the matching RBAC fails **closed** to read-only
 `get/list/watch`). The granted verbs and whether the request was elevated
 are recorded on the `kubectl.session.opened` audit row.
 
-This is intentionally coarse for v1. The use case is operator break-glass
-debugging across an entire managed cluster. Operators who need
-**per-namespace fine-grained control** should fall back to the existing
-`kubectl proxy` flow with their own kubeconfig
-(`/api/v1/clusters/{id}/generate-kubeconfig/`).
+Caller scoping is mandatory and cannot be disabled with a platform setting.
+Cluster-wide grants produce a ClusterRole; namespace-confined grants produce
+Roles bound only in the permitted namespaces. Confined sessions remain read-only
+and use the intersection of grants across those namespaces. Missing authorization
+infrastructure denies the shell.
 
-A v2 follow-on can mirror per-namespace project memberships into namespaced
-`RoleBindings` instead of the cluster-wide grant. The migration-065 schema
-already accommodates this (the `sa_namespace` column is `kube-system` for
-v1 but writable, and the manifest builder is parameterized).
+`clusters:update` permits opening the shell but grants no implicit access to
+Pods, ConfigMaps, Secrets, or other Kubernetes objects. Secret `read`, `list`, and
+`watch` grants independently permit Kubernetes `get`, `list`, and `watch`.
+Unknown resource families are omitted, and non-superuser roles never contain
+wildcard resources. Pod exec and log access require their dedicated permissions.
 
 ## Lifecycle caps
 

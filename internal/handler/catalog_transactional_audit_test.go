@@ -3,12 +3,8 @@ package handler
 import (
 	"context"
 	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -45,6 +42,7 @@ type stagedCatalogMutationTx struct {
 	idemOp   sqlc.CatalogOperation
 	audits   []sqlc.UpsertAuditOutboxParams
 	tasks    []sqlc.UpsertTaskOutboxParams
+	deleted  int64
 	taskErr  error
 	auditErr error
 }
@@ -96,6 +94,30 @@ func (tx *stagedCatalogMutationTx) UpsertAuditOutbox(_ context.Context, arg sqlc
 	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
 }
 
+func (tx *stagedCatalogMutationTx) DeleteFailedInstallationsByCluster(_ context.Context, _ uuid.UUID) (int64, error) {
+	return tx.deleted, nil
+}
+
+func TestCatalogDeleteFailedAppsCommitsAuditWithDeletion(t *testing.T) {
+	clusterID := uuid.New()
+	tx := &stagedCatalogMutationTx{deleted: 3}
+	h := NewCatalogHandler(nil)
+	h.SetRunTx(func(_ context.Context, fn func(CatalogMutationTx) error) error { return fn(tx) })
+	router := chi.NewRouter()
+	router.Delete("/api/v1/clusters/{cluster_id}/apps/failed/", h.DeleteFailedClusterApps)
+	request := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/apps/failed/", nil)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"deleted":3`) {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if len(tx.audits) != 1 || tx.audits[0].Action != "catalog.installations.delete_failed" {
+		t.Fatalf("audit events=%+v", tx.audits)
+	}
+}
+
 func TestCatalogStateOperationAndAuditCommitTogether(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -124,7 +146,7 @@ func TestCatalogStateOperationAndAuditCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/c/installations/", nil)
 			params := sqlc.CreateInstalledChartParams{ClusterID: uuid.New(), ReleaseName: "payments", Namespace: "apps", Status: "pending_install"}
 
-			_, err := executeCatalogMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q CatalogMutationTx) (catalogMutationResult[sqlc.InstalledChart], error) {
 					row, mutationErr := q.CreateInstalledChart(r.Context(), params)
 					if mutationErr != nil {
@@ -133,12 +155,8 @@ func TestCatalogStateOperationAndAuditCommitTogether(t *testing.T) {
 					op, mutationErr := createCatalogOperation(r.Context(), q, "installed_chart", row.ID.String(), "install", catalogOperationEnvelope{InstalledChartID: row.ID.String(), ClusterID: row.ClusterID.String()}, sqlc.CreateCatalogOperationParams{}.CreatedByID)
 					return catalogMutationResult[sqlc.InstalledChart]{row: row, op: op}, mutationErr
 				},
-				func() (catalogMutationResult[sqlc.InstalledChart], error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return catalogMutationResult[sqlc.InstalledChart]{}, nil
-				},
-				func(result catalogMutationResult[sqlc.InstalledChart]) clusterAuditEvent {
-					return clusterAuditEvent{action: "catalog.installation.create", resourceType: "installed_chart", resourceID: result.row.ID.String(), status: http.StatusAccepted, detail: map[string]any{"operation_id": result.op.ID.String()}}
+				func(result catalogMutationResult[sqlc.InstalledChart]) mutationAuditEvent {
+					return mutationAuditEvent{action: "catalog.installation.create", resourceType: "installed_chart", resourceID: result.row.ID.String(), status: http.StatusAccepted, detail: map[string]any{"operation_id": result.op.ID.String()}}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -279,7 +297,7 @@ func TestCatalogCreateReplayCannotCommitOrphanInstallation(t *testing.T) {
 	params := sqlc.CreateInstalledChartParams{ClusterID: uuid.New(), ReleaseName: "payments", Namespace: "apps", Status: "pending_install"}
 	opCtx := withOperationIdempotency(request, "catalog")
 
-	_, err := executeCatalogMutation(request, h,
+	_, err := executeMutation(request, h.runTx,
 		func(q CatalogMutationTx) (catalogMutationResult[sqlc.InstalledChart], error) {
 			row, mutationErr := q.CreateInstalledChart(request.Context(), params)
 			if mutationErr != nil {
@@ -288,11 +306,8 @@ func TestCatalogCreateReplayCannotCommitOrphanInstallation(t *testing.T) {
 			op, mutationErr := createCatalogOperation(opCtx, q, "installed_chart", row.ID.String(), "install", catalogOperationEnvelope{InstalledChartID: row.ID.String(), ClusterID: row.ClusterID.String()}, sqlc.CreateCatalogOperationParams{}.CreatedByID)
 			return catalogMutationResult[sqlc.InstalledChart]{row: row, op: op}, mutationErr
 		},
-		func() (catalogMutationResult[sqlc.InstalledChart], error) {
-			return catalogMutationResult[sqlc.InstalledChart]{}, nil
-		},
-		func(result catalogMutationResult[sqlc.InstalledChart]) clusterAuditEvent {
-			return clusterAuditEvent{action: "catalog.installation.create", resourceType: "installed_chart", resourceID: result.row.ID.String(), status: http.StatusAccepted}
+		func(result catalogMutationResult[sqlc.InstalledChart]) mutationAuditEvent {
+			return mutationAuditEvent{action: "catalog.installation.create", resourceType: "installed_chart", resourceID: result.row.ID.String(), status: http.StatusAccepted}
 		})
 	if !errors.Is(err, errCatalogOperationIdempotencyConflict) {
 		t.Fatalf("error = %v, want idempotency conflict", err)
@@ -334,7 +349,7 @@ func TestCatalogRepositoryURLCannotCarrySecrets(t *testing.T) {
 		{name: "fragment", raw: "https://charts.example.com/platform#secret", wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := validateCatalogRepositoryURL(tc.raw)
+			_, err := catalog.ValidateRepositoryURL(tc.raw)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
 			}
@@ -343,42 +358,9 @@ func TestCatalogRepositoryURLCannotCarrySecrets(t *testing.T) {
 }
 
 func TestCatalogHighRiskMutationsUseTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("catalog.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]bool{
-		"CreateRepo": false, "UpdateRepo": false, "DeleteRepo": false,
-		"CreateInstallation": false, "DeleteInstallation": false,
-		"UpgradeInstalledChart": false, "RollbackInstalledChart": false,
-		"RetryOperation": false,
-	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
-		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeCatalogMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
-	}
-	for name, found := range want {
-		if !found {
-			t.Errorf("%s does not use executeCatalogMutation", name)
-		}
-	}
+	assertHandlerMutationsUseExecutor(t, "CatalogHandler", []string{
+		"CreateRepo", "UpdateRepo", "DeleteRepo",
+		"CreateInstallation", "DeleteInstalledChart",
+		"UpgradeInstalledChart", "RollbackInstalledChart", "RetryOperation",
+	})
 }

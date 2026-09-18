@@ -33,11 +33,9 @@ func newBackupCmd() *cobra.Command {
 		newBackupCreateCmd(),
 		newBackupDeleteCmd(),
 		newBackupRestoreCmd(),
-		newBackupRunsCmd(),
 		newBackupRestoresCmd(),
 		newBackupSchedulesCmd(),
 		newBackupStorageCmd(),
-		newBackupStorageConfigsCmd(),
 		newBackupControllerStatusCmd(),
 	)
 	return cmd
@@ -273,34 +271,6 @@ func newBackupRestoreCmd() *cobra.Command {
 	}
 	cmd.Flags().StringSliceVar(&includedNamespaces, "included-namespaces", nil, "namespaces to restore")
 	cmd.Flags().StringToStringVar(&namespaceMapping, "namespace-mapping", nil, "old=new namespace remap")
-	return cmd
-}
-
-func newBackupRunsCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "runs",
-		Short: "List backup runs",
-		Args:  cobra.NoArgs,
-	}
-	limit, offset := bkLimitOffsetFlags(cmd)
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		client, err := newAstroClient(cmd)
-		if err != nil {
-			return err
-		}
-		params := &astroclient.GetBackupsRunsParams{
-			Limit:  bkPageParam(cmd, "limit", limit),
-			Offset: bkPageParam(cmd, "offset", offset),
-		}
-		resp, err := client.GetBackupsRunsWithResponse(cmd.Context(), params)
-		if err != nil {
-			return err
-		}
-		if resp.JSON200 == nil {
-			return bkSDKError(resp.HTTPResponse, resp.JSON500, resp.Body)
-		}
-		return renderSDK(cmd, resp.JSON200.Data)
-	}
 	return cmd
 }
 
@@ -834,11 +804,9 @@ func newStorageDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-// newStorageTestCmd hits the /storage/{id}/test endpoint. The
-// /storage/{id}/test-connection endpoint also exists; it is exposed below
-// as a hidden alias so both generated methods are reachable from the CLI.
+// newStorageTestCmd checks a storage configuration through the canonical
+// /storage/{id}/test-connection endpoint.
 func newStorageTestCmd() *cobra.Command {
-	var useTestConnection bool
 	cmd := &cobra.Command{
 		Use:   "test <id>",
 		Short: "Test a storage configuration's connectivity",
@@ -852,210 +820,7 @@ func newStorageTestCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if useTestConnection {
-				resp, err := client.PostBackupsStorageByIdTestConnectionWithResponse(cmd.Context(), id)
-				if err != nil {
-					return err
-				}
-				if resp.JSON200 == nil {
-					return bkSDKError(resp.HTTPResponse, bkFirstErr(resp.JSON400, resp.JSON404, resp.JSON500), resp.Body)
-				}
-				return renderSDK(cmd, resp.JSON200.Data)
-			}
-			resp, err := client.PostBackupsStorageByIdTestWithResponse(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if resp.JSON200 == nil {
-				return bkSDKError(resp.HTTPResponse, bkFirstErr(resp.JSON400, resp.JSON404, resp.JSON500), resp.Body)
-			}
-			return renderSDK(cmd, resp.JSON200.Data)
-		},
-	}
-	cmd.Flags().BoolVar(&useTestConnection, "connection", false, "use the /test-connection variant instead of /test")
-	return cmd
-}
-
-// ---------------------------------------------------------------------
-// storage-configs: list / get / create / update / delete / test-connection
-// ---------------------------------------------------------------------
-
-func newBackupStorageConfigsCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "storage-configs",
-		Short: "Manage backup storage configs (the /storage-configs endpoints)",
-	}
-	cmd.AddCommand(
-		newStorageConfigsListCmd(),
-		newStorageConfigsGetCmd(),
-		newStorageConfigsCreateCmd(),
-		newStorageConfigsUpdateCmd(),
-		newStorageConfigsDeleteCmd(),
-		newStorageConfigsTestConnCmd(),
-	)
-	return cmd
-}
-
-func newStorageConfigsListCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List storage configs",
-		Args:  cobra.NoArgs,
-	}
-	limit, offset := bkLimitOffsetFlags(cmd)
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		client, err := newAstroClient(cmd)
-		if err != nil {
-			return err
-		}
-		params := &astroclient.GetBackupsStorageConfigsParams{
-			Limit:  bkPageParam(cmd, "limit", limit),
-			Offset: bkPageParam(cmd, "offset", offset),
-		}
-		resp, err := client.GetBackupsStorageConfigsWithResponse(cmd.Context(), params)
-		if err != nil {
-			return err
-		}
-		if resp.JSON200 == nil {
-			return bkSDKError(resp.HTTPResponse, resp.JSON500, resp.Body)
-		}
-		return renderSDK(cmd, resp.JSON200.Data)
-	}
-	return cmd
-}
-
-func newStorageConfigsGetCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "get <id>",
-		Short: "Show one storage config",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := newAstroClient(cmd)
-			if err != nil {
-				return err
-			}
-			id, err := bkParseUUID(args[0])
-			if err != nil {
-				return err
-			}
-			resp, err := client.GetBackupsStorageConfigsByIdWithResponse(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if resp.JSON200 == nil {
-				return bkSDKError(resp.HTTPResponse, bkFirstErr(resp.JSON400, resp.JSON404), resp.Body)
-			}
-			return renderSDK(cmd, resp.JSON200.Data)
-		},
-	}
-	return cmd
-}
-
-func newStorageConfigsCreateCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create a storage config",
-		Args:  cobra.NoArgs,
-	}
-	build := storageConfigFlags(cmd)
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		client, err := newAstroClient(cmd)
-		if err != nil {
-			return err
-		}
-		body, err := build()
-		if err != nil {
-			return err
-		}
-		resp, err := client.PostBackupsStorageConfigsWithResponse(cmd.Context(), body)
-		if err != nil {
-			return err
-		}
-		if resp.JSON201 == nil {
-			return bkSDKError(resp.HTTPResponse, bkFirstErr(resp.JSON400, resp.JSON500), resp.Body)
-		}
-		return renderSDK(cmd, resp.JSON201.Data)
-	}
-	return cmd
-}
-
-func newStorageConfigsUpdateCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "update <id>",
-		Short: "Update a storage config (full replacement)",
-		Args:  cobra.ExactArgs(1),
-	}
-	build := storageConfigFlags(cmd)
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		client, err := newAstroClient(cmd)
-		if err != nil {
-			return err
-		}
-		id, err := bkParseUUID(args[0])
-		if err != nil {
-			return err
-		}
-		body, err := build()
-		if err != nil {
-			return err
-		}
-		resp, err := client.PutBackupsStorageConfigsByIdWithResponse(cmd.Context(), id, body)
-		if err != nil {
-			return err
-		}
-		if resp.JSON200 == nil {
-			return bkSDKError(resp.HTTPResponse, bkFirstErr(resp.JSON400, resp.JSON500), resp.Body)
-		}
-		return renderSDK(cmd, resp.JSON200.Data)
-	}
-	return cmd
-}
-
-func newStorageConfigsDeleteCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "delete <id>",
-		Aliases: []string{"rm"},
-		Short:   "Delete a storage config",
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := newAstroClient(cmd)
-			if err != nil {
-				return err
-			}
-			id, err := bkParseUUID(args[0])
-			if err != nil {
-				return err
-			}
-			resp, err := client.DeleteBackupsStorageConfigsByIdWithResponse(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if !bkOKStatus(resp.HTTPResponse) {
-				return bkSDKError(resp.HTTPResponse, bkFirstErr(resp.JSON400, resp.JSON500), resp.Body)
-			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Deleted storage config %s.\n", args[0])
-			return err
-		},
-	}
-	return cmd
-}
-
-func newStorageConfigsTestConnCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "test-connection <id>",
-		Aliases: []string{"test"},
-		Short:   "Test a storage config's connectivity",
-		Args:    cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, err := newAstroClient(cmd)
-			if err != nil {
-				return err
-			}
-			id, err := bkParseUUID(args[0])
-			if err != nil {
-				return err
-			}
-			resp, err := client.PostBackupsStorageConfigsByIdTestConnectionWithResponse(cmd.Context(), id)
+			resp, err := client.PostBackupsStorageByIdTestConnectionWithResponse(cmd.Context(), id)
 			if err != nil {
 				return err
 			}

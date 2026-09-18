@@ -129,6 +129,10 @@ const (
 	// TypeSnapshotChanged fires when a snapshot row is written.
 	TypeSnapshotChanged Type = "snapshot.changed"
 
+	// TypeServiceMeshChanged fires after a periodic or on-demand detection is
+	// durably stored. The payload is metadata-only and cluster-scoped.
+	TypeServiceMeshChanged Type = "service_mesh.changed"
+
 	// TypeAlertingChanged fires when an alerting row is written (payload
 	// `kind` field: rule|event|silence|baseline). Rule/silence CRUD and
 	// event ack/resolve publish from the API handler; alert-event
@@ -232,8 +236,20 @@ type Bus struct {
 }
 
 type subscription struct {
-	ch chan Event
+	ch     chan Event
+	filter Filter
 }
+
+// Filter is a non-blocking event delivery predicate evaluated before an event
+// enters a subscriber's bounded channel. Filters must be pure and fast: the
+// bus invokes them while holding its subscriber read lock so cancellation can
+// close channels without racing a publisher.
+type Filter func(Event) bool
+
+// AcceptAll is the explicit filter for internal taps that need every event.
+// Requiring a filter at every subscription site prevents new high-volume
+// consumers from accidentally subscribing to the entire fleet stream.
+func AcceptAll(Event) bool { return true }
 
 // redisWire is the payload published to Redis (stable JSON).
 type redisWire struct {
@@ -434,6 +450,10 @@ func (b *Bus) PublishRemote(t Type, data any) {
 func (b *Bus) broadcastLocal(e Event) {
 	b.mu.RLock()
 	for s := range b.subs {
+		if s.filter == nil || !s.filter(e) {
+			observability.RecordFilteredEvent()
+			continue
+		}
 		select {
 		case s.ch <- e:
 		default:
@@ -678,13 +698,16 @@ func (b *Bus) RelayStatus() RedisRelayStatus {
 	return status
 }
 
-// Subscribe returns a channel that receives events until ctx is cancelled.
+// Subscribe returns a channel that receives matching events until ctx is
+// cancelled. Filtering happens before the bounded subscriber channel, keeping
+// irrelevant fleet traffic from consuming channel capacity or waking the
+// subscriber.
 // Buffer is sized to absorb informer/publisher bursts (T6: 64→256 for the
 // P4.5 domain-publisher expansion); further bursts are dropped and counted
 // via RecordDroppedEvent (alertable; D7 threshold 0.1%/24h drives the
 // post-merge coalescing follow-up).
-func (b *Bus) Subscribe(ctx context.Context) <-chan Event {
-	s := &subscription{ch: make(chan Event, 256)}
+func (b *Bus) Subscribe(ctx context.Context, filter Filter) <-chan Event {
+	s := &subscription{ch: make(chan Event, 256), filter: filter}
 	b.mu.Lock()
 	b.subs[s] = struct{}{}
 	b.mu.Unlock()

@@ -30,6 +30,20 @@ function apiResponse<T>(data: T) {
   return { status: 200, data };
 }
 
+function paginated<T>(data: T[]) {
+  return {
+    data,
+    pagination: {
+      total: data.length,
+      limit: 25,
+      offset: 0,
+      has_more: false,
+      next_offset: null,
+      next_cursor: null,
+    },
+  };
+}
+
 const cluster = {
   id: CLUSTER_ID,
   name: CLUSTER_ID,
@@ -144,9 +158,9 @@ async function mockApi(page: Page) {
       return route.fulfill({ json: apiResponse(cluster) });
     }
     if (path === `/clusters/${CLUSTER_ID}/pods` && method === "GET") {
-      return route.fulfill({ json: apiResponse([podRow]) });
+      return route.fulfill({ json: paginated([podRow]) });
     }
-    // Raw pod list via the k8s proxy — seeds the pods TanStack DB collection
+    // Raw pod list via the k8s proxy — refreshes the pods Query cache
     // behind the Pods table (P4.7). The SSE watch that follows is allowed to
     // fail (the ticket mint below returns no ticket); the table renders from
     // this seed alone.
@@ -200,7 +214,9 @@ test("pod drilldown: row opens pod detail with containers + Logs tab renders", a
   await expect(page.getByText("Containers")).toBeVisible();
   await expect(page.getByText("nginx:1.25")).toBeVisible();
   // Pod summary fields.
-  await expect(page.getByText("node-1")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "node-1", exact: true }),
+  ).toBeVisible();
 
   // Logs tab is present (pods:logs allowed for admin) and renders the viewer.
   await page.getByRole("tab", { name: "Logs" }).click();

@@ -68,7 +68,11 @@ func TestNoCharlieCentralTransportImports(t *testing.T) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" || entry.Name() == "node_modules" || entry.Name() == "vendor" {
+			// Repository-local tool caches and metadata are not product source.
+			// Walking them makes this contract depend on which developer tools
+			// happen to be installed beside the checkout.
+			if (path != repositoryRoot && strings.HasPrefix(entry.Name(), ".")) ||
+				entry.Name() == "node_modules" || entry.Name() == "vendor" {
 				return filepath.SkipDir
 			}
 			return nil

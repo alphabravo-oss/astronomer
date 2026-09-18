@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -32,11 +34,11 @@ func scopeEnforceHarness(t *testing.T, required string, setCtx func(r *http.Requ
 
 func TestAPITokenScopeMiddleware_AllowsScopedRequest(t *testing.T) {
 	rr, called := scopeEnforceHarness(t, auth.ScopeWriteClusters, func(r *http.Request) *http.Request {
-		ctx := SetAuthenticatedUserForTest(r.Context(), &AuthenticatedUser{
+		ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 			ID:         "u1",
 			AuthMethod: "api_token",
 		})
-		ctx = SetAuthenticatedAPITokenForTest(ctx, &sqlc.ApiToken{
+		ctx = auth.WithAuthenticatedAPIToken(ctx, &sqlc.ApiToken{
 			Scopes: json.RawMessage(`["clusters:write","read"]`),
 		})
 		return r.WithContext(ctx)
@@ -51,11 +53,11 @@ func TestAPITokenScopeMiddleware_AllowsScopedRequest(t *testing.T) {
 
 func TestAPITokenScopeMiddleware_RejectsMissingScope(t *testing.T) {
 	rr, called := scopeEnforceHarness(t, auth.ScopeWriteClusters, func(r *http.Request) *http.Request {
-		ctx := SetAuthenticatedUserForTest(r.Context(), &AuthenticatedUser{
+		ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 			ID:         "u1",
 			AuthMethod: "api_token",
 		})
-		ctx = SetAuthenticatedAPITokenForTest(ctx, &sqlc.ApiToken{
+		ctx = auth.WithAuthenticatedAPIToken(ctx, &sqlc.ApiToken{
 			Scopes: json.RawMessage(`["read"]`),
 		})
 		return r.WithContext(ctx)
@@ -77,11 +79,11 @@ func TestAPITokenScopeMiddleware_RejectsMissingScope(t *testing.T) {
 
 func TestAPITokenScopeMiddleware_AdminScopeAllowsEverything(t *testing.T) {
 	rr, called := scopeEnforceHarness(t, auth.ScopeWriteRBAC, func(r *http.Request) *http.Request {
-		ctx := SetAuthenticatedUserForTest(r.Context(), &AuthenticatedUser{
+		ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 			ID:         "u1",
 			AuthMethod: "api_token",
 		})
-		ctx = SetAuthenticatedAPITokenForTest(ctx, &sqlc.ApiToken{
+		ctx = auth.WithAuthenticatedAPIToken(ctx, &sqlc.ApiToken{
 			Scopes: json.RawMessage(`["admin"]`),
 		})
 		return r.WithContext(ctx)
@@ -93,11 +95,11 @@ func TestAPITokenScopeMiddleware_AdminScopeAllowsEverything(t *testing.T) {
 
 func TestAPITokenScopeMiddleware_WildcardScopeAllowsEverything(t *testing.T) {
 	rr, called := scopeEnforceHarness(t, auth.ScopeWriteRBAC, func(r *http.Request) *http.Request {
-		ctx := SetAuthenticatedUserForTest(r.Context(), &AuthenticatedUser{
+		ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 			ID:         "u1",
 			AuthMethod: "api_token",
 		})
-		ctx = SetAuthenticatedAPITokenForTest(ctx, &sqlc.ApiToken{
+		ctx = auth.WithAuthenticatedAPIToken(ctx, &sqlc.ApiToken{
 			Scopes: json.RawMessage(`["*"]`),
 		})
 		return r.WithContext(ctx)
@@ -110,7 +112,7 @@ func TestAPITokenScopeMiddleware_WildcardScopeAllowsEverything(t *testing.T) {
 func TestAPITokenScopeMiddleware_JWTSessionBypassesScopeCheck(t *testing.T) {
 	rr, called := scopeEnforceHarness(t, auth.ScopeWriteClusters, func(r *http.Request) *http.Request {
 		// JWT session — no api_token in context; scope check must be a no-op.
-		ctx := SetAuthenticatedUserForTest(r.Context(), &AuthenticatedUser{
+		ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 			ID:         "u1",
 			AuthMethod: "jwt",
 		})
@@ -125,11 +127,11 @@ func TestAPITokenScopeMiddleware_EmptyScopesLegacyAllow(t *testing.T) {
 	// Pre-044 tokens carry `scopes: []` — must keep working so the
 	// rollout is opt-in per token.
 	rr, called := scopeEnforceHarness(t, auth.ScopeWriteClusters, func(r *http.Request) *http.Request {
-		ctx := SetAuthenticatedUserForTest(r.Context(), &AuthenticatedUser{
+		ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 			ID:         "u1",
 			AuthMethod: "api_token",
 		})
-		ctx = SetAuthenticatedAPITokenForTest(ctx, &sqlc.ApiToken{
+		ctx = auth.WithAuthenticatedAPIToken(ctx, &sqlc.ApiToken{
 			Scopes: json.RawMessage(`[]`),
 		})
 		return r.WithContext(ctx)
@@ -159,11 +161,11 @@ func requireWriteHarness(t *testing.T, method string, scopes json.RawMessage) (*
 	})
 	h := RequireWriteScopeForMutations(auth.ScopeWriteClusters)(inner)
 	req := httptest.NewRequest(method, "/api/v1/clusters/{cluster_id}/workloads/x/", nil)
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         "u1",
 		AuthMethod: "api_token",
 	})
-	ctx = SetAuthenticatedAPITokenForTest(ctx, &sqlc.ApiToken{Scopes: scopes})
+	ctx = auth.WithAuthenticatedAPIToken(ctx, &sqlc.ApiToken{Scopes: scopes})
 	req = req.WithContext(ctx)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
@@ -205,7 +207,7 @@ func TestAPITokenScopeMiddleware_NoTokenInContextBypass(t *testing.T) {
 	// auth middleware ran without DB queries. Must NOT crash; behave
 	// the same as the pre-044 deployment.
 	rr, called := scopeEnforceHarness(t, auth.ScopeWriteClusters, func(r *http.Request) *http.Request {
-		ctx := SetAuthenticatedUserForTest(r.Context(), &AuthenticatedUser{
+		ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 			ID:         "u1",
 			AuthMethod: "api_token",
 		})

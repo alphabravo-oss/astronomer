@@ -17,10 +17,39 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
+
+type templateApplyBindings struct{}
+
+func (templateApplyBindings) GetUserBindings(context.Context, string) ([]rbac.RoleBinding, error) {
+	return []rbac.RoleBinding{{IsSuperuser: true}}, nil
+}
+
+type templateApplyTx struct {
+	RBACMutationTx
+	params sqlc.ApplyProjectRoleTemplateParams
+	audit  sqlc.UpsertAuditOutboxParams
+}
+
+func (tx *templateApplyTx) ApplyProjectRoleTemplate(_ context.Context, params sqlc.ApplyProjectRoleTemplateParams) (sqlc.ApplyProjectRoleTemplateRow, error) {
+	tx.params = params
+	return sqlc.ApplyProjectRoleTemplateRow{
+		ID: uuid.New(), UserID: params.UserID, RoleID: uuid.New(), ProjectID: params.ProjectID,
+	}, nil
+}
+
+func (tx *templateApplyTx) UpsertAuditOutbox(_ context.Context, params sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	tx.audit = params
+	return sqlc.AuditOutbox{ID: params.ID}, nil
+}
 
 func TestListTemplates_NoCatalog503(t *testing.T) {
 	h := &RBACHandler{}
@@ -144,5 +173,43 @@ func TestGetTemplate_PlatformAdmin(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "platform-admin") {
 		t.Errorf("body missing template name; got %s", rr.Body.String())
+	}
+}
+
+func TestApplyProjectTemplateIsEscalationGuardedAuditedAndDigestAddressed(t *testing.T) {
+	cat, err := rbac.LoadCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &RBACHandler{}
+	h.SetTemplateCatalog(cat)
+	h.SetAuthorization(rbac.NewEngine(), templateApplyBindings{})
+	tx := &templateApplyTx{}
+	h.SetRunTx(func(_ context.Context, fn func(RBACMutationTx) error) error { return fn(tx) })
+
+	projectID, userID, actorID := uuid.New(), uuid.New(), uuid.New()
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", projectID.String())
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID.String()+"/apply-rbac-template/", strings.NewReader(`{"template_name":"workload-viewer","user_id":"`+userID.String()+`"}`))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: actorID.String(), AuthMethod: "jwt"}))
+	rec := httptest.NewRecorder()
+
+	h.ApplyProjectTemplate(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if tx.params.ProjectID != projectID || !tx.params.UserID.Valid || uuid.UUID(tx.params.UserID.Bytes) != userID {
+		t.Fatalf("apply params=%+v", tx.params)
+	}
+	if !tx.params.TemplateName.Valid || tx.params.TemplateName.String != "workload-viewer" || !tx.params.TemplateDigest.Valid || len(tx.params.TemplateDigest.String) != 64 {
+		t.Fatalf("template identity=%+v/%+v", tx.params.TemplateName, tx.params.TemplateDigest)
+	}
+	if tx.audit.Action != "template.apply" || tx.audit.ResourceType != "project_role_binding" {
+		t.Fatalf("audit=%+v", tx.audit)
+	}
+	if tx.params.UserID != (pgtype.UUID{Bytes: userID, Valid: true}) {
+		t.Fatalf("user id=%+v", tx.params.UserID)
 	}
 }

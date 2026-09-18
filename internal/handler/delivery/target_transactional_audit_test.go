@@ -61,13 +61,9 @@ func TestDeliveryTargetStateAndAuditCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/targets/", nil)
 			params := sqlc.CreateDeliveryTargetParams{ProjectID: uuid.New(), Name: "production", BundleVersionID: uuid.New()}
 
-			_, err := executeTargetMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q TargetMutationTx) (sqlc.DeliveryTarget, error) {
 					return q.CreateDeliveryTarget(r.Context(), params)
-				},
-				func() (sqlc.DeliveryTarget, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.DeliveryTarget{}, nil
 				},
 				func(row sqlc.DeliveryTarget) deliveryAuditEvent {
 					return deliveryAuditEvent{action: "delivery.target.created", resourceType: "delivery_target", resourceID: row.ID.String(), status: http.StatusCreated}
@@ -107,7 +103,7 @@ func TestEveryDeliveryTargetMutationUsesTransactionalExecutor(t *testing.T) {
 			}
 			switch fn := call.Fun.(type) {
 			case *ast.Ident:
-				if fn.Name == "executeTargetMutation" {
+				if fn.Name == "executeMutation" {
 					want[fnDecl.Name.Name] = true
 				}
 			case *ast.SelectorExpr:
@@ -120,7 +116,7 @@ func TestEveryDeliveryTargetMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeTargetMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

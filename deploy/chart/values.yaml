@@ -25,6 +25,43 @@ release:
   # the exact release manifest whose digest it binds.
   mirrorMapping: ""
 
+# Immutable application-store index synchronized by every clean install. A
+# release bumps this commit deliberately; mutable branches are rejected by the
+# server so catalog metadata cannot change without a chart/release change.
+catalog:
+  # Set false to disable curated application synchronization while retaining
+  # management of already-installed releases and operator-added repositories.
+  # The UI degrades to an explicit unavailable/empty catalog state.
+  enabled: true
+  sourceURL: "https://raw.githubusercontent.com/alphabravo-oss/astronomer-catalog/3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5/catalog.json"
+  # SHA-256 of the catalog document. HTTPS sources are rejected when their
+  # bytes do not match; OCI sources additionally require an @sha256 digest.
+  digest: "sha256:084aa9dec47d9612fdebd848737f53f9feb70e248a4e8e5ccbc93491e1f4ae0c"
+  # Longest-prefix rewrites. Both source and target must use HTTPS or OCI.
+  # Example: {"oci://ghcr.io/alphabravo-oss/astronomer-catalog":"oci://registry.internal/catalog"}
+  mirrors: {}
+  allowPrivateMirrors: false
+  proxy:
+    enabled: false
+    urlSecretRef:
+      name: ""
+      key: url
+  ca:
+    existingSecret: ""
+    key: ca.crt
+  signature:
+    # Signed catalogs must use a digest-pinned OCI source. Verification is
+    # performed in-process and offline; it never shells out to cosign.
+    required: false
+    provider: cosign_keyless
+    identity: ""
+    issuer: "https://token.actions.githubusercontent.com"
+    keyRef: ""
+    trustKeys:
+      # Keys are <keyRef>.pub for key verification; keyless verification uses
+      # trusted_root.json containing the pinned Fulcio/Rekor trusted root.
+      existingSecret: ""
+
 # =============================================================================
 # Container images
 # =============================================================================
@@ -36,6 +73,9 @@ image:
   registry: ""           # Empty registry = use local images (k3d-imported).
   pullPolicy: IfNotPresent
   pullSecrets: []
+  # Production sets this true and refuses every active image without an exact
+  # sha256 digest. Development keeps tag-based local-image workflows available.
+  requireDigest: false
   # F1 schema-skew guard: server and migrate ship the same DB schema and are
   # built from one commit, so their tags MUST match. The chart fails the render
   # when image.server.tag != image.migrate.tag (a mismatch can 503 the plane
@@ -48,23 +88,23 @@ image:
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""             # Published upgrades set the exact sha256 digest.
   worker:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
   migrate:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
 
 # =============================================================================
@@ -103,7 +143,7 @@ frontend:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: astronomer-frontend
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   hostAliases: []
@@ -190,6 +230,9 @@ server:
 # =============================================================================
 worker:
   replicaCount: 2
+  # Jobs per worker pod. Fleet sweeps have their own bounded fan-out; size the
+  # database pool for the resulting query concurrency.
+  concurrency: 32
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -242,8 +285,66 @@ worker:
 # Database / Cache
 # =============================================================================
 postgres:
+  # Empty preserves the legacy bundled.enabled switch. Explicit modes are:
+  # bundled (single-node development), cloudNativePG (chart-managed Cluster),
+  # or external (operator-provided DSN).
+  mode: ""
   bundled:
     enabled: true
+    # Development/qualification-only capacity for the bundled database. Keep
+    # this above the combined server + worker pool maxima when exercising a
+    # scaled local topology. Production forbids the bundled database.
+    maxConnections: 100
+  cloudNativePG:
+    clusterName: ""          # Empty derives <release>-postgres.
+    instances: 1             # Set 3 for HA production.
+    imageName: ghcr.io/cloudnative-pg/postgresql:17.6
+    storage:
+      # Longhorn is thin-provisioned, so this is a logical ceiling rather than
+      # eager disk consumption. 50Gi leaves practical room for WAL, indexes,
+      # upgrades, and retention on a durable management-plane database.
+      size: 50Gi
+      storageClassName: ""
+    walStorage:
+      enabled: false
+      size: 4Gi
+      storageClassName: ""
+    synchronousReplication:
+      enabled: false
+      number: 1
+    monitoring:
+      enablePodMonitor: false
+    # Optional continuous backup/PITR through the upstream CNPG-I Barman Cloud
+    # plugin. The plugin and referenced ObjectStore CR must be installed and
+    # managed separately; this chart never creates storage credentials.
+    barmanCloud:
+      enabled: false
+      pluginName: barman-cloud.cloudnative-pg.io
+      objectStoreName: ""
+      scheduledBackup:
+        enabled: false
+        # CloudNativePG uses a six-field cron expression (seconds first).
+        schedule: "0 0 2 * * *"
+        backupOwnerReference: self
+      recovery:
+        # Recovery bootstraps a new CNPG cluster; do not enable it on an
+        # initialized cluster. Leave targetTime empty for latest recovery.
+        enabled: false
+        sourceName: origin
+        objectStoreName: ""
+        serverName: ""
+        targetTime: ""
+    # PostgreSQL GUCs managed declaratively by CloudNativePG. Values must be
+    # strings. This leaves failover headroom above the application pools.
+    parameters:
+      max_connections: "200"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "4"
+        memory: 4Gi
   image:
     repository: postgres
     tag: 16-alpine
@@ -261,6 +362,13 @@ postgres:
   storage:
     size: 8Gi
     storageClassName: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 999
@@ -299,8 +407,10 @@ postgres:
     minimumWeeklyBackups: 12
     minimumMonthlyBackups: 6
   # pgxpool sizing for the server + worker processes (FEATURES-051126 T21).
-  # Zero / unset = use the binary's defaults (MaxConns=25, MinConns=5,
-  # MaxConnLifetime=30m, MaxConnIdleTime=5m, HealthCheckPeriod=30s).
+  # Zero / unset = use binary defaults. Server MaxConns=25; worker MaxConns is
+  # max(25, WORKER_CONCURRENCY+8), so queue concurrency cannot exhaust the
+  # whole pool by construction. Both use MinConns=5, MaxConnLifetime=30m,
+  # MaxConnIdleTime=5m, and HealthCheckPeriod=30s.
   #
   # Tuning guidance for 50+ managed clusters under load:
   #   pool:
@@ -315,8 +425,37 @@ postgres:
   pool: {}
 
 redis:
+  # Empty preserves bundled.enabled. Explicit modes are standalone,
+  # sentinel, or external. The engine is Valkey in both managed modes.
+  mode: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
   bundled:
     enabled: true
+  sentinel:
+    replicas: 3
+    sentinels: 3
+    masterName: astronomer
+    quorum: 2
+    downAfterMilliseconds: 5000
+    failoverTimeoutMilliseconds: 60000
+    parallelSyncs: 1
+    passwordSecretRef:
+      # Empty name = chart generates and manages <release>-valkey-auth.
+      # Set a name to use an externally managed Secret instead.
+      name: ""
+      key: password
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 2
+    topologySpread:
+      maxSkew: 1
+      whenUnsatisfiable: DoNotSchedule
   # Engine is Valkey (the BSD-licensed drop-in fork of Redis). Wire-compatible,
   # so the go-redis client and redis:// URLs are unchanged; the resource/service
   # stay named "redis" to avoid PVC and NetworkPolicy churn.
@@ -327,6 +466,12 @@ redis:
     registry: ""    # T23 air-gapped override; falls back to image.registry
   port: 6379
   storage:
+    # Keep the base claim size upgrade-compatible with pre-1.2 releases.
+    # StatefulSet volumeClaimTemplates are immutable, so increasing this
+    # default would make an otherwise ordinary Helm upgrade fail. New
+    # production HA installs request additional headroom in
+    # values-production.yaml; existing operators expand their PVCs through
+    # their storage provider rather than by changing this template.
     size: 2Gi
     storageClassName: ""
   podSecurityContext:
@@ -381,7 +526,6 @@ migrate:
     limits:
       cpu: 500m
       memory: 256Mi
-
 preflight:
   enabled: true
   image:
@@ -392,7 +536,7 @@ preflight:
     # Same image runs the in-browser kubectl shell pods, so air-gapped
     # operators only need to mirror one image for both surfaces.
     repository: astronomer-shell
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   # Read-only upgrade admission for external databases. Empty databases are
@@ -401,7 +545,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 26
+    targetVersion: 62
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -424,18 +568,26 @@ preflight:
 config:
   databaseURL: ""        # Defaults to postgres://USER:PASS@<release>-postgres:5432/<db>
   redisURL: ""           # Defaults to redis://<release>-redis:6379/0
-  env: development
-  debug: "true"
+  env: production
+  debug: "false"
   logLevel: info
-  allowedHosts: "*"
+  allowedHosts: ""
   corsAllowedOrigins: "http://astronomer.localtest.me"
   # Only these immediate reverse-proxy networks may assert X-Forwarded-For.
   # Empty is fail-closed: API-token CIDR policy uses the socket peer.
   trustedProxyCIDRs: []
+  # Per-authenticated-caller Kubernetes proxy token bucket. Keep the secure
+  # production defaults; load/capacity environments may raise these explicitly.
+  apiK8sProxyRateLimitRPS: 1
+  apiK8sProxyRateLimitBurst: 20
   # External URL of this install (e.g. http://astronomer.example.com:8080).
   # Seeded into platform_configuration.server_url on first boot. Leave empty
   # to skip the seed and set it later through platform settings.
   serverURL: ""
+  # Exact trust context embedded in every Astronomer JWT. Use install-specific
+  # values when signing keys are shared across environments.
+  jwtIssuer: "astronomer"
+  jwtAudience: "astronomer-browser"
   # Empty => derive from image.agent (registry-aware). This also accepts an
   # exact repository@sha256:digest; agentImageTag remains the release version.
   agentImageRepository: ""
@@ -477,11 +629,12 @@ config:
 # Flux-native continuous delivery
 # =============================================================================
 # Delivery protocol v2 is the only supported delivery engine in v1. It is not
-# a selector and there is no compatibility mode. Flux itself runs only inside
-# managed clusters from the signed distribution supplied during enrollment;
-# this management-plane chart never installs Flux controllers.
+# a selector and there is no compatibility mode. Flux runs inside every
+# delivery target. This chart bootstraps the pinned embedded distribution on
+# the local cluster; enrolled agents install it on downstream clusters.
 delivery:
   enabled: true
+  localFluxBootstrap: true
   compatibility:
     # These bounds mirror deploy/release/compatibility.yaml. Release automation
     # must keep the generated compatibility manifest authoritative and verify
@@ -581,6 +734,15 @@ delivery:
 dex:
   enabled: false
   replicaCount: 1
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  affinity:
+    enabled: true
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: ScheduleAnyway
   image:
     repository: dexidp/dex
     tag: v2.41.1
@@ -638,6 +800,8 @@ secrets:
   existingSecret: ""
   secretKeyKey: SECRET_KEY
   encryptionKeyKey: ASTRONOMER_ENCRYPTION_KEY
+  internalPSKKey: ASTRONOMER_INTERNAL_PSK
+  internalPSKPreviousKey: ASTRONOMER_INTERNAL_PSK_PREVIOUS
   postgresPasswordKey: POSTGRES_PASSWORD
   # REQUIRED (no default). The chart used to ship a working JWT signing key and
   # Fernet key here, which meant every default install was forgeable by anyone
@@ -652,6 +816,14 @@ secrets:
   # (rotation reencrypts all wrapped values). Generate
   # with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
   encryptionKey: ""
+  # Dedicated HMAC key for short-lived, body-bound requests between server
+  # replicas. Keep this separate from both JWT and Fernet keys. Generate with:
+  # openssl rand -base64 48
+  internalPSK: ""
+  # Verification-only predecessor accepted during a rolling key rotation. Set
+  # this to the old internalPSK while deploying a new current key, then clear it
+  # after every server replica has rolled. It never signs new requests.
+  internalPSKPrevious: ""
   githubClientID: ""
   githubClientSecret: ""
   googleClientID: ""
@@ -680,6 +852,8 @@ bootstrap:
   username: admin
   email: admin@astronomer.local
   password: ""
+  # Require the generated bootstrap credential to be changed after login.
+  forcePasswordChange: false
   # Offline-render-safe escape hatch (F8 / C-04). Point this at a pre-created Secret
   # (in the release namespace) with a `password` key and the chart will NOT
   # manage a bootstrap Secret of its own — the server reads the password
@@ -788,7 +962,16 @@ affinity: {}
 # =============================================================================
 gateway:
   enabled: true
+  # When true, this chart owns a Gateway. Set false to attach the rendered
+  # HTTPRoutes to a platform-managed Gateway (for example a shared public LB).
+  create: true
   className: nginx
+  # Required when create=false. Namespace defaults to the Helm release
+  # namespace when empty. sectionName is optional; omitting it lets Gateway API
+  # hostname matching attach the route to every compatible listener.
+  name: ""
+  namespace: ""
+  sectionName: ""
   annotations: {}
   hosts:
     - astronomer.localtest.me
@@ -826,6 +1009,11 @@ networkPolicy:
   # addresses to prove coverage. The policy allows only TCP 443/6443 here.
   kubernetesAPIEgressCIDRs: []
   identityProviderEgressCIDRs: []
+  # Dedicated destinations for the DR writer/restore reader and management log
+  # shipper. Optional workloads receive no catch-all egress from the legacy
+  # bucket; operators must name their actual dependency networks here.
+  objectStoreEgressCIDRs: []
+  loggingSinkEgressCIDRs: []
 
 # =============================================================================
 # Metrics scraping
@@ -887,10 +1075,20 @@ observability:
     # Comma-separated key=value list forwarded with every OTLP export.
     # Typical use: "Authorization=Bearer xyz" for hosted backends.
     headers: ""
-    # Head sampler ratio in [0.0, 1.0]. Empty/zero defaults to 0.05.
+    # Head sampler ratio in [0.0, 1.0]. Empty defaults to 0.05; the string
+    # "0" explicitly disables sampling.
     # Set to "1.0" while bootstrapping the trace pipeline so every
     # request appears; turn down once volume is acceptable.
     samplerRatio: ""
+    # Adopted clusters usually cannot resolve the management cluster's
+    # collector Service DNS. Configure a separately reachable OTLP/HTTP route
+    # for newly rendered agent manifests. Collector auth headers are never
+    # copied into those manifests.
+    agentEndpoint: ""
+    agentInsecure: false
+    # Empty defaults to 0.05; the string "0" explicitly disables agent
+    # sampling while preserving zero-sampling semantics end to end.
+    agentSamplerRatio: ""
 
 # =============================================================================
 # Management-plane DR (pg_dump -> S3)
@@ -923,12 +1121,19 @@ managementBackup:
   ttlSecondsAfterFinished: 86400
   # Local scratch space for the dump file. Tune up for large DBs.
   scratchSizeLimit: 8Gi
-  # Retention per tier. Daily is the rolling window; on Sundays the dump is
-  # also copied into weekly/, on the 1st of the month into monthly/.
+  # Retention runs as a distinct CronJob with credentials that are not mounted
+  # into the backup writer. Keep dryRun=true until its candidate list has been
+  # reviewed, then opt into deletions. Object Lock remains the final authority.
   retention:
+    enabled: true
+    schedule: "30 3 * * *"
+    dryRun: true
     daily: 30
     weekly: 12
     monthly: 6
+    credentialsSecretRef:
+      name: ""
+      key: "credentials"
   s3:
     # Required when enabled=true.
     bucket: ""
@@ -947,6 +1152,20 @@ managementBackup:
     credentialsSecretRef:
       name: ""
       key: "credentials"
+  # Production backups are accepted only when the target bucket has Object
+  # Lock enabled with a default retention rule at least this long. The writer
+  # validates that contract before pg_dump or any upload.
+  immutability:
+    mode: "objectLock"
+    minimumRetentionDays: 30
+  # One separately-held high-entropy secret protects both AES-256-GCM payload
+  # envelopes and the authenticated manifest. It must not be accessible to the
+  # object-store writer/retention principals outside this pod.
+  encryption:
+    sourceIdentity: ""
+    wrappingSecretRef:
+      name: ""
+      key: "passphrase"
   # ---------------------------------------------------------------------------
   # F4 (HIGH · DR): back up the Fernet/JWT encryption-key Secret WITH the DB.
   # ---------------------------------------------------------------------------
@@ -959,34 +1178,24 @@ managementBackup:
   # first, so the key is never written to S3 in plaintext next to the data it
   # protects. Key custody steps: docs/management-plane-dr-runbook.md.
   encryptionKeyBackup:
-    # Default on, but INERT until wrappingSecretRef.name is set (the chart
-    # refuses to upload the key in plaintext). When unset a NOTES/preflight
-    # warning fires so the DR gap is visible rather than silent.
+    # Default on, but the workload is inert until encryption.wrappingSecretRef
+    # and sourceIdentity are set. Production rejects disabling this because a
+    # database-only recovery point cannot decrypt application data.
     enabled: true
     # Independent in-cluster backup bundle Secret. Empty => use the runtime core
     # Secret and alias secrets.*KeyKey to canonical restore filenames. A nonempty
     # override is a separate contract and MUST already contain canonical keys
     # SECRET_KEY and ASTRONOMER_ENCRYPTION_KEY; all its other keys are preserved.
     secretName: ""
-    # Secret holding the wrapping passphrase used to encrypt the key bundle
-    # before upload. HOLD THIS SEPARATELY from the S3 backup credentials and the
-    # DB — ideally a different cloud account / KMS / offline vault. Whoever holds
-    # only the S3 bucket must NOT also hold this, or the separation is moot.
-    wrappingSecretRef:
-      name: ""
-      key: "passphrase"
     # S3 sub-tier (under <prefix>/<release>/) the wrapped key bundles land in.
     # Deliberately distinct from daily/weekly/monthly so key custody is separable.
     keyPrefix: "keys"
-    # How many wrapped key bundles to retain. Keys rotate rarely, so keep a
-    # generous history so an older dump can still be paired with its key.
-    retention: 30
-  # Image bundling postgresql-client + aws-cli. Built and published by
-  # Astronomer at ghcr.io/alphabravocompany/pgdump-s3; override to an
-  # internally mirrored image when air-gapped.
+  # First-party DR image bundling postgresql-client, aws-cli, and the audited
+  # authenticated-envelope helper. Override with a digest-pinned mirror when
+  # air-gapped.
   image:
-    repository: ghcr.io/alphabravocompany/pgdump-s3
-    tag: "16-awscli"
+    repository: ghcr.io/alphabravo-oss/astronomer-dr
+    tag: "v1.1.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
@@ -1061,6 +1270,22 @@ managementRestoreDrill:
     - clusters
     - projects
     - audit_log
+  # Delivery/catalog tables may legitimately be empty on a fresh install, but
+  # must still exist after restore. The drill checks these separately from the
+  # non-empty baseline above so DR coverage follows every schema addition.
+  requiredTables:
+    - delivery_catalogs
+    - catalog_blessed_charts
+    - delivery_application_versions
+    - delivery_sources
+    - component_bundles
+    - component_bundle_versions
+    - delivery_targets
+    - delivery_rollouts
+    - cluster_deployments
+    - delivery_controller_inventory
+    - delivery_configuration_templates
+    - delivery_override_sets
   # ---------------------------------------------------------------------------
   # F4 (b): prove the backed-up encryption key actually DECRYPTS the restored
   # data. Without this the drill can stay green while real DR is broken (the key
@@ -1073,20 +1298,13 @@ managementRestoreDrill:
     # A known Fernet-encrypted delivery credential to sample when one exists.
     table: "delivery_sources"
     column: "credential_encrypted"
-    # The SAME wrapping-passphrase Secret managementBackup.encryptionKeyBackup
-    # used to wrap the key bundle. Empty => the decrypt check is skipped (the
-    # drill can't unwrap the key), and a warning is emitted. Set it to make the
-    # drill actually prove decryptability.
-    wrappingSecretRef:
-      name: ""
-      key: "passphrase"
     # Must match managementBackup.encryptionKeyBackup.keyPrefix.
     keyPrefix: "keys"
   # Image bundling postgresql-client + aws-cli — reuse the same image
   # as managementBackup so the drill can run wherever the backup runs.
   image:
-    repository: ghcr.io/alphabravocompany/pgdump-s3
-    tag: "16-awscli"
+    repository: ghcr.io/alphabravo-oss/astronomer-dr
+    tag: "v1.1.0"
     digest: ""
     pullPolicy: IfNotPresent
     registry: ""    # T23 air-gapped override; falls back to image.registry
@@ -1176,6 +1394,10 @@ managementLogging:
   #   - splunk: https://splunk-hec.observability.svc:8088
   #   - http: any HTTP(S) URL with a JSON body sink
   endpoint: ""
+  # Exact destination ports admitted by the management-logging NetworkPolicy.
+  # Keep this synchronized with endpoint (for example 3100 for in-cluster Loki).
+  networkPolicyPorts:
+    - 443
   # Drop level=DEBUG lines at the forwarder. The chart wires this via the
   # Fluent Bit grep filter; leave on by default to keep volumes manageable.
   excludeDebug: true
@@ -1236,6 +1458,15 @@ managementLogging:
     limits:
       cpu: 500m
       memory: 256Mi
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
   # Standard DaemonSet scheduling knobs. nodeSelector pins the daemon to
   # specific nodes (e.g. linux only); tolerations let it run on tainted
   # nodes (e.g. the control-plane). Default tolerations are empty so the

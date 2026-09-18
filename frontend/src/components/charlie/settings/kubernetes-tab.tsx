@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useDraft } from "@/lib/hooks/use-draft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Shield } from "lucide-react";
 import {
@@ -32,14 +32,8 @@ export function KubernetesTab() {
     queryKey: queryKeys.charlie.adminKubernetesVisibility,
     queryFn: ({ signal }) => getCharlieKubernetesVisibility(signal),
   });
-  const [profile, setProfile] =
-    useState<CharlieKubernetesVisibilityProfile>("disabled");
-  const [podLogs, setPodLogs] = useState(false);
-  useEffect(() => {
-    if (!query.data) return;
-    setProfile(query.data.profile);
-    setPodLogs(query.data.podLogs);
-  }, [query.data]);
+  const [profile, setProfile] = useDraft(query.data?.profile ?? "disabled");
+  const [podLogs, setPodLogs] = useDraft(query.data?.podLogs ?? false);
   const update = useMutation({
     mutationFn: async () => {
       const latest = await getCharlieKubernetesVisibility();
@@ -140,7 +134,7 @@ export function KubernetesTab() {
             checked={profile !== "disabled" && podLogs}
             disabled={!configured || profile === "disabled"}
             onChange={(event) => setPodLogs(event.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-border bg-background accent-primary"
+            className="mt-0.5 h-4 w-4 shrink-0 rounded-sm border-border bg-background accent-primary"
           />
           <label htmlFor="charlie-kubernetes-pod-logs">
             <strong className="block">Bounded, redacted pod log tails</strong>

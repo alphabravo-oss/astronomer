@@ -9,7 +9,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 type auditWriterV1 interface {
@@ -38,15 +38,15 @@ func recordStreamOpenAudit(r *http.Request, writer any, userID uuid.UUID, action
 	audit.Record(r.Context(), v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
 		Request:         r,
 		Source:          "service",
-		CorrelationID:   middleware.GetCorrelationID(r.Context()),
+		CorrelationID:   reqctx.CorrelationID(r.Context()),
 		UserID:          audit.UserIDFromUUID(userID),
 		ActorAuthMethod: streamAuthMethod(r),
 		Action:          action,
 		ResourceType:    "cluster",
 		ResourceID:      clusterID,
 		ResourceName:    podRef,
-		RequestID:       middleware.GetRequestID(r.Context()),
-		IPAddress:       middleware.RemoteIPAddr(r),
+		RequestID:       reqctx.RequestID(r.Context()),
+		IPAddress:       reqctx.ClientIP(r),
 		Detail:          detail,
 	}))
 }
@@ -77,15 +77,15 @@ func recordForwardedK8sMutationAudit(r *http.Request, writer any, userID uuid.UU
 	audit.Record(ctx, v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
 		Request:         r,
 		Source:          "service",
-		CorrelationID:   middleware.GetCorrelationID(ctx),
+		CorrelationID:   reqctx.CorrelationID(ctx),
 		UserID:          audit.UserIDFromUUID(userID),
 		ActorAuthMethod: "internal_forward",
 		Action:          "cluster.k8s_proxy.forwarded",
 		ResourceType:    "cluster",
 		ResourceID:      clusterID,
 		ResourceName:    k8sPath,
-		RequestID:       middleware.GetRequestID(ctx),
-		IPAddress:       middleware.RemoteIPAddr(r),
+		RequestID:       reqctx.RequestID(ctx),
+		IPAddress:       reqctx.ClientIP(r),
 		Detail:          detail,
 	}))
 }
@@ -117,15 +117,15 @@ func recordForwardedHelmMutationAudit(r *http.Request, writer any, userID uuid.U
 	audit.Record(ctx, v1, audit.NewHTTPRequestEvent(audit.HTTPRequestEvent{
 		Request:         r,
 		Source:          "service",
-		CorrelationID:   middleware.GetCorrelationID(ctx),
+		CorrelationID:   reqctx.CorrelationID(ctx),
 		UserID:          audit.UserIDFromUUID(userID),
 		ActorAuthMethod: "internal_forward",
 		Action:          "cluster.helm_proxy.forwarded",
 		ResourceType:    "cluster",
 		ResourceID:      clusterID,
 		ResourceName:    resourceName,
-		RequestID:       middleware.GetRequestID(ctx),
-		IPAddress:       middleware.RemoteIPAddr(r),
+		RequestID:       reqctx.RequestID(ctx),
+		IPAddress:       reqctx.ClientIP(r),
 		Detail:          detail,
 	}))
 }

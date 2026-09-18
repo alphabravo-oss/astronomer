@@ -58,19 +58,24 @@ func EnrichTaskPayload(ctx context.Context, payload []byte, correlationID string
 // tracingFieldsFromContext returns the W3C traceparent/tracestate keys
 // that should be injected, or nil when no span is active.
 func tracingFieldsFromContext(ctx context.Context) map[string]string {
-	carrier := propagation.MapCarrier{}
-	otel.GetTextMapPropagator().Inject(ctx, carrier)
-	if len(carrier) == 0 {
+	traceparent, tracestate := TraceContextFromContext(ctx)
+	if traceparent == "" {
 		return nil
 	}
-	fields := map[string]string{}
-	if tp := carrier["traceparent"]; tp != "" {
-		fields[asynqTraceparentField] = tp
-	}
-	if ts := carrier["tracestate"]; ts != "" {
-		fields[asynqTracestateField] = ts
+	fields := map[string]string{asynqTraceparentField: traceparent}
+	if tracestate != "" {
+		fields[asynqTracestateField] = tracestate
 	}
 	return fields
+}
+
+// TraceContextFromContext serializes only W3C trace routing metadata. Baggage
+// is deliberately excluded from tunnel/task envelopes to avoid propagating
+// arbitrary application or secret values.
+func TraceContextFromContext(ctx context.Context) (traceparent, tracestate string) {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	return carrier["traceparent"], carrier["tracestate"]
 }
 
 // ContextWithAsynqTracing extracts _traceparent / _tracestate from a
@@ -92,10 +97,18 @@ func ContextWithAsynqTracing(ctx context.Context, payload []byte) context.Contex
 	if probe.Traceparent == "" {
 		return ctx
 	}
-	carrier := propagation.MapCarrier{}
-	carrier["traceparent"] = probe.Traceparent
-	if probe.Tracestate != "" {
-		carrier["tracestate"] = probe.Tracestate
+	return ContextWithTraceContext(ctx, probe.Traceparent, probe.Tracestate)
+}
+
+// ContextWithTraceContext installs a remote W3C parent. Invalid or absent
+// metadata safely leaves ctx without a valid remote span context.
+func ContextWithTraceContext(ctx context.Context, traceparent, tracestate string) context.Context {
+	if traceparent == "" {
+		return ctx
+	}
+	carrier := propagation.MapCarrier{"traceparent": traceparent}
+	if tracestate != "" {
+		carrier["tracestate"] = tracestate
 	}
 	return otel.GetTextMapPropagator().Extract(ctx, carrier)
 }

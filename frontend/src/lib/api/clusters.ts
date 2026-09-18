@@ -2,15 +2,24 @@ import {
   deleteClustersById as deleteClusterOperation,
   getClusters as listClustersOperation,
   getClustersById as getClusterOperation,
+  getClustersSummary as getClusterEstateSummaryOperation,
   patchClustersById as updateClusterOperation,
   postClusters as createClusterOperation,
 } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
+import type { CamelizeKeys } from "@/types/wire-contract";
 import type { Cluster, ClusterRegistration, PaginatedResponse } from "@/types";
 
 type ClusterWire = OpenAPIComponents["schemas"]["Cluster"];
+type ClusterEstateSummaryWire =
+  OpenAPIComponents["schemas"]["ClusterEstateSummary"];
 export type UpdateClusterInput =
   OpenAPIComponents["schemas"]["UpdateClusterRequest"];
+
+export type ClusterEstateSummary = CamelizeKeys<
+  OpenAPIComponents["schemas"]["ClusterEstateSummary"]
+>;
 
 function requireData<T>(value: { data?: T } | undefined, operation: string): T {
   if (!value?.data) throw new Error(`${operation} returned no data payload`);
@@ -23,6 +32,10 @@ export function mapCluster(wire: ClusterWire): Cluster {
     id: wire.id,
     name: wire.name,
     displayName: wire.display_name,
+    badgeText: wire.badge_text,
+    badgeColor: wire.badge_color,
+    agentOverrides: wire.agent_overrides,
+    agentOverridesDigest: wire.agent_overrides_digest,
     description: wire.description,
     status: wire.status,
     apiServerUrl: wire.api_server_url,
@@ -32,7 +45,7 @@ export function mapCluster(wire: ClusterWire): Cluster {
     provider: wire.provider,
     labels: wire.labels,
     annotations: wire.annotations,
-    distribution: wire.distribution as Cluster["distribution"],
+    distribution: wire.distribution,
     agentVersion: wire.agent_version,
     lastHeartbeat: wire.last_heartbeat,
     kubernetesVersion: wire.kubernetes_version,
@@ -79,6 +92,7 @@ function createBody(
     annotations: input.annotations,
     api_server_url: input.apiServerUrl,
     ca_certificate: input.caCertificate,
+    agent_overrides: input.agentOverrides,
   };
 }
 
@@ -93,10 +107,12 @@ export interface ClusterListParameters {
 
 export async function getClusters(
   params?: ClusterListParameters,
+  signal?: AbortSignal,
 ): Promise<PaginatedResponse<Cluster>> {
   const pageSize = Math.max(1, Math.min(200, params?.pageSize ?? 20));
   const page = Math.max(1, params?.page ?? 1);
   const response = await listClustersOperation({
+    signal,
     query: {
       status: params?.status,
       provider: params?.provider,
@@ -106,22 +122,36 @@ export async function getClusters(
       offset: (page - 1) * pageSize,
     },
   });
-  const count = response.count;
+  return mapPage(response, mapCluster);
+}
+
+export async function getClusterEstateSummary(
+  signal?: AbortSignal,
+): Promise<ClusterEstateSummary> {
+  const wire: ClusterEstateSummaryWire = requireData(
+    await getClusterEstateSummaryOperation({ signal }),
+    "getClusterEstateSummary",
+  );
   return {
-    data: response.data.map(mapCluster),
-    total: count,
-    count,
-    next: response.next,
-    previous: response.previous,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(count / pageSize)),
+    clustersTotal: wire.clusters_total,
+    clustersActive: wire.clusters_active,
+    clustersWarning: wire.clusters_warning,
+    clustersDisconnected: wire.clusters_disconnected,
+    nodesTotal: wire.nodes_total,
+    podsTotal: wire.pods_total,
+    asOf: wire.as_of,
   };
 }
 
-export async function getCluster(id: string): Promise<Cluster> {
+export async function getCluster(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Cluster> {
   return mapCluster(
-    requireData(await getClusterOperation({ path: { id } }), "getCluster"),
+    requireData(
+      await getClusterOperation({ path: { id }, signal }),
+      "getCluster",
+    ),
   );
 }
 

@@ -2,10 +2,28 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestMigrationLoggerWritesStructuredJSON(t *testing.T) {
+	var stderr bytes.Buffer
+	logger := migrationLogger{log: slog.New(slog.NewJSONHandler(&stderr, nil)), verbose: true}
+	logger.Printf("applied migration %d\n", 47)
+	var record map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &record); err != nil {
+		t.Fatalf("migration log is not JSON: %v: %s", err, stderr.String())
+	}
+	if record["msg"] != "database migration" || record["detail"] != "applied migration 47" {
+		t.Fatalf("unexpected migration log: %#v", record)
+	}
+	if !logger.Verbose() {
+		t.Fatal("verbose flag was not preserved")
+	}
+}
 
 func TestParseOptionsPreservesMigrateCLIContract(t *testing.T) {
 	var stdout, stderr bytes.Buffer

@@ -48,15 +48,8 @@ type Controller interface {
 }
 
 type PostgresController struct {
-	pool         *pgxpool.Pool
-	now          func() time.Time
-	requireAudit bool
-}
-
-func (c *PostgresController) RequireTransactionalAudit() {
-	if c != nil {
-		c.requireAudit = true
-	}
+	pool *pgxpool.Pool
+	now  func() time.Time
 }
 
 func NewPostgresController(pool *pgxpool.Pool, now func() time.Time) (*PostgresController, error) {
@@ -70,6 +63,9 @@ func NewPostgresController(pool *pgxpool.Pool, now func() time.Time) (*PostgresC
 }
 
 func (c *PostgresController) Act(ctx context.Context, request Request) (Result, error) {
+	if request.Audit.IsZero() {
+		return Result{}, audit.ErrOutboxUnavailable
+	}
 	if request.ProjectID == uuid.Nil || request.DeploymentID == uuid.Nil || request.ExpectedGeneration < 0 {
 		return Result{}, errors.New("project, deployment, and non-negative If-Match generation are required")
 	}
@@ -140,9 +136,7 @@ func (c *PostgresController) Act(ctx context.Context, request Request) (Result, 
 	}
 	auditPersisted := false
 	if request.Audit.IsZero() {
-		if c.requireAudit {
-			return Result{}, audit.ErrOutboxUnavailable
-		}
+		return Result{}, audit.ErrOutboxUnavailable
 	} else {
 		intent := request.Audit
 		if intent.Event.Detail == nil {

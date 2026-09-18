@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { pageRowCount } from "@/lib/api/pagination";
 import { useMemo, useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import { useTabParam } from "@/lib/use-tab-param";
@@ -12,7 +13,7 @@ import {
   useApplySecurityPolicy,
   useRemoveSecurityPolicy,
 } from "@/lib/hooks/security";
-import { useClusters } from "@/lib/hooks";
+import { useClusters } from "@/lib/hooks/clusters";
 import { useCISScans } from "@/components/security/hooks";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -20,6 +21,7 @@ import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { CISScansTab } from "@/components/security/cis-scans-tab";
 import { formatRelativeTime, cn } from "@/lib/utils";
@@ -125,7 +127,7 @@ function PSAExplainer() {
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-4">
       <div className="flex items-start gap-2">
-        <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+        <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">
             What is Pod Security Admission (PSA)?
@@ -150,7 +152,7 @@ function PSAExplainer() {
               <li key={d.level} className="flex items-start gap-2">
                 <span
                   className={cn(
-                    "text-2xs px-1.5 py-0.5 rounded font-medium capitalize flex-shrink-0",
+                    "text-2xs px-1.5 py-0.5 rounded-sm font-medium capitalize shrink-0",
                     psaLevelColors[d.level],
                   )}
                 >
@@ -171,7 +173,7 @@ function PSAExplainer() {
           <ul className="space-y-1.5">
             {psaModeDefs.map((d) => (
               <li key={d.mode} className="flex items-start gap-2">
-                <span className="text-2xs px-1.5 py-0.5 rounded font-medium capitalize flex-shrink-0 bg-accent text-foreground">
+                <span className="text-2xs px-1.5 py-0.5 rounded-sm font-medium capitalize shrink-0 bg-accent text-foreground">
                   {d.mode}
                 </span>
                 <span className="text-xs text-muted-foreground leading-relaxed">
@@ -195,12 +197,16 @@ function SecurityPage() {
   // wins over this heuristic.
   const { data: scansPage } = useCISScans({ pageSize: 1 });
   const defaultTab: TabKey =
-    scansPage && (scansPage.total ?? 0) === 0 ? "templates" : "cis";
+    scansPage && pageRowCount(scansPage) === 0 ? "templates" : "cis";
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, defaultTab);
 
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] =
+    useState<PodSecurityTemplate | null>(null);
+  const [removePolicyTarget, setRemovePolicyTarget] =
+    useState<SecurityPolicyRow | null>(null);
+  const [deleteTemplateTarget, setDeleteTemplateTarget] =
     useState<PodSecurityTemplate | null>(null);
 
   const { data: policies, isLoading: policiesLoading } =
@@ -225,8 +231,7 @@ function SecurityPage() {
         ...policy,
         clusterName:
           clusters.get(policy.clusterId) || `Unknown (${policy.clusterId})`,
-        templateName:
-          template?.name || `Unknown (${policy.templateId})`,
+        templateName: template?.name || `Unknown (${policy.templateId})`,
         enforceLevel: template?.enforceLevel || "privileged",
         auditLevel: template?.auditLevel || "privileged",
         warnLevel: template?.warnLevel || "privileged",
@@ -264,7 +269,7 @@ function SecurityPage() {
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
             psaLevelColors[row.enforceLevel],
           )}
         >
@@ -278,7 +283,7 @@ function SecurityPage() {
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
             psaLevelColors[row.auditLevel],
           )}
         >
@@ -292,7 +297,7 @@ function SecurityPage() {
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
             psaLevelColors[row.warnLevel],
           )}
         >
@@ -322,7 +327,7 @@ function SecurityPage() {
           <button
             onClick={() => applyPolicy.mutate(row.id)}
             disabled={applyPolicy.isPending}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
               hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
             title="Apply to cluster"
           >
@@ -330,14 +335,8 @@ function SecurityPage() {
             Apply
           </button>
           <button
-            onClick={() => {
-              if (
-                confirm(`Remove security policy from "${row.clusterName}"?`)
-              ) {
-                removePolicy.mutate(row.id);
-              }
-            }}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            onClick={() => setRemovePolicyTarget(row)}
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Remove policy"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -358,12 +357,12 @@ function SecurityPage() {
           <Shield className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-foreground">{row.name}</span>
           {row.isDefault && (
-            <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+            <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary font-medium">
               Default
             </span>
           )}
           {row.isBuiltin && (
-            <span className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded bg-accent text-muted-foreground font-medium">
+            <span className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded-sm bg-accent text-muted-foreground font-medium">
               <Lock className="h-2.5 w-2.5" />
               Built-in
             </span>
@@ -377,7 +376,7 @@ function SecurityPage() {
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
             psaLevelColors[row.enforceLevel],
           )}
         >
@@ -391,7 +390,7 @@ function SecurityPage() {
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
             psaLevelColors[row.auditLevel],
           )}
         >
@@ -405,7 +404,7 @@ function SecurityPage() {
       accessor: (row) => (
         <span
           className={cn(
-            "text-xs px-2 py-0.5 rounded font-medium capitalize",
+            "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
             psaLevelColors[row.warnLevel],
           )}
         >
@@ -434,7 +433,7 @@ function SecurityPage() {
               setShowTemplateModal(true);
             }}
             disabled={row.isBuiltin}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
             title={
               row.isBuiltin
@@ -445,13 +444,9 @@ function SecurityPage() {
             <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={() => {
-              if (confirm(`Delete template "${row.name}"?`)) {
-                deleteTemplate.mutate(row.id);
-              }
-            }}
+            onClick={() => setDeleteTemplateTarget(row)}
             disabled={row.isDefault || row.isBuiltin}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10
               transition-colors disabled:opacity-30 disabled:pointer-events-none"
             title={
               row.isBuiltin
@@ -530,7 +525,7 @@ function SecurityPage() {
         {activeTab === "policies" && (
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-muted/30 p-4 flex items-start gap-2">
-              <Info className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+              <Info className="h-4 w-4 text-primary mt-0.5 shrink-0" />
               <p className="text-xs text-muted-foreground leading-relaxed">
                 A security policy binds a PSA template to a cluster. Until you
                 assign and apply a template here, Pod Security Admission is not
@@ -544,7 +539,11 @@ function SecurityPage() {
               keyExtractor={(row) => row.id}
               searchPlaceholder="Search cluster policies..."
               loading={policiesLoading}
-              emptyMessage="No security policies assigned"
+              emptyState={{
+                title: "No security policies assigned",
+                description:
+                  "Resources will appear here when they are available in this scope.",
+              }}
             />
           </div>
         )}
@@ -558,7 +557,10 @@ function SecurityPage() {
               keyExtractor={(row) => row.id}
               searchPlaceholder="Search templates..."
               loading={templatesLoading}
-              emptyMessage="No PSA templates defined"
+              emptyState={{
+                title: "No PSA templates defined",
+                description: "Create the first item to configure this feature.",
+              }}
             />
           </div>
         )}
@@ -580,6 +582,60 @@ function SecurityPage() {
           }}
         />
       )}
+      <ConfirmDialog
+        open={removePolicyTarget !== null}
+        onClose={() => setRemovePolicyTarget(null)}
+        onConfirm={() => {
+          if (!removePolicyTarget) return;
+          removePolicy.mutate(removePolicyTarget.id, {
+            onSuccess: () => setRemovePolicyTarget(null),
+          });
+        }}
+        title="Remove security policy"
+        description="This unassigns the Pod Security Admission policy from the cluster."
+        confirmText="Remove policy"
+        variant="destructive"
+        loading={removePolicy.isPending}
+        impact={
+          removePolicyTarget
+            ? {
+                scope: `${removePolicyTarget.templateName} on ${removePolicyTarget.clusterName}`,
+                consequences: [
+                  "The platform will stop managing this PSA assignment.",
+                  "Namespaces may no longer receive the selected enforce, audit, and warn levels.",
+                ],
+                recovery: "Assign and apply the template to the cluster again.",
+              }
+            : undefined
+        }
+      />
+      <ConfirmDialog
+        open={deleteTemplateTarget !== null}
+        onClose={() => setDeleteTemplateTarget(null)}
+        onConfirm={() => {
+          if (!deleteTemplateTarget) return;
+          deleteTemplate.mutate(deleteTemplateTarget.id, {
+            onSuccess: () => setDeleteTemplateTarget(null),
+          });
+        }}
+        title="Delete PSA template"
+        description="This permanently removes the custom Pod Security Admission template."
+        confirmValue={deleteTemplateTarget?.name}
+        variant="destructive"
+        loading={deleteTemplate.isPending}
+        impact={
+          deleteTemplateTarget
+            ? {
+                scope: deleteTemplateTarget.name,
+                consequences: [
+                  "The template can no longer be assigned to clusters.",
+                  "Existing policy assignments may need to be replaced.",
+                ],
+                recovery: "Recreate the template and its assignments manually.",
+              }
+            : undefined
+        }
+      />
     </PageShell>
   );
 }
@@ -599,28 +655,34 @@ function AssignTemplateModal({
   const { data: clustersData } = useClusters({ pageSize: 100 });
   const clusters = clustersData?.data || [];
 
-  const [form, setForm] = useState({
-    clusterId: "",
-    templateId:
-      templates.find((t) => t.isDefault)?.id || templates[0]?.id || "",
+  const form = useAppForm({
+    defaultValues: {
+      clusterId: "",
+      templateId:
+        templates.find((t) => t.isDefault)?.id || templates[0]?.id || "",
+    },
+    validators: {
+      onSubmit: ({ value }) =>
+        !value.clusterId || !value.templateId
+          ? "Select a cluster and security template."
+          : undefined,
+    },
+    onSubmit: async ({ value }) => {
+      try {
+        await assignPolicy.mutateAsync({
+          cluster_id: value.clusterId,
+          template_id: value.templateId,
+        });
+        onClose();
+      } catch {
+        // Persistent failure is rendered in the form summary.
+      }
+    },
   });
-
-  const selectedTemplate = useMemo(
-    () => templates.find((t) => t.id === form.templateId),
-    [templates, form.templateId],
+  const values = useStore(form.store, (state) => state.values);
+  const selectedTemplate = templates.find(
+    (template) => template.id === values.templateId,
   );
-
-  const handleSave = async () => {
-    try {
-      await assignPolicy.mutateAsync({
-        cluster_id: form.clusterId,
-        template_id: form.templateId,
-      });
-      onClose();
-    } catch {
-      // Error surfaced by mutation toast.
-    }
-  };
 
   return (
     <ModalShell
@@ -633,9 +695,9 @@ function AssignTemplateModal({
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
             intent="primary"
-            onClick={handleSave}
+            onClick={() => void form.handleSubmit()}
             disabled={
-              assignPolicy.isPending || !form.clusterId || !form.templateId
+              assignPolicy.isPending || !values.clusterId || !values.templateId
             }
             loading={assignPolicy.isPending}
           >
@@ -644,50 +706,33 @@ function AssignTemplateModal({
         </>
       }
     >
-      <div className="space-y-1.5">
-        <label
-          className="text-sm font-medium text-foreground"
-          htmlFor="field-7db9bce2-535"
-        >
-          Cluster
-        </label>
-        <Select
-          id="field-7db9bce2-535"
-          value={form.clusterId}
-          onChange={(e) =>
-            setForm((f) => ({ ...f, clusterId: e.target.value }))
-          }
-        >
-          <option value="">Select a cluster...</option>
-          {clusters.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.displayName} ({c.name})
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      <div className="space-y-1.5">
-        <label
-          className="text-sm font-medium text-foreground"
-          htmlFor="field-7db9bce2-550"
-        >
-          Template
-        </label>
-        <Select
-          id="field-7db9bce2-550"
-          value={form.templateId}
-          onChange={(e) =>
-            setForm((f) => ({ ...f, templateId: e.target.value }))
-          }
-        >
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} {t.isDefault ? "(Default)" : ""}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <form.AppForm>
+        <form.FormErrorSummary serverError={assignPolicy.error?.message} />
+      </form.AppForm>
+      <form.AppField name="clusterId">
+        {(field) => (
+          <field.SelectField label="Cluster">
+            <option value="">Select a cluster…</option>
+            {clusters.map((cluster) => (
+              <option key={cluster.id} value={cluster.id}>
+                {cluster.displayName} ({cluster.name})
+              </option>
+            ))}
+          </field.SelectField>
+        )}
+      </form.AppField>
+      <form.AppField name="templateId">
+        {(field) => (
+          <field.SelectField label="Template">
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+                {template.isDefault ? " (Default)" : ""}
+              </option>
+            ))}
+          </field.SelectField>
+        )}
+      </form.AppField>
 
       {selectedTemplate && (
         <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
@@ -699,7 +744,7 @@ function AssignTemplateModal({
               <p className="text-2xs text-muted-foreground">Enforce</p>
               <span
                 className={cn(
-                  "text-xs px-2 py-0.5 rounded font-medium capitalize",
+                  "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
                   psaLevelColors[selectedTemplate.enforceLevel],
                 )}
               >
@@ -710,7 +755,7 @@ function AssignTemplateModal({
               <p className="text-2xs text-muted-foreground">Audit</p>
               <span
                 className={cn(
-                  "text-xs px-2 py-0.5 rounded font-medium capitalize",
+                  "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
                   psaLevelColors[selectedTemplate.auditLevel],
                 )}
               >
@@ -721,7 +766,7 @@ function AssignTemplateModal({
               <p className="text-2xs text-muted-foreground">Warn</p>
               <span
                 className={cn(
-                  "text-xs px-2 py-0.5 rounded font-medium capitalize",
+                  "text-xs px-2 py-0.5 rounded-sm font-medium capitalize",
                   psaLevelColors[selectedTemplate.warnLevel],
                 )}
               >
@@ -826,6 +871,13 @@ function PSATemplateModal({
         </>
       }
     >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={
+            createTemplate.error?.message ?? updateTemplate.error?.message
+          }
+        />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -836,6 +888,7 @@ function PSATemplateModal({
         <form.Field name="name">
           {(field) => (
             <Input
+              name={field.name}
               id="field-7db9bce2-682"
               type="text"
               value={field.state.value}
@@ -857,6 +910,7 @@ function PSATemplateModal({
         <form.Field name="description">
           {(field) => (
             <Input
+              name={field.name}
               id="field-7db9bce2-698"
               type="text"
               value={field.state.value}
@@ -879,6 +933,7 @@ function PSATemplateModal({
           <form.Field name="enforceLevel">
             {(field) => (
               <Select
+                name={field.name}
                 id="field-7db9bce2-715"
                 value={field.state.value}
                 onChange={(e) =>
@@ -906,6 +961,7 @@ function PSATemplateModal({
           <form.Field name="auditLevel">
             {(field) => (
               <Select
+                name={field.name}
                 id="field-7db9bce2-734"
                 value={field.state.value}
                 onChange={(e) =>
@@ -933,6 +989,7 @@ function PSATemplateModal({
           <form.Field name="warnLevel">
             {(field) => (
               <Select
+                name={field.name}
                 id="field-7db9bce2-753"
                 value={field.state.value}
                 onChange={(e) =>
@@ -963,14 +1020,15 @@ function PSATemplateModal({
           <form.Field name="enforceVersion">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-7db9bce2-775"
                 type="text"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 placeholder="latest"
-                className="w-full h-8 px-2.5 rounded border border-border bg-background text-xs
-                      placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                className="w-full h-8 px-2.5 rounded-sm border border-border bg-background text-xs
+                      placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
               />
             )}
           </form.Field>
@@ -985,6 +1043,7 @@ function PSATemplateModal({
           <form.Field name="auditVersion">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-7db9bce2-791"
                 type="text"
                 value={field.state.value}
@@ -1006,6 +1065,7 @@ function PSATemplateModal({
           <form.Field name="warnVersion">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-7db9bce2-806"
                 type="text"
                 value={field.state.value}
@@ -1031,7 +1091,8 @@ function PSATemplateModal({
           </label>
           <form.Field name="exemptNamespaces">
             {(field) => (
-              <input
+              <Input
+                name={field.name}
                 id="field-7db9bce2-826"
                 type="text"
                 value={field.state.value}
@@ -1053,6 +1114,7 @@ function PSATemplateModal({
           <form.Field name="exemptRuntimeClasses">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-7db9bce2-842"
                 type="text"
                 value={field.state.value}
@@ -1074,6 +1136,7 @@ function PSATemplateModal({
           <form.Field name="exemptUsernames">
             {(field) => (
               <Input
+                name={field.name}
                 id="field-7db9bce2-858"
                 type="text"
                 value={field.state.value}

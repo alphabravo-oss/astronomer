@@ -7,8 +7,14 @@ SELECT c.id, c.cluster_id, c.type, c.status, c.reason, c.message,
        c.last_transition_time, c.last_probe_time, c.created_at, c.updated_at
 FROM cluster_conditions c
 JOIN clusters cl ON cl.id = c.cluster_id
-WHERE c.status = $1 AND cl.decommissioned_at IS NULL
-ORDER BY c.last_transition_time ASC;
+WHERE c.status = sqlc.arg(status)
+  AND cl.decommissioned_at IS NULL
+  AND (c.last_transition_time, c.id) > (
+      sqlc.arg(after_transition_time)::timestamptz,
+      sqlc.arg(after_id)::uuid
+  )
+ORDER BY c.last_transition_time ASC, c.id ASC
+LIMIT sqlc.arg(query_limit);
 
 -- name: InsertClusterConditionRemediation :one
 INSERT INTO cluster_condition_remediation_attempts

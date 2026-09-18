@@ -11,15 +11,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
-const explicitSessionTTL = 120 * time.Minute
+const explicitSessionTTL = 10 * time.Minute
 
 func newExplicitSessionJWT() *auth.JWTManager {
 	manager := auth.MustNewJWTManager("session-timeout-path-test-secret", sessionpolicy.DefaultMinutes)
@@ -36,13 +36,13 @@ func requireSessionCookieTTL(t *testing.T, manager *auth.JWTManager, response *h
 	t.Helper()
 	var access string
 	for _, cookie := range response.Cookies() {
-		if cookie.Name == middleware.SessionCookieName {
+		if cookie.Name == auth.SessionCookieName {
 			access = cookie.Value
 			break
 		}
 	}
 	if access == "" {
-		t.Fatalf("response did not set %s", middleware.SessionCookieName)
+		t.Fatalf("response did not set %s", auth.SessionCookieName)
 	}
 	claims, err := manager.ValidateToken(access)
 	if err != nil {
@@ -57,8 +57,10 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 	t.Run("password", func(t *testing.T) {
 		manager := newExplicitSessionJWT()
 		user := makeTestUser(t, true)
-		h := NewAuthHandler(newMockQuerier(user), manager)
-		h.SetSessionTimeoutPolicy(func(context.Context) int { return 120 })
+		users := newMockQuerier(user)
+		h := NewAuthHandler(users, manager)
+		wireAuthTestMutationTx(h, &authTestMutationTx{users: users})
+		h.SetSessionTimeoutPolicy(func(context.Context) int { return 10 })
 		body, _ := json.Marshal(LoginRequest{Email: user.Email, Password: "testpassword"})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", bytes.NewReader(body))
 		w := httptest.NewRecorder()
@@ -74,14 +76,18 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 	t.Run("refresh", func(t *testing.T) {
 		manager := newExplicitSessionJWT()
 		user := makeTestUser(t, true)
-		h := NewAuthHandler(newMockQuerier(user), manager)
-		h.SetSessionTimeoutPolicy(func(context.Context) int { return 120 })
+		users := newMockQuerier(user)
+		h := NewAuthHandler(users, manager)
+		wireAuthTestMutationTx(h, &authTestMutationTx{users: users})
+		h.SetSessionTimeoutPolicy(func(context.Context) int { return 10 })
 		refresh, err := manager.GenerateRefreshToken(user.ID)
 		if err != nil {
 			t.Fatalf("GenerateRefreshToken: %v", err)
 		}
-		body, _ := json.Marshal(map[string]string{"refresh": refresh})
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh/", nil)
+		req.AddCookie(&http.Cookie{Name: auth.RefreshCookieName, Value: refresh})
+		req.AddCookie(&http.Cookie{Name: auth.CSRFCookieName, Value: "csrf-token"})
+		req.Header.Set("X-CSRF-Token", "csrf-token")
 		w := httptest.NewRecorder()
 
 		h.Refresh(w, req)
@@ -95,16 +101,18 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 	t.Run("sso callback", func(t *testing.T) {
 		manager := newExplicitSessionJWT()
 		user := makeTestUser(t, true)
-		flow := &fakeTTLSSOFlow{info: &auth.SSOUserInfo{Email: user.Email, Username: user.Username}}
+		flow := &fakeTTLSSOFlow{info: &auth.SSOUserInfo{Email: user.Email, Username: user.Username, ConnectorID: "test"}}
 		queries := &fakeTTLSSOQueries{user: user}
 		h := &SSOHandler{
 			manager:  flow,
-			queries:  queries,
 			jwt:      manager,
 			frontend: "/",
 			now:      time.Now,
 			states:   make(map[string]ssoState),
 		}
+		h.SetRunTx(func(ctx context.Context, fn func(SSOCallbackTx) error) error { return fn(queries) })
+		h.SetEncryptor(newTestEncryptor(t))
+		h.SetRBACCacheInvalidator(&ssoTestInvalidator{})
 		state := "ttl-state"
 		cookie, err := h.signStateCookie("test", state)
 		if err != nil {
@@ -145,7 +153,7 @@ func TestSessionTimeoutExplicitValueAcrossActualMintPaths(t *testing.T) {
 			t.Fatalf("GenerateRecoveryCodes: %v", err)
 		}
 		_ = store.InsertRecoveryCode(context.Background(), sqlc.InsertRecoveryCodeParams{UserID: user.ID, CodeHash: hashes[0]})
-		h := NewTOTPHandler(store, newMockQuerier(user), encryptor, manager)
+		h := newTestTOTPHandler(store, newMockQuerier(user), encryptor, manager)
 		challenge, err := manager.GeneratePurposeToken(user.ID, auth.PurposeTOTPChallenge, auth.TOTPChallengeTTL)
 		if err != nil {
 			t.Fatalf("GeneratePurposeToken: %v", err)
@@ -176,7 +184,9 @@ func (f *fakeTTLSSOFlow) HandleCallback(context.Context, string, string, string)
 }
 
 type fakeTTLSSOQueries struct {
-	user sqlc.User
+	user      sqlc.User
+	claimUser sqlc.User
+	claimErr  error
 }
 
 func (f *fakeTTLSSOQueries) GetUserByEmail(context.Context, string) (sqlc.User, error) {
@@ -190,7 +200,16 @@ func (f *fakeTTLSSOQueries) CreateUser(context.Context, sqlc.CreateUserParams) (
 }
 func (f *fakeTTLSSOQueries) UpdateUserLastLogin(context.Context, uuid.UUID) error { return nil }
 func (f *fakeTTLSSOQueries) GetDexConnectorByName(context.Context, string) (sqlc.DexConnector, error) {
-	return sqlc.DexConnector{}, errors.New("not found")
+	return sqlc.DexConnector{ID: uuid.New(), Enabled: true}, nil
+}
+func (f *fakeTTLSSOQueries) ClaimExternalPrincipal(context.Context, sqlc.ClaimExternalPrincipalParams) (sqlc.User, error) {
+	if f.claimErr != nil {
+		return sqlc.User{}, f.claimErr
+	}
+	if f.claimUser.ID != uuid.Nil {
+		return f.claimUser, nil
+	}
+	return sqlc.User{}, pgx.ErrNoRows
 }
 func (f *fakeTTLSSOQueries) UpsertUserIDPGroups(context.Context, sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error) {
 	return sqlc.UserIdpGroup{}, nil

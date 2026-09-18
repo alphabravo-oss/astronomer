@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { authMeWire, seedAuth } from "./helpers/auth";
 
 // Confirms the DataTable rewrite (now backed by @tanstack/react-table) end-to-end
-// against the real Clusters page: global search, sorting, pagination, and the
+// against the real Clusters page: server-owned search/filter/pagination and the
 // B2 column-visibility persistence across reload. Auth + API are faked via
 // cookies + route interception (no backend), mirroring dashboard-smoke.spec.ts.
 
@@ -24,17 +24,26 @@ const adminUser = {
 function apiResponse<T>(data: T) {
   return { status: 200, data };
 }
-function paginated<T>(data: T[]) {
-  return { data, total: data.length, page: 1, pageSize: 100, totalPages: 1 };
+function paginated<T>(data: T[], limit: number, offset: number) {
+  return {
+    data: data.slice(offset, offset + limit),
+    pagination: {
+      total: data.length,
+      limit,
+      offset,
+      has_more: offset + limit < data.length,
+      next_offset: offset + limit < data.length ? offset + limit : null,
+    },
+  };
 }
 
-// 25 clusters → exceeds the default pageSize of 20 so pagination engages.
-const clusters = Array.from({ length: 25 }, (_, i) => {
+// 55 clusters exceed the estate page size of 50 so server pagination engages.
+const clusters = Array.from({ length: 55 }, (_, i) => {
   const n = String(i + 1).padStart(2, "0");
   return {
     id: `cluster-${n}`,
     name: `cluster-${n}`,
-    displayName: `Cluster ${n}`,
+    display_name: `Cluster ${n}`,
     description: "",
     status: i % 2 === 0 ? "active" : "inactive",
     health: {
@@ -46,27 +55,22 @@ const clusters = Array.from({ length: 25 }, (_, i) => {
     environment: "production",
     region: "us-east-1",
     distribution: "eks",
-    kubernetesVersion: "1.30",
-    nodeCount: 3,
-    podCount: 42,
-    namespaceCount: 8,
-    cpuCapacity: 24,
-    cpuUsage: 6,
-    cpuPercentage: 25,
-    memoryCapacity: 96,
-    memoryUsage: 32,
-    memoryPercentage: 33,
+    kubernetes_version: "1.30",
+    node_count: 3,
+    pod_count: 42,
+    cpu_percentage: 25,
+    memory_percentage: 33,
     labels: {},
     annotations: {},
-    agentVersion: "e2e",
-    lastHeartbeat: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    isLocal: false,
+    agent_version: "e2e",
+    last_heartbeat: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    is_local: false,
   };
 });
 
-async function mockApi(page: Page) {
+async function mockApi(page: Page, clusterRequests: URL[]) {
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path =
@@ -79,70 +83,111 @@ async function mockApi(page: Page) {
       return route.fulfill({ json: apiResponse(authMeWire(adminUser)) });
     if (path === "/settings/features")
       return route.fulfill({ json: apiResponse({}) });
-    if (path === "/clusters" && method === "GET")
-      return route.fulfill({ json: paginated(clusters) });
+    if (path === "/clusters" && method === "GET") {
+      clusterRequests.push(url);
+      const provider = url.searchParams.get("provider");
+      const search = url.searchParams.get("search")?.toLowerCase();
+      const matching = clusters.filter(
+        (cluster) =>
+          (!provider || cluster.provider === provider) &&
+          (!search ||
+            cluster.name.toLowerCase().includes(search) ||
+            cluster.display_name.toLowerCase().includes(search)),
+      );
+      const limit = Number(url.searchParams.get("limit") ?? "50");
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+      return route.fulfill({
+        json: paginated(matching, limit, offset),
+      });
+    }
     return route.fulfill({ json: apiResponse([]) });
   });
 }
 
 const firstBodyRow = (page: Page) => page.locator("tbody tr").first();
 
-test.beforeEach(async ({ page }) => {
-  await mockApi(page);
-});
-
-test("DataTable: paginates, searches, and sorts the clusters list", async ({
+test("DataTable: paginates and searches clusters through the server API", async ({
   context,
   page,
 }) => {
+  const clusterRequests: URL[] = [];
+  await mockApi(page, clusterRequests);
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/clusters");
 
   await expect(page.getByRole("heading", { name: "Clusters" })).toBeVisible();
 
-  // Pagination: 25 rows, pageSize 20 → first page shows 1-20 of 25.
-  await expect(page.getByText("Showing 1-20 of 25")).toBeVisible();
-
-  // NB: the Clusters page renders JSX cell accessors, so the global search box
-  // is a no-op here (matches String(<jsx>) === "[object Object]"). This is
-  // unchanged from the previous hand-rolled table; search-with-string-accessors
-  // is covered in the unit suite (data-table.behavior.test.tsx).
-
-  // Sort by Name (sortAccessor → displayName): asc then desc.
-  const nameHeader = page.getByRole("columnheader", { name: /name/i });
-  await nameHeader.click();
+  await expect(page.getByText("Showing 1-50 of 55")).toBeVisible();
   await expect(firstBodyRow(page)).toContainText("Cluster 01");
-  await nameHeader.click();
-  await expect(firstBodyRow(page)).toContainText("Cluster 25");
 
-  // Navigate to page 2 — clears the desc sort first to keep assertions simple.
-  await nameHeader.click(); // back to asc
-  await page.getByRole("button", { name: "2", exact: true }).click();
-  await expect(page.getByText("Showing 21-25 of 25")).toBeVisible();
-  await expect(firstBodyRow(page)).toContainText("Cluster 21");
+  // The server owns the stable estate order; navigating requests the next
+  // bounded page instead of sorting or slicing the visible page locally.
+  await page.getByRole("button", { name: "Page 2", exact: true }).click();
+  await expect(page.getByText("Showing 51-55 of 55")).toBeVisible();
+  await expect(firstBodyRow(page)).toContainText("Cluster 51");
+  await expect
+    .poll(() =>
+      clusterRequests.some(
+        (url) =>
+          url.searchParams.get("limit") === "50" &&
+          url.searchParams.get("offset") === "50",
+      ),
+    )
+    .toBe(true);
+
+  await page
+    .getByRole("textbox", { name: "Search clusters..." })
+    .fill("Cluster 55");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(firstBodyRow(page)).toContainText("Cluster 55");
+  await expect
+    .poll(() =>
+      clusterRequests.some(
+        (url) =>
+          url.searchParams.get("search") === "Cluster 55" &&
+          url.searchParams.get("offset") === "0",
+      ),
+    )
+    .toBe(true);
 });
 
-test("DataTable: faceted Provider filter narrows the rows (B3)", async ({
+test("DataTable: server-side Provider filter narrows the estate", async ({
   context,
   page,
 }) => {
+  const clusterRequests: URL[] = [];
+  await mockApi(page, clusterRequests);
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/clusters");
-  await expect(page.getByText("Showing 1-20 of 25")).toBeVisible();
+  await expect(page.getByText("Showing 1-50 of 55")).toBeVisible();
 
-  // 25 clusters cycle aws/gcp/azure → 9 are aws (indices 0,3,…,24). Filtering to
-  // a single page (<20 rows) also removes the pagination footer.
-  await page.getByRole("button", { name: /provider/i }).click();
-  await page.getByRole("checkbox", { name: "aws" }).click();
+  // 55 clusters cycle aws/gcp/azure → 19 are aws. The toolbar filter must be
+  // sent to the API; a page-local faceted filter would lie about estate truth.
+  await page
+    .getByRole("combobox", { name: "Filter clusters by provider" })
+    .selectOption("aws");
 
-  await expect(page.locator("tbody tr")).toHaveCount(9);
-  await expect(page.getByText("Showing 1-20 of 25")).toHaveCount(0);
+  await expect(page.locator("tbody tr")).toHaveCount(19);
+  await expect(page.getByText("Showing 1-50 of 55")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Provider", exact: true }),
+  ).toHaveCount(0);
+  await expect
+    .poll(() =>
+      clusterRequests.some(
+        (url) =>
+          url.searchParams.get("provider") === "aws" &&
+          url.searchParams.get("offset") === "0",
+      ),
+    )
+    .toBe(true);
 });
 
 test("DataTable: column-visibility choices persist across reload (B2)", async ({
   context,
   page,
 }) => {
+  await mockApi(page, []);
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/clusters");
 

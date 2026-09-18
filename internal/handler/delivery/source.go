@@ -12,16 +12,16 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
 const maxCredentialValueBytes = 256 << 10
@@ -73,32 +73,6 @@ func (h *SourceHandler) SetRunTx(runTx sourceRunTxFunc) {
 }
 
 func (h *SourceHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
-
-func executeSourceMutation[T any](r *http.Request, h *SourceHandler, mutate func(SourceMutationTx) (T, error), fallback func() (T, error), describe func(T) deliveryAuditEvent) (T, error) {
-	var zero T
-	if h == nil {
-		return zero, errors.New("delivery source handler is nil")
-	}
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q SourceMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			return recordAuditOutbox(r, q, describe(result))
-		})
-		return result, err
-	}
-	result, err := fallback()
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
 
 // NewSourceHandler creates a source handler. credentialKeyVersion identifies
 // the primary Fernet key generation written beside new ciphertext. It must be
@@ -273,7 +247,7 @@ func (h *SourceHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		response = append(response, converted)
 	}
-	respondPage(w, r, response, total, limit, offset, int64(offset)+int64(len(response)) < total, true)
+	paging.Write(w, response, paging.Exact(total, int(limit), int(offset), len(response)))
 }
 
 // Create validates and seals all write-only material before any database write.
@@ -347,7 +321,7 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "validation_error", "trust policy is invalid")
 		return
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	actor := reqctx.UserUUID(r.Context())
 	params := sqlc.CreateDeliverySourceParams{
 		ProjectID: projectID, Name: request.Name, Description: request.Description,
 		SourceType: string(request.Type), Url: request.URL, AuthMode: string(request.AuthMode),
@@ -355,12 +329,9 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CaBundleEncrypted: caEncrypted, ProxyRef: request.ProxyRef, TrustPolicy: trust,
 		CreatedBy: actor, UpdatedBy: actor,
 	}
-	created, err := executeSourceMutation(r, h,
+	created, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.CreateDeliverySourceRow, error) {
 			return q.CreateDeliverySource(r.Context(), params)
-		},
-		func() (sqlc.CreateDeliverySourceRow, error) {
-			return h.queries.CreateDeliverySource(r.Context(), params)
 		},
 		func(row sqlc.CreateDeliverySourceRow) deliveryAuditEvent {
 			return deliveryAuditEvent{
@@ -502,14 +473,11 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	params := sqlc.UpdateDeliverySourceParams{
 		Description: description, Url: sourceURL, ProxyRef: proxyRef, TrustPolicy: trustJSON,
 		ReplaceCaBundle: replaceCA, CaBundleEncrypted: caEncrypted,
-		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
+		UpdatedBy: reqctx.UserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
 	}
-	updated, err := executeSourceMutation(r, h,
+	updated, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.UpdateDeliverySourceRow, error) {
 			return q.UpdateDeliverySource(r.Context(), params)
-		},
-		func() (sqlc.UpdateDeliverySourceRow, error) {
-			return h.queries.UpdateDeliverySource(r.Context(), params)
 		},
 		func(row sqlc.UpdateDeliverySourceRow) deliveryAuditEvent {
 			return deliveryAuditEvent{
@@ -557,9 +525,8 @@ func (h *SourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		}
 		return deleted, deleteErr
 	}
-	_, err := executeSourceMutation(r, h,
+	_, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (int64, error) { return deleteSource(q) },
-		func() (int64, error) { return deleteSource(h.queries) },
 		func(int64) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.source.deleted", resourceType: "delivery_source", resourceID: sourceID.String(),
@@ -633,7 +600,7 @@ func (h *SourceHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	params := sqlc.CreateDeliverySourceResolutionAndOutboxParams{
 		SourceID: sourceID, BundleVersionID: pgtype.UUID{}, RequestedRevision: revision, ChartName: chart,
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	actor := reqctx.UserUUID(r.Context())
 	if !actor.Valid || uuid.UUID(actor.Bytes) == uuid.Nil {
 		respondError(w, http.StatusUnauthorized, "authentication_required", "authenticated actor is required")
 		return
@@ -752,14 +719,11 @@ func (h *SourceHandler) RotateCredential(w http.ResponseWriter, r *http.Request)
 	}
 	params := sqlc.RotateDeliverySourceCredentialParams{
 		AuthMode: string(request.AuthMode), CredentialEncrypted: ciphertext, CredentialKeyVersion: keyVersion,
-		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
+		UpdatedBy: reqctx.UserUUID(r.Context()), ID: sourceID, ProjectID: projectID,
 	}
-	rotated, err := executeSourceMutation(r, h,
+	rotated, err := executeMutation(r, h.runTx,
 		func(q SourceMutationTx) (sqlc.RotateDeliverySourceCredentialRow, error) {
 			return q.RotateDeliverySourceCredential(r.Context(), params)
-		},
-		func() (sqlc.RotateDeliverySourceCredentialRow, error) {
-			return h.queries.RotateDeliverySourceCredential(r.Context(), params)
 		},
 		func(row sqlc.RotateDeliverySourceCredentialRow) deliveryAuditEvent {
 			return deliveryAuditEvent{

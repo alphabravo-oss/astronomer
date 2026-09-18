@@ -38,6 +38,7 @@ FIRST_PARTY = {
     "agent": "astronomer-go-agent",
     "migrate": "astronomer-go-migrate",
     "shell": "astronomer-shell",
+    "dr": "astronomer-dr",
     "frontend": "astronomer-frontend",
 }
 

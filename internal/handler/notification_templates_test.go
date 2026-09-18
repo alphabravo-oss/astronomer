@@ -8,13 +8,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeNotifyQuerier satisfies NotificationTemplateQuerier for tests.
@@ -84,8 +85,8 @@ func newNotifyHandler(t *testing.T) (*NotificationTemplateHandler, *fakeNotifyQu
 	q := &fakeNotifyQuerier{rows: map[string]sqlc.NotificationTemplate{}, users: map[uuid.UUID]sqlc.User{}}
 	id := uuid.New()
 	q.users[id] = sqlc.User{ID: id, IsSuperuser: true, IsActive: true}
-	ctx := middleware.SetAuthenticatedUserForTest(context.Background(), &middleware.AuthenticatedUser{ID: id.String()})
-	return NewNotificationTemplateHandler(q, nil), q, ctx
+	ctx := reqctx.WithUser(context.Background(), &reqctx.User{ID: id.String()})
+	return wireNotificationTemplateMutationFixture(NewNotificationTemplateHandler(q, nil), q), q, ctx
 }
 
 // withNotifyURLParam wraps a request so chi.URLParam(r, "key")
@@ -101,8 +102,8 @@ func TestNotificationTemplateHandler_RequiresSuperuser(t *testing.T) {
 	q := &fakeNotifyQuerier{rows: map[string]sqlc.NotificationTemplate{}, users: map[uuid.UUID]sqlc.User{}}
 	id := uuid.New()
 	q.users[id] = sqlc.User{ID: id, IsSuperuser: false, IsActive: true}
-	ctx := middleware.SetAuthenticatedUserForTest(context.Background(), &middleware.AuthenticatedUser{ID: id.String()})
-	h := NewNotificationTemplateHandler(q, nil)
+	ctx := reqctx.WithUser(context.Background(), &reqctx.User{ID: id.String()})
+	h := wireNotificationTemplateMutationFixture(NewNotificationTemplateHandler(q, nil), q)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/notification-templates/", nil).WithContext(ctx)

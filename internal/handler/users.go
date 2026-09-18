@@ -27,12 +27,14 @@ import (
 type UserMutationTx interface {
 	audit.OutboxQuerier
 	GetUserByIDForUpdate(context.Context, uuid.UUID) (sqlc.User, error)
+	ListSSOSessionsByUser(context.Context, uuid.UUID) ([]sqlc.SsoSession, error)
 	CreateUser(context.Context, sqlc.CreateUserParams) (sqlc.User, error)
 	UpdateUser(context.Context, sqlc.UpdateUserParams) (sqlc.User, error)
 	DeleteUser(context.Context, uuid.UUID) error
 	UpdateUserPassword(context.Context, sqlc.UpdateUserPasswordParams) error
 	UnlockUser(context.Context, uuid.UUID) error
 	InvalidateAllTokens(context.Context, sqlc.InvalidateAllTokensParams) error
+	DeleteSSOSessionsByUser(context.Context, uuid.UUID) error
 }
 
 type userRunTxFunc func(context.Context, func(UserMutationTx) error) error
@@ -45,6 +47,35 @@ func (h *ResourceHandler) SetUserRunTx(runTx userRunTxFunc) {
 
 func (h *ResourceHandler) TransactionalUserAuditWired() bool {
 	return h != nil && h.userRunTx != nil
+}
+
+var _ UserMutationTx = (*sqlc.Queries)(nil)
+
+func (h *ResourceHandler) requireUserMutationRunner(w http.ResponseWriter, r *http.Request) bool {
+	if h == nil || h.queries == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+		return false
+	}
+	if h.userRunTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "user administration transaction runner is not configured")
+		return false
+	}
+	return true
+}
+
+func (h *ResourceHandler) mutateUser(
+	w http.ResponseWriter,
+	r *http.Request,
+	status int,
+	code string,
+	message string,
+	fn func(UserMutationTx) error,
+) bool {
+	if err := h.userRunTx(r.Context(), fn); err != nil {
+		respondTransactionalMutationError(w, r, err, status, code, message)
+		return false
+	}
+	return true
 }
 
 // generateTempPassword returns a 12-character password drawn from a URL-safe
@@ -95,10 +126,7 @@ type ResetPasswordRequest struct {
 
 // CreateUser handles POST /api/v1/users/.
 func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	// Store wiring check first so route-security tests (empty body, RBAC
-	// already passed) still observe 503 when the querier is unwired.
-	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+	if !h.requireUserMutationRunner(w, r) {
 		return
 	}
 	var req CreateUserRequest
@@ -146,30 +174,17 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		IsSuperuser: req.IsSuperuser,
 	}
 	var user sqlc.User
-	auditCommitted := false
-	if h.userRunTx != nil {
-		err = h.userRunTx(r.Context(), func(q UserMutationTx) error {
-			var createErr error
-			user, createErr = q.CreateUser(r.Context(), params)
-			if createErr != nil {
-				return createErr
-			}
-			return recordAuditOutbox(r, q, "user.create", "user", user.ID.String(), user.Username, http.StatusCreated, map[string]any{
-				"email": user.Email, "is_active": user.IsActive, "is_staff": user.IsStaff, "is_superuser": user.IsSuperuser,
-			})
-		})
-		auditCommitted = err == nil
-	} else {
-		user, err = h.queries.CreateUser(r.Context(), params)
-	}
-	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.CreateError, "Failed to create user")
-		return
-	}
-	if !auditCommitted {
-		recordAudit(r, h.queries, "user.create", "user", user.ID.String(), user.Username, map[string]any{
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.CreateError, "Failed to create user", func(q UserMutationTx) error {
+		var createErr error
+		user, createErr = q.CreateUser(r.Context(), params)
+		if createErr != nil {
+			return createErr
+		}
+		return recordAuditOutbox(r, q, "user.create", "user", user.ID.String(), user.Username, http.StatusCreated, map[string]any{
 			"email": user.Email, "is_active": user.IsActive, "is_staff": user.IsStaff, "is_superuser": user.IsSuperuser,
 		})
+	}) {
+		return
 	}
 	w.Header().Set("Location", "/api/v1/users/"+user.ID.String()+"/")
 	RespondJSON(w, http.StatusCreated, mapUser(user))
@@ -177,8 +192,7 @@ func (h *ResourceHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUser handles PUT/PATCH /api/v1/users/{id}/.
 func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+	if !h.requireUserMutationRunner(w, r) {
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -225,82 +239,60 @@ func (h *ResourceHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		IsActive:  isActive,
 	}
 	var user sqlc.User
-	auditCommitted := false
+	var revokedSessions []sqlc.SsoSession
 	sessionsRevoked := false
-	if h.userRunTx != nil {
-		err = h.userRunTx(r.Context(), func(q UserMutationTx) error {
-			locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
-			if lockErr != nil {
-				return lockErr
-			}
-			// Re-resolve omitted PATCH-like fields from the row under lock so
-			// concurrent admin updates do not restore a stale pre-lock value.
-			txParams := params
-			if strings.TrimSpace(req.Email) == "" {
-				txParams.Email = locked.Email
-			}
-			if strings.TrimSpace(req.Username) == "" {
-				txParams.Username = locked.Username
-			}
-			if req.FirstName == "" {
-				txParams.FirstName = locked.FirstName
-			}
-			if req.LastName == "" {
-				txParams.LastName = locked.LastName
-			}
-			if req.IsActive == nil {
-				txParams.IsActive = locked.IsActive
-			}
-			var updateErr error
-			user, updateErr = q.UpdateUser(r.Context(), txParams)
+	revokedAt := time.Now()
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update user", func(q UserMutationTx) error {
+		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
+		if lockErr != nil {
+			return lockErr
+		}
+		// Re-resolve omitted PATCH-like fields from the locked row so a
+		// concurrent administrator cannot restore stale values.
+		txParams := params
+		if strings.TrimSpace(req.Email) == "" {
+			txParams.Email = locked.Email
+		}
+		if strings.TrimSpace(req.Username) == "" {
+			txParams.Username = locked.Username
+		}
+		if req.FirstName == "" {
+			txParams.FirstName = locked.FirstName
+		}
+		if req.LastName == "" {
+			txParams.LastName = locked.LastName
+		}
+		if req.IsActive == nil {
+			txParams.IsActive = locked.IsActive
+		}
+		var updateErr error
+		user, updateErr = q.UpdateUser(r.Context(), txParams)
+		if updateErr != nil {
+			return updateErr
+		}
+		if locked.IsActive && !user.IsActive {
+			revokedSessions, updateErr = invalidateUserSessionsTx(r.Context(), q, id, revokedAt)
 			if updateErr != nil {
 				return updateErr
 			}
-			if locked.IsActive && !user.IsActive {
-				if revokeErr := q.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
-					ID: id, TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-				}); revokeErr != nil {
-					return revokeErr
-				}
-				sessionsRevoked = true
-			}
-			return recordAuditOutbox(r, q, "user.update", "user", user.ID.String(), user.Username, http.StatusOK, map[string]any{
-				"email": user.Email, "is_active": user.IsActive, "sessions_revoked": sessionsRevoked,
-			})
+			sessionsRevoked = true
+		}
+		return recordAuditOutbox(r, q, "user.update", "user", user.ID.String(), user.Username, http.StatusOK, map[string]any{
+			"email": user.Email, "is_active": user.IsActive, "sessions_revoked": sessionsRevoked,
+			"sso_sessions_cleared": len(revokedSessions),
 		})
-		auditCommitted = err == nil
-	} else {
-		user, err = h.queries.UpdateUser(r.Context(), params)
-	}
-	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update user")
+	}) {
 		return
 	}
-	// Security: deactivating a user must terminate their live sessions, not
-	// just block future logins. When is_active transitions true->false, run
-	// the same token-cutoff + JWT-cache flush that ForceLogoutUser uses so an
-	// in-flight JWT can't outlive the deactivation.
-	if h.userRunTx == nil && current.IsActive && !isActive {
-		if err := revokeUserSessions(r.Context(), h.queries, h.jwt, id, "user_deactivated"); err != nil {
-			RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to invalidate sessions")
-			return
-		}
-	} else if sessionsRevoked {
-		auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", "user_deactivated")...).Inc()
-		h.jwt.InvalidateUser(r.Context(), id)
-	}
-	if !auditCommitted {
-		recordAudit(r, h.queries, "user.update", "user", user.ID.String(), user.Username, map[string]any{
-			"email": user.Email, "is_active": user.IsActive,
-		})
+	if sessionsRevoked {
+		h.finalizeUserSessionRevocation(r.Context(), id, "user_deactivated", revokedSessions)
 	}
 	RespondJSON(w, http.StatusOK, mapUser(user))
 }
 
 // DeleteUser handles DELETE /api/v1/users/{id}/.
 func (h *ResourceHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
-	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+	if !h.requireUserMutationRunner(w, r) {
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -313,54 +305,41 @@ func (h *ResourceHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 		return
 	}
-	auditCommitted := false
-	if h.userRunTx != nil {
-		err = h.userRunTx(r.Context(), func(q UserMutationTx) error {
-			locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
-			if lockErr != nil {
-				return lockErr
-			}
-			existing = locked
-			if deleteErr := q.DeleteUser(r.Context(), id); deleteErr != nil {
-				return deleteErr
-			}
-			return recordAuditOutbox(r, q, "user.delete", "user", existing.ID.String(), existing.Username, http.StatusNoContent, map[string]any{"email": existing.Email})
-		})
-		auditCommitted = err == nil
-	} else {
-		// Legacy narrow-test path. Production deletes the account and writes
-		// audit intent atomically; a deleted account cannot pass DB-backed JWT
-		// validation, and the cache is invalidated immediately after commit.
-		if err = revokeUserSessions(r.Context(), h.queries, h.jwt, id, "user_deleted"); err == nil {
-			err = h.queries.DeleteUser(r.Context(), id)
+	var revokedSessions []sqlc.SsoSession
+	revokedAt := time.Now()
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete user", func(q UserMutationTx) error {
+		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
+		if lockErr != nil {
+			return lockErr
 		}
-	}
-	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete user")
+		existing = locked
+		var revokeErr error
+		revokedSessions, revokeErr = invalidateUserSessionsTx(r.Context(), q, id, revokedAt)
+		if revokeErr != nil {
+			return revokeErr
+		}
+		if deleteErr := q.DeleteUser(r.Context(), id); deleteErr != nil {
+			return deleteErr
+		}
+		return recordAuditOutbox(r, q, "user.delete", "user", existing.ID.String(), existing.Username, http.StatusNoContent, map[string]any{
+			"email": existing.Email, "sessions_revoked": true, "sso_sessions_cleared": len(revokedSessions),
+		})
+	}) {
 		return
 	}
-	if auditCommitted {
-		auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", "user_deleted")...).Inc()
-		if h.jwt != nil {
-			h.jwt.InvalidateUser(r.Context(), id)
-		}
-	}
+	h.finalizeUserSessionRevocation(r.Context(), id, "user_deleted", revokedSessions)
 	// ON DELETE CASCADE on the role-binding tables means every binding for
 	// this user just vanished. Invalidate so the cache doesn't keep handing
 	// out the old set for up to one TTL.
 	if h.rbacCache != nil {
 		h.rbacCache.Invalidate(existing.ID.String())
 	}
-	if !auditCommitted {
-		recordAudit(r, h.queries, "user.delete", "user", existing.ID.String(), existing.Username, map[string]any{"email": existing.Email})
-	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // ResetUserPassword handles POST /api/v1/users/{id}/reset-password/.
 func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
-	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+	if !h.requireUserMutationRunner(w, r) {
 		return
 	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -408,43 +387,29 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 		ID:       id,
 		Password: string(hashed),
 	}
-	auditCommitted := false
-	if h.userRunTx != nil {
-		err = h.userRunTx(r.Context(), func(q UserMutationTx) error {
-			locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
-			if lockErr != nil {
-				return lockErr
-			}
-			existing = locked
-			if updateErr := q.UpdateUserPassword(r.Context(), passwordParams); updateErr != nil {
-				return updateErr
-			}
-			if revokeErr := q.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
-				ID: id, TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-			}); revokeErr != nil {
-				return revokeErr
-			}
-			return recordAuditOutbox(r, q, "user.reset_password", "user", existing.ID.String(), existing.Username, http.StatusOK, map[string]any{"generated": generated})
-		})
-		auditCommitted = err == nil
-	} else {
-		err = h.queries.UpdateUserPassword(r.Context(), passwordParams)
-		if err == nil {
-			err = revokeUserSessions(r.Context(), h.queries, h.jwt, id, "admin_password_reset")
+	var revokedSessions []sqlc.SsoSession
+	revokedAt := time.Now()
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to reset password and invalidate sessions", func(q UserMutationTx) error {
+		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
+		if lockErr != nil {
+			return lockErr
 		}
-	}
-	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to reset password and invalidate sessions")
+		existing = locked
+		if updateErr := q.UpdateUserPassword(r.Context(), passwordParams); updateErr != nil {
+			return updateErr
+		}
+		var revokeErr error
+		revokedSessions, revokeErr = invalidateUserSessionsTx(r.Context(), q, id, revokedAt)
+		if revokeErr != nil {
+			return revokeErr
+		}
+		return recordAuditOutbox(r, q, "user.reset_password", "user", existing.ID.String(), existing.Username, http.StatusOK, map[string]any{
+			"generated": generated, "sso_sessions_cleared": len(revokedSessions),
+		})
+	}) {
 		return
 	}
-	if auditCommitted {
-		auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", "admin_password_reset")...).Inc()
-		if h.jwt != nil {
-			h.jwt.InvalidateUser(r.Context(), id)
-		}
-	} else {
-		recordAudit(r, h.queries, "user.reset_password", "user", existing.ID.String(), existing.Username, map[string]any{"generated": generated})
-	}
+	h.finalizeUserSessionRevocation(r.Context(), id, "admin_password_reset", revokedSessions)
 	resp := map[string]any{"success": true, "message": "Password updated"}
 	if generated {
 		// Returned exactly once — the frontend captures this and shows it to
@@ -465,8 +430,7 @@ func (h *ResourceHandler) ResetUserPassword(w http.ResponseWriter, r *http.Reque
 // Auth: superuser. Gated inside the handler so a non-superuser hitting
 // the route gets a clean 403 rather than a generic permission rejection.
 func (h *ResourceHandler) UnlockUser(w http.ResponseWriter, r *http.Request) {
-	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+	if !h.requireUserMutationRunner(w, r) {
 		return
 	}
 	if err := requireSuperuserFromContext(r, h.queries); err != nil {
@@ -483,35 +447,21 @@ func (h *ResourceHandler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "User not found")
 		return
 	}
-	auditCommitted := false
-	if h.userRunTx != nil {
-		err = h.userRunTx(r.Context(), func(q UserMutationTx) error {
-			locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
-			if lockErr != nil {
-				return lockErr
-			}
-			existing = locked
-			if unlockErr := q.UnlockUser(r.Context(), id); unlockErr != nil {
-				return unlockErr
-			}
-			return recordAuditOutbox(r, q, "admin.user.unlocked", "user", existing.ID.String(), existing.Username, http.StatusOK, map[string]any{
-				"previous_locked_until": formatTimestamptz(existing.LockedUntil), "previous_locked_reason": existing.LockedReason,
-				"previous_failed_count": existing.FailedLoginCount,
-			})
-		})
-		auditCommitted = err == nil
-	} else {
-		err = h.queries.UnlockUser(r.Context(), id)
-	}
-	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to unlock user")
-		return
-	}
-	if !auditCommitted {
-		recordAudit(r, h.queries, "admin.user.unlocked", "user", existing.ID.String(), existing.Username, map[string]any{
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to unlock user", func(q UserMutationTx) error {
+		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
+		if lockErr != nil {
+			return lockErr
+		}
+		existing = locked
+		if unlockErr := q.UnlockUser(r.Context(), id); unlockErr != nil {
+			return unlockErr
+		}
+		return recordAuditOutbox(r, q, "admin.user.unlocked", "user", existing.ID.String(), existing.Username, http.StatusOK, map[string]any{
 			"previous_locked_until": formatTimestamptz(existing.LockedUntil), "previous_locked_reason": existing.LockedReason,
 			"previous_failed_count": existing.FailedLoginCount,
 		})
+	}) {
+		return
 	}
 	if h.emails != nil && existing.Email != "" {
 		h.emails.EnqueueAndLog(r.Context(), EmailNotifierRequest{
@@ -533,8 +483,7 @@ func (h *ResourceHandler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 //
 // Auth: superuser. Same in-handler gating as UnlockUser.
 func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request) {
-	if h.queries == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user store not configured")
+	if !h.requireUserMutationRunner(w, r) {
 		return
 	}
 	if err := requireSuperuserFromContext(r, h.queries); err != nil {
@@ -552,106 +501,30 @@ func (h *ResourceHandler) ForceLogoutUser(w http.ResponseWriter, r *http.Request
 		return
 	}
 	now := time.Now()
-	params := sqlc.InvalidateAllTokensParams{
-		ID:                  id,
-		TokensInvalidatedAt: pgtype.Timestamptz{Time: now, Valid: true},
-	}
-	auditCommitted := false
-	if h.userRunTx != nil {
-		err = h.userRunTx(r.Context(), func(q UserMutationTx) error {
-			locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
-			if lockErr != nil {
-				return lockErr
-			}
-			existing = locked
-			if invalidateErr := q.InvalidateAllTokens(r.Context(), params); invalidateErr != nil {
-				return invalidateErr
-			}
-			return recordAuditOutbox(r, q, "admin.user.force_logged_out", "user", existing.ID.String(), existing.Username, http.StatusOK, map[string]any{
-				"tokens_invalidated_at": now.UTC().Format(time.RFC3339),
-			})
+	var sessions []sqlc.SsoSession
+	if !h.mutateUser(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to invalidate sessions", func(q UserMutationTx) error {
+		locked, lockErr := q.GetUserByIDForUpdate(r.Context(), id)
+		if lockErr != nil {
+			return lockErr
+		}
+		existing = locked
+		var revokeErr error
+		sessions, revokeErr = invalidateUserSessionsTx(r.Context(), q, id, now)
+		if revokeErr != nil {
+			return revokeErr
+		}
+		return recordAuditOutbox(r, q, "admin.user.force_logged_out", "user", existing.ID.String(), existing.Username, http.StatusOK, map[string]any{
+			"tokens_invalidated_at": now.UTC().Format(time.RFC3339), "sso_sessions_cleared": len(sessions),
 		})
-		auditCommitted = err == nil
-	} else {
-		err = h.queries.InvalidateAllTokens(r.Context(), params)
-	}
-	if err != nil {
-		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to invalidate tokens")
+	}) {
 		return
 	}
-	auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", "admin_force_logout")...).Inc()
-	if h.jwt != nil {
-		h.jwt.InvalidateUser(r.Context(), id)
-	}
-
-	// Single sign-out clean-up (migration 054). When sso_sessions is
-	// wired we additionally:
-	//   1. Enumerate every active upstream session for the target
-	//      user. Best-effort — DB errors here don't block force-
-	//      logout because the JWT cutoff stamped above already
-	//      neutralises every in-flight session at the next request.
-	//   2. Fire a back-channel end-session POST against each one. Some
-	//      IdPs (mostly Dex with native OIDC connectors + Okta/Auth0
-	//      with back-channel-logout enabled) honour this and tear
-	//      down the upstream session immediately. Many don't —
-	//      including Dex's SAML connectors — but the per-attempt
-	//      metric tells the operator which providers worked.
-	//   3. Delete every sso_sessions row so the encrypted id_tokens
-	//      don't sit at rest after the user has been forced out.
-	sessionsCleared := 0
-	backchannelOK := 0
-	backchannelFailed := 0
-	if h.ssoSessions != nil {
-		sessions, err := h.ssoSessions.ListSSOSessionsByUser(r.Context(), id)
-		if err == nil {
-			sessionsCleared = len(sessions)
-			// Only fire upstream POSTs when both the back-channel
-			// client AND the encryptor are wired (we need the
-			// plaintext id_token to put in the body). Both are
-			// optional at startup — without the encryptor the row's
-			// id_token is unreadable.
-			if h.ssoBackchannel != nil && h.encryptor != nil {
-				for _, s := range sessions {
-					if s.EndSessionEndpoint == "" {
-						continue
-					}
-					idToken, derr := h.encryptor.Decrypt(s.UpstreamIDTokenEncrypted)
-					if derr != nil {
-						backchannelFailed++
-						auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(s.ProviderName, "encrypt_error")...).Inc()
-						continue
-					}
-					if perr := h.ssoBackchannel.PostEndSession(r.Context(), s.EndSessionEndpoint, idToken); perr != nil {
-						backchannelFailed++
-						auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(s.ProviderName, "backchannel_failed")...).Inc()
-					} else {
-						backchannelOK++
-						auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(s.ProviderName, "backchannel_ok")...).Inc()
-					}
-				}
-			}
-			// Drop the rows regardless — the JWT cutoff makes them
-			// unusable for SLO and they only expose encrypted
-			// id_tokens at rest after this point.
-			if derr := h.ssoSessions.DeleteSSOSessionsByUser(r.Context(), id); derr != nil {
-				// Best-effort: log + audit but don't 5xx the admin
-				// path. The retention cron will sweep these later.
-				_ = derr
-			}
-		}
-	}
-
-	if !auditCommitted {
-		recordAudit(r, h.queries, "admin.user.force_logged_out", "user", existing.ID.String(), existing.Username, map[string]any{
-			"tokens_invalidated_at": now.UTC().Format(time.RFC3339), "sso_sessions_cleared": sessionsCleared,
-			"sso_backchannel_ok": backchannelOK, "sso_backchannel_failed": backchannelFailed,
-		})
-	}
+	backchannelOK, backchannelFailed := h.finalizeUserSessionRevocation(r.Context(), id, "admin_force_logout", sessions)
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{
 		"success":                true,
 		"message":                "All active sessions invalidated",
 		"tokens_invalidated_at":  now.UTC().Format(time.RFC3339),
-		"sso_sessions_cleared":   sessionsCleared,
+		"sso_sessions_cleared":   len(sessions),
 		"sso_backchannel_ok":     backchannelOK,
 		"sso_backchannel_failed": backchannelFailed,
 	})
@@ -682,34 +555,58 @@ type authError struct{ msg string }
 
 func (e *authError) Error() string { return e.msg }
 
-// tokenInvalidator is the narrow DB surface revokeUserSessions needs — the
-// per-user JWT cutoff bump. Satisfied by both ResourceQuerier (users admin)
-// and SCIMQuerier (SCIM deprovision), so the two handlers share one code path.
-type tokenInvalidator interface {
-	InvalidateAllTokens(ctx context.Context, arg sqlc.InvalidateAllTokensParams) error
-}
-
-// revokeUserSessions terminates a user's live JWT sessions. It stamps
-// users.tokens_invalidated_at = now() (so every token issued before now is
-// rejected on its next validation) and flushes the JWT positive-validation
-// cache (so a recently-cached JTI doesn't survive the revocation for one more
-// TTL). This is the same core ForceLogoutUser runs, minus the SSO back-channel
-// logout, and is reused by the user-admin (deactivate/delete) and SCIM
-// (deprovision / active=false) paths so an account change actually kills live
-// sessions. jwt may be nil (InvalidateCache is nil-safe). reason is the metric
-// label recorded on auth_revocations_total{kind="user"}.
-func revokeUserSessions(ctx context.Context, q tokenInvalidator, jwt *auth.JWTManager, id uuid.UUID, reason string) error {
+// invalidateUserSessionsTx captures upstream sessions for post-commit logout,
+// advances the local JWT cutoff, and deletes the session credentials in one
+// database transaction.
+func invalidateUserSessionsTx(ctx context.Context, q UserMutationTx, id uuid.UUID, invalidatedAt time.Time) ([]sqlc.SsoSession, error) {
+	sessions, err := q.ListSSOSessionsByUser(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	if err := q.InvalidateAllTokens(ctx, sqlc.InvalidateAllTokensParams{
 		ID:                  id,
-		TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		TokensInvalidatedAt: pgtype.Timestamptz{Time: invalidatedAt, Valid: true},
 	}); err != nil {
-		return err
+		return nil, err
 	}
+	if err := q.DeleteSSOSessionsByUser(ctx, id); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// finalizeUserSessionRevocation performs effects that must never happen before
+// the database commit: local cache eviction, metrics, and upstream logout.
+func (h *ResourceHandler) finalizeUserSessionRevocation(ctx context.Context, id uuid.UUID, reason string, sessions []sqlc.SsoSession) (int, int) {
 	auth.SessionRevocationsTotal.WithLabelValues(observability.MetricValues("user", reason)...).Inc()
-	if jwt != nil {
-		jwt.InvalidateUser(ctx, id)
+	if h.jwt != nil {
+		h.jwt.InvalidateUser(ctx, id)
 	}
-	return nil
+	if h.ssoBackchannel == nil || h.encryptor == nil {
+		return 0, 0
+	}
+
+	succeeded := 0
+	failed := 0
+	for _, session := range sessions {
+		if session.EndSessionEndpoint == "" {
+			continue
+		}
+		idToken, err := h.encryptor.Decrypt(session.UpstreamIDTokenEncrypted)
+		if err != nil {
+			failed++
+			auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "encrypt_error")...).Inc()
+			continue
+		}
+		if err := h.ssoBackchannel.PostEndSession(ctx, session.EndSessionEndpoint, idToken); err != nil {
+			failed++
+			auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "backchannel_failed")...).Inc()
+			continue
+		}
+		succeeded++
+		auth.SSOLogoutsTotal.WithLabelValues(observability.MetricValues(session.ProviderName, "backchannel_ok")...).Inc()
+	}
+	return succeeded, failed
 }
 
 func formatTimestamptz(t pgtype.Timestamptz) string {

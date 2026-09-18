@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -265,7 +265,7 @@ func NewRedisStreamTicketBackendFromURL(redisURL string) (StreamTicketBackend, e
 }
 
 func redisClientFromAsynqURL(redisURL string) (*redis.Client, error) {
-	opt, err := asynq.ParseRedisURI(redisURL)
+	opt, err := redisconn.Parse(redisURL)
 	if err != nil {
 		return nil, err
 	}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,13 +20,31 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const mandatoryAuditDrainTimeout = 2 * time.Minute
+const (
+	mandatoryAuditDrainTimeout     = 2 * time.Minute
+	auditOutboxMetricsRefreshDelay = 16 * time.Second
+)
+
+// refreshAuditOutboxMetricsAfterDrain waits through one 15-second database
+// metrics-reporter interval before taking the post-drain scrape. Without this
+// barrier the report can retain a stale non-zero active-row gauge even after
+// the independent observer and public audit API have both proved delivery.
+func refreshAuditOutboxMetricsAfterDrain(ctx context.Context, metricsServer, token string, rec *recorder) error {
+	timer := time.NewTimer(auditOutboxMetricsRefreshDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return scrapeOnce(ctx, metricsServer, token, rec)
+	}
+}
 
 // runMandatoryAuditWorkload performs bounded, reversible metadata-only PATCHes on
 // run-owned fixture clusters. Fixture decommission remains the exact cleanup.
 // Each accepted request carries a unique UUID correlation ID that is later
 // reconciled through the public audit API.
-func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, rec *recorder, log *slog.Logger) {
+func runMandatoryAuditWorkload(scheduleCtx, requestCtx context.Context, cfg *config, token string, rec *recorder, log *slog.Logger) {
 	profile := cfg.mandatoryAudit
 	if profile.RatePerSecond <= 0 || profile.MaxOperations <= 0 || len(cfg.fixtureClusterIDs) == 0 {
 		return
@@ -41,12 +60,15 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 	defer ticker.Stop()
 	client := &http.Client{Timeout: 15 * time.Second}
 	base := strings.TrimRight(cfg.server, "/")
-	for sequence := 0; sequence < profile.MaxOperations; sequence++ {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
+	// maxOperations is a safety cap, not a target. Starting immediately means
+	// exactly duration*rate operations cover the whole interval; attempting the
+	// cap beyond that target schedules one more mutation on the cancellation
+	// boundary and can manufacture a transport rejection after a healthy run.
+	operationLimit := mandatoryAuditTargetOperations(cfg.duration, profile.RatePerSecond)
+	if operationLimit > profile.MaxOperations {
+		operationLimit = profile.MaxOperations
+	}
+	runConcurrentMandatoryAuditOperations(scheduleCtx, operationLimit, ticker.C, func(sequence int) {
 		clusterID := cfg.fixtureClusterIDs[sequence%len(cfg.fixtureClusterIDs)]
 		requestID := uuid.NewString()
 		body, err := json.Marshal(map[string]any{
@@ -58,12 +80,12 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 		})
 		if err != nil {
 			rec.recordAuditMutation(requestID, false, time.Time{})
-			continue
+			return
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, base+"/api/v1/clusters/"+clusterID+"/", bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(requestCtx, http.MethodPatch, base+"/api/v1/clusters/"+clusterID+"/", bytes.NewReader(body))
 		if err != nil {
 			rec.recordAuditMutation(requestID, false, time.Time{})
-			continue
+			return
 		}
 		// The mounted route is PATCH; it reaches the same transactional update
 		// handler and avoids the deprecated PUT alias.
@@ -81,6 +103,59 @@ func runMandatoryAuditWorkload(ctx context.Context, cfg *config, token string, r
 		if !accepted {
 			log.Warn("mandatory-audit qualification mutation rejected", "sequence", sequence, "transport_error", err != nil)
 		}
+	})
+}
+
+// runConcurrentMandatoryAuditOperations keeps the declared scheduling rate
+// independent of individual request latency, then joins every operation that
+// began before the scheduling window closed. The operation receives the
+// longer-lived request context from runMandatoryAuditWorkload, so a request
+// started at the final tick is not manufactured into a rejection merely
+// because the scheduling deadline arrived while it was in flight.
+func runConcurrentMandatoryAuditOperations(
+	ctx context.Context,
+	maxOperations int,
+	ticks <-chan time.Time,
+	operation func(sequence int),
+) {
+	var operations sync.WaitGroup
+	runMandatoryAuditOperations(ctx, maxOperations, ticks, func(sequence int) {
+		operations.Add(1)
+		go func() {
+			defer operations.Done()
+			operation(sequence)
+		}()
+	})
+	operations.Wait()
+}
+
+// runMandatoryAuditOperations opens the workload window with an operation at
+// t=0, then paces subsequent operations on ticks. Starting with a tick would
+// place the operation required to sustain the declared rate exactly on the
+// workload deadline (for example operation 9000 at 30:00 for 5/s). That races
+// cancellation and turns a healthy run into one artificial rejected request.
+//
+// Re-checking ctx after a tick is intentional: a timer tick and cancellation
+// may become selectable together at the boundary. No operation may begin once
+// the qualification window is closed.
+func runMandatoryAuditOperations(
+	ctx context.Context,
+	maxOperations int,
+	ticks <-chan time.Time,
+	operation func(sequence int),
+) {
+	for sequence := 0; sequence < maxOperations; sequence++ {
+		if sequence > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticks:
+			}
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		operation(sequence)
 	}
 }
 

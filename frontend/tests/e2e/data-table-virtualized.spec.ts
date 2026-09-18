@@ -37,13 +37,22 @@ function apiResponse<T>(data: T) {
   return { status: 200, data };
 }
 function paginated<T>(data: T[]) {
-  return { data, total: data.length, page: 1, pageSize: 200, totalPages: 1 };
+  return {
+    data,
+    pagination: {
+      total: data.length,
+      limit: 200,
+      offset: 0,
+      has_more: false,
+      next_offset: null,
+    },
+  };
 }
 
 const cluster = {
   id: CLUSTER_ID,
   name: "cluster-01",
-  displayName: "Cluster 01",
+  display_name: "Cluster 01",
   description: "",
   status: "active",
   health: {
@@ -55,23 +64,18 @@ const cluster = {
   environment: "production",
   region: "us-east-1",
   distribution: "eks",
-  kubernetesVersion: "1.30",
-  nodeCount: 3,
-  podCount: 42,
-  namespaceCount: 8,
-  cpuCapacity: 24,
-  cpuUsage: 6,
-  cpuPercentage: 25,
-  memoryCapacity: 96,
-  memoryUsage: 32,
-  memoryPercentage: 33,
+  kubernetes_version: "1.30",
+  node_count: 3,
+  pod_count: 42,
+  cpu_percentage: 25,
+  memory_percentage: 33,
   labels: {},
   annotations: {},
-  agentVersion: "e2e",
-  lastHeartbeat: new Date().toISOString(),
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  isLocal: false,
+  agent_version: "e2e",
+  last_heartbeat: new Date().toISOString(),
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  is_local: false,
 };
 
 const severities = ["critical", "high", "medium", "low", "info"];
@@ -92,19 +96,25 @@ const findings = Array.from({ length: FINDING_COUNT }, (_, i) => {
 
 const scanDetail = {
   id: SCAN_ID,
-  clusterId: CLUSTER_ID,
-  scanType: "cis-1.8",
+  cluster_id: CLUSTER_ID,
+  scan_type: "cis-1.8",
   status: "completed",
   passed: 300,
   failed: 300,
   warned: 300,
   skipped: 300,
-  startedAt: new Date().toISOString(),
-  completedAt: new Date().toISOString(),
-  clusterScanName: "scan-report-e2e",
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  findings,
+  started_at: new Date().toISOString(),
+  completed_at: new Date().toISOString(),
+  cluster_scan_name: "scan-report-e2e",
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  findings: findings.map((finding) => ({
+    test_id: finding.testId,
+    severity: finding.severity,
+    status: finding.status,
+    description: finding.description,
+    remediation: finding.remediation,
+  })),
 };
 
 async function mockApi(page: Page) {
@@ -122,10 +132,9 @@ async function mockApi(page: Page) {
       return route.fulfill({ json: apiResponse({}) });
     if (path === "/clusters" && method === "GET")
       return route.fulfill({ json: paginated([cluster]) });
-    // The detail endpoint returns a flat object (not an envelope) — getCISScan
-    // tolerates both, so a flat body is the faithful mock.
+    // Generated API clients consume the standard data envelope.
     if (path === `/security/scans/${SCAN_ID}` && method === "GET") {
-      return route.fulfill({ json: scanDetail });
+      return route.fulfill({ json: apiResponse(scanDetail) });
     }
     return route.fulfill({ json: apiResponse([]) });
   });

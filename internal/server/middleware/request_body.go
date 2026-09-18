@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 const (
@@ -33,7 +35,7 @@ func BoundRequestBodies(maximum int64, timeout time.Duration) func(http.Handler)
 				errorObject := map[string]string{
 					"code": "request_body_too_large", "message": "Request body exceeds the configured limit",
 				}
-				if requestID := GetRequestID(r.Context()); requestID != "" {
+				if requestID := reqctx.RequestID(r.Context()); requestID != "" {
 					errorObject["request_id"] = requestID
 				}
 				w.Header().Set("Content-Type", "application/json")

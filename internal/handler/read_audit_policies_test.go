@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeReadAuditPolicyQuerier is the test double for the handler's DB
@@ -157,7 +157,7 @@ func (c *countingPolicyInvalidator) Invalidate() { c.calls++ }
 
 // withAuth injects an AuthenticatedUser into the request context.
 func withAuth(r *http.Request, userID uuid.UUID) *http.Request {
-	ctx := middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(r.Context(), &reqctx.User{
 		ID:         userID.String(),
 		Email:      "admin@example.com",
 		AuthMethod: "jwt",
@@ -177,7 +177,7 @@ func newPolicyRouter(h *ReadAuditPolicyHandler) *chi.Mux {
 
 func TestReadAuditHandler_CRUD(t *testing.T) {
 	q := newFakeQuerier(true)
-	h := NewReadAuditPolicyHandler(q, nil)
+	h := wireReadAuditPolicyMutationFixture(NewReadAuditPolicyHandler(q, nil), q)
 	r := newPolicyRouter(h)
 
 	// Create.
@@ -262,7 +262,7 @@ func TestReadAuditHandler_CRUD(t *testing.T) {
 
 func TestReadAuditHandler_RequiresSuperuser(t *testing.T) {
 	q := newFakeQuerier(false) // not superuser
-	h := NewReadAuditPolicyHandler(q, nil)
+	h := wireReadAuditPolicyMutationFixture(NewReadAuditPolicyHandler(q, nil), q)
 	r := newPolicyRouter(h)
 
 	// List requires superuser.
@@ -358,14 +358,14 @@ func TestAuditLog_FilterByActionClass(t *testing.T) {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Data  []AuditLogResponse `json:"data"`
-		Count int64              `json:"count"`
+		Data       []AuditLogResponse `json:"data"`
+		Pagination paging.Metadata    `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Count != 2 || len(resp.Data) != 2 {
-		t.Fatalf("count = %d, items = %d", resp.Count, len(resp.Data))
+	if exactPageTotal(t, resp.Pagination) != 2 || len(resp.Data) != 2 {
+		t.Fatalf("count = %d, items = %d", exactPageTotal(t, resp.Pagination), len(resp.Data))
 	}
 	for _, it := range resp.Data {
 		if it.ActionClass != "read" {

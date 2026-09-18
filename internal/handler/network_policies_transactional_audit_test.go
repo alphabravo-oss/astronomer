@@ -74,7 +74,7 @@ func TestNetworkPolicyBatchTasksAndAuditCommitTogether(t *testing.T) {
 			clusterID, templateID := uuid.New(), uuid.New()
 			namespaces := []string{"payments", "orders"}
 
-			_, err := executeNetworkPolicyMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q NetworkPolicyMutationTx) (networkPolicyApplyResult, error) {
 					result := networkPolicyApplyResult{}
 					for _, namespace := range namespaces {
@@ -92,12 +92,8 @@ func TestNetworkPolicyBatchTasksAndAuditCommitTogether(t *testing.T) {
 					}
 					return result, nil
 				},
-				func() (networkPolicyApplyResult, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return networkPolicyApplyResult{}, nil
-				},
-				func(networkPolicyApplyResult) clusterAuditEvent {
-					return clusterAuditEvent{action: "cluster.network_policy.applied", resourceType: "cluster", resourceID: clusterID.String(), status: http.StatusAccepted}
+				func(networkPolicyApplyResult) mutationAuditEvent {
+					return mutationAuditEvent{action: "cluster.network_policy.applied", resourceType: "cluster", resourceID: clusterID.String(), status: http.StatusAccepted}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -136,7 +132,7 @@ func TestEveryNetworkPolicyMutationUsesTransactionalExecutor(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeNetworkPolicyMutation" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 				want[fn.Name.Name] = true
 			}
 			return true
@@ -144,7 +140,7 @@ func TestEveryNetworkPolicyMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeNetworkPolicyMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

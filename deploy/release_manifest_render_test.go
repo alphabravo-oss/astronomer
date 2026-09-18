@@ -14,7 +14,7 @@ func TestReleaseManifestIsValidatedAndMountedByChart(t *testing.T) {
 		t.Skipf("helm unavailable: %v", err)
 	}
 	path := filepath.Join(t.TempDir(), "release-manifest.json")
-	payload := `{"schema_version":1,"release":{"version":"v1.1.0"}}`
+	payload := `{"schema_version":1,"release":{"version":"v1.2.0"}}`
 	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestReleaseManifestIsValidatedAndMountedByChart(t *testing.T) {
 	}
 
 	mappingPath := filepath.Join(t.TempDir(), "mirror-mapping.json")
-	mapping := `{"schema_version":1,"release_version":"v1.1.0"}`
+	mapping := `{"schema_version":1,"release_version":"v1.2.0"}`
 	if err := os.WriteFile(mappingPath, []byte(mapping), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestReleaseManifestIsValidatedAndMountedByChart(t *testing.T) {
 
 func renderChartWithReleaseManifest(path string, mappingPath ...string) (string, string, error) {
 	arguments := []string{
-		"helm", "template", "astronomer", "chart", "-f", "chart/values.yaml",
+		"helm", "template", "astronomer", "chart", "-f", "chart/values.yaml", "-f", "chart/values-dev.yaml",
 		"--kube-version", "1.35.0",
 		"--set", testRenderSecretKeySet,
 		"--set", testRenderEncryptionKeySet,

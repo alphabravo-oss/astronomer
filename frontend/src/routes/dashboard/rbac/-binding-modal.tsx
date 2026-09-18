@@ -2,40 +2,35 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { PrincipalPicker } from "@/components/rbac/principal-picker";
+import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { cn } from "@/lib/utils";
 import { toastError } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   useClusterRoles,
+  useApplyProjectRoleTemplate,
   useCreateAccessBinding,
   useGlobalRoles,
   useProjectRoles,
+  useRoleTemplates,
 } from "@/lib/hooks/rbac";
-import { useClusters, useProjects } from "@/lib/hooks";
-import { useUsers } from "@/lib/hooks/user-settings";
-import {
-  clusterLabel,
-  isValidNamespace,
-  projectLabel,
-  roleTitle,
-  userLabel,
-} from "./-utils";
+import { useProjects } from "@/lib/hooks/projects";
+import { isValidNamespace, projectLabel, roleTitle } from "./-utils";
 
 export function CreateClusterBindingModal({
   onClose,
 }: {
   onClose: () => void;
 }) {
-  const { data: usersData } = useUsers({ pageSize: 200 });
   const { data: globalRoles } = useGlobalRoles();
   const { data: clusterRoles } = useClusterRoles();
   const { data: projectRoles } = useProjectRoles();
-  const { data: clustersData } = useClusters({ pageSize: 200 });
+  const { data: templates } = useRoleTemplates();
   const { data: projectsData } = useProjects({ pageSize: 200 });
   const createBinding = useCreateAccessBinding();
+  const applyTemplate = useApplyProjectRoleTemplate();
 
-  const users = usersData?.data || [];
-  const clusters = clustersData?.data || [];
   const projects = projectsData?.data || [];
 
   const form = useAppForm({
@@ -70,14 +65,22 @@ export function CreateClusterBindingModal({
     },
     onSubmit: async ({ value }) => {
       try {
-        await createBinding.mutateAsync({
-          scope: value.scope,
-          user_id: value.userId,
-          role_id: value.roleId,
-          cluster_id: value.clusterId || undefined,
-          project_id: value.projectId || undefined,
-          namespace: value.namespace.trim() || undefined,
-        });
+        if (value.scope === "project" && value.roleId.startsWith("template:")) {
+          await applyTemplate.mutateAsync({
+            projectId: value.projectId,
+            templateName: value.roleId.slice("template:".length),
+            userId: value.userId,
+          });
+        } else {
+          await createBinding.mutateAsync({
+            scope: value.scope,
+            user_id: value.userId,
+            role_id: value.roleId,
+            cluster_id: value.clusterId || undefined,
+            project_id: value.projectId || undefined,
+            namespace: value.namespace.trim() || undefined,
+          });
+        }
         onClose();
       } catch {
         // Error handled by mutation
@@ -112,21 +115,32 @@ export function CreateClusterBindingModal({
       title="Create Binding"
       onClose={onClose}
       size="md"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void form.handleSubmit();
+      }}
       footerClassName="flex items-center justify-end gap-2"
       footer={
         <>
           <ActionButton onClick={onClose}>Cancel</ActionButton>
           <ActionButton
+            type="submit"
             intent="primary"
-            loading={createBinding.isPending}
+            loading={createBinding.isPending || applyTemplate.isPending}
             disabled={!canSubmit}
-            onClick={() => void form.handleSubmit()}
           >
             Create Binding
           </ActionButton>
         </>
       }
     >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={
+            createBinding.error?.message || applyTemplate.error?.message
+          }
+        />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
@@ -138,6 +152,7 @@ export function CreateClusterBindingModal({
           {(field) => (
             <Select
               id="field-b53e75b3-111"
+              name={field.name}
               value={field.state.value}
               onChange={(e) => {
                 field.handleChange(
@@ -164,21 +179,18 @@ export function CreateClusterBindingModal({
         </label>
         <form.Field name="userId">
           {(field) => (
-            <Select
+            <PrincipalPicker
               id="field-b53e75b3-131"
               value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-            >
-              <option value="">Select a user…</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {userLabel(u)}
-                </option>
-              ))}
-            </Select>
+              onChange={field.handleChange}
+            />
           )}
         </form.Field>
+        <p className="text-xs text-muted-foreground">
+          External identities are verified with their provider before the
+          binding is created. “Pending sign-in” access activates on first SSO
+          login.
+        </p>
       </div>
 
       <div className="space-y-1.5">
@@ -192,6 +204,7 @@ export function CreateClusterBindingModal({
           {(field) => (
             <Select
               id="field-b53e75b3-151"
+              name={field.name}
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onBlur={field.handleBlur}
@@ -202,6 +215,23 @@ export function CreateClusterBindingModal({
                   {roleTitle(r)}
                 </option>
               ))}
+              {scope === "project" &&
+                (templates ?? []).filter(
+                  (template) => template.scope === "project",
+                ).length > 0 && (
+                  <optgroup label="Curated templates">
+                    {(templates ?? [])
+                      .filter((template) => template.scope === "project")
+                      .map((template) => (
+                        <option
+                          key={template.name}
+                          value={`template:${template.name}`}
+                        >
+                          {template.displayName} ({template.riskLevel} risk)
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
             </Select>
           )}
         </form.Field>
@@ -218,34 +248,26 @@ export function CreateClusterBindingModal({
             </label>
             <form.Field name="clusterId">
               {(field) => (
-                <Select
+                <RemoteClusterPicker
                   id="field-b53e75b3-173"
+                  name={field.name}
+                  ariaLabel="Cluster"
                   value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
+                  onChange={field.handleChange}
                   onBlur={field.handleBlur}
-                >
-                  <option value="">Select a cluster…</option>
-                  {clusters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {clusterLabel(c)}
-                    </option>
-                  ))}
-                </Select>
+                  placeholder="Select a cluster…"
+                />
               )}
             </form.Field>
           </div>
 
           <div className="space-y-1.5">
-            <label
-              className="text-sm font-medium text-foreground"
-              htmlFor="field-b53e75b3-193"
-            >
-              Namespace
-            </label>
+            <label htmlFor="field-b53e75b3-193">Namespace</label>
             <form.Field name="namespace">
               {(field) => (
                 <Input
                   id="field-b53e75b3-193"
+                  name={field.name}
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -280,6 +302,7 @@ export function CreateClusterBindingModal({
             {(field) => (
               <Select
                 id="field-b53e75b3-217"
+                name={field.name}
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}

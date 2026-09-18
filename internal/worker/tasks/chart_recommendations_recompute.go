@@ -54,7 +54,7 @@ func HandleChartRecommendationsRecompute(ctx context.Context, _ *asynq.Task) err
 		if err := catalog.RecomputeCoInstallation(ctx, q); err != nil {
 			return fmt.Errorf("recompute co-installation: %w", err)
 		}
-		if err := catalog.RecomputeAllAggregates(ctx, q); err != nil {
+		if err := catalog.RecomputeAllAggregates(ctx, q, runtimeDependencies(ctx).ChartRecommendationPolicy); err != nil {
 			return fmt.Errorf("recompute aggregates: %w", err)
 		}
 		runtimeLogger(ctx).InfoContext(ctx, "chart recommendations recompute completed")

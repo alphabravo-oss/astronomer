@@ -1,22 +1,15 @@
 import { useMemo, useState } from "react";
-import {
-  useGatewayClasses,
-  useGateways,
-  useGRPCRoutes,
-  useHTTPRoutes,
-  useK8sDelete,
-  useReferenceGrants,
-  useTCPRoutes,
-  useTLSRoutes,
-  useUDPRoutes,
-} from "@/lib/hooks";
-import { useRouter } from "@/lib/navigation";
+import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
+import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
 import { ActionButton } from "@/components/ui/action-button";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import type { TableEmptyState } from "@/components/ui/data-table-empty-state";
+import { ServerResourceExplorerTable } from "@/components/resources/server-resource-explorer-table";
+import type { NamedResourceType } from "@/lib/api/kubernetes-resources";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import { resourceDeletionImpact } from "@/components/resources/resource-deletion-impact";
 import {
@@ -53,20 +46,20 @@ function ConditionPill({
   if (!status) return <span className="text-xs text-muted-foreground">—</span>;
   if (status === "True") {
     return (
-      <span className="text-xs px-1.5 py-0.5 rounded bg-status-success/10 text-status-success">
+      <span className="text-xs px-1.5 py-0.5 rounded-sm bg-status-success/10 text-status-success">
         {trueLabel}
       </span>
     );
   }
   if (status === "False") {
     return (
-      <span className="text-xs px-1.5 py-0.5 rounded bg-status-error/10 text-status-error">
+      <span className="text-xs px-1.5 py-0.5 rounded-sm bg-status-error/10 text-status-error">
         {falseLabel}
       </span>
     );
   }
   return (
-    <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+    <span className="text-xs px-1.5 py-0.5 rounded-sm bg-muted text-muted-foreground">
       {status}
     </span>
   );
@@ -109,7 +102,7 @@ const gatewayColumns: Column<Gateway>[] = [
           row.listenerSummary.map((s, i) => (
             <span
               key={`${s}-${i}`}
-              className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground font-mono"
+              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
             >
               {s}
             </span>
@@ -185,7 +178,7 @@ const routeColumns: Column<GatewayRoute>[] = [
           row.parentSummary.map((p, i) => (
             <span
               key={`${p}-${i}`}
-              className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground font-mono"
+              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
             >
               {p}
             </span>
@@ -306,7 +299,7 @@ const referenceGrantColumns: Column<ReferenceGrant>[] = [
           row.from.map((f, i) => (
             <span
               key={`${f.kind}-${f.namespace}-${i}`}
-              className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground font-mono"
+              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
             >
               {f.kind}@{f.namespace}
             </span>
@@ -327,7 +320,7 @@ const referenceGrantColumns: Column<ReferenceGrant>[] = [
           row.to.map((t, i) => (
             <span
               key={`${t.kind}-${t.name}-${i}`}
-              className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground font-mono"
+              className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground font-mono"
             >
               {t.kind}
               {t.name ? `/${t.name}` : ""}
@@ -361,7 +354,7 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
   onView,
   onDelete,
 }: {
-  resourceType: string;
+  resourceType: NamedResourceType;
   kindLabel: string;
   row: T;
   permissions: ResourcePermissionDecisions;
@@ -404,8 +397,7 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
 }
 
 export function GatewaysTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useGateways(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, "gateways");
   const [yamlTarget, setYamlTarget] = useState<{
@@ -453,19 +445,28 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
           Create Gateway
         </ActionButton>
       </div>
-      <DataTable
-        data={data || []}
+      <ServerResourceExplorerTable<Gateway>
+        clusterId={clusterId}
+        resourceType="gateways"
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           "gateways",
           permissions.read,
         )}
         searchPlaceholder="Search gateways..."
-        loading={isLoading}
-        emptyMessage="No gateways found"
+        emptyState={{
+          title: "No gateways found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        bulkDelete={{
+          path: (row) => k8sResourcePath("gateways", row.name, row.namespace),
+          label: (row) => `${row.namespace}/${row.name}`,
+          noun: "gateway",
+        }}
       />
       {yamlTarget && (
         <YamlViewDialog
@@ -524,20 +525,16 @@ function RouteTable<T extends GatewayRoute>({
   clusterId,
   kindLabel,
   resourceType,
-  data,
-  isLoading,
   searchPlaceholder,
-  emptyMessage,
+  emptyState,
 }: {
   clusterId: string;
   kindLabel: string;
-  resourceType: string;
-  data: T[] | undefined;
-  isLoading: boolean;
+  resourceType: NamedResourceType;
   searchPlaceholder: string;
-  emptyMessage: string;
+  emptyState: TableEmptyState;
 }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, resourceType);
   const [yamlTarget, setYamlTarget] = useState<{
@@ -572,19 +569,24 @@ function RouteTable<T extends GatewayRoute>({
 
   return (
     <>
-      <DataTable
-        data={data || []}
+      <ServerResourceExplorerTable<T>
+        clusterId={clusterId}
+        resourceType={resourceType}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           resourceType,
           permissions.read,
         )}
         searchPlaceholder={searchPlaceholder}
-        loading={isLoading}
-        emptyMessage={emptyMessage}
+        emptyState={emptyState}
+        bulkDelete={{
+          path: (row) => k8sResourcePath(resourceType, row.name, row.namespace),
+          label: (row) => `${row.namespace}/${row.name}`,
+          noun: kindLabel,
+        }}
       />
       {yamlTarget && (
         <YamlViewDialog
@@ -630,83 +632,87 @@ function RouteTable<T extends GatewayRoute>({
 }
 
 export function HTTPRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useHTTPRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="HTTPRoute"
       resourceType="httproutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search HTTPRoutes..."
-      emptyMessage="No HTTPRoutes found"
+      emptyState={{
+        title: "No HTTPRoutes found",
+        description:
+          "Resources will appear here when they are available in this scope.",
+      }}
     />
   );
 }
 
 export function GRPCRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useGRPCRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="GRPCRoute"
       resourceType="grpcroutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search GRPCRoutes..."
-      emptyMessage="No GRPCRoutes found"
+      emptyState={{
+        title: "No GRPCRoutes found",
+        description:
+          "Resources will appear here when they are available in this scope.",
+      }}
     />
   );
 }
 
 export function TLSRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useTLSRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="TLSRoute"
       resourceType="tlsroutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search TLSRoutes..."
-      emptyMessage="No TLSRoutes found"
+      emptyState={{
+        title: "No TLSRoutes found",
+        description:
+          "Resources will appear here when they are available in this scope.",
+      }}
     />
   );
 }
 
 export function TCPRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useTCPRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="TCPRoute"
       resourceType="tcproutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search TCPRoutes..."
-      emptyMessage="No TCPRoutes found"
+      emptyState={{
+        title: "No TCPRoutes found",
+        description:
+          "Resources will appear here when they are available in this scope.",
+      }}
     />
   );
 }
 
 export function UDPRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useUDPRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="UDPRoute"
       resourceType="udproutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search UDPRoutes..."
-      emptyMessage="No UDPRoutes found"
+      emptyState={{
+        title: "No UDPRoutes found",
+        description:
+          "Resources will appear here when they are available in this scope.",
+      }}
     />
   );
 }
 
 export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useGatewayClasses(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(
     clusterId,
@@ -769,19 +775,28 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <DataTable
-        data={data || []}
+      <ServerResourceExplorerTable<GatewayClass>
+        clusterId={clusterId}
+        resourceType="gatewayclasses"
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           "gatewayclasses",
           permissions.read,
         )}
         searchPlaceholder="Search GatewayClasses..."
-        loading={isLoading}
-        emptyMessage="No GatewayClasses found"
+        emptyState={{
+          title: "No GatewayClasses found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        bulkDelete={{
+          path: (row) => k8sResourcePath("gatewayclasses", row.name),
+          label: (row) => row.name,
+          noun: "gateway class",
+        }}
       />
       {yamlTarget && (
         <YamlViewDialog
@@ -823,8 +838,7 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useReferenceGrants(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(
     clusterId,
@@ -862,19 +876,29 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <DataTable
-        data={data || []}
+      <ServerResourceExplorerTable<ReferenceGrant>
+        clusterId={clusterId}
+        resourceType="referencegrants"
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           "referencegrants",
           permissions.read,
         )}
         searchPlaceholder="Search ReferenceGrants..."
-        loading={isLoading}
-        emptyMessage="No ReferenceGrants found"
+        emptyState={{
+          title: "No ReferenceGrants found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        bulkDelete={{
+          path: (row) =>
+            k8sResourcePath("referencegrants", row.name, row.namespace),
+          label: (row) => `${row.namespace}/${row.name}`,
+          noun: "reference grant",
+        }}
       />
       {yamlTarget && (
         <YamlViewDialog

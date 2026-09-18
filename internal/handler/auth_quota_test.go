@@ -60,6 +60,7 @@ func TestAuthHandler_TokenCreateQuotaExceeded(t *testing.T) {
 
 	tokenQ := newMockTokenQuerier()
 	handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
+	wireAuthTestMutationTx(handler, &authTestMutationTx{tokens: tokenQ})
 	enf := quota.New(&quotaEnforcerFakeQuerier{
 		plan: sqlc.GetEffectiveQuotaForUserRow{
 			UserID:           userID,
@@ -104,6 +105,7 @@ func TestAuthHandler_TokenCreateAllowsUnderCap(t *testing.T) {
 
 	tokenQ := newMockTokenQuerier()
 	handler := NewAuthHandlerWithTokens(newMockQuerier(), tokenQ, jwtMgr)
+	wireAuthTestMutationTx(handler, &authTestMutationTx{tokens: tokenQ})
 	enf := quota.New(&quotaEnforcerFakeQuerier{
 		plan: sqlc.GetEffectiveQuotaForUserRow{
 			UserID:           userID,

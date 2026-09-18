@@ -1,3 +1,5 @@
+import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +8,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Cluster detail → Network policies tab. Lists every applied
  * NetworkPolicy template for this cluster, grouped by namespace. The
@@ -14,20 +16,23 @@ import {
  * fires the per-namespace POST. Migration 068.
  */
 
-import { useEffect, useState } from "react";
-import { useParams } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+import { useState } from "react";
+import {
+  useNetworkPolicyApplications,
+  useNetworkPolicyTemplates,
+} from "@/lib/hooks/policy-queries";
+import { QueryStates } from "@/components/ui/query-states";
+
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, Plus, Trash2, RefreshCw, Loader2 } from "lucide-react";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import {
-  listNetworkPolicyApplications,
-  listNetworkPolicyTemplates,
   applyNetworkPolicy,
   deleteNetworkPolicyApplication,
   reapplyNetworkPolicyApplication,
   type NetworkPolicyApplication,
-  type NetworkPolicyTemplate,
 } from "@/lib/api/settings";
 
 function StatusPill({
@@ -45,7 +50,7 @@ function StatusPill({
   };
   return (
     <span
-      className={`text-xs px-2 py-0.5 rounded border font-medium capitalize ${palette[status]}`}
+      className={`text-xs px-2 py-0.5 rounded-sm border font-medium capitalize ${palette[status]}`}
     >
       {status}
     </span>
@@ -53,38 +58,25 @@ function StatusPill({
 }
 
 function ClusterNetworkPoliciesPage() {
-  const params = useParams<{ id: string }>();
+  const params = Route.useParams();
   const clusterID = params?.id ?? "";
 
-  const [apps, setApps] = useState<NetworkPolicyApplication[]>([]);
-  const [templates, setTemplates] = useState<NetworkPolicyTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
+  const applicationsQuery = useNetworkPolicyApplications(clusterID);
+  const templatesQuery = useNetworkPolicyTemplates();
+  const apps = applicationsQuery.data ?? [];
+  const templates = templatesQuery.data ?? [];
+  const loading = applicationsQuery.isLoading || templatesQuery.isLoading;
   const [openApply, setOpenApply] = useState(false);
   const [pickedTemplate, setPickedTemplate] = useState("");
   const [namespaces, setNamespaces] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [revokeTarget, setRevokeTarget] =
+    useState<NetworkPolicyApplication | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
   const refresh = async () => {
-    if (!clusterID) return;
-    setLoading(true);
-    try {
-      const [a, t] = await Promise.all([
-        listNetworkPolicyApplications(clusterID),
-        listNetworkPolicyTemplates(),
-      ]);
-      setApps(a);
-      setTemplates(t);
-    } catch (err: unknown) {
-      toastApiError("Load failed", err);
-    } finally {
-      setLoading(false);
-    }
+    await Promise.all([applicationsQuery.refetch(), templatesQuery.refetch()]);
   };
-
-  useEffect(() => {
-    void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clusterID]);
 
   const handleApply = async () => {
     if (!pickedTemplate) {
@@ -117,14 +109,18 @@ function ClusterNetworkPoliciesPage() {
     }
   };
 
-  const handleRevoke = async (app: NetworkPolicyApplication) => {
-    if (!confirm(`Revoke ${app.template_slug} from ${app.namespace}?`)) return;
+  const handleRevoke = async () => {
+    if (!revokeTarget) return;
+    setRevoking(true);
     try {
-      await deleteNetworkPolicyApplication(clusterID, app.id);
+      await deleteNetworkPolicyApplication(clusterID, revokeTarget.id);
       toastSuccess("Application revoked");
+      setRevokeTarget(null);
       await refresh();
     } catch (err: unknown) {
       toastApiError("Revoke failed", err);
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -138,19 +134,24 @@ function ClusterNetworkPoliciesPage() {
     }
   };
 
+  if (applicationsQuery.isError)
+    return <QueryStates query={applicationsQuery}>{null}</QueryStates>;
+  if (templatesQuery.isError)
+    return <QueryStates query={templatesQuery}>{null}</QueryStates>;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Link
-          href={`/dashboard/clusters/${clusterID}`}
+        <RouterLink
+          to="/dashboard/clusters/$id" params={{ id: clusterID }}
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to cluster
-        </Link>
+        </RouterLink>
         <button
           type="button"
           onClick={() => setOpenApply((v) => !v)}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-border bg-card hover:bg-muted"
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-card hover:bg-muted"
         >
           <Plus className="h-4 w-4" /> Apply template
         </button>
@@ -172,8 +173,8 @@ function ClusterNetworkPoliciesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label className="text-sm space-y-1 block">
               <span className="text-muted-foreground">Template</span>
-              <select
-                className="w-full px-2 py-1 rounded border border-border bg-background text-sm"
+              <Select
+                className="w-full px-2 py-1 rounded-sm border border-border bg-background text-sm"
                 value={pickedTemplate}
                 onChange={(e) => setPickedTemplate(e.target.value)}
               >
@@ -185,13 +186,13 @@ function ClusterNetworkPoliciesPage() {
                       {t.name} ({t.slug})
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <label className="text-sm space-y-1 block">
               <span className="text-muted-foreground">Namespaces</span>
-              <input
+              <Input
                 type="text"
-                className="w-full px-2 py-1 rounded border border-border bg-background text-sm font-mono"
+                className="w-full px-2 py-1 rounded-sm border border-border bg-background text-sm font-mono"
                 placeholder="team-a, team-b"
                 value={namespaces}
                 onChange={(e) => setNamespaces(e.target.value)}
@@ -205,7 +206,7 @@ function ClusterNetworkPoliciesPage() {
             type="button"
             onClick={handleApply}
             disabled={submitting}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50"
           >
             {submitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -273,14 +274,14 @@ function ClusterNetworkPoliciesPage() {
                       <button
                         type="button"
                         onClick={() => handleReapply(a)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-muted"
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted"
                       >
                         <RefreshCw className="h-3 w-3" /> Reapply
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleRevoke(a)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-status-error/30 text-status-error hover:bg-status-error/10"
+                        onClick={() => setRevokeTarget(a)}
+                        className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-status-error/30 text-status-error hover:bg-status-error/10"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -314,6 +315,28 @@ function ClusterNetworkPoliciesPage() {
           </Table>
         </div>
       )}
+      <ConfirmDialog
+        open={revokeTarget !== null}
+        onClose={() => setRevokeTarget(null)}
+        onConfirm={() => void handleRevoke()}
+        title="Revoke network policy"
+        description="The reconciler will stop enforcing this template in the selected namespace."
+        confirmText="Revoke"
+        variant="destructive"
+        loading={revoking}
+        impact={
+          revokeTarget
+            ? {
+                scope: `${revokeTarget.template_slug ?? revokeTarget.template_id} in namespace ${revokeTarget.namespace}`,
+                consequences: [
+                  `The managed NetworkPolicy ${revokeTarget.policy_name} will be removed.`,
+                  "Traffic previously denied by this policy may become reachable.",
+                ],
+                recovery: "Apply the template to this namespace again.",
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

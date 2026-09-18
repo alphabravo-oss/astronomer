@@ -40,6 +40,14 @@ type lifecycleWork struct {
 	runExited chan struct{}
 }
 
+type exitingLifecycleWork struct{ stops atomic.Int32 }
+
+func (*exitingLifecycleWork) Run(context.Context) {}
+func (w *exitingLifecycleWork) Shutdown(context.Context) error {
+	w.stops.Add(1)
+	return nil
+}
+
 func (w *lifecycleWork) Run(ctx context.Context) {
 	w.runs.Add(1)
 	<-ctx.Done()
@@ -111,6 +119,43 @@ func TestRuntimeLifecycleColdDisabledCreatesNoWorkOrTimer(t *testing.T) {
 				t.Fatalf("inactive startup did not close stale transport: %d", closes.Load())
 			}
 		})
+	}
+}
+
+func TestRuntimeLifecycleReportsUnexpectedGenerationExit(t *testing.T) {
+	features := &lifecycleFeature{}
+	features.enabled.Store(true)
+	connection := &lifecycleConnection{row: sqlc.CharlieConnection{
+		ID: uuid.New(), Active: true, OnboardingState: "active",
+		RequestedMode: string(ModeReadOnly), VerifiedMode: string(ModeReadOnly),
+	}}
+	work := &exitingLifecycleWork{}
+	lifecycle, err := NewRuntimeLifecycle(features, connection, func(context.Context) (ActivationWork, error) {
+		return work, nil
+	}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lifecycle.ticker = func(time.Duration) runtimeTicker { return &fakeRuntimeTicker{channel: make(chan time.Time)} }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := lifecycle.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-lifecycle.Failures():
+		if err == nil {
+			t.Fatal("unexpected generation exit reported nil error")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("unexpected generation exit was not reported")
+	}
+	deadline := time.Now().Add(time.Second)
+	for work.stops.Load() != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if work.stops.Load() != 1 {
+		t.Fatal("unexpectedly exited generation was not shut down")
 	}
 }
 

@@ -17,7 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
-	"github.com/alphabravocompany/astronomer-go/internal/agent2"
+	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -28,9 +28,10 @@ import (
 const upgradeReportInterval = time.Minute
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
+	slog.SetDefault(logger)
 
 	rootCmd := &cobra.Command{
 		Use:     "astronomer-agent",
@@ -46,18 +47,6 @@ func main() {
 		},
 	}
 
-	// connect2 is experimental and supports already-adopted durable identity
-	// only. It has no CONNECT_ACK credential handoff, so bootstrap adoption and
-	// rotation remain on the deployed `connect` path.
-	connect2Cmd := &cobra.Command{
-		Use:   "connect2",
-		Short: "Experimental remotedialer tunnel for already-adopted agents",
-		Long:  "Experimental existing-durable-identity-only path. It cannot adopt bootstrap credentials or receive durable-token rotations; use the deployed connect command for those workflows.",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runConnect2(logger)
-		},
-	}
-
 	// upgrade-watchdog is the self-upgrade safety net. It runs as a short-lived
 	// Job created by the agent BEFORE the agent patches its own Deployment: with
 	// strategy Recreate the patching process is terminated by its own rollout,
@@ -68,58 +57,16 @@ func main() {
 		Short:  "Verify an in-flight agent self-upgrade and roll it back if it never becomes healthy",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return agent.RunUpgradeWatchdogFromEnv(cmd.Context(), logger)
+			return agent.RunUpgradeWatchdogInCluster(cmd.Context(), logger, agent.LoadUpgradeWatchdogOptions())
 		},
 	}
 
 	rootCmd.AddCommand(connectCmd)
-	rootCmd.AddCommand(connect2Cmd)
 	rootCmd.AddCommand(upgradeWatchdogCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
-}
-
-// runConnect2 is the experimental remotedialer tunnel. It deliberately rejects
-// bootstrap/legacy/environment sources because remotedialer has no CONNECT_ACK
-// channel for durable identity handoff or rotation.
-func runConnect2(logger *slog.Logger) error {
-	cfg, err := agent.LoadAgentConfigWithLogger(logger)
-	if err != nil {
-		logger.Error("failed to load config", "error", err)
-		return err
-	}
-	if err := validateConnect2CredentialSource(cfg.CredentialSource); err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigCh
-		logger.Info("received signal, shutting down", "signal", sig)
-		cancel()
-	}()
-
-	logger.Info("starting agent (remotedialer)",
-		"server_url", cfg.ServerURL,
-		"cluster_id", cfg.ClusterID,
-	)
-	if err := agent2.ConnectAndServe(ctx, logger, cfg.ServerURL, cfg.ClusterID, cfg.AgentToken, cfg.CACert, cfg.CAChecksum); err != nil && err != context.Canceled {
-		logger.Error("agent2 exited with error", "error", err)
-		return err
-	}
-	return nil
-}
-
-func validateConnect2CredentialSource(source string) error {
-	if source != agent.CredentialSourceIdentity {
-		return fmt.Errorf("connect2 requires credential_source=%s; bootstrap, legacy, and environment credentials must use connect", agent.CredentialSourceIdentity)
-	}
-	return nil
 }
 
 func runConnect(logger *slog.Logger) error {
@@ -128,6 +75,27 @@ func runConnect(logger *slog.Logger) error {
 		logger.Error("failed to load config", "error", err)
 		return err
 	}
+	instanceID := cfg.AgentID
+	if instanceID == "" {
+		instanceID = cfg.ClusterID
+	}
+	otelShutdown, err := observability.InitTracing(context.Background(), logger, observability.TracingConfig{
+		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		ServiceName: "astronomer-agent", ServiceVersion: version.Version,
+		Environment: cfg.Environment, ServiceNamespace: "astronomer", ServiceInstanceID: instanceID,
+		SamplerRatio: cfg.OTELSamplerRatio,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize agent tracing: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if shutdownErr := otelShutdown(shutdownCtx); shutdownErr != nil {
+			logger.Warn("otel shutdown error", "error", shutdownErr)
+		}
+	}()
 
 	tunnel := agent.NewTunnelClient(cfg, logger)
 
@@ -400,6 +368,7 @@ func runConnect(logger *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("initialize delivery capability probe: %w", err)
 		}
+		deliveryProbe.WithDynamicClient(deliveryDynamic)
 		deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
 			ClusterID:        cfg.ClusterID,
 			AgentVersion:     version.Version,
@@ -441,7 +410,7 @@ func runConnect(logger *slog.Logger) error {
 
 	// k8s proxy was unavailable: fall back to helm-only registration so the
 	// agent can still serve helm requests off-cluster (testing scenario).
-	registerHelm(tunnel, logger)
+	registerHelm(tunnel, logger, cfg.HelmRuntime)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -466,8 +435,8 @@ func runConnect(logger *slog.Logger) error {
 	return tunnel.Close()
 }
 
-func registerHelm(tunnel *agent.TunnelClient, _ *slog.Logger) {
-	helm := agent.NewHelmHandler(slog.Default())
+func registerHelm(tunnel *agent.TunnelClient, logger *slog.Logger, runtime agent.HelmRuntimeConfig) {
+	helm := agent.NewHelmHandler(logger, runtime)
 	tunnel.RegisterHandler(protocol.MsgHelmInstall, helm.HandleInstall)
 	tunnel.RegisterHandler(protocol.MsgHelmUpgrade, helm.HandleUpgrade)
 	tunnel.RegisterHandler(protocol.MsgHelmUninstall, helm.HandleUninstall)
@@ -477,7 +446,7 @@ func registerHelm(tunnel *agent.TunnelClient, _ *slog.Logger) {
 }
 
 func runHelmAndConnect(ctx context.Context, tunnel *agent.TunnelClient, logger *slog.Logger, cfg *agent.AgentConfig) error {
-	registerHelm(tunnel, logger)
+	registerHelm(tunnel, logger, cfg.HelmRuntime)
 
 	logger.Info("starting agent",
 		"server_url", cfg.ServerURL,

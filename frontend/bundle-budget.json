@@ -1,0 +1,20 @@
+{
+  "policy": "Sum independently gzipped JavaScript and CSS in each emitted static dependency closure. Initial ceilings are the 2026-09-10 build plus 2%, rounded up to 1 KiB. Lower ceilings after optimizations; increases require explicit review. Fonts and optional dynamic features are excluded.",
+  "closures": {
+    "bootstrap": {
+      "entries": ["index.html"],
+      "baselineGzipBytes": 409992,
+      "maxGzipBytes": 418816
+    },
+    "login": {
+      "entries": ["index.html", "src/routes/auth/login/index.tsx?tsr-split=component"],
+      "baselineGzipBytes": 419050,
+      "maxGzipBytes": 428032
+    },
+    "app": {
+      "entries": ["index.html", "src/routes/dashboard/route.tsx?tsr-split=component", "src/routes/dashboard/index.tsx?tsr-split=component"],
+      "baselineGzipBytes": 479351,
+      "maxGzipBytes": 489472
+    }
+  }
+}

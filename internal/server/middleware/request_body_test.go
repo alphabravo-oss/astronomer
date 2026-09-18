@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 func TestBoundRequestBodiesRejectsDeclaredOverflow(t *testing.T) {
@@ -38,7 +39,7 @@ func TestBoundRequestBodiesIncludesRequestID(t *testing.T) {
 		t.Fatal("oversized request reached handler")
 	}))
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", strings.NewReader("12345"))
-	request = request.WithContext(context.WithValue(request.Context(), requestIDKey, "request-413"))
+	request = request.WithContext(reqctx.WithRequestID(request.Context(), "request-413", false))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	var body struct {

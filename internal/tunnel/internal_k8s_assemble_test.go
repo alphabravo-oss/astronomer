@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -92,8 +93,8 @@ func TestReassembleK8sResponse_StreamClosed(t *testing.T) {
 	doneCh := make(chan struct{})
 	close(doneCh)
 	_, err := reassembleK8sResponse(context.Background(), dataCh, doneCh)
-	if err == nil {
-		t.Errorf("expected error when stream closes before first frame")
+	if !errors.Is(err, errK8sStreamClosedUnexpectedly) {
+		t.Errorf("expected closed-stream sentinel, got %v", err)
 	}
 }
 

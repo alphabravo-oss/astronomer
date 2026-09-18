@@ -261,7 +261,7 @@ func TestNodeProductionWiringAndRouteGuards(t *testing.T) {
 			t.Fatalf("node post-load authorizer missing %q", required)
 		}
 	}
-	if !strings.Contains(string(routes), `r.With(requireAuth(deps.JWT, deps.AuthQueries)).Get("/nodes/{cluster_id}/{node_name}/operations/{id}/"`) {
+	if !strings.Contains(string(routes), `r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/nodes/{cluster_id}/{node_name}/operations/{id}/"`) {
 		t.Fatal("node operation poll route does not require authentication before post-load authorization")
 	}
 }

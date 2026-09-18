@@ -66,7 +66,7 @@ export function CheckboxField({
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 rounded border-border"
+        className="h-4 w-4 rounded-sm border-border"
       />
       {label}
     </label>

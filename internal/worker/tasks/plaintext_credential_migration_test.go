@@ -331,3 +331,14 @@ func TestPlaintextCredentialMigrationSealsMonitoringBackendAuthConfig(t *testing
 		t.Fatalf("second pass re-sealed an already-sealed row: %d -> %d", before, len(q.backendSeals))
 	}
 }
+
+func TestPlaintextCredentialMigrationSkipsOnNonLeader(t *testing.T) {
+	leader := &fakeLeader{held: false}
+	ctx := testRuntimeContext(RuntimeDependencies{Leader: leader})
+	if err := (MaintenanceRuntime{}).HandlePlaintextCredentialMigration(ctx, nil); err != nil {
+		t.Fatalf("non-leader migration: %v", err)
+	}
+	if leader.releaseCalled {
+		t.Fatal("non-leader migration released a lock it never held")
+	}
+}

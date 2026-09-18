@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Cluster Service Mesh tab — Istio / Linkerd / Kuma / Cilium-mesh detection.
  *
@@ -20,12 +20,14 @@ import {
  * the auth gate (same as the snapshots page).
  */
 
-import { Link } from "@/lib/link";
-import { useParams } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { QueryStates } from "@/components/ui/query-states";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -37,7 +39,9 @@ import {
   Shield,
 } from "lucide-react";
 
-import { queryKeys, useCluster } from "@/lib/hooks";
+import { queryKeys } from "@/lib/query-keys";
+import { useCluster } from "@/lib/hooks/clusters";
+import { liveFallback } from "@/lib/live/status-store";
 import {
   getServiceMeshInventory,
   getServiceMeshDetection,
@@ -47,7 +51,7 @@ import {
   type ServiceMeshInventory,
   type ServiceMeshPolicyValidation,
   type ServiceMeshKind,
-} from "@/lib/api/cluster-detail";
+} from "@/lib/api/cluster-service-mesh";
 
 // meshLabel maps the backend enum to a human-readable string. Kept as a
 // pure mapping (no JSX) so it can be reused in headers + tile labels.
@@ -77,7 +81,7 @@ function meshAccent(kind: ServiceMeshKind): string {
     case "linkerd":
       return "text-status-success";
     case "kuma":
-      return "text-purple-500";
+      return "text-primary";
     case "cilium":
       return "text-status-warning";
     case "none":
@@ -148,21 +152,23 @@ function HeroCard({
             </p>
             {detection.lastError && (
               <p className="text-xs text-status-warning mt-2 flex items-start gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                 <span>{detection.lastError}</span>
               </p>
             )}
           </div>
         </div>
         {!isInstalled && (
-          <Link
-            href={`/dashboard/clusters/${clusterId}/apps?section=browse&install=istio-base`}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded text-sm font-medium
-              bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex-shrink-0"
+          <RouterLink
+            to="/dashboard/clusters/$id/apps"
+            params={{ id: clusterId }}
+            search={{ section: "browse", install: "istio-base" }}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-sm text-sm font-medium
+              bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
           >
             <Plus className="h-3.5 w-3.5" />
             Install a mesh
-          </Link>
+          </RouterLink>
         )}
       </div>
     </div>
@@ -287,7 +293,7 @@ function InventoryPanel({
                         {preview.map((item) => (
                           <span
                             key={`${resource.kind}:${item.namespace || "_"}:${item.name}`}
-                            className="inline-flex items-center rounded border border-border px-2 py-1 text-xs text-foreground"
+                            className="inline-flex items-center rounded-sm border border-border px-2 py-1 text-xs text-foreground"
                             title={item.reason || undefined}
                           >
                             {item.namespace && (
@@ -308,7 +314,7 @@ function InventoryPanel({
                   </TableCell>
                   <TableCell className="px-5 py-3 whitespace-nowrap">
                     {gitOpsOwned > 0 ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-status-warning/10 px-2 py-1 text-xs text-status-warning">
+                      <span className="inline-flex items-center gap-1 rounded-sm bg-status-warning/10 px-2 py-1 text-xs text-status-warning">
                         <Shield className="h-3 w-3" />
                         {gitOpsOwned} GitOps owned
                       </span>
@@ -361,7 +367,7 @@ function PolicyValidationPanel({
           type="button"
           onClick={onValidate}
           disabled={validating || value.trim().length === 0}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
             border border-border text-foreground hover:bg-accent transition-colors
             disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -374,11 +380,11 @@ function PolicyValidationPanel({
         </button>
       </div>
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <textarea
+        <Textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
           spellCheck={false}
-          className="min-h-72 w-full resize-y bg-background p-4 font-mono text-xs text-foreground outline-none border-b lg:border-b-0 lg:border-r border-border"
+          className="min-h-72 w-full resize-y bg-background p-4 font-mono text-xs text-foreground outline-hidden border-b lg:border-b-0 lg:border-r border-border"
           placeholder={`apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
@@ -392,7 +398,7 @@ spec:
           {result ? (
             <>
               <div
-                className={`rounded border px-3 py-2 text-xs ${
+                className={`rounded-sm border px-3 py-2 text-xs ${
                   result.applyAllowed
                     ? "border-status-success/30 bg-status-success/10 text-status-success"
                     : "border-status-warning/30 bg-status-warning/10 text-status-warning"
@@ -409,7 +415,7 @@ spec:
                   {findings.map((finding, index) => (
                     <div
                       key={`${finding.field || "finding"}:${index}`}
-                      className="rounded border border-border p-3 text-xs"
+                      className="rounded-sm border border-border p-3 text-xs"
                     >
                       <div className="font-medium text-foreground">
                         {finding.severity === "error" ? "Error" : "Warning"}
@@ -440,31 +446,28 @@ spec:
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 function ClusterServiceMeshPage() {
-  const params = useParams();
-  const clusterId = params.id as string;
+  const params = Route.useParams();
+  const clusterId = params.id;
   const queryClient = useQueryClient();
   const [policyYaml, setPolicyYaml] = useState("");
   const [validationResult, setValidationResult] = useState<
     ServiceMeshPolicyValidation | undefined
   >();
 
-  const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
+  const clusterQuery = useCluster(clusterId);
+  const { data: cluster, isLoading: clusterLoading } = clusterQuery;
   const { data: detection, isLoading: detLoading } = useQuery({
     queryKey: queryKeys.clusterPages.serviceMeshDetection(clusterId),
     queryFn: () => getServiceMeshDetection(clusterId),
     enabled: !!clusterId,
-    // KEEP (P4.9): mesh state is cluster-side truth read through the agent
-    // at request time (no server write to publish on) — same shape as the
-    // This direct-read trio is deliberately not converted to liveFallback.
-    refetchInterval: 60000,
+    refetchInterval: liveFallback(60_000),
     refetchIntervalInBackground: false,
   });
   const { data: inventory, isLoading: inventoryLoading } = useQuery({
     queryKey: queryKeys.clusterPages.serviceMeshInventory(clusterId),
     queryFn: () => getServiceMeshInventory(clusterId),
     enabled: !!clusterId,
-    // KEEP (P4.9): cluster-side truth, see detection query above.
-    refetchInterval: 60000,
+    refetchInterval: liveFallback(60_000),
     refetchIntervalInBackground: false,
   });
 
@@ -495,11 +498,20 @@ function ClusterServiceMeshPage() {
     onError: (e: Error) => toastApiError("Validation failed", e),
   });
 
-  if (clusterLoading) {
+  if (clusterLoading || clusterQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={clusterQuery}
+        permission="clusters:read"
+        notFound={
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <Server className="h-8 w-8 mb-3" />
+            <p>Cluster not found</p>
+          </div>
+        }
+      >
+        {() => null}
+      </QueryStates>
     );
   }
   if (!cluster) {
@@ -523,7 +535,7 @@ function ClusterServiceMeshPage() {
         <button
           onClick={() => reDetect.mutate()}
           disabled={reDetect.isPending}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded text-sm font-medium
+          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-sm text-sm font-medium
             border border-border text-foreground hover:bg-accent transition-colors
             disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -589,7 +601,7 @@ function ClusterServiceMeshPage() {
         detection.detectedMesh !== "unknown" && (
           <div className="rounded-lg border border-border bg-card p-4 flex items-center justify-between">
             <div className="flex items-start gap-3">
-              <Shield className="h-5 w-5 text-status-success flex-shrink-0 mt-0.5" />
+              <Shield className="h-5 w-5 text-status-success shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-foreground">
                   mTLS posture
@@ -599,13 +611,14 @@ function ClusterServiceMeshPage() {
                 </p>
               </div>
             </div>
-            <Link
-              href={`/dashboard/clusters/${clusterId}/service-mesh/mtls/`}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+            <RouterLink
+              to="/dashboard/clusters/$id/service-mesh/mtls"
+              params={{ id: clusterId }}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
               border border-border text-foreground hover:bg-accent transition-colors"
             >
               View breakdown
-            </Link>
+            </RouterLink>
           </div>
         )}
 
@@ -629,7 +642,7 @@ function ClusterServiceMeshPage() {
       {/* "no mesh" install CTA already lives in HeroCard; surface a hint here too */}
       {detection && detection.detectedMesh === "none" && (
         <div className="rounded-lg border border-border bg-card p-6 flex items-start gap-3">
-          <CheckCircle2 className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <CheckCircle2 className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-medium text-foreground">
               No service mesh installed

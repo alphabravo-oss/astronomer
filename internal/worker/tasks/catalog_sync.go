@@ -400,8 +400,8 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 				IconUrl:      firstNonEmptyEntryField(versions, func(v *repo.ChartVersion) string { return v.Icon }),
 				HomeUrl:      firstNonEmptyEntryField(versions, func(v *repo.ChartVersion) string { return v.Home }),
 				Category:     "",
-				Keywords:     mustJSON(firstSliceEntryField(versions, func(v *repo.ChartVersion) []string { return v.Keywords })),
-				Maintainers:  mustJSON(firstMaintainers(versions)),
+				Keywords:     mustJSONArray(firstSliceEntryField(versions, func(v *repo.ChartVersion) []string { return v.Keywords })),
+				Maintainers:  mustJSONArray(firstMaintainers(versions)),
 				Deprecated:   false,
 			})
 			if err != nil {
@@ -431,7 +431,7 @@ func syncRepositoryIndex(ctx context.Context, repoRecord sqlc.HelmRepository, in
 				Version:       version.Version,
 				AppVersion:    version.AppVersion,
 				Digest:        version.Digest,
-				Urls:          mustJSON(version.URLs),
+				Urls:          mustJSONArray(version.URLs),
 				ValuesSchema:  valuesSchema,
 				DefaultValues: defaultValues,
 				Readme:        readme,
@@ -668,4 +668,11 @@ func firstMaintainers(versions repo.ChartVersions) []map[string]string {
 func mustJSON(v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
+}
+
+func mustJSONArray[T any](values []T) json.RawMessage {
+	if values == nil {
+		values = make([]T, 0)
+	}
+	return mustJSON(values)
 }

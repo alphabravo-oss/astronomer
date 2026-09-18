@@ -3,12 +3,12 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 type loginRateLimitBucket struct {
@@ -97,6 +97,25 @@ func (l *loginRateLimiter) allow(key string) loginRateDecision {
 	}
 }
 
+// refund removes the reservation made by allow after a successful auth
+// response. Reserving before the handler keeps concurrent brute-force bursts
+// bounded; refunding success means legitimate logins do not consume the
+// failure budget.
+func (l *loginRateLimiter) refund(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	bucket, ok := l.buckets[key]
+	if !ok {
+		return
+	}
+	if bucket.count <= 1 {
+		delete(l.buckets, key)
+		return
+	}
+	bucket.count--
+	l.buckets[key] = bucket
+}
+
 // loginResetSeconds renders a window-remaining duration as a whole-second
 // count for the RateLimit-Reset header (ceil, min 1 while the window is open).
 func loginResetSeconds(d time.Duration) int {
@@ -173,6 +192,44 @@ func LoginRateLimitWithContext(ctx context.Context, limit int, window time.Durat
 	return newLoginRateLimitMiddleware(ctx, limit, window, time.Now)
 }
 
+// AuthFailureRateLimit bounds failed authentication attempts without
+// penalizing successful logins. A slot is reserved before the handler to keep
+// concurrent bursts bounded and refunded for every response below 400.
+func AuthFailureRateLimit(limit int, window time.Duration) func(http.Handler) http.Handler {
+	limiter := newLoginRateLimiter(limit, window, time.Now)
+	limiter.startJanitor(context.Background(), 0)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			key := clientKey(r)
+			if key == "" {
+				key = "unknown"
+			}
+			decision := limiter.allow(key)
+			setLoginRateLimitHeaders(w, decision)
+			if !decision.allowed {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Retry-After", formatRetryAfter(decision.retryAfter))
+				w.WriteHeader(http.StatusTooManyRequests)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"code":    "rate_limited",
+					"message": "Too many failed authentication attempts",
+				})
+				return
+			}
+
+			recorder := &statusWriter{ResponseWriter: w}
+			next.ServeHTTP(recorder, r)
+			status := recorder.status
+			if status == 0 {
+				status = http.StatusOK
+			}
+			if status < http.StatusBadRequest {
+				limiter.refund(key)
+			}
+		})
+	}
+}
+
 func newLoginRateLimitMiddleware(ctx context.Context, limit int, window time.Duration, now func() time.Time) func(http.Handler) http.Handler {
 	limiter := newLoginRateLimiter(limit, window, now)
 	limiter.startJanitor(ctx, 0)
@@ -212,18 +269,10 @@ func setLoginRateLimitHeaders(w http.ResponseWriter, d loginRateDecision) {
 }
 
 func clientKey(r *http.Request) string {
-	if r == nil {
-		return ""
+	if address := reqctx.ClientIP(r); address != nil {
+		return address.String()
 	}
-	addr := strings.TrimSpace(r.RemoteAddr)
-	if addr == "" {
-		return ""
-	}
-	host, _, err := net.SplitHostPort(addr)
-	if err == nil {
-		return host
-	}
-	return addr
+	return ""
 }
 
 func formatRetryAfter(d time.Duration) string {

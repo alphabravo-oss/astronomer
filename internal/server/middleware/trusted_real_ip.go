@@ -5,7 +5,25 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
+
+type trustedForwarding struct {
+	proto string
+	host  string
+}
+
+var forwardingHeaders = []string{
+	"Forwarded",
+	"X-Forwarded-For",
+	"X-Forwarded-Host",
+	"X-Forwarded-Proto",
+	"X-Real-IP",
+	"True-Client-IP",
+	"CF-Connecting-IP",
+	"X-Cluster-Client-IP",
+}
 
 // TrustedRealIP accepts X-Forwarded-For only from explicitly configured proxy
 // networks and walks the chain from right to left. Spoofable vendor headers are
@@ -15,9 +33,7 @@ func TrustedRealIP(rawCIDRs string) func(http.Handler) http.Handler {
 	trusted := parseTrustedProxyCIDRs(rawCIDRs)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-			request.Header.Del("True-Client-IP")
-			request.Header.Del("CF-Connecting-IP")
-			request.Header.Del("X-Cluster-Client-IP")
+			forwarding := trustedForwarding{}
 			peer, ok := remoteAddress(request.RemoteAddr)
 			if ok && trustedAddress(peer, trusted) {
 				client := peer
@@ -29,16 +45,32 @@ func TrustedRealIP(rawCIDRs string) func(http.Handler) http.Handler {
 					}
 					client = candidate.Unmap()
 				}
-				if client == peer {
+				if client == peer && strings.TrimSpace(request.Header.Get("X-Forwarded-For")) == "" {
 					if candidate, err := netip.ParseAddr(strings.TrimSpace(request.Header.Get("X-Real-IP"))); err == nil {
 						client = candidate.Unmap()
 					}
 				}
 				request.RemoteAddr = client.String()
+				forwarding.proto = trustedForwardedValue(request.Header.Get("X-Forwarded-Proto"))
+				forwarding.host = trustedForwardedValue(request.Header.Get("X-Forwarded-Host"))
 			}
-			next.ServeHTTP(response, request)
+			for _, header := range forwardingHeaders {
+				request.Header.Del(header)
+			}
+			ctx := reqctx.WithTrustedForwarding(request.Context(), forwarding.proto, forwarding.host)
+			next.ServeHTTP(response, request.WithContext(ctx))
 		})
 	}
+}
+
+func trustedForwardedValue(raw string) string {
+	parts := strings.Split(raw, ",")
+	for index := len(parts) - 1; index >= 0; index-- {
+		if value := strings.TrimSpace(parts[index]); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func parseTrustedProxyCIDRs(raw string) []netip.Prefix {

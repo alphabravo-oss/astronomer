@@ -17,7 +17,14 @@ func respondClusterAccessError(w http.ResponseWriter, r *http.Request, err error
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "unexpected empty cluster access error")
 		return
 	}
+	var upstream *kubernetesResponseError
 	switch {
+	case errors.As(err, &upstream) && upstream.StatusCode == http.StatusTooManyRequests:
+		if retryAfter := upstream.Headers["Retry-After"]; retryAfter != "" {
+			w.Header().Set("Retry-After", retryAfter)
+		}
+		RespondRequestError(w, r, http.StatusTooManyRequests, apierror.AgentOverloaded,
+			"The cluster agent is busy. Retry the request shortly.")
 	case errors.Is(err, ErrCircuitOpen):
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.TunnelUnavailable,
 			"Cluster agent is temporarily unavailable (circuit breaker open). Reconnect the agent or wait for automatic recovery.")

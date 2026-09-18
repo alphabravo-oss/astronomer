@@ -50,8 +50,9 @@ func helmTemplateWithValueFiles(t *testing.T, valueFiles []string, sets ...strin
 	}
 	chartDir := filepath.Join(filepath.Dir(here), "chart")
 	valuesFile := filepath.Join(chartDir, "values.yaml")
+	devValuesFile := filepath.Join(chartDir, "values-dev.yaml")
 
-	args := []string{"template", "astronomer", chartDir, "-f", valuesFile, "--kube-version", "1.35.0"}
+	args := []string{"template", "astronomer", chartDir, "-f", valuesFile, "-f", devValuesFile, "--kube-version", "1.35.0"}
 	for _, file := range valueFiles {
 		args = append(args, "-f", file)
 	}
@@ -201,6 +202,22 @@ func TestManagementLoggingDaemonSet_RespectsImageRegistry(t *testing.T) {
 	// Hash annotation rolls pods on values change.
 	if !strings.Contains(out, "checksum/config:") {
 		t.Fatalf("checksum/config annotation missing:\n%s", out)
+	}
+	doc := renderedDocumentContaining(t, out, "checksum/config:")
+	for _, want := range []string{
+		"allowPrivilegeEscalation: false",
+		"readOnlyRootFilesystem: true",
+		"type: RuntimeDefault",
+		"mountPath: /var/log\n              readOnly: true",
+		"mountPath: /fluent-bit/state",
+		"name: state\n          emptyDir: {}",
+	} {
+		if !strings.Contains(doc, want) {
+			t.Fatalf("hardened logging DaemonSet missing %q:\n%s", want, doc)
+		}
+	}
+	if !strings.Contains(out, "DB                /fluent-bit/state/flb-astronomer.db") {
+		t.Fatalf("tail offset database is not on the dedicated writable volume:\n%s", out)
 	}
 }
 

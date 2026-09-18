@@ -7,8 +7,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { useEffect, useMemo, useState } from "react";
+} from "@/components/ui/operator-table";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
 import {
@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { QueryStates } from "@/components/ui/query-states";
+import { Textarea } from "@/components/ui/textarea";
 import {
   disableExtension,
   enableExtension,
@@ -33,7 +35,7 @@ import {
   type ExtensionManifest,
   type ExtensionValidationResponse,
 } from "@/lib/api/extensions";
-import { queryKeys } from "@/lib/hooks";
+import { queryKeys } from "@/lib/query-keys";
 
 function statusClass(status: string, enabled?: boolean) {
   if (enabled) return "bg-status-success/10 text-status-success";
@@ -51,7 +53,7 @@ function FindingList({ findings }: { findings: ExtensionFinding[] }) {
       {findings.map((finding, index) => (
         <div
           key={`${finding.field || "finding"}:${index}`}
-          className="rounded border border-border p-3"
+          className="rounded-sm border border-border p-3"
         >
           <div className="flex items-center gap-2 text-xs font-medium text-foreground">
             {finding.severity === "error" ? (
@@ -142,7 +144,7 @@ function ExtensionTable({
                         .map((permission) => (
                           <span
                             key={permission}
-                            className="rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+                            className="rounded-sm border border-border px-2 py-1 text-xs text-muted-foreground"
                           >
                             {permission}
                           </span>
@@ -156,7 +158,7 @@ function ExtensionTable({
                   </TableCell>
                   <TableCell className="px-5 py-3">
                     <span
-                      className={`inline-flex rounded px-2 py-1 text-xs ${statusClass(item.compatibilityStatus, item.enabled)}`}
+                      className={`inline-flex rounded-sm px-2 py-1 text-xs ${statusClass(item.compatibilityStatus, item.enabled)}`}
                     >
                       {item.enabled ? "enabled" : item.compatibilityStatus}
                     </span>
@@ -170,7 +172,7 @@ function ExtensionTable({
                           !item.enabled)
                       }
                       onClick={() => onToggle(item.name, !item.enabled)}
-                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+                      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                         border border-border text-foreground hover:bg-accent transition-colors
                         disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -189,21 +191,20 @@ function ExtensionTable({
 
 function ExtensionsPage() {
   const queryClient = useQueryClient();
-  const [manifestText, setManifestText] = useState("");
+  const [manifestDraft, setManifestText] = useState<string>();
   const [validation, setValidation] = useState<
     ExtensionValidationResponse | undefined
   >();
 
-  const { data, isLoading } = useQuery({
+  const extensionsQuery = useQuery({
     queryKey: queryKeys.extensions.list,
     queryFn: listExtensions,
   });
+  const { data, isLoading } = extensionsQuery;
 
-  useEffect(() => {
-    if (!manifestText && data?.sampleManifest) {
-      setManifestText(JSON.stringify(data.sampleManifest, null, 2));
-    }
-  }, [data?.sampleManifest, manifestText]);
+  const manifestText =
+    manifestDraft ??
+    (data?.sampleManifest ? JSON.stringify(data.sampleManifest, null, 2) : "");
 
   const parsedManifest = useMemo(() => {
     try {
@@ -251,6 +252,16 @@ function ExtensionsPage() {
     onError: (error: Error) => toastApiError("", error),
   });
 
+  if (extensionsQuery.isError) {
+    return (
+      <PageShell>
+        <QueryStates query={extensionsQuery} permission="extensions:list">
+          {() => null}
+        </QueryStates>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell>
       <PageHeader
@@ -291,7 +302,7 @@ function ExtensionsPage() {
                 type="button"
                 onClick={() => validate.mutate()}
                 disabled={validate.isPending || !parsedManifest}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                   border border-border text-foreground hover:bg-accent transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -310,7 +321,7 @@ function ExtensionsPage() {
                   !validation?.valid ||
                   validation.compatibilityStatus !== "compatible"
                 }
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                   bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
                   disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -323,7 +334,7 @@ function ExtensionsPage() {
               </button>
             </div>
           </div>
-          <textarea
+          <Textarea
             aria-label="Extension manifest JSON"
             value={manifestText}
             onChange={(event) => {
@@ -331,7 +342,7 @@ function ExtensionsPage() {
               setValidation(undefined);
             }}
             spellCheck={false}
-            className="min-h-[520px] w-full resize-y bg-background p-4 font-mono text-xs text-foreground outline-none"
+            className="min-h-[520px] w-full resize-y bg-background p-4 font-mono text-xs text-foreground outline-hidden"
           />
         </div>
 

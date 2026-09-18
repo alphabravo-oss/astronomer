@@ -88,6 +88,7 @@ func (q *installedCatalogAuditQuerier) CreateInstalledChart(_ context.Context, a
 	row := sqlc.InstalledChart{
 		ID:             uuid.New(),
 		ClusterID:      arg.ClusterID,
+		ProjectID:      arg.ProjectID,
 		ChartVersionID: arg.ChartVersionID,
 		ReleaseName:    arg.ReleaseName,
 		Namespace:      arg.Namespace,
@@ -163,9 +164,40 @@ func (q *installedCatalogAuditQuerier) CreateAuditLogV1(_ context.Context, arg s
 	return nil
 }
 
+func (q *installedCatalogAuditQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	q.audits = append(q.audits, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{}, nil
+}
+
+func (q *installedCatalogAuditQuerier) UpsertTaskOutbox(_ context.Context, _ sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	return sqlc.TaskOutbox{}, nil
+}
+
+func (q *installedCatalogAuditQuerier) CreateCatalogOperationIdempotent(ctx context.Context, arg sqlc.CreateCatalogOperationIdempotentParams) (sqlc.CatalogOperation, error) {
+	return q.CreateCatalogOperation(ctx, sqlc.CreateCatalogOperationParams{
+		TargetType: arg.TargetType, TargetKey: arg.TargetKey, OperationType: arg.OperationType,
+		Payload: arg.Payload, Status: arg.Status, CreatedByID: arg.CreatedByID,
+	})
+}
+
+func (q *installedCatalogAuditQuerier) CreateCatalogOperationIdempotentWithDisposition(ctx context.Context, arg sqlc.CreateCatalogOperationIdempotentWithDispositionParams) (sqlc.CreateCatalogOperationIdempotentWithDispositionRow, error) {
+	op, err := q.CreateCatalogOperationIdempotent(ctx, sqlc.CreateCatalogOperationIdempotentParams(arg))
+	return sqlc.CreateCatalogOperationIdempotentWithDispositionRow{CatalogOperation: op, Inserted: err == nil}, err
+}
+
+func (q *installedCatalogAuditQuerier) RequeueCatalogOperation(_ context.Context, id uuid.UUID) (sqlc.CatalogOperation, error) {
+	for _, op := range q.operations {
+		if op.ID == id {
+			return op, nil
+		}
+	}
+	return sqlc.CatalogOperation{}, pgx.ErrNoRows
+}
+
 func TestCatalogInstalledMutationsAreAudited(t *testing.T) {
 	q, clusterID, projectID, versionID := newInstalledCatalogAuditQuerier()
 	h := NewCatalogHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(CatalogMutationTx) error) error { return fn(q) })
 
 	createBody, _ := json.Marshal(map[string]any{
 		"cluster_id":       clusterID.String(),
@@ -225,6 +257,59 @@ func TestCatalogInstalledMutationsAreAudited(t *testing.T) {
 	}
 	assertInstalledCatalogAudit(t, q.audits[2], "catalog.installation.delete", installation.ID.String(), "nginx")
 	assertAuditDetail(t, q.audits[2].Detail, "cluster_id", clusterID.String())
+}
+
+type namespaceOwnedCatalogQuerier struct {
+	*installedCatalogAuditQuerier
+	clusterID uuid.UUID
+	projectID uuid.UUID
+	namespace string
+}
+
+func (q *namespaceOwnedCatalogQuerier) ListProjectsByCluster(_ context.Context, arg sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error) {
+	if arg.ClusterID != q.clusterID {
+		return []sqlc.Project{}, nil
+	}
+	return []sqlc.Project{q.projects[q.projectID]}, nil
+}
+
+func (q *namespaceOwnedCatalogQuerier) GetProjectNamespaceByClusterAndNamespace(_ context.Context, arg sqlc.GetProjectNamespaceByClusterAndNamespaceParams) (sqlc.ProjectNamespace, error) {
+	if arg.ClusterID != q.clusterID || arg.Namespace != q.namespace {
+		return sqlc.ProjectNamespace{}, pgx.ErrNoRows
+	}
+	return sqlc.ProjectNamespace{ProjectID: q.projectID, ClusterID: q.clusterID, Namespace: q.namespace}, nil
+}
+
+func TestCatalogInstallDerivesProjectFromNamespace(t *testing.T) {
+	base, clusterID, projectID, versionID := newInstalledCatalogAuditQuerier()
+	q := &namespaceOwnedCatalogQuerier{
+		installedCatalogAuditQuerier: base,
+		clusterID:                    clusterID,
+		projectID:                    projectID,
+		namespace:                    "apps",
+	}
+	h := NewCatalogHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(CatalogMutationTx) error) error { return fn(q) })
+	body, _ := json.Marshal(map[string]any{
+		"cluster_id":       clusterID.String(),
+		"chart_version_id": versionID.String(),
+		"release_name":     "nginx",
+		"namespace":        "apps",
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/catalog/installed/", bytes.NewReader(body))
+	request.Header.Set("Idempotency-Key", "catalog-derived-project")
+	recorder := httptest.NewRecorder()
+	h.CreateInstalledChart(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	for _, installation := range q.installations {
+		if !installation.ProjectID.Valid || uuid.UUID(installation.ProjectID.Bytes) != projectID {
+			t.Fatalf("installation project=%v, want inferred project %s", installation.ProjectID, projectID)
+		}
+		return
+	}
+	t.Fatal("installation was not persisted")
 }
 
 func assertInstalledCatalogAudit(t *testing.T, row sqlc.CreateAuditLogV1Params, action, resourceID, resourceName string) {

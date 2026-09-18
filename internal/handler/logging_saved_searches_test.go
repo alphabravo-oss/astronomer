@@ -10,13 +10,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 func loggingSavedSearchTestRequest(method, target string, body any, userID uuid.UUID, params map[string]string) *http.Request {
@@ -25,7 +26,7 @@ func loggingSavedSearchTestRequest(method, target string, body any, userID uuid.
 		raw, _ = json.Marshal(body)
 	}
 	req := httptest.NewRequest(method, target, bytes.NewReader(raw))
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: userID.String()})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: userID.String()})
 	routeContext := chi.NewRouteContext()
 	for key, value := range params {
 		routeContext.URLParams.Add(key, value)
@@ -45,7 +46,7 @@ func newSavedSearchHandler(t *testing.T, outputType string) (*LoggingHandler, *l
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewLoggingHandler(queries)
+	h := newLoggingHandlerForTest(queries)
 	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: []rbac.RoleBinding{{
 		ClusterID: clusterID.String(),
 		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceLogging), Verbs: []string{string(rbac.VerbRead)}}},

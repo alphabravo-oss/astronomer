@@ -11,30 +11,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agentcompat"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/redaction"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type fakeClusterAgentQuerier struct {
 	fakeOperationIdempotencyStore
-	clusters   []sqlc.Cluster
-	active     []sqlc.AgentConnection
-	history    map[uuid.UUID][]sqlc.AgentConnection
-	conditions map[uuid.UUID][]sqlc.ClusterCondition
-	operations map[uuid.UUID][]sqlc.AgentLifecycleOperation
-	created    []sqlc.AgentLifecycleOperation
-	idempotent []sqlc.CreateAgentLifecycleOperationIdempotentParams
-	users      map[uuid.UUID]sqlc.User
-	audits     []sqlc.UpsertAuditOutboxParams
-	outboxErr  error
+	clusters    []sqlc.Cluster
+	active      []sqlc.AgentConnection
+	history     map[uuid.UUID][]sqlc.AgentConnection
+	conditions  map[uuid.UUID][]sqlc.ClusterCondition
+	operations  map[uuid.UUID][]sqlc.AgentLifecycleOperation
+	created     []sqlc.AgentLifecycleOperation
+	idempotent  []sqlc.CreateAgentLifecycleOperationIdempotentParams
+	users       map[uuid.UUID]sqlc.User
+	audits      []sqlc.UpsertAuditOutboxParams
+	outboxErr   error
+	cursorCalls []sqlc.ListClustersAfterParams
 }
 
 func (f *fakeClusterAgentQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.User, error) {
@@ -74,8 +75,23 @@ func (f *fakeClusterAgentQuerier) ListClusters(context.Context, sqlc.ListCluster
 	return f.clusters, nil
 }
 
-func (f *fakeClusterAgentQuerier) ListActiveConnections(context.Context) ([]sqlc.AgentConnection, error) {
-	return f.active, nil
+func (f *fakeClusterAgentQuerier) ListClustersAfter(_ context.Context, arg sqlc.ListClustersAfterParams) ([]sqlc.Cluster, error) {
+	f.cursorCalls = append(f.cursorCalls, arg)
+	start := 0
+	if arg.HasCursor {
+		start = len(f.clusters)
+		for i, cluster := range f.clusters {
+			if cluster.CreatedAt.Before(arg.AfterCreatedAt) || (cluster.CreatedAt.Equal(arg.AfterCreatedAt) && cluster.ID.String() < arg.AfterID.String()) {
+				start = i
+				break
+			}
+		}
+	}
+	end := start + int(arg.QueryLimit)
+	if end > len(f.clusters) {
+		end = len(f.clusters)
+	}
+	return f.clusters[start:end], nil
 }
 
 func (f *fakeClusterAgentQuerier) ListConnectionsByCluster(_ context.Context, arg sqlc.ListConnectionsByClusterParams) ([]sqlc.AgentConnection, error) {
@@ -86,6 +102,13 @@ func (f *fakeClusterAgentQuerier) ListLatestConnectionsByClusters(_ context.Cont
 	out := make([]sqlc.AgentConnection, 0, len(clusterIDs))
 	for _, id := range clusterIDs {
 		var latest *sqlc.AgentConnection
+		for i := range f.active {
+			c := f.active[i]
+			if c.ClusterID == id && (latest == nil || c.ConnectedAt.After(latest.ConnectedAt)) {
+				cc := c
+				latest = &cc
+			}
+		}
 		for i := range f.history[id] {
 			c := f.history[id][i]
 			if latest == nil || c.ConnectedAt.After(latest.ConnectedAt) {
@@ -179,19 +202,17 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 				DisplayName:       "Connected",
 				Status:            "active",
 				AgentVersion:      "v1.1.0",
-				LastHeartbeat:     ts(now.Add(-30 * time.Second)),
 				Annotations:       profileAnnotation(agenttemplate.PrivilegeProfileOperator),
 				KubernetesVersion: "v1.30.1",
 				NodeCount:         3,
 			},
 			{
-				ID:            degradedID,
-				Name:          "degraded",
-				DisplayName:   "Degraded",
-				Status:        "active",
-				LastHeartbeat: ts(now.Add(-5 * time.Minute)),
-				Annotations:   profileAnnotation(agenttemplate.PrivilegeProfileAdmin),
-				NodeCount:     2,
+				ID:          degradedID,
+				Name:        "degraded",
+				DisplayName: "Degraded",
+				Status:      "active",
+				Annotations: profileAnnotation(agenttemplate.PrivilegeProfileAdmin),
+				NodeCount:   2,
 			},
 			{
 				ID:          disconnectedID,
@@ -246,13 +267,13 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", rr.Code, rr.Body.String())
 	}
-	var envelope struct {
-		Data clusterAgentResponse `json:"data"`
-	}
-	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
+	var got clusterAgentResponse
+	if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	got := envelope.Data
+	if got.Pagination.Total == nil || *got.Pagination.Total != 3 || got.Pagination.HasMore {
+		t.Fatalf("pagination = %+v, want exact three-item page", got.Pagination)
+	}
 	if got.Summary.Connected != 1 || got.Summary.Degraded != 1 || got.Summary.Disconnected != 1 {
 		t.Fatalf("summary = %+v, want connected/degraded/disconnected 1/1/1", got.Summary)
 	}
@@ -265,39 +286,69 @@ func TestClusterAgentListSummarizesConnectedDegradedDisconnectedAgents(t *testin
 	if got.Summary.MinimumCompatibleAgentVersion != agentcompat.MinimumCompatibleVersion {
 		t.Fatalf("minimum compatible agent = %q, want %q", got.Summary.MinimumCompatibleAgentVersion, agentcompat.MinimumCompatibleVersion)
 	}
-	if len(got.Items) != 3 {
-		t.Fatalf("items len = %d, want 3", len(got.Items))
+	if len(got.Data) != 3 {
+		t.Fatalf("items len = %d, want 3", len(got.Data))
 	}
-	if got.Items[0].AgentStatus != "connected" {
-		t.Fatalf("first status = %q, want connected", got.Items[0].AgentStatus)
+	if got.Data[0].AgentStatus != "connected" {
+		t.Fatalf("first status = %q, want connected", got.Data[0].AgentStatus)
 	}
-	if got.Items[0].CompatibilityStatus != "supported" {
-		t.Fatalf("first compatibility = %q, want supported", got.Items[0].CompatibilityStatus)
+	if got.Data[0].CompatibilityStatus != "supported" {
+		t.Fatalf("first compatibility = %q, want supported", got.Data[0].CompatibilityStatus)
 	}
-	if got.Items[1].AgentStatus != "degraded" || len(got.Items[1].DegradedReasons) == 0 {
-		t.Fatalf("second item = %+v, want degraded with reasons", got.Items[1])
+	if got.Data[1].AgentStatus != "degraded" || len(got.Data[1].DegradedReasons) == 0 {
+		t.Fatalf("second item = %+v, want degraded with reasons", got.Data[1])
 	}
-	if got.Items[1].CompatibilityStatus != "deprecated" {
-		t.Fatalf("second compatibility = %q, want deprecated", got.Items[1].CompatibilityStatus)
+	if got.Data[1].CompatibilityStatus != "deprecated" {
+		t.Fatalf("second compatibility = %q, want deprecated", got.Data[1].CompatibilityStatus)
 	}
-	if got.Items[2].AgentStatus != "disconnected" {
-		t.Fatalf("third status = %q, want disconnected", got.Items[2].AgentStatus)
+	if got.Data[2].AgentStatus != "disconnected" {
+		t.Fatalf("third status = %q, want disconnected", got.Data[2].AgentStatus)
 	}
-	if got.Items[2].OfflineBehavior == nil {
+	if got.Data[2].OfflineBehavior == nil {
 		t.Fatalf("third offline behavior is nil")
 	}
-	if got.Items[2].OfflineBehavior.State != "offline" || !got.Items[2].OfflineBehavior.Stale {
-		t.Fatalf("third offline behavior = %+v, want stale offline", got.Items[2].OfflineBehavior)
+	if got.Data[2].OfflineBehavior.State != "offline" || !got.Data[2].OfflineBehavior.Stale {
+		t.Fatalf("third offline behavior = %+v, want stale offline", got.Data[2].OfflineBehavior)
 	}
-	if got.Items[2].OfflineBehavior.LastKnownAt == nil || *got.Items[2].OfflineBehavior.LastKnownAt != now.Add(-30*time.Minute).UTC().Format(time.RFC3339) {
-		t.Fatalf("third last known = %v", got.Items[2].OfflineBehavior.LastKnownAt)
+	if got.Data[2].OfflineBehavior.LastKnownAt == nil || *got.Data[2].OfflineBehavior.LastKnownAt != now.Add(-30*time.Minute).UTC().Format(time.RFC3339) {
+		t.Fatalf("third last known = %v", got.Data[2].OfflineBehavior.LastKnownAt)
 	}
-	if !containsString(got.Items[2].OfflineBehavior.BlockedOperations, "kubernetes_proxy") ||
-		!containsString(got.Items[2].OfflineBehavior.PermittedQueuedOperations, "cluster_metadata_updates") {
-		t.Fatalf("third offline operations = %+v", got.Items[2].OfflineBehavior)
+	if !containsString(got.Data[2].OfflineBehavior.BlockedOperations, "kubernetes_proxy") ||
+		!containsString(got.Data[2].OfflineBehavior.PermittedQueuedOperations, "cluster_metadata_updates") {
+		t.Fatalf("third offline operations = %+v", got.Data[2].OfflineBehavior)
 	}
 	if got.Summary.Compatibility["supported"] != 1 || got.Summary.Compatibility["deprecated"] != 1 || got.Summary.Compatibility["blocked"] != 1 {
 		t.Fatalf("compatibility summary = %+v, want supported=1 deprecated=1 blocked=1", got.Summary.Compatibility)
+	}
+}
+
+func TestClusterAgentListUsesCursorContinuation(t *testing.T) {
+	now := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
+	q := &fakeClusterAgentQuerier{clusters: []sqlc.Cluster{
+		{ID: uuid.MustParse("ffffffff-ffff-ffff-ffff-ffffffffffff"), Name: "one", CreatedAt: now},
+		{ID: uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), Name: "two", CreatedAt: now.Add(-time.Second)},
+		{ID: uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd"), Name: "three", CreatedAt: now.Add(-2 * time.Second)},
+	}}
+	h := NewClusterAgentHandler(q)
+	first := httptest.NewRecorder()
+	h.List(first, httptest.NewRequest(http.MethodGet, "/api/v1/cluster-agents/?limit=2", nil))
+	if first.Code != http.StatusOK {
+		t.Fatalf("first page status=%d body=%s", first.Code, first.Body.String())
+	}
+	var page clusterAgentResponse
+	if err := json.Unmarshal(first.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Data) != 2 || page.Pagination.NextCursor == nil || len(q.cursorCalls) != 1 || q.cursorCalls[0].QueryLimit != 3 {
+		t.Fatalf("page=%+v cursor calls=%+v", page.Pagination, q.cursorCalls)
+	}
+	second := httptest.NewRecorder()
+	h.List(second, httptest.NewRequest(http.MethodGet, "/api/v1/cluster-agents/?limit=2&cursor="+*page.Pagination.NextCursor, nil))
+	if second.Code != http.StatusOK {
+		t.Fatalf("second page status=%d body=%s", second.Code, second.Body.String())
+	}
+	if len(q.cursorCalls) != 2 || !q.cursorCalls[1].HasCursor {
+		t.Fatalf("second cursor call=%+v", q.cursorCalls)
 	}
 }
 
@@ -317,13 +368,12 @@ func TestClusterAgentDiagnosticsReturnsRedactedTriagePayload(t *testing.T) {
 	h := NewClusterAgentHandler(&fakeClusterAgentQuerier{
 		clusters: []sqlc.Cluster{
 			{
-				ID:            clusterID,
-				Name:          "prod",
-				DisplayName:   "Production",
-				Status:        "active",
-				LastHeartbeat: ts(now.Add(-5 * time.Minute)),
-				Annotations:   profileAnnotation(agenttemplate.PrivilegeProfileAdmin),
-				AgentVersion:  "v1.1.0",
+				ID:           clusterID,
+				Name:         "prod",
+				DisplayName:  "Production",
+				Status:       "active",
+				Annotations:  profileAnnotation(agenttemplate.PrivilegeProfileAdmin),
+				AgentVersion: "v1.1.0",
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -394,12 +444,11 @@ func TestClusterAgentDiagnosticsBundleDownloadsRedactedJSON(t *testing.T) {
 	h := NewClusterAgentHandler(&fakeClusterAgentQuerier{
 		clusters: []sqlc.Cluster{
 			{
-				ID:            clusterID,
-				Name:          "prod",
-				DisplayName:   "Production",
-				Status:        "active",
-				LastHeartbeat: ts(now.Add(-30 * time.Second)),
-				Annotations:   profileAnnotation(agenttemplate.PrivilegeProfileOperator),
+				ID:          clusterID,
+				Name:        "prod",
+				DisplayName: "Production",
+				Status:      "active",
+				Annotations: profileAnnotation(agenttemplate.PrivilegeProfileOperator),
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -664,13 +713,12 @@ func TestClusterAgentSelfTestPassesForHealthyConnectedAgent(t *testing.T) {
 	h := NewClusterAgentHandler(&fakeClusterAgentQuerier{
 		clusters: []sqlc.Cluster{
 			{
-				ID:            clusterID,
-				Name:          "prod",
-				DisplayName:   "Production",
-				Status:        "active",
-				LastHeartbeat: ts(now.Add(-30 * time.Second)),
-				Annotations:   profileAnnotation(agenttemplate.PrivilegeProfileOperator),
-				AgentVersion:  "v1.1.0",
+				ID:           clusterID,
+				Name:         "prod",
+				DisplayName:  "Production",
+				Status:       "active",
+				Annotations:  profileAnnotation(agenttemplate.PrivilegeProfileOperator),
+				AgentVersion: "v1.1.0",
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -822,11 +870,12 @@ func TestClusterAgentUpgradePlanReadyForConnectedRemoteAgent(t *testing.T) {
 	h := NewClusterAgentHandler(&fakeClusterAgentQuerier{
 		clusters: []sqlc.Cluster{
 			{
-				ID:          clusterID,
-				Name:        "prod",
-				DisplayName: "Production",
-				Status:      "active",
-				Annotations: profileAnnotation(agenttemplate.PrivilegeProfileOperator),
+				ID:             clusterID,
+				Name:           "prod",
+				DisplayName:    "Production",
+				Status:         "active",
+				Annotations:    profileAnnotation(agenttemplate.PrivilegeProfileOperator),
+				AgentOverrides: json.RawMessage(`{"resources":{"requests":{"cpu":"250m"}}}`),
 			},
 		},
 		history: map[uuid.UUID][]sqlc.AgentConnection{
@@ -871,6 +920,12 @@ func TestClusterAgentUpgradePlanReadyForConnectedRemoteAgent(t *testing.T) {
 	}
 	if len(got.CanaryClusterIDs) != 1 || got.CanaryClusterIDs[0] != clusterID.String() {
 		t.Fatalf("canary defaults = %+v", got.CanaryClusterIDs)
+	}
+	if got.ConfigurationDigest == "" || got.PlanDigest == "" || got.AgentOverrides.Resources == nil || got.AgentOverrides.Resources.Requests.CPU != "250m" {
+		t.Fatalf("configuration not bound into plan: %+v", got)
+	}
+	if got.PlanDigest != agentUpgradePlanDigest(got) {
+		t.Fatalf("plan digest = %q, want recomputed %q", got.PlanDigest, agentUpgradePlanDigest(got))
 	}
 	if len(got.PreflightChecks) == 0 || len(got.PostUpgradeHealthChecks) == 0 || len(got.Steps) == 0 || len(got.Validation) == 0 || len(got.Rollback) == 0 {
 		t.Fatalf("expected actionable rollout plan: %+v", got)
@@ -1113,13 +1168,11 @@ func TestClusterAgentOperationsListsLifecycleHistory(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 	}
-	var envelope struct {
-		Data agentLifecycleOperationsResponse `json:"data"`
-	}
+	var envelope paging.Response[agentLifecycleOperationResponse]
 	if err := json.NewDecoder(rr.Body).Decode(&envelope); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(envelope.Data.Items) != 1 || envelope.Data.Items[0].OperationType != "agent_upgrade" {
+	if len(envelope.Data) != 1 || envelope.Data[0].OperationType != "agent_upgrade" {
 		t.Fatalf("operations response = %+v", envelope.Data)
 	}
 }

@@ -7,6 +7,7 @@ frontend/.next
 frontend/dist
 out
 .claude
+.local-ci
 bin
 keyrotate
 worker
@@ -20,4 +21,5 @@ plans
 *.md
 !content/**/*.md
 coverage
+test-artifacts
 **/*_test.go

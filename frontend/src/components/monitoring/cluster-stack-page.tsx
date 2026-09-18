@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * /dashboard/clusters/$id/monitoring-stack — lifecycle for ONE cluster's
  * kube-prometheus-stack. It sits in the cluster subtree, next to Tools and
@@ -8,31 +6,25 @@
  * The backend declares {id} as a cluster scope for this subtree, so UI
  * decisions use the same cluster-scoped monitoring grant as the API.
  */
-import { Link } from "@/lib/link";
-import { ArrowLeft, BarChart3, ExternalLink } from "lucide-react";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { ArrowLeft, BarChart3 } from "lucide-react";
 
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { PermissionState } from "@/components/ui/empty-state";
 import { usePermissionDecision } from "@/lib/permission-hooks";
-import { useCluster } from "@/lib/hooks";
+import { useCluster } from "@/lib/hooks/clusters";
 import { useB2StorageLocations } from "@/components/backups/hooks";
 import {
   StackLifecyclePanel,
   type StackLifecyclePermissions,
   type StackOption,
 } from "@/components/monitoring/stack-lifecycle-panel";
+import { CLUSTER_STACK_FAMILY } from "@/components/monitoring/stack-spec";
 import {
-  CLUSTER_STACK_FAMILY,
-  fleetGrafanaClusterURL,
-} from "@/components/monitoring/stack-spec";
-import {
-  useSharedGrafanaStatus,
+  useClusterStackStatus,
   useSharedThanosStatus,
 } from "@/components/monitoring/hooks";
-import type {
-  SharedGrafanaStatus,
-  SharedThanosStatus,
-} from "@/lib/api/monitoring-stack";
+import type { SharedThanosStatus } from "@/lib/api/monitoring-stack";
 
 export function ClusterMonitoringStackPage({
   clusterId,
@@ -59,11 +51,7 @@ export function ClusterMonitoringStackPage({
   const thanos = thanosQuery.data as SharedThanosStatus | undefined;
   const sharedThanosStorageId =
     thanos?.status === "healthy" ? (thanos.storageConfigId || "").trim() : "";
-  const grafanaQuery = useSharedGrafanaStatus(permissions.read.allowed);
-  const grafanaOpenURL = fleetGrafanaClusterURL(
-    grafanaQuery.data as SharedGrafanaStatus | undefined,
-    clusterId,
-  );
+  const stackStatus = useClusterStackStatus(clusterId);
 
   const target = { kind: "cluster" as const, clusterId };
 
@@ -71,31 +59,43 @@ export function ClusterMonitoringStackPage({
     <PageShell>
       <PageHeader
         eyebrow={
-          <Link
-            href={`/dashboard/clusters/${clusterId}`}
+          <RouterLink
+            to="/dashboard/clusters/$id"
+            params={{ id: clusterId }}
             className="inline-flex items-center gap-1 hover:text-foreground"
           >
             <ArrowLeft className="h-3 w-3" />
             {cluster?.displayName || "Cluster"}
-          </Link>
+          </RouterLink>
         }
         title="Monitoring stack"
         description="kube-prometheus-stack for this cluster. Install, upgrade, replace or uninstall the release; the panel follows the queued operation to completion and surfaces the reconciler's own errors."
         actions={
           <div className="flex items-center gap-2">
-            <Link
-              href={`/dashboard/clusters/${clusterId}/metrics`}
+            {stackStatus.data?.grafanaAvailable ? (
+              <RouterLink
+                to="/dashboard/clusters/$id/grafana"
+                params={{ id: clusterId }}
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Grafana
+              </RouterLink>
+            ) : null}
+            <RouterLink
+              to="/dashboard/clusters/$id/metrics"
+              params={{ id: clusterId }}
               className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <BarChart3 className="h-3.5 w-3.5" />
               Metrics
-            </Link>
-            <Link
-              href="/dashboard/settings/monitoring"
+            </RouterLink>
+            <RouterLink
+              to="/dashboard/settings/monitoring"
               className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               Shared stacks
-            </Link>
+            </RouterLink>
           </div>
         }
       />
@@ -112,23 +112,10 @@ export function ClusterMonitoringStackPage({
             data-testid="two-grafana-copy"
           >
             Cluster Grafana talks to this cluster’s Prometheus (15d local
-            retention) and survives an Astronomer outage. Shared Grafana is the
-            lobby for comparing clusters, long-term metrics, and logs — it dies
-            with Astronomer. We do not uninstall cluster Grafana automatically.
-            {grafanaOpenURL ? (
-              <>
-                {" "}
-                <a
-                  href={grafanaOpenURL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 font-medium text-foreground hover:underline"
-                >
-                  Open shared Grafana
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </>
-            ) : null}
+            retention) and remains available within the member cluster during a
+            management-plane outage. Astronomer exposes it only through the
+            signed-in user’s cluster-scoped monitoring permissions; it has no
+            public ingress of its own.
           </p>
 
           {sharedThanosStorageId ? (

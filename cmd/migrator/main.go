@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/url"
 	"os"
@@ -46,12 +47,15 @@ type options struct {
 }
 
 type migrationLogger struct {
-	w       io.Writer
+	log     *slog.Logger
 	verbose bool
 }
 
 func (l migrationLogger) Printf(format string, args ...any) {
-	_, _ = fmt.Fprintf(l.w, format, args...)
+	if l.log == nil {
+		return
+	}
+	l.log.Info("database migration", "detail", strings.TrimSpace(fmt.Sprintf(format, args...)))
 }
 
 func (l migrationLogger) Verbose() bool { return l.verbose }
@@ -66,7 +70,7 @@ func main() {
 	defer stop()
 
 	if err := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "migrate: %v\n", err)
+		slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("migration command failed", "error", err)
 		os.Exit(1)
 	}
 }
@@ -187,7 +191,7 @@ func runMigration(ctx context.Context, opts options, stdin io.Reader, stdout, st
 			cleanupMigrationDatabase(locked, databaseDriver.Close),
 		)
 	}
-	migrator.Log = migrationLogger{w: stderr, verbose: opts.verbose}
+	migrator.Log = migrationLogger{log: slog.New(slog.NewJSONHandler(stderr, nil)), verbose: opts.verbose}
 	migrator.PrefetchMigrations = opts.prefetch
 	migrator.LockTimeout = opts.lockTimeout
 

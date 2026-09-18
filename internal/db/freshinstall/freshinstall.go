@@ -15,18 +15,19 @@ var ErrFreshInstallRequired = errors.New("fresh_install_required")
 
 const AcceptedSchemaVersion int64 = 1
 
-// Names are concatenated so active-runtime scanners do not treat this
-// rejector as a leftover delivery-engine surface.
+// These explicit historical names are detection inputs only. The release
+// contract allowlists them in this file so the migration guard remains
+// readable without hiding retired identifiers through string concatenation.
 var LegacyDeliveryTables = []string{
-	"argo" + "cd_baseline_ownership_decisions",
-	"argo" + "cd_cluster_proxy_tokens",
-	"argo" + "cd_managed_clusters",
-	"argo" + "cd_operation_events",
-	"argo" + "cd_operations",
-	"argo" + "cd_applications",
-	"argo" + "cd_instances",
-	"fl" + "eet_operation_targets",
-	"fl" + "eet_operations",
+	"argocd_baseline_ownership_decisions",
+	"argocd_cluster_proxy_tokens",
+	"argocd_managed_clusters",
+	"argocd_operation_events",
+	"argocd_operations",
+	"argocd_applications",
+	"argocd_instances",
+	"fleet_operation_targets",
+	"fleet_operations",
 }
 
 var RequiredV1Tables = []string{

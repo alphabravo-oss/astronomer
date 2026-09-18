@@ -36,7 +36,7 @@ func TestPodDeleteRouteRetainsWriteScopeAndPodDeleteAuthorization(t *testing.T) 
 	if !strings.Contains(text, "r.Use(mutationWriteScope)") || !strings.Contains(text, "r.Use(idem)") {
 		t.Fatal("workload mutation group must retain write-scope and idempotency middleware")
 	}
-	want := `r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourcePods, rbac.VerbDelete)).Delete("/workloads/pods/{cluster_id}/{namespace}/{pod}/", deps.Workloads.DeletePod)`
+	want := `r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourcePods, rbac.VerbDelete)).Delete("/workloads/pods/{cluster_id}/{namespace}/{pod}/", deps.ClusterResources.Workloads.DeletePod)`
 	if !strings.Contains(text, want) {
 		t.Fatal("pod delete route must retain pods:delete authorization")
 	}

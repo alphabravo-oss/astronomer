@@ -5,10 +5,11 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
@@ -20,12 +21,17 @@ type runtimeTaskComposition struct {
 
 func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *slog.Logger, routed *routerComposition, foundation *runtimeFoundation) (*runtimeTaskComposition, error) {
 	core := tasks.CoreRuntime{Deps: tasks.RuntimeDependencies{
-		Queries: c.queries, ManagementBackup: routed.deps.AdminDrill, Log: logger,
+		Queries: c.queries, ManagementBackup: routed.deps.AdminPlatform.AdminDrill, Log: logger,
 		AgentImageRepo: cfg.AgentImageRepository, AgentImageTag: cfg.AgentImageTag,
 		PlatformName: "Astronomer", Leader: c.taskLeader, K8s: c.requester,
-		ResourceDecryptor: c.encryptor, Enqueuer: c.queue, Bus: c.bus,
-		CatalogDecryptor: tasks.CatalogDecryptorFor(c.encryptor),
-		MonitoringCipher: tasks.MonitoringCipherFor(c.encryptor),
+		ChartRecommendationPolicy:     catalog.NewRecommendationPolicy(cfg.ChartRatingBayesianAverage, cfg.ChartRatingBayesianWeight),
+		AuditLogRetentionMonths:       cfg.AuditLogRetentionMonths,
+		ClusterTombstoneRetentionDays: cfg.ClusterTombstoneRetentionDays,
+		ResourceDecryptor:             c.encryptor, Enqueuer: c.queue, Bus: c.bus,
+		NotificationEmail:      c.emailEnqueuer,
+		AlertNotificationRunTx: sqlcMutationTxRunner[tasks.AlertNotificationMutationTx](c.database),
+		CatalogDecryptor:       tasks.CatalogDecryptorFor(c.encryptor),
+		MonitoringCipher:       tasks.MonitoringCipherFor(c.encryptor),
 	}}
 	clusterDecommission := tasks.ClusterDecommissionRuntime{Deps: tasks.ClusterDecommissionDeps{
 		Queries: c.queries, Tunnel: c.hub, RBACCache: c.rbacQuerier.Cache(),
@@ -36,9 +42,10 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 	toolDrift := tasks.ToolDriftRuntime{Deps: tasks.ToolDriftSweepDeps{Queries: c.queries, Helm: c.helmRequester}}
 	clusterRegistry := c.clusterRegistriesHandler.WorkerRuntime(c.queries)
 	cloudCredential := tasks.CloudCredentialRuntime{Deps: tasks.CloudCredentialMaterializeDeps{
-		Queries: c.queries, Requester: handler.ProjectK8sRequesterFromHandlerRequester(c.requester), Decryptor: c.encryptor,
+		Queries: c.queries, Requester: projectdomain.TaskRequester(c.requester), Decryptor: c.encryptor,
 	}}
-	project := c.projectHandler.WorkerRuntime()
+	project := projectdomain.NewReconcileRuntime(c.queries, c.requester, c.encryptor)
+	c.projectHandler.SetReconcileSweep(project.HandleProjectReconcileAll)
 	crdOwnership := tasks.CRDOwnershipRuntime{Deps: tasks.CRDOwnershipDriftDeps{Queries: c.queries, Dynamic: c.localDynamic}}
 	if cfg.RedisURL != "" {
 		terminalPublisher, _ := charlie.NewQueueTerminalFailurePublisher(sqlc.New(c.database.Pool()))
@@ -51,8 +58,10 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 			ClusterSnapshot: c.clusterSnapshotRuntime, ClusterDecommission: clusterDecommission,
 			ControlPlaneSnapshot: c.controlPlaneSnapshotRuntime, Deferred: routed.deferredRuntime,
 			KubectlSessionReap: c.kubectlSessionReapRuntime, SecurityIngest: c.securityIngestRuntime,
-			CRDOwnership: crdOwnership,
-			Dex:          tasks.DexOperationRuntime{Queries: c.queries, Executor: c.dexHandler},
+			CRDOwnership:  crdOwnership,
+			Dex:           tasks.DexOperationRuntime{Queries: c.queries, Executor: c.dexHandler},
+			SupportBundle: tasks.SupportBundleRuntime{Queries: c.queries, Generator: routed.deps.AdminPlatform.SupportBundle},
+			AuditExport:   tasks.AuditExportRuntime{Queries: c.queries, Generator: routed.deps.AdminPlatform.Audit},
 		}
 		tunnelWorker, err := worker.NewTunnelWorker(
 			cfg.RedisURL, cfg.TunnelWorkerConcurrency, logger, runtime,
@@ -73,13 +82,9 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 			worker.CapabilityOutboundHTTP: true,
 		}
 		if foundation.server.tunnelWorker == nil {
-			foundation.cancel()
-			c.database.Close()
 			return nil, fmt.Errorf("tunnel task runtime is unavailable; refusing production startup")
 		}
 		if err := worker.ValidateTaskCapabilities(worker.TaskOwnerTunnel, capabilities); err != nil {
-			foundation.cancel()
-			c.database.Close()
 			return nil, fmt.Errorf("validate tunnel task runtime: %w", err)
 		}
 		if err := tasks.ValidateTunnelRuntime(tasks.TunnelRuntimeFeatures{
@@ -89,8 +94,6 @@ func (c *productionComposition) composeRuntimeTasks(cfg *config.Config, logger *
 			c.meshRuntime, cloudCredential, clusterRegistry, project, c.clusterSnapshotRuntime,
 			clusterDecommission, c.controlPlaneSnapshotRuntime, routed.deferredRuntime,
 			c.kubectlSessionReapRuntime, c.securityIngestRuntime, crdOwnership); err != nil {
-			foundation.cancel()
-			c.database.Close()
 			return nil, fmt.Errorf("validate tunnel task composition: %w", err)
 		}
 		logger.Info("validated tunnel task runtime", "task_counts", worker.TaskRegistryCounts())

@@ -4,67 +4,7 @@ import {
   adminSmtpTest,
   adminSmtpUpdate,
 } from "@/lib/api/generated/client";
-import type { PaginatedResponse } from "@/types";
-
-interface ItemsEnvelope<T> {
-  items?: T[];
-  total?: number;
-  limit?: number;
-  offset?: number;
-}
-
-function toPaginatedResponse<T>(
-  envelope: ItemsEnvelope<T> | PaginatedResponse<T> | T[] | undefined,
-  params?: { page?: number; page_size?: number },
-): PaginatedResponse<T> {
-  if (Array.isArray(envelope)) {
-    const pageSize = params?.page_size ?? envelope.length;
-    return {
-      data: envelope,
-      total: envelope.length,
-      count: envelope.length,
-      next: null,
-      previous: null,
-      page: params?.page ?? 1,
-      pageSize,
-      totalPages:
-        pageSize > 0 ? Math.max(1, Math.ceil(envelope.length / pageSize)) : 1,
-    };
-  }
-
-  const data = Array.isArray(
-    (envelope as PaginatedResponse<T> | undefined)?.data,
-  )
-    ? (envelope as PaginatedResponse<T>).data
-    : ((envelope as ItemsEnvelope<T> | undefined)?.items ?? []);
-  const total =
-    (envelope as ItemsEnvelope<T> | undefined)?.total ?? data.length;
-  const limit =
-    (envelope as ItemsEnvelope<T> | undefined)?.limit ??
-    (envelope as PaginatedResponse<T> | undefined)?.pageSize ??
-    params?.page_size ??
-    data.length ??
-    0;
-  const offset = (envelope as ItemsEnvelope<T> | undefined)?.offset ?? 0;
-  const page =
-    (envelope as PaginatedResponse<T> | undefined)?.page ??
-    params?.page ??
-    (limit > 0 ? Math.floor(offset / limit) + 1 : 1);
-  const totalPages =
-    (envelope as PaginatedResponse<T> | undefined)?.totalPages ??
-    (limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1);
-
-  return {
-    data,
-    total,
-    count: (envelope as PaginatedResponse<T> | undefined)?.count ?? total,
-    next: (envelope as PaginatedResponse<T> | undefined)?.next ?? null,
-    previous: (envelope as PaginatedResponse<T> | undefined)?.previous ?? null,
-    page,
-    pageSize: limit,
-    totalPages,
-  };
-}
+import { mapPage } from "@/lib/api/pagination";
 // ============================================================
 // Types — SMTP
 // ============================================================
@@ -193,24 +133,15 @@ export async function listSentEmails(params?: {
     },
     signal: params?.signal,
   });
-  const envelope: ItemsEnvelope<SentEmail> = {
-    items: (response.data?.items ?? []).map((email) => ({
-      id: email.id ?? "",
-      to: email.to_address ?? "",
-      subject: email.subject ?? "",
-      template: email.template ?? "",
-      status: (email.status as EmailStatus | undefined) ?? "queued",
-      attempts: email.attempts ?? 0,
-      lastError: email.last_error,
-      sentAt: email.sent_at ?? undefined,
-      createdAt: email.created_at ?? "",
-    })),
-    total: response.data?.total,
-    limit: response.data?.limit,
-    offset: response.data?.offset,
-  };
-  return toPaginatedResponse(envelope, {
-    page,
-    page_size: pageSize,
-  });
+  return mapPage(response, (email): SentEmail => ({
+    id: email.id ?? "",
+    to: email.to_address ?? "",
+    subject: email.subject ?? "",
+    template: email.template ?? "",
+    status: (email.status as EmailStatus | undefined) ?? "queued",
+    attempts: email.attempts ?? 0,
+    lastError: email.last_error,
+    sentAt: email.sent_at ?? undefined,
+    createdAt: email.created_at ?? "",
+  }));
 }

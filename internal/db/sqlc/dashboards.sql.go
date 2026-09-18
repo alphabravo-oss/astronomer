@@ -8,10 +8,33 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countDashboardWidgets = `-- name: CountDashboardWidgets :one
+SELECT count(*) FROM dashboard_widgets
+`
+
+func (q *Queries) CountDashboardWidgets(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countDashboardWidgets)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPrometheusDatasources = `-- name: CountPrometheusDatasources :one
+SELECT count(*) FROM prometheus_datasources
+`
+
+func (q *Queries) CountPrometheusDatasources(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPrometheusDatasources)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createDashboardWidget = `-- name: CreateDashboardWidget :one
 INSERT INTO dashboard_widgets (
@@ -222,24 +245,26 @@ func (q *Queries) GetPrometheusDatasourceByName(ctx context.Context, name string
 	return i, err
 }
 
-const listDashboardWidgets = `-- name: ListDashboardWidgets :many
+const listDashboardWidgetsPage = `-- name: ListDashboardWidgetsPage :many
 
 SELECT id, name, description, widget_type, spec, scope, scope_ids,
        grid_x, grid_y, grid_w, grid_h, refresh_seconds, enabled,
        created_by, created_at, updated_at
 FROM dashboard_widgets
-ORDER BY scope ASC, grid_y ASC, grid_x ASC, name ASC
+ORDER BY scope ASC, grid_y ASC, grid_x ASC, name ASC, id ASC
+LIMIT $2 OFFSET $1
 `
+
+type ListDashboardWidgetsPageParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
 
 // Dashboard widgets + Prometheus datasources (migration 058).
 //
-// Hand-edited SQL companion to the hand-written sqlc shim in
-// internal/db/sqlc/dashboards.sql.go. The sqlc CLI isn't part of the
-// local build path (compliance.sql lexer error blocks a fresh
-// generate); these queries are kept in the canonical queries/ tree so
-// a future `sqlc generate` picks them up by name.
-func (q *Queries) ListDashboardWidgets(ctx context.Context) ([]DashboardWidget, error) {
-	rows, err := q.db.Query(ctx, listDashboardWidgets)
+// Canonical sqlc source for dashboard widgets and Prometheus datasources.
+func (q *Queries) ListDashboardWidgetsPage(ctx context.Context, arg ListDashboardWidgetsPageParams) ([]DashboardWidget, error) {
+	rows, err := q.db.Query(ctx, listDashboardWidgetsPage, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -311,28 +336,47 @@ func (q *Queries) ListEnabledPrometheusDatasources(ctx context.Context) ([]Prome
 	return items, nil
 }
 
-const listPrometheusDatasources = `-- name: ListPrometheusDatasources :many
+const listPrometheusDatasourcesPage = `-- name: ListPrometheusDatasourcesPage :many
 
-SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+SELECT id, name, url, (auth_encrypted <> '') AS has_auth,
+       tls_skip_verify, enabled, created_at, updated_at
 FROM prometheus_datasources
-ORDER BY name ASC
+ORDER BY name ASC, id ASC
+LIMIT $2 OFFSET $1
 `
 
+type ListPrometheusDatasourcesPageParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
+
+type ListPrometheusDatasourcesPageRow struct {
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Url           string    `json:"url"`
+	HasAuth       bool      `json:"has_auth"`
+	TlsSkipVerify bool      `json:"tls_skip_verify"`
+	Enabled       bool      `json:"enabled"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
 // Prometheus datasources -------------------------------------------------
-func (q *Queries) ListPrometheusDatasources(ctx context.Context) ([]PrometheusDatasource, error) {
-	rows, err := q.db.Query(ctx, listPrometheusDatasources)
+// Admin lists need only the configured state, never the encrypted credential.
+func (q *Queries) ListPrometheusDatasourcesPage(ctx context.Context, arg ListPrometheusDatasourcesPageParams) ([]ListPrometheusDatasourcesPageRow, error) {
+	rows, err := q.db.Query(ctx, listPrometheusDatasourcesPage, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []PrometheusDatasource{}
+	items := []ListPrometheusDatasourcesPageRow{}
 	for rows.Next() {
-		var i PrometheusDatasource
+		var i ListPrometheusDatasourcesPageRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.Url,
-			&i.AuthEncrypted,
+			&i.HasAuth,
 			&i.TlsSkipVerify,
 			&i.Enabled,
 			&i.CreatedAt,

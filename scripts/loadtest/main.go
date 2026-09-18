@@ -26,15 +26,22 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 // Build-time defaults. All overridable via flags.
 const (
-	defaultServer   = "http://localhost:8080"
+	defaultServer   = "http://localhost:8001"
 	defaultClusters = 50
 	defaultRPS      = 100
 	defaultDuration = 5 * time.Minute
 	defaultOut      = "loadtest-report.md"
+	// Synthetic agents exercise the production compatibility gate, so their
+	// identity must be a strict semver accepted by the current release. A label
+	// such as "loadtest" upgrades the WebSocket but is rejected before CONNECT
+	// readiness, making every estate profile hang in its ramp-up phase.
+	syntheticAgentVersion = "1.1.0"
 
 	heartbeatInterval  = 30 * time.Second
 	metricsScrape      = 15 * time.Second
@@ -44,10 +51,13 @@ const (
 
 type config struct {
 	server            string
+	metricsServer     string
 	clusters          int
 	rps               int
 	duration          time.Duration
 	tokenPath         string
+	loginEmail        string
+	loginPasswordPath string
 	outPath           string
 	verbose           bool
 	skipAgents        bool // dev convenience — disable WS dial entirely
@@ -93,10 +103,13 @@ func main() {
 func parseFlags() *config {
 	cfg := &config{}
 	flag.StringVar(&cfg.server, "server", envOr("LOADTEST_SERVER", defaultServer), "management-plane base URL")
+	flag.StringVar(&cfg.metricsServer, "metrics-server", envOr("LOADTEST_METRICS_SERVER", ""), "Prometheus metrics base URL (defaults to -server)")
 	flag.IntVar(&cfg.clusters, "clusters", envOrInt("LOADTEST_CLUSTERS", defaultClusters), "number of synthetic agents to spawn")
 	flag.IntVar(&cfg.rps, "rps", envOrInt("LOADTEST_RPS", defaultRPS), "aggregate HTTP request rate (per second)")
 	flag.DurationVar(&cfg.duration, "duration", envOrDuration("LOADTEST_DURATION", defaultDuration), "how long to run")
-	flag.StringVar(&cfg.tokenPath, "token", envOr("LOADTEST_TOKEN", ""), "path to a file holding an admin JWT (Bearer token)")
+	flag.StringVar(&cfg.tokenPath, "token", envOr("LOADTEST_TOKEN", ""), "path to a file holding an admin API bearer token")
+	flag.StringVar(&cfg.loginEmail, "login-email", envOr("LOADTEST_LOGIN_EMAIL", ""), "local engineering only: email used to mint an ephemeral API token")
+	flag.StringVar(&cfg.loginPasswordPath, "login-password-file", envOr("LOADTEST_LOGIN_PASSWORD_FILE", ""), "local engineering only: path or file descriptor containing the login password")
 	flag.StringVar(&cfg.outPath, "out", envOr("LOADTEST_OUT", defaultOut), "where to write the markdown report")
 	flag.StringVar(&cfg.profilePath, "profile", envOr("LOADTEST_PROFILE", ""), "optional YAML scale profile path")
 	flag.StringVar(&cfg.auditObserverPath, "audit-observer-dsn", envOr("LOADTEST_AUDIT_OBSERVER_DATABASE_URL_FILE", ""), "path to a read-only PostgreSQL DSN used to independently observe durable audit outbox intents")
@@ -106,6 +119,9 @@ func parseFlags() *config {
 	flag.BoolVar(&cfg.certification, "certification", envOrBool("LOADTEST_CERTIFICATION", false), "require reproducibility metadata and passing day-2 drill evidence")
 	flag.BoolVar(&cfg.validateDrills, "validate-drill-evidence", false, "validate configured drill evidence provenance without running a load test")
 	flag.Parse()
+	if strings.TrimSpace(cfg.metricsServer) == "" {
+		cfg.metricsServer = cfg.server
+	}
 	if cfg.profilePath != "" {
 		profile, err := loadScaleProfile(cfg.profilePath)
 		if err != nil {
@@ -178,32 +194,34 @@ func run(cfg *config, log *slog.Logger) error {
 		"out", cfg.outPath,
 	)
 
-	if cfg.clusters < 1 {
-		return fmt.Errorf("clusters must be >= 1, got %d", cfg.clusters)
-	}
-	if cfg.rps < 0 {
-		return fmt.Errorf("rps must be >= 0, got %d", cfg.rps)
-	}
-	if cfg.certification && cfg.mandatoryAudit.RatePerSecond > 0 {
-		if strings.TrimSpace(cfg.auditObserverPath) == "" {
-			return fmt.Errorf("LOADTEST_AUDIT_OBSERVER_DATABASE_URL_FILE is required for certification")
-		}
-		info, err := os.Stat(cfg.auditObserverPath)
-		if err != nil {
-			return fmt.Errorf("audit observer DSN must be readable: %w", err)
-		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("audit observer DSN must be a regular file")
-		}
-		if info.Mode().Perm()&0o077 != 0 {
-			return fmt.Errorf("audit observer DSN file permissions must not grant group or other access")
-		}
+	if err := validateConfig(cfg); err != nil {
+		return err
 	}
 
-	// 1. Load token. Required unless -skip-agents AND rps==0.
+	// 1. Load a pre-provisioned API token, or exchange a local browser login for
+	// an ephemeral API token without persisting bearer material. Certification
+	// continues to use the approval-gated pre-provisioned token path.
 	adminToken, err := loadToken(cfg.tokenPath)
 	if err != nil {
 		return fmt.Errorf("load token: %w", err)
+	}
+	var cleanupAdminToken func()
+	if strings.TrimSpace(adminToken) == "" && (strings.TrimSpace(cfg.loginEmail) != "" || strings.TrimSpace(cfg.loginPasswordPath) != "") {
+		if cfg.certification {
+			return fmt.Errorf("certification requires a pre-provisioned API token; local login bootstrap is not accepted")
+		}
+		password, passwordErr := loadCredential(cfg.loginPasswordPath, "login password")
+		if passwordErr != nil {
+			return passwordErr
+		}
+		adminToken, cleanupAdminToken, err = bootstrapAdminAPIToken(context.Background(), cfg.server, cfg.loginEmail, password)
+		if err != nil {
+			return fmt.Errorf("bootstrap ephemeral API token: %w", err)
+		}
+		defer cleanupAdminToken()
+	}
+	if strings.TrimSpace(cfg.tokenPath) != "" && (strings.TrimSpace(cfg.loginEmail) != "" || strings.TrimSpace(cfg.loginPasswordPath) != "") {
+		return fmt.Errorf("-token and local login bootstrap are mutually exclusive")
 	}
 
 	// 2. Authenticate against /api/v1/auth/me/ — fail fast on bad creds /
@@ -282,41 +300,36 @@ func run(cfg *config, log *slog.Logger) error {
 	// 4. Spawn synthetic agents. Each agent dials the WS and behaves like a
 	//    real agent. They keep running until ctx is cancelled.
 	var agentWG sync.WaitGroup
-	agents := make([]*syntheticAgent, 0, cfg.clusters)
+	var agents []*syntheticAgent
 	if !cfg.skipAgents {
 		agents = make([]*syntheticAgent, cfg.clusters)
-		sem := make(chan struct{}, registrationConcur)
 		for i := 0; i < cfg.clusters; i++ {
-			i := i
 			agents[i] = newSyntheticAgent(cfg.server, agentCredentials[i], log, rec, cfg.resources)
-			agentWG.Add(1)
-			go func() {
-				defer agentWG.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				agents[i].Run(ctx)
-			}()
 		}
 		log.Info("spawning synthetic agents", "count", cfg.clusters)
 		readyCtx, readyCancel := context.WithTimeout(ctx, 30*time.Minute)
-		if err := waitForSyntheticAgents(readyCtx, agents); err != nil {
-			readyCancel()
+		err := runSyntheticAgentRamp(readyCtx, ctx, agents, registrationConcur, &agentWG, func(ctx context.Context, agent *syntheticAgent) {
+			agent.Run(ctx)
+		})
+		readyCancel()
+		if err != nil {
 			return fmt.Errorf("wait for synthetic agents: %w", err)
 		}
-		readyCancel()
 		log.Info("all synthetic agents connected", "count", cfg.clusters)
-		if cfg.reconnectStorm.Enabled {
-			go scheduleReconnectStorm(ctx, agents, cfg.reconnectStorm, cfg.duration, log)
-		}
-		if cfg.resources.EventsPerSecond > 0 {
-			go emitSyntheticStateEvents(ctx, agents, cfg.resources.EventsPerSecond, rec, log)
-		}
 	}
 	rec.MarkStart()
 
 	// 5. Drive HTTP workload at the configured RPS.
 	workloadCtx, workloadCancel := context.WithTimeout(ctx, cfg.duration)
 	defer workloadCancel()
+	if len(agents) > 0 {
+		if cfg.reconnectStorm.Enabled {
+			go scheduleReconnectStorm(workloadCtx, agents, cfg.reconnectStorm, cfg.duration, log)
+		}
+		if cfg.resources.EventsPerSecond > 0 {
+			go emitSyntheticStateEvents(workloadCtx, agents, cfg.resources.EventsPerSecond, rec, log)
+		}
+	}
 
 	var workloadWG sync.WaitGroup
 	var auditMutationWG sync.WaitGroup
@@ -331,7 +344,7 @@ func run(cfg *config, log *slog.Logger) error {
 		auditMutationWG.Add(1)
 		go func() {
 			defer auditMutationWG.Done()
-			runMandatoryAuditWorkload(workloadCtx, cfg, adminToken, rec, log)
+			runMandatoryAuditWorkload(workloadCtx, ctx, cfg, adminToken, rec, log)
 		}()
 	}
 
@@ -339,7 +352,7 @@ func run(cfg *config, log *slog.Logger) error {
 	workloadWG.Add(1)
 	go func() {
 		defer workloadWG.Done()
-		scrapeMetricsLoop(workloadCtx, cfg.server, adminToken, rec, log)
+		scrapeMetricsLoop(workloadCtx, cfg.metricsServer, adminToken, rec, log)
 	}()
 
 	// Wait for the workload window. Then stop agents.
@@ -355,6 +368,9 @@ func run(cfg *config, log *slog.Logger) error {
 		if err := reconcileMandatoryAudit(drainCtx, cfg, adminToken, rec); err != nil {
 			log.Warn("mandatory-audit conservation did not converge", "error", err)
 		}
+		if err := refreshAuditOutboxMetricsAfterDrain(drainCtx, cfg.metricsServer, adminToken, rec); err != nil {
+			log.Warn("mandatory-audit post-drain metrics refresh failed", "error", err)
+		}
 		drainCancel()
 	}
 
@@ -365,7 +381,7 @@ func run(cfg *config, log *slog.Logger) error {
 	//    after the workload stops.
 	finalCtx, finalCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer finalCancel()
-	if err := scrapeOnce(finalCtx, cfg.server, adminToken, rec); err != nil {
+	if err := scrapeOnce(finalCtx, cfg.metricsServer, adminToken, rec); err != nil {
 		log.Warn("final scrape failed", "error", err)
 	}
 
@@ -384,6 +400,9 @@ func run(cfg *config, log *slog.Logger) error {
 			// os.Exit skips deferred functions, so explicitly clean the estate
 			// after evidence is written and before returning the failing verdict.
 			cleanupFixtures()
+		}
+		if cleanupAdminToken != nil {
+			cleanupAdminToken()
 		}
 		os.Exit(2)
 	}
@@ -407,11 +426,12 @@ type syntheticAgent struct {
 	rec       *recorder
 	resources scaleResources
 
-	mu        sync.Mutex
-	writeMu   sync.Mutex
-	ready     chan struct{}
-	readyOnce sync.Once
-	conn      *websocket.Conn
+	mu                   sync.Mutex
+	writeMu              sync.Mutex
+	ready                chan struct{}
+	readyOnce            sync.Once
+	conn                 *websocket.Conn
+	connectionGeneration uint64
 }
 
 func newSyntheticAgent(server string, credential agentCredential, log *slog.Logger, rec *recorder, resources scaleResources) *syntheticAgent {
@@ -485,13 +505,21 @@ func (sa *syntheticAgent) sendSyntheticStateUpdate(ctx context.Context, sequence
 	}) == nil
 }
 
-func (sa *syntheticAgent) CloseForStorm() {
+func (sa *syntheticAgent) CloseForStorm() uint64 {
 	sa.mu.Lock()
 	conn := sa.conn
+	generation := sa.connectionGeneration
 	sa.mu.Unlock()
 	if conn != nil {
 		_ = conn.Close(websocket.StatusGoingAway, "loadtest reconnect storm")
 	}
+	return generation
+}
+
+func (sa *syntheticAgent) ConnectionGeneration() uint64 {
+	sa.mu.Lock()
+	defer sa.mu.Unlock()
+	return sa.connectionGeneration
 }
 
 // backoffWithJitter mirrors internal/agent/tunnel.go BackoffDurationWithJitter
@@ -545,10 +573,14 @@ func (sa *syntheticAgent) connectAndServe(ctx context.Context) error {
 
 	// CONNECT
 	connectPayload, _ := json.Marshal(map[string]any{
-		"cluster_id":    sa.clusterID,
-		"agent_id":      sa.agentID,
-		"agent_version": "loadtest",
-		"token":         connectToken,
+		"cluster_id":                sa.clusterID,
+		"agent_id":                  sa.agentID,
+		"agent_version":             syntheticAgentVersion,
+		"tunnel_protocol_version":   protocol.TunnelProtocolVersion,
+		"heartbeat_schema_version":  protocol.HeartbeatSchemaVersion,
+		"delivery_protocol_version": protocol.DeliveryProtocolVersion,
+		"capabilities":              syntheticConnectCapabilities(),
+		"token":                     connectToken,
 	})
 	connectMsg := tunnelMessage{
 		Type:      "CONNECT",
@@ -586,6 +618,9 @@ func (sa *syntheticAgent) connectAndServe(ctx context.Context) error {
 	}
 
 	sa.rec.RecordConnect()
+	sa.mu.Lock()
+	sa.connectionGeneration++
+	sa.mu.Unlock()
 	sa.readyOnce.Do(func() { close(sa.ready) })
 	defer sa.rec.RecordAgentEnd()
 
@@ -630,6 +665,14 @@ func (sa *syntheticAgent) connectAndServe(ctx context.Context) error {
 	}
 }
 
+func syntheticConnectCapabilities() []string {
+	// The load driver serves both ordinary GETs and streaming list/watch
+	// requests. Keep the delivery admission contract sourced from the canonical
+	// protocol package, then advertise the read capability its canned responder
+	// actually implements.
+	return append(protocol.RequiredConnectCapabilities(), "watch")
+}
+
 func (sa *syntheticAgent) acceptAgentCredential(agentToken string) error {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
@@ -661,6 +704,7 @@ func (sa *syntheticAgent) heartbeatLoop(ctx context.Context) {
 
 func (sa *syntheticAgent) sendHeartbeat(ctx context.Context) {
 	payload, _ := json.Marshal(map[string]any{
+		"schema_version":       protocol.HeartbeatSchemaVersion,
 		"timestamp":            time.Now().UTC().Format(time.RFC3339),
 		"kubernetes_version":   "v1.30.0",
 		"distribution":         "loadtest",
@@ -668,7 +712,7 @@ func (sa *syntheticAgent) sendHeartbeat(ctx context.Context) {
 		"pod_count":            42,
 		"cpu_usage_percent":    12.5,
 		"memory_usage_percent": 30.0,
-		"agent_version":        "loadtest",
+		"agent_version":        syntheticAgentVersion,
 	})
 	msg := tunnelMessage{
 		Type:      "HEARTBEAT",

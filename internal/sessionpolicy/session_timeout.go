@@ -18,9 +18,9 @@ const SettingKey = "session.timeout_minutes"
 const (
 	// DefaultMinutes is the single fallback used by boot config, the
 	// platform-settings registry, and runtime JWT minting.
-	DefaultMinutes = 60
+	DefaultMinutes = 15
 	MinMinutes     = 5
-	MaxMinutes     = 10080
+	MaxMinutes     = 15
 )
 
 // ParseMinutes decodes the stored JSON setting. Missing/null data resolves to

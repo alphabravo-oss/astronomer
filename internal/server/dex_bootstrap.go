@@ -16,14 +16,15 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
@@ -39,7 +40,6 @@ const (
 	dexBootstrapServiceNameEnv       = "DEX_BUNDLED_SERVICE_NAME"
 	dexBootstrapRuntimeSecretNameEnv = "DEX_BUNDLED_RUNTIME_SECRET_NAME"
 	dexBootstrapMigrationPhaseEnv    = "DEX_BUNDLED_MIGRATION_PHASE"
-	dexBootstrapConfigmapNameEnv     = "DEX_BUNDLED_CONFIGMAP_NAME" // deprecated alias
 	dexBootstrapIssuerURLEnv         = "DEX_BUNDLED_ISSUER_URL"
 )
 
@@ -68,8 +68,22 @@ type dexBootstrapEnvLookup func(string) (string, bool)
 //   - (false, err): an unexpected DB error; the caller should log but boot
 //     should continue — the connector wizard stays usable and the operator
 //     can configure dex_settings via the UI as a fallback.
-func SeedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, logger *slog.Logger) (bool, error) {
-	return seedBundledDexSettings(ctx, queries, logger, os.LookupEnv)
+func SeedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, logger *slog.Logger, cfg *config.Config) (bool, error) {
+	values := map[string]string{}
+	if cfg != nil {
+		values[dexBootstrapEnv] = fmt.Sprintf("%t", cfg.DexBundledEnabled)
+		values[dexBootstrapNamespaceEnv] = cfg.DexBundledNamespace
+		values[dexBootstrapReleaseNameEnv] = cfg.DexBundledReleaseName
+		values[dexBootstrapDeploymentNameEnv] = cfg.DexBundledDeploymentName
+		values[dexBootstrapServiceNameEnv] = cfg.DexBundledServiceName
+		values[dexBootstrapRuntimeSecretNameEnv] = cfg.DexBundledRuntimeSecretName
+		values[dexBootstrapMigrationPhaseEnv] = cfg.DexBundledMigrationPhase
+		values[dexBootstrapIssuerURLEnv] = cfg.DexBundledIssuerURL
+	}
+	return seedBundledDexSettings(ctx, queries, logger, func(key string) (string, bool) {
+		value, ok := values[key]
+		return value, ok
+	})
 }
 
 func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, logger *slog.Logger, env dexBootstrapEnvLookup) (bool, error) {
@@ -106,8 +120,7 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 		desiredDeployment := envOr(env, dexBootstrapDeploymentNameEnv, desiredChartRelease+"-dex")
 		desiredService := envOr(env, dexBootstrapServiceNameEnv, desiredDeployment)
 		desiredPhase := envOr(env, dexBootstrapMigrationPhaseEnv, "fresh")
-		desiredRuntimeName := envOr(env, dexBootstrapRuntimeSecretNameEnv,
-			envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-runtime"))
+		desiredRuntimeName := envOr(env, dexBootstrapRuntimeSecretNameEnv, "astronomer-dex-runtime")
 		// Bundled identity is chart-owned and immutable. Reconcile every identity
 		// field while preserving operator-owned issuer, cluster, clients, and
 		// extension settings.
@@ -144,8 +157,7 @@ func seedBundledDexSettings(ctx context.Context, queries dexBootstrapQuerier, lo
 	deploymentName := envOr(env, dexBootstrapDeploymentNameEnv, chartReleaseName+"-dex")
 	serviceName := envOr(env, dexBootstrapServiceNameEnv, deploymentName)
 	runtimePhase := envOr(env, dexBootstrapMigrationPhaseEnv, "fresh")
-	runtimeSecretName := envOr(env, dexBootstrapRuntimeSecretNameEnv,
-		envOr(env, dexBootstrapConfigmapNameEnv, "astronomer-dex-runtime"))
+	runtimeSecretName := envOr(env, dexBootstrapRuntimeSecretNameEnv, "astronomer-dex-runtime")
 
 	_, err = queries.StageDexSettingsAndDisableSSO(ctx, sqlc.StageDexSettingsAndDisableSSOParams{
 		ID:                     dexBootstrapSingletonID,

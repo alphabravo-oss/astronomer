@@ -89,23 +89,13 @@ const (
 )
 
 type Service struct {
-	pool         *pgxpool.Pool
-	now          func() time.Time
-	requireAudit bool
-}
-
-func (s *Service) RequireTransactionalAudit() {
-	if s != nil {
-		s.requireAudit = true
-	}
+	pool *pgxpool.Pool
+	now  func() time.Time
 }
 
 func (s *Service) persistAudit(ctx context.Context, tx pgx.Tx, intent audit.Intent, view View) error {
 	if intent.IsZero() {
-		if s.requireAudit {
-			return audit.ErrOutboxUnavailable
-		}
-		return nil
+		return audit.ErrOutboxUnavailable
 	}
 	intent.Event.ResourceID = view.ID.String()
 	if intent.Event.Detail == nil {
@@ -130,6 +120,9 @@ func New(pool *pgxpool.Pool) (*Service, error) {
 // serializable transaction that inserts the rollout and assignments. Startup
 // never calls this method; promotion is always an explicit platform action.
 func (s *Service) Start(ctx context.Context, request StartRequest) (View, error) {
+	if request.Audit.IsZero() {
+		return View{}, audit.ErrOutboxUnavailable
+	}
 	if request.ReleaseID == uuid.Nil {
 		return View{}, fmt.Errorf("%w: release_id is required", ErrPrecondition)
 	}
@@ -314,6 +307,9 @@ func (s *Service) Assignments(ctx context.Context, id uuid.UUID) ([]Assignment, 
 // cohort release and completion, keeping HTTP requests bounded regardless of
 // cluster count.
 func (s *Service) Act(ctx context.Context, id uuid.UUID, expectedFence int64, action Action, actor uuid.UUID, reason string, intent audit.Intent) (View, error) {
+	if intent.IsZero() {
+		return View{}, audit.ErrOutboxUnavailable
+	}
 	if id == uuid.Nil || expectedFence < 1 {
 		return View{}, ErrPrecondition
 	}

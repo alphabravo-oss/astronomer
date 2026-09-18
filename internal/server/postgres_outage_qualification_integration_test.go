@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -34,7 +36,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 const (
@@ -171,6 +173,7 @@ func postgresOutageFamilies(database *db.DB) []postgresOutageFamily {
 		postgresOutageTypedFamily[handler.AdminTaskOutboxMutationTx](database, "admin_task_outbox"),
 		postgresOutageTypedFamily[handler.AlertingMutationTx](database, "alerting"),
 		postgresOutageTypedFamily[handler.ApiserverAllowlistMutationTx](database, "apiserver_allowlist"),
+		postgresOutageTypedFamily[handler.AuditExportMutationTx](database, "audit_export"),
 		postgresOutageTypedFamily[handler.AuthMutationTx](database, "auth"),
 		postgresOutageTypedFamily[handler.BackupMutationTx](database, "backup"),
 		postgresOutageTypedFamily[handler.CatalogMutationTx](database, "catalog"),
@@ -203,6 +206,7 @@ func postgresOutageFamilies(database *db.DB) []postgresOutageFamily {
 		postgresOutageTypedFamily[handler.NotificationTemplateMutationTx](database, "notification_template"),
 		postgresOutageTypedFamily[handler.PlatformDefaultTemplateMutationTx](database, "platform_default_template"),
 		postgresOutageTypedFamily[handler.PlatformSettingsMutationTx](database, "platform_settings"),
+		postgresOutageTypedFamily[handler.PrincipalMutationTx](database, "principal"),
 		postgresOutageTypedFamily[handler.ProjectCatalogMutationTx](database, "project_catalog"),
 		postgresOutageTypedFamily[handler.ProjectNamespaceTx](database, "project_namespace"),
 		postgresOutageTypedFamily[handler.QuotaMutationTx](database, "quota"),
@@ -210,25 +214,42 @@ func postgresOutageFamilies(database *db.DB) []postgresOutageFamily {
 		postgresOutageTypedFamily[handler.ReadAuditPolicyMutationTx](database, "read_audit_policy"),
 		postgresOutageTypedFamily[handler.ResourceMutationTx](database, "resource"),
 		postgresOutageTypedFamily[handler.ResourceSettingsMutationTx](database, "resource_settings"),
+		postgresOutageTypedFamily[handler.SCIMMutationTx](database, "scim"),
 		postgresOutageTypedFamily[handler.SecurityMutationTx](database, "security"),
 		postgresOutageTypedFamily[handler.SIEMMutationTx](database, "siem"),
 		postgresOutageTypedFamily[handler.SMTPMutationTx](database, "smtp"),
+		postgresOutageTypedFamily[handler.SSOCallbackTx](database, "sso_callback"),
+		postgresOutageTypedFamily[handler.SupportBundleMutationTx](database, "support_bundle"),
 		postgresOutageTypedFamily[handler.ToolMutationTx](database, "tool"),
+		postgresOutageTypedFamily[handler.TOTPMutationTx](database, "totp"),
 		postgresOutageTypedFamily[handler.UserMutationTx](database, "user"),
+		postgresOutageTypedFamily[handler.UserPreferencesMutationTx](database, "user_preferences"),
 		postgresOutageTypedFamily[handler.VaultMutationTx](database, "vault"),
 		postgresOutageTypedFamily[handler.WebhookMutationTx](database, "webhook"),
 		postgresOutageTypedFamily[handler.WorkloadMutationTx](database, "workload"),
 		postgresOutageTypedFamily[deliveryhandler.BundleMutationTx](database, "delivery_bundle"),
+		postgresOutageTypedFamily[deliveryhandler.ConfigurationTemplateMutationTx](database, "delivery_configuration_template"),
+		postgresOutageTypedFamily[deliveryhandler.OverrideSetMutationTx](database, "delivery_override_set"),
 		postgresOutageTypedFamily[deliveryhandler.SourceMutationTx](database, "delivery_source"),
 		postgresOutageTypedFamily[deliveryhandler.TargetMutationTx](database, "delivery_target"),
+		postgresOutageTypedFamily[tasks.AlertNotificationMutationTx](database, "alert_notification"),
+		postgresOutageTypedFamily[crdClusterDecommissionMutationTx](database, "crd_cluster_decommission"),
 	}
 }
 
 func assertProductionPostgresOutageInventory(t *testing.T, families []postgresOutageFamily) {
 	t.Helper()
 	wiring := ""
-	for _, path := range []string{"server.go", "management_backup_enablement.go"} {
-		content, err := os.ReadFile(path)
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == "mutation_tx.go" {
+			continue
+		}
+		content, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -238,6 +259,9 @@ func assertProductionPostgresOutageInventory(t *testing.T, families []postgresOu
 	wired := make(map[string]struct{}, len(matches))
 	for _, match := range matches {
 		name := strings.ReplaceAll(match[1], "deliveryhandler.", "delivery.")
+		if !strings.Contains(name, ".") {
+			name = "server." + name
+		}
 		wired[name] = struct{}{}
 	}
 	expected := make(map[string]struct{}, len(families))
@@ -257,7 +281,7 @@ func assertProductionPostgresOutageInventory(t *testing.T, families []postgresOu
 	}
 	sort.Strings(missing)
 	sort.Strings(unexpected)
-	if len(wired) != 54 || len(expected) != 54 || len(missing) > 0 || len(unexpected) > 0 {
+	if len(wired) != len(expected) || len(missing) > 0 || len(unexpected) > 0 {
 		t.Fatalf("production transaction inventory wired=%d qualified=%d missing=%v stale=%v", len(wired), len(expected), missing, unexpected)
 	}
 }
@@ -295,16 +319,17 @@ func (b *postgresOutageBoundaries) assertHealthy(t *testing.T, ctx context.Conte
 	t.Helper()
 	healthyRole := "postgres-outage-healthy-role"
 	recorder := httptest.NewRecorder()
-	b.rbac.CreateGlobalRole(recorder, postgresOutageRequest(http.MethodPost, "/api/v1/rbac/global-roles/", `{"name":"`+healthyRole+`","display_name":"Healthy","permissions":[]}`, b.admin))
+	b.rbac.CreateGlobalRole(recorder, postgresOutageRequest(http.MethodPost, "/api/v1/rbac/global-roles/", `{"name":"`+healthyRole+`","display_name":"Healthy","permissions":{}}`, b.admin))
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("healthy RBAC mutation = %d %s", recorder.Code, recorder.Body.String())
 	}
 
 	recorder = httptest.NewRecorder()
 	b.auth.Login(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login/", strings.NewReader(`{"email":"outage-admin@example.test","password":"`+password+`"}`)))
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"token"`) || strings.Contains(recorder.Body.String(), password) {
+	if recorder.Code != http.StatusOK || strings.Contains(recorder.Body.String(), `"token"`) || strings.Contains(recorder.Body.String(), `"refresh"`) || strings.Contains(recorder.Body.String(), password) {
 		t.Fatalf("healthy credential response = %d %s", recorder.Code, recorder.Body.String())
 	}
+	assertPostgresOutageBrowserSession(t, recorder.Result())
 
 	if _, err := b.queries.UpsertSMTPSettings(ctx, sqlc.UpsertSMTPSettingsParams{
 		ID: email.SingletonSettingsID, Enabled: true, Host: "smtp.invalid", Port: 587,
@@ -326,6 +351,24 @@ func (b *postgresOutageBoundaries) assertHealthy(t *testing.T, ctx context.Conte
 	}
 }
 
+func assertPostgresOutageBrowserSession(t *testing.T, response *http.Response) {
+	t.Helper()
+	cookies := make(map[string]*http.Cookie)
+	for _, cookie := range response.Cookies() {
+		cookies[cookie.Name] = cookie
+	}
+	for name, wantHTTPOnly := range map[string]bool{
+		auth.SessionCookieName: true,
+		auth.RefreshCookieName: true,
+		auth.CSRFCookieName:    false,
+	} {
+		cookie := cookies[name]
+		if cookie == nil || cookie.Value == "" || cookie.HttpOnly != wantHTTPOnly {
+			t.Fatalf("browser session cookie %s missing or insecure", name)
+		}
+	}
+}
+
 func (b *postgresOutageBoundaries) assertOutage(t *testing.T, password string) {
 	t.Helper()
 	assertFailClosed := func(name string, recorder *httptest.ResponseRecorder, forbidden ...string) {
@@ -341,7 +384,7 @@ func (b *postgresOutageBoundaries) assertOutage(t *testing.T, password string) {
 	}
 
 	recorder := httptest.NewRecorder()
-	b.rbac.CreateGlobalRole(recorder, postgresOutageRequest(http.MethodPost, "/api/v1/rbac/global-roles/", `{"name":"postgres-outage-leaked-role","display_name":"Outage","permissions":[]}`, b.admin))
+	b.rbac.CreateGlobalRole(recorder, postgresOutageRequest(http.MethodPost, "/api/v1/rbac/global-roles/", `{"name":"postgres-outage-leaked-role","display_name":"Outage","permissions":{}}`, b.admin))
 	assertFailClosed("RBAC", recorder, postgresOutageSecret)
 	if !strings.Contains(recorder.Body.String(), `"code":"audit_unavailable"`) {
 		t.Fatalf("RBAC outage response is not the standard audit error: %s", recorder.Body.String())
@@ -391,7 +434,7 @@ func (b *postgresOutageBoundaries) assertRecovered(t *testing.T, ctx context.Con
 			healthyMarkers, outageMarkers, qualificationAudits, leakedSecrets, healthyRoles, leakedRoles, familyCount, familyCount)
 	}
 	for action, want := range map[string]int{
-		"auth.login": 1, "admin.smtp.test": 1, "cluster.k8s_proxy.intent": 1, "cluster.k8s_proxy.outcome": 1,
+		"admin.smtp.test": 1, "cluster.k8s_proxy.intent": 1, "cluster.k8s_proxy.outcome": 1,
 	} {
 		var count int
 		if err := b.database.Pool().QueryRow(ctx, `SELECT count(*) FROM audit_log WHERE action=$1`, action).Scan(&count); err != nil {
@@ -400,6 +443,13 @@ func (b *postgresOutageBoundaries) assertRecovered(t *testing.T, ctx context.Con
 		if count != want {
 			t.Fatalf("audit_log action %s rows = %d, want %d", action, count, want)
 		}
+	}
+	var loginAudits int
+	if err := b.database.Pool().QueryRow(ctx, `SELECT count(*) FROM audit_outbox WHERE action='auth.login'`).Scan(&loginAudits); err != nil {
+		t.Fatal(err)
+	}
+	if loginAudits != 1 {
+		t.Fatalf("audit_outbox action auth.login rows = %d, want 1", loginAudits)
 	}
 	if b.smtpSends.Load() != 1 || b.k8sRemoteCalls.Load() != 1 {
 		t.Fatalf("remote effects after recovery SMTP=%d Kubernetes=%d, want 1/1", b.smtpSends.Load(), b.k8sRemoteCalls.Load())
@@ -475,22 +525,21 @@ func newPostgresOutageResiduals(t *testing.T, ctx context.Context, database *db.
 	if err != nil {
 		t.Fatal(err)
 	}
-	residuals.planner.RequireTransactionalAudit()
+
 	residuals.rolloutControl, err = deliveryrollout.NewPostgresController(database.Pool(), time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	residuals.rolloutControl.RequireTransactionalAudit()
+
 	residuals.deployment, err = deliverydeployment.NewPostgresController(database.Pool(), time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	residuals.deployment.RequireTransactionalAudit()
+
 	residuals.systemRollout, err = systemrollout.New(database.Pool())
 	if err != nil {
 		t.Fatal(err)
 	}
-	residuals.systemRollout.RequireTransactionalAudit()
 
 	_, preview, err := store.Preview(ctx, residuals.targetID)
 	if err != nil {
@@ -523,6 +572,16 @@ func (r *postgresOutageResiduals) seedDeliveryGraph(t *testing.T, ctx context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	rendererSpec, err := json.Marshal(model.RendererSpec{
+		Kind: model.RendererKustomize,
+		Kustomize: &model.KustomizeSpec{
+			Path:            "./clusters/prod",
+			TargetNamespace: "platform",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	statements := []struct {
 		sql  string
 		args []any
@@ -531,10 +590,10 @@ func (r *postgresOutageResiduals) seedDeliveryGraph(t *testing.T, ctx context.Co
 		{`INSERT INTO projects (id,name,display_name,cluster_id) VALUES ($1,$2,$2,$3)`, []any{projectID, "postgres-outage-residual-project", clusterID}},
 		{`INSERT INTO cluster_agent_tokens (cluster_id,token,token_hash) VALUES ($1,$2,$3)`, []any{clusterID, "qualification-token-" + uuid.NewString(), "qualification-hash-" + uuid.NewString()}},
 		{`INSERT INTO agent_connections (cluster_id,agent_id,session_id,status) VALUES ($1,$2,$3,'connected')`, []any{clusterID, "qualification-agent", uuid.NewString()}},
-		{`INSERT INTO delivery_controller_inventory (cluster_id,flux_version,components,ready,compatibility_status) VALUES ($1,'2.4.0','{}',true,'compatible')`, []any{clusterID}},
+		{`INSERT INTO delivery_controller_inventory (cluster_id,flux_version,components,ready,compatibility_status,status_digest,agent_session_id,agent_sequence,semantic_sequence) VALUES ($1,'2.4.0','{}',true,'compatible','sha256:0000000000000000000000000000000000000000000000000000000000000000','fixture',1,1)`, []any{clusterID}},
 		{`INSERT INTO delivery_sources (id,project_id,name,source_type,url,status) VALUES ($1,$2,$3,'git',$4,'ready')`, []any{sourceID, projectID, "qualification-source", "https://git.example.test/qualification.git"}},
 		{`INSERT INTO component_bundles (id,project_id,name) VALUES ($1,$2,$3)`, []any{bundleID, projectID, "qualification-bundle"}},
-		{`INSERT INTO component_bundle_versions (id,bundle_id,source_id,version,renderer,requested_revision,resolved_revision,artifact_digest,source_spec,requirements,spec_digest,verification_status,state) VALUES ($1,$2,$3,'v1','kustomize',$4,$4,$5,$6,'[]',$5,'verified','ready')`, []any{versionID, bundleID, sourceID, strings.Repeat("b", 40), digest, sourceSpec}},
+		{`INSERT INTO component_bundle_versions (id,bundle_id,source_id,version,renderer,requested_revision,resolved_revision,artifact_digest,source_spec,renderer_spec,requirements,spec_digest,verification_status,state) VALUES ($1,$2,$3,'v1','kustomize',$4,$4,$5,$6,$7,'[]',$5,'verified','ready')`, []any{versionID, bundleID, sourceID, strings.Repeat("b", 40), digest, sourceSpec, rendererSpec}},
 		{`INSERT INTO delivery_targets (id,project_id,name,bundle_version_id,placement,rollout_policy) VALUES ($1,$2,$3,$4,'{"all_clusters":true}','{"approval_required":false}')`, []any{r.targetID, projectID, "qualification-target", versionID}},
 		{`INSERT INTO delivery_targets (id,project_id,name,bundle_version_id,placement,rollout_policy) VALUES ($1,$2,$3,$4,'{"all_clusters":true}','{"approval_required":true}')`, []any{r.approvalTarget, projectID, "qualification-approval-target", versionID}},
 		{`INSERT INTO cluster_deployments (id,target_id,cluster_id,desired_bundle_version_id,desired_generation,desired_spec_digest,desired_revision,action,phase) VALUES ($1,$2,$3,$4,1,$5,$6,'apply','ready')`, []any{r.deploymentID, r.targetID, clusterID, versionID, digest, strings.Repeat("b", 40)}},
@@ -600,7 +659,8 @@ func (r *postgresOutageResiduals) assertHealthy(t *testing.T, ctx context.Contex
 	r.rolloutID = plan.ID
 	action, err := r.rolloutControl.Act(ctx, deliveryrollout.ActionRequest{
 		ProjectID: plan.ProjectID, RolloutID: plan.ID, ExpectedFence: 1, Action: deliveryrollout.ActionPause,
-		ActorID: pgtype.UUID{Bytes: r.admin.ID, Valid: true}, Audit: postgresOutageIntent("qualification.delivery.rollout.action", "delivery_rollout", "healthy-control"),
+		ActorID: pgtype.UUID{Bytes: r.admin.ID, Valid: true}, IdempotencyKey: "qualification-rollout-pause",
+		Audit: postgresOutageIntent("qualification.delivery.rollout.action", "delivery_rollout", "healthy-control"),
 	})
 	if err != nil || !action.AuditPersisted || action.Rollout.State != string(model.RolloutPaused) {
 		t.Fatalf("healthy rollout action result=%+v err=%v", action, err)
@@ -617,7 +677,8 @@ func (r *postgresOutageResiduals) assertHealthy(t *testing.T, ctx context.Contex
 	approval, err := r.rolloutControl.Approve(ctx, deliveryrollout.ApprovalRequest{
 		ProjectID: approvalPlan.ProjectID, RolloutID: approvalPlan.ID, ExpectedFence: 1, Cohort: -1,
 		BindingDigest: approvalPlan.Approval.Digest, Decision: "approved", ActorID: pgtype.UUID{Bytes: r.admin.ID, Valid: true},
-		ExpiresAt: time.Now().Add(time.Hour), Audit: postgresOutageIntent("qualification.delivery.rollout.approval", "delivery_rollout", "healthy-approval"),
+		ExpiresAt: time.Now().Add(time.Hour), IdempotencyKey: "qualification-rollout-approval",
+		Audit: postgresOutageIntent("qualification.delivery.rollout.approval", "delivery_rollout", "healthy-approval"),
 	})
 	if err != nil || !approval.AuditPersisted || approval.Approval == nil || approval.Rollout.State != string(model.RolloutQueued) {
 		t.Fatalf("healthy rollout approval result=%+v err=%v", approval, err)
@@ -625,7 +686,9 @@ func (r *postgresOutageResiduals) assertHealthy(t *testing.T, ctx context.Contex
 
 	deployment, err := r.deployment.Act(ctx, deliverydeployment.Request{
 		ProjectID: plan.ProjectID, DeploymentID: r.deploymentID, ExpectedGeneration: 1,
-		Action: deliverydeployment.ActionSuspend, Audit: postgresOutageIntent("qualification.delivery.deployment.action", "cluster_deployment", "healthy-deployment"),
+		Action: deliverydeployment.ActionSuspend, ActorID: pgtype.UUID{Bytes: r.admin.ID, Valid: true},
+		IdempotencyKey: "qualification-deployment-suspend",
+		Audit:          postgresOutageIntent("qualification.delivery.deployment.action", "cluster_deployment", "healthy-deployment"),
 	})
 	if err != nil || !deployment.AuditPersisted || deployment.Deployment.DesiredGeneration != 2 {
 		t.Fatalf("healthy deployment action result=%+v err=%v", deployment, err)
@@ -671,19 +734,35 @@ func (r *postgresOutageResiduals) assertOutage(t *testing.T) {
 		return err
 	})
 	attempt("rollout control", func(ctx context.Context) error {
-		_, err := r.rolloutControl.Act(ctx, deliveryrollout.ActionRequest{ProjectID: r.projectID, RolloutID: r.rolloutID, ExpectedFence: 2, Action: deliveryrollout.ActionResume, Audit: postgresOutageIntent("qualification.delivery.rollout.action", "delivery_rollout", "outage-control")})
+		_, err := r.rolloutControl.Act(ctx, deliveryrollout.ActionRequest{
+			ProjectID: r.projectID, RolloutID: r.rolloutID, ExpectedFence: 2, Action: deliveryrollout.ActionResume,
+			ActorID: pgtype.UUID{Bytes: r.admin.ID, Valid: true}, IdempotencyKey: "qualification-outage-resume",
+			Audit: postgresOutageIntent("qualification.delivery.rollout.action", "delivery_rollout", "outage-control"),
+		})
 		return err
 	})
 	attempt("rollout approval", func(ctx context.Context) error {
-		_, err := r.rolloutControl.Approve(ctx, deliveryrollout.ApprovalRequest{ProjectID: r.projectID, RolloutID: r.approvalID, ExpectedFence: 2, Cohort: -1, BindingDigest: r.approvalDigest, Decision: "approved", ExpiresAt: time.Now().Add(time.Hour), Audit: postgresOutageIntent("qualification.delivery.rollout.approval", "delivery_rollout", "outage-approval")})
+		_, err := r.rolloutControl.Approve(ctx, deliveryrollout.ApprovalRequest{
+			ProjectID: r.projectID, RolloutID: r.approvalID, ExpectedFence: 2, Cohort: -1,
+			BindingDigest: r.approvalDigest, Decision: "approved", ExpiresAt: time.Now().Add(time.Hour),
+			ActorID: pgtype.UUID{Bytes: r.admin.ID, Valid: true}, IdempotencyKey: "qualification-outage-approval",
+			Audit: postgresOutageIntent("qualification.delivery.rollout.approval", "delivery_rollout", "outage-approval"),
+		})
 		return err
 	})
 	attempt("deployment control", func(ctx context.Context) error {
-		_, err := r.deployment.Act(ctx, deliverydeployment.Request{ProjectID: r.projectID, DeploymentID: r.deploymentID, ExpectedGeneration: 2, Action: deliverydeployment.ActionResume, Audit: postgresOutageIntent("qualification.delivery.deployment.action", "cluster_deployment", "outage-deployment")})
+		_, err := r.deployment.Act(ctx, deliverydeployment.Request{
+			ProjectID: r.projectID, DeploymentID: r.deploymentID, ExpectedGeneration: 2, Action: deliverydeployment.ActionResume,
+			ActorID: pgtype.UUID{Bytes: r.admin.ID, Valid: true}, IdempotencyKey: "qualification-outage-deployment",
+			Audit: postgresOutageIntent("qualification.delivery.deployment.action", "cluster_deployment", "outage-deployment"),
+		})
 		return err
 	})
 	attempt("system rollout", func(ctx context.Context) error {
-		_, err := r.systemRollout.Start(ctx, systemrollout.StartRequest{ReleaseID: r.draftReleaseID, Strategy: r.strategy, IdempotencyKey: "qualification-outage-system", Audit: postgresOutageIntent("qualification.delivery.system_rollout.start", "delivery_system_rollout", "outage-system")})
+		_, err := r.systemRollout.Start(ctx, systemrollout.StartRequest{
+			ReleaseID: r.draftReleaseID, Strategy: r.strategy, IdempotencyKey: "qualification-outage-system", ActorID: r.admin.ID,
+			Audit: postgresOutageIntent("qualification.delivery.system_rollout.start", "delivery_system_rollout", "outage-system"),
+		})
 		return err
 	})
 }
@@ -732,7 +811,7 @@ func postgresOutageChiRequest(method, path, id, body string, admin sqlc.User, ba
 	ctx := request.Context()
 	if base != nil {
 		ctx = base
-		ctx = appmiddleware.SetAuthenticatedUserForTest(ctx, &appmiddleware.AuthenticatedUser{
+		ctx = reqctx.WithUser(ctx, &reqctx.User{
 			ID: admin.ID.String(), Email: admin.Email, Username: admin.Username, AuthMethod: "jwt",
 		})
 	}
@@ -773,7 +852,7 @@ func postgresOutageRequest(method, path, body string, admin sqlc.User) *http.Req
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Secret", postgresOutageSecret)
-	ctx := appmiddleware.SetAuthenticatedUserForTest(request.Context(), &appmiddleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(request.Context(), &reqctx.User{
 		ID: admin.ID.String(), Email: admin.Email, Username: admin.Username, AuthMethod: "jwt",
 	})
 	return request.WithContext(ctx)
@@ -818,14 +897,15 @@ func startPostgresOutageContainer(t *testing.T, container string) {
 func waitForPostgresOutageRecovery(t *testing.T, ctx context.Context, database *db.DB) {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
+	var lastErr error
 	for time.Now().Before(deadline) {
 		pingCtx, cancel := context.WithTimeout(ctx, time.Second)
-		err := database.Health(pingCtx)
+		lastErr = database.Health(pingCtx)
 		cancel()
-		if err == nil {
+		if lastErr == nil {
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatal("PostgreSQL did not recover within 20 seconds")
+	t.Fatalf("PostgreSQL did not recover within 20 seconds: %v", lastErr)
 }

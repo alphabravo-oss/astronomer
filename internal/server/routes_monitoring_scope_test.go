@@ -69,7 +69,7 @@ func TestClusterMonitoringRoutesHonourClusterScopedBinding(t *testing.T) {
 	}
 	clusterX := uuid.New()
 	router := newClusterMonitoringAuthzRouter(jwtMgr, monitoringBindingOnCluster(clusterX, allMonitoringVerbs()...))
-	base := "/api/v1/clusters/" + clusterX.String() + "/monitoring"
+	base := "/api/v1/clusters/" + clusterX.String()
 
 	for _, tc := range clusterMonitoringRoutes {
 		t.Run(tc.name, func(t *testing.T) {
@@ -99,8 +99,8 @@ func TestClusterMonitoringRoutesRejectBindingOnAnotherCluster(t *testing.T) {
 	}
 	clusterX, clusterY := uuid.New(), uuid.New()
 	router := newClusterMonitoringAuthzRouter(jwtMgr, monitoringBindingOnCluster(clusterX, allMonitoringVerbs()...))
-	granted := "/api/v1/clusters/" + clusterX.String() + "/monitoring"
-	other := "/api/v1/clusters/" + clusterY.String() + "/monitoring"
+	granted := "/api/v1/clusters/" + clusterX.String()
+	other := "/api/v1/clusters/" + clusterY.String()
 
 	for _, tc := range clusterMonitoringRoutes {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestClusterMonitoringRoutesStillAdmitGlobalBinding(t *testing.T) {
 	router := newClusterMonitoringAuthzRouter(jwtMgr, routeSecurityBindings(rbac.ResourceMonitoring, allMonitoringVerbs()...))
 
 	for i, clusterID := range []uuid.UUID{uuid.New(), uuid.New()} {
-		base := "/api/v1/clusters/" + clusterID.String() + "/monitoring"
+		base := "/api/v1/clusters/" + clusterID.String()
 		for _, tc := range clusterMonitoringRoutes {
 			t.Run(fmt.Sprintf("cluster%d/%s", i, tc.name), func(t *testing.T) {
 				rec := httptest.NewRecorder()
@@ -167,7 +167,7 @@ func TestClusterMonitoringRoutesDenyCallerWithNoBinding(t *testing.T) {
 	}
 	clusterX := uuid.New()
 	router := newClusterMonitoringAuthzRouter(jwtMgr, nil)
-	base := "/api/v1/clusters/" + clusterX.String() + "/monitoring"
+	base := "/api/v1/clusters/" + clusterX.String()
 
 	for _, tc := range clusterMonitoringRoutes {
 		t.Run(tc.name, func(t *testing.T) {
@@ -221,13 +221,7 @@ func newSharedMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.Rol
 	querier := routeSecurityRBACQuerier{bindings: bindings}
 	monitoring := handler.NewMonitoringHandler()
 	monitoring.SetAuthorization(engine, querier)
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  engine,
-		RBACQueries: querier,
-		Resources:   handler.NewResourceHandler(),
-		Monitoring:  monitoring,
-	})
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: engine, RBACQueries: querier}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler(), Monitoring: monitoring}})
 }
 
 // TestSharedMonitoringRoutesStayGlobalForClusterScopedBinding is the trap.

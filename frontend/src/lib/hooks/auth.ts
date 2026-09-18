@@ -5,7 +5,7 @@ import { queryKeys } from "@/lib/query-keys";
 export function useCurrentUser() {
   return useQuery({
     queryKey: queryKeys.users.current,
-    queryFn: getCurrentUser,
+    queryFn: ({ signal }) => getCurrentUser(signal),
     retry: false,
     staleTime: 5 * 60 * 1000,
   });

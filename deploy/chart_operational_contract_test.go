@@ -17,6 +17,8 @@ import (
 	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 )
 
+const productionTestImageDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
 // repoRoot returns the repository root relative to this test file
 // (deploy/ sits directly under the root).
 func repoRoot(t *testing.T) string {
@@ -49,6 +51,23 @@ var productionWiringSets = []string{
 	// address and 10.40.x API endpoint network. Cardinality cannot prove that;
 	// operators must inventory the target cluster's actual addresses.
 	"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/14",
+	"networkPolicy.objectStoreEgressCIDRs[0]=10.50.0.0/16",
+	"managementBackup.encryption.sourceIdentity=test-production-installation",
+	"managementBackup.encryption.wrappingSecretRef.name=backup-wrap",
+	"managementBackup.retention.credentialsSecretRef.name=backup-retention-creds",
+	"image.server.digest=" + productionTestImageDigest,
+	"image.worker.digest=" + productionTestImageDigest,
+	"image.agent.digest=" + productionTestImageDigest,
+	"image.migrate.digest=" + productionTestImageDigest,
+	"utilities.busybox.digest=" + productionTestImageDigest,
+	"postgres.image.digest=" + productionTestImageDigest,
+	"redis.image.digest=" + productionTestImageDigest,
+	"preflight.image.digest=" + productionTestImageDigest,
+	"frontend.image.digest=" + productionTestImageDigest,
+	"dex.image.digest=" + productionTestImageDigest,
+	"managementBackup.image.digest=" + productionTestImageDigest,
+	"managementRestoreDrill.image.digest=" + productionTestImageDigest,
+	"managementRestoreDrill.sidecar.image.digest=" + productionTestImageDigest,
 	"delivery.artifacts.fluxDistribution.ociRepository=ghcr.io/example/astronomer/flux-distribution",
 	"delivery.artifacts.fluxDistribution.digest=sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	"delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=https://github.com/example/repo/.github/workflows/release.yaml@refs/tags/v1.0.0",
@@ -77,6 +96,54 @@ func TestEnterpriseProductionRenderCoversProductionWiringContract(t *testing.T) 
 		if !strings.Contains(productionBlock, canonicalKey+"=") {
 			t.Errorf("enterprise verifier production render is missing productionWiringSets key %q", canonicalKey)
 		}
+	}
+}
+
+func TestProductionWorkloadImagesAreDigestOnly(t *testing.T) {
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
+		"managementBackup.s3.bucket=astronomer-backups",
+		"managementBackup.s3.credentialsSecretRef.name=backup-creds",
+	)
+	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{filepath.Join("chart", "values-production.yaml")}, sets...))
+	count := 0
+	for _, doc := range docs {
+		podSpec := podSpecFor(doc)
+		if podSpec == nil {
+			continue
+		}
+		for _, field := range []string{"initContainers", "containers"} {
+			for _, container := range containerList(podSpec, field) {
+				image := stringValue(container["image"])
+				if image == "" {
+					continue
+				}
+				count++
+				if !regexp.MustCompile(`^[^[:space:]]+@sha256:[a-f0-9]{64}$`).MatchString(image) {
+					t.Errorf("%s/%s %s %q uses mutable image %q", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"), field, stringValue(container["name"]), image)
+				}
+			}
+		}
+	}
+	if count == 0 {
+		t.Fatal("production render contained no workload images")
+	}
+}
+
+func TestProductionRejectsMissingActiveImageDigest(t *testing.T) {
+	sets := make([]string, 0, len(productionWiringSets)+3)
+	for _, set := range productionWiringSets {
+		if !strings.HasPrefix(set, "frontend.image.digest=") {
+			sets = append(sets, set)
+		}
+	}
+	sets = append(sets,
+		"managementBackup.s3.bucket=astronomer-backups",
+		"managementBackup.s3.credentialsSecretRef.name=backup-creds",
+	)
+	errOut := helmTemplateExpectError(t, []string{filepath.Join("chart", "values-production.yaml")}, sets...)
+	if !strings.Contains(errOut, "frontend.image.digest must be an exact sha256 digest") {
+		t.Fatalf("production render did not reject mutable frontend image:\n%s", errOut)
 	}
 }
 
@@ -156,11 +223,11 @@ func TestPreflightOwnershipUsesHelmOnly(t *testing.T) {
 	for _, doc := range docs {
 		annotations := nestedMap(doc, "metadata", "annotations")
 		for key := range annotations {
-			if strings.HasPrefix(key, "argo"+"cd.") {
+			if strings.HasPrefix(key, "argocd.") {
 				t.Fatalf("rendered %s/%s retains removed lifecycle annotation %q", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"), key)
 			}
 		}
-		if strings.Contains(stringAt(doc, "metadata", "name"), "preflight-argo"+"cd") {
+		if strings.Contains(stringAt(doc, "metadata", "name"), "preflight-argocd") {
 			t.Fatalf("rendered obsolete preflight resource %s/%s", stringValue(doc["kind"]), stringAt(doc, "metadata", "name"))
 		}
 	}
@@ -290,6 +357,21 @@ func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
 			{apiGroups: []string{""}, resources: []string{"configmaps"}, resourceNames: []string{"astronomer-dex-config-retained"}, verbs: []string{"get"}},
 		})
 	})
+}
+
+func TestTLSCertificateOnlyIncludesConfiguredListenerHosts(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"gateway.enabled=false",
+		"ingress.enabled=true",
+		"ingress.host=astronomer.example.com",
+		"tls.source=selfSigned",
+	))
+	certificate := findRenderedDoc(t, docs, "Certificate", "astronomer-tls")
+	got := stringListValue(nestedMap(certificate, "spec")["dnsNames"])
+	want := []string{"astronomer.example.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Certificate dnsNames = %v, want configured listener hosts only %v", got, want)
+	}
 }
 
 func TestPreflightHookUpgradeReplacementContract(t *testing.T) {
@@ -763,6 +845,91 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
 	assertContainerImage(t, docs, "StatefulSet", "astronomer-redis", "containers", "redis", "registry.example.com/platform/valkey/valkey:8-alpine", "Always")
 }
 
+func TestBundledPostgresMaxConnectionsIsDeclarative(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t, "postgres.bundled.maxConnections=400"))
+	postgres := findContainer(t, podSpecFor(findRenderedDoc(t, docs, "StatefulSet", "astronomer-postgres")), "containers", "postgres")
+	if got, want := postgres["args"], []any{"-c", "max_connections=400"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("bundled postgres args = %#v, want %#v", got, want)
+	}
+}
+
+func TestSharedGatewayRoutesWithoutOwningGatewayOrTLS(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"gateway.create=false",
+		"gateway.name=public",
+		"gateway.namespace=platform-gateway",
+		"gateway.sectionName=https",
+		"gateway.hosts[0]=astronomer.dev.alphabravo.io",
+		"tls.source=externalGateway",
+	))
+
+	for _, doc := range docs {
+		if stringValue(doc["kind"]) == "Gateway" {
+			t.Fatalf("shared-Gateway mode unexpectedly rendered Gateway/%s", stringAt(doc, "metadata", "name"))
+		}
+	}
+	for _, name := range []string{"astronomer-ui", "astronomer-api"} {
+		route := findRenderedDoc(t, docs, "HTTPRoute", name)
+		parentRefs, _ := nestedMap(route, "spec")["parentRefs"].([]any)
+		if len(parentRefs) != 1 {
+			t.Fatalf("HTTPRoute/%s parentRefs = %#v, want one", name, parentRefs)
+		}
+		parent, _ := parentRefs[0].(map[string]any)
+		if got := stringValue(parent["name"]); got != "public" {
+			t.Fatalf("HTTPRoute/%s parent name = %q, want public", name, got)
+		}
+		if got := stringValue(parent["namespace"]); got != "platform-gateway" {
+			t.Fatalf("HTTPRoute/%s parent namespace = %q, want platform-gateway", name, got)
+		}
+		if got := stringValue(parent["sectionName"]); got != "https" {
+			t.Fatalf("HTTPRoute/%s parent sectionName = %q, want https", name, got)
+		}
+	}
+
+	config := nestedMap(findRenderedDoc(t, docs, "ConfigMap", "astronomer-config"), "data")
+	if got := stringValue(config["ASTRONOMER_GATEWAY_NAME"]); got != "public" {
+		t.Fatalf("ASTRONOMER_GATEWAY_NAME = %q, want public", got)
+	}
+	if got := stringValue(config["ASTRONOMER_GATEWAY_NAMESPACE"]); got != "platform-gateway" {
+		t.Fatalf("ASTRONOMER_GATEWAY_NAMESPACE = %q, want platform-gateway", got)
+	}
+}
+
+func TestProductionCoreWorkloadsHaveNodeLevelHAContracts(t *testing.T) {
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets, "managementBackup.enabled=false")
+	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{"chart/values-production.yaml"}, sets...))
+
+	for _, workload := range []string{"astronomer-server", "astronomer-worker", "astronomer-frontend", "astronomer-dex"} {
+		deployment := findRenderedDoc(t, docs, "Deployment", workload)
+		constraints, _ := podSpecFor(deployment)["topologySpreadConstraints"].([]any)
+		if len(constraints) != 1 {
+			t.Fatalf("Deployment/%s topologySpreadConstraints = %#v, want one", workload, constraints)
+		}
+		constraint, _ := constraints[0].(map[string]any)
+		if got := stringValue(constraint["topologyKey"]); got != "kubernetes.io/hostname" {
+			t.Fatalf("Deployment/%s topologyKey = %q, want kubernetes.io/hostname", workload, got)
+		}
+		if got := stringValue(constraint["whenUnsatisfiable"]); got != "DoNotSchedule" {
+			t.Fatalf("Deployment/%s whenUnsatisfiable = %q, want DoNotSchedule", workload, got)
+		}
+		matchLabelKeys, _ := constraint["matchLabelKeys"].([]any)
+		if len(matchLabelKeys) != 1 || stringValue(matchLabelKeys[0]) != "pod-template-hash" {
+			t.Fatalf("Deployment/%s matchLabelKeys = %#v, want pod-template-hash", workload, matchLabelKeys)
+		}
+
+		pdb := findRenderedDoc(t, docs, "PodDisruptionBudget", workload)
+		minAvailable := nestedMap(pdb, "spec")["minAvailable"]
+		want := "2"
+		if workload == "astronomer-dex" {
+			want = "1"
+		}
+		if got := fmt.Sprint(minAvailable); got != want {
+			t.Fatalf("PodDisruptionBudget/%s minAvailable = %q, want %s", workload, got, want)
+		}
+	}
+}
+
 func assertContainerImage(t *testing.T, docs []renderedDoc, kind, name, field, containerName, wantImage, wantPullPolicy string) {
 	t.Helper()
 	doc := findRenderedDoc(t, docs, kind, name)
@@ -796,6 +963,39 @@ func podSpecFor(doc renderedDoc) map[string]any {
 		return nestedMap(doc, "spec", "jobTemplate", "spec", "template", "spec")
 	default:
 		return nil
+	}
+}
+
+func TestEveryRenderedContainerHasCPUAndMemoryBounds(t *testing.T) {
+	renders := map[string]string{
+		"default": helmTemplate(t),
+		"ha-datastores": helmTemplate(t,
+			"postgres.mode=cloudNativePG",
+			"postgres.cloudNativePG.instances=3",
+			"redis.mode=sentinel",
+		),
+	}
+	for profile, out := range renders {
+		for _, doc := range parseRenderedDocs(t, out) {
+			podSpec := podSpecFor(doc)
+			if podSpec == nil {
+				continue
+			}
+			for _, field := range []string{"initContainers", "containers"} {
+				for _, container := range containerList(podSpec, field) {
+					resources := nestedMap(container, "resources")
+					requests := nestedMap(resources, "requests")
+					limits := nestedMap(resources, "limits")
+					for _, resource := range []string{"cpu", "memory"} {
+						if stringValue(requests[resource]) == "" || stringValue(limits[resource]) == "" {
+							t.Errorf("%s: %s/%s %s/%s has no %s request and limit", profile,
+								stringValue(doc["kind"]), stringAt(doc, "metadata", "name"), field,
+								stringValue(container["name"]), resource)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -913,38 +1113,43 @@ func TestProductionRequiresBackupsWired(t *testing.T) {
 func TestProductionRequiresKeyWrapWhenBackupsEnabled(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 
-	// S3 wired, wrapping secret empty → preflight must refuse.
-	s3Only := append([]string{}, productionWiringSets...)
+	// S3 wired, wrapping secret empty → schema/preflight must refuse.
+	s3Only := make([]string, 0, len(productionWiringSets)+2)
+	for _, set := range productionWiringSets {
+		if !strings.HasPrefix(set, "managementBackup.encryption.wrappingSecretRef.name=") {
+			s3Only = append(s3Only, set)
+		}
+	}
 	s3Only = append(s3Only,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-aws",
 	)
 	errOut := helmTemplateExpectError(t, []string{prodValues}, s3Only...)
-	if !strings.Contains(errOut, "wrappingSecretRef") && !strings.Contains(errOut, "encryptionKeyBackup") {
-		t.Fatalf("production render with S3 but no key wrap did not mention wrappingSecretRef/encryptionKeyBackup:\n%s", errOut)
+	if !strings.Contains(errOut, "wrappingSecretRef") {
+		t.Fatalf("production render with S3 but no AEAD key did not mention wrappingSecretRef:\n%s", errOut)
 	}
 
-	// Explicit opt-out of key backup (still with S3) → render must succeed,
-	// but the key-backup path stays inert.
+	// A production database-only backup is not a recoverable backup and cannot
+	// be opted out independently.
 	optOut := append([]string{}, s3Only...)
-	optOut = append(optOut, "managementBackup.encryptionKeyBackup.enabled=false")
-	out := helmTemplateWithValueFiles(t, []string{prodValues}, optOut...)
-	if !strings.Contains(out, "name: astronomer-management-backup") {
-		t.Fatalf("S3-wired backup CronJob should render when key backup is explicitly disabled:\n%s", out)
-	}
-	if strings.Contains(out, "- name: KEYBACKUP_ENABLED") {
-		t.Fatalf("encryptionKeyBackup.enabled=false must not arm KEYBACKUP_ENABLED:\n%s", out)
+	optOut = append(optOut,
+		"managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap",
+		"managementBackup.encryptionKeyBackup.enabled=false",
+	)
+	errOut = helmTemplateExpectError(t, []string{prodValues}, optOut...)
+	if !strings.Contains(errOut, "encryptionKeyBackup.enabled must remain true") {
+		t.Fatalf("production render accepted a database-only backup:\n%s", errOut)
 	}
 
-	// Full wiring (S3 + wrap) → backup CronJob renders with key-backup armed.
+	// Full wiring renders the authenticated backup writer.
 	full := append([]string{}, s3Only...)
-	full = append(full, "managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap")
-	out = helmTemplateWithValueFiles(t, []string{prodValues}, full...)
+	full = append(full, "managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap")
+	out := helmTemplateWithValueFiles(t, []string{prodValues}, full...)
 	if !strings.Contains(out, "name: astronomer-management-backup") {
 		t.Fatalf("fully-wired production backup CronJob missing:\n%s", out)
 	}
-	if !strings.Contains(out, "- name: KEYBACKUP_ENABLED") {
-		t.Fatalf("fully-wired production render should arm key backup:\n%s", out)
+	if !strings.Contains(out, "dr-crypto manifest-create") || !strings.Contains(out, "--purpose database-dump") {
+		t.Fatalf("fully-wired production render should use authenticated client-side encryption:\n%s", out)
 	}
 	if !strings.Contains(out, `secretName: "astronomer-key-wrap"`) {
 		t.Fatalf("fully-wired production render should mount wrapping secret:\n%s", out)
@@ -952,22 +1157,21 @@ func TestProductionRequiresKeyWrapWhenBackupsEnabled(t *testing.T) {
 }
 
 // OPS-01: production with backups + S3 wired but no key-wrap secret must fail.
-func TestProductionRequiresEncryptionKeyWrapWhenBackupsEnabled(t *testing.T) {
+func TestProductionRequiresSeparateRetentionIdentity(t *testing.T) {
 	prodValues := filepath.Join(repoRoot(t), "deploy", "chart", "values-production.yaml")
 	sets := append([]string{}, productionWiringSets...)
 	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
-		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
-		// wrap name left empty on purpose
+		"managementBackup.s3.credentialsSecretRef.name=backup-retention-creds",
 	)
 	errOut := helmTemplateExpectError(t, []string{prodValues}, sets...)
-	if !strings.Contains(errOut, "wrappingSecretRef") && !strings.Contains(errOut, "encryptionKeyBackup") {
-		t.Fatalf("production render with S3 but no key wrap must fail on wrap custody:\n%s", errOut)
+	if !strings.Contains(errOut, "different Secrets") {
+		t.Fatalf("production render reused the writer identity for retention:\n%s", errOut)
 	}
 
-	// With wrap wired, production render succeeds.
+	// A distinct write-only and delete-capable identity pair renders.
 	okSets := append([]string{}, sets...)
-	okSets = append(okSets, "managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap")
+	okSets = append(okSets, "managementBackup.s3.credentialsSecretRef.name=astronomer-backup-writer")
 	_ = helmTemplateWithValueFiles(t, []string{prodValues}, okSets...)
 }
 
@@ -1053,6 +1257,25 @@ func TestEncryptionKeyNameHasNoBareDrift(t *testing.T) {
 	}
 	if !strings.Contains(string(kr), "ASTRONOMER_ENCRYPTION_KEY") {
 		t.Fatal("cmd/keyrotate/main.go does not read ASTRONOMER_ENCRYPTION_KEY")
+	}
+}
+
+func TestServerHelmRepositoryStateUsesWritableTmp(t *testing.T) {
+	root := repoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "server-deployment.yaml"))
+	if err != nil {
+		t.Fatalf("read server deployment: %v", err)
+	}
+	template := string(raw)
+	for _, required := range []string{
+		"name: HELM_CACHE_HOME\n              value: /tmp/helm/cache",
+		"name: HELM_CONFIG_HOME\n              value: /tmp/helm/config",
+		"name: HELM_DATA_HOME\n              value: /tmp/helm/data",
+		"mountPath: /tmp",
+	} {
+		if !strings.Contains(template, required) {
+			t.Fatalf("server Helm runtime is missing writable-path contract %q", required)
+		}
 	}
 }
 

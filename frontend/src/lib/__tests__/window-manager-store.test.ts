@@ -1,4 +1,8 @@
-import { tabIdFor, useWindowManagerStore } from "@/lib/window-manager-store";
+import {
+  openClusterShellWindow,
+  tabIdFor,
+  useWindowManagerStore,
+} from "@/lib/window-manager-store";
 
 const MIN_HEIGHT = 200;
 const DEFAULT_HEIGHT = 420;
@@ -37,6 +41,10 @@ describe("tabIdFor", () => {
     const exec = { ...makeLogsTab("web", "app"), kind: "exec" as const };
     expect(tabIdFor(exec)).toBe("exec:c1:default:web:app");
     expect(tabIdFor(exec)).not.toBe(tabIdFor(makeLogsTab("web", "app")));
+  });
+
+  it("uses one stable shell tab per cluster without a fake pod target", () => {
+    expect(tabIdFor({ kind: "shell", clusterId: "c1" })).toBe("shell:c1");
   });
 });
 
@@ -82,6 +90,26 @@ describe("useWindowManagerStore", () => {
       addTab(makeLogsTab("web", "sidecar"));
       expect(useWindowManagerStore.getState().tabs).toHaveLength(2);
     });
+
+    it("opens and focuses one shell tab per cluster", () => {
+      const first = openClusterShellWindow("c1", "Production");
+      useWindowManagerStore.setState({ open: false, minimized: true });
+      const second = openClusterShellWindow("c1", "Production");
+
+      const state = useWindowManagerStore.getState();
+      expect(second).toBe(first);
+      expect(state.tabs).toEqual([
+        {
+          id: "shell:c1",
+          kind: "shell",
+          clusterId: "c1",
+          clusterName: "Production",
+        },
+      ]);
+      expect(state.activeTabId).toBe(first);
+      expect(state.open).toBe(true);
+      expect(state.minimized).toBe(false);
+    });
   });
 
   describe("LRU eviction at maxTabs", () => {
@@ -96,7 +124,9 @@ describe("useWindowManagerStore", () => {
 
       const state = useWindowManagerStore.getState();
       expect(state.tabs).toHaveLength(10);
-      expect(state.tabs.map((t) => t.pod)).toEqual([
+      expect(
+        state.tabs.map((tab) => (tab.kind === "shell" ? "" : tab.pod)),
+      ).toEqual([
         "pod-2",
         "pod-3",
         "pod-4",
@@ -121,7 +151,8 @@ describe("useWindowManagerStore", () => {
 
       const state = useWindowManagerStore.getState();
       expect(state.tabs).toHaveLength(10);
-      expect(state.tabs[0].pod).toBe("pod-1");
+      const first = state.tabs[0];
+      expect(first.kind === "shell" ? "" : first.pod).toBe("pod-1");
     });
   });
 

@@ -14,6 +14,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumeJWTChallenge = `-- name: ConsumeJWTChallenge :execrows
+INSERT INTO jwt_revocations (jti, user_id, expires_at, reason)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (jti) DO NOTHING
+`
+
+type ConsumeJWTChallengeParams struct {
+	Jti       string    `json:"jti"`
+	UserID    uuid.UUID `json:"user_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Reason    string    `json:"reason"`
+}
+
+// Purpose tokens are one-shot credentials. The primary key on jti makes the
+// insert an atomic consume operation across every server replica.
+func (q *Queries) ConsumeJWTChallenge(ctx context.Context, arg ConsumeJWTChallengeParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeJWTChallenge,
+		arg.Jti,
+		arg.UserID,
+		arg.ExpiresAt,
+		arg.Reason,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countActiveUnmigratedSSORows = `-- name: CountActiveUnmigratedSSORows :one
 SELECT count(*) FROM sso_configurations
 WHERE is_enabled = true AND migrated_to_dex_at IS NULL
@@ -85,6 +113,39 @@ func (q *Queries) CreateAPIToken(ctx context.Context, arg CreateAPITokenParams) 
 		&i.LastSeenRemoteIp,
 	)
 	return i, err
+}
+
+const createRefreshSession = `-- name: CreateRefreshSession :exec
+
+WITH family AS (
+    INSERT INTO refresh_session_families (family_hash, user_id, created_at, expires_at)
+    VALUES ($4, $5, $2, $3)
+    RETURNING family_hash
+)
+INSERT INTO refresh_session_tokens (jti_hash, family_hash, created_at, expires_at)
+SELECT $1, family_hash, $2, $3
+FROM family
+`
+
+type CreateRefreshSessionParams struct {
+	JtiHash    []byte    `json:"jti_hash"`
+	IssuedAt   time.Time `json:"issued_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	FamilyHash []byte    `json:"family_hash"`
+	UserID     uuid.UUID `json:"user_id"`
+}
+
+// Browser refresh-session families. Only SHA-256 lookup hashes are retained;
+// raw JTIs and family IDs remain inside the signed JWT and browser cookie.
+func (q *Queries) CreateRefreshSession(ctx context.Context, arg CreateRefreshSessionParams) error {
+	_, err := q.db.Exec(ctx, createRefreshSession,
+		arg.JtiHash,
+		arg.IssuedAt,
+		arg.ExpiresAt,
+		arg.FamilyHash,
+		arg.UserID,
+	)
+	return err
 }
 
 const createSSOConfiguration = `-- name: CreateSSOConfiguration :one
@@ -466,6 +527,21 @@ func (q *Queries) IsJWTRevoked(ctx context.Context, jti string) (bool, error) {
 	return revoked, err
 }
 
+const isRefreshSessionFamilyRevoked = `-- name: IsRefreshSessionFamilyRevoked :one
+SELECT COALESCE((
+    SELECT revoked_at IS NOT NULL OR expires_at <= now()
+    FROM refresh_session_families
+    WHERE family_hash = $1
+), true)::boolean AS revoked
+`
+
+func (q *Queries) IsRefreshSessionFamilyRevoked(ctx context.Context, familyHash []byte) (bool, error) {
+	row := q.db.QueryRow(ctx, isRefreshSessionFamilyRevoked, familyHash)
+	var revoked bool
+	err := row.Scan(&revoked)
+	return revoked, err
+}
+
 const listSSOConfigurations = `-- name: ListSSOConfigurations :many
 SELECT id, provider, is_enabled, display_name, config, client_id, client_secret_encrypted, allowed_organizations, allowed_domains, auto_create_users, default_global_role_id, created_at, updated_at, migrated_to_dex_at FROM sso_configurations ORDER BY created_at DESC LIMIT $1 OFFSET $2
 `
@@ -600,6 +676,18 @@ func (q *Queries) PurgeExpiredJWTRevocations(ctx context.Context) (int64, error)
 	return result.RowsAffected(), nil
 }
 
+const purgeExpiredRefreshSessions = `-- name: PurgeExpiredRefreshSessions :execrows
+DELETE FROM refresh_session_families WHERE expires_at < now()
+`
+
+func (q *Queries) PurgeExpiredRefreshSessions(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeExpiredRefreshSessions)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordFailedLoginAttempt = `-- name: RecordFailedLoginAttempt :one
 UPDATE users
 SET failed_login_count = failed_login_count + 1,
@@ -723,6 +811,99 @@ func (q *Queries) RevokeJWT(ctx context.Context, arg RevokeJWTParams) error {
 		arg.Reason,
 	)
 	return err
+}
+
+const revokeRefreshSessionFamily = `-- name: RevokeRefreshSessionFamily :execrows
+UPDATE refresh_session_families
+SET revoked_at = $1,
+    revoke_reason = $2
+WHERE family_hash = $3
+`
+
+type RevokeRefreshSessionFamilyParams struct {
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+	Reason     string             `json:"reason"`
+	FamilyHash []byte             `json:"family_hash"`
+}
+
+func (q *Queries) RevokeRefreshSessionFamily(ctx context.Context, arg RevokeRefreshSessionFamilyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeRefreshSessionFamily, arg.RevokedAt, arg.Reason, arg.FamilyHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const rotateRefreshSession = `-- name: RotateRefreshSession :one
+WITH locked AS MATERIALIZED (
+    SELECT token.jti_hash,
+           token.family_hash,
+           token.consumed_at,
+           token.expires_at AS token_expires_at,
+           family.expires_at AS family_expires_at,
+           family.revoked_at
+    FROM refresh_session_tokens AS token
+    JOIN refresh_session_families AS family ON family.family_hash = token.family_hash
+    WHERE token.jti_hash = $1
+      AND token.family_hash = $2
+      AND family.user_id = $3
+    FOR UPDATE OF token, family
+), reuse_revocation AS (
+    UPDATE refresh_session_families AS family
+    SET revoked_at = $4,
+        revoke_reason = 'refresh_token_reuse'
+    FROM locked
+    WHERE family.family_hash = locked.family_hash
+      AND locked.consumed_at IS NOT NULL
+    RETURNING family.family_hash
+), consumed AS (
+    UPDATE refresh_session_tokens AS token
+    SET consumed_at = $4,
+        replaced_by_jti_hash = $5
+    FROM locked
+    WHERE token.jti_hash = locked.jti_hash
+      AND locked.consumed_at IS NULL
+      AND locked.revoked_at IS NULL
+      AND locked.token_expires_at > $4
+      AND locked.family_expires_at > $4
+    RETURNING token.family_hash
+), next_token AS (
+    INSERT INTO refresh_session_tokens (jti_hash, family_hash, created_at, expires_at)
+    SELECT $5, consumed.family_hash, $4,
+           LEAST($6::timestamptz, locked.family_expires_at)
+    FROM consumed
+    JOIN locked ON locked.family_hash = consumed.family_hash
+    RETURNING family_hash
+)
+SELECT CASE
+    WHEN EXISTS (SELECT 1 FROM next_token) THEN 'rotated'
+    WHEN EXISTS (SELECT 1 FROM locked WHERE consumed_at IS NOT NULL) THEN 'reused'
+    WHEN EXISTS (SELECT 1 FROM locked WHERE revoked_at IS NOT NULL) THEN 'revoked'
+    ELSE 'invalid'
+END::text AS status
+`
+
+type RotateRefreshSessionParams struct {
+	PreviousJtiHash []byte             `json:"previous_jti_hash"`
+	FamilyHash      []byte             `json:"family_hash"`
+	UserID          uuid.UUID          `json:"user_id"`
+	RotatedAt       pgtype.Timestamptz `json:"rotated_at"`
+	NextJtiHash     []byte             `json:"next_jti_hash"`
+	NextExpiresAt   time.Time          `json:"next_expires_at"`
+}
+
+func (q *Queries) RotateRefreshSession(ctx context.Context, arg RotateRefreshSessionParams) (string, error) {
+	row := q.db.QueryRow(ctx, rotateRefreshSession,
+		arg.PreviousJtiHash,
+		arg.FamilyHash,
+		arg.UserID,
+		arg.RotatedAt,
+		arg.NextJtiHash,
+		arg.NextExpiresAt,
+	)
+	var status string
+	err := row.Scan(&status)
+	return status, err
 }
 
 const unlockUser = `-- name: UnlockUser :exec

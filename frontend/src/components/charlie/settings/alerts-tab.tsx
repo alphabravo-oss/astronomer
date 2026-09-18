@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useDraft } from "@/lib/hooks/use-draft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save } from "lucide-react";
 import { StatePanel } from "@/components/ui/empty-state";
@@ -9,7 +9,7 @@ import {
   updateCharlieAlertPolicy,
   type CharlieAlertPolicy,
 } from "@/lib/api/charlie-admin";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   Field,
   NumberField,
@@ -26,10 +26,7 @@ export function AlertsTab() {
     queryFn: ({ signal }) => getCharlieAlertPolicy(signal),
     retry: false,
   });
-  const [draft, setDraft] = useState<CharlieAlertPolicy>();
-  useEffect(() => {
-    if (q.data) setDraft(structuredClone(q.data));
-  }, [q.data]);
+  const [draft, setDraft] = useDraft(q.data);
   const save = useMutation({
     mutationFn: (input: CharlieAlertPolicy) => updateCharlieAlertPolicy(input),
     onSuccess: (value) => {
@@ -192,12 +189,12 @@ export function AlertsTab() {
           <p className="text-sm text-muted-foreground">
             No supported notification channels are enabled. Configure Slack,
             PagerDuty, Teams, or a webhook under{" "}
-            <Link
+            <RouterLink
               className="underline underline-offset-2"
-              href="/dashboard/alerting"
+              to="/dashboard/alerting"
             >
               Alerting
-            </Link>{" "}
+            </RouterLink>{" "}
             first. Findings still appear in Charlie regardless.
           </p>
         )}

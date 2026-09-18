@@ -13,38 +13,38 @@ import (
 func registerProjectRoutes(r chi.Router, deps RouterDependencies) {
 	writeProjects := requireScope(iauth.ScopeWriteProjects)
 
-	if deps.Projects != nil {
-		r.With(featureGate("feature.projects", deps.SettingsCache)).Route("/projects", func(r chi.Router) {
+	if deps.ClusterResources.Projects != nil {
+		r.With(featureGate("feature.projects", deps.CoreAuth.SettingsCache)).Route("/projects", func(r chi.Router) {
 			// Collection gate: cluster-/project-scoped callers are admitted and
 			// the handler filters the page. See RequireCollectionPermission.
-			r.With(requireCollectionPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/", deps.Projects.List)
-			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbCreate)).Post("/", deps.Projects.Create)
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/", deps.Projects.Get)
-			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/{id}/", deps.Projects.Update)
-			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/", deps.Projects.Update)
-			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/ownership/takeover/", deps.Projects.TakeoverOwnership)
-			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/{id}/", deps.Projects.Delete)
-			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/add-namespace/", deps.Projects.AddNamespace)
-			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/remove-namespace/", deps.Projects.RemoveNamespace)
+			r.With(requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/", deps.ClusterResources.Projects.List)
+			r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbCreate)).Post("/", deps.ClusterResources.Projects.Create)
+			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/", deps.ClusterResources.Projects.Get)
+			r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/{id}/", deps.ClusterResources.Projects.Update)
+			r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/", deps.ClusterResources.Projects.Update)
+			r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/ownership/takeover/", deps.ClusterResources.Projects.TakeoverOwnership)
+			r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/{id}/", deps.ClusterResources.Projects.Delete)
+			r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/add-namespace/", deps.ClusterResources.Projects.AddNamespace)
+			r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/{id}/remove-namespace/", deps.ClusterResources.Projects.RemoveNamespace)
 			// Policy PATCH is a targeted update of just the PSS + ResourceQuota
 			// columns; gated on projects:update so an admin who can edit the
 			// project can also retune its security posture.
-			r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/policy/", deps.Projects.UpdatePolicy)
+			r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/{id}/policy/", deps.ClusterResources.Projects.UpdatePolicy)
 			// Quota-usage is read-only and reflects current cluster state, so
 			// projects:read is the right gate. Multi-cluster fanout surfaces
 			// per-cluster partial failures the way resources_search does.
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/quota-usage/", deps.Projects.QuotaUsage)
+			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/quota-usage/", deps.ClusterResources.Projects.QuotaUsage)
 			// Per-project RBAC matrix: who is bound to what role on this
 			// project. Read-only — bindings are created via the existing
 			// /resources/rbac/ surface; this is the operator-facing
 			// "members & roles" view.
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/rbac/", deps.Projects.RBACMatrix)
+			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/rbac/", deps.ClusterResources.Projects.RBACMatrix)
 			// T4.3 — distinct clusters the project is materialised on,
 			// derived from project_namespaces. Drives the
 			// frontend multi-cluster project view.
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/clusters/", deps.Projects.ListClusters)
+			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/{id}/clusters/", deps.ClusterResources.Projects.ListClusters)
 		})
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/clusters/{cluster_id}/projects/", deps.Projects.ListByCluster)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbList)).Get("/clusters/{cluster_id}/projects/", deps.ClusterResources.Projects.ListByCluster)
 	}
 
 	// Cloud credentials (migration 053). Project-scoped CRUD with the
@@ -52,39 +52,39 @@ func registerProjectRoutes(r chi.Router, deps RouterDependencies) {
 	// credential" SDK call. The public /providers/ list is exposed
 	// outside the project tree so the UI's "Add credential" wizard can
 	// load the form-builder schema without a project id.
-	if deps.CloudCredentials != nil {
-		r.Get("/cloud-credentials/providers/", deps.CloudCredentials.ListProviders)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/cloud-credentials/", deps.CloudCredentials.List)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/", deps.CloudCredentials.Create)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Get)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Update)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Update)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/cloud-credentials/{id}/", deps.CloudCredentials.Delete)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/{id}/test/", deps.CloudCredentials.Test)
+	if deps.ClusterResources.CloudCredentials != nil {
+		r.Get("/cloud-credentials/providers/", deps.ClusterResources.CloudCredentials.ListProviders)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/cloud-credentials/", deps.ClusterResources.CloudCredentials.List)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/", deps.ClusterResources.CloudCredentials.Create)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/cloud-credentials/{id}/", deps.ClusterResources.CloudCredentials.Get)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/projects/{project_id}/cloud-credentials/{id}/", deps.ClusterResources.CloudCredentials.Update)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Patch("/projects/{project_id}/cloud-credentials/{id}/", deps.ClusterResources.CloudCredentials.Update)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/cloud-credentials/{id}/", deps.ClusterResources.CloudCredentials.Delete)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/cloud-credentials/{id}/test/", deps.ClusterResources.CloudCredentials.Test)
 	}
 
 	// Per-project ("BYO") Helm catalogs (migration 061). Gated by the
 	// project-update permission — same shape as cloud-credentials above.
-	if deps.ProjectCatalogs != nil {
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/catalogs/", deps.ProjectCatalogs.List)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/catalogs/", deps.ProjectCatalogs.Create)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/catalogs/{catalog_id}/subscribe/", deps.ProjectCatalogs.Subscribe)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/catalogs/{catalog_id}/", deps.ProjectCatalogs.Delete)
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/catalogs/{catalog_id}/charts/", deps.ProjectCatalogs.ListCharts)
+	if deps.ClusterResources.ProjectCatalogs != nil {
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/catalogs/", deps.ClusterResources.ProjectCatalogs.List)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/catalogs/", deps.ClusterResources.ProjectCatalogs.Create)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Post("/projects/{project_id}/catalogs/{catalog_id}/subscribe/", deps.ClusterResources.ProjectCatalogs.Subscribe)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbDelete)).Delete("/projects/{project_id}/catalogs/{catalog_id}/", deps.ClusterResources.ProjectCatalogs.Delete)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{project_id}/catalogs/{catalog_id}/charts/", deps.ClusterResources.ProjectCatalogs.ListCharts)
 	}
 
 	// Vault integration (migration 067).
-	if deps.Vault != nil {
-		r.Get("/admin/vault-connections/", deps.Vault.List)
-		r.Post("/admin/vault-connections/", deps.Vault.Create)
-		r.Get("/admin/vault-connections/{id}/", deps.Vault.Get)
-		r.Put("/admin/vault-connections/{id}/", deps.Vault.Update)
-		r.Delete("/admin/vault-connections/{id}/", deps.Vault.Delete)
-		r.Post("/admin/vault-connections/{id}/test/", deps.Vault.Test)
-		r.Post("/admin/vault-connections/{id}/health/", deps.Vault.Health)
+	if deps.ClusterResources.Vault != nil {
+		r.Get("/admin/vault-connections/", deps.ClusterResources.Vault.List)
+		r.Post("/admin/vault-connections/", deps.ClusterResources.Vault.Create)
+		r.Get("/admin/vault-connections/{id}/", deps.ClusterResources.Vault.Get)
+		r.Put("/admin/vault-connections/{id}/", deps.ClusterResources.Vault.Update)
+		r.Delete("/admin/vault-connections/{id}/", deps.ClusterResources.Vault.Delete)
+		r.Post("/admin/vault-connections/{id}/test/", deps.ClusterResources.Vault.Test)
+		r.Post("/admin/vault-connections/{id}/health/", deps.ClusterResources.Vault.Health)
 
-		r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{id}/default-vault-connection/", deps.Vault.GetProjectDefault)
-		r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/projects/{id}/default-vault-connection/", deps.Vault.PutProjectDefault)
+		r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbRead)).Get("/projects/{id}/default-vault-connection/", deps.ClusterResources.Vault.GetProjectDefault)
+		r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceProjects, rbac.VerbUpdate)).Put("/projects/{id}/default-vault-connection/", deps.ClusterResources.Vault.PutProjectDefault)
 	}
 
 }

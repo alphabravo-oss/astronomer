@@ -94,7 +94,7 @@ func TestEveryReadAuditPolicyMutationUsesTransactionalExecutor(t *testing.T) {
 			if !ok {
 				return true
 			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeReadAuditPolicyMutation" {
+			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
 				want[fn.Name.Name] = true
 			}
 			return true
@@ -102,7 +102,7 @@ func TestEveryReadAuditPolicyMutationUsesTransactionalExecutor(t *testing.T) {
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeReadAuditPolicyMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

@@ -64,9 +64,13 @@ describe("generated kubectl shell API", () => {
             command_line: "kubectl get pods -A",
           },
         ],
-        count: 1,
-        next: null,
-        previous: null,
+        pagination: {
+          total: 1,
+          limit: 50,
+          offset: 10,
+          has_more: false,
+          next_offset: null,
+        },
       },
     );
 

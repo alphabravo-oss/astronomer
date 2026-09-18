@@ -24,6 +24,8 @@ function mapSCIMToken(token: SCIMTokenWire): SCIMToken {
     prefix: token.prefix,
     lastUsedAt: token.last_used_at,
     createdAt: token.created_at,
+    expiresAt: token.expires_at,
+    revokedAt: token.revoked_at,
   };
 }
 

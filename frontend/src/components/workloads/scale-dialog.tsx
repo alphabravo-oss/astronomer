@@ -1,6 +1,4 @@
-"use client";
-
-import { useState, useEffect } from "react";
+import { useDraft } from "@/lib/hooks/use-draft";
 import { Loader2, Minus, Plus } from "lucide-react";
 import { ModalShell } from "@/components/ui/modal-shell";
 
@@ -13,21 +11,20 @@ interface ScaleDialogProps {
   loading?: boolean;
 }
 
-export function ScaleDialog({
-  open,
+export function ScaleDialog(props: ScaleDialogProps) {
+  return props.open ? (
+    <ScaleDialogContent key={props.workloadName} {...props} />
+  ) : null;
+}
+
+function ScaleDialogContent({
   onClose,
   onScale,
   workloadName,
   currentReplicas,
   loading,
 }: ScaleDialogProps) {
-  const [replicas, setReplicas] = useState(currentReplicas);
-
-  useEffect(() => {
-    if (open) setReplicas(currentReplicas);
-  }, [open, currentReplicas]);
-
-  if (!open) return null;
+  const [replicas, setReplicas] = useDraft(currentReplicas);
 
   return (
     <ModalShell
@@ -41,7 +38,7 @@ export function ScaleDialog({
           <button
             onClick={onClose}
             disabled={loading}
-            className="inline-flex items-center h-8 px-3 rounded text-sm
+            className="inline-flex items-center h-8 px-3 rounded-sm text-sm
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             Cancel
@@ -49,7 +46,7 @@ export function ScaleDialog({
           <button
             onClick={() => onScale(replicas)}
             disabled={loading || replicas === currentReplicas}
-            className="inline-flex items-center gap-1.5 h-8 px-4 rounded text-sm font-medium
+            className="inline-flex items-center gap-1.5 h-8 px-4 rounded-sm text-sm font-medium
               bg-primary text-primary-foreground hover:bg-primary/90
               disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
@@ -84,8 +81,8 @@ export function ScaleDialog({
           onChange={(e) =>
             setReplicas(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
           }
-          className="h-10 w-20 text-center text-lg font-medium tabular-nums rounded border border-border
-            bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          className="h-10 w-20 text-center text-lg font-medium tabular-nums rounded-sm border border-border
+            bg-background focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
 
         <button

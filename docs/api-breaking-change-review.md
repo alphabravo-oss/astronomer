@@ -8,6 +8,72 @@ authorize changing runtime behavior. The catalog sync entry records the
 intentional move to durable asynchronous acceptance (`202`) so a request is
 never reported complete before its committed worker intent runs.
 
+Reviewed 2026-09-10 as intentional greenfield contract hardening. GitHub
+webhooks now require the provider's signed-delivery envelope so unsigned or
+replay-ambiguous requests cannot enter the delivery pipeline. The obsolete
+synchronous support-bundle alias was removed in favor of the durable,
+pollable support-bundle operation API. The experimental remotedialer stack was
+also removed in favor of the production agent hub; no compatibility endpoint
+or CLI alias is retained:
+
+- POST /api/v1/gitops/sources/{id}/webhook added the new required `header` request parameter `x-github-delivery`
+- POST /api/v1/gitops/sources/{id}/webhook added the new required `header` request parameter `x-github-event`
+- POST /api/v1/gitops/sources/{id}/webhook added the new required `header` request parameter `x-hub-signature-256`
+- POST /api/v1/gitops/sources/{id}/webhook added required request body
+- GET /api/v1/support-bundle api path removed without deprecation
+- GET /api/v1/clusters/{id}/v2/pods api path removed without deprecation
+- GET /api/v1/connect/{cluster_id} api path removed without deprecation
+- HEAD /api/v1/connect/{cluster_id} api path removed without deprecation
+- OPTIONS /api/v1/connect/{cluster_id} api path removed without deprecation
+- POST /api/v1/connect/{cluster_id} api path removed without deprecation
+- PUT /api/v1/connect/{cluster_id} api path removed without deprecation
+- PATCH /api/v1/connect/{cluster_id} api path removed without deprecation
+- DELETE /api/v1/connect/{cluster_id} api path removed without deprecation
+- TRACE /api/v1/connect/{cluster_id} api path removed without deprecation
+
+The same 2026-09-10 greenfield review removed the remaining duplicate backup,
+Dex, scan, settings, Charlie, and feature-flag spellings. Canonical clients were
+regenerated in the same change; no server or CLI forwarding layer is retained.
+The audit response now exposes only the canonical singular `detail` field, and
+tool operation consumers accept the new first-class rollback state:
+
+- GET /api/v1/admin/charlie/trigger-rules/ removed the required property `rules/items/fleet_threshold_percent` from the response with the `200` status
+- POST /api/v1/admin/charlie/trigger-rules/ the request property `estate_threshold_percent` became required
+- POST /api/v1/admin/charlie/trigger-rules/ removed the required property `fleet_threshold_percent` from the response with the `201` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the request property `fleet_threshold_percent`
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ the request property `estate_threshold_percent` became required
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the required property `fleet_threshold_percent` from the response with the `200` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the request property `fleet_threshold_percent`
+- GET /api/v1/audit/ removed the optional property `allOf[subschema #2]/data/items/details` from the response with the `200` status
+- GET /api/v1/audit/{id}/ removed the optional property `allOf[subschema #2]/data/details` from the response with the `200` status
+- GET /api/v1/auth/dex/settings/ removed the optional property `allOf[subschema #2]/data/configmap_name` from the response with the `200` status
+- PUT /api/v1/auth/dex/settings/ removed the request property `configmap_name`
+- PUT /api/v1/auth/dex/settings/ removed the optional property `allOf[subschema #2]/data/configmap_name` from the response with the `200` status
+- GET /api/v1/backups/runs api path removed without deprecation
+- GET /api/v1/backups/storage-configs api path removed without deprecation
+- POST /api/v1/backups/storage-configs api path removed without deprecation
+- DELETE /api/v1/backups/storage-configs/{id} api path removed without deprecation
+- GET /api/v1/backups/storage-configs/{id} api path removed without deprecation
+- PUT /api/v1/backups/storage-configs/{id} api path removed without deprecation
+- POST /api/v1/backups/storage-configs/{id}/test-connection api path removed without deprecation
+- POST /api/v1/backups/storage/{id}/test api path removed without deprecation
+- GET /api/v1/clusters/{cluster_id}/tools/status added the new `rollback` enum value to the `allOf[subschema #2]/data/items/operation/operationType` response property for the response status `200`
+- POST /api/v1/security/scans removed the request property `scan_type`
+- GET /api/v1/settings/features/ removed the optional property `data/feature.fleet_grafana` from the response with the `200` status
+- PUT /api/v1/settings/general the request property `agentHeartbeatInterval` became not nullable
+- PUT /api/v1/settings/general the request property `defaultSessionTimeout` became not nullable
+- PUT /api/v1/settings/general the request property `enableAuditLogging` became not nullable
+- PUT /api/v1/settings/general the request property `metricsCollection` became not nullable
+- PUT /api/v1/settings/general the request property `platformName` became not nullable
+- PUT /api/v1/settings/general removed the request property `platform_name`
+- GET /api/v1/tools/operations added the new `rollback` enum value to the `allOf[subschema #2]/data/items/operationType` response property for the response status `200`
+- GET /api/v1/tools/operations/{id} added the new `rollback` enum value to the `allOf[subschema #2]/data/operationType` response property for the response status `200`
+- POST /api/v1/tools/operations/{id}/retry added the new `rollback` enum value to the `allOf[subschema #2]/data/operationType` response property for the response status `202`
+- POST /api/v1/tools/{slug}/adopt added the new `rollback` enum value to the `allOf[subschema #2]/data/operationType` response property for the response status `202`
+- POST /api/v1/tools/{slug}/install added the new `rollback` enum value to the `allOf[subschema #2]/data/operationType` response property for the response status `202`
+- DELETE /api/v1/tools/{slug}/uninstall added the new `rollback` enum value to the `allOf[subschema #2]/data/operationType` response property for the response status `202`
+- PUT /api/v1/tools/{slug}/upgrade added the new `rollback` enum value to the `allOf[subschema #2]/data/operationType` response property for the response status `202`
+
 Reviewed 2026-08-23 for the v1 contract hardening release:
 
 - POST /api/v1/alerting/channels/ added required request body
@@ -302,3 +368,93 @@ receipt corrections; no runtime field was silently removed.
 - POST /api/v1/delivery/targets/{id}/rollouts/ for the `header` request parameter `idempotency-key`, the minLength was increased from `0` to `1`
 - POST /api/v1/nodes/{cluster_id}/{node_name}/drain/ added the new required `header` request parameter `idempotency-key` to all path's operations
 - DELETE /api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/ added the new required `header` request parameter `idempotency-key`
+
+Reviewed 2026-09-16 as the intentional pre-GA pagination contract
+normalization. List handlers, generated clients, frontend consumers, and
+contract tests now use the shared `{data, pagination}` envelope instead of the
+legacy top-level `count`/`next`/`previous` fields. Agent inventory keeps its
+estate summary as a top-level sibling of the paginated data array, and report
+detail embeds its vulnerability list as a paginated object. These are
+coordinated runtime and client changes in the unreleased v1.1 contract, not
+specification-only suppressions:
+
+- GET /api/v1/admin/group-mappings removed the required property `count` from the response with the `200` status
+- GET /api/v1/admin/group-mappings removed the required property `next` from the response with the `200` status
+- GET /api/v1/admin/group-mappings removed the required property `previous` from the response with the `200` status
+- GET /api/v1/cluster-agents/ the `data` response's property `type` changed from `object` to `array<object>` for status `200`
+- GET /api/v1/cluster-agents/ removed the required property `data/items` from the response with the `200` status
+- GET /api/v1/cluster-agents/ removed the required property `data/limit` from the response with the `200` status
+- GET /api/v1/cluster-agents/ removed the required property `data/offset` from the response with the `200` status
+- GET /api/v1/cluster-agents/ removed the required property `data/summary` from the response with the `200` status
+- GET /api/v1/cluster-agents/{cluster_id}/operations/ the `data` response's property `type` changed from `object` to `array<object>` for status `200`
+- GET /api/v1/cluster-agents/{cluster_id}/operations/ removed the required property `data/items` from the response with the `200` status
+- GET /api/v1/cluster-agents/{cluster_id}/operations/ removed the required property `data/limit` from the response with the `200` status
+- GET /api/v1/cluster-agents/{cluster_id}/operations/ removed the required property `data/offset` from the response with the `200` status
+- GET /api/v1/clusters/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/clusters/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/clusters/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/gateway-classes removed the required property `count` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/gateway-classes removed the required property `next` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/gateway-classes removed the required property `previous` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/ingress-classes removed the required property `count` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/ingress-classes removed the required property `next` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/ingress-classes removed the required property `previous` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/limit-ranges removed the required property `count` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/limit-ranges removed the required property `next` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/limit-ranges removed the required property `previous` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/network-policies removed the required property `count` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/network-policies removed the required property `next` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/network-policies removed the required property `previous` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/resource-quotas removed the required property `count` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/resource-quotas removed the required property `next` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/resource-quotas removed the required property `previous` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands removed the required property `count` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands removed the required property `next` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands removed the required property `previous` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id} the `data/vulnerabilities` response's property `type` changed from `array<object>` to `object` for status `200`
+- GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id} removed the required property `data/limit` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id} removed the required property `data/offset` from the response with the `200` status
+- GET /api/v1/clusters/{cluster_id}/vulnerabilities/reports/{id} removed the required property `data/vulnerability_total` from the response with the `200` status
+- GET /api/v1/clusters/{id}/vulnerabilities/images/ removed the optional property `count` from the response with the `200` status
+- GET /api/v1/delivery/bundles/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/bundles/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/bundles/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/bundles/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/delivery/bundles/{id}/versions/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/bundles/{id}/versions/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/bundles/{id}/versions/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/bundles/{id}/versions/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/delivery/deployments/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/deployments/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/deployments/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/deployments/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/delivery/deployments/{id}/events/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/deployments/{id}/events/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/deployments/{id}/events/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/deployments/{id}/events/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/{id}/clusters/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/{id}/clusters/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/{id}/clusters/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/{id}/clusters/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/{id}/events/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/{id}/events/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/{id}/events/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/rollouts/{id}/events/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/delivery/sources/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/sources/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/sources/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/sources/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/delivery/targets/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/delivery/targets/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/delivery/targets/ removed the required property `previous` from the response with the `200` status
+- GET /api/v1/delivery/targets/ removed the required property `total_known` from the response with the `200` status
+- GET /api/v1/monitoring/endpoints removed the required property `count` from the response with the `200` status
+- GET /api/v1/monitoring/endpoints removed the required property `next` from the response with the `200` status
+- GET /api/v1/monitoring/endpoints removed the required property `previous` from the response with the `200` status
+- GET /api/v1/tools/ removed the required property `count` from the response with the `200` status
+- GET /api/v1/tools/ removed the required property `next` from the response with the `200` status
+- GET /api/v1/tools/ removed the required property `previous` from the response with the `200` status

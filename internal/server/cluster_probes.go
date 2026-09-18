@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,56 +29,102 @@ const (
 	probeStatusTrue    = "True"
 	probeStatusFalse   = "False"
 	probeStatusUnknown = "Unknown"
+
+	clusterProbePageSize    = int32(500)
+	clusterProbeConcurrency = 32
 )
 
-// startClusterProbeReconciler runs probe-based cluster conditions
-// (AgentReachable, GatewayAPISupported) from the server process. These
-// require the tunnel-backed K8sRequester which only the server has — the
-// worker process has no access to the tunnel registry, so its
-// cluster:health_check task only maintains heartbeat-derived conditions.
-//
-// Ticks every 60s, iterates active clusters, runs cheap probes through the
-// tunnel, and upserts one cluster_conditions row per (cluster_id, type).
-// Probes are time-boxed and run sequentially per cluster to avoid hammering
-// the tunnel on large fleets; this can be parallelized once we have proof
-// of the right concurrency cap.
-func startClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, requester handler.K8sRequester) {
+type clusterProbeQuerier interface {
+	ListClusterProbeTargets(ctx context.Context, arg sqlc.ListClusterProbeTargetsParams) ([]uuid.UUID, error)
+	UpsertClusterCondition(ctx context.Context, arg sqlc.UpsertClusterConditionParams) (sqlc.ClusterCondition, error)
+}
+
+// runClusterProbeReconciler maintains probe-based cluster conditions
+// (AgentReachable, GatewayAPISupported) from the server process. These require
+// the tunnel-backed K8sRequester which only the server has. It is owned and
+// joined by the server runtime instead of starting an untracked goroutine.
+func runClusterProbeReconciler(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester) {
 	if logger == nil || queries == nil || requester == nil {
 		return
 	}
-	go func() {
-		// Short initial delay so the first sweep doesn't race tunnel
-		// registration on cold start.
-		time.Sleep(5 * time.Second)
-		ticker := time.NewTicker(60 * time.Second)
-		defer ticker.Stop()
-		for {
-			runCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-			if err := sweepClusterProbes(runCtx, logger, queries, requester); err != nil {
-				logger.Warn("cluster probe sweep failed", "error", err)
-			}
-			cancel()
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
+	// Short initial delay so the first sweep doesn't race tunnel registration
+	// on cold start.
+	initial := time.NewTimer(5 * time.Second)
+	select {
+	case <-ctx.Done():
+		initial.Stop()
+		return
+	case <-initial.C:
+	}
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	var cursor uuid.UUID
+	for {
+		runCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		if err := sweepClusterProbes(runCtx, logger, queries, requester, &cursor); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			logger.Warn("cluster probe sweep failed", "error", err)
 		}
-	}()
+		cancel()
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
-func sweepClusterProbes(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, requester handler.K8sRequester) error {
-	clusters, err := queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: 500, Offset: 0})
-	if err != nil {
-		return fmt.Errorf("list clusters: %w", err)
+func sweepClusterProbes(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, cursor *uuid.UUID) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		clusters, err := queries.ListClusterProbeTargets(ctx, sqlc.ListClusterProbeTargetsParams{
+			PageSize: clusterProbePageSize, AfterID: *cursor,
+		})
+		if err != nil {
+			return fmt.Errorf("list cluster probe targets: %w", err)
+		}
+		if err := fanOutClusterProbes(ctx, logger, queries, requester, clusters, cursor); err != nil {
+			return err
+		}
+		if len(clusters) < int(clusterProbePageSize) {
+			*cursor = uuid.Nil
+			return nil
+		}
 	}
-	for _, c := range clusters {
-		probeOne(ctx, logger, queries, requester, c.ID)
-	}
-	return nil
 }
 
-func probeOne(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, requester handler.K8sRequester, clusterID uuid.UUID) {
+func fanOutClusterProbes(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, clusters []uuid.UUID, cursor *uuid.UUID) error {
+	sem := make(chan struct{}, clusterProbeConcurrency)
+	var wg sync.WaitGroup
+	for _, clusterID := range clusters {
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Wait()
+			return ctx.Err()
+		}
+		// Cancellation can win concurrently with an available semaphore slot.
+		if err := ctx.Err(); err != nil {
+			<-sem
+			wg.Wait()
+			return err
+		}
+		// Advance on dispatch, including timed-out probes. Retrying the first
+		// slow page every tick would starve the rest of the estate forever.
+		*cursor = clusterID
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			probeOne(ctx, logger, queries, requester, clusterID)
+		}()
+	}
+	wg.Wait()
+	return ctx.Err()
+}
+
+func probeOne(ctx context.Context, logger *slog.Logger, queries clusterProbeQuerier, requester handler.K8sRequester, clusterID uuid.UUID) {
 	// Positive machine-origin marker: this is a background health probe with no
 	// human anywhere near it (design doc §10.5, agent lifecycle / health). It is
 	// stamped rather than left to fall through as "no user", because §7
@@ -101,6 +149,9 @@ func probeOne(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, r
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	resp, err := requester.Do(probeCtx, clusterID.String(), http.MethodGet, "/version", nil, nil)
 	cancel()
+	if ctx.Err() != nil {
+		return
+	}
 	switch {
 	case err != nil:
 		upsert(probeConditionAgentReachable, probeStatusFalse, "ProbeError", err.Error())
@@ -117,10 +168,16 @@ func probeOne(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, r
 
 	// GatewayAPISupported: discovery probe for gateway.networking.k8s.io/v1.
 	// 200 → True, 404 → False (CRDs not installed), anything else → Unknown.
+	if ctx.Err() != nil {
+		return
+	}
 	probeCtx, cancel = context.WithTimeout(ctx, 5*time.Second)
 	resp, err = requester.Do(probeCtx, clusterID.String(), http.MethodGet,
 		"/apis/gateway.networking.k8s.io/v1", nil, nil)
 	cancel()
+	if ctx.Err() != nil {
+		return
+	}
 	switch {
 	case err != nil:
 		upsert(probeConditionGatewayAPISupport, probeStatusUnknown, "ProbeError", err.Error())

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
@@ -38,7 +40,7 @@ type requestLogFields struct {
 	actorAuthMethod string
 }
 
-func setRequestLogActor(ctx context.Context, user *AuthenticatedUser) {
+func setRequestLogActor(ctx context.Context, user *reqctx.User) {
 	fields, ok := ctx.Value(requestLogFieldsKey{}).(*requestLogFields)
 	if !ok || fields == nil || user == nil {
 		return
@@ -84,12 +86,12 @@ func RequestLogger(next http.Handler) http.Handler {
 			}
 		}
 
-		requestID := GetRequestID(r.Context())
+		requestID := reqctx.RequestID(r.Context())
 		log := observability.WithTraceID(
 			observability.WithRequestID(
 				observability.WithCorrelationID(
 					observability.WithEvent(slog.Default(), "http_request"),
-					GetCorrelationID(r.Context()),
+					reqctx.CorrelationID(r.Context()),
 				),
 				requestID,
 			),

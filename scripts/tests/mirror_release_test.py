@@ -92,7 +92,7 @@ class MirrorReleaseTest(unittest.TestCase):
         document = manifest()
         document["astronomer"]["images"] = [
             subject(name, "container_image")
-            for name in ("agent", "frontend", "migrate", "server", "shell", "worker")
+            for name in ("agent", "dr", "frontend", "migrate", "server", "shell", "worker")
         ]
         runtime = {
             "busybox:1.36": f"docker.io/library/busybox@{DIGEST}",
@@ -100,7 +100,6 @@ class MirrorReleaseTest(unittest.TestCase):
             "valkey/valkey:8-alpine": f"docker.io/valkey/valkey@{DIGEST}",
             "dexidp/dex:v2.41.1": f"docker.io/dexidp/dex@{DIGEST}",
             "fluent/fluent-bit:3.2.4": f"docker.io/fluent/fluent-bit@{DIGEST}",
-            "ghcr.io/alphabravocompany/pgdump-s3:16-awscli": f"ghcr.io/alphabravocompany/pgdump-s3@{DIGEST}",
         }
         document["astronomer"]["runtime_images"] = [
             {"source_reference": source, "reference": exact}
@@ -115,6 +114,8 @@ class MirrorReleaseTest(unittest.TestCase):
         self.assertEqual(values["image"]["registry"], "")
         self.assertEqual(values["utilities"]["busybox"]["repository"], "library/busybox")
         self.assertEqual(values["managementRestoreDrill"]["sidecar"]["image"]["digest"], DIGEST)
+        self.assertEqual(values["managementBackup"]["image"]["digest"], DIGEST)
+        self.assertEqual(values["managementRestoreDrill"]["image"]["digest"], DIGEST)
         self.assertEqual(values["delivery"]["artifacts"]["privateRegistry"], "mirror.example.test:5000")
         self.assertEqual(values["delivery"]["artifacts"]["fluxDistribution"]["digest"], DIGEST)
         self.assertIn("@sha256:", values["kubectlShell"]["image"])

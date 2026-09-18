@@ -9,6 +9,7 @@ import {
   adminWebhookUpdate,
 } from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
+import { mapPage } from "@/lib/api/pagination";
 import type { PaginatedResponse } from "@/types";
 import type {
   WebhookDelivery as WebhookDeliveryWire,
@@ -254,18 +255,7 @@ export async function listWebhookDeliveries(
     query: { limit: pageSize, offset: (page - 1) * pageSize },
     signal: options.signal,
   });
-  const data = response.data;
-  const total = data?.total ?? 0;
-  const limit = data?.limit ?? pageSize;
-  const offset = data?.offset ?? (page - 1) * pageSize;
-  return {
-    data: (data?.items ?? []).map(mapWebhookDelivery),
-    total,
-    count: total,
-    page: Math.floor(offset / limit) + 1,
-    pageSize: limit,
-    totalPages: Math.max(1, Math.ceil(total / limit)),
-  };
+  return mapPage(response, mapWebhookDelivery);
 }
 
 export async function retryWebhookDelivery(

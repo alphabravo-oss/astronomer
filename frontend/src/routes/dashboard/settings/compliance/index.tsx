@@ -7,7 +7,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * download directly today.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, Download, FileArchive, Plus } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { downloadBlob } from "@/lib/utils";
@@ -131,7 +131,6 @@ function ComplianceForm() {
           </div>
         </ModalShell>
       )}
-
     </div>
   );
 }
@@ -140,13 +139,13 @@ function CompliancePage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Compliance"
           title={
@@ -158,19 +157,20 @@ function CompliancePage() {
           description="Build a ZIP of audit + RBAC + config for a date range. Large windows may take longer, but the export downloads directly when complete."
         />
         <ComplianceForm />
-        <div className="border rounded p-4 bg-card">
+        <div className="border rounded-sm p-4 bg-card">
           <h2 className="font-semibold text-sm">Compliance baselines</h2>
           <p className="text-sm text-muted-foreground mt-1">
             One-click preset profiles (PCI-DSS, HIPAA, FedRAMP, SOC 2) that
             snapshot and apply the related platform settings, quota plans, audit
-            retention, and alert rules.
+            retention, and alert rules. Presets are not certifications and do
+            not make the standard release artifact FIPS validated.
           </p>
-          <Link
-            href="/dashboard/settings/compliance/baselines"
-            className="inline-block mt-3 text-sm px-3 py-1.5 rounded border bg-background hover:bg-muted"
+          <RouterLink
+            to="/dashboard/settings/compliance/baselines"
+            className="inline-block mt-3 text-sm px-3 py-1.5 rounded-sm border bg-background hover:bg-muted"
           >
             Open baselines
-          </Link>
+          </RouterLink>
         </div>
       </PageShell>
     </SettingsAuthGate>

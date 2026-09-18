@@ -3,11 +3,14 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -31,6 +34,55 @@ type fakeSCIMQuerier struct {
 	// groups maps displayName -> mapping row for DIR-03 SCIM Group writes.
 	groups    map[string]sqlc.IdentityGroupMapping
 	idpGroups map[uuid.UUID]sqlc.UserIdpGroup
+	outbox    []sqlc.UpsertAuditOutboxParams
+	outboxErr error
+	idpErr    error
+}
+
+func TestSCIMPagingBoundsDeepOffsets(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?startIndex=999999999&count=999", nil)
+	startIndex, count := scimPaging(req)
+	if startIndex != int(maxPaginationOffset)+1 {
+		t.Fatalf("startIndex = %d, want %d", startIndex, int(maxPaginationOffset)+1)
+	}
+	if count != scimMaxListResult {
+		t.Fatalf("count = %d, want %d", count, scimMaxListResult)
+	}
+}
+
+func (f *fakeSCIMQuerier) clone() *fakeSCIMQuerier {
+	cloned := *f
+	cloned.users = make(map[string]sqlc.User, len(f.users))
+	for key, value := range f.users {
+		cloned.users[key] = value
+	}
+	cloned.groups = make(map[string]sqlc.IdentityGroupMapping, len(f.groups))
+	for key, value := range f.groups {
+		cloned.groups[key] = value
+	}
+	cloned.idpGroups = make(map[uuid.UUID]sqlc.UserIdpGroup, len(f.idpGroups))
+	for key, value := range f.idpGroups {
+		value.Groups = append([]byte(nil), value.Groups...)
+		cloned.idpGroups[key] = value
+	}
+	cloned.invalidatedTokensFor = append([]uuid.UUID(nil), f.invalidatedTokensFor...)
+	cloned.outbox = append([]sqlc.UpsertAuditOutboxParams(nil), f.outbox...)
+	return &cloned
+}
+
+func (f *fakeSCIMQuerier) runTx(_ context.Context, fn func(SCIMMutationTx) error) error {
+	tx := f.clone()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	*f = *tx
+	return nil
+}
+
+func newTestSCIMHandler(q *fakeSCIMQuerier) *SCIMHandler {
+	h := NewSCIMHandler(q)
+	h.SetRunTx(q.runTx)
+	return h
 }
 
 func (f *fakeSCIMQuerier) InvalidateAllTokens(_ context.Context, arg sqlc.InvalidateAllTokensParams) error {
@@ -40,7 +92,7 @@ func (f *fakeSCIMQuerier) InvalidateAllTokens(_ context.Context, arg sqlc.Invali
 
 func (f *fakeSCIMQuerier) GetSCIMTokenByHash(_ context.Context, hash string) (sqlc.ScimToken, error) {
 	if hash == f.tokenHash {
-		return sqlc.ScimToken{ID: uuid.New()}, nil
+		return sqlc.ScimToken{ID: uuid.New(), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	}
 	return sqlc.ScimToken{}, pgx.ErrNoRows
 }
@@ -87,6 +139,10 @@ func (f *fakeSCIMQuerier) GetUserByID(_ context.Context, id uuid.UUID) (sqlc.Use
 		}
 	}
 	return sqlc.User{}, pgx.ErrNoRows
+}
+
+func (f *fakeSCIMQuerier) GetUserByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.User, error) {
+	return f.GetUserByID(ctx, id)
 }
 
 func (f *fakeSCIMQuerier) GetUserByUsername(_ context.Context, username string) (sqlc.User, error) {
@@ -137,6 +193,11 @@ func (f *fakeSCIMQuerier) CountSCIMGroupNames(_ context.Context) (int64, error) 
 	return int64(len(f.groups)), nil
 }
 
+func (f *fakeSCIMQuerier) SCIMGroupExists(_ context.Context, name string) (bool, error) {
+	_, ok := f.groups[name]
+	return ok, nil
+}
+
 func (f *fakeSCIMQuerier) CreateGroupMapping(_ context.Context, arg sqlc.CreateGroupMappingParams) (sqlc.IdentityGroupMapping, error) {
 	if f.groups == nil {
 		f.groups = map[string]sqlc.IdentityGroupMapping{}
@@ -184,12 +245,23 @@ func (f *fakeSCIMQuerier) GetUserIDPGroups(_ context.Context, userID uuid.UUID) 
 }
 
 func (f *fakeSCIMQuerier) UpsertUserIDPGroups(_ context.Context, arg sqlc.UpsertUserIDPGroupsParams) (sqlc.UserIdpGroup, error) {
+	if f.idpErr != nil {
+		return sqlc.UserIdpGroup{}, f.idpErr
+	}
 	if f.idpGroups == nil {
 		f.idpGroups = map[uuid.UUID]sqlc.UserIdpGroup{}
 	}
 	row := sqlc.UserIdpGroup{UserID: arg.UserID, Groups: arg.Groups, SyncedAt: arg.SyncedAt}
 	f.idpGroups[arg.UserID] = row
 	return row, nil
+}
+
+func (f *fakeSCIMQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	if f.outboxErr != nil {
+		return sqlc.AuditOutbox{}, f.outboxErr
+	}
+	f.outbox = append(f.outbox, arg)
+	return sqlc.AuditOutbox{ID: arg.ID, DedupeKey: arg.DedupeKey}, nil
 }
 
 // TestSCIMUserLifecycle exercises the smallest end-to-end slice: a bad
@@ -202,7 +274,7 @@ func TestSCIMUserLifecycle(t *testing.T) {
 		tokenHash: auth.HashSCIMToken(token),
 		users:     map[string]sqlc.User{},
 	}
-	h := NewSCIMHandler(q)
+	h := newTestSCIMHandler(q)
 
 	// --- 401 on missing/bad token (Auth middleware) ---
 	badReq := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
@@ -314,7 +386,7 @@ func TestSCIMListUsersFilterDBError(t *testing.T) {
 		users:     map[string]sqlc.User{},
 		lookupErr: pgx.ErrTxClosed, // any non-ErrNoRows error => transient failure
 	}
-	h := NewSCIMHandler(q)
+	h := newTestSCIMHandler(q)
 
 	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?filter="+
 		url.QueryEscape(`userName eq "alice@example.com"`), nil)
@@ -336,7 +408,7 @@ func TestSCIMPatchUser(t *testing.T) {
 		tokenHash: auth.HashSCIMToken(token),
 		users:     map[string]sqlc.User{},
 	}
-	h := NewSCIMHandler(q)
+	h := newTestSCIMHandler(q)
 
 	// Seed a user directly through CreateUser so we have a real id.
 	u, err := q.CreateUser(context.Background(), sqlc.CreateUserParams{
@@ -413,7 +485,7 @@ func TestSCIMPatchUser(t *testing.T) {
 func TestSCIMPatchUserRejectsBadSchema(t *testing.T) {
 	token := "astro_scim_testtoken"
 	q := &fakeSCIMQuerier{tokenHash: auth.HashSCIMToken(token), users: map[string]sqlc.User{}}
-	h := NewSCIMHandler(q)
+	h := newTestSCIMHandler(q)
 	u, _ := q.CreateUser(context.Background(), sqlc.CreateUserParams{
 		Email: "c@example.com", Username: "c@example.com", IsActive: true,
 	})
@@ -438,7 +510,7 @@ func TestSCIMCreateGroup(t *testing.T) {
 		users:     map[string]sqlc.User{},
 		groups:    map[string]sqlc.IdentityGroupMapping{},
 	}
-	h := NewSCIMHandler(q)
+	h := newTestSCIMHandler(q)
 	body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"engineers"}`
 	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Groups", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -461,7 +533,7 @@ func TestSCIMDeleteGroup(t *testing.T) {
 		users:     map[string]sqlc.User{},
 		groups:    map[string]sqlc.IdentityGroupMapping{},
 	}
-	h := NewSCIMHandler(q)
+	h := newTestSCIMHandler(q)
 
 	// Seed via CreateGroup so the group exists in the SCIM view.
 	createBody := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"contractors"}`
@@ -497,13 +569,184 @@ func TestSCIMDeleteGroup(t *testing.T) {
 	}
 }
 
+func TestSCIMMutationsFailClosedWithoutTransactionRunner(t *testing.T) {
+	userID := uuid.New()
+	groupID := uuid.New()
+	q := &fakeSCIMQuerier{
+		users: map[string]sqlc.User{
+			"existing@example.com": {ID: userID, Username: "existing@example.com", Email: "existing@example.com", IsActive: true},
+		},
+		groups: map[string]sqlc.IdentityGroupMapping{
+			"engineers": {ID: groupID, GroupName: "engineers", Scope: "global"},
+		},
+	}
+	h := NewSCIMHandler(q)
+	tests := []struct {
+		name    string
+		method  string
+		path    string
+		body    string
+		id      string
+		handler http.HandlerFunc
+	}{
+		{name: "create user", method: http.MethodPost, path: "/scim/v2/Users", body: `{"userName":"new@example.com"}`, handler: h.CreateUser},
+		{name: "replace user", method: http.MethodPut, path: "/scim/v2/Users/" + userID.String(), body: `{"userName":"existing@example.com","active":false}`, id: userID.String(), handler: h.PutUser},
+		{name: "patch user", method: http.MethodPatch, path: "/scim/v2/Users/" + userID.String(), body: `{"Operations":[{"op":"replace","path":"active","value":false}]}`, id: userID.String(), handler: h.PatchUser},
+		{name: "delete user", method: http.MethodDelete, path: "/scim/v2/Users/" + userID.String(), id: userID.String(), handler: h.DeleteUser},
+		{name: "create group", method: http.MethodPost, path: "/scim/v2/Groups", body: `{"displayName":"new-group"}`, handler: h.CreateGroup},
+		{name: "patch group", method: http.MethodPatch, path: "/scim/v2/Groups/engineers", body: `{"Operations":[{"op":"replace","path":"displayName","value":"renamed"}]}`, id: "engineers", handler: h.PatchGroup},
+		{name: "delete group", method: http.MethodDelete, path: "/scim/v2/Groups/engineers", id: "engineers", handler: h.DeleteGroup},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
+			if test.id != "" {
+				req = withChiID(req, test.id)
+			}
+			rec := httptest.NewRecorder()
+			test.handler(rec, req)
+			if rec.Code != http.StatusServiceUnavailable {
+				t.Fatalf("status=%d body=%s, want 503", rec.Code, rec.Body.String())
+			}
+		})
+	}
+	if !q.users["existing@example.com"].IsActive || len(q.users) != 1 {
+		t.Fatalf("user state changed without transaction runner: %+v", q.users)
+	}
+	if _, ok := q.groups["engineers"]; !ok || len(q.groups) != 1 {
+		t.Fatalf("group state changed without transaction runner: %+v", q.groups)
+	}
+	if len(q.outbox) != 0 {
+		t.Fatalf("unexpected outbox rows without transaction runner: %d", len(q.outbox))
+	}
+}
+
+func TestSCIMUserDeactivationRollsBackWhenAuditOutboxFails(t *testing.T) {
+	userID := uuid.New()
+	q := &fakeSCIMQuerier{
+		users: map[string]sqlc.User{
+			"alice@example.com": {ID: userID, Username: "alice@example.com", Email: "alice@example.com", IsActive: true},
+		},
+		outboxErr: errors.New("audit database unavailable"),
+	}
+	h := newTestSCIMHandler(q)
+	req := withChiID(httptest.NewRequest(http.MethodPut, "/scim/v2/Users/"+userID.String(),
+		strings.NewReader(`{"userName":"alice@example.com","active":false}`)), userID.String())
+	rec := httptest.NewRecorder()
+	h.PutUser(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s, want 503", rec.Code, rec.Body.String())
+	}
+	if !q.users["alice@example.com"].IsActive {
+		t.Fatal("deactivation committed without its audit outbox row")
+	}
+	if len(q.invalidatedTokensFor) != 0 {
+		t.Fatalf("token revocation committed without audit: %v", q.invalidatedTokensFor)
+	}
+}
+
+func TestSCIMGroupMembershipFailureRollsBackWholeMutation(t *testing.T) {
+	userID := uuid.New()
+	q := &fakeSCIMQuerier{
+		users: map[string]sqlc.User{
+			"member@example.com": {ID: userID, Username: "member@example.com", Email: "member@example.com", IsActive: true},
+		},
+		groups: map[string]sqlc.IdentityGroupMapping{},
+		idpErr: errors.New("membership write failed"),
+	}
+	h := newTestSCIMHandler(q)
+	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Groups", strings.NewReader(fmt.Sprintf(
+		`{"displayName":"engineers","members":[{"value":%q}]}`, userID.String())))
+	rec := httptest.NewRecorder()
+	h.CreateGroup(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s, want 500", rec.Code, rec.Body.String())
+	}
+	if len(q.groups) != 0 {
+		t.Fatalf("group mapping survived failed member update: %+v", q.groups)
+	}
+	if len(q.outbox) != 0 {
+		t.Fatalf("audit row survived rolled-back group creation: %d", len(q.outbox))
+	}
+}
+
+func TestSCIMGroupDeleteRollsBackMappingWhenMembershipCleanupFails(t *testing.T) {
+	userID := uuid.New()
+	groupID := uuid.New()
+	q := &fakeSCIMQuerier{
+		users: map[string]sqlc.User{
+			"member@example.com": {ID: userID, Username: "member@example.com", Email: "member@example.com", IsActive: true},
+		},
+		groups: map[string]sqlc.IdentityGroupMapping{
+			"engineers": {ID: groupID, GroupName: "engineers", Scope: "global"},
+		},
+		idpGroups: map[uuid.UUID]sqlc.UserIdpGroup{
+			userID: {UserID: userID, Groups: json.RawMessage(`["engineers"]`)},
+		},
+		idpErr: errors.New("membership cleanup failed"),
+	}
+	h := newTestSCIMHandler(q)
+	req := withChiID(httptest.NewRequest(http.MethodDelete, "/scim/v2/Groups/engineers", nil), "engineers")
+	rec := httptest.NewRecorder()
+	h.DeleteGroup(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s, want 500", rec.Code, rec.Body.String())
+	}
+	if _, ok := q.groups["engineers"]; !ok {
+		t.Fatal("group mapping was deleted despite failed membership cleanup")
+	}
+	if got := string(q.idpGroups[userID].Groups); got != `["engineers"]` {
+		t.Fatalf("membership changed after rollback: %s", got)
+	}
+	if len(q.outbox) != 0 {
+		t.Fatalf("audit row survived rolled-back group deletion: %d", len(q.outbox))
+	}
+}
+
+func TestSCIMMutationAuditIsTransactionalAndReadsDoNotWriteOutbox(t *testing.T) {
+	token := "astro_scim_audit"
+	q := &fakeSCIMQuerier{
+		tokenHash: auth.HashSCIMToken(token),
+		users:     map[string]sqlc.User{},
+	}
+	h := newTestSCIMHandler(q)
+	create := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", strings.NewReader(`{"userName":"audited@example.com"}`))
+	create.Header.Set("Authorization", "Bearer "+token)
+	createRec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.CreateUser)).ServeHTTP(createRec, create)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status=%d body=%s", createRec.Code, createRec.Body.String())
+	}
+	if len(q.outbox) != 1 || q.outbox[0].Action != "scim.user.create" {
+		t.Fatalf("transactional audit rows=%+v", q.outbox)
+	}
+	var detail map[string]any
+	if err := json.Unmarshal(q.outbox[0].Detail, &detail); err != nil {
+		t.Fatalf("decode audit detail: %v", err)
+	}
+	if detail["token_id"] == "" {
+		t.Fatalf("audit detail missing authenticated SCIM token id: %+v", detail)
+	}
+
+	list := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+	list.Header.Set("Authorization", "Bearer "+token)
+	listRec := httptest.NewRecorder()
+	h.Auth(http.HandlerFunc(h.ListUsers)).ServeHTTP(listRec, list)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", listRec.Code, listRec.Body.String())
+	}
+	if len(q.outbox) != 1 {
+		t.Fatalf("read path wrote post-response audit row: %d", len(q.outbox))
+	}
+}
+
 // TestSCIMServiceProviderConfig asserts the discovery document advertises
 // patch=true (the capability Azure AD/Okta gate provisioning on) and is
 // served under the static-bearer Auth chain.
 func TestSCIMServiceProviderConfig(t *testing.T) {
 	token := "astro_scim_testtoken"
 	q := &fakeSCIMQuerier{tokenHash: auth.HashSCIMToken(token), users: map[string]sqlc.User{}}
-	h := NewSCIMHandler(q)
+	h := newTestSCIMHandler(q)
 
 	req := httptest.NewRequest(http.MethodGet, "/scim/v2/ServiceProviderConfig", nil)
 	req.Header.Set("Authorization", "Bearer "+token)

@@ -9,7 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * they actually type a new value.
  */
 import { useEffect, useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Loader2,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { formatRelativeTime } from "@/lib/utils";
+import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { useAppForm } from "@/lib/form";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -225,6 +226,8 @@ function EmailsTable() {
   const [page, setPage] = useState(1);
   const { data, isLoading } = useSentEmails({ page, page_size: 25 });
   const rows = data?.data ?? [];
+  const currentPage = data ? pageNumber(data.pagination) : page;
+  const totalPages = data ? pageCount(data.pagination) : undefined;
 
   const columns: Column<SentEmail>[] = [
     {
@@ -247,7 +250,7 @@ function EmailsTable() {
       key: "template",
       header: "Template",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono">
           {row.template}
         </span>
       ),
@@ -287,7 +290,11 @@ function EmailsTable() {
         </h2>
         {data && (
           <p className="text-xs text-muted-foreground">
-            Page {data.page} of {data.totalPages || 1} · {data.total} total
+            Page {currentPage}
+            {totalPages === undefined ? "" : ` of ${totalPages}`}
+            {data.pagination.total === undefined
+              ? ""
+              : ` · ${data.pagination.total} total`}
           </p>
         )}
       </div>
@@ -296,10 +303,14 @@ function EmailsTable() {
         columns={columns}
         keyExtractor={(row) => row.id}
         loading={isLoading}
-        emptyMessage="No emails sent yet"
+        emptyState={{
+          title: "No emails sent yet",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
         pageSize={25}
       />
-      {data && data.totalPages > 1 && (
+      {data && (data.pagination.offset > 0 || data.pagination.has_more) && (
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
@@ -312,7 +323,7 @@ function EmailsTable() {
           <button
             type="button"
             onClick={() => setPage((p) => p + 1)}
-            disabled={page >= data.totalPages}
+            disabled={!data.pagination.has_more}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Next
@@ -354,7 +365,7 @@ function SmtpSummary({
         <button
           type="button"
           onClick={onEdit}
-          className="inline-flex flex-shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+          className="inline-flex shrink-0 items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
         >
           {configured ? (
             <Pencil className="h-3.5 w-3.5" />
@@ -430,13 +441,13 @@ function SmtpSettingsPage() {
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Email"
           title={

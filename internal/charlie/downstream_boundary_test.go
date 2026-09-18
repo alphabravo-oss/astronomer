@@ -103,7 +103,7 @@ func TestProhibitedOperationsAreAbsentRejectedAuditedAndZeroEgress(t *testing.T)
 
 // This matrix deliberately reuses the canonical scenario tests instead of
 // substituting Charlie-local egress fakes. The counters live at the real
-// management-plane tunnel/remotedialer boundaries, so any future production
+// management-plane tunnel boundaries, so any future production
 // dependency that reaches a downstream agent changes the snapshot.
 func TestCharlieScenarioMatrixNeverCrossesDownstreamBoundary(t *testing.T) {
 	scenarios := []struct {

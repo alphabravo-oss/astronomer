@@ -44,14 +44,14 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 // MaxClusterGroupDepth is the inclusive cap on tree depth (depth 0 ==
@@ -87,46 +87,10 @@ type ClusterGroupMutationTx interface {
 
 type clusterGroupRunTxFunc func(context.Context, func(ClusterGroupMutationTx) error) error
 
-func executeClusterGroupMutation[T any](r *http.Request, h *ClusterGroupHandler, mutate func(ClusterGroupMutationTx) (T, error), fallback func() (T, error), describe func(T) []clusterAuditEvent) (T, error) {
-	var zero T
-	if h == nil {
-		return zero, errors.New("cluster group handler is nil")
-	}
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q ClusterGroupMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			for _, event := range describe(result) {
-				if err := recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		return result, err
-	}
-	result, err := fallback()
-	if err != nil {
-		return zero, err
-	}
-	for _, event := range describe(result) {
-		recordAudit(r, h.auditor, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	}
-	return result, nil
-}
-
 // ClusterGroupHandler owns /api/v1/cluster-groups/*.
 type ClusterGroupHandler struct {
 	queries ClusterGroupQuerier
 	runTx   clusterGroupRunTxFunc
-	// auditor is the audit writer used to record cluster_group.* events;
-	// `any` mirrors the pattern used by cloud_credentials.go (recordAudit
-	// type-asserts internally). Optional — nil-safe.
-	auditor any
 }
 
 // NewClusterGroupHandler constructs the handler.
@@ -141,14 +105,6 @@ func (h *ClusterGroupHandler) SetRunTx(runTx clusterGroupRunTxFunc) {
 }
 
 func (h *ClusterGroupHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
-
-// SetAuditor wires the audit writer used for cluster_group.* events.
-func (h *ClusterGroupHandler) SetAuditor(a any) {
-	if h == nil {
-		return
-	}
-	h.auditor = a
-}
 
 // ClusterGroupResponse is the wire shape for create/get/update responses.
 type ClusterGroupResponse struct {
@@ -452,7 +408,7 @@ func (h *ClusterGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	// This endpoint returns the full authorized tree, so its length is exact.
-	RespondList(w, out, NewPagination(len(out), len(out), 0, len(out)))
+	paging.Write(w, out, paging.Exact(len(out), len(out), 0, len(out)))
 }
 
 // Get handles GET /api/v1/cluster-groups/{id}/.
@@ -527,15 +483,12 @@ func (h *ClusterGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Icon:        icon,
 		CreatedBy:   currentUserUUID(r),
 	}
-	g, err := executeClusterGroupMutation(r, h,
+	g, err := executeMutation(r, h.runTx,
 		func(q ClusterGroupMutationTx) (sqlc.ClusterGroup, error) {
 			return q.CreateClusterGroup(r.Context(), params)
 		},
-		func() (sqlc.ClusterGroup, error) {
-			return h.queries.CreateClusterGroup(r.Context(), params)
-		},
-		func(row sqlc.ClusterGroup) []clusterAuditEvent {
-			return []clusterAuditEvent{{
+		func(row sqlc.ClusterGroup) []mutationAuditEvent {
+			return []mutationAuditEvent{{
 				action: "admin.cluster_group.created", resourceType: "cluster_group",
 				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
 				detail: map[string]any{"slug": row.Slug, "parent_id": req.ParentID},
@@ -649,15 +602,12 @@ func (h *ClusterGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Color:       color,
 		Icon:        icon,
 	}
-	g, err := executeClusterGroupMutation(r, h,
+	g, err := executeMutation(r, h.runTx,
 		func(q ClusterGroupMutationTx) (sqlc.ClusterGroup, error) {
 			return q.UpdateClusterGroup(r.Context(), params)
 		},
-		func() (sqlc.ClusterGroup, error) {
-			return h.queries.UpdateClusterGroup(r.Context(), params)
-		},
-		func(row sqlc.ClusterGroup) []clusterAuditEvent {
-			return []clusterAuditEvent{{
+		func(row sqlc.ClusterGroup) []mutationAuditEvent {
+			return []mutationAuditEvent{{
 				action: "admin.cluster_group.updated", resourceType: "cluster_group",
 				resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusOK,
 				detail: map[string]any{"slug": row.Slug, "parent_id": req.ParentID},
@@ -696,7 +646,7 @@ func (h *ClusterGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.GetError, "Failed to load cluster group")
 		return
 	}
-	_, err = executeClusterGroupMutation(r, h,
+	_, err = executeMutation(r, h.runTx,
 		func(q ClusterGroupMutationTx) (clusterGroupDeleteResult, error) {
 			affected, listErr := q.ListClustersInGroupTree(r.Context(), id)
 			if listErr != nil {
@@ -707,24 +657,14 @@ func (h *ClusterGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			}
 			return clusterGroupDeleteResult{group: g, affected: affected}, nil
 		},
-		func() (clusterGroupDeleteResult, error) {
-			affected, listErr := h.queries.ListClustersInGroupTree(r.Context(), id)
-			if listErr != nil {
-				return clusterGroupDeleteResult{}, listErr
-			}
-			if deleteErr := h.queries.DeleteClusterGroup(r.Context(), id); deleteErr != nil {
-				return clusterGroupDeleteResult{}, deleteErr
-			}
-			return clusterGroupDeleteResult{group: g, affected: affected}, nil
-		},
-		func(result clusterGroupDeleteResult) []clusterAuditEvent {
-			events := []clusterAuditEvent{{
+		func(result clusterGroupDeleteResult) []mutationAuditEvent {
+			events := []mutationAuditEvent{{
 				action: "admin.cluster_group.deleted", resourceType: "cluster_group",
 				resourceID: result.group.ID.String(), resourceName: result.group.Name, status: http.StatusNoContent,
 				detail: map[string]any{"slug": result.group.Slug, "cascaded_clusters": len(result.affected)},
 			}}
 			for _, cluster := range result.affected {
-				events = append(events, clusterAuditEvent{
+				events = append(events, mutationAuditEvent{
 					action: "admin.cluster_group.moved_cluster", resourceType: "cluster",
 					resourceID: cluster.ID.String(), resourceName: cluster.Name, status: http.StatusNoContent,
 					detail: map[string]any{
@@ -832,13 +772,12 @@ func (h *ClusterGroupHandler) MoveClusters(w http.ResponseWriter, r *http.Reques
 		}
 		return result, nil
 	}
-	result, err := executeClusterGroupMutation(r, h,
+	result, err := executeMutation(r, h.runTx,
 		func(q ClusterGroupMutationTx) (clusterGroupMoveResult, error) { return move(q) },
-		func() (clusterGroupMoveResult, error) { return move(h.queries) },
-		func(result clusterGroupMoveResult) []clusterAuditEvent {
-			events := make([]clusterAuditEvent, 0, len(result.moved))
+		func(result clusterGroupMoveResult) []mutationAuditEvent {
+			events := make([]mutationAuditEvent, 0, len(result.moved))
 			for _, cluster := range result.moved {
-				events = append(events, clusterAuditEvent{
+				events = append(events, mutationAuditEvent{
 					action: "admin.cluster_group.moved_cluster", resourceType: "cluster",
 					resourceID: cluster.id.String(), resourceName: cluster.name, status: http.StatusOK,
 					detail: map[string]any{"to_group": g.ID.String(), "to_group_slug": g.Slug},

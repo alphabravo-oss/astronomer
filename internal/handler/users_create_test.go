@@ -22,6 +22,25 @@ type createUserTrackingQuerier struct {
 	resetN     int
 }
 
+type createUserMutationTx struct {
+	UserMutationTx
+	store *createUserTrackingQuerier
+}
+
+func (tx *createUserMutationTx) CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error) {
+	return tx.store.CreateUser(ctx, arg)
+}
+
+func (tx *createUserMutationTx) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action, ResourceType: arg.ResourceType}, nil
+}
+
+func wireCreateUserTestTx(h *ResourceHandler, store *createUserTrackingQuerier) {
+	h.SetUserRunTx(func(ctx context.Context, fn func(UserMutationTx) error) error {
+		return fn(&createUserMutationTx{store: store})
+	})
+}
+
 func (q *createUserTrackingQuerier) CreateUser(_ context.Context, arg sqlc.CreateUserParams) (sqlc.User, error) {
 	q.createN++
 	cp := arg
@@ -48,6 +67,7 @@ func withUserRouteID(r *http.Request, id string) *http.Request {
 func TestCreateUser_HTTPRejectsWeakPassword(t *testing.T) {
 	q := &createUserTrackingQuerier{}
 	h := NewResourceHandlerWithQueries(q, nil)
+	wireCreateUserTestTx(h, q)
 	body := `{"email":"a@example.com","username":"alice","password":"short"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
@@ -64,6 +84,7 @@ func TestCreateUser_HTTPRejectsWeakPassword(t *testing.T) {
 func TestCreateUser_HTTPAcceptsStrongPassword(t *testing.T) {
 	q := &createUserTrackingQuerier{}
 	h := NewResourceHandlerWithQueries(q, nil)
+	wireCreateUserTestTx(h, q)
 	body := `{"email":"a@example.com","username":"alice","password":"ValidPassw0rd"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
@@ -83,6 +104,7 @@ func TestCreateUser_HTTPAcceptsStrongPassword(t *testing.T) {
 func TestResetUserPassword_HTTPRejectsWeak(t *testing.T) {
 	q := &createUserTrackingQuerier{userID: uuid.New()}
 	h := NewResourceHandlerWithQueries(q, nil)
+	wireCreateUserTestTx(h, q)
 	id := q.userID
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/"+id.String()+"/reset-password/",
 		bytes.NewBufferString(`{"password":"short"}`))

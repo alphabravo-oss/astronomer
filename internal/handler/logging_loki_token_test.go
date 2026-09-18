@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,7 +18,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/lokiauth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type recordingLokiReconciler struct {
@@ -45,7 +46,7 @@ func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	key, err := auth.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +69,7 @@ func TestRotateOutputTokenMintsHashAndFernet(t *testing.T) {
 	rc.URLParams.Add("id", out.ID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
 	// Restore authenticated user after WithContext replacement of the chi ctx only.
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 
 	w := httptest.NewRecorder()
 	h.RotateOutputToken(w, req)
@@ -125,14 +126,14 @@ func TestRotateOutputTokenDeniesZeroGrant(t *testing.T) {
 		ClusterID:     pgtype.UUID{Bytes: clusterID, Valid: true},
 		Enabled:       true,
 	})
-	h := NewLoggingHandler(q)
+	h := newLoggingHandlerForTest(q)
 	h.SetAuthorization(rbac.NewEngine(), stubLoggingRBACQuerier{bindings: nil})
 	req := authedLoggingReq(http.MethodPost, "/api/v1/logging/outputs/"+out.ID.String()+"/rotate-token/", nil)
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", out.ID.String())
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(
+	req = req.WithContext(reqctx.WithUser(
 		context.WithValue(req.Context(), chi.RouteCtxKey, rc),
-		&middleware.AuthenticatedUser{ID: uuid.NewString()},
+		&reqctx.User{ID: uuid.NewString()},
 	))
 	w := httptest.NewRecorder()
 	h.RotateOutputToken(w, req)

@@ -112,6 +112,10 @@ export const K8S_KIND_ROUTES: Record<
   ],
   Ingress: (cid) => [qk.networking.ingresses(cid)],
   NetworkPolicy: (cid) => [qk.networking.networkPolicies(cid)],
+  ResourceQuota: (cid) => [
+    qk.generic.resources(cid, "resourcequotas"),
+    qk.projects.details,
+  ],
   PersistentVolume: (cid) => [qk.storage.pvs(cid)],
   PersistentVolumeClaim: (cid) => [qk.storage.pvcs(cid)],
   StorageClass: (cid) => [qk.storage.storageClasses(cid)],
@@ -163,7 +167,8 @@ function k8sChangedRoute(d: LiveEventData): QueryKey[] {
   if (!cid) return [];
   const kind = typeof d.kind === "string" ? d.kind : "";
   const route = K8S_KIND_ROUTES[kind];
-  return route ? route(cid, d) : defaultK8sRoute(cid, d);
+  const keys = route ? route(cid, d) : defaultK8sRoute(cid, d);
+  return [...keys, qk.generic.counts(cid)];
 }
 
 function registrationRoute(d: LiveEventData): QueryKey[] {
@@ -226,8 +231,9 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
   "cluster.k8s_changed": k8sChangedRoute,
   "cluster.registration.step": registrationRoute,
   "cluster.registration.phase": registrationRoute,
-  // Heartbeat only — nothing to refresh.
-  "sys.ping": () => [],
+  // Charlie agent and diagnostics are remote health reads without their own
+  // durable mutation event. The SSE heartbeat is their shared refresh clock.
+  "sys.ping": () => [qk.charlie.adminAgent, qk.charlie.adminDiagnostics],
   // ── P4.5 domain publishers — metadata-only `<resource>.changed` events ──
   // Velero backups/restores/schedules (payload kind: backup|restore|schedule).
   // Both key families cover the legacy backups hooks and the B2 engine hooks.
@@ -318,6 +324,17 @@ export const EVENT_ROUTES: Record<string, (d: LiveEventData) => QueryKey[]> = {
           qk.clusterPages.snapshots(cid),
           qk.clusterPages.snapshotSchedules(cid),
           qk.clusterPages.veleroStatus(cid),
+        ]
+      : [];
+  },
+  "service_mesh.changed": (d) => {
+    const cid = clusterIdOf(d);
+    return cid
+      ? [
+          qk.clusterPages.serviceMeshDetection(cid),
+          qk.clusterPages.serviceMeshInventory(cid),
+          qk.clusterPages.serviceMeshMtls(cid),
+          qk.clusterPages.serviceMeshHeader(cid),
         ]
       : [];
   },

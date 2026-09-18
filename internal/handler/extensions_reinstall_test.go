@@ -83,6 +83,18 @@ func (f *reinstallExtQuerier) CreateAuditLogV1(context.Context, sqlc.CreateAudit
 	return nil
 }
 
+func (f *reinstallExtQuerier) GetUIExtensionByNameForUpdate(_ context.Context, name string) (sqlc.UIExtension, error) {
+	row, ok := f.rows[name]
+	if !ok {
+		return sqlc.UIExtension{}, pgx.ErrNoRows
+	}
+	return row, nil
+}
+
+func (f *reinstallExtQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
+}
+
 func installExtension(t *testing.T, h *ExtensionHandler, m ExtensionManifest) {
 	t.Helper()
 	raw, _ := json.Marshal(InstallExtensionRequest{Manifest: m, Source: "unit-test", Enable: true})
@@ -105,6 +117,7 @@ func TestExtensionHandler_ReinstallResetsBundleVerified(t *testing.T) {
 	}
 	h := NewExtensionHandler(q)
 	h.SetCurrentVersion("0.9.1")
+	h.SetRunTx(func(_ context.Context, fn func(ExtensionMutationTx) error) error { return fn(q) })
 	// A trusted key IS configured, so the enabled fail-closed guard does not
 	// fire — this is the exact precondition of the reported bypass.
 	if err := h.SetTrustedBundleKey(base64.StdEncoding.EncodeToString(pub)); err != nil {

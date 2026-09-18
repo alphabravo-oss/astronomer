@@ -8,10 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
@@ -28,6 +31,12 @@ type fakeStreamBindings struct{ list []rbac.RoleBinding }
 
 func (f fakeStreamBindings) GetUserBindings(_ context.Context, _ string) ([]rbac.RoleBinding, error) {
 	return f.list, nil
+}
+
+type noOpStreamAuditWriter struct{}
+
+func (noOpStreamAuditWriter) CreateAuditLogV1(context.Context, sqlc.CreateAuditLogV1Params) error {
+	return nil
 }
 
 // streamVerbFixture is one shipped role's exact grant set plus the stream access
@@ -123,12 +132,12 @@ func streamVerbFixtures(clusterID uuid.UUID) []streamVerbFixture {
 // for clusterID under the given bindings.
 func issueStreamTicket(t *testing.T, bindings []rbac.RoleBinding, kind string, clusterID uuid.UUID) bool {
 	t.Helper()
-	h := NewStreamTicketHandler(auth.NewStreamTicketStore(time.Minute))
+	h := newTestStreamTicketHandler(auth.NewStreamTicketStore(time.Minute))
 	h.SetAuthorization(rbac.NewEngine(), fakeStreamBindings{list: bindings})
 
 	body := `{"stream_type":"` + kind + `","cluster_id":"` + clusterID.String() + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/streams/tickets/", bytes.NewBufferString(body))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	w := httptest.NewRecorder()
 	h.Create(w, req)
 
@@ -143,33 +152,53 @@ func issueStreamTicket(t *testing.T, bindings []rbac.RoleBinding, kind string, c
 	}
 }
 
-// redeemStream reports whether the WebSocket consumer lets the request past its
-// RBAC gate. Auth is left unwired (dev/test mode admits the caller), so the only
-// thing under test is authorizeCluster: a denied request is a 403, an allowed one
-// falls through to websocket.Accept and fails the handshake with a 4xx that is
-// not 403.
+// redeemStream reports whether the WebSocket consumer lets an authenticated
+// request past its RBAC gate. A denied request is a 403; an allowed request
+// falls through to websocket.Accept and fails the synthetic handshake with a
+// different 4xx response.
 func redeemStream(t *testing.T, bindings []rbac.RoleBinding, kind string, clusterID uuid.UUID) bool {
 	t.Helper()
 	engine := rbac.NewEngine()
 	querier := fakeStreamBindings{list: bindings}
+	jwt := auth.MustNewJWTManager("stream-redemption-test-secret", 15)
+	token, err := jwt.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatalf("generate access token: %v", err)
+	}
 
 	r := chi.NewRouter()
+	security := tunnel.StreamConsumerDependencies{
+		JWT:         jwt,
+		Queries:     stubStreamTokenUserQuerier{},
+		Tickets:     auth.NewStreamTicketStore(time.Minute),
+		AuditWriter: noOpStreamAuditWriter{},
+		RBACEngine:  engine,
+		RBACQuerier: querier,
+	}
 	switch kind {
 	case auth.StreamKindExec:
-		ec := tunnel.NewExecConsumer(nil, nil)
-		ec.SetAuthorization(engine, querier)
+		ec, err := tunnel.NewExecConsumer(nil, nil, security)
+		if err != nil {
+			t.Fatalf("new exec consumer: %v", err)
+		}
 		r.Get("/ws/exec/{cluster_id}/{namespace}/{pod}/{container}/", ec.HandleExec)
 	case auth.StreamKindLogs:
-		lc := tunnel.NewLogsConsumer(nil, nil)
-		lc.SetAuthorization(engine, querier)
+		lc, err := tunnel.NewLogsConsumer(nil, nil, security)
+		if err != nil {
+			t.Fatalf("new logs consumer: %v", err)
+		}
 		r.Get("/ws/logs/{cluster_id}/{namespace}/{pod}/{container}/", lc.HandleLogs)
 	default:
 		t.Fatalf("unsupported stream kind %q", kind)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/ws/"+kind+"/"+clusterID.String()+"/default/example/app/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
+	if w.Code == http.StatusUnauthorized {
+		t.Fatal("stream redemption fixture failed authentication before RBAC")
+	}
 	return w.Code != http.StatusForbidden
 }
 
@@ -187,7 +216,7 @@ func redeemPodWatch(t *testing.T, bindings []rbac.RoleBinding, clusterID uuid.UU
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/clusters/"+clusterID.String()+"/pods/watch/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w.Code != http.StatusForbidden

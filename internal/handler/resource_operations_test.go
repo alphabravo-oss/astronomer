@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,7 +19,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
@@ -100,7 +101,7 @@ func resourceMutationRequest(method, target, body string, params map[string]stri
 	r := httptest.NewRequest(method, target, strings.NewReader(body))
 	r.Header.Set("Idempotency-Key", "resource-once")
 	userID := uuid.NewString()
-	r = r.WithContext(middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{ID: userID, AuthMethod: "jwt"}))
+	r = r.WithContext(reqctx.WithUser(r.Context(), &reqctx.User{ID: userID, AuthMethod: "jwt"}))
 	ctx := chi.NewRouteContext()
 	for key, value := range params {
 		ctx.URLParams.Add(key, value)
@@ -297,7 +298,7 @@ func TestGetResourceOperationIsClusterScoped(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: test.bindings})
 			r := resourceMutationRequest(http.MethodGet, "/", "", map[string]string{"cluster_id": test.cluster, "id": operationID.String()})
-			r = r.WithContext(middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{ID: creatorID.String(), AuthMethod: "jwt"}))
+			r = r.WithContext(reqctx.WithUser(r.Context(), &reqctx.User{ID: creatorID.String(), AuthMethod: "jwt"}))
 			recorder := httptest.NewRecorder()
 			h.GetResourceOperation(recorder, r)
 			if recorder.Code != test.status {
@@ -317,7 +318,7 @@ func TestGetResourceOperationFailsClosedWithoutAuthorizationWiring(t *testing.T)
 		CreatedByID: pgtype.UUID{Bytes: callerID, Valid: true}, CreatedAt: now, UpdatedAt: now,
 	}})
 	r := resourceMutationRequest(http.MethodGet, "/", "", map[string]string{"cluster_id": clusterID.String(), "id": operationID.String()})
-	r = r.WithContext(middleware.SetAuthenticatedUserForTest(r.Context(), &middleware.AuthenticatedUser{ID: callerID.String(), AuthMethod: "jwt"}))
+	r = r.WithContext(reqctx.WithUser(r.Context(), &reqctx.User{ID: callerID.String(), AuthMethod: "jwt"}))
 	recorder := httptest.NewRecorder()
 	h.GetResourceOperation(recorder, r)
 	if recorder.Code != http.StatusInternalServerError {

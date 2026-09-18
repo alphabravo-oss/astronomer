@@ -1,0 +1,6 @@
+FROM alpine@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb
+
+RUN apk add --no-cache \
+      git=2.49.1-r0 \
+      git-daemon=2.49.1-r0 \
+    && git config --system --add safe.directory /fixture/flux-fixture/git/repository.git

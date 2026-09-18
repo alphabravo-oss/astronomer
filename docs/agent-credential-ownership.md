@@ -90,8 +90,7 @@ identity: concurrent accepted ACKs become last-writer-wins on `data.token`, and
 one replica can retain a credential the other has already replaced. Recreate
 terminates the old writer before an image or manifest rollout starts the next.
 
-## Tunnel compatibility
+## Tunnel ownership
 
-The deployed `connect` command owns bootstrap adoption, durable handoff, and
-rotation. `connect2` is experimental and has no ACK credential channel; it
-fails closed unless startup selected `credential_source=durable_identity`.
+The deployed `connect` command is the single agent tunnel path. It owns
+bootstrap adoption, durable handoff, and rotation.

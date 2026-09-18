@@ -1,9 +1,47 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import * as apiClient from "@/lib/api";
+import {
+  getPersistentVolumes,
+  getPersistentVolumeClaims,
+  getStorageClasses,
+  createPersistentVolumeClaim,
+  deletePersistentVolumeClaim,
+  deletePersistentVolume,
+  getServices,
+  getIngresses,
+  getNetworkPolicies,
+  deleteService,
+  deleteIngress,
+  deleteNetworkPolicy,
+  getGateways,
+  getHTTPRoutes,
+  getGatewayClasses,
+  getGRPCRoutes,
+  getTLSRoutes,
+  getTCPRoutes,
+  getUDPRoutes,
+  getReferenceGrants,
+  getNamedResources,
+  type NamedResourceType,
+  type NamedResourceListParams,
+} from "@/lib/api/kubernetes-resources";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import type { PersistentVolumeClaim } from "@/types";
+
+export function useNamedResources<T>(
+  clusterId: string,
+  resourceType: NamedResourceType,
+  params?: Omit<NamedResourceListParams, "signal">,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.generic.namedResources(clusterId, resourceType, params),
+    queryFn: ({ signal }) =>
+      getNamedResources<T>(clusterId, resourceType, { ...params, signal }),
+    enabled: enabled && !!clusterId && !!resourceType,
+  });
+}
 
 // ============================================================
 // Storage Hooks
@@ -12,7 +50,7 @@ import type { PersistentVolumeClaim } from "@/types";
 export function usePersistentVolumes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.storage.pvs(clusterId),
-    queryFn: () => apiClient.getPersistentVolumes(clusterId),
+    queryFn: () => getPersistentVolumes(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -20,7 +58,7 @@ export function usePersistentVolumes(clusterId: string) {
 export function usePersistentVolumeClaims(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.storage.pvcs(clusterId),
-    queryFn: () => apiClient.getPersistentVolumeClaims(clusterId),
+    queryFn: () => getPersistentVolumeClaims(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -28,7 +66,7 @@ export function usePersistentVolumeClaims(clusterId: string) {
 export function useStorageClasses(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.storage.storageClasses(clusterId),
-    queryFn: () => apiClient.getStorageClasses(clusterId),
+    queryFn: () => getStorageClasses(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -42,7 +80,7 @@ export function useCreatePVC() {
     }: {
       clusterId: string;
       data: Partial<PersistentVolumeClaim>;
-    }) => apiClient.createPersistentVolumeClaim(clusterId, data),
+    }) => createPersistentVolumeClaim(clusterId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
       toastSuccess("PVC created");
@@ -64,7 +102,7 @@ export function useDeletePVC() {
       clusterId: string;
       namespace: string;
       name: string;
-    }) => apiClient.deletePersistentVolumeClaim(clusterId, namespace, name),
+    }) => deletePersistentVolumeClaim(clusterId, namespace, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
       toastSuccess("PVC deleted");
@@ -79,7 +117,7 @@ export function useDeletePV() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ clusterId, name }: { clusterId: string; name: string }) =>
-      apiClient.deletePersistentVolume(clusterId, name),
+      deletePersistentVolume(clusterId, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.storage.all });
       toastSuccess("PV deleted");
@@ -97,7 +135,7 @@ export function useDeletePV() {
 export function useServices(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.services(clusterId),
-    queryFn: () => apiClient.getServices(clusterId),
+    queryFn: () => getServices(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -105,7 +143,7 @@ export function useServices(clusterId: string) {
 export function useIngresses(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.ingresses(clusterId),
-    queryFn: () => apiClient.getIngresses(clusterId),
+    queryFn: () => getIngresses(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -113,7 +151,7 @@ export function useIngresses(clusterId: string) {
 export function useNetworkPolicies(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.networkPolicies(clusterId),
-    queryFn: () => apiClient.getNetworkPolicies(clusterId),
+    queryFn: () => getNetworkPolicies(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -129,7 +167,7 @@ export function useDeleteService() {
       clusterId: string;
       namespace: string;
       name: string;
-    }) => apiClient.deleteService(clusterId, namespace, name),
+    }) => deleteService(clusterId, namespace, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
       toastSuccess("Service deleted");
@@ -151,7 +189,7 @@ export function useDeleteIngress() {
       clusterId: string;
       namespace: string;
       name: string;
-    }) => apiClient.deleteIngress(clusterId, namespace, name),
+    }) => deleteIngress(clusterId, namespace, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
       toastSuccess("Ingress deleted");
@@ -173,7 +211,7 @@ export function useDeleteNetworkPolicy() {
       clusterId: string;
       namespace: string;
       name: string;
-    }) => apiClient.deleteNetworkPolicy(clusterId, namespace, name),
+    }) => deleteNetworkPolicy(clusterId, namespace, name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.networking.all });
       toastSuccess("Network policy deleted");
@@ -195,7 +233,7 @@ export function useDeleteNetworkPolicy() {
 export function useGateways(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.gateways(clusterId),
-    queryFn: () => apiClient.getGateways(clusterId),
+    queryFn: () => getGateways(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -203,7 +241,7 @@ export function useGateways(clusterId: string) {
 export function useHTTPRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.httpRoutes(clusterId),
-    queryFn: () => apiClient.getHTTPRoutes(clusterId),
+    queryFn: () => getHTTPRoutes(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -211,7 +249,7 @@ export function useHTTPRoutes(clusterId: string) {
 export function useGatewayClasses(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.gatewayClasses(clusterId),
-    queryFn: () => apiClient.getGatewayClasses(clusterId),
+    queryFn: () => getGatewayClasses(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -219,7 +257,7 @@ export function useGatewayClasses(clusterId: string) {
 export function useGRPCRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.grpcRoutes(clusterId),
-    queryFn: () => apiClient.getGRPCRoutes(clusterId),
+    queryFn: () => getGRPCRoutes(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -227,7 +265,7 @@ export function useGRPCRoutes(clusterId: string) {
 export function useTLSRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.tlsRoutes(clusterId),
-    queryFn: () => apiClient.getTLSRoutes(clusterId),
+    queryFn: () => getTLSRoutes(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -235,7 +273,7 @@ export function useTLSRoutes(clusterId: string) {
 export function useTCPRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.tcpRoutes(clusterId),
-    queryFn: () => apiClient.getTCPRoutes(clusterId),
+    queryFn: () => getTCPRoutes(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -243,7 +281,7 @@ export function useTCPRoutes(clusterId: string) {
 export function useUDPRoutes(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.udpRoutes(clusterId),
-    queryFn: () => apiClient.getUDPRoutes(clusterId),
+    queryFn: () => getUDPRoutes(clusterId),
     enabled: !!clusterId,
   });
 }
@@ -251,7 +289,7 @@ export function useUDPRoutes(clusterId: string) {
 export function useReferenceGrants(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.networking.referenceGrants(clusterId),
-    queryFn: () => apiClient.getReferenceGrants(clusterId),
+    queryFn: () => getReferenceGrants(clusterId),
     enabled: !!clusterId,
   });
 }

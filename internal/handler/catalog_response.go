@@ -160,3 +160,24 @@ func timestamptzNano(ts pgtype.Timestamptz) *string {
 	s := ts.Time.Format(time.RFC3339Nano)
 	return &s
 }
+
+// installedChartListItem projects an installed_charts row for the fleet list.
+// It deliberately omits values_override (secrets) — that field is only
+// returned by the cluster-gated GetInstalledChartValues endpoint.
+func installedChartListItem(ic sqlc.InstalledChart) map[string]any {
+	return map[string]any{
+		"id":               ic.ID.String(),
+		"cluster_id":       ic.ClusterID.String(),
+		"chart_version_id": ic.ChartVersionID,
+		"release_name":     ic.ReleaseName,
+		"namespace":        ic.Namespace,
+		"status":           ic.Status,
+		"revision":         ic.Revision,
+		"notes":            ic.Notes,
+		"tool_slug":        ic.ToolSlug,
+		"preset_used":      ic.PresetUsed,
+		"drift_detected":   ic.DriftDetected,
+		"created_at":       ic.CreatedAt.UTC().Format(time.RFC3339),
+		"updated_at":       ic.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+}

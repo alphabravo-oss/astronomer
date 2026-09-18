@@ -39,6 +39,7 @@ beforeEach(() => {
 
 describe("resource discovery generated boundary", () => {
   it("maps discovery wire casing explicitly", async () => {
+    const signal = new AbortController().signal;
     discovery.mockResolvedValue({
       data: {
         cluster_id: "cluster-1",
@@ -49,9 +50,10 @@ describe("resource discovery generated boundary", () => {
       },
     });
 
-    const result = await getResourceDiscovery("cluster-1");
+    const result = await getResourceDiscovery("cluster-1", signal);
     expect(discovery).toHaveBeenCalledWith({
       path: { cluster_id: "cluster-1" },
+      signal,
     });
     expect(result.resources[0]).toMatchObject({
       resourceType: "deployments",

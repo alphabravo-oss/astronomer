@@ -24,6 +24,10 @@ type jwtRevocationPurger interface {
 	PurgeExpiredJWTRevocations(ctx context.Context) (int64, error)
 }
 
+type refreshSessionPurger interface {
+	PurgeExpiredRefreshSessions(ctx context.Context) (int64, error)
+}
+
 // ssoSessionPurger drains the sso_sessions table (migration 054) on
 // the same daily cron. Rows are bounded by the access JWT's natural
 // expiry — once the JWT is unusable the stored id_token is useless
@@ -90,6 +94,13 @@ func enforceAuditLogRetention(ctx context.Context, q auditRetentionQuerier, now 
 			runtimeLogger(ctx).WarnContext(ctx, "purge expired jwt revocations failed", "error", err)
 		} else if purged > 0 {
 			runtimeLogger(ctx).InfoContext(ctx, "purged expired jwt revocations", "rows", purged)
+		}
+	}
+	if purger, ok := q.(refreshSessionPurger); ok {
+		if purged, err := purger.PurgeExpiredRefreshSessions(ctx); err != nil {
+			runtimeLogger(ctx).WarnContext(ctx, "purge expired refresh sessions failed", "error", err)
+		} else if purged > 0 {
+			runtimeLogger(ctx).InfoContext(ctx, "purged expired refresh sessions", "families", purged)
 		}
 	}
 	// SLO session GC (migration 054). Same daily cadence as the

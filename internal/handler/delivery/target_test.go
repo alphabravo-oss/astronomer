@@ -29,3 +29,12 @@ func TestPreviewCursorRejectsUnboundedOrMalformedInput(t *testing.T) {
 		}
 	}
 }
+
+func TestTargetOverrideUpdateIsGenerationChanging(t *testing.T) {
+	t.Parallel()
+	overrides := model.TargetOverrides{Patches: []string{"kind: Deployment\nmetadata:\n  name: a"}}
+	fields := targetChangedFields(updateTargetRequest{Overrides: &overrides})
+	if len(fields) != 1 || fields[0] != "overrides" {
+		t.Fatalf("changed fields = %v", fields)
+	}
+}

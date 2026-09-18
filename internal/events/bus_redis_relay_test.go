@@ -284,8 +284,8 @@ func TestRedisRelayRemoteSSEExactlyOnceAndSuppressesOriginEcho(t *testing.T) {
 
 	subCtx, subCancel := context.WithCancel(ctx)
 	defer subCancel()
-	local := busA.Subscribe(subCtx)
-	remote := busB.Subscribe(subCtx)
+	local := busA.Subscribe(subCtx, AcceptAll)
+	remote := busB.Subscribe(subCtx, AcceptAll)
 	busA.Publish(TypeClusterConnected, map[string]any{"cluster_id": "c1"})
 
 	localEvent := receiveEvent(t, local)
@@ -357,7 +357,7 @@ func TestBusConcurrentPublishAndSubscribe(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			subCtx, subCancel := context.WithCancel(ctx)
-			ch := bus.Subscribe(subCtx)
+			ch := bus.Subscribe(subCtx, AcceptAll)
 			for i := 0; i < 5; i++ {
 				select {
 				case <-ch:

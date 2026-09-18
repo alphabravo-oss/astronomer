@@ -39,19 +39,6 @@ func clusterTemplateRequestDedupeKey(r *http.Request, clusterID uuid.UUID) strin
 	return "cluster_template_apply:" + audit.MutationDedupeKey(key, r.Method+":"+r.URL.Path, "cluster", clusterID.String())
 }
 
-func enqueueClusterTemplateApplyOutbox(ctx context.Context, outbox tasks.TaskOutboxWriter, task *asynq.Task, clusterID uuid.UUID) bool {
-	if outbox == nil || task == nil {
-		return false
-	}
-	_, err := tasks.EnqueueTaskOutbox(ctx, outbox, task, tasks.TaskOutboxOptions{
-		DedupeKey:           clusterTemplateApplyDedupeKey(clusterID),
-		QueueName:           tasks.ClusterTemplateApplyQueueName,
-		MaxRetry:            3,
-		MaxDeliveryAttempts: 20,
-	})
-	return err == nil
-}
-
 func upsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, q any, outbox tasks.TaskOutboxWriter, app sqlc.UpsertClusterTemplateApplicationParams, task *asynq.Task, opts tasks.TaskOutboxOptions) (sqlc.ClusterTemplateApplication, bool, error) {
 	atomicQ, ok := q.(clusterTemplateApplicationTaskOutboxQuerier)
 	if !ok || outbox == nil || task == nil {

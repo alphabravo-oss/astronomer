@@ -22,7 +22,7 @@ vi.mock("@/lib/api/generated/client", () => ({
   postBackupsSchedules: vi.fn(),
   postBackupsSchedulesByIdTriggerNow: vi.fn(),
   postBackupsStorage: vi.fn(),
-  postBackupsStorageByIdTest: vi.fn(),
+  postBackupsStorageByIdTestConnection: vi.fn(),
   putBackupsSchedulesById: vi.fn(),
   putBackupsStorageById: vi.fn(),
 }));
@@ -59,19 +59,26 @@ describe("backup generated API boundary", () => {
           updated_at: "2026-08-23T00:01:00Z",
         },
       ],
-      count: 41,
-      next: "/api/v1/backups/storage?limit=20&offset=40",
-      previous: "/api/v1/backups/storage?limit=20&offset=0",
+      pagination: {
+        total: 41,
+        limit: 20,
+        offset: 20,
+        has_more: true,
+        next_offset: 40,
+      },
     });
 
     await expect(
       b2ListStorageLocations({ page: 2, page_size: 20 }),
     ).resolves.toEqual(
       expect.objectContaining({
-        total: 41,
-        page: 2,
-        pageSize: 20,
-        totalPages: 3,
+        pagination: {
+          total: 41,
+          limit: 20,
+          offset: 20,
+          has_more: true,
+          next_offset: 40,
+        },
         data: [
           expect.objectContaining({
             id: "storage-1",

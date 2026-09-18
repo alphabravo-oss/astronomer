@@ -58,21 +58,51 @@ func (f *fakeReapQuerier) GetKubectlSessionByID(_ context.Context, id uuid.UUID)
 	}
 	return *r, nil
 }
-func (f *fakeReapQuerier) ListActiveKubectlSessionsByCluster(_ context.Context, _ uuid.UUID) ([]sqlc.KubectlSession, error) {
-	return nil, nil
-}
-func (f *fakeReapQuerier) ListAllActiveKubectlSessions(_ context.Context) ([]sqlc.KubectlSession, error) {
+func (f *fakeReapQuerier) ListActiveKubectlSessionsByCluster(_ context.Context, arg sqlc.ListActiveKubectlSessionsByClusterParams) ([]sqlc.KubectlSession, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []sqlc.KubectlSession
 	for _, r := range f.sessions {
-		if r.Status == "starting" || r.Status == "active" {
+		if r.ClusterID == arg.ClusterID && (r.Status == "starting" || r.Status == "active") {
 			out = append(out, *r)
 		}
 	}
-	return out, nil
+	return reapSessionPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
-func (f *fakeReapQuerier) ListExpiredKubectlSessions(_ context.Context) ([]sqlc.KubectlSession, error) {
+func (f *fakeReapQuerier) CountActiveKubectlSessionsByCluster(_ context.Context, clusterID uuid.UUID) (int64, error) {
+	rows, _ := f.ListActiveKubectlSessionsByCluster(context.Background(), sqlc.ListActiveKubectlSessionsByClusterParams{
+		ClusterID: clusterID, QueryLimit: 1<<31 - 1,
+	})
+	return int64(len(rows)), nil
+}
+func (f *fakeReapQuerier) ListActiveKubectlSessionClusters(_ context.Context, arg sqlc.ListActiveKubectlSessionClustersParams) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	seen := make(map[uuid.UUID]struct{})
+	var out []uuid.UUID
+	for _, r := range f.sessions {
+		if r.Status != "starting" && r.Status != "active" {
+			continue
+		}
+		if _, ok := seen[r.ClusterID]; !ok {
+			seen[r.ClusterID] = struct{}{}
+			out = append(out, r.ClusterID)
+		}
+	}
+	return reapSessionPage(out, arg.QueryLimit, arg.QueryOffset), nil
+}
+func (f *fakeReapQuerier) CountAllActiveKubectlSessions(_ context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var count int64
+	for _, r := range f.sessions {
+		if r.Status == "starting" || r.Status == "active" {
+			count++
+		}
+	}
+	return count, nil
+}
+func (f *fakeReapQuerier) ListExpiredKubectlSessions(_ context.Context, arg sqlc.ListExpiredKubectlSessionsParams) ([]sqlc.KubectlSession, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := time.Now()
@@ -81,11 +111,24 @@ func (f *fakeReapQuerier) ListExpiredKubectlSessions(_ context.Context) ([]sqlc.
 		if r.Status != "starting" && r.Status != "active" {
 			continue
 		}
-		if !r.ExpiresAt.After(now) || r.LastInputAt.Add(30*time.Minute).Before(now) {
+		idleTimeout := time.Duration(arg.IdleTimeout.Microseconds) * time.Microsecond
+		if !r.ExpiresAt.After(now) || r.LastInputAt.Add(idleTimeout).Before(now) {
 			out = append(out, *r)
 		}
 	}
-	return out, nil
+	return reapSessionPage(out, arg.QueryLimit, 0), nil
+}
+
+func reapSessionPage[T any](rows []T, limit, offset int32) []T {
+	start := int(offset)
+	if start >= len(rows) {
+		return []T{}
+	}
+	end := start + int(limit)
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[start:end]
 }
 func (f *fakeReapQuerier) SetKubectlSessionStatus(_ context.Context, arg sqlc.SetKubectlSessionStatusParams) error {
 	f.mu.Lock()

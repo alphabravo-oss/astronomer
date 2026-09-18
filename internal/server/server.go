@@ -3,12 +3,16 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -25,7 +29,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
-	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
@@ -49,7 +52,7 @@ type securityCacheTarget struct {
 
 type charlieLiveBindings struct {
 	queries  *sqlc.Queries
-	bindings appmiddleware.RBACQuerier
+	bindings rbac.BindingQuerier
 }
 
 type charlieLiveFeatures struct{ queries *sqlc.Queries }
@@ -161,55 +164,33 @@ func (t securityCacheTarget) InvalidateRBACAllLocal() {
 // reconcilers only while this pod is leader (CORR-R06). On leadership loss it
 // cancels the child context (stopping ticker loops that respect ctx) and
 // retries acquisition.
-func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log *slog.Logger, start func(context.Context)) {
+func runServerReconcilerLeader(ctx context.Context, elector *leader.Elector, log *slog.Logger, run func(context.Context) error) error {
 	if log == nil {
 		log = slog.Default()
 	}
 	const job = "server.reconcilers"
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	var (
-		heldCtx    context.Context
-		heldCancel context.CancelFunc
-		release    func()
-	)
-	stopHeld := func() {
-		if heldCancel != nil {
-			heldCancel()
-			heldCancel = nil
-			heldCtx = nil
-		}
-		if release != nil {
-			release()
-			release = nil
-		}
-	}
-	defer stopHeld()
-	try := func() {
-		if release != nil {
-			// Already leader — keep holding.
-			return
-		}
+	for {
 		rel, held, err := elector.TryLeader(ctx, job)
 		if err != nil {
 			log.Warn("server reconciler leader election failed", "error", err)
-			return
+		} else if held {
+			log.Info("server reconciler leadership acquired", "job", job)
+			runErr := run(ctx)
+			rel()
+			if ctx.Err() != nil {
+				return nil
+			}
+			if runErr == nil {
+				runErr = errors.New("reconciler group exited without cancellation")
+			}
+			return runErr
 		}
-		if !held {
-			return
-		}
-		release = rel
-		heldCtx, heldCancel = context.WithCancel(ctx)
-		log.Info("server reconciler leadership acquired", "job", job)
-		start(heldCtx)
-	}
-	try()
-	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
-			try()
 		}
 	}
 }
@@ -270,36 +251,115 @@ func reportInsecureDevKeys(cfg *config.Config, logger *slog.Logger) {
 }
 
 func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencies) error {
-	if !isProductionConfig(cfg) {
-		return nil
-	}
+	_ = cfg // Security wiring is mandatory in every environment.
 	var errs []string
-	if deps.JWT == nil {
+	if deps.CoreAuth.JWT == nil {
 		errs = append(errs, "JWT manager is not wired")
+	} else if !deps.CoreAuth.JWT.HasRevocationChecker() {
+		errs = append(errs, "JWT revocation checker is not wired")
 	}
-	if deps.AuthQueries == nil {
+	if dependencyMissing(deps.CoreAuth.AuthQueries) {
 		errs = append(errs, "auth queries are not wired")
 	}
-	if deps.RBACEngine == nil {
+	if deps.CoreAuth.RBACEngine == nil {
 		errs = append(errs, "RBAC engine is not wired")
 	}
-	if deps.RBACQueries == nil {
+	if dependencyMissing(deps.CoreAuth.RBACQueries) {
 		errs = append(errs, "RBAC queries are not wired")
 	}
-	if deps.Encryptor == nil {
+	if deps.CoreAuth.Encryptor == nil {
 		errs = append(errs, "encryptor is not wired")
+	}
+	if deps.CoreAuth.SettingsCache == nil {
+		errs = append(errs, "platform settings cache is not wired")
+	}
+	if deps.CoreAuth.Queries == nil {
+		errs = append(errs, "shared queries are not wired")
+	}
+	if dependencyMissing(deps.CoreAuth.AuditWriter) {
+		errs = append(errs, "security audit writer is not wired")
+	}
+	if deps.StreamingInternal.Hub != nil && !deps.StreamingInternal.Hub.AgentTokenValidatorWired() {
+		errs = append(errs, "hub agent-token validator is not wired")
+	}
+	if deps.StreamingInternal.Exec != nil && !deps.StreamingInternal.Exec.SecurityWiringValid() {
+		errs = append(errs, "exec stream security is not fully wired")
+	}
+	if deps.StreamingInternal.Logs != nil && !deps.StreamingInternal.Logs.SecurityWiringValid() {
+		errs = append(errs, "logs stream security is not fully wired")
+	}
+	if (deps.StreamingInternal.Exec != nil || deps.StreamingInternal.Logs != nil || deps.StreamingInternal.EventStream != nil) && deps.StreamingInternal.StreamTicketStore == nil {
+		errs = append(errs, "stream ticket store is not wired")
 	}
 	// project_namespaces feeds the synthetic namespace-scoped bindings, so a
 	// project handler with no RBAC cache invalidator turns every
 	// remove-namespace into a revoke that does not take effect until the cache
 	// entry expires. Fail the boot instead.
-	if deps.Projects != nil && !deps.Projects.RBACInvalidatorWired() {
+	if deps.ClusterResources.Projects != nil && !deps.ClusterResources.Projects.RBACInvalidatorWired() {
 		errs = append(errs, "project handler RBAC cache invalidator is not wired")
 	}
+	if deps.CoreAuth.SCIM != nil && !deps.CoreAuth.SCIM.TransactionalAuditWired() {
+		errs = append(errs, "SCIM transactional audit is not wired")
+	}
+	if deps.CoreAuth.SSO != nil && !deps.CoreAuth.SSO.TransactionalAuditWired() {
+		errs = append(errs, "SSO callback transactional audit, encryption, or RBAC invalidation is not wired")
+	}
+	if deps.CoreAuth.TOTP != nil && !deps.CoreAuth.TOTP.TransactionalAuditWired() {
+		errs = append(errs, "TOTP transactional audit is not wired")
+	}
+	if deps.AdminPlatform.SMTP != nil && !deps.AdminPlatform.SMTP.TransactionalAuditWired() {
+		errs = append(errs, "SMTP transactional audit is not wired")
+	}
+	if deps.AdminPlatform.Security != nil && !deps.AdminPlatform.Security.TransactionalAuditWired() {
+		errs = append(errs, "security transactional audit is not wired")
+	}
+	if deps.AdminPlatform.Extensions != nil && !deps.AdminPlatform.Extensions.TransactionalAuditWired() {
+		errs = append(errs, "extension transactional audit is not wired")
+	}
+	if deps.AdminPlatform.PlatformDefaultTemplate != nil && !deps.AdminPlatform.PlatformDefaultTemplate.TransactionalAuditWired() {
+		errs = append(errs, "platform default template transactional audit is not wired")
+	}
+	if deps.ClusterResources.ControlPlaneSnapshots != nil && !deps.ClusterResources.ControlPlaneSnapshots.TransactionalAuditWired() {
+		errs = append(errs, "control-plane snapshot transactional audit is not wired")
+	}
+	if deps.ClusterResources.Resources != nil && !deps.ClusterResources.Resources.TransactionalSettingsSSOAuditWired() {
+		errs = append(errs, "settings and SSO transactional audit is not wired")
+	}
+	if deps.ClusterResources.Resources != nil && !deps.ClusterResources.Resources.TransactionalUserAuditWired() {
+		errs = append(errs, "user administration transactional audit is not wired")
+	}
+	if deps.ClusterResources.ProjectCatalogs != nil && !deps.ClusterResources.ProjectCatalogs.TransactionalAuditWired() {
+		errs = append(errs, "project catalog transactional audit is not wired")
+	}
+	if deps.Delivery.ConfigurationTemplates != nil && !deps.Delivery.ConfigurationTemplates.TransactionalAuditWired() {
+		errs = append(errs, "delivery configuration template transactional audit is not wired")
+	}
+	if deps.Delivery.OverrideSets != nil && !deps.Delivery.OverrideSets.TransactionalAuditWired() {
+		errs = append(errs, "delivery override set transactional audit is not wired")
+	}
+	if deps.AdminPlatform.SupportBundle != nil && !deps.AdminPlatform.SupportBundle.TransactionalMutationWired() {
+		errs = append(errs, "support bundle durable operation store is not wired")
+	}
+	if deps.AdminPlatform.Audit != nil && !deps.AdminPlatform.Audit.DurableExportWired() {
+		errs = append(errs, "audit durable export operation store is not wired")
+	}
 	if len(errs) > 0 {
-		return fmt.Errorf("production security wiring invalid: %s", strings.Join(errs, "; "))
+		return fmt.Errorf("security wiring invalid: %s", strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func dependencyMissing(dependency any) bool {
+	if dependency == nil {
+		return true
+	}
+	value := reflect.ValueOf(dependency)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // resolveCallbackBaseURL builds the API base URL used when registering SSO
@@ -326,7 +386,6 @@ type Server struct {
 	handler    http.Handler
 	logger     *slog.Logger
 	db         *db.DB
-	cancel     context.CancelFunc
 	queue      *asynq.Client
 	// hub is the tunnel hub; nil in lightweight test servers. Held here
 	// so Shutdown can drain WS connections before tearing down HTTP.
@@ -336,7 +395,7 @@ type Server struct {
 	// drift_check) call into the ToolHandler.EnsureInstalled tunnel
 	// path, which only works on the pod that owns the WS terminations.
 	// Nil in lightweight test servers built via New().
-	tunnelWorker *worker.Worker
+	tunnelWorker tunnelWorkerLifecycle
 	// Encryptor is the Fernet encryptor wired into handlers that surface
 	// encrypted columns (delivery credentials, SSO client secrets, etc.).
 	Encryptor *auth.Encryptor
@@ -348,6 +407,56 @@ type Server struct {
 	// product operation.
 	charlieRuntime *charlieLifecycleGroup
 	charlieBridge  *charlie.ManagedBridge
+	// taskLeader owns the small Postgres pool reserved for advisory-lock
+	// sessions. It is closed after reconcilers stop and before the main pool.
+	taskLeader *leader.Elector
+	// runtime owns every process-lifetime loop and supplies the critical-loop
+	// readiness state consumed by /readyz.
+	runtime *runtimeSupervisor
+	// shutdownHooks drain durable buffers and telemetry before the resource
+	// pools they depend on are closed. Hooks are registered during startup and
+	// run in registration order after ingress has stopped.
+	shutdownHooks   []shutdownHook
+	resourceClosers []shutdownHook
+	stopping        atomic.Bool
+	shutdownMu      sync.Mutex
+	shutdownDone    bool
+	shutdownErr     error
+}
+
+type tunnelWorkerLifecycle interface {
+	Run(context.Context) error
+	Shutdown()
+}
+
+type shutdownHook struct {
+	name string
+	fn   func(context.Context) error
+}
+
+// AddShutdownHook registers a bounded drain that must complete before Redis
+// and Postgres are closed. It is intended for startup-time wiring only.
+func (s *Server) AddShutdownHook(name string, fn func(context.Context) error) {
+	if s == nil || fn == nil {
+		return
+	}
+	s.shutdownHooks = append(s.shutdownHooks, shutdownHook{name: name, fn: fn})
+}
+
+func (s *Server) addResourceCloser(name string, fn func(context.Context) error) {
+	if s == nil || fn == nil {
+		return
+	}
+	s.resourceClosers = append(s.resourceClosers, shutdownHook{name: name, fn: fn})
+}
+
+// AddRuntimeLoop registers an additional process-lifetime component after
+// NewApp composition (for example the dedicated metrics listener).
+func (s *Server) AddRuntimeLoop(name string, critical bool, run func(context.Context) error) error {
+	if s == nil || s.runtime == nil {
+		return errors.New("runtime supervisor is unavailable")
+	}
+	return s.runtime.Go(name, critical, run)
 }
 
 // DB returns the primary application database wrapper when this server was
@@ -455,15 +564,33 @@ func (s *Server) Start(addr string) error {
 	if err != nil {
 		return err
 	}
+	errCh := make(chan error, 1)
 	if s.tunnelWorker != nil {
-		go func() {
-			if err := s.tunnelWorker.Start(); err != nil {
-				s.logger.Error("tunnel-queue asynq server exited", "error", err)
-			}
-		}()
+		if s.runtime == nil {
+			_ = ln.Close()
+			return errors.New("tunnel-queue worker requires runtime supervisor")
+		}
+		if err := s.runtime.Go("tunnel-queue-worker", true, func(ctx context.Context) error {
+			return s.tunnelWorker.Run(ctx)
+		}); err != nil {
+			_ = ln.Close()
+			return err
+		}
 	}
 	s.logger.Info("server listening", "addr", addr)
-	return s.httpServer.Serve(ln)
+	go func() { errCh <- s.httpServer.Serve(ln) }()
+	var runtimeFailures <-chan error
+	if s.runtime != nil {
+		runtimeFailures = s.runtime.Failures()
+	}
+	select {
+	case err = <-errCh:
+	case err = <-runtimeFailures:
+	}
+	if errors.Is(err, http.ErrServerClosed) || (err == nil && s.stopping.Load()) {
+		return nil
+	}
+	return err
 }
 
 // Shutdown gracefully shuts down the server with a deadline.
@@ -479,12 +606,29 @@ func (s *Server) Start(addr string) error {
 //  2. httpServer.Shutdown — blocks until in-flight HTTP handlers exit.
 //     New connections are rejected immediately; long-running requests
 //     get the deadline.
-//  3. cancel the reconcile context (in-process workers, publishers).
-//  4. close DB pool + asynq client.
+//  3. Stop task intake, cancel every owned loop, and join it before draining
+//     hooks or closing any dependency used by those loops.
+//  4. Drain audit/telemetry, then close leader sessions, Redis, and Postgres.
+//     Project mutations are delivered through
+//     the durable task outbox; there are no request-spawned project goroutines.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.shutdownMu.Lock()
+	defer s.shutdownMu.Unlock()
+	if s.shutdownDone {
+		return s.shutdownErr
+	}
+	s.stopping.Store(true)
+	var shutdownErrs []error
+	runtimeJoined := true
 	if s.hub != nil {
 		drained := s.hub.Drain()
 		s.logger.Info("tunnel hub drained", "agents_disconnected", drained)
+	}
+	if err := s.httpServer.Shutdown(ctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		shutdownErrs = append(shutdownErrs, fmt.Errorf("http server: %w", err))
+	}
+	if s.runtime != nil {
+		s.runtime.MarkStopping()
 	}
 	if s.tunnelWorker != nil {
 		s.tunnelWorker.Shutdown()
@@ -492,22 +636,49 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if s.charlieRuntime != nil {
 		if err := s.charlieRuntime.Shutdown(ctx); err != nil {
 			charlie.LogOperationalFailure(ctx, s.logger, "runtime.shutdown_failed", "")
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("Charlie runtime: %w", err))
 		}
 	}
 	if s.charlieBridge != nil {
 		s.charlieBridge.Close()
 	}
-	err := s.httpServer.Shutdown(ctx)
-	if s.cancel != nil {
-		s.cancel()
+	if s.runtime != nil {
+		s.runtime.BeginStop()
+		if err := s.runtime.Wait(ctx); err != nil {
+			shutdownErrs = append(shutdownErrs, err)
+			runtimeJoined = false
+		}
 	}
-	if s.db != nil {
-		s.db.Close()
+	for _, hook := range s.shutdownHooks {
+		if err := hook.fn(ctx); err != nil {
+			s.logger.Warn("shutdown drain failed", "component", hook.name, "error", err)
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("%s: %w", hook.name, err))
+		}
+	}
+	if !runtimeJoined {
+		s.logger.Error("runtime loops did not join; leaving dependency pools open for process exit")
+		s.shutdownErr = errors.Join(shutdownErrs...)
+		s.shutdownDone = true
+		return s.shutdownErr
+	}
+	if s.taskLeader != nil {
+		s.taskLeader.Close()
+	}
+	for _, closer := range s.resourceClosers {
+		if err := closer.fn(ctx); err != nil {
+			s.logger.Warn("runtime resource close failed", "component", closer.name, "error", err)
+			shutdownErrs = append(shutdownErrs, fmt.Errorf("%s: %w", closer.name, err))
+		}
 	}
 	if s.queue != nil {
 		_ = s.queue.Close()
 	}
-	return err
+	if s.db != nil {
+		s.db.Close()
+	}
+	s.shutdownErr = errors.Join(shutdownErrs...)
+	s.shutdownDone = true
+	return s.shutdownErr
 }
 
 // ServeHTTP implements http.Handler, useful for testing.
@@ -524,7 +695,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // process gets the same deps via the shared queue wiring).
 func kubectlShellComponents(
 	queries *sqlc.Queries,
-	rbacQuerier appmiddleware.RBACQuerier,
+	rbacQuerier rbac.BindingQuerier,
 	rbacEngine *rbac.Engine,
 	requester handler.K8sRequester,
 	cfg *config.Config,
@@ -559,8 +730,8 @@ func kubectlShellComponents(
 // Downward API when configured) then falls back to the standard
 // serviceaccount mount. Returns "astronomer" if both fail, since that's
 // the chart's default namespace.
-func detectReleaseNamespace() string {
-	if v := strings.TrimSpace(os.Getenv("POD_NAMESPACE")); v != "" {
+func detectReleaseNamespace(configured string) string {
+	if v := strings.TrimSpace(configured); v != "" {
 		return v
 	}
 	if b, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {

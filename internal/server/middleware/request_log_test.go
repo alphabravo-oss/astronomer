@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -72,13 +74,13 @@ func TestRequestLoggerEmitsActorClusterAndOperationIDs(t *testing.T) {
 	slog.SetDefault(logger)
 	defer slog.SetDefault(previous)
 
-	user := &AuthenticatedUser{ID: "user-123", AuthMethod: "jwt"}
+	user := &reqctx.User{ID: "user-123", AuthMethod: "jwt"}
 	router := chi.NewRouter()
 	router.Use(RequestID)
 	router.Use(RequestLogger)
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := SetAuthenticatedUserForTest(r.Context(), user)
+			ctx := reqctx.WithUser(r.Context(), user)
 			setRequestLogActor(ctx, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

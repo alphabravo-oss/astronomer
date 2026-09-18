@@ -21,7 +21,7 @@ func TestDeliveryCommandTreeCoversContinuousDeliverySurface(t *testing.T) {
 			t.Fatalf("delivery help missing %q:\n%s", want, help)
 		}
 	}
-	if strings.Contains(strings.ToLower(help), "argo"+"cd") || strings.Contains(help, "fl"+"eet") {
+	if strings.Contains(strings.ToLower(help), "argocd") || strings.Contains(help, "fleet") {
 		t.Fatalf("delivery help listed a leftover delivery engine:\n%s", help)
 	}
 
@@ -67,7 +67,7 @@ func TestClusterAgentCommandTreeIsFirstParty(t *testing.T) {
 			t.Fatalf("cluster-agent help missing %s:\n%s", want, help)
 		}
 	}
-	if strings.Contains(strings.ToLower(help), "argo"+"cd") || strings.Contains(help, "fl"+"eet-operations") {
+	if strings.Contains(strings.ToLower(help), "argocd") || strings.Contains(help, "fleet-operations") {
 		t.Fatalf("cluster-agent help listed a leftover delivery engine:\n%s", help)
 	}
 }

@@ -34,7 +34,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hibiken/asynq"
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -81,7 +81,7 @@ type Locator struct {
 // to this pod — typically `<pod-ip>:8000`. Empty address disables
 // publish (read-only mode for tests / one-replica installs).
 func NewLocatorFromAsynqRedisURL(redisURL, address string, log *slog.Logger) (*Locator, error) {
-	opt, err := asynq.ParseRedisURI(redisURL)
+	opt, err := redisconn.Parse(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse redis url for tunnel locator: %w", err)
 	}

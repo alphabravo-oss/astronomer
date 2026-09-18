@@ -181,7 +181,7 @@ func (h *MonitoringHandler) localManagementCluster(ctx context.Context) (sqlc.Cl
 	if !ok || !picked.IsLocal {
 		for _, c := range clusters {
 			if c.IsLocal {
-				return c, true
+				return c.Cluster, true
 			}
 		}
 		return sqlc.Cluster{}, false

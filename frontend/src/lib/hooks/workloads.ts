@@ -1,12 +1,32 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import * as apiClient from "@/lib/api";
+import {
+  getWorkloads,
+  getWorkloadPods,
+  scaleWorkload,
+  getWorkloadOperation,
+  restartWorkload,
+  getPodLogs,
+  streamPodLogs,
+} from "@/lib/api/workloads";
+import {
+  getClusterMetrics,
+  getClusterMetricsSummary,
+  getWorkloadMetrics,
+} from "@/lib/api/metrics";
 import { liveFallback } from "@/lib/live/status-store";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import type { PodLog } from "@/types";
 import { useOperationMutation } from "@/lib/hooks/operation-mutation";
+import { k8sQueryKeys } from "@/lib/hooks/kubernetes-proxy";
+import type { WorkloadSort } from "@/lib/api/workloads";
+import {
+  getResourceDef,
+  k8sResourcePath,
+  kindToResourceType,
+} from "@/lib/k8s-paths";
 
 // ============================================================
 // Workload Hooks
@@ -18,31 +38,16 @@ export function useWorkloads(
     namespace?: string;
     kind?: string;
     search?: string;
+    sort?: WorkloadSort;
     page?: number;
     pageSize?: number;
   },
 ) {
   return useQuery({
     queryKey: queryKeys.workloads.list(clusterId, params),
-    queryFn: ({ signal }) =>
-      apiClient.getWorkloads(clusterId, { ...params, signal }),
+    queryFn: ({ signal }) => getWorkloads(clusterId, { ...params, signal }),
     enabled: !!clusterId,
     refetchInterval: liveFallback(15000),
-  });
-}
-
-export function useWorkload(
-  clusterId: string,
-  kind: string,
-  namespace: string,
-  name: string,
-) {
-  return useQuery({
-    queryKey: queryKeys.workloads.detail(clusterId, kind, namespace, name),
-    queryFn: ({ signal }) =>
-      apiClient.getWorkload(clusterId, kind, namespace, name, signal),
-    enabled: !!clusterId && !!kind && !!namespace && !!name,
-    refetchInterval: liveFallback(10000),
   });
 }
 
@@ -55,7 +60,7 @@ export function useWorkloadPods(
   return useQuery({
     queryKey: queryKeys.workloads.pods(clusterId, kind, namespace, name),
     queryFn: ({ signal }) =>
-      apiClient.getWorkloadPods(clusterId, kind, namespace, name, signal),
+      getWorkloadPods(clusterId, kind, namespace, name, signal),
     enabled: !!clusterId && !!kind && !!namespace && !!name,
     refetchInterval: liveFallback(10000),
   });
@@ -75,7 +80,7 @@ export function useScaleWorkload() {
       },
       context,
     ) =>
-      apiClient.scaleWorkload(
+      scaleWorkload(
         params.clusterId,
         params.kind,
         params.namespace,
@@ -83,17 +88,10 @@ export function useScaleWorkload() {
         params.replicas,
         context,
       ),
-    read: apiClient.getWorkloadOperation,
+    read: getWorkloadOperation,
     mutation: {
       onSuccess: (_data, variables) => {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.workloads.detail(
-            variables.clusterId,
-            variables.kind,
-            variables.namespace,
-            variables.name,
-          ),
-        });
+        invalidateWorkloadResource(queryClient, variables);
         toastSuccess(`Scaled to ${variables.replicas} replicas`);
       },
       onError: (error: Error) => {
@@ -116,30 +114,42 @@ export function useRestartWorkload() {
       },
       context,
     ) =>
-      apiClient.restartWorkload(
+      restartWorkload(
         params.clusterId,
         params.kind,
         params.namespace,
         params.name,
         context,
       ),
-    read: apiClient.getWorkloadOperation,
+    read: getWorkloadOperation,
     mutation: {
       onSuccess: (_data, variables) => {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.workloads.detail(
-            variables.clusterId,
-            variables.kind,
-            variables.namespace,
-            variables.name,
-          ),
-        });
+        invalidateWorkloadResource(queryClient, variables);
         toastSuccess("Workload restart completed");
       },
       onError: (error: Error) => {
         toastApiError("Failed to restart workload", error);
       },
     },
+  });
+}
+
+function invalidateWorkloadResource(
+  queryClient: ReturnType<typeof useQueryClient>,
+  workload: {
+    clusterId: string;
+    kind: string;
+    namespace: string;
+    name: string;
+  },
+) {
+  const lower = workload.kind.toLowerCase();
+  const resourceType = getResourceDef(lower)
+    ? lower
+    : kindToResourceType(workload.kind);
+  const path = k8sResourcePath(resourceType, workload.name, workload.namespace);
+  queryClient.invalidateQueries({
+    queryKey: k8sQueryKeys.resource(workload.clusterId, path),
   });
 }
 
@@ -167,17 +177,25 @@ export function usePodLogs(
     // "give me everything."
     noTail?: boolean;
     follow?: boolean;
+    previous?: boolean;
   },
 ) {
-  const [streamLogs, setStreamLogs] = useState<PodLog[]>([]);
+  const streamIdentity = `${clusterId}/${namespace}/${pod}/${params?.container ?? ""}`;
+  const [stream, setStream] = useState<{
+    identity: string;
+    logs: PodLog[];
+  }>({ identity: streamIdentity, logs: [] });
   // Exposes WS connection state so consumers (e.g. the window-manager tab
   // strip) can show a pill without owning the WS lifecycle themselves.
-  const [status, setStatus] = useState<PodLogsStatus>("idle");
+  const [streamStatus, setStreamStatus] = useState<{
+    identity: string;
+    value: PodLogsStatus;
+  }>({ identity: streamIdentity, value: "idle" });
   const cleanupRef = useRef<(() => void) | null>(null);
   // De-duplicate toasts: if the WS errors mid-stream we only want one toast
   // per (pod, container) selection rather than one per reconnect/dropped
   // frame.
-  const errorShownRef = useRef(false);
+  const errorShownRef = useRef<string | null>(null);
 
   // Resolve the effective query params once so the initial fetch, the
   // streaming useEffect, and the queryKey all agree. The precedence is:
@@ -206,50 +224,54 @@ export function usePodLogs(
       params?.container,
       effectiveTailLines ?? "no-tail",
       effectiveSinceSeconds ?? "no-since",
+      params?.previous ?? false,
     ),
     queryFn: ({ signal }) =>
-      apiClient.getPodLogs(clusterId, namespace, pod, {
+      getPodLogs(clusterId, namespace, pod, {
         container: params?.container,
         tailLines: effectiveTailLines,
         sinceSeconds: effectiveSinceSeconds,
+        previous: params?.previous,
         signal,
       }),
     enabled: !!clusterId && !!namespace && !!pod,
   });
 
-  // Reset the streaming buffer when the pod or container changes. Without
-  // this, switching pods would show the old pod's tail of stream lines
-  // prepended to the new pod's REST fetch — a real correctness bug that
-  // also leaked memory across switches.
-  useEffect(() => {
-    setStreamLogs([]);
-    errorShownRef.current = false;
-  }, [clusterId, namespace, pod, params?.container]);
-
   // Streaming
   useEffect(() => {
-    if (!params?.follow || !clusterId || !namespace || !pod) {
-      setStatus("idle");
+    if (
+      !params?.follow ||
+      params?.previous ||
+      !clusterId ||
+      !namespace ||
+      !pod
+    ) {
       return;
     }
 
-    setStatus("connecting");
-    const cleanup = apiClient.streamPodLogs(
+    const cleanup = streamPodLogs(
       clusterId,
       namespace,
       pod,
       params?.container || "",
       (log) => {
-        setStatus("streaming");
-        setStreamLogs((prev) => [...prev.slice(-2000), log]);
+        setStreamStatus({ identity: streamIdentity, value: "streaming" });
+        setStream((previous) =>
+          previous.identity === streamIdentity
+            ? {
+                identity: streamIdentity,
+                logs: [...previous.logs.slice(-2000), log],
+              }
+            : { identity: streamIdentity, logs: [log] },
+        );
       },
       (err) => {
-        setStatus("disconnected");
+        setStreamStatus({ identity: streamIdentity, value: "disconnected" });
         // Surface the first error per stream so the user knows the live
         // tail dropped — but suppress duplicates so a flapping agent
         // doesn't spam the corner of the screen.
-        if (!errorShownRef.current) {
-          errorShownRef.current = true;
+        if (errorShownRef.current !== streamIdentity) {
+          errorShownRef.current = streamIdentity;
           toastApiError("Log stream", err);
         }
       },
@@ -271,7 +293,6 @@ export function usePodLogs(
     return () => {
       cleanup();
       cleanupRef.current = null;
-      setStatus("idle");
     };
   }, [
     clusterId,
@@ -279,8 +300,10 @@ export function usePodLogs(
     pod,
     params?.container,
     params?.follow,
+    params?.previous,
     effectiveTailLines,
     effectiveSinceSeconds,
+    streamIdentity,
   ]);
 
   // Always surface the streamed tail in `allLogs`, even after the caller
@@ -290,12 +313,20 @@ export function usePodLogs(
   // should stop *accumulating* new lines (the streaming useEffect tears
   // down when follow is false) without losing what was already on
   // screen.
+  const streamLogs = stream.identity === streamIdentity ? stream.logs : [];
+  const status: PodLogsStatus =
+    !params?.follow || params?.previous || !clusterId || !namespace || !pod
+      ? "idle"
+      : streamStatus.identity === streamIdentity
+        ? streamStatus.value
+        : "connecting";
   const allLogs = [...(query.data || []), ...streamLogs];
 
   const stopStreaming = useCallback(() => {
     cleanupRef.current?.();
     cleanupRef.current = null;
-  }, []);
+    setStreamStatus({ identity: streamIdentity, value: "disconnected" });
+  }, [streamIdentity]);
 
   // Forward query fields explicitly rather than spreading the whole result —
   // spreading a TanStack Query result subscribes the consumer to every field
@@ -319,8 +350,7 @@ export function usePodLogs(
 export function useClusterMetrics(clusterId: string, range?: string) {
   return useQuery({
     queryKey: queryKeys.clusters.metrics(clusterId, range),
-    queryFn: ({ signal }) =>
-      apiClient.getClusterMetrics(clusterId, { range }, signal),
+    queryFn: ({ signal }) => getClusterMetrics(clusterId, { range }, signal),
     enabled: !!clusterId,
     // While the stream is open, `cluster.metrics` ticks invalidate the
     // per-cluster metrics prefix (see lib/live/routes.ts).
@@ -331,7 +361,7 @@ export function useClusterMetrics(clusterId: string, range?: string) {
 export function useClusterMetricsSummary(clusterId: string) {
   return useQuery({
     queryKey: queryKeys.clusters.metricsSummary(clusterId),
-    queryFn: ({ signal }) => apiClient.getClusterMetricsSummary(clusterId, signal),
+    queryFn: ({ signal }) => getClusterMetricsSummary(clusterId, signal),
     enabled: !!clusterId,
     refetchInterval: liveFallback(30000),
   });
@@ -353,7 +383,7 @@ export function useWorkloadMetrics(
       range,
     ),
     queryFn: ({ signal }) =>
-      apiClient.getWorkloadMetrics(clusterId, kind, namespace, name, { range }, signal),
+      getWorkloadMetrics(clusterId, kind, namespace, name, { range }, signal),
     enabled: !!clusterId && !!kind && !!namespace && !!name,
     // No per-workload metrics event exists; while the stream is open this
     // refreshes on the cluster's Pod/workload `cluster.k8s_changed` churn

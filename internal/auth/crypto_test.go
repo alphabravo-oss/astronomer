@@ -1,7 +1,10 @@
 package auth
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/fernet/fernet-go"
 )
 
 func TestEncryptDecryptRoundtrip(t *testing.T) {
@@ -28,6 +31,9 @@ func TestEncryptDecryptRoundtrip(t *testing.T) {
 
 	if got != plaintext {
 		t.Errorf("roundtrip mismatch: got %q, want %q", got, plaintext)
+	}
+	if !strings.HasPrefix(token, "astronomer:v1:fernet:"+enc.PrimaryKeyID()+":") {
+		t.Fatalf("ciphertext = %q, want versioned primary-key envelope", token)
 	}
 }
 
@@ -241,5 +247,68 @@ func TestNewEncryptorWhitespaceTolerance(t *testing.T) {
 	}
 	if enc.KeyCount() != 2 {
 		t.Errorf("KeyCount = %d, want 2", enc.KeyCount())
+	}
+}
+
+func TestEncryptorExplicitKeyInventoryAndUnknownKey(t *testing.T) {
+	primary, _ := GenerateKey()
+	fallback, _ := GenerateKey()
+	enc, err := NewEncryptor("current:" + primary + ",previous:" + fallback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []EncryptionKeyInfo{{ID: "current", Primary: true}, {ID: "previous", Primary: false}}
+	got := enc.KeyInventory()
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("KeyInventory() = %#v, want %#v", got, want)
+	}
+	token, err := enc.Encrypt("secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown := strings.Replace(token, ":current:", ":missing:", 1)
+	if _, err := enc.Decrypt(unknown); err == nil || !strings.Contains(err.Error(), "unknown key id") {
+		t.Fatalf("Decrypt(unknown key) error = %v", err)
+	}
+	if !enc.IsPrimaryCiphertext(token) || enc.IsPrimaryCiphertext(unknown) {
+		t.Fatal("primary ciphertext classification is incorrect")
+	}
+}
+
+func TestEncryptorAcceptsLegacyFernetDuringMigration(t *testing.T) {
+	key, _ := GenerateKey()
+	decoded, err := fernet.DecodeKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := fernet.EncryptAndSign([]byte("legacy-row"), decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc, err := NewEncryptor(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := enc.Decrypt(string(legacy))
+	if err != nil || got != "legacy-row" {
+		t.Fatalf("Decrypt(legacy) = %q, %v", got, err)
+	}
+	if enc.IsPrimaryCiphertext(string(legacy)) {
+		t.Fatal("legacy ciphertext must require rewrap")
+	}
+}
+
+func TestEncryptorRejectsMalformedOrDuplicateIdentifiers(t *testing.T) {
+	key, _ := GenerateKey()
+	for _, value := range []string{"bad id:" + key, "same:" + key + ",same:" + key} {
+		if _, err := NewEncryptor(value); err == nil {
+			t.Fatalf("NewEncryptor(%q) succeeded", value)
+		}
+	}
+	enc, _ := NewEncryptor(key)
+	for _, value := range []string{"astronomer:v2:fernet:key:value", "astronomer:v1:fernet::value", "astronomer:v1:fernet:key:"} {
+		if _, err := enc.Decrypt(value); err == nil {
+			t.Fatalf("Decrypt(%q) succeeded", value)
+		}
 	}
 }

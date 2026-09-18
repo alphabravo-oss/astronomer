@@ -12,14 +12,11 @@ import { useId, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFieldContext, useFormContext } from "@/lib/form";
-import { Input, controlClassName } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { ActionButton } from "@/components/ui/action-button";
-
-/** @deprecated Use `controlClassName` from `@/components/ui/input`. */
-export const inputClassName = controlClassName;
 
 const SECRET_PLACEHOLDER = "••••••••";
 
@@ -114,6 +111,7 @@ export function TextField({
       error={error}
     >
       <Input
+        name={field.name}
         id={id}
         type={type}
         value={field.state.value ?? ""}
@@ -156,6 +154,7 @@ export function NumberField({
       error={error}
     >
       <Input
+        name={field.name}
         id={id}
         type="number"
         value={field.state.value ?? ""}
@@ -194,6 +193,7 @@ export function PasswordField({
       error={error}
     >
       <Input
+        name={field.name}
         id={id}
         type="password"
         value={field.state.value ?? ""}
@@ -240,6 +240,7 @@ export function SecretField({
   const showStored = stored && pristine;
   const input = (
     <Input
+      name={field.name}
       id={id}
       type={revealable && reveal ? "text" : "password"}
       value={field.state.value ?? ""}
@@ -266,7 +267,8 @@ export function SecretField({
           <button
             type="button"
             onClick={() => setReveal((prev) => !prev)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+            className="absolute right-1 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label={reveal ? "Hide secret" : "Show secret"}
             title={reveal ? "Hide" : "Show"}
           >
             {reveal ? (
@@ -308,6 +310,7 @@ export function TextareaField({
       error={error}
     >
       <Textarea
+        name={field.name}
         id={id}
         value={field.state.value ?? ""}
         onChange={(e) => field.handleChange(e.target.value)}
@@ -343,6 +346,7 @@ export function SelectField({
       error={error}
     >
       <Select
+        name={field.name}
         id={id}
         value={field.state.value ?? ""}
         onChange={(e) => field.handleChange(e.target.value)}
@@ -376,6 +380,7 @@ export function SwitchField({
         {helper && <p className="text-xs text-muted-foreground">{helper}</p>}
       </div>
       <Switch
+        name={field.name}
         id={id}
         checked={checked}
         disabled={disabled}
@@ -403,7 +408,7 @@ export function CheckboxField({
         onChange={(e) => field.handleChange(e.target.checked)}
         onBlur={field.handleBlur}
         disabled={disabled}
-        className="mt-0.5 h-4 w-4 rounded border-border"
+        className="mt-0.5 h-4 w-4 rounded-sm border-border"
       />
       <div>
         <label htmlFor={id} className="text-foreground font-medium">

@@ -33,14 +33,7 @@ import (
 // request surfaces as 503) behind the real project-binding querier.
 func resourceCreateRouter(t *testing.T, jwtMgr *auth.JWTManager, q projectBindingQuerier) http.Handler {
 	t.Helper()
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:                 jwtMgr,
-		RBACEngine:          rbac.NewEngine(),
-		RBACQueries:         appmiddleware.NewSQLCRBACQuerierWithCache(q, nil),
-		Resources:           handler.NewResourceHandler(),
-		Proxy:               tunnel.NewProxyHandler(tunnel.NewHub(nil), nil),
-		NamespaceScopedRBAC: true,
-	})
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: appmiddleware.NewSQLCRBACQuerierWithCache(q, nil)}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler(), NamespaceScopedRBAC: true}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(nil), nil)}})
 }
 
 func TestResourceCreate_AuthorizesBodyNamespaceNotQuery(t *testing.T) {
@@ -81,15 +74,15 @@ func TestResourceCreate_AuthorizesBodyNamespaceNotQuery(t *testing.T) {
 		{"query owned, body foreign", "?namespace=team-a", `{"metadata":{"name":"api","namespace":"kube-system"}}`, denied},
 		// No query at all — the shape the UI actually sends.
 		{"body names a foreign namespace", "", `{"metadata":{"name":"api","namespace":"team-b"}}`, denied},
-		// A body with no namespace would proxy to an implicit/cluster-wide path;
-		// no namespace-narrowed grant covers that.
-		{"body names no namespace", "?namespace=team-a", `{"metadata":{"name":"api"}}`, denied},
+		// A body with no namespace is rejected as malformed before it can proxy
+		// to an implicit/cluster-wide path.
+		{"body names no namespace", "?namespace=team-a", `{"metadata":{"name":"api"}}`, http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, path+tc.query, strings.NewReader(tc.body))
 			req.Header.Set("Authorization", "Bearer "+token)
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Idempotency-Key", "namespace-authorization-fixture")
+			req.Header.Set("Idempotency-Key", "namespace-authorization-fixture-"+uuid.NewString())
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 			if rec.Code != tc.want {

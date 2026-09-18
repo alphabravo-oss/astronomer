@@ -1,3 +1,6 @@
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FormShell } from "@/components/ui/form-shell";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +12,7 @@ import {
   DeliveryProjectGate,
   ErrorMessage,
   RedirectDeliveryList,
+  deliveryPageRowCount,
   inputClass,
   primaryButton,
   secondaryButton,
@@ -20,14 +24,14 @@ import {
   createComponentBundle,
   listComponentBundles,
   type ComponentBundle,
-} from "@/lib/api/delivery";
+} from "@/lib/api/delivery-bundles";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 import { formatRelativeTime } from "@/lib/utils";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { toastSuccess } from "@/lib/toast";
 
 export function BundlesPage() {
@@ -37,7 +41,7 @@ export function BundlesPage() {
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_bundles", "list", scope);
   const canCreate = can(user, "delivery_bundles", "create", scope);
-  const router = useRouter();
+  const navigate = useNavigate();
   const [pageIndex, setPageIndex] = useDeliveryPageIndex();
   const [creating, setCreating] = useState(false);
   const pageSize = 25;
@@ -117,12 +121,23 @@ export function BundlesPage() {
             keyExtractor={(row) => row.id}
             loading={query.isLoading}
             isError={query.isError}
+            error={query.error}
+            permission="delivery_bundles:list"
             onRetry={() => void query.refetch()}
             searchable={false}
-            emptyMessage="No component bundles in this project"
-            onRowClick={(row) => router.push(entityHref("bundles", row.id))}
+            emptyState={{
+              title: "No component bundles in this project",
+              description:
+                "Create a bundle to version and deliver your application components.",
+              action: canCreate
+                ? { label: "Create bundle", onClick: () => setCreating(true) }
+                : undefined,
+            }}
+            onRowClick={(row) =>
+              void navigate({ to: entityHref("bundles", row.id) })
+            }
             serverSide={{
-              rowCount: query.data?.count ?? 0,
+              rowCount: deliveryPageRowCount(query.data),
               pagination: { pageIndex, pageSize },
               onPaginationChange: (next) => setPageIndex(next.pageIndex),
             }}
@@ -147,7 +162,7 @@ function CreateBundleDialog({
   onClose: () => void;
 }) {
   const client = useQueryClient();
-  const router = useRouter();
+  const navigate = useNavigate();
   const { entityHref } = useDeliveryWorkspace();
   const mutation = useMutation({
     mutationFn: (body: { name: string; description?: string }) =>
@@ -158,7 +173,7 @@ function CreateBundleDialog({
       });
       toastSuccess("Component bundle created");
       onClose();
-      router.push(entityHref("bundles", bundle.id));
+      void navigate({ to: entityHref("bundles", bundle.id) });
     },
   });
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -175,14 +190,14 @@ function CreateBundleDialog({
       onClose={onClose}
       subtitle="Versions are immutable and added after the stable bundle is created."
     >
-      <form className="space-y-4" onSubmit={submit}>
+      <FormShell className="space-y-4" onSubmit={submit}>
         <label className="block space-y-1.5 text-sm">
           <span className="font-medium">Name</span>
-          <input name="name" required maxLength={128} className={inputClass} />
+          <Input name="name" required maxLength={128} className={inputClass} />
         </label>
         <label className="block space-y-1.5 text-sm">
           <span className="font-medium">Description</span>
-          <textarea
+          <Textarea
             name="description"
             maxLength={4096}
             className={textareaClass}
@@ -201,7 +216,7 @@ function CreateBundleDialog({
             {mutation.isPending ? "Creating…" : "Create bundle"}
           </button>
         </div>
-      </form>
+      </FormShell>
     </ModalShell>
   );
 }

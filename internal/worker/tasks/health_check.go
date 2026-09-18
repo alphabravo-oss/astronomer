@@ -10,6 +10,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
@@ -92,7 +93,7 @@ func HandleHealthCheck(ctx context.Context, t *asynq.Task) error {
 		// concurrency and a per-cluster timeout. A cluster whose write fails or
 		// times out is skipped-with-log so it can't abort the whole fleet sweep
 		// (each cluster is an independent row; the next tick converges it).
-		fanOutClusters(ctx, clusters, healthCheckPerClusterTimeout, func(ctx context.Context, cluster sqlc.Cluster) {
+		fanOutClusters(ctx, clusters, healthCheckPerClusterTimeout, func(ctx context.Context, cluster healthCheckTarget) {
 			if err := updateClusterHealth(ctx, cluster); err != nil {
 				slog.WarnContext(ctx, "health check failed for cluster, skipping",
 					"cluster_id", cluster.ID.String(), "error", err)
@@ -120,28 +121,45 @@ const (
 	healthCheckPerClusterTimeout = 10 * time.Second
 )
 
-func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, error) {
+type healthCheckTarget struct {
+	ID                uuid.UUID
+	Status            string
+	KubernetesVersion string
+	Distribution      string
+	NodeCount         int32
+	LastHeartbeat     pgtype.Timestamptz
+}
+
+func healthCheckTargets(ctx context.Context, clusterID string) ([]healthCheckTarget, error) {
 	if clusterID != "" {
 		id, err := uuid.Parse(clusterID)
 		if err != nil {
 			return nil, fmt.Errorf("invalid cluster_id: %w", err)
 		}
-		cluster, err := runtimeDependencies(ctx).Queries.GetClusterByID(ctx, id)
+		cluster, err := runtimeDependencies(ctx).Queries.GetClusterHealthTarget(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		return []sqlc.Cluster{cluster}, nil
+		return []healthCheckTarget{{
+			ID: cluster.ID, Status: cluster.Status, KubernetesVersion: cluster.KubernetesVersion,
+			Distribution: cluster.Distribution, NodeCount: cluster.NodeCount, LastHeartbeat: cluster.LastHeartbeat,
+		}}, nil
 	}
 	// Page through the entire non-decommissioned fleet. Stop when a page
 	// comes back short (fewer than a full page of rows), which means we've
 	// reached the end.
-	var all []sqlc.Cluster
+	var all []healthCheckTarget
 	for offset := int32(0); ; offset += healthCheckPageSize {
-		page, err := runtimeDependencies(ctx).Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: healthCheckPageSize, Offset: offset})
+		page, err := runtimeDependencies(ctx).Queries.ListClusterHealthTargets(ctx, sqlc.ListClusterHealthTargetsParams{QueryLimit: healthCheckPageSize, QueryOffset: offset})
 		if err != nil {
 			return nil, err
 		}
-		all = append(all, page...)
+		for _, cluster := range page {
+			all = append(all, healthCheckTarget{
+				ID: cluster.ID, Status: cluster.Status, KubernetesVersion: cluster.KubernetesVersion,
+				Distribution: cluster.Distribution, NodeCount: cluster.NodeCount, LastHeartbeat: cluster.LastHeartbeat,
+			})
+		}
 		if int32(len(page)) < healthCheckPageSize {
 			break
 		}
@@ -149,7 +167,7 @@ func healthCheckTargets(ctx context.Context, clusterID string) ([]sqlc.Cluster, 
 	return all, nil
 }
 
-func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {
+func updateClusterHealth(ctx context.Context, cluster healthCheckTarget) error {
 	// 2m MUST match the metrics publisher's staleHeartbeatThreshold
 	// (internal/metrics/publisher.go): both write clusters.status from
 	// last_heartbeat age, and a DIFFERENT threshold makes the two fight and flap
@@ -206,7 +224,7 @@ func updateClusterHealth(ctx context.Context, cluster sqlc.Cluster) error {
 // are owned by the server process — see internal/server/cluster_probes.go
 // — because they require the tunnel-backed K8sRequester which only the
 // server has access to.
-func updateClusterConditions(ctx context.Context, cluster sqlc.Cluster, heartbeatFresh bool) {
+func updateClusterConditions(ctx context.Context, cluster healthCheckTarget, heartbeatFresh bool) {
 	upsert := func(condType, status, reason, message string) {
 		_, err := runtimeDependencies(ctx).Queries.UpsertClusterCondition(ctx, sqlc.UpsertClusterConditionParams{
 			ClusterID: cluster.ID,

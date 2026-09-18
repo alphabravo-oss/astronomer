@@ -68,6 +68,7 @@ func TestBuildTLSConfig_LoadsRootCAs(t *testing.T) {
 	}
 	if cfg == nil {
 		t.Fatal("expected non-nil tls.Config when CA provided")
+		return
 	}
 	if cfg.RootCAs == nil {
 		t.Fatal("expected RootCAs to be set from the PEM bundle")

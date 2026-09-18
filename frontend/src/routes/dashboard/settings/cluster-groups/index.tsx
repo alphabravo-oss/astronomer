@@ -6,7 +6,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
+import { ClusterGroupMembership } from "./-membership";
 /**
  * /dashboard/settings/cluster-groups — operator-defined folder hierarchy
  * over clusters (migration 066).
@@ -26,6 +27,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
+import { QueryStates } from "@/components/ui/query-states";
 import {
   Plus,
   Loader2,
@@ -34,13 +36,19 @@ import {
   AlertCircle,
   Folder,
 } from "lucide-react";
-import * as api from "@/lib/api";
-import { queryKeys } from "@/lib/hooks";
+import {
+  listClusterGroups,
+  createClusterGroup,
+  updateClusterGroup,
+  deleteClusterGroup,
+} from "@/lib/api/cluster-groups";
+import { queryKeys } from "@/lib/query-keys";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   CLUSTER_GROUP_COLORS,
@@ -54,15 +62,14 @@ const MAX_DEPTH = 2;
 function useClusterGroups() {
   return useQuery({
     queryKey: queryKeys.clusterGroups.all,
-    queryFn: ({ signal }) => api.listClusterGroups({ signal }),
+    queryFn: ({ signal }) => listClusterGroups({ signal }),
   });
 }
 
 function useCreateClusterGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: ClusterGroupWriteRequest) =>
-      api.createClusterGroup(body),
+    mutationFn: (body: ClusterGroupWriteRequest) => createClusterGroup(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
       toastSuccess("Cluster group created");
@@ -80,7 +87,7 @@ function useUpdateClusterGroup() {
     }: {
       id: string;
       body: ClusterGroupWriteRequest;
-    }) => api.updateClusterGroup(id, body),
+    }) => updateClusterGroup(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
       toastSuccess("Cluster group updated");
@@ -92,7 +99,7 @@ function useUpdateClusterGroup() {
 function useDeleteClusterGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.deleteClusterGroup(id),
+    mutationFn: (id: string) => deleteClusterGroup(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
       toastSuccess("Cluster group deleted");
@@ -102,15 +109,21 @@ function useDeleteClusterGroup() {
 }
 
 function ClusterGroupsPage() {
-  const { data, isLoading } = useClusterGroups();
+  const clusterGroupsQuery = useClusterGroups();
+  const { data, isLoading } = clusterGroupsQuery;
   const createMut = useCreateClusterGroup();
   const updateMut = useUpdateClusterGroup();
   const deleteMut = useDeleteClusterGroup();
 
   const [editing, setEditing] = useState<ClusterGroupTreeNode | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ClusterGroupTreeNode | null>(
+    null,
+  );
 
   const tree = useMemo(() => data ?? [], [data]);
+  const selectedGroup = tree.find((group) => group.id === selectedGroupId);
 
   // Sort the flat tree by parent → depth → name so siblings cluster
   // together visually. The server already returns rows ordered by
@@ -135,6 +148,14 @@ function ClusterGroupsPage() {
     walk("__root__");
     return out;
   }, [tree]);
+
+  if (clusterGroupsQuery.isError) {
+    return (
+      <QueryStates query={clusterGroupsQuery} permission="cluster_groups:list">
+        {() => null}
+      </QueryStates>
+    );
+  }
 
   return (
     <PageShell>
@@ -162,7 +183,7 @@ function ClusterGroupsPage() {
         </div>
       ) : flattened.length === 0 ? (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
           <p>
             No cluster groups yet — create one to start organizing your
             clusters.
@@ -192,7 +213,16 @@ function ClusterGroupsPage() {
               {flattened.map((g) => (
                 <TableRow
                   key={g.id}
-                  className="border-b border-border last:border-b-0"
+                  tabIndex={0}
+                  aria-selected={selectedGroupId === g.id}
+                  onClick={() => setSelectedGroupId(g.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedGroupId(g.id);
+                    }
+                  }}
+                  className="cursor-pointer border-b border-border transition-colors last:border-b-0 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-selected:bg-muted/50"
                 >
                   <TableCell className="px-4 py-2">
                     <div
@@ -200,7 +230,7 @@ function ClusterGroupsPage() {
                       style={{ paddingLeft: `${g.depth * 16}px` }}
                     >
                       <span
-                        className="inline-flex items-center justify-center h-5 w-5 rounded"
+                        className="inline-flex items-center justify-center h-5 w-5 rounded-sm"
                         style={{ background: g.color + "33", color: g.color }}
                         aria-label={g.icon}
                       >
@@ -224,27 +254,23 @@ function ClusterGroupsPage() {
                     <div className="flex items-center gap-1 justify-end">
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(event) => {
+                          event.stopPropagation();
                           setEditing(g);
                           setShowForm(true);
                         }}
-                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                         title="Edit"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `Delete "${g.name}"? This will remove the entire subtree. Clusters in the deleted tree will be unassigned (not deleted).`,
-                            )
-                          ) {
-                            deleteMut.mutate(g.id);
-                          }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDeleteTarget(g);
                         }}
-                        className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+                        className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
                         title="Delete"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -257,6 +283,8 @@ function ClusterGroupsPage() {
           </Table>
         </div>
       )}
+
+      {selectedGroup && <ClusterGroupMembership group={selectedGroup} />}
 
       {showForm && (
         <ClusterGroupForm
@@ -277,6 +305,39 @@ function ClusterGroupsPage() {
           }}
         />
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          deleteMut.mutate(deleteTarget.id, {
+            onSuccess: () => {
+              if (selectedGroupId === deleteTarget.id) {
+                setSelectedGroupId(null);
+              }
+              setDeleteTarget(null);
+            },
+          });
+        }}
+        title="Delete cluster group subtree"
+        description="This permanently removes the selected group and every nested group."
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={deleteMut.isPending}
+        impact={
+          deleteTarget
+            ? {
+                scope: deleteTarget.name,
+                consequences: [
+                  `The full subtree containing ${deleteTarget.clusterCountTree} cluster assignment${deleteTarget.clusterCountTree === 1 ? "" : "s"} will be removed.`,
+                  "Clusters remain adopted but become unassigned from deleted groups.",
+                ],
+                recovery:
+                  "Recreate the group hierarchy and reassign its clusters.",
+              }
+            : undefined
+        }
+      />
     </PageShell>
   );
 }
@@ -445,7 +506,7 @@ function ClusterGroupForm({
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
-                className="mt-1"
+                containerClassName="mt-1"
               >
                 <option value="">— Top-level —</option>
                 {parentOptions.map((p) => (
@@ -471,7 +532,7 @@ function ClusterGroupForm({
                       type="button"
                       key={c}
                       onClick={() => field.handleChange(c)}
-                      className="h-7 w-7 rounded border-2"
+                      className="h-7 w-7 rounded-sm border-2"
                       style={{
                         background: c,
                         borderColor:
@@ -496,7 +557,7 @@ function ClusterGroupForm({
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  className="mt-1"
+                  containerClassName="mt-1"
                 >
                   {CLUSTER_GROUP_ICONS.map((i) => (
                     <option key={i} value={i}>

@@ -1,15 +1,9 @@
-{{- if and .Values.managementBackup.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name }}
+{{- if and .Values.managementBackup.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name .Values.managementBackup.encryption.sourceIdentity .Values.managementBackup.encryption.wrappingSecretRef.name .Values.managementBackup.encryptionKeyBackup.enabled }}
 {{- /*
-  Management-plane DR: nightly pg_dump of Astronomer's own Postgres pushed to
-  S3-compatible object storage.
-
-  Scope: this CronJob backs up the management plane's source-of-truth DB only
-  (clusters, projects, RBAC, audit, monitoring configuration, and delivery
-  state). It deliberately does NOT back up Redis — Redis is ephemeral asynq
-  queue state and is rebuilt by periodic re-evaluators on restore.
-
-  The companion runbook lives at docs/management-plane-dr-runbook.md and
-  documents the human side of the restore procedure.
+  The writer can create objects but has no retention/deletion credentials. It
+  validates Object Lock before touching the database, encrypts dump and key
+  material client-side, and uploads the authenticated manifest last as the
+  commit marker for one complete backup set.
 */ -}}
 apiVersion: batch/v1
 kind: CronJob
@@ -33,7 +27,7 @@ spec:
             {{- include "astronomer.componentLabels" (dict "context" . "component" "management-backup") | nindent 12 }}
         spec:
           restartPolicy: OnFailure
-          serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+          automountServiceAccountToken: false
           {{- with .Values.managementBackup.podSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -62,166 +56,149 @@ spec:
               args:
                 - |
                   set -eu
+                  umask 077
 
-                  # --- Resolve dump file naming ---------------------------------
                   STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-                  DOW="$(date -u +%u)"   # 1=Mon..7=Sun
-                  DOM="$(date -u +%d)"   # 01..31
-
+                  DOW="$(date -u +%u)"
+                  DOM="$(date -u +%d)"
                   BUCKET="${MANAGEMENT_BACKUP_BUCKET}"
                   PREFIX="${MANAGEMENT_BACKUP_PREFIX:-astronomer-pg}"
                   RELEASE="${MANAGEMENT_BACKUP_RELEASE}"
-
-                  DAILY_KEY="${PREFIX}/${RELEASE}/daily/${STAMP}.pgcustom"
-                  WEEKLY_KEY="${PREFIX}/${RELEASE}/weekly/${STAMP}.pgcustom"
-                  MONTHLY_KEY="${PREFIX}/${RELEASE}/monthly/${STAMP}.pgcustom"
-
+                  BASE="${PREFIX}/${RELEASE}"
+                  KEY_OBJECT="${BASE}/${KEYBACKUP_PREFIX}/${STAMP}.keys.tar.aead"
                   DUMP_PATH="/tmp/${STAMP}.pgcustom"
+                  DUMP_ENVELOPE="${DUMP_PATH}.aead"
+                  KEY_BUNDLE="/tmp/${STAMP}.keys.tar"
+                  KEY_ENVELOPE="${KEY_BUNDLE}.aead"
+                  MANIFEST_PATH="/tmp/${STAMP}.manifest.json"
+                  CONTEXT="{\"release\":\"${MANAGEMENT_BACKUP_NAMESPACE}/${RELEASE}\",\"source\":\"${MANAGEMENT_BACKUP_SOURCE_IDENTITY}\",\"stamp\":\"${STAMP}\"}"
 
-                  # --- Configure aws cli ----------------------------------------
-                  export AWS_SHARED_CREDENTIALS_FILE="/var/run/aws/credentials"
+                  cleanup() {
+                    rm -f "${DUMP_PATH}" "${DUMP_ENVELOPE}" "${KEY_BUNDLE}" "${KEY_ENVELOPE}" "${MANIFEST_PATH}"
+                    find /var/run/astronomer-keys -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+                  }
+                  trap cleanup EXIT
+
+                  export AWS_SHARED_CREDENTIALS_FILE=/var/run/aws/credentials
                   export AWS_DEFAULT_REGION="${MANAGEMENT_BACKUP_REGION}"
                   AWS_S3_FLAGS=""
                   if [ -n "${MANAGEMENT_BACKUP_ENDPOINT:-}" ]; then
                     AWS_S3_FLAGS="--endpoint-url ${MANAGEMENT_BACKUP_ENDPOINT}"
                   fi
 
-                  # --- pg_dump --------------------------------------------------
-                  echo "Starting pg_dump at ${STAMP} (release=${RELEASE})"
-                  pg_dump \
-                    --dbname="${DATABASE_URL}" \
-                    --format=custom \
-                    --no-owner \
-                    --no-acl \
-                    --file="${DUMP_PATH}"
-
-                  DUMP_SIZE="$(wc -c < "${DUMP_PATH}")"
-                  echo "pg_dump complete: ${DUMP_SIZE} bytes -> ${DUMP_PATH}"
-
-                  # --- Upload daily ---------------------------------------------
-                  echo "Uploading daily: s3://${BUCKET}/${DAILY_KEY}"
-                  aws s3 cp ${AWS_S3_FLAGS} "${DUMP_PATH}" "s3://${BUCKET}/${DAILY_KEY}"
-
-                  # --- Promote to weekly on Sundays -----------------------------
-                  if [ "${DOW}" = "7" ]; then
-                    echo "Promoting to weekly: s3://${BUCKET}/${WEEKLY_KEY}"
-                    aws s3 cp ${AWS_S3_FLAGS} "${DUMP_PATH}" "s3://${BUCKET}/${WEEKLY_KEY}"
+                  # Object Lock is checked before pg_dump so a configuration
+                  # regression cannot create an unprotected recovery point.
+                  LOCK_STATUS="$(aws s3api get-object-lock-configuration ${AWS_S3_FLAGS} \
+                    --bucket "${BUCKET}" \
+                    --query '[ObjectLockConfiguration.ObjectLockEnabled,ObjectLockConfiguration.Rule.DefaultRetention.Days,ObjectLockConfiguration.Rule.DefaultRetention.Years]' \
+                    --output text)" || { echo "bucket Object Lock validation failed" >&2; exit 1; }
+                  set -- ${LOCK_STATUS}
+                  if [ "${1:-}" != "Enabled" ]; then
+                    echo "bucket Object Lock is not enabled" >&2
+                    exit 1
+                  fi
+                  LOCK_DAYS=0
+                  case "${2:-}" in ''|None) ;; *) LOCK_DAYS="$2" ;; esac
+                  case "${3:-}" in ''|None) ;; *) LOCK_DAYS="$((LOCK_DAYS + ($3 * 365)))" ;; esac
+                  if [ "${LOCK_DAYS}" -lt "${MANAGEMENT_BACKUP_MINIMUM_RETENTION_DAYS}" ]; then
+                    echo "bucket default Object Lock retention (${LOCK_DAYS}d) is below required ${MANAGEMENT_BACKUP_MINIMUM_RETENTION_DAYS}d" >&2
+                    exit 1
                   fi
 
-                  # --- Promote to monthly on the 1st ----------------------------
-                  if [ "${DOM}" = "01" ]; then
-                    echo "Promoting to monthly: s3://${BUCKET}/${MONTHLY_KEY}"
-                    aws s3 cp ${AWS_S3_FLAGS} "${DUMP_PATH}" "s3://${BUCKET}/${MONTHLY_KEY}"
-                  fi
+                  SCHEMA_VERSION="$(psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -At -c \
+                    'SELECT version FROM schema_migrations WHERE dirty = false ORDER BY version DESC LIMIT 1;')"
+                  case "${SCHEMA_VERSION}" in ''|*[!0-9]*) echo "could not determine a clean database schema version" >&2; exit 1 ;; esac
 
+                  echo "Starting authenticated management backup ${STAMP} (schema=${SCHEMA_VERSION})"
+                  pg_dump --dbname="${DATABASE_URL}" --format=custom --no-owner --no-acl --file="${DUMP_PATH}"
+                  dr-crypto encrypt --input "${DUMP_PATH}" --output "${DUMP_ENVELOPE}" \
+                    --passphrase-file /var/run/astronomer-wrap/passphrase \
+                    --purpose database-dump --context "${CONTEXT}"
                   rm -f "${DUMP_PATH}"
 
-                  # --- Retention -----------------------------------------------
-                  # List + prune objects older than the configured retention per
-                  # tier. We sort by key (which embeds an ISO-8601 timestamp), so
-                  # lexical order == chronological order.
-                  prune_tier() {
+                  cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/
+                  {{- if .Values.managementBackup.encryptionKeyBackup.secretName }}
+                  cp -L /var/run/astronomer-keys-source/SECRET_KEY /var/run/astronomer-keys/SECRET_KEY
+                  cp -L /var/run/astronomer-keys-source/ASTRONOMER_ENCRYPTION_KEY /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
+                  {{- else }}
+                  cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.secretKeyKey }}" /var/run/astronomer-keys/SECRET_KEY
+                  cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.encryptionKeyKey }}" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
+                  {{- end }}
+                  {{- if .Values.catalog.ca.existingSecret }}
+                  # Preserve the private catalog trust roots alongside the
+                  # database policy that references them.
+                  mkdir -p /var/run/astronomer-keys/catalog-ca
+                  cp -aL /var/run/catalog-ca/. /var/run/astronomer-keys/catalog-ca/
+                  {{- end }}
+                  {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+                  mkdir -p /var/run/astronomer-keys/catalog-signature-trust
+                  cp -aL /var/run/catalog-signature-trust/. /var/run/astronomer-keys/catalog-signature-trust/
+                  {{- end }}
+                  dr-crypto key-bundle-create --source /var/run/astronomer-keys --output "${KEY_BUNDLE}"
+                  dr-crypto encrypt --input "${KEY_BUNDLE}" --output "${KEY_ENVELOPE}" \
+                    --passphrase-file /var/run/astronomer-wrap/passphrase \
+                    --purpose key-bundle --context "${CONTEXT}"
+                  rm -f "${KEY_BUNDLE}"
+
+                  # Manifest upload is the commit marker and always happens
+                  # after both ciphertext payloads exist.
+                  aws s3 cp ${AWS_S3_FLAGS} "${KEY_ENVELOPE}" "s3://${BUCKET}/${KEY_OBJECT}"
+                  upload_tier() {
                     TIER="$1"
-                    KEEP="$2"
-                    PFX="${PREFIX}/${RELEASE}/${TIER}/"
-                    echo "Pruning ${TIER} retention (keep ${KEEP})"
-                    KEYS="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} \
-                              --bucket "${BUCKET}" \
-                              --prefix "${PFX}" \
-                              --query 'Contents[].Key' \
-                              --output text 2>/dev/null || echo '')"
-                    if [ -z "${KEYS}" ] || [ "${KEYS}" = "None" ]; then
-                      echo "  (no objects under ${PFX})"
-                      return 0
-                    fi
-                    # tr tabs/spaces -> newlines, sort desc, drop the top KEEP, delete the rest
-                    echo "${KEYS}" | tr '\t' '\n' | tr ' ' '\n' | sed '/^$/d' \
-                      | sort -r | tail -n +"$((KEEP + 1))" \
-                      | while read -r OLD; do
-                          [ -z "${OLD}" ] && continue
-                          echo "  rm s3://${BUCKET}/${OLD}"
-                          aws s3 rm ${AWS_S3_FLAGS} "s3://${BUCKET}/${OLD}" || true
-                        done
+                    ARCHIVE_OBJECT="${BASE}/${TIER}/${STAMP}.pgcustom.aead"
+                    MANIFEST_OBJECT="${BASE}/${TIER}/${STAMP}.manifest.json"
+                    rm -f "${MANIFEST_PATH}"
+                    dr-crypto manifest-create \
+                      --archive "${DUMP_ENVELOPE}" --archive-key "${ARCHIVE_OBJECT}" \
+                      --key-bundle "${KEY_ENVELOPE}" --key-bundle-key "${KEY_OBJECT}" \
+                      --passphrase-file /var/run/astronomer-wrap/passphrase \
+                      --release-name "${RELEASE}" --release-namespace "${MANAGEMENT_BACKUP_NAMESPACE}" \
+                      --chart-version "${MANAGEMENT_BACKUP_CHART_VERSION}" \
+                      --source-identity "${MANAGEMENT_BACKUP_SOURCE_IDENTITY}" \
+                      --database-schema-version "${SCHEMA_VERSION}" --created-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                      --output "${MANIFEST_PATH}"
+                    aws s3 cp ${AWS_S3_FLAGS} "${DUMP_ENVELOPE}" "s3://${BUCKET}/${ARCHIVE_OBJECT}"
+                    aws s3 cp ${AWS_S3_FLAGS} "${MANIFEST_PATH}" "s3://${BUCKET}/${MANIFEST_OBJECT}"
+                    echo "Committed ${TIER} backup manifest: s3://${BUCKET}/${MANIFEST_OBJECT}"
                   }
 
-                  prune_tier "daily"   "${MANAGEMENT_BACKUP_KEEP_DAILY}"
-                  prune_tier "weekly"  "${MANAGEMENT_BACKUP_KEEP_WEEKLY}"
-                  prune_tier "monthly" "${MANAGEMENT_BACKUP_KEEP_MONTHLY}"
-
-                  # --- Encryption-key backup (F4) ------------------------------
-                  # pg_dump captures the ciphertext; this captures the Fernet/JWT
-                  # KEY that decrypts it — WITHOUT which a restore onto a new
-                  # cluster is undecryptable. The key Secret is mounted at
-                  # /var/run/astronomer-keys (one file per key). We tar it (-h to
-                  # dereference the k8s secret-mount symlinks) and symmetrically
-                  # encrypt the archive with the SEPARATELY-held wrapping
-                  # passphrase BEFORE upload, so the key never lands in S3 in
-                  # plaintext beside the data it protects.
-                  if [ -n "${KEYBACKUP_ENABLED:-}" ]; then
-                    echo "Backing up encryption-key Secret (wrapped) to ${KEYBACKUP_PREFIX}/"
-                    # Preserve the complete Secret bundle (OAuth and future
-                    # keys included), then add canonical filenames required by
-                    # the restore contract when operators use custom key names.
-                    find /var/run/astronomer-keys -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-                    cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/
-                    {{- if .Values.managementBackup.encryptionKeyBackup.secretName }}
-                    # An independent BYO backup bundle is a separate contract:
-                    # it already exposes the canonical restore filenames.
-                    cp -L /var/run/astronomer-keys-source/SECRET_KEY /var/run/astronomer-keys/SECRET_KEY
-                    cp -L /var/run/astronomer-keys-source/ASTRONOMER_ENCRYPTION_KEY /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
-                    {{- else }}
-                    cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.secretKeyKey }}" /var/run/astronomer-keys/SECRET_KEY
-                    cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.encryptionKeyKey }}" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
-                    {{- end }}
-                    KEY_BUNDLE="/tmp/${STAMP}.keys.tar"
-                    KEY_ENC="${KEY_BUNDLE}.enc"
-                    KEY_S3="${PREFIX}/${RELEASE}/${KEYBACKUP_PREFIX}/${STAMP}.keys.tar.enc"
-                    tar -C /var/run/astronomer-keys -chf "${KEY_BUNDLE}" .
-                    openssl enc -aes-256-cbc -pbkdf2 -salt \
-                      -in "${KEY_BUNDLE}" -out "${KEY_ENC}" \
-                      -pass file:/var/run/astronomer-wrap/passphrase
-                    aws s3 cp ${AWS_S3_FLAGS} "${KEY_ENC}" "s3://${BUCKET}/${KEY_S3}"
-                    rm -f "${KEY_BUNDLE}" "${KEY_ENC}"
-                    prune_tier "${KEYBACKUP_PREFIX}" "${KEYBACKUP_KEEP}"
-                    echo "Encryption-key backup OK: s3://${BUCKET}/${KEY_S3}"
-                  fi
-
+                  upload_tier daily
+                  if [ "${DOW}" = 7 ]; then upload_tier weekly; fi
+                  if [ "${DOM}" = 01 ]; then upload_tier monthly; fi
                   echo "Backup OK."
               env:
                 - name: HOME
                   value: /tmp
                 - name: MANAGEMENT_BACKUP_RELEASE
                   value: {{ .Release.Name | quote }}
+                - name: MANAGEMENT_BACKUP_NAMESPACE
+                  value: {{ .Release.Namespace | quote }}
+                - name: MANAGEMENT_BACKUP_CHART_VERSION
+                  value: {{ .Chart.AppVersion | quote }}
+                - name: MANAGEMENT_BACKUP_SOURCE_IDENTITY
+                  value: {{ .Values.managementBackup.encryption.sourceIdentity | quote }}
                 - name: MANAGEMENT_BACKUP_BUCKET
                   value: {{ .Values.managementBackup.s3.bucket | quote }}
                 - name: MANAGEMENT_BACKUP_REGION
                   value: {{ .Values.managementBackup.s3.region | quote }}
                 - name: MANAGEMENT_BACKUP_PREFIX
                   value: {{ .Values.managementBackup.s3.prefix | default "astronomer-pg" | quote }}
+                - name: MANAGEMENT_BACKUP_MINIMUM_RETENTION_DAYS
+                  value: {{ .Values.managementBackup.immutability.minimumRetentionDays | quote }}
+                - name: KEYBACKUP_PREFIX
+                  value: {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" | quote }}
+                - name: KEYBACKUP_ENABLED
+                  value: "aead-v1"
                 {{- with .Values.managementBackup.s3.endpoint }}
                 - name: MANAGEMENT_BACKUP_ENDPOINT
                   value: {{ . | quote }}
                 {{- end }}
-                - name: MANAGEMENT_BACKUP_KEEP_DAILY
-                  value: {{ .Values.managementBackup.retention.daily | default 30 | quote }}
-                - name: MANAGEMENT_BACKUP_KEEP_WEEKLY
-                  value: {{ .Values.managementBackup.retention.weekly | default 12 | quote }}
-                - name: MANAGEMENT_BACKUP_KEEP_MONTHLY
-                  value: {{ .Values.managementBackup.retention.monthly | default 6 | quote }}
-                {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
-                - name: KEYBACKUP_ENABLED
-                  value: "1"
-                - name: KEYBACKUP_PREFIX
-                  value: {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" | quote }}
-                - name: KEYBACKUP_KEEP
-                  value: {{ .Values.managementBackup.encryptionKeyBackup.retention | default 30 | quote }}
-                {{- end }}
-                {{- if .Values.postgres.external.dsnSecretRef.name }}
+                {{- if include "astronomer.databaseSecretName" . }}
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:
-                      name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                      key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                      name: {{ include "astronomer.databaseSecretName" . | quote }}
+                      key: {{ include "astronomer.databaseSecretKey" . | quote }}
                 {{- else }}
                 - name: DATABASE_URL
                   valueFrom:
@@ -235,7 +212,6 @@ spec:
                   readOnly: true
                 - name: scratch
                   mountPath: /tmp
-                {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
                 - name: encryption-keys
                   mountPath: /var/run/astronomer-keys
                 - name: encryption-keys-source
@@ -243,6 +219,15 @@ spec:
                   readOnly: true
                 - name: wrapping-passphrase
                   mountPath: /var/run/astronomer-wrap
+                  readOnly: true
+                {{- if .Values.catalog.ca.existingSecret }}
+                - name: catalog-ca
+                  mountPath: /var/run/catalog-ca
+                  readOnly: true
+                {{- end }}
+                {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+                - name: catalog-signature-trust
+                  mountPath: /var/run/catalog-signature-trust
                   readOnly: true
                 {{- end }}
               resources:
@@ -257,22 +242,26 @@ spec:
             - name: scratch
               emptyDir:
                 sizeLimit: {{ .Values.managementBackup.scratchSizeLimit | default "8Gi" | quote }}
-            {{- if and .Values.managementBackup.encryptionKeyBackup.enabled .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name }}
-            # The Fernet/JWT key Secret, mounted read-only so the job can wrap
-            # and back it up. Defaults to the chart's own <release>-secrets.
             - name: encryption-keys
               emptyDir:
                 sizeLimit: 16Mi
             - name: encryption-keys-source
               secret:
                 secretName: {{ .Values.managementBackup.encryptionKeyBackup.secretName | default (include "astronomer.secretsSecretName" .) | quote }}
-            # Separately-held wrapping passphrase. Custody MUST be distinct from
-            # the S3 backup credentials (see docs/management-plane-dr-runbook.md).
             - name: wrapping-passphrase
               secret:
-                secretName: {{ .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.name | quote }}
+                secretName: {{ .Values.managementBackup.encryption.wrappingSecretRef.name | quote }}
                 items:
-                  - key: {{ .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.key | default "passphrase" | quote }}
+                  - key: {{ .Values.managementBackup.encryption.wrappingSecretRef.key | default "passphrase" | quote }}
                     path: passphrase
+            {{- if .Values.catalog.ca.existingSecret }}
+            - name: catalog-ca
+              secret:
+                secretName: {{ .Values.catalog.ca.existingSecret | quote }}
+            {{- end }}
+            {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+            - name: catalog-signature-trust
+              secret:
+                secretName: {{ .Values.catalog.signature.trustKeys.existingSecret | quote }}
             {{- end }}
 {{- end }}

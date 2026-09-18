@@ -73,6 +73,16 @@ func TestProvider_DetectsSelfManaged_FallsBackOnEmptyProvider(t *testing.T) {
 	}
 }
 
+func TestSelfManagedCapabilityFailsClosed(t *testing.T) {
+	capability := DeclaredCapability(Cluster{Provider: ProviderSelfManaged})
+	if capability.CanMonitor || capability.CanEnforce {
+		t.Fatalf("self-managed capability = %+v, want monitor and enforce disabled", capability)
+	}
+	if capability.Reason == "" {
+		t.Fatal("self-managed capability must explain why control is unavailable")
+	}
+}
+
 func TestProvider_EKSApplyIsIdempotent(t *testing.T) {
 	var describeCalls, updateCalls int32
 	mux := http.NewServeMux()

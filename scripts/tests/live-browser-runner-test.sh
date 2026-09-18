@@ -25,6 +25,8 @@ required_patterns=(
   'MANAGEMENT_BACKUP_ENABLED=false'
   'DELIVERY_ENABLED=true'
 	'./scripts/testdata/live-browser-fixture'
+	'"$artifact_dir/bin/live-browser-fixture" api-token'
+	'admin-api.curl'
 	'LIVE_FIXTURE_AGENT_TOKEN="$agent_token"'
 	'agent_connections WHERE cluster_id='
   'npx playwright test --project=live'
@@ -46,6 +48,8 @@ required_patterns=(
 	'--set upgradeCRDs=false'
 	'LIVE_FIXTURE_BACKUP_NAMESPACE="$backup_namespace"'
 	'app.kubernetes.io/managed-by=astronomer-go'
+	'mc stat --json'
+	'backups/$velero_backup_name/$velero_backup_name.tar.gz'
 	'velero-durable-state.log'
 	'LIVE_FIXTURE_DIRECT_ENDPOINT="$direct_api_endpoint"'
 	'LIVE_FIXTURE_DIRECT_CA_SHA256="$direct_ca_sha256"'
@@ -79,6 +83,10 @@ done
 if grep -Eq 'localhost:(5433|6380)|k3d cluster delete \$|kubectl config use-context|member-a|member-b' "$RUNNER"; then
   echo "live-browser runner must not use existing compose endpoints or mutable Kubernetes context" >&2
   exit 1
+fi
+if grep -Fq 'auth/login/" | json_field token' "$RUNNER"; then
+	echo "live-browser runner must not expect bearer material from browser login" >&2
+	exit 1
 fi
 grep -Fq 'flux_cluster="test-run-live-' "$RUNNER"
 # Literal assertion against the runner source, not an expression in this test.

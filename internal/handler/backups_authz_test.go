@@ -81,11 +81,12 @@ func TestBackupHandler_CreateRestoreDeniesCrossCluster(t *testing.T) {
 		},
 	}
 	h := NewBackupHandler(q)
+	wireBackupTestTransaction(h, q)
 	// Caller can create backups on cluster A, but not cluster B.
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: backupBindings(clusterA, rbac.VerbCreate)})
 
 	rec := httptest.NewRecorder()
-	h.CreateRestore(rec, authedCatalogReq(http.MethodPost, "/api/v1/backups/"+backupID.String()+"/restore/", map[string]string{"id": backupID.String()}))
+	h.CreateRestoreByBackup(rec, authedCatalogReq(http.MethodPost, "/api/v1/backups/"+backupID.String()+"/restore/", map[string]string{"id": backupID.String()}))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("cross-cluster restore: want 403, got %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -96,7 +97,7 @@ func TestBackupHandler_CreateRestoreDeniesCrossCluster(t *testing.T) {
 	// A caller holding backups:create on cluster B is allowed through the gate.
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: backupBindings(clusterB, rbac.VerbCreate)})
 	rec = httptest.NewRecorder()
-	h.CreateRestore(rec, authedCatalogReq(http.MethodPost, "/api/v1/backups/"+backupID.String()+"/restore/", map[string]string{"id": backupID.String()}))
+	h.CreateRestoreByBackup(rec, authedCatalogReq(http.MethodPost, "/api/v1/backups/"+backupID.String()+"/restore/", map[string]string{"id": backupID.String()}))
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("authorized restore: want 201, got %d body=%s", rec.Code, rec.Body.String())
 	}

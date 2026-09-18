@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { postClustersByIdGenerateDirectKubeconfig } from "@/lib/api/generated/client";
-import { downloadDirectKubeconfig } from "@/lib/api/kubernetes-proxy";
+import transport from "@/lib/api/transport";
+import { downloadDirectKubeconfig, k8sGet } from "@/lib/api/kubernetes-proxy";
 
 vi.mock("@/lib/api/generated/client", () => ({
   postClustersByIdGenerateDirectKubeconfig: vi.fn(),
@@ -27,6 +28,22 @@ describe("downloadDirectKubeconfig", () => {
     expect(result).toBeInstanceOf(Blob);
     expect(result.type).toBe("application/x-yaml;charset=utf-8");
     expect(result.size).toBeGreaterThan(0);
+  });
+
+  it("forwards cancellation to Kubernetes proxy reads", async () => {
+    const signal = new AbortController().signal;
+    vi.mocked(transport.request).mockResolvedValueOnce({
+      data: { kind: "Pod" },
+    });
+
+    await expect(
+      k8sGet("cluster-1", "api/v1/pods/pod-1", signal),
+    ).resolves.toEqual({
+      kind: "Pod",
+    });
+    expect(transport.request).toHaveBeenCalledWith(
+      expect.objectContaining({ signal }),
+    );
   });
 
   it("propagates the generated API error so the download hook can show it", async () => {

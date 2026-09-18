@@ -21,13 +21,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // ---------------------------------------------------------------------------
@@ -144,12 +145,12 @@ func (f *fakeProjectCatalogQuerier) GetCatalogVisibilityForProject(ctx context.C
 	return sqlc.CatalogVisibilityForeignPrivate, nil
 }
 
-func (f *fakeProjectCatalogQuerier) CreateProjectOwnedCatalog(_ context.Context, arg sqlc.CreateProjectOwnedCatalogParams) (sqlc.HelmRepositoryWithOwner, error) {
+func (f *fakeProjectCatalogQuerier) CreateProjectOwnedCatalog(_ context.Context, arg sqlc.CreateProjectOwnedCatalogParams) (sqlc.HelmRepository, error) {
 	if f.createErr != nil {
-		return sqlc.HelmRepositoryWithOwner{}, f.createErr
+		return sqlc.HelmRepository{}, f.createErr
 	}
 	id := uuid.New()
-	cat := sqlc.HelmRepositoryWithOwner{
+	cat := sqlc.HelmRepository{
 		ID:             id,
 		Name:           arg.Name,
 		Url:            arg.Url,
@@ -164,7 +165,11 @@ func (f *fakeProjectCatalogQuerier) CreateProjectOwnedCatalog(_ context.Context,
 		UpdatedAt:      time.Now(),
 		OwnerProjectID: arg.OwnerProjectID,
 	}
-	f.catalogs[id] = cat
+	f.catalogs[id] = sqlc.HelmRepositoryWithOwner{
+		ID: cat.ID, Name: cat.Name, Url: cat.Url, RepoType: cat.RepoType, Description: cat.Description,
+		IsDefault: cat.IsDefault, AuthType: cat.AuthType, AuthConfig: cat.AuthConfig, Enabled: cat.Enabled,
+		CreatedByID: cat.CreatedByID, CreatedAt: cat.CreatedAt, UpdatedAt: cat.UpdatedAt, OwnerProjectID: cat.OwnerProjectID,
+	}
 	return cat, nil
 }
 
@@ -216,6 +221,17 @@ func (f *fakeProjectCatalogQuerier) CreateAuditLogV1(_ context.Context, arg sqlc
 	return nil
 }
 
+func (f *fakeProjectCatalogQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.audits = append(f.audits, sqlc.CreateAuditLogV1Params{
+		Source: arg.Source, CorrelationID: arg.CorrelationID, UserID: arg.UserID,
+		ActorAuthMethod: arg.ActorAuthMethod, Action: arg.Action, ResourceType: arg.ResourceType,
+		ResourceID: arg.ResourceID, ResourceName: arg.ResourceName, HTTPMethod: arg.HttpMethod,
+		Path: arg.Path, StatusCode: arg.StatusCode, DurationMs: arg.DurationMs, RequestID: arg.RequestID,
+		IpAddress: arg.IpAddress, UserAgent: arg.UserAgent, Detail: arg.Detail, ActionClass: arg.ActionClass,
+	})
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action, Detail: arg.Detail}, nil
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -224,7 +240,7 @@ func newProjectCatalogTestEnv(t *testing.T) (*ProjectCatalogHandler, *fakeProjec
 	t.Helper()
 	q := newFakeProjectCatalogQuerier()
 	h := NewProjectCatalogHandler(q)
-	h.SetAuditor(q)
+	h.SetRunTx(func(_ context.Context, fn func(ProjectCatalogMutationTx) error) error { return fn(q) })
 	h.SetEncryptor(testEncryptor(t))
 	projectA := uuid.New()
 	projectB := uuid.New()
@@ -249,7 +265,7 @@ func authedReq(method, path string, body []byte, callerID uuid.UUID, params map[
 		rctx.URLParams.Add(k, v)
 	}
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{
+	ctx = reqctx.WithUser(ctx, &reqctx.User{
 		ID:       callerID.String(),
 		Email:    "tester@example.com",
 		Username: "tester",
@@ -730,6 +746,21 @@ func (m *minimalCatalogQuerier) ListInstalledChartsWithMetadataByCluster(_ conte
 	return nil, nil
 }
 
+type clusterCatalogQuerier struct{ *minimalCatalogQuerier }
+
+func (m *clusterCatalogQuerier) ListProjectsByCluster(_ context.Context, arg sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error) {
+	out := make([]sqlc.Project, 0)
+	for _, project := range m.projects {
+		if project.ClusterID == arg.ClusterID {
+			out = append(out, project)
+		}
+	}
+	return out, nil
+}
+func (m *clusterCatalogQuerier) GetProjectNamespaceByClusterAndNamespace(_ context.Context, _ sqlc.GetProjectNamespaceByClusterAndNamespaceParams) (sqlc.ProjectNamespace, error) {
+	return sqlc.ProjectNamespace{}, pgx.ErrNoRows
+}
+
 func TestCatalogBrowse_ProjectScopedFilter(t *testing.T) {
 	q := newFakeProjectCatalogQuerier()
 	projectA := uuid.New()
@@ -779,6 +810,37 @@ func TestCatalogBrowse_AdminView_Unchanged(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"name":"g"`) {
 		t.Errorf("admin view must return all charts; got %s", rec.Body.String())
+	}
+}
+
+func TestCatalogBrowse_ClusterScopeIncludesGlobalAndClusterOwnedSources(t *testing.T) {
+	q := newFakeProjectCatalogQuerier()
+	clusterID := uuid.New()
+	otherClusterID := uuid.New()
+	projectID := uuid.New()
+	otherProjectID := uuid.New()
+	q.projects[projectID] = sqlc.Project{ID: projectID, ClusterID: clusterID}
+	q.projects[otherProjectID] = sqlc.Project{ID: otherProjectID, ClusterID: otherClusterID}
+	globalID := seedGlobal(q, "global")
+	ownedID := seedOwned(q, "cluster-private", projectID)
+	foreignID := seedOwned(q, "foreign-private", otherProjectID)
+	q.chartsByRepo[globalID] = []sqlc.HelmChart{{ID: uuid.New(), RepositoryID: globalID, Name: "global-chart"}}
+	q.chartsByRepo[ownedID] = []sqlc.HelmChart{{ID: uuid.New(), RepositoryID: ownedID, Name: "cluster-chart"}}
+	q.chartsByRepo[foreignID] = []sqlc.HelmChart{{ID: uuid.New(), RepositoryID: foreignID, Name: "foreign-chart"}}
+
+	h := NewCatalogHandler(&clusterCatalogQuerier{minimalCatalogQuerier: &minimalCatalogQuerier{fakeProjectCatalogQuerier: q}})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/catalog/charts/?cluster_id="+clusterID.String(), nil)
+	h.ListCharts(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"name":"global-chart"`) || !strings.Contains(body, `"name":"cluster-chart"`) {
+		t.Fatalf("cluster catalog union is incomplete: %s", body)
+	}
+	if strings.Contains(body, `"name":"foreign-chart"`) {
+		t.Fatalf("foreign cluster catalog leaked: %s", body)
 	}
 }
 

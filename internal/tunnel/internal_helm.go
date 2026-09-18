@@ -9,9 +9,9 @@
 //
 // This file exposes POST /internal/tunnel/helm/{cluster_id} which a sibling
 // replica's TunnelHelmRequester targets after the redis-backed locator
-// reports the WS lives elsewhere. Auth: same PSK scheme as
-// /internal/tunnel/k8s/{cluster_id} — DerivePSK over the shared encryption
-// key. Body is JSON {msg_type, payload}, response is JSON-encoded
+// reports the WS lives elsewhere. Auth uses the same dedicated short-lived
+// HMAC request envelope as /internal/tunnel/k8s/{cluster_id}. Body is JSON
+// {msg_type, payload}, response is JSON-encoded
 // protocol.HelmResultPayload.
 //
 // Timeout: helm operations can run 10+ minutes (kube-prom-stack install with
@@ -22,7 +22,6 @@ package tunnel
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,9 +61,9 @@ type InternalHelmRequest struct {
 // InternalHelmHandler receives cross-pod helm forwards from sibling
 // replicas. Mount it OUTSIDE JWT auth — it carries its own PSK check.
 type InternalHelmHandler struct {
-	hub *Hub
-	psk string
-	log *slog.Logger
+	hub  *Hub
+	auth *internalRequestAuthenticator
+	log  *slog.Logger
 	// audit is the optional audit-log writer. When set, every mutating
 	// helm op (install/upgrade/uninstall/rollback) forwarded through this
 	// door emits a cluster.helm_proxy.forwarded row attributed to the
@@ -98,17 +97,17 @@ func internalHelmMutatingOp(t protocol.MessageType) bool {
 
 // NewInternalHelmHandler builds the handler. Empty psk 503s every call
 // (same disable-by-config behaviour as InternalK8sHandler).
-func NewInternalHelmHandler(hub *Hub, psk string, log *slog.Logger) *InternalHelmHandler {
+func NewInternalHelmHandler(hub *Hub, keys InternalRequestKeyring, log *slog.Logger) *InternalHelmHandler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &InternalHelmHandler{hub: hub, psk: psk, log: log}
+	return &InternalHelmHandler{hub: hub, auth: newInternalRequestAuthenticator(keys, internalAudienceHelm), log: log}
 }
 
 // Handle is POST /internal/tunnel/helm/{cluster_id}. The HELM_RESULT
 // from the agent is JSON-marshaled back to the caller verbatim.
 func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
-	if h == nil || h.psk == "" {
+	if h == nil || !h.auth.enabled() {
 		http.Error(w, `{"error":"internal endpoint disabled"}`, http.StatusServiceUnavailable)
 		return
 	}
@@ -116,11 +115,6 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	// marker even with a valid PSK (see internal_k8s.go). Checked before
 	// the PSK so a leaked-PSK attacker over an external route is denied.
 	if !hasSiblingSourceSignal(r) {
-		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
-		return
-	}
-	got := r.Header.Get(InternalPSKHeader)
-	if subtle.ConstantTimeCompare([]byte(got), []byte(h.psk)) != 1 {
 		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
@@ -133,6 +127,10 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, internalHelmMaxBodyBytes))
 	if err != nil {
 		http.Error(w, `{"error":"read body"}`, http.StatusBadRequest)
+		return
+	}
+	if !h.auth.verify(r, clusterID, bodyBytes) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
 	var req InternalHelmRequest
@@ -172,7 +170,7 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 	// roundTrip sets StreamID==RequestID so the agent's response routes
 	// correctly via either field. Mirror that here.
-	if err := h.hub.SendToAgent(clusterID, &protocol.Message{
+	if err := h.hub.SendToAgentContext(r.Context(), clusterID, &protocol.Message{
 		Type:      req.MsgType,
 		StreamID:  streamID,
 		RequestID: streamID,
@@ -180,7 +178,11 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now().UTC(),
 		Payload:   out,
 	}); err != nil {
-		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadGateway)
+		if errors.Is(err, ErrAgentCapabilityUnsupported) {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusPreconditionFailed)
+			return
+		}
+		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusServiceUnavailable)
 		return
 	}
 
@@ -193,6 +195,10 @@ func (h *InternalHelmHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	select {
 	case respBytes = <-stream.DataCh:
 	case <-stream.DoneCh:
+		if h.hub.GetAgent(clusterID) != agent {
+			http.Error(w, `{"error":"Cluster agent connection changed"}`, http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(w, `{"error":"stream closed"}`, http.StatusBadGateway)
 		return
 	case <-waitCtx.Done():

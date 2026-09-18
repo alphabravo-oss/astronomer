@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -108,9 +110,8 @@ func (h *ResourceHandler) NodeMutationWired() bool {
 }
 
 func (h *ResourceHandler) enqueueNodeOperation(w http.ResponseWriter, r *http.Request, action string, parameters nodeOperationParameters) {
-	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return
 	}
 	nodeName := strings.TrimSpace(chi.URLParam(r, "node_name"))
@@ -212,7 +213,7 @@ func (h *ResourceHandler) GetNodeOperation(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to load node operation")
 		return
 	}
-	clusterID, clusterErr := uuid.Parse(chi.URLParam(r, "cluster_id"))
+	clusterID, clusterErr := reqctx.ClusterID(r)
 	if clusterErr != nil || operation.ClusterID != clusterID || operation.NodeName != chi.URLParam(r, "node_name") {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Node operation not found")
 		return

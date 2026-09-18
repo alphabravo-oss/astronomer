@@ -7,6 +7,7 @@ import {
   SESSION_COOKIE,
   seedAuth,
 } from "./helpers/auth";
+import { EMPTY_AUTH_STATE } from "./helpers/auth-state";
 
 type SmokeUser = {
   id: string;
@@ -62,7 +63,7 @@ const readOnlyUser = {
 const cluster = {
   id: "cluster-1",
   name: "prod-east",
-  displayName: "Prod East",
+  display_name: "Prod East",
   description: "Production cluster",
   status: "active",
   health: {
@@ -74,63 +75,59 @@ const cluster = {
   environment: "production",
   region: "us-east-1",
   distribution: "eks",
-  kubernetesVersion: "1.30",
-  nodeCount: 3,
-  podCount: 42,
-  namespaceCount: 8,
-  cpuCapacity: 24,
-  cpuUsage: 6,
-  cpuPercentage: 25,
-  memoryCapacity: 96,
-  memoryUsage: 32,
-  memoryPercentage: 33,
+  kubernetes_version: "1.30",
+  node_count: 3,
+  pod_count: 42,
+  cpu_percentage: 25,
+  memory_percentage: 33,
   labels: {},
   annotations: {},
-  agentVersion: "e2e",
-  lastHeartbeat: new Date().toISOString(),
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  isLocal: false,
+  agent_version: "e2e",
+  last_heartbeat: new Date().toISOString(),
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+  is_local: false,
 };
 
 const project = {
   id: "project-1",
   name: "platform",
-  displayName: "Platform",
+  display_name: "Platform",
   description: "Platform delivery project",
-  clusterId: "cluster-1",
+  cluster_id: "cluster-1",
   namespaces: [],
-  members: [],
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
+  resource_quota: {},
+  resource_quota_cpu_limit: "",
+  resource_quota_memory_limit: "",
+  resource_quota_pod_count: 0,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
 };
 
 const catalogChart = {
   id: "chart-prometheus",
-  repositoryId: "repo-prometheus",
-  repositoryName: "Prometheus Community",
+  repository_id: "repo-prometheus",
   name: "kube-prometheus-stack",
-  displayName: "Kube Prometheus Stack",
+  display_name: "Kube Prometheus Stack",
   description: "Prometheus, Grafana, and alerting for Kubernetes.",
   category: "monitoring",
   keywords: ["monitoring", "prometheus"],
-  homeUrl: "https://prometheus.io",
-  iconUrl: "",
-  sources: [],
+  home_url: "https://prometheus.io",
+  icon_url: "",
   maintainers: [],
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
 };
 
 const catalogVersion = {
   id: "version-prometheus-1",
-  chartId: catalogChart.id,
+  chart_id: catalogChart.id,
   version: "61.0.0",
-  appVersion: "0.75.0",
-  defaultValues: "grafana:\n  enabled: true\n",
-  valuesSchema: null,
+  app_version: "0.75.0",
+  default_values: "grafana:\n  enabled: true\n",
+  values_schema: null,
   readme: "Install kube-prometheus-stack.",
-  createdAt: new Date().toISOString(),
+  created_at: new Date().toISOString(),
 };
 
 function apiResponse<T>(data: T) {
@@ -138,7 +135,16 @@ function apiResponse<T>(data: T) {
 }
 
 function paginated<T>(data: T[]) {
-  return { data, total: data.length, page: 1, pageSize: 100, totalPages: 1 };
+  return {
+    data,
+    pagination: {
+      total: data.length,
+      limit: 100,
+      offset: 0,
+      has_more: false,
+      next_offset: null,
+    },
+  };
 }
 
 async function mockApi(page: Page, user = adminUser) {
@@ -198,6 +204,17 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/auth/me") {
       return route.fulfill({ json: apiResponse(authMeWire(user)) });
+    }
+    if (path === "/auth/me/preferences") {
+      return route.fulfill({
+        json: apiResponse({
+          theme: "system",
+          table_density: "comfortable",
+          landing_route: "/dashboard",
+          time_format: "locale",
+          favorites: [],
+        }),
+      });
     }
     if (path === "/settings/features") {
       return route.fulfill({
@@ -269,7 +286,7 @@ async function mockApi(page: Page, user = adminUser) {
       return route.fulfill({
         json: apiResponse({
           summary: {
-            adoptedClusters: 2,
+            managedClusters: 2,
             fluxReady: 2,
             incompatible: 0,
             disconnected: 0,
@@ -315,7 +332,7 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/charlie/threads" && method === "GET") {
       return route.fulfill({
-        json: apiResponse({
+        json: {
           threads: [
             {
               id: "session-private-user",
@@ -324,7 +341,7 @@ async function mockApi(page: Page, user = adminUser) {
               updated_at: new Date().toISOString(),
             },
           ],
-        }),
+        },
       });
     }
     if (
@@ -345,7 +362,7 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/charlie/sessions" && method === "GET") {
       return route.fulfill({
-        json: apiResponse({
+        json: {
           mode: "approval",
           sessions: [
             {
@@ -373,7 +390,7 @@ async function mockApi(page: Page, user = adminUser) {
               updatedAt: new Date().toISOString(),
             },
           ],
-        }),
+        },
       });
     }
     if (
@@ -394,7 +411,7 @@ async function mockApi(page: Page, user = adminUser) {
     }
     if (path === "/charlie/findings" && method === "GET") {
       return route.fulfill({
-        json: apiResponse({
+        json: {
           items: [
             {
               id: "f-1",
@@ -414,12 +431,12 @@ async function mockApi(page: Page, user = adminUser) {
               summary: "Review the selected installation.",
             },
           ],
-        }),
+        },
       });
     }
     if (path === "/charlie/findings/f-1") {
       return route.fulfill({
-        json: apiResponse({
+        json: {
           finding: {
             id: "f-1",
             title: "Bounded finding",
@@ -435,7 +452,12 @@ async function mockApi(page: Page, user = adminUser) {
             operatorChecks: [],
             evidence: [],
           },
-        }),
+        },
+      });
+    }
+    if (path === "/charlie/activation" && method === "GET") {
+      return route.fulfill({
+        json: { activated: true, endpoint: "https://charlie.example.test" },
       });
     }
     if (path === "/catalog/repositories") {
@@ -458,7 +480,7 @@ async function mockApi(page: Page, user = adminUser) {
           chartName: catalogChart.name,
           chartVersionLabel: catalogVersion.version,
           clusterId: cluster.id,
-          clusterName: cluster.displayName,
+          clusterName: cluster.display_name,
           namespace: "monitoring",
           status: "pending",
           revision: 1,
@@ -511,27 +533,31 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page);
 });
 
-test("redirects unauthenticated dashboard users and supports login/logout", async ({
-  page,
-}) => {
-  await page.goto("/dashboard");
-  await expect(page).toHaveURL(/\/auth\/login/);
-  await expect(
-    page.getByRole("heading", { name: /sign in to astronomer/i }),
-  ).toBeVisible();
+test.describe("fresh-session authentication", () => {
+  test.use({ storageState: EMPTY_AUTH_STATE });
 
-  await page.getByPlaceholder("you@example.com").fill("admin@example.com");
-  await page.getByPlaceholder("Enter your password").fill("password");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  test("redirects unauthenticated dashboard users and supports login/logout", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL(/\/auth\/login/);
+    await expect(
+      page.getByRole("heading", { name: /sign in to astronomer/i }),
+    ).toBeVisible();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(
-    page.getByRole("heading", { name: /platform overview/i }),
-  ).toBeVisible();
+    await page.getByPlaceholder("you@example.com").fill("admin@example.com");
+    await page.getByPlaceholder("Enter your password").fill("password");
+    await page.getByRole("button", { name: /sign in/i }).click();
 
-  await page.getByRole("button", { name: /user menu/i }).click();
-  await page.getByRole("button", { name: /sign out/i }).click();
-  await expect(page).toHaveURL(/\/auth\/login/);
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(
+      page.getByRole("heading", { name: /platform overview/i }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /user menu/i }).click();
+    await page.getByRole("button", { name: /sign out/i }).click();
+    await expect(page).toHaveURL(/\/auth\/login/);
+  });
 });
 
 test("cluster registration wizard creates a cluster and advances to connect step", async ({
@@ -544,20 +570,16 @@ test("cluster registration wizard creates a cluster and advances to connect step
     page.getByRole("heading", { name: /register an existing cluster/i }),
   ).toBeVisible();
 
-  const clusterName = page.getByPlaceholder("my-cluster");
-  await clusterName.focus();
-  await page.keyboard.type("e2e-cluster");
-  const displayName = page.getByPlaceholder("My Production Cluster");
-  await displayName.focus();
-  await page.keyboard.type("E2E Cluster");
+  await page.getByPlaceholder("my-cluster").fill("e2e-cluster");
+  await page.getByPlaceholder("My Production Cluster").fill("E2E Cluster");
   const next = page.getByRole("button", {
     name: /next: get install command/i,
   });
-  await next.focus();
-  await page.keyboard.press("Enter");
+  await expect(next).toBeEnabled();
+  await next.click();
 
   await expect(page).toHaveURL(
-    /\/dashboard\/clusters\/register\/cluster-new\/connect/,
+    /\/dashboard\/clusters\/register\?clusterId=cluster-new/,
   );
 });
 
@@ -602,13 +624,20 @@ test("catalog install modal remains usable on responsive viewports", async ({
   await expect(
     page.getByRole("heading", { name: /install kube prometheus stack/i }),
   ).toBeVisible();
-  await page.getByLabel("Target Cluster").selectOption(cluster.id);
-  await page.getByLabel("Release Name").fill("platform-monitoring");
-  await page.getByLabel("Namespace").fill("monitoring");
+  const installDialog = page.getByRole("dialog", {
+    name: /install kube prometheus stack/i,
+  });
+  await installDialog.getByRole("combobox", { name: "Target Cluster" }).click();
+  await installDialog.getByRole("option", { name: /Prod East/ }).click();
+  await expect(installDialog).toBeVisible();
+  await installDialog.getByLabel("Release Name").fill("platform-monitoring");
+  await expect(installDialog).toBeVisible();
+  await installDialog.getByLabel("Namespace").fill("monitoring");
+  await expect(installDialog).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /install chart/i }),
+    installDialog.getByRole("button", { name: /install chart/i }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: /install chart/i }).click();
+  await installDialog.getByRole("button", { name: /install chart/i }).click();
 });
 
 test("settings general form remains usable on responsive viewports", async ({

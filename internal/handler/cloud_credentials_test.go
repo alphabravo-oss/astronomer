@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -27,11 +26,13 @@ import (
 // CloudCredentialHandler tests. Operations are serialised by mu so the
 // "drift sweep + handler" tests can drive multiple goroutines safely.
 type fakeCloudCredQuerier struct {
-	mu          sync.Mutex
-	projectOK   map[uuid.UUID]bool
-	clusterOK   map[uuid.UUID]bool
-	credentials map[uuid.UUID]sqlc.CloudCredential
-	mats        map[uuid.UUID][]sqlc.CloudCredentialMaterialization
+	mu                   sync.Mutex
+	projectOK            map[uuid.UUID]bool
+	clusterOK            map[uuid.UUID]bool
+	namespaces           []sqlc.ProjectNamespace
+	credentials          map[uuid.UUID]sqlc.CloudCredential
+	mats                 map[uuid.UUID][]sqlc.CloudCredentialMaterialization
+	materializationTasks []sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams
 }
 
 func newFakeCloudCredQuerier() *fakeCloudCredQuerier {
@@ -59,6 +60,18 @@ func (f *fakeCloudCredQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (
 		return sqlc.Cluster{}, pgx.ErrNoRows
 	}
 	return sqlc.Cluster{ID: id, Name: "test-cluster"}, nil
+}
+
+func (f *fakeCloudCredQuerier) ListProjectNamespaces(_ context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]sqlc.ProjectNamespace, 0, len(f.namespaces))
+	for _, namespace := range f.namespaces {
+		if namespace.ProjectID == projectID {
+			out = append(out, namespace)
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeCloudCredQuerier) ListCloudCredentialsForProject(_ context.Context, projectID uuid.UUID) ([]sqlc.CloudCredential, error) {
@@ -144,29 +157,6 @@ func (f *fakeCloudCredQuerier) ListCloudCredentialMaterializations(_ context.Con
 	return out, nil
 }
 
-func (f *fakeCloudCredQuerier) UpsertCloudCredentialMaterialization(_ context.Context, arg sqlc.UpsertCloudCredentialMaterializationParams) (sqlc.CloudCredentialMaterialization, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	existing := f.mats[arg.CredentialID]
-	for i, m := range existing {
-		if m.ClusterID == arg.ClusterID && m.Namespace == arg.Namespace {
-			existing[i].SecretName = arg.SecretName
-			f.mats[arg.CredentialID] = existing
-			return existing[i], nil
-		}
-	}
-	m := sqlc.CloudCredentialMaterialization{
-		ID:           uuid.New(),
-		CredentialID: arg.CredentialID,
-		ClusterID:    arg.ClusterID,
-		Namespace:    arg.Namespace,
-		SecretName:   arg.SecretName,
-		Status:       "pending",
-	}
-	f.mats[arg.CredentialID] = append(f.mats[arg.CredentialID], m)
-	return m, nil
-}
-
 func (f *fakeCloudCredQuerier) DeleteOrphanCloudCredentialMaterializations(_ context.Context, arg sqlc.DeleteOrphanCloudCredentialMaterializationsParams) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -187,44 +177,62 @@ func (f *fakeCloudCredQuerier) DeleteOrphanCloudCredentialMaterializations(_ con
 	return nil
 }
 
-// fakeCloudCredEnqueuer captures enqueued tasks so the tests can assert on the
-// fan-out shape.
-type fakeCloudCredEnqueuer struct {
-	mu    sync.Mutex
-	tasks []*asynq.Task
-}
-
-func (f *fakeCloudCredEnqueuer) Enqueue(t *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+func (f *fakeCloudCredQuerier) UpsertCloudCredentialMaterializationWithTaskOutbox(_ context.Context, arg sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams) (sqlc.CloudCredentialMaterialization, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.tasks = append(f.tasks, t)
-	return &asynq.TaskInfo{}, nil
+	f.materializationTasks = append(f.materializationTasks, arg)
+	existing := f.mats[arg.CredentialID]
+	for i, materialization := range existing {
+		if materialization.ClusterID == arg.ClusterID && materialization.Namespace == arg.Namespace {
+			existing[i].SecretName = arg.SecretName
+			f.mats[arg.CredentialID] = existing
+			return existing[i], nil
+		}
+	}
+	materialization := sqlc.CloudCredentialMaterialization{
+		ID:           uuid.New(),
+		CredentialID: arg.CredentialID,
+		ClusterID:    arg.ClusterID,
+		Namespace:    arg.Namespace,
+		SecretName:   arg.SecretName,
+		Status:       "pending",
+	}
+	f.mats[arg.CredentialID] = append(existing, materialization)
+	return materialization, nil
 }
 
-func (f *fakeCloudCredEnqueuer) all() []*asynq.Task {
+func (f *fakeCloudCredQuerier) DeleteCloudCredentialMaterializationWithTaskOutbox(_ context.Context, arg sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := make([]*asynq.Task, len(f.tasks))
-	copy(out, f.tasks)
-	return out
+	existing := f.mats[arg.CredentialID]
+	kept := existing[:0]
+	for _, materialization := range existing {
+		if materialization.ClusterID != arg.ClusterID || materialization.Namespace != arg.Namespace {
+			kept = append(kept, materialization)
+		}
+	}
+	f.mats[arg.CredentialID] = kept
+	return nil
+}
+
+func (f *fakeCloudCredQuerier) UpsertAuditOutbox(_ context.Context, _ sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	return sqlc.AuditOutbox{}, nil
+}
+
+func (f *fakeCloudCredQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAuditLogV1Params) error {
+	return nil
 }
 
 func TestCloudCredentialsMaterializeWritesTaskOutbox(t *testing.T) {
 	credentialID := uuid.New()
 	clusterID := uuid.New()
-	outbox := &fakeRegistrationTaskOutbox{}
-	enq := &fakeCloudCredEnqueuer{}
-	h := NewCloudCredentialHandler(nil)
-	h.SetEnqueuer(enq)
-	h.SetTaskOutbox(outbox)
+	q := newFakeCloudCredQuerier()
 	ref := TargetRef{ClusterID: clusterID, Namespace: "apps", SecretName: "aws-prod"}
 
-	h.enqueueMaterialize(context.Background(), sqlc.CloudCredential{ID: credentialID}, []TargetRef{ref}, "apply")
-
-	if got := len(enq.all()); got != 0 {
-		t.Fatalf("direct enqueues = %d, want 0 when outbox succeeds", got)
+	if err := stageCloudCredentialMaterialization(context.Background(), q, sqlc.CloudCredential{ID: credentialID}, ref, "apply"); err != nil {
+		t.Fatalf("stage materialization: %v", err)
 	}
-	args := outbox.all()
+	args := q.materializationTasks
 	if len(args) != 1 {
 		t.Fatalf("outbox writes = %d, want 1", len(args))
 	}
@@ -287,22 +295,25 @@ func testKey(t *testing.T) string {
 }
 
 // newTestHandler wires a handler against in-memory dependencies.
-func newTestHandler(t *testing.T) (*CloudCredentialHandler, *fakeCloudCredQuerier, *fakeCloudCredEnqueuer, uuid.UUID, uuid.UUID) {
+func newTestHandler(t *testing.T) (*CloudCredentialHandler, *fakeCloudCredQuerier, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	q := newFakeCloudCredQuerier()
 	pid := uuid.New()
 	cid := uuid.New()
 	q.projectOK[pid] = true
 	q.clusterOK[cid] = true
+	q.namespaces = append(q.namespaces, sqlc.ProjectNamespace{ProjectID: pid, ClusterID: cid, Namespace: "default"})
 	enc, err := auth.NewEncryptor(testKey(t))
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
-	enq := &fakeCloudCredEnqueuer{}
 	h := NewCloudCredentialHandler(q)
 	h.SetEncryptor(enc)
-	h.SetEnqueuer(enq)
-	return h, q, enq, pid, cid
+	h.SetAuditor(q)
+	h.SetRunTx(func(_ context.Context, fn func(CloudCredentialMutationTx) error) error {
+		return fn(q)
+	})
+	return h, q, pid, cid
 }
 
 // callRoute drives a route handler through a chi router so the
@@ -328,7 +339,7 @@ func callRoute(t *testing.T, h http.Handler, method, path, body string) *http.Re
 // roundtrip — the same matrix the cluster-registry suite uses, narrowed
 // to AWS so the test stays focused on the provider-typed shape.
 func TestCloudCreds_CRUD_AWS(t *testing.T) {
-	h, q, enq, pid, _ := newTestHandler(t)
+	h, q, pid, _ := newTestHandler(t)
 
 	// CREATE
 	body := `{
@@ -356,8 +367,8 @@ func TestCloudCreds_CRUD_AWS(t *testing.T) {
 	if created.Data["region"] != "us-east-1" {
 		t.Fatalf("expected non-secret region to pass through, got %q", created.Data["region"])
 	}
-	if len(enq.all()) != 0 {
-		t.Fatalf("expected no materialize tasks (no target_refs), got %d", len(enq.all()))
+	if len(q.materializationTasks) != 0 {
+		t.Fatalf("expected no materialization task intents (no target_refs), got %d", len(q.materializationTasks))
 	}
 
 	// GET — redacted
@@ -416,7 +427,7 @@ func TestCloudCreds_CRUD_AWS(t *testing.T) {
 // TestCloudCreds_CRUD_GCP exercises the GCP key-shape (single
 // service_account_json field) plus the key.json filename rewrite.
 func TestCloudCreds_CRUD_GCP(t *testing.T) {
-	h, q, _, pid, _ := newTestHandler(t)
+	h, q, pid, _ := newTestHandler(t)
 
 	body := `{
 		"name": "prod-gcp",
@@ -447,7 +458,7 @@ func TestCloudCreds_CRUD_GCP(t *testing.T) {
 
 // TestCloudCreds_CRUD_Azure walks the four-key Azure shape.
 func TestCloudCreds_CRUD_Azure(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	body := `{
 		"name": "prod-azure",
 		"provider": "azure",
@@ -467,7 +478,7 @@ func TestCloudCreds_CRUD_Azure(t *testing.T) {
 
 // TestCloudCreds_RejectsUnknownProvider is the 400 path.
 func TestCloudCreds_RejectsUnknownProvider(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	body := `{"name": "ok", "provider": "spaceX", "data": {"x": "y"}}`
 	resp := callRoute(t, http.HandlerFunc(h.Create), http.MethodPost, fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/", pid), body)
 	if resp.StatusCode != http.StatusBadRequest {
@@ -477,7 +488,7 @@ func TestCloudCreds_RejectsUnknownProvider(t *testing.T) {
 
 // TestCloudCreds_RejectsMissingRequiredKey hits the validator on POST.
 func TestCloudCreds_RejectsMissingRequiredKey(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	body := `{"name": "incomplete", "provider": "aws", "data": {"access_key_id": "AKIAFAKE"}}`
 	resp := callRoute(t, http.HandlerFunc(h.Create), http.MethodPost, fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/", pid), body)
 	if resp.StatusCode != http.StatusBadRequest {
@@ -491,7 +502,7 @@ func TestCloudCreds_RejectsMissingRequiredKey(t *testing.T) {
 
 // TestCloudCreds_RedactsSecretKeys is the safety property the UI relies on.
 func TestCloudCreds_RedactsSecretKeys(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	createBody := `{
 		"name": "redact-me",
 		"provider": "azure",
@@ -522,7 +533,7 @@ func TestCloudCreds_RedactsSecretKeys(t *testing.T) {
 // TestCloudCreds_TestEndpoint_AWS_OK round-trips a successful tester
 // response through the handler.
 func TestCloudCreds_TestEndpoint_AWS_OK(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	h.SetTester(&fakeTester{awsResult: CloudTestResult{OK: true, Message: "ok"}})
 	id := createTestAWS(t, h, pid)
 	resp := callRoute(t, http.HandlerFunc(h.Test), http.MethodPost, fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/%s/test/", pid, id), "")
@@ -537,7 +548,7 @@ func TestCloudCreds_TestEndpoint_AWS_OK(t *testing.T) {
 
 // TestCloudCreds_TestEndpoint_AWS_BadKeys verifies the failure path.
 func TestCloudCreds_TestEndpoint_AWS_BadKeys(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	h.SetTester(&fakeTester{awsResult: CloudTestResult{OK: false, Message: "InvalidClientTokenId"}})
 	id := createTestAWS(t, h, pid)
 	resp := callRoute(t, http.HandlerFunc(h.Test), http.MethodPost, fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/%s/test/", pid, id), "")
@@ -556,7 +567,7 @@ func TestCloudCreds_TestEndpoint_AWS_BadKeys(t *testing.T) {
 // TestCloudCreds_TestEndpoint_GenericNoOp is the explicit "no test
 // available" path for Generic providers.
 func TestCloudCreds_TestEndpoint_GenericNoOp(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	h.SetTester(&fakeTester{})
 	body := `{"name": "generic-x", "provider": "generic", "data": {"foo": "bar"}}`
 	resp := callRoute(t, http.HandlerFunc(h.Create), http.MethodPost, fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/", pid), body)
@@ -581,7 +592,7 @@ func TestCloudCreds_TestEndpoint_GenericNoOp(t *testing.T) {
 // TestCloudCreds_TargetRefsCanonicaliseAndDefault verifies the handler
 // fills in a default secret_name and rejects bad cluster_ids.
 func TestCloudCreds_TargetRefsCanonicaliseAndDefault(t *testing.T) {
-	h, _, enq, pid, cid := newTestHandler(t)
+	h, q, pid, cid := newTestHandler(t)
 	body := fmt.Sprintf(`{
 		"name": "with-target",
 		"provider": "aws",
@@ -603,16 +614,16 @@ func TestCloudCreds_TargetRefsCanonicaliseAndDefault(t *testing.T) {
 	if created.TargetRefs[0].SecretName != want {
 		t.Fatalf("expected default secret_name %q, got %q", want, created.TargetRefs[0].SecretName)
 	}
-	// And one materialize task should have been enqueued.
-	if len(enq.all()) != 1 {
-		t.Fatalf("expected 1 enqueued task, got %d", len(enq.all()))
+	// The task intent is committed atomically with the credential and audit.
+	if len(q.materializationTasks) != 1 {
+		t.Fatalf("expected 1 durable materialization task, got %d", len(q.materializationTasks))
 	}
 }
 
 // TestCloudCreds_TargetRefsRejectMissingCluster verifies cluster
 // existence is checked before the credential is stored.
 func TestCloudCreds_TargetRefsRejectMissingCluster(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	body := fmt.Sprintf(`{
 		"name": "bad-target",
 		"provider": "aws",
@@ -629,7 +640,7 @@ func TestCloudCreds_TargetRefsRejectMissingCluster(t *testing.T) {
 
 // TestCloudCreds_RejectsNameTaken is the 409 uniqueness path.
 func TestCloudCreds_RejectsNameTaken(t *testing.T) {
-	h, _, _, pid, _ := newTestHandler(t)
+	h, _, pid, _ := newTestHandler(t)
 	body := `{"name": "twice", "provider": "aws", "data": {"access_key_id": "AKIAFAKE", "secret_access_key": "shhh"}}`
 	resp := callRoute(t, http.HandlerFunc(h.Create), http.MethodPost, fmt.Sprintf("/api/v1/projects/%s/cloud-credentials/", pid), body)
 	if resp.StatusCode != http.StatusCreated {

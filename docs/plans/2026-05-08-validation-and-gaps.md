@@ -1,5 +1,7 @@
 # Astronomer-go vs Rancher: Validation Report & Remaining Gaps
 
+> **Status: superseded.** This is a historical snapshot and its delivery/UI claims are no longer authoritative. Use advisor review 010 and the current Rancher comparison.
+
 **Date:** 2026-05-10  
 **Scope:** Current completion audit after the parity/hardening work landed. This document replaces the earlier 2026-05-08 gap report, which had become stale in several important areas.
 

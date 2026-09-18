@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -16,6 +18,23 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+// jsonPayloadEqual compares persisted JSON semantically. PostgreSQL jsonb may
+// reorder object keys when returning a freshly inserted operation, so raw byte
+// equality would incorrectly reject that operation as an idempotency conflict.
+func jsonPayloadEqual(left, right json.RawMessage) bool {
+	if bytes.Equal(left, right) {
+		return true
+	}
+	var leftValue, rightValue any
+	if err := json.Unmarshal(left, &leftValue); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(right, &rightValue); err != nil {
+		return false
+	}
+	return reflect.DeepEqual(leftValue, rightValue)
+}
 
 type persistedOperationReceipt[T any] struct {
 	RequestDigest string `json:"request_digest"`

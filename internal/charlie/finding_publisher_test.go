@@ -13,7 +13,7 @@ func TestEventFindingPublisherEmitsBoundedActionableMetadata(t *testing.T) {
 	bus := events.NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stream := bus.Subscribe(ctx)
+	stream := bus.Subscribe(ctx, events.AcceptAll)
 	publisher := NewEventFindingPublisher(bus)
 	alert := FindingAlert{FindingID: "finding-1", Severity: "critical", Status: "open", ResourceType: "tunnel", ResourceID: "replica-a", BlockCode: "read_only", RepeatCount: 2}
 	if err := publisher.PublishCharlieFinding(ctx, alert); err != nil {

@@ -64,7 +64,7 @@ func TestK8sProxyAuditMethodClassificationCoversRouteMethods(t *testing.T) {
 		})
 	}
 
-	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodConnect, http.MethodTrace} {
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodConnect, http.MethodTrace, "QUERY"} {
 		t.Run("mutation_"+method, func(t *testing.T) {
 			writer := &k8sProxyBoundaryAuditWriter{}
 			router := k8sProxyBoundaryRouter(writer, func(w http.ResponseWriter, _ *http.Request) {
@@ -170,8 +170,8 @@ func TestK8sProxyMandatoryAuditIsWiredAtProductionRouteEntry(t *testing.T) {
 	}
 	routesText := string(routesSource)
 	for _, required := range []string{
-		"auditK8sProxyMutations(deps.AuditWriter)",
-		`HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.Proxy.HandleK8sProxy)`,
+		"auditK8sProxyMutations(deps.CoreAuth.AuditWriter)",
+		`HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", deps.StreamingInternal.Proxy.HandleK8sProxy)`,
 	} {
 		if !strings.Contains(routesText, required) {
 			t.Fatalf("production k8s proxy route missing %q", required)
@@ -181,7 +181,7 @@ func TestK8sProxyMandatoryAuditIsWiredAtProductionRouteEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(serverSource), "AuditWriter:         queries") {
+	if !strings.Contains(string(serverSource), "AuditWriter: queries") {
 		t.Fatal("production router does not wire the durable SQL audit writer")
 	}
 }

@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeRatingsQuerier is the in-memory implementation of ChartRatingsQuerier
@@ -279,7 +280,7 @@ func doAuth(method, path string, body []byte, userID uuid.UUID) *http.Request {
 	} else {
 		req = httptest.NewRequest(method, path, nil)
 	}
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: userID.String(), AuthMethod: "jwt",
 	})
 	return req.WithContext(ctx)

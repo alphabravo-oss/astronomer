@@ -45,7 +45,7 @@ Open these in tabs at the start of every shift.
 | Cluster list | Per-cluster status, agent reachability, CPU/mem | `/dashboard/clusters` |
 | Observability → Health summary | Aggregate degraded/disconnected count, DLQ depth | `GET /api/v1/platform/health-summary/` (no UI yet — curl it) |
 | Prometheus | `/metrics` scrapes of server + worker + agent | Operator-installed Prometheus |
-| Worker queue state | asynq queue / DLQ depth | Same Prometheus; OR `unzip -p $(curl -sH "Bearer $TOKEN" $URL/api/v1/support-bundle/) asynq-queues.json | jq` |
+| Worker queue state | asynq queue / DLQ depth | Same Prometheus; or generate a durable support bundle from Settings → General → Support and inspect `asynq-queues.json` |
 
 ---
 

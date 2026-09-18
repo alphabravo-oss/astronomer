@@ -71,12 +71,14 @@ function classify(routePath) {
   if (routePath.includes('/ws/') || /\/(watch|stream|connect|events\/stream)(\/|$)/.test(routePath)) return 'stream';
   if (isPassthroughRoute(routePath) || routePath.endsWith('/*')) return 'proxy';
   if (/(export|\.csv|kubeconfig|support-bundle|diagnostics\/bundle)/.test(routePath)) return 'download';
-  if (routePath.startsWith('/api/v1/alerts/')) return 'compatibility-alias';
   return 'public-api';
 }
 
 function isPassthroughRoute(routePath) {
   return (routePath.startsWith('/api/v1/clusters/') && routePath.includes('/k8s/')) ||
+    /^\/api\/v1\/clusters\/\{[^}]+\}\/observability\/grafana(?:\/\*)?$/.test(routePath) ||
+    routePath === '/api/v1/observability/grafana' ||
+    routePath.startsWith('/api/v1/observability/grafana/') ||
     routePath.includes('/proxy/service/') ||
     routePath === '/api/v1/clusters/{cluster_id}/resources/{resource_type}' ||
     routePath === '/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}';
@@ -232,9 +234,19 @@ function ensureOperationMetadata(source) {
       lines[i + 1 + routeClassIndex] = block[routeClassIndex];
     }
     const hasJSONRequestBody = block.some((candidate) => /^      requestBody:/.test(candidate));
-    if (isPassthroughRoute(currentPath) && hasJSONRequestBody &&
-        !block.some((candidate) => /^      x-astronomer-request-schema-status:/.test(candidate))) {
-      additions.push('      x-astronomer-request-schema-status: passthrough');
+    if (isPassthroughRoute(currentPath) && hasJSONRequestBody) {
+      if (requestStatusIndex < 0) {
+        additions.push('      x-astronomer-request-schema-status: passthrough');
+      } else if (block[requestStatusIndex] !== '      x-astronomer-request-schema-status: passthrough') {
+        block[requestStatusIndex] = '      x-astronomer-request-schema-status: passthrough';
+        lines[i + 1 + requestStatusIndex] = block[requestStatusIndex];
+      }
+      const mutationSchemaIndex = block.findIndex((candidate) =>
+        candidate.includes("schema: {$ref: '#/components/schemas/RouteMutationRequest'}"));
+      if (mutationSchemaIndex >= 0) {
+        block[mutationSchemaIndex] = '            schema: {}';
+        lines[i + 1 + mutationSchemaIndex] = block[mutationSchemaIndex];
+      }
     }
     if (isPolymorphicRoute(currentPath) && hasJSONRequestBody &&
         !block.some((candidate) => /^      x-astronomer-request-schema-status:/.test(candidate))) {
@@ -273,7 +285,10 @@ function generate(source) {
   const risks = riskByRoute();
   const uniqueRoutes = new Map();
   for (const route of JSON.parse(fs.readFileSync(routesPath, 'utf8'))) {
-    if (route.method.toUpperCase() === 'CONNECT') continue;
+    // OpenAPI 3 has no operation object for CONNECT or HTTP QUERY. Preserve
+    // both in the mounted-route inventory, but do not synthesize invalid path
+    // operations into the API document.
+    if (['CONNECT', 'QUERY'].includes(route.method.toUpperCase())) continue;
     uniqueRoutes.set(routeKey(route.method, route.pattern), route);
   }
   const routes = [...uniqueRoutes.values()]

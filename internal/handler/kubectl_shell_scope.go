@@ -1,40 +1,12 @@
-// Package handler — kubectl-shell caller-scoping (opt-in).
+// Package handler — kubectl-shell caller scoping.
 //
-// The v1 break-glass shell (kubectl_shell.go) provisions an in-cluster
-// ServiceAccount whose ClusterRole mirrors a COARSE verb envelope
-// (read / +write / +delete / cluster-admin) across every namespace.
-// Opening the shell only proves the clusters:update RBAC gate at the
-// route, so a caller who holds cluster:update — even one scoped to a
-// single project/namespace by their astronomer bindings — receives a
-// blanket, cluster-wide grant via the agent SA. That is the
-// escalation this file closes.
+// Caller scoping is mandatory. Missing authorization infrastructure denies
+// access, and every emitted rule is intersected with the caller's grants.
 //
-// The scoping here is OPT-IN and DEFAULT-OFF: it only runs when the
-// platform-settings flag `feature.shell_scope_to_caller` is set true.
-// With the flag off (the default) every code path below is bypassed and
-// the shell behaves exactly as before. See docs/kubectl-shell.md.
-//
-// When ON, the caller's own astronomer RoleBindings — not the agent SA —
-// define an envelope:
-//
-//   - superuser ............... full cluster, verbs as requested.
-//   - cluster/global binding .. cross-namespace ("-A") visibility,
-//     write verbs only if the caller actually holds clusters:update /
-//     :delete on this cluster.
-//   - namespace-scoped only ... confined to those namespaces AND capped
-//     at read-only, because the coarse v1 ClusterRole cannot express a
-//     per-namespace write grant — handing a single-namespace operator a
-//     cluster-wide create/update/patch role would re-introduce the very
-//     escalation we are closing.
-//   - nothing applicable ...... scope is UNDETERMINED and, with the flag
-//     on, the shell FAILS CLOSED (the caller is denied). We never fall
-//     back to the blanket SA grant.
-//
-// Enforcement points wired from kubectl_shell.go behind the flag:
-//   - Open(): constrains kubectl.EffectiveVerbs to the derived envelope
-//     and denies undetermined scopes.
-//   - HandleWS(): re-derives + fails closed before the WS upgrade, and
-//     tags out-of-scope namespace targets in the command audit trail.
+// Cluster-wide sessions use ClusterRoles; namespace-confined sessions use
+// namespaced Roles with the intersection of grants across their namespaces.
+// Missing scope denies both provisioning and WebSocket upgrades. Superusers
+// receive cluster-admin only when explicitly requesting elevation.
 //
 // The caller identity this scope would be impersonated as is available
 // via CallerScope.ImpersonationSubject(); the subject itself is minted by
@@ -54,27 +26,13 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
-// shellScopeToCallerFlag is the platform_settings key that opts a
-// deployment into caller-scoped kubectl shells. DEFAULT FALSE: the
-// fallback passed to BoolValue is false, so absent an explicit
-// operator opt-in the existing coarse behaviour is used unchanged.
-const shellScopeToCallerFlag = "feature.shell_scope_to_caller"
-
-// ShellFeatureReader is the minimal platform-settings surface the scope
-// path needs. *handler.SettingsCache satisfies it (same shape as
-// middleware.FeatureFlagReader). nil-safe at the call site: a nil
-// reader means the flag is treated as OFF, i.e. existing behaviour.
-type ShellFeatureReader interface {
-	BoolValue(ctx context.Context, key string, fallback bool) bool
-}
-
 // CallerScope is the RBAC-derived envelope a caller-scoped kubectl
 // shell is confined to. It is derived purely from the caller's
 // astronomer RoleBindings against the target cluster — never from the
 // agent ServiceAccount's blanket grant.
 type CallerScope struct {
 	// Determined is false when no applicable binding could be resolved
-	// for the caller against this cluster. With the scope feature ON an
+	// for the caller against this cluster. An
 	// undetermined scope MUST fail closed (deny the shell); it must
 	// NEVER fall back to the blanket SA grant.
 	Determined bool
@@ -105,7 +63,7 @@ type CallerScope struct {
 // derived scope can only ever narrow it.
 //
 // Fail-closed contract: if engine is nil, or no binding applies to the
-// cluster, Determined stays false and callers under the flag must deny.
+// cluster, Determined stays false and callers must deny.
 func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, clusterID, callerID uuid.UUID, requested kubectl.EffectiveVerbs) CallerScope {
 	s := CallerScope{
 		Namespaces: map[string]struct{}{},
@@ -120,7 +78,7 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
 		s.Determined = true
 		s.AllNamespaces = true
 		s.Superuser = true
-		s.Verbs = requested
+		s.Verbs = requested.WithPermissions(func(_, _, _ string) bool { return true })
 		return s
 	}
 	for _, b := range bindings {
@@ -177,6 +135,8 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
 	// grant to a namespace, and a cluster-wide write role would be an
 	// escalation for a single-namespace operator.
 	s.Verbs = kubectl.EffectiveVerbs{Read: true}
+	s.Verbs.ReadSecrets = requested.ReadSecrets
+	s.Verbs.ExecPods = requested.ExecPods
 	if s.AllNamespaces {
 		if requested.Update && engine.CheckPermission(bindings, rbac.ResourceClusters, rbac.VerbUpdate, clusterID, uuid.Nil) {
 			s.Verbs.Update = true
@@ -185,7 +145,45 @@ func deriveCallerScope(engine *rbac.Engine, bindings []rbac.RoleBinding, cluster
 			s.Verbs.Delete = true
 		}
 	}
+	s.Verbs = s.Verbs.WithPermissions(func(_ string, resource, verb string) bool {
+		family, permission, ok := shellResourcePermission(resource, verb)
+		if !ok {
+			return false
+		}
+		if s.AllNamespaces {
+			return engine.CheckPermission(bindings, family, permission, clusterID, uuid.Nil)
+		}
+		// One rule set is installed in every allowed namespace. Intersect
+		// grants across those namespaces so a grant in A cannot leak into B.
+		for namespace := range s.Namespaces {
+			if !engine.CheckPermission(bindings, family, permission, clusterID, uuid.Nil, namespace) {
+				return false
+			}
+		}
+		return len(s.Namespaces) > 0
+	})
 	return s
+}
+
+func shellResourcePermission(resource, verb string) (rbac.Resource, rbac.Verb, bool) {
+	if resource == "pods/log" {
+		return rbac.ResourcePods, rbac.VerbLogs, verb == "get"
+	}
+	if resource == "pods/exec" || resource == "pods/attach" || resource == "pods/portforward" {
+		return rbac.ResourcePods, rbac.VerbExec, verb == "create"
+	}
+	family, ok := rbac.KubernetesResource(strings.TrimSuffix(resource, "/status"))
+	if !ok {
+		return "", "", false
+	}
+	permission := rbac.Verb(verb)
+	switch verb {
+	case "get":
+		permission = rbac.VerbRead
+	case "patch":
+		permission = rbac.VerbUpdate
+	}
+	return family, permission, true
 }
 
 // bindingAppliesToCluster reports whether a binding is relevant to the
@@ -220,8 +218,8 @@ func bindingAppliesToCluster(b rbac.RoleBinding, clusterID uuid.UUID) bool {
 
 // Allows reports whether a command that targets `namespace` is within
 // the scope. An empty namespace ("current"/unspecified) is always
-// allowed — the pod's own default context is bounded by the SA grant,
-// not the flag. Cross-namespace ("-A") targeting is represented by the
+// allowed — the pod's own default context is bounded by the SA grant.
+// Cross-namespace ("-A") targeting is represented by the
 // sentinel namespaceAllSentinel and is only allowed for AllNamespaces
 // scopes.
 func (s CallerScope) Allows(namespace string) bool {
@@ -325,32 +323,12 @@ func namespaceTargetsFromCommand(line string) []string {
 	return out
 }
 
-// shellScopeEnabled reports whether caller-scoping is active. Task 009
-// (DIR-04) collapses the two multi-tenancy switches: scoping is ON when
-// EITHER the master namespace_scoped_rbac_enabled config flag is set
-// (h.NamespaceScopedRBAC, the promoted default) OR the legacy
-// feature.shell_scope_to_caller platform setting is explicitly on. A nil
-// reader and an unset key both yield false for the legacy path, so with
-// namespace-scoped RBAC off the shell keeps its pre-feature behaviour.
-func (h *KubectlShellHandler) shellScopeEnabled(ctx context.Context) bool {
-	if h == nil {
-		return false
-	}
-	if h.NamespaceScopedRBAC {
-		return true
-	}
-	if h.Features == nil {
-		return false
-	}
-	return h.Features.BoolValue(ctx, shellScopeToCallerFlag, false)
-}
-
 // deriveScopeForCaller looks up the caller's bindings and derives the
 // CallerScope. The bool return is false when scope could not be
-// determined — callers under the flag must fail closed on false.
+// determined — callers must fail closed on false.
 func (h *KubectlShellHandler) deriveScopeForCaller(ctx context.Context, userID, clusterID uuid.UUID, requested kubectl.EffectiveVerbs) (CallerScope, bool) {
 	if h.Bindings == nil || h.RBACEngine == nil {
-		// Can't prove scope → undetermined → fail closed under the flag.
+		// Can't prove scope → undetermined → fail closed.
 		return CallerScope{Namespaces: map[string]struct{}{}, Caller: userID}, false
 	}
 	bindings, err := h.Bindings.GetUserBindings(ctx, userID.String())
@@ -359,15 +337,4 @@ func (h *KubectlShellHandler) deriveScopeForCaller(ctx context.Context, userID, 
 	}
 	scope := deriveCallerScope(h.RBACEngine, bindings, clusterID, userID, requested)
 	return scope, scope.Determined
-}
-
-// SetFeatureFlags wires the platform-settings reader used to evaluate
-// feature.shell_scope_to_caller. Optional — when unset the scope
-// feature is OFF and the shell keeps its existing behaviour. Mirrors
-// the other Set* wiring hooks so the constructor signature stays stable.
-func (h *KubectlShellHandler) SetFeatureFlags(r ShellFeatureReader) {
-	if h == nil {
-		return
-	}
-	h.Features = r
 }

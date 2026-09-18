@@ -16,9 +16,11 @@ import (
 	"k8s.io/client-go/rest"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
@@ -28,6 +30,13 @@ import (
 // 127.0.0.1 keeps the connection on the loopback interface and avoids any
 // dependency on the in-cluster service mesh / DNS.
 const localAgentDialURL = "ws://127.0.0.1:8000"
+
+// localAgentPrivilegeProfile matches the dedicated management-plane
+// ServiceAccount installed by the chart. The embedded agent manages the local
+// cluster with that allowlisted administrative RBAC; leaving this unset makes
+// the generic agent default to viewer and causes CONNECT admission to reject
+// legitimate namespace reconciliation as missing the mutate capability.
+const localAgentPrivilegeProfile = agenttemplate.PrivilegeProfileAdmin
 
 // localClusterName is the canonical name for the management cluster row,
 // matching Rancher's convention. The user-visible UI surfaces this directly.
@@ -111,7 +120,6 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 		Annotations:       row.Annotations,
 		Distribution:      row.Distribution,
 		AgentVersion:      row.AgentVersion,
-		LastHeartbeat:     row.LastHeartbeat,
 		KubernetesVersion: row.KubernetesVersion,
 		NodeCount:         row.NodeCount,
 		CreatedByID:       row.CreatedByID,
@@ -133,6 +141,17 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 // logs a warning and returns nil — the server still comes up, just without
 // the local cluster's data plane.
 func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID) error {
+	run, err := buildLocalAgentRuntime(ctx, logger, queries, clusterID, helmruntime.InClusterDefaults())
+	if err != nil || run == nil {
+		return err
+	}
+	go func() { _ = run(ctx) }()
+	return nil
+}
+
+// buildLocalAgentRuntime performs fallible setup synchronously, then returns a
+// blocking runtime that joins the tunnel, informer, and health loops.
+func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID, helmRuntime helmruntime.Config) (func(context.Context) error, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -142,12 +161,12 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	restCfg, err := rest.InClusterConfig()
 	if err != nil {
 		logger.Warn("local agent disabled: not running in-cluster", "error", err)
-		return nil
+		return nil, nil
 	}
 
 	clientset, err := kubernetes.NewForConfig(restCfg)
 	if err != nil {
-		return fmt.Errorf("create local agent clientset: %w", err)
+		return nil, fmt.Errorf("create local agent clientset: %w", err)
 	}
 
 	// Issue a long-lived registration token in-process. The token never leaves
@@ -155,14 +174,14 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	// CONNECT handshake succeeds end-to-end.
 	tokenStr, err := generateLocalAgentToken()
 	if err != nil {
-		return fmt.Errorf("generate local agent token: %w", err)
+		return nil, fmt.Errorf("generate local agent token: %w", err)
 	}
 	if _, err := queries.CreateClusterRegistrationToken(ctx, sqlc.CreateClusterRegistrationTokenParams{
 		ClusterID: clusterID,
 		TokenHash: auth.HashOpaqueToken(tokenStr),
 		ExpiresAt: time.Now().Add(localRegistrationTokenTTL),
 	}); err != nil {
-		return fmt.Errorf("persist local agent registration token: %w", err)
+		return nil, fmt.Errorf("persist local agent registration token: %w", err)
 	}
 
 	cfg := &agent.AgentConfig{
@@ -176,6 +195,7 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 		HeartbeatInterval: 30,
 		MetricsInterval:   60,
 		HealthAddr:        "", // health probe server is owned by the main process
+		PrivilegeProfile:  localAgentPrivilegeProfile,
 	}
 
 	tunnelClient := agent.NewTunnelClient(cfg, logger.With("component", "local-agent"))
@@ -184,7 +204,7 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	// against the same TunnelClient instance the local goroutine uses.
 	k8sProxy, err := agent.NewK8sProxyWithConfig(restCfg, logger)
 	if err != nil {
-		return fmt.Errorf("create local k8s proxy: %w", err)
+		return nil, fmt.Errorf("create local k8s proxy: %w", err)
 	}
 	// Streaming variant for the embedded local agent —
 	// large list responses (e.g. /apis/.../resources) get chunked instead
@@ -210,7 +230,7 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	svcProxy := agent.NewServiceProxy(logger)
 	tunnelClient.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
-	helm := agent.NewHelmHandler(logger)
+	helm := agent.NewHelmHandler(logger, helmRuntime)
 	tunnelClient.RegisterHandler(protocol.MsgHelmInstall, helm.HandleInstall)
 	tunnelClient.RegisterHandler(protocol.MsgHelmUpgrade, helm.HandleUpgrade)
 	tunnelClient.RegisterHandler(protocol.MsgHelmUninstall, helm.HandleUninstall)
@@ -223,79 +243,87 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	health := agent.NewHealthReporter(clientset, logger, cfg.HeartbeatInterval, cfg.MetricsInterval)
 	health.SetAgentVersion(version.Version)
 	health.SetClusterID(cfg.ClusterID)
+	health.SetPrivilegeProfile(cfg.PrivilegeProfile)
 	if mc, err := metricsv.NewForConfig(restCfg); err == nil {
 		health.SetMetricsClient(mc)
 	} else {
 		logger.Debug("local agent metrics client unavailable", "error", err)
 	}
 
-	go func() {
-		// Wait until the tunnel reports connected so the first heartbeat isn't
-		// dropped on the floor by the send-buffer fast path and so the informer
-		// subscriber only starts once outbound STATE_UPDATE sends can succeed.
-		ticker := time.NewTicker(250 * time.Millisecond)
-		defer ticker.Stop()
-		for !tunnelClient.IsConnected() {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-		subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
-		// P4.6 informer expansion: metadata-only informers (extra built-in
-		// kinds, Helm release Secrets, discover-if-present CRDs).
-		if mc, mErr := metadata.NewForConfig(restCfg); mErr == nil {
-			subscriber.SetMetadataClient(mc)
-		} else {
-			logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
-		}
-		// Serve the heartbeat/metrics node + pod inventory from the informer
-		// caches this subscriber already maintains, instead of re-listing the
-		// whole cluster from the apiserver on every tick.
-		health.SetInventorySource(subscriber)
-		go subscriber.Run(ctx)
-		// Track every tunnel transition, not just the first connect, so
-		// collection pauses while the embedded tunnel is down.
-		tunnelClient.SetConnectionListener(health.SetConnected)
-		health.SetConnected(true)
-		health.Start(ctx, tunnelClient.SendFunc(ctx))
-	}()
-
-	go func() {
-		logger.Info("starting embedded local agent",
-			"cluster_id", cfg.ClusterID,
-			"agent_id", cfg.AgentID,
-			"server_url", cfg.ServerURL,
+	return func(ctx context.Context) error {
+		return runRuntimeLoopGroup(ctx,
+			namedRuntimeLoop{name: "local-agent-observers", run: func(ctx context.Context) {
+				// Wait until the tunnel reports connected so the first heartbeat isn't
+				// dropped on the floor by the send-buffer fast path and so the informer
+				// subscriber only starts once outbound STATE_UPDATE sends can succeed.
+				ticker := time.NewTicker(250 * time.Millisecond)
+				defer ticker.Stop()
+				for !tunnelClient.IsConnected() {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+					}
+				}
+				subscriber := agent.NewStateSubscriber(clientset, tunnelClient, logger.With("component", "local-agent"))
+				// P4.6 informer expansion: metadata-only informers (extra built-in
+				// kinds, Helm release Secrets, discover-if-present CRDs).
+				if mc, mErr := metadata.NewForConfig(restCfg); mErr == nil {
+					subscriber.SetMetadataClient(mc)
+				} else {
+					logger.Warn("local agent: metadata client init failed; expanded informer set disabled", "error", mErr)
+				}
+				// Serve the heartbeat/metrics node + pod inventory from the informer
+				// caches this subscriber already maintains, instead of re-listing the
+				// whole cluster from the apiserver on every tick.
+				health.SetInventorySource(subscriber)
+				// Track every tunnel transition, not just the first connect, so
+				// collection pauses while the embedded tunnel is down.
+				tunnelClient.SetConnectionListener(health.SetConnected)
+				health.SetConnected(true)
+				if err := runRuntimeLoopGroup(ctx,
+					namedRuntimeLoop{name: "local-agent-state-subscriber", run: subscriber.Run},
+					namedRuntimeLoop{name: "local-agent-health", run: func(ctx context.Context) {
+						health.Start(ctx, tunnelClient.SendFunc(ctx))
+					}},
+				); err != nil {
+					logger.Error("embedded local agent observer stopped", "error", err)
+				}
+			}},
+			namedRuntimeLoop{name: "local-agent-tunnel", run: func(ctx context.Context) {
+				logger.Info("starting embedded local agent",
+					"cluster_id", cfg.ClusterID,
+					"agent_id", cfg.AgentID,
+					"server_url", cfg.ServerURL,
+				)
+				// Outer retry loop: NewApp returns before httpServer.Serve is called,
+				// so the very first dial will hit "connection refused". TunnelClient's
+				// internal reconnect only starts AFTER one successful CONNECT. Wrap the
+				// initial attempt in a backoff loop so we wait until the server is
+				// actually listening, then hand off to TunnelClient's reconnect logic.
+				backoff := 500 * time.Millisecond
+				for {
+					if ctx.Err() != nil {
+						return
+					}
+					err := tunnelClient.Connect(ctx)
+					if err == nil {
+						logger.Info("local agent shut down cleanly")
+						return
+					}
+					logger.Warn("local agent tunnel exited; retrying", "error", err, "backoff", backoff.String())
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(backoff):
+					}
+					if backoff < 30*time.Second {
+						backoff *= 2
+					}
+				}
+			}},
 		)
-		// Outer retry loop: NewApp returns before httpServer.Serve is called,
-		// so the very first dial will hit "connection refused". TunnelClient's
-		// internal reconnect only starts AFTER one successful CONNECT. Wrap the
-		// initial attempt in a backoff loop so we wait until the server is
-		// actually listening, then hand off to TunnelClient's reconnect logic.
-		backoff := 500 * time.Millisecond
-		for {
-			if ctx.Err() != nil {
-				return
-			}
-			err := tunnelClient.Connect(ctx)
-			if err == nil {
-				logger.Info("local agent shut down cleanly")
-				return
-			}
-			logger.Warn("local agent tunnel exited; retrying", "error", err, "backoff", backoff.String())
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
-			}
-			if backoff < 30*time.Second {
-				backoff *= 2
-			}
-		}
-	}()
-
-	return nil
+	}, nil
 }
 
 // generateLocalAgentToken returns a 32-byte cryptographically random URL-safe

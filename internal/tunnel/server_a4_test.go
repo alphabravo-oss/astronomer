@@ -29,7 +29,7 @@ func (s *auditValidatorStub) CreateAuditLogV1(_ context.Context, arg sqlc.Create
 }
 
 func TestHandleWebSocketRejects429WhenBlocked(t *testing.T) {
-	hub := NewHub(nil)
+	hub := NewHubWithValidator(nil, &auditValidatorStub{})
 	lim := NewConnectFailureLimiter(3, time.Minute, nil)
 	hub.SetConnectLimiter(lim, 0)
 
@@ -55,7 +55,7 @@ func TestHandleWebSocketRejects429WhenBlocked(t *testing.T) {
 }
 
 func TestHandleWebSocketBlockedIsPerIP(t *testing.T) {
-	hub := NewHub(nil)
+	hub := NewHubWithValidator(nil, &auditValidatorStub{})
 	lim := NewConnectFailureLimiter(3, time.Minute, nil)
 	hub.SetConnectLimiter(lim, 0)
 	for i := 0; i < 3; i++ {
@@ -72,6 +72,16 @@ func TestHandleWebSocketBlockedIsPerIP(t *testing.T) {
 
 	if rec.Code == 429 {
 		t.Fatal("an unrelated IP must not receive a 429")
+	}
+}
+
+func TestHandleWebSocketRejectsMissingTokenValidator(t *testing.T) {
+	hub := NewHub(nil)
+	req := httptest.NewRequest("GET", "/api/v1/ws/agent/tunnel/c1/", nil)
+	rec := httptest.NewRecorder()
+	hub.HandleWebSocket(rec, req)
+	if rec.Code != 503 {
+		t.Fatalf("status = %d, want 503", rec.Code)
 	}
 }
 

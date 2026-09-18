@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -30,7 +32,7 @@ func (f *fakeUserBindingsQuerier) ListProjectNamespaces(_ context.Context, proje
 func nsListReq(t *testing.T, clusterID, query string) *http.Request {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/clusters/"+clusterID+"/pods/"+query, nil)
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: uuid.New().String(), Email: "u@test.com"})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.New().String(), Email: "u@test.com"})
 	req = req.WithContext(ctx)
 	return setupChiRequest(req, map[string]string{"cluster_id": clusterID})
 }

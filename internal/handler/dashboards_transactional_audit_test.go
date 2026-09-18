@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -63,16 +64,12 @@ func TestDashboardStateAndAuditCommitTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/admin/dashboard-widgets/", nil)
 			params := sqlc.CreateDashboardWidgetParams{Name: "health", WidgetType: "prom_stat", Scope: "global"}
 
-			_, err := executeDashboardMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q DashboardMutationTx) (sqlc.DashboardWidget, error) {
 					return q.CreateDashboardWidget(r.Context(), params)
 				},
-				func() (sqlc.DashboardWidget, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.DashboardWidget{}, nil
-				},
-				func(row sqlc.DashboardWidget) clusterAuditEvent {
-					return clusterAuditEvent{
+				func(row sqlc.DashboardWidget) mutationAuditEvent {
+					return mutationAuditEvent{
 						action: "admin.dashboard_widget.created", resourceType: "dashboard_widget",
 						resourceID: row.ID.String(), resourceName: row.Name, status: http.StatusCreated,
 					}
@@ -88,11 +85,7 @@ func TestDashboardStateAndAuditCommitTogether(t *testing.T) {
 }
 
 func TestEveryDashboardMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("dashboards.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	paths, err := filepath.Glob("dashboards*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,28 +93,37 @@ func TestEveryDashboardMutationUsesTransactionalExecutor(t *testing.T) {
 		"AdminCreate": false, "AdminUpdate": false, "AdminDelete": false,
 		"AdminCreateDatasource": false, "AdminUpdateDatasource": false, "AdminDeleteDatasource": false,
 	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
 		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if _, tracked := want[fn.Name.Name]; !tracked {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
+					want[fn.Name.Name] = true
+				}
 				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeDashboardMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
+			})
+		}
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeDashboardMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

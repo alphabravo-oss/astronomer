@@ -1,25 +1,24 @@
 import { useCallback, useMemo, useState } from "react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
+import type { SortingState } from "@tanstack/react-table";
 import {
   useClusterEvents,
   useClusterNamespaces,
   useClusterNodes,
+  useClusterPods,
   useDeletePod,
   useNodeOperation,
-  useK8sDelete,
-} from "@/lib/hooks";
-import * as apiClient from "@/lib/api";
-import { useLiveQuery } from "@tanstack/react-db";
-import {
-  k8sCollection,
-  podRowFromRaw,
-  type RawPod,
-} from "@/lib/db/collections";
-import { useRouter } from "@/lib/navigation";
+} from "@/lib/hooks/clusters";
+import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
+import { k8sCreate } from "@/lib/api/kubernetes-proxy";
+import type { PodSort } from "@/lib/api/workloads";
+import { useNavigate } from "@tanstack/react-router";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
 import { ActionButton } from "@/components/ui/action-button";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import type { Column } from "@/components/ui/data-table";
+import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
@@ -40,6 +39,7 @@ import {
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
 import { k8sResourcePath } from "@/lib/k8s-paths";
+import { pageRowCount } from "@/lib/api/pagination";
 import {
   permissionDeniedReason,
   toastPermissionDenied,
@@ -58,10 +58,11 @@ import {
 } from "lucide-react";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
 import { OperationPartialError } from "@/lib/api/operation-polling";
+import { cn } from "@/lib/utils";
 
 export function NodesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNodes(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const nodeOperation = useNodeOperation();
   const permissions = useClusterResourcePermissions(clusterId, "nodes");
   const [yamlTarget, setYamlTarget] = useState<{
@@ -199,19 +200,27 @@ export function NodesTable({ clusterId }: { clusterId: string }) {
           ? `Node operation ${nodeOperation.operationState.phase}`
           : ""}
       </p>
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="nodes"
         data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         searchPlaceholder="Search nodes..."
         loading={isLoading}
-        emptyMessage="No nodes found"
+        emptyState={{
+          title: "No nodes found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
         onRowClick={(row) => {
           if (!permissions.read.allowed) {
             toastPermissionDenied(permissions.read);
             return;
           }
-          router.push(`/dashboard/clusters/${clusterId}/nodes/${row.name}`);
+          void navigate({
+            to: `/dashboard/clusters/${clusterId}/nodes/${row.name}`,
+          });
         }}
       />
 
@@ -246,7 +255,7 @@ export function NodesTable({ clusterId }: { clusterId: string }) {
 
 export function NamespacesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNamespaces(clusterId);
-  const router = useRouter();
+  const navigate = useNavigate();
   const k8sDeleteMut = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, "namespaces");
   const [yamlTarget, setYamlTarget] = useState<{
@@ -256,8 +265,6 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
   const [deleteTarget, setDeleteTarget] = useState<Namespace | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newNsName, setNewNsName] = useState("");
-  const k8sCreate = apiClient.k8sCreate;
-
   const handleCreateNamespace = async () => {
     if (!permissions.create.allowed) {
       toastPermissionDenied(permissions.create);
@@ -347,19 +354,26 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
         </ActionButton>
       </div>
 
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="namespaces"
         data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={makeRowClick(
-          router,
+          navigate,
           clusterId,
           "namespaces",
           permissions.read,
         )}
         searchPlaceholder="Search namespaces..."
         loading={isLoading}
-        emptyMessage="No namespaces found"
+        emptyState={{
+          title: "No namespaces found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        namespaceAccessor={(row) => row.name}
       />
 
       {yamlTarget && (
@@ -459,32 +473,51 @@ export function NamespacesTable({ clusterId }: { clusterId: string }) {
 export function EventsTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterEvents(clusterId, { limit: 200 });
   return (
-    <DataTable
+    <ExplorerDataTable
+      clusterId={clusterId}
+      resourceType="events"
       data={data || []}
       columns={eventColumns}
       keyExtractor={(r) => r.id}
       searchPlaceholder="Search events..."
       loading={isLoading}
-      emptyMessage="No events found"
+      emptyState={{
+        title: "No events found",
+        description: "New observations will appear here as they are reported.",
+      }}
+      namespaceAccessor={(row) => row.involvedObject.namespace}
     />
   );
 }
 
 export function PodsTable({ clusterId }: { clusterId: string }) {
-  const router = useRouter();
-  // Live pods collection (P4.7): raw pod objects seeded by a list and folded
-  // from the pods SSE watch, shaped into display rows client-side. Deletes and
-  // restarts land as watch frames, so no invalidation plumbing is needed.
-  const pods = k8sCollection<RawPod>({ clusterId, source: { kind: "pods" } });
-  const live = useLiveQuery(
-    (q) => q.from({ p: pods.collection }),
-    [pods.collection],
-  );
-  const data = useMemo(
-    () => (live.data ?? []).map((p) => podRowFromRaw(clusterId, p)),
-    [live.data, clusterId],
-  );
-  const isLoading = !live.isReady;
+  const navigate = useNavigate();
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageSize = 20;
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "namespace", desc: false },
+  ]);
+  const [healthFilter, setHealthFilter] = useState<
+    "all" | "attention" | "restarted"
+  >("all");
+  const sort = (
+    sorting[0]
+      ? `${sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
+      : "namespace_asc"
+  ) as PodSort;
+  // Pod changes are routed by the shared SSE dispatcher to this Query key;
+  // the hook polls only while the dashboard event stream is unavailable.
+  const podsQuery = useClusterPods(clusterId, {
+    limit: pageSize,
+    offset: pageIndex * pageSize,
+    search: debouncedSearch.trim() || undefined,
+    sort,
+    health: healthFilter,
+  });
+  const data = useMemo(() => podsQuery.data?.data ?? [], [podsQuery.data]);
+  const isLoading = podsQuery.isLoading;
   const deletePod = useDeletePod();
   const permissions = useClusterResourcePermissions(clusterId, "pods");
 
@@ -508,7 +541,9 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
         clusterId,
         namespace: pod.namespace,
         pod: pod.name,
-        container: pod.containers[0]?.name,
+        container:
+          pod.containers.find((container) => !container.init)?.name ??
+          pod.containers[0]?.name,
       });
     },
     [clusterId, permissions.logs],
@@ -524,7 +559,9 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
         clusterId,
         namespace: pod.namespace,
         pod: pod.name,
-        container: pod.containers[0]?.name,
+        container:
+          pod.containers.find((container) => !container.init)?.name ??
+          pod.containers[0]?.name,
       });
     },
     [clusterId, permissions.exec],
@@ -599,6 +636,21 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
       permissions.read,
     ],
   );
+  const sortableKeys = new Set([
+    "name",
+    "namespace",
+    "status",
+    "restarts",
+    "node",
+    "age",
+  ]);
+  const serverColumns = columns.map((column) => ({
+    ...column,
+    sortable: sortableKeys.has(column.key),
+    // Facet values derived from one server page would be incomplete. The
+    // server-backed health/search controls below operate over the full set.
+    filter: undefined,
+  }));
 
   return (
     <>
@@ -607,14 +659,86 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
           ? `Pod deletion ${deletePod.operationState.phase}`
           : ""}
       </p>
-      <DataTable
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType="pods"
         data={data}
-        columns={columns}
+        columns={serverColumns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search pods..."
+        pageSize={pageSize}
+        serverSide={{
+          rowCount: pageRowCount(podsQuery.data),
+          pagination: { pageIndex, pageSize },
+          onPaginationChange: (next) => setPageIndex(next.pageIndex),
+          search: {
+            value: search,
+            onChange: (value) => {
+              setSearch(value);
+              setPageIndex(0);
+            },
+          },
+          sorting: {
+            value: sorting,
+            onChange: (next) => {
+              setSorting(next.slice(0, 1));
+              setPageIndex(0);
+            },
+          },
+        }}
+        filtersActive={healthFilter !== "all" || search.trim() !== ""}
+        onClearFilters={() => {
+          setHealthFilter("all");
+          setSearch("");
+          setPageIndex(0);
+        }}
+        toolbar={
+          <div
+            className="flex items-center gap-1 rounded-md border border-border bg-muted/20 p-1"
+            aria-label="Pod health filter"
+          >
+            {(
+              [
+                ["all", "All"],
+                ["attention", "Needs attention"],
+                ["restarted", "Restarted"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={healthFilter === value}
+                onClick={() => {
+                  setHealthFilter(value);
+                  setPageIndex(0);
+                }}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors",
+                  healthFilter === value
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        }
         loading={isLoading}
-        emptyMessage="No pods found"
-        onRowClick={makeRowClick(router, clusterId, "pods", permissions.read)}
+        isError={podsQuery.isError}
+        error={podsQuery.error}
+        onRetry={() => void podsQuery.refetch()}
+        emptyState={{
+          title: "No pods found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        onRowClick={makeRowClick(navigate, clusterId, "pods", permissions.read)}
+        bulkDelete={{
+          path: (row) => k8sResourcePath("pods", row.name, row.namespace),
+          label: (row) => `${row.namespace}/${row.name}`,
+          noun: "pod",
+        }}
       />
 
       <ConfirmDialog

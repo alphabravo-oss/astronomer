@@ -1,4 +1,3 @@
-"use client";
 
 // §HostMounts — ExtensionProvider: the React context that owns the enabled-
 // extension registry for the host runtime. It wraps the dashboard shell once,

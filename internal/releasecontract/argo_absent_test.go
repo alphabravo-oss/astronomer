@@ -11,7 +11,27 @@ import (
 
 // Runtime Argo/Fleet identifiers must stay gone from the v1 product surface.
 // Historical advisor-plans and archived docs may still mention the old stack.
-var forbiddenRuntimeArgo = regexp.MustCompile(`(?i)(argocd|argo-cd|argoproj|/argocd)`)
+var forbiddenRuntimeDelivery = regexp.MustCompile(`(?i)(argocd|argo-cd|argoproj|/argocd|fleet_operations?)`)
+
+// Retired identifiers are legitimate only where a negative contract detects
+// or rejects them. Keep this allowlist path- and token-specific so production
+// code cannot make a stale integration invisible by splitting string literals.
+var allowedHistoricalDelivery = map[string][]string{
+	"cmd/astro/delivery_test.go": {"argocd"},
+	"deploy/chart/templates/preflight-job.yaml": {
+		"argocd_baseline_ownership_decisions", "argocd_cluster_proxy_tokens",
+		"argocd_managed_clusters", "argocd_operation_events", "argocd_operations",
+		"argocd_applications", "argocd_instances", "fleet_operation_targets", "fleet_operations",
+	},
+	"internal/db/freshinstall/freshinstall.go": {
+		"argocd_baseline_ownership_decisions", "argocd_cluster_proxy_tokens",
+		"argocd_managed_clusters", "argocd_operation_events", "argocd_operations",
+		"argocd_applications", "argocd_instances", "fleet_operation_targets", "fleet_operations",
+	},
+	"internal/db/freshinstall/freshinstall_test.go": {
+		"argocd_applications", "argocd_instances", "fleet_operations",
+	},
+}
 
 func TestRuntimeHasNoArgoCD(t *testing.T) {
 	root := findModuleRoot(t)
@@ -57,7 +77,10 @@ func TestRuntimeHasNoArgoCD(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if forbiddenRuntimeArgo.Match(body) {
+			for _, allowed := range allowedHistoricalDelivery[filepath.ToSlash(rel)] {
+				body = []byte(strings.ReplaceAll(string(body), allowed, ""))
+			}
+			if forbiddenRuntimeDelivery.Match(body) {
 				hits = append(hits, rel)
 			}
 			return nil

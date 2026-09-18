@@ -11,9 +11,7 @@ import (
 )
 
 func TestSSORoutesAcceptNoTrailingSlash(t *testing.T) {
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		SSO: handler.NewSSOHandler(nil, nil, nil, "/"),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{SSO: handler.NewSSOHandler(nil, nil, "/")}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/dex", nil)
 	rec := httptest.NewRecorder()

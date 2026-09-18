@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // nsWatchFrames is a fixed set of pod-watch frames spanning two namespaces plus
@@ -32,7 +33,7 @@ func doWatchPods(t *testing.T, h *WorkloadHandler, clusterID string, bindings []
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("cluster_id", clusterID)
 	req := httptest.NewRequest("GET", "/api/v1/clusters/"+clusterID+"/pods/watch/", nil)
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.New().String(), Email: "u@test.com"})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.New().String(), Email: "u@test.com"})
 	ctx = context.WithValue(ctx, chi.RouteCtxKey, rc)
 	req = req.WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -103,7 +104,8 @@ func TestWatchPods_FlagOffNoFiltering(t *testing.T) {
 	h := NewWorkloadHandler()
 	h.SetPodWatcher(&fakePodWatcher{events: nsWatchFrames()})
 	h.SetAuthorization(rbac.NewEngine(), stubWorkloadRBACQuerier{bindings: binding})
-	// namespace_scoped_rbac_enabled OFF (default).
+	// Unconfigured test handler: filtering is explicitly absent here. Production
+	// wiring enables namespace_scoped_rbac_enabled by default.
 
 	body := doWatchPods(t, h, clusterID, binding)
 	if !strings.Contains(body, `"namespace":"team-a"`) || !strings.Contains(body, `"namespace":"team-b"`) {

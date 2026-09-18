@@ -7,19 +7,27 @@
 -- cluster:decommission for each. The handler tier owns CRUD over the
 -- sources themselves and the per-source /clusters/ + /preview/ readers.
 
--- name: ListGitOpsSources :many
-SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
+-- name: ListGitOpsSourcesPage :many
+-- List projection intentionally excludes both encrypted credential columns.
+SELECT id, name, repo_url, branch, path_prefix, auth_mode,
+       (auth_encrypted <> '') AS auth_configured,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission
+       created_by, created_at, updated_at, allow_mass_decommission,
+       webhook_provider, (webhook_secret_encrypted <> '') AS webhook_configured
 FROM gitops_registration_sources
-ORDER BY name ASC;
+ORDER BY name ASC, id ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountGitOpsSources :one
+SELECT count(*) FROM gitops_registration_sources;
 
 -- name: ListEnabledGitOpsSources :many
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission
+       created_by, created_at, updated_at, allow_mass_decommission,
+       webhook_provider, webhook_secret_encrypted
 FROM gitops_registration_sources
 WHERE enabled = true
 ORDER BY name ASC;
@@ -28,7 +36,8 @@ ORDER BY name ASC;
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission
+       created_by, created_at, updated_at, allow_mass_decommission,
+       webhook_provider, webhook_secret_encrypted
 FROM gitops_registration_sources
 WHERE id = $1;
 
@@ -36,19 +45,22 @@ WHERE id = $1;
 SELECT id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
        sync_mode, sync_interval_seconds, on_delete,
        last_synced_at, last_synced_sha, last_error, enabled,
-       created_by, created_at, updated_at, allow_mass_decommission
+       created_by, created_at, updated_at, allow_mass_decommission,
+       webhook_provider, webhook_secret_encrypted
 FROM gitops_registration_sources
 WHERE name = $1;
 
 -- name: CreateGitOpsSource :one
 INSERT INTO gitops_registration_sources (
     name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
-    sync_mode, sync_interval_seconds, on_delete, enabled, created_by
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    sync_mode, sync_interval_seconds, on_delete, enabled, created_by,
+    webhook_provider, webhook_secret_encrypted
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
           sync_mode, sync_interval_seconds, on_delete,
           last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at, allow_mass_decommission;
+          created_by, created_at, updated_at, allow_mass_decommission,
+          webhook_provider, webhook_secret_encrypted;
 
 -- name: UpdateGitOpsSource :one
 UPDATE gitops_registration_sources
@@ -63,12 +75,21 @@ SET name                  = $2,
     on_delete             = $10,
     enabled               = $11,
     allow_mass_decommission = $12,
+    webhook_provider       = $13,
+    webhook_secret_encrypted = $14,
     updated_at            = now()
 WHERE id = $1
 RETURNING id, name, repo_url, branch, path_prefix, auth_mode, auth_encrypted,
           sync_mode, sync_interval_seconds, on_delete,
           last_synced_at, last_synced_sha, last_error, enabled,
-          created_by, created_at, updated_at, allow_mass_decommission;
+          created_by, created_at, updated_at, allow_mass_decommission,
+          webhook_provider, webhook_secret_encrypted;
+
+-- name: CreateGitOpsWebhookReceipt :one
+INSERT INTO gitops_webhook_receipts (source_id, content_digest)
+VALUES ($1, $2)
+ON CONFLICT (source_id, content_digest) DO NOTHING
+RETURNING received_at;
 
 -- name: DeleteGitOpsSource :exec
 DELETE FROM gitops_registration_sources WHERE id = $1;
@@ -108,6 +129,18 @@ SELECT cluster_id, source_id, repo_path, last_yaml_sha, last_applied_at,
 FROM gitops_registered_clusters
 WHERE source_id = $1
 ORDER BY repo_path ASC;
+
+-- name: ListGitOpsRegisteredClustersBySourcePage :many
+-- Admin list projection joins display metadata in the same bounded query,
+-- avoiding both an unbounded reconciliation read and per-row cluster lookups.
+SELECT g.cluster_id, g.source_id, g.repo_path, g.last_yaml_sha,
+       g.last_applied_at, g.status, g.tombstoned_at, g.created_at, g.updated_at,
+       c.name AS cluster_name, c.display_name
+FROM gitops_registered_clusters g
+LEFT JOIN clusters c ON c.id = g.cluster_id
+WHERE g.source_id = sqlc.arg(source_id)
+ORDER BY g.repo_path ASC, g.cluster_id ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: UpsertGitOpsRegisteredCluster :one
 -- The sync worker calls this after a YAML's contents have been applied

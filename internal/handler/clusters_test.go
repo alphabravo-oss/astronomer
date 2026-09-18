@@ -20,7 +20,7 @@ func TestRenderAgentInstallManifestUsesTemplate(t *testing.T) {
 		Name: "demo",
 	}
 
-	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
+	manifest := mustRenderAgentInstallManifest(t, h, cluster, "reg-token", "https://astro.example.com")
 
 	checks := []string{
 		"name: astronomer-system",
@@ -58,9 +58,27 @@ func TestRenderAgentInstallManifestPreservesReleaseDigest(t *testing.T) {
 	h := NewClusterHandler(nil)
 	h.SetAgentImage(digestRef, "v1.2.3")
 	cluster := sqlc.Cluster{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), Name: "demo"}
-	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
+	manifest := mustRenderAgentInstallManifest(t, h, cluster, "reg-token", "https://astro.example.com")
 	if !strings.Contains(manifest, `image: "`+digestRef+`"`) {
 		t.Fatalf("manifest does not preserve agent digest")
+	}
+}
+
+func TestRenderAgentInstallManifestCarriesConfiguredTraceRouting(t *testing.T) {
+	h := NewClusterHandler(nil)
+	h.SetAgentImage("example.com/astronomer-agent", "v1.2.3")
+	h.SetAgentTelemetry("http://tempo.observability.svc:4318", true, 0, "production")
+	cluster := sqlc.Cluster{ID: uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"), Name: "demo"}
+	manifest := mustRenderAgentInstallManifest(t, h, cluster, "reg-token", "https://astro.example.com")
+	for _, want := range []string{
+		`value: "http://tempo.observability.svc:4318"`,
+		`value: "true"`,
+		`value: "0"`,
+		`value: "production"`,
+	} {
+		if !strings.Contains(manifest, want) {
+			t.Fatalf("manifest missing trace setting %q", want)
+		}
 	}
 }
 
@@ -80,7 +98,7 @@ func TestRenderAgentInstallManifestHonorsPrivilegeProfileAnnotation(t *testing.T
 		Annotations: annotations,
 	}
 
-	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
+	manifest := mustRenderAgentInstallManifest(t, h, cluster, "reg-token", "https://astro.example.com")
 	if !strings.Contains(manifest, `verbs: ["get", "list", "watch"]`) {
 		t.Fatalf("viewer RBAC not rendered:\n%s", manifest)
 	}
@@ -113,7 +131,7 @@ func TestRenderAgentInstallManifestHonorsSafeAgentInstallMetadataAnnotations(t *
 		Annotations: annotations,
 	}
 
-	manifest := h.renderAgentInstallManifest(cluster, "reg-token", "https://astro.example.com")
+	manifest := mustRenderAgentInstallManifest(t, h, cluster, "reg-token", "https://astro.example.com")
 	for _, want := range []string{
 		`image: "example.com/default-agent:v1.2.3"`,
 		"name: team-agent",

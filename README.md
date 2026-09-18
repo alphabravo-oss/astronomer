@@ -156,14 +156,18 @@ Production-oriented chart capabilities include:
 - NetworkPolicy with explicit ingress and egress boundaries.
 - Ingress/Gateway and TLS integration.
 - cert-manager and Let's Encrypt compatibility.
-- External Postgres and Redis support for production.
+- External data services or managed CloudNativePG and Sentinel-backed Valkey
+  for production.
 - Bootstrap admin credential generation or operator-provided password.
 - Non-root security contexts, dropped capabilities, seccomp, and read-only-root-filesystem posture where practical.
 - Migration, preflight, backup, and restore-drill jobs.
 - Management-plane backup to S3-compatible storage.
 - Production value validation and chart render tests.
 
-The bundled Postgres and Redis profiles are for development, CI, and small smoke environments. Real production installs should use managed or HA Postgres, TLS, backups, restore drills, and separate protection for encryption and signing keys.
+The bundled Postgres and Valkey profiles are for development, CI, and small
+smoke environments. Production can use external services or the chart's
+three-node CloudNativePG and Sentinel profiles, plus TLS, off-cluster backups,
+restore drills, and separate protection for encryption and signing keys.
 
 ## What Astronomer Is Not
 
@@ -177,7 +181,42 @@ For local development:
 
 ```bash
 make dev
+cd frontend
+npm ci
+npm run dev
 ```
+
+The Vite development server binds to `127.0.0.1` by default. Set
+`VITE_DEV_HOST=0.0.0.0` explicitly only when running it inside an isolated
+development container that must publish the port.
+
+`make dev` starts Postgres, Redis, migrations, the Go server on port 8001,
+and the worker. Vite serves the operator console on port 3000 and proxies API
+and WebSocket traffic to the Go server. Use `make dev-full` when the
+containerized frontend is preferable to the Vite development server. After a
+Go or SQL change, run `make dev-reload` to rebuild and replace the migrator,
+server, and worker through the same production Dockerfiles. The explicit
+rebuild is the supported backend reload path; the repository does not require a
+separate file-watcher runtime.
+Use the optional [local telemetry stack](docs/local-telemetry.md) to inspect
+correlated JSON logs, Prometheus exemplars and end-to-end traces without a
+hosted collector.
+
+### Verification scopes
+
+| Command | What it proves | Requirements / exclusions |
+|---|---|---|
+| `make verify-enterprise VERIFY_SCOPE=backend` | Go formatting, build, vet, unit/race tests, architecture and generated-document contracts. | Go and the tools checked by the script; not stateful failure qualification. |
+| `make verify-enterprise VERIFY_SCOPE=frontend` | TypeScript, zero-warning lint, unit behavior tests, dependency audit and production bundle budgets. | Node 24.21.0 and `npm ci`; no browser or live-cluster acceptance. |
+| `make verify-enterprise VERIFY_SCOPE=helm` | Chart lint/render, release artifacts and deployment contracts. | Helm and the script's deployment-tool prerequisites; no live installation. |
+| `make verify-enterprise VERIFY_SCOPE=api-contract` | OpenAPI quality, route/request coverage and generated-client freshness. | Go and Node; focused contract diagnostics. |
+| `make verify-enterprise VERIFY_SCOPE=all` | All static backend, frontend and Helm scopes. | Does **not** substitute for the stateful/browser lanes below. |
+| `make verify-all` | Static scopes plus PostgreSQL and worker integration, restart/outage recovery (including race variants), tunnel HA, database failover, Playwright and live-browser qualification. | Docker, browser binaries and the lane-specific cluster/credential prerequisites; destructive lanes require disposable targets. |
+
+The enterprise script records the source-tree fingerprint, tool versions and
+per-command results under `artifacts/`. A green static scope is not a measured
+scale result or proof of production restore, accessibility or live acceptance.
+See [workflow responsibilities](.github/workflows/README.md) for CI ownership.
 
 For a Kubernetes install, use an exact published chart version. The chart ships
 no key material in any profile, so generate the JWT signing key and the Fernet
@@ -201,22 +240,24 @@ helm upgrade --install ngf \
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.1.0 \
+  --version 1.2.0 \
   --namespace astronomer \
   --create-namespace \
   --set-file secrets.secretKey=./jwt-key \
   --set-file secrets.encryptionKey=./fernet-key
 ```
 
-For production, layer the production values file and provide external Postgres, external Redis, TLS, bootstrap credentials, encryption keys, and backup settings:
+For production, layer the production values file and provide the CloudNativePG
+operator (or select external data services), TLS, bootstrap credentials,
+encryption keys, a Valkey password Secret, and backup settings:
 
 ```bash
-git clone --branch v1.1.0 --depth 1 \
+git clone --branch v1.2.0 --depth 1 \
   https://github.com/alphabravo-oss/astronomer.git astronomer-release
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.1.0 \
+  --version 1.2.0 \
   --namespace astronomer \
   --create-namespace \
   -f astronomer-release/deploy/chart/values-production.yaml \
@@ -268,6 +309,8 @@ Typical first workflows:
 - [Secret handling policy](docs/secret-handling-policy.md)
 - [Threat model](docs/threat-model.md)
 - [Operator runbooks](docs/runbooks/README.md)
+- [Configuration reference](docs/configuration.md)
+- [astro CLI reference](docs/cli.md)
 - [OpenAPI specification](docs/openapi.yaml)
 
 ## License

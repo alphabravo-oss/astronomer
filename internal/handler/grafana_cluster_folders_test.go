@@ -10,12 +10,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -315,6 +316,7 @@ func (f *grafanaFolderTriggerFake) TriggerGrafanaFolderReconcile() { f.n++ }
 func TestClusterCreateTriggersGrafanaFolderReconcile(t *testing.T) {
 	q := newFakeAutoAttachClusterQuerier()
 	h := NewClusterHandler(q)
+	setClusterTestRunTx(h, q)
 	trig := &grafanaFolderTriggerFake{}
 	h.SetGrafanaFolderReconciler(trig)
 
@@ -338,6 +340,7 @@ func TestClusterDeleteTriggersGrafanaFolderReconcile(t *testing.T) {
 		IsLocal: false,
 	}
 	h := NewClusterHandler(q)
+	setClusterTestRunTx(h, q)
 	trig := &grafanaFolderTriggerFake{}
 	h.SetGrafanaFolderReconciler(trig)
 
@@ -345,7 +348,7 @@ func TestClusterDeleteTriggersGrafanaFolderReconcile(t *testing.T) {
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", clusterID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: uuid.NewString(), AuthMethod: "jwt",
 	}))
 	w := httptest.NewRecorder()

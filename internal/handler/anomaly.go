@@ -13,13 +13,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // AnomalyBaselineQuerier is the narrow interface the handler needs.
@@ -52,7 +51,7 @@ func NewAnomalyHandler(queries AnomalyBaselineQuerier) *AnomalyHandler {
 // SetAuthorization wires the RBAC engine + bindings querier the read
 // handlers use to scope baselines to clusters the caller may monitor.
 // Until wired, restricted callers fail closed (see authorizeClusterAction).
-func (h *AnomalyHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+func (h *AnomalyHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
 	if h == nil {
 		return
 	}
@@ -95,7 +94,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		if pageLimit == 0 {
 			pageLimit = 1
 		}
-		RespondList(w, items, NewPagination(len(items), pageLimit, 0, len(items)))
+		paging.Write(w, items, paging.Exact(len(items), pageLimit, 0, len(items)))
 		return
 	}
 	// Resolve the authorized set before LIMIT/OFFSET so hidden fleet rows never
@@ -106,7 +105,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit := queryLimit(r, 50)
-	offset := queryInt(r, "offset", 0)
+	offset := queryOffset(r)
 	var rows []sqlc.AnomalyBaseline
 	var total int64
 	if all {
@@ -135,7 +134,7 @@ func (h *AnomalyHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, b := range rows {
 		items = append(items, anomalyBaselineResponse(b))
 	}
-	RespondList(w, items, NewPagination(int(total), limit, offset, len(rows)))
+	paging.Write(w, items, paging.Exact(total, limit, offset, len(rows)))
 }
 
 // Get handles GET /api/v1/anomaly-baselines/{id}/.

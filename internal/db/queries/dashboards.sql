@@ -1,17 +1,17 @@
 -- Dashboard widgets + Prometheus datasources (migration 058).
 --
--- Hand-edited SQL companion to the hand-written sqlc shim in
--- internal/db/sqlc/dashboards.sql.go. The sqlc CLI isn't part of the
--- local build path (compliance.sql lexer error blocks a fresh
--- generate); these queries are kept in the canonical queries/ tree so
--- a future `sqlc generate` picks them up by name.
+-- Canonical sqlc source for dashboard widgets and Prometheus datasources.
 
--- name: ListDashboardWidgets :many
+-- name: ListDashboardWidgetsPage :many
 SELECT id, name, description, widget_type, spec, scope, scope_ids,
        grid_x, grid_y, grid_w, grid_h, refresh_seconds, enabled,
        created_by, created_at, updated_at
 FROM dashboard_widgets
-ORDER BY scope ASC, grid_y ASC, grid_x ASC, name ASC;
+ORDER BY scope ASC, grid_y ASC, grid_x ASC, name ASC, id ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountDashboardWidgets :one
+SELECT count(*) FROM dashboard_widgets;
 
 -- name: GetDashboardWidgetByID :one
 SELECT id, name, description, widget_type, spec, scope, scope_ids,
@@ -76,10 +76,16 @@ ORDER BY scope ASC, grid_y ASC, grid_x ASC, name ASC;
 
 -- Prometheus datasources -------------------------------------------------
 
--- name: ListPrometheusDatasources :many
-SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at
+-- name: ListPrometheusDatasourcesPage :many
+-- Admin lists need only the configured state, never the encrypted credential.
+SELECT id, name, url, (auth_encrypted <> '') AS has_auth,
+       tls_skip_verify, enabled, created_at, updated_at
 FROM prometheus_datasources
-ORDER BY name ASC;
+ORDER BY name ASC, id ASC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountPrometheusDatasources :one
+SELECT count(*) FROM prometheus_datasources;
 
 -- name: ListEnabledPrometheusDatasources :many
 SELECT id, name, url, auth_encrypted, tls_skip_verify, enabled, created_at, updated_at

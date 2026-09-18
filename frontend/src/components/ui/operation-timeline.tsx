@@ -1,4 +1,3 @@
-"use client";
 
 import type { ReactNode } from "react";
 import { Check, Circle, Loader2, X } from "lucide-react";
@@ -64,7 +63,7 @@ export function OperationTimeline({
               {step.status === "running" &&
                 step.progressPct &&
                 step.progressPct > 0 && (
-                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-muted">
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-sm bg-muted">
                     <div
                       className="h-full bg-primary"
                       style={{ width: `${step.progressPct}%` }}

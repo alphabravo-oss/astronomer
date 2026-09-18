@@ -7,10 +7,22 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countVaultConnections = `-- name: CountVaultConnections :one
+SELECT count(*) FROM vault_connections
+`
+
+func (q *Queries) CountVaultConnections(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countVaultConnections)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createVaultConnection = `-- name: CreateVaultConnection :one
 INSERT INTO vault_connections (
@@ -167,39 +179,65 @@ func (q *Queries) GetVaultConnectionByName(ctx context.Context, name string) (Va
 	return i, err
 }
 
-const listVaultConnections = `-- name: ListVaultConnections :many
+const listVaultConnectionsPage = `-- name: ListVaultConnectionsPage :many
 
-SELECT id, name, description, addr, auth_method, auth_encrypted, namespace,
+SELECT id, name, description, addr, auth_method,
+       (auth_encrypted <> '') AS auth_configured, namespace,
        tls_skip_verify, ca_cert_pem, default_mount, enabled,
        cached_token_expires_at, last_health_at, last_health_ok, last_error,
        created_by, created_at, updated_at
 FROM vault_connections
-ORDER BY name ASC
+ORDER BY name ASC, id ASC
+LIMIT $2 OFFSET $1
 `
+
+type ListVaultConnectionsPageParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
+
+type ListVaultConnectionsPageRow struct {
+	ID                   uuid.UUID          `json:"id"`
+	Name                 string             `json:"name"`
+	Description          string             `json:"description"`
+	Addr                 string             `json:"addr"`
+	AuthMethod           string             `json:"auth_method"`
+	AuthConfigured       bool               `json:"auth_configured"`
+	Namespace            string             `json:"namespace"`
+	TlsSkipVerify        bool               `json:"tls_skip_verify"`
+	CaCertPem            string             `json:"ca_cert_pem"`
+	DefaultMount         string             `json:"default_mount"`
+	Enabled              bool               `json:"enabled"`
+	CachedTokenExpiresAt pgtype.Timestamptz `json:"cached_token_expires_at"`
+	LastHealthAt         pgtype.Timestamptz `json:"last_health_at"`
+	LastHealthOk         bool               `json:"last_health_ok"`
+	LastError            string             `json:"last_error"`
+	CreatedBy            pgtype.UUID        `json:"created_by"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
+}
 
 // Vault connections CRUD (migration 067).
 //
-// Hand-edited SQL paired with the hand-authored sqlc shim in
-// internal/db/sqlc/vault_connections.sql.go (sqlc CLI not available
-// in agent worktrees; same pattern cloud_credentials uses). Keep this
-// file byte-compatible with what sqlc would emit so a future
-// `make sqlc` is a no-op.
-func (q *Queries) ListVaultConnections(ctx context.Context) ([]VaultConnection, error) {
-	rows, err := q.db.Query(ctx, listVaultConnections)
+// Canonical sqlc source for Vault connection persistence.
+// List projection intentionally excludes auth_encrypted. Detail/probe paths
+// use GetVaultConnectionByID when they need to resolve credential material.
+func (q *Queries) ListVaultConnectionsPage(ctx context.Context, arg ListVaultConnectionsPageParams) ([]ListVaultConnectionsPageRow, error) {
+	rows, err := q.db.Query(ctx, listVaultConnectionsPage, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []VaultConnection{}
+	items := []ListVaultConnectionsPageRow{}
 	for rows.Next() {
-		var i VaultConnection
+		var i ListVaultConnectionsPageRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.Description,
 			&i.Addr,
 			&i.AuthMethod,
-			&i.AuthEncrypted,
+			&i.AuthConfigured,
 			&i.Namespace,
 			&i.TlsSkipVerify,
 			&i.CaCertPem,

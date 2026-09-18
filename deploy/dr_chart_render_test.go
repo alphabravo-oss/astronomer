@@ -106,18 +106,16 @@ func TestF8_ProductionWithoutBootstrapPasswordFails(t *testing.T) {
 
 // ── F4: encryption-key backup + restore-drill decrypt proof ─────────────────
 
-// Wiring only the backup S3 target (no key-backup wrapping secret) must NOT
-// mount the key Secret or wrapping passphrase — the key is not written to S3.
+// Wiring only the backup S3 target is intentionally inert: plaintext backups
+// are never an accepted fallback.
 func TestF4_KeyBackupInertWithoutWrappingSecret(t *testing.T) {
 	out := helmTemplate(t,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
 	)
-	if !strings.Contains(out, "name: astronomer-management-backup") {
-		t.Fatalf("backup CronJob should render with S3 wired:\n%s", out)
-	}
-	if strings.Contains(out, "- name: KEYBACKUP_ENABLED") || strings.Contains(out, "name: encryption-keys") {
-		t.Fatalf("key backup must stay inert until a wrapping secret is wired:\n%s", out)
+	docs := parseRenderedDocs(t, out)
+	if renderedDocExists(docs, "CronJob", "astronomer-management-backup") || renderedDocExists(docs, "CronJob", "astronomer-restore-drill") {
+		t.Fatalf("backup/restore workloads must stay inert until authenticated encryption is wired:\n%s", out)
 	}
 }
 
@@ -127,15 +125,19 @@ func TestF4_KeyBackupRendersWhenWrappingSecretWired(t *testing.T) {
 	out := helmTemplate(t,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
-		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
+		"managementBackup.encryption.sourceIdentity=test-installation",
+		"managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap",
 	)
 	for _, want := range []string{
-		"- name: KEYBACKUP_ENABLED",
 		"name: encryption-keys",
 		"name: wrapping-passphrase",
 		`secretName: "astronomer-key-wrap"`,
 		`secretName: "astronomer-secrets"`, // default key Secret = <release>-secrets
-		"openssl enc -aes-256-cbc",
+		"dr-crypto encrypt",
+		"--purpose database-dump",
+		"--purpose key-bundle",
+		"dr-crypto manifest-create",
+		"get-object-lock-configuration",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("key-backup render missing %q:\n%s", want, out)
@@ -143,17 +145,15 @@ func TestF4_KeyBackupRendersWhenWrappingSecretWired(t *testing.T) {
 	}
 }
 
-// The restore-drill decrypt check stays off until its wrapping secret is wired.
+// The restore drill also stays inert until the manifest-authentication secret
+// and stable source identity are wired.
 func TestF4_DrillDecryptCheckInertWithoutWrappingSecret(t *testing.T) {
 	out := helmTemplate(t,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
 	)
-	if !strings.Contains(out, "name: astronomer-restore-drill") {
-		t.Fatalf("restore-drill CronJob should render with S3 wired:\n%s", out)
-	}
-	if strings.Contains(out, "- name: DECRYPT_CHECK_ENABLED") {
-		t.Fatalf("drill decrypt check must stay inert until a wrapping secret is wired:\n%s", out)
+	if renderedDocExists(parseRenderedDocs(t, out), "CronJob", "astronomer-restore-drill") {
+		t.Fatalf("restore drill must stay inert until authenticated encryption is wired:\n%s", out)
 	}
 }
 
@@ -163,12 +163,15 @@ func TestF4_DrillDecryptCheckRendersWhenWired(t *testing.T) {
 	out := helmTemplate(t,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
-		"managementRestoreDrill.decryptCheck.wrappingSecretRef.name=astronomer-key-wrap",
+		"managementBackup.encryption.sourceIdentity=test-installation",
+		"managementBackup.encryption.wrappingSecretRef.name=astronomer-key-wrap",
 	)
 	for _, want := range []string{
 		"- name: DECRYPT_CHECK_ENABLED",
 		"name: wrapping-passphrase",
-		"openssl enc -d -aes-256-cbc",
+		"dr-crypto manifest-verify",
+		"dr-crypto decrypt",
+		"dr-crypto key-bundle-extract",
 		"base64 -d | python3 -",
 		"did NOT verify under the backed-up key",
 	} {

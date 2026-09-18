@@ -195,9 +195,15 @@ func (q *backupAuditQuerier) CreateAuditLogV1(_ context.Context, arg sqlc.Create
 	return nil
 }
 
+func (q *backupAuditQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	q.audits = append(q.audits, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{}, nil
+}
+
 func TestBackupMutationsAreAudited(t *testing.T) {
 	q := newBackupAuditQuerier()
 	h := NewBackupHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(BackupMutationTx) error) error { return fn(q) })
 	key, err := auth.GenerateKey()
 	if err != nil {
 		t.Fatal(err)
@@ -243,13 +249,12 @@ func TestBackupMutationsAreAudited(t *testing.T) {
 
 	backupRec := httptest.NewRecorder()
 	h.CreateBackup(backupRec, backupAuditRequest(t, http.MethodPost, "/api/v1/backups/", map[string]any{
-		"name":                  "manual",
-		"storage_id":            storage.ID.String(),
-		"backup_type":           "full",
-		"included_namespaces":   []string{"observability"},
-		"excluded_namespaces":   []string{"kube-system"},
-		"database_tables":       []string{},
-		"additional_unused_key": "ignored",
+		"name":                "manual",
+		"storage_id":          storage.ID.String(),
+		"backup_type":         "full",
+		"included_namespaces": []string{"observability"},
+		"excluded_namespaces": []string{"kube-system"},
+		"database_tables":     []string{},
 	}, nil))
 	if backupRec.Code != http.StatusCreated {
 		t.Fatalf("backup create status=%d body=%s", backupRec.Code, backupRec.Body.String())
@@ -259,7 +264,7 @@ func TestBackupMutationsAreAudited(t *testing.T) {
 	assertAuditDetail(t, q.audits[2].Detail, "backup_type", "full")
 
 	restoreRec := httptest.NewRecorder()
-	h.CreateRestore(restoreRec, backupAuditRequest(t, http.MethodPost, "/api/v1/backups/"+backup.ID.String()+"/restore/", map[string]any{
+	h.CreateRestoreByBackup(restoreRec, backupAuditRequest(t, http.MethodPost, "/api/v1/backups/"+backup.ID.String()+"/restore/", map[string]any{
 		"included_namespaces": []string{"observability"},
 	}, map[string]string{"id": backup.ID.String()}))
 	if restoreRec.Code != http.StatusCreated {

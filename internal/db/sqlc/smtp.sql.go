@@ -193,10 +193,12 @@ func (q *Queries) GetSMTPSettings(ctx context.Context, id uuid.UUID) (SmtpSettin
 const insertEmailMessage = `-- name: InsertEmailMessage :one
 INSERT INTO email_messages (
     to_address, cc_address, subject, template,
-    body_text, body_html, user_id, status, last_error
+    body_text, body_html, user_id, status, last_error, dedupe_key
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO UPDATE
+SET dedupe_key = EXCLUDED.dedupe_key
+RETURNING id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at, dedupe_key
 `
 
 type InsertEmailMessageParams struct {
@@ -209,6 +211,7 @@ type InsertEmailMessageParams struct {
 	UserID    pgtype.UUID `json:"user_id"`
 	Status    string      `json:"status"`
 	LastError string      `json:"last_error"`
+	DedupeKey pgtype.Text `json:"dedupe_key"`
 }
 
 // Persists a "we want to send this" record. The handler that wraps a
@@ -227,6 +230,7 @@ func (q *Queries) InsertEmailMessage(ctx context.Context, arg InsertEmailMessage
 		arg.UserID,
 		arg.Status,
 		arg.LastError,
+		arg.DedupeKey,
 	)
 	var i EmailMessage
 	err := row.Scan(
@@ -244,12 +248,13 @@ func (q *Queries) InsertEmailMessage(ctx context.Context, arg InsertEmailMessage
 		&i.SentAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DedupeKey,
 	)
 	return i, err
 }
 
 const listEmailMessages = `-- name: ListEmailMessages :many
-SELECT id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at FROM email_messages
+SELECT id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at, dedupe_key FROM email_messages
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -286,6 +291,7 @@ func (q *Queries) ListEmailMessages(ctx context.Context, arg ListEmailMessagesPa
 			&i.SentAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DedupeKey,
 		); err != nil {
 			return nil, err
 		}
@@ -298,7 +304,7 @@ func (q *Queries) ListEmailMessages(ctx context.Context, arg ListEmailMessagesPa
 }
 
 const listQueuedEmails = `-- name: ListQueuedEmails :many
-SELECT id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at FROM email_messages
+SELECT id, to_address, cc_address, subject, template, body_text, body_html, user_id, status, attempts, last_error, sent_at, created_at, updated_at, dedupe_key FROM email_messages
 WHERE (status = 'queued')
    OR (status = 'failed' AND attempts < 3)
 ORDER BY created_at ASC
@@ -334,6 +340,7 @@ func (q *Queries) ListQueuedEmails(ctx context.Context, limit int32) ([]EmailMes
 			&i.SentAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DedupeKey,
 		); err != nil {
 			return nil, err
 		}

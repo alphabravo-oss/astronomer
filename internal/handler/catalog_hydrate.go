@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,6 +45,18 @@ import (
 // prevents a malicious repo from streaming gigabytes at us.
 const chartArchiveMaxBytes = 50 * 1024 * 1024
 
+// defaultChartHydrationTimeout is an end-to-end budget covering repository lookup,
+// archive download, parsing, and cache persistence. A slow repository must not
+// pin an API handler for the HTTP client's former 60-second timeout.
+const defaultChartHydrationTimeout = 10 * time.Second
+
+func (h *CatalogHandler) effectiveChartHydrationTimeout() time.Duration {
+	if h != nil && h.chartHydrationTimeout > 0 {
+		return h.chartHydrationTimeout
+	}
+	return defaultChartHydrationTimeout
+}
+
 // hydrateChartVersion ensures the helm_chart_versions row has its
 // default_values + readme populated, fetching + parsing the chart
 // archive on cache miss. Returns the (possibly updated) version row
@@ -54,6 +67,34 @@ func (h *CatalogHandler) hydrateChartVersion(ctx context.Context, version sqlc.H
 	if version.ContentHydratedAt.Valid {
 		return version, nil
 	}
+	if h == nil {
+		return version, errors.New("catalog handler is not configured")
+	}
+
+	// The first request owns a detached, strictly bounded hydration. Detaching
+	// from caller cancellation lets a second waiter reuse useful work if the
+	// first client disconnects, while the 10-second timeout prevents leaks.
+	result := h.chartHydration.DoChan(version.ID.String(), func() (any, error) {
+		hydrationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), h.effectiveChartHydrationTimeout())
+		defer cancel()
+		return h.hydrateChartVersionOnce(hydrationCtx, version)
+	})
+	select {
+	case <-ctx.Done():
+		return version, ctx.Err()
+	case completed := <-result:
+		if completed.Err != nil {
+			return version, completed.Err
+		}
+		hydrated, ok := completed.Val.(sqlc.HelmChartVersion)
+		if !ok {
+			return version, errors.New("chart hydration returned an invalid result")
+		}
+		return hydrated, nil
+	}
+}
+
+func (h *CatalogHandler) hydrateChartVersionOnce(ctx context.Context, version sqlc.HelmChartVersion) (sqlc.HelmChartVersion, error) {
 
 	chart, err := h.queries.GetHelmChartByID(ctx, version.ChartID)
 	if err != nil {
@@ -182,7 +223,7 @@ func (h *CatalogHandler) fetchHTTPChartArchive(ctx context.Context, repo sqlc.He
 		h.applyRepoIndexAuth(req, repo)
 	}
 
-	client := httpclient.SafeClient(60 * time.Second)
+	client := httpclient.SafeClient(h.effectiveChartHydrationTimeout())
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

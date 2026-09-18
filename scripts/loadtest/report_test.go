@@ -306,6 +306,125 @@ func TestCertificationFailsClosedOnTrafficAndCardinalityGaps(t *testing.T) {
 	}
 }
 
+func TestEngineeringRunFailsOnNon2xxResponses(t *testing.T) {
+	cfg := &config{skipAgents: true, duration: time.Second}
+	rec := newRecorder()
+	rec.httpCount["cluster_pods"] = 100
+	rec.httpStatus["cluster_pods"] = map[int]int{200: 99, 503: 1}
+	report := newReport(cfg, rec)
+	if report.Verdict != "fail" || !strings.Contains(strings.Join(report.Reasons, "\n"), "HTTP failure ratio") {
+		t.Fatalf("verdict=%q reasons=%v, want non-2xx failure", report.Verdict, report.Reasons)
+	}
+}
+
+func TestEngineeringRunFailsOnConservationGaps(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*config, *recorder)
+		want   string
+	}{
+		{name: "subtarget throughput", mutate: func(cfg *config, _ *recorder) {
+			cfg.rps = 100
+		}, want: "recorded requests"},
+		{name: "early termination", mutate: func(_ *config, rec *recorder) {
+			rec.endedAt = rec.startedAt.Add(100 * time.Millisecond)
+		}, want: "observed duration"},
+		{name: "missing state events", mutate: func(cfg *config, _ *recorder) {
+			cfg.resources.EventsPerSecond = 10
+		}, want: "state events emitted"},
+		{name: "unobserved durable intent", mutate: func(_ *config, rec *recorder) {
+			rec.auditConservation.IntentsObserved = 0
+		}, want: "mandatory-audit conservation failed"},
+		{name: "rejected audit mutation", mutate: func(_ *config, rec *recorder) {
+			rec.auditConservation.Rejected = 1
+		}, want: "mandatory-audit conservation failed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, rec := passingCertificationFixture()
+			cfg.certification = false
+			tc.mutate(cfg, rec)
+			report := newReport(cfg, rec)
+			if report.Verdict != "fail" || !strings.Contains(strings.Join(report.Reasons, "\n"), tc.want) {
+				t.Fatalf("verdict=%q reasons=%v, want %q", report.Verdict, report.Reasons, tc.want)
+			}
+		})
+	}
+}
+
+func TestBoundedReconnectStormAccountsForExpectedAgentRoute503s(t *testing.T) {
+	now := time.Now().UTC()
+	cfg := &config{
+		skipAgents: true,
+		duration:   time.Minute,
+		reconnectStorm: reconnectStormConfig{
+			Enabled: true, JitterDuration: time.Second,
+		},
+	}
+	rec := newRecorder()
+	rec.reconnectStorm = reconnectStormObservation{
+		StartedAt: now, RecoveredAt: now.Add(500 * time.Millisecond),
+		TargetAgents: 1, ReconnectedAgents: 1,
+		AgentRoute503ByName: map[string]int{"cluster_pods": 1},
+	}
+	rec.httpCount["cluster_pods"] = 100
+	rec.httpStatus["cluster_pods"] = map[int]int{200: 99, 503: 1}
+
+	report := newReport(cfg, rec)
+	if report.Verdict != "pass" || !strings.Contains(strings.Join(report.Reasons, "\n"), "expected agent-route 503") {
+		t.Fatalf("verdict=%q reasons=%v, want bounded reconnect transient to be reported without failing", report.Verdict, report.Reasons)
+	}
+}
+
+func TestReconnectStormOutsideRecoveryBudgetFails(t *testing.T) {
+	now := time.Now().UTC()
+	cfg := &config{
+		skipAgents: true,
+		duration:   time.Minute,
+		reconnectStorm: reconnectStormConfig{
+			Enabled: true, JitterDuration: time.Second,
+		},
+	}
+	rec := newRecorder()
+	rec.reconnectStorm = reconnectStormObservation{
+		StartedAt: now, RecoveredAt: now.Add(32 * time.Second),
+		TargetAgents: 1, ReconnectedAgents: 1,
+		AgentRoute503ByName: map[string]int{"cluster_pods": 1},
+	}
+	rec.httpCount["cluster_pods"] = 1
+	rec.httpStatus["cluster_pods"] = map[int]int{503: 1}
+
+	report := newReport(cfg, rec)
+	joined := strings.Join(report.Reasons, "\n")
+	if report.Verdict != "fail" || !strings.Contains(joined, "recovery") || !strings.Contains(joined, "HTTP failure ratio") {
+		t.Fatalf("verdict=%q reasons=%v, want slow recovery and its 503 to fail", report.Verdict, report.Reasons)
+	}
+}
+
+func TestReconnectStormDoesNotMaskManagementPlane503s(t *testing.T) {
+	now := time.Now().UTC()
+	cfg := &config{
+		skipAgents: true,
+		duration:   time.Minute,
+		reconnectStorm: reconnectStormConfig{
+			Enabled: true, JitterDuration: time.Second,
+		},
+	}
+	rec := newRecorder()
+	rec.reconnectStorm = reconnectStormObservation{
+		StartedAt: now, RecoveredAt: now.Add(500 * time.Millisecond),
+		TargetAgents: 1, ReconnectedAgents: 1,
+		AgentRoute503ByName: map[string]int{},
+	}
+	rec.httpCount["auth_me"] = 1
+	rec.httpStatus["auth_me"] = map[int]int{503: 1}
+
+	report := newReport(cfg, rec)
+	if report.Verdict != "fail" || !strings.Contains(strings.Join(report.Reasons, "\n"), "HTTP failure ratio") {
+		t.Fatalf("verdict=%q reasons=%v, want management-plane 503 to fail during reconnect", report.Verdict, report.Reasons)
+	}
+}
+
 func TestCertificationFailsClosedOnInvalidComponentReplicaMetadata(t *testing.T) {
 	setCertificationMetadata(t)
 	t.Setenv("LOADTEST_COMPONENT_REPLICAS", `{"server":3,"worker":0}`)

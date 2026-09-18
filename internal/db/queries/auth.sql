@@ -107,6 +107,13 @@ INSERT INTO jwt_revocations (jti, user_id, expires_at, reason)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (jti) DO NOTHING;
 
+-- name: ConsumeJWTChallenge :execrows
+-- Purpose tokens are one-shot credentials. The primary key on jti makes the
+-- insert an atomic consume operation across every server replica.
+INSERT INTO jwt_revocations (jti, user_id, expires_at, reason)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (jti) DO NOTHING;
+
 -- name: IsJWTRevoked :one
 SELECT EXISTS (SELECT 1 FROM jwt_revocations WHERE jti = $1) AS revoked;
 
@@ -121,6 +128,83 @@ WHERE id = $1;
 -- without bound. Returning the rowcount lets the worker emit it as a
 -- metric.
 DELETE FROM jwt_revocations WHERE expires_at < now();
+
+-- Browser refresh-session families. Only SHA-256 lookup hashes are retained;
+-- raw JTIs and family IDs remain inside the signed JWT and browser cookie.
+
+-- name: CreateRefreshSession :exec
+WITH family AS (
+    INSERT INTO refresh_session_families (family_hash, user_id, created_at, expires_at)
+    VALUES (sqlc.arg(family_hash), sqlc.arg(user_id), sqlc.arg(issued_at), sqlc.arg(expires_at))
+    RETURNING family_hash
+)
+INSERT INTO refresh_session_tokens (jti_hash, family_hash, created_at, expires_at)
+SELECT sqlc.arg(jti_hash), family_hash, sqlc.arg(issued_at), sqlc.arg(expires_at)
+FROM family;
+
+-- name: RotateRefreshSession :one
+WITH locked AS MATERIALIZED (
+    SELECT token.jti_hash,
+           token.family_hash,
+           token.consumed_at,
+           token.expires_at AS token_expires_at,
+           family.expires_at AS family_expires_at,
+           family.revoked_at
+    FROM refresh_session_tokens AS token
+    JOIN refresh_session_families AS family ON family.family_hash = token.family_hash
+    WHERE token.jti_hash = sqlc.arg(previous_jti_hash)
+      AND token.family_hash = sqlc.arg(family_hash)
+      AND family.user_id = sqlc.arg(user_id)
+    FOR UPDATE OF token, family
+), reuse_revocation AS (
+    UPDATE refresh_session_families AS family
+    SET revoked_at = sqlc.arg(rotated_at),
+        revoke_reason = 'refresh_token_reuse'
+    FROM locked
+    WHERE family.family_hash = locked.family_hash
+      AND locked.consumed_at IS NOT NULL
+    RETURNING family.family_hash
+), consumed AS (
+    UPDATE refresh_session_tokens AS token
+    SET consumed_at = sqlc.arg(rotated_at),
+        replaced_by_jti_hash = sqlc.arg(next_jti_hash)
+    FROM locked
+    WHERE token.jti_hash = locked.jti_hash
+      AND locked.consumed_at IS NULL
+      AND locked.revoked_at IS NULL
+      AND locked.token_expires_at > sqlc.arg(rotated_at)
+      AND locked.family_expires_at > sqlc.arg(rotated_at)
+    RETURNING token.family_hash
+), next_token AS (
+    INSERT INTO refresh_session_tokens (jti_hash, family_hash, created_at, expires_at)
+    SELECT sqlc.arg(next_jti_hash), consumed.family_hash, sqlc.arg(rotated_at),
+           LEAST(sqlc.arg(next_expires_at)::timestamptz, locked.family_expires_at)
+    FROM consumed
+    JOIN locked ON locked.family_hash = consumed.family_hash
+    RETURNING family_hash
+)
+SELECT CASE
+    WHEN EXISTS (SELECT 1 FROM next_token) THEN 'rotated'
+    WHEN EXISTS (SELECT 1 FROM locked WHERE consumed_at IS NOT NULL) THEN 'reused'
+    WHEN EXISTS (SELECT 1 FROM locked WHERE revoked_at IS NOT NULL) THEN 'revoked'
+    ELSE 'invalid'
+END::text AS status;
+
+-- name: IsRefreshSessionFamilyRevoked :one
+SELECT COALESCE((
+    SELECT revoked_at IS NOT NULL OR expires_at <= now()
+    FROM refresh_session_families
+    WHERE family_hash = $1
+), true)::boolean AS revoked;
+
+-- name: RevokeRefreshSessionFamily :execrows
+UPDATE refresh_session_families
+SET revoked_at = sqlc.arg(revoked_at),
+    revoke_reason = sqlc.arg(reason)
+WHERE family_hash = sqlc.arg(family_hash);
+
+-- name: PurgeExpiredRefreshSessions :execrows
+DELETE FROM refresh_session_families WHERE expires_at < now();
 
 -- SSO Configurations
 

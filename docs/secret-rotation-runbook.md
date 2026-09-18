@@ -45,8 +45,12 @@ Dex connector secrets (LDAP bind password, OIDC client secret, and similar).
 
 The chart and binary support **multi-key** Fernet from
 [`internal/auth/crypto.go`](../internal/auth/crypto.go): `encryptionKey`
-accepts a comma-separated list. The first key is the primary (used to
-encrypt); every listed key is tried in order on decrypt.
+accepts a comma-separated list. Prefer explicit `key-id:key` entries; legacy
+bare keys receive a deterministic SHA-256 fingerprint ID. The first key is the
+primary (used to encrypt); every listed key remains available for reads. New
+writes use `astronomer:v1:fernet:<key-id>:<ciphertext>`. Raw Fernet rows remain
+readable only for the bounded migration and increment
+`astronomer_ciphertext_decryptions_total{format="legacy"}`.
 
 The safe procedure is:
 
@@ -68,7 +72,7 @@ same key):
 
 ```bash
 helm upgrade --reuse-values astronomer ./deploy/chart \
-  --set-string secrets.encryptionKey="${NEW_KEY},${OLD_KEY}"
+  --set-string secrets.encryptionKey="new-2026q3:${NEW_KEY},old-2026q2:${OLD_KEY}"
 ```
 
 Verify the server picked up two keys:
@@ -90,13 +94,13 @@ At this point:
 # Dry run first — reports what would change without writing.
 keyrotate \
   --database-url "$DATABASE_URL" \
-  --encryption-key "${NEW_KEY},${OLD_KEY}" \
+  --encryption-key "new-2026q3:${NEW_KEY},old-2026q2:${OLD_KEY}" \
   --dry-run
 
 # Then for real:
 keyrotate \
   --database-url "$DATABASE_URL" \
-  --encryption-key "${NEW_KEY},${OLD_KEY}"
+  --encryption-key "new-2026q3:${NEW_KEY},old-2026q2:${OLD_KEY}"
 ```
 
 The tool rewrites every row in every column-stored Fernet secret. As of this
@@ -144,6 +148,10 @@ compatibility value, CAS-scrubs it, and stamps `public_clients_cutover_at`.
 Re-running is safe and processes only unstamped rows. The database constraint
 then rejects an old binary attempting to repopulate plaintext.
 
+Rows already carrying the primary v1 envelope are counted as `skipped`; legacy
+tokens and fallback-key envelopes are counted as `rewrote`. These per-table and
+final counters are the batch-migration progress contract.
+
 After rewriting, `keyrotate` performs a second primary-only scan of every
 encrypted column, typed connector JSON credential, and static-client envelope.
 It also checks pre-cutover envelope/plaintext equality. Any CAS miss, fallback-
@@ -155,7 +163,7 @@ the fallback key.
 
 ```bash
 helm upgrade --reuse-values astronomer ./deploy/chart \
-  --set-string secrets.encryptionKey="${NEW_KEY}"
+  --set-string secrets.encryptionKey="new-2026q3:${NEW_KEY}"
 ```
 
 Verify:
@@ -170,9 +178,18 @@ Add `OLD_KEY` back to the fallback list and re-run `keyrotate`.
 
 ### Rollback
 
-If something goes wrong at any step before step 4: just keep
-`encryptionKey="${OLD_KEY}"` — the old key has been in the fallback
-list the whole time, so reverting is a single Helm upgrade.
+Do not roll back to the old key alone: writes made after step 2 already name and
+use the new key. Before step 4, roll application writes back safely by making
+the old key primary while retaining the new key as a read fallback:
+
+```text
+encryptionKey="old-2026q2:${OLD_KEY},new-2026q3:${NEW_KEY}"
+```
+
+If `keyrotate` already rewrote rows under the new primary, run it again with
+that old-primary/new-fallback ordering and require `failed=0` before removing
+the new fallback. The `/api/v1/admin/key-status` response exposes non-secret
+key IDs and marks the primary, so the intended rollback ordering is auditable.
 
 ---
 

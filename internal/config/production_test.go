@@ -12,11 +12,13 @@ func prodBase() *Config {
 		Env:                                "production",
 		SecretKey:                          "a-real-unique-secret",
 		EncryptionKey:                      "a-real-unique-encryption-key",
+		InternalPSK:                        "a-dedicated-internal-signing-key-with-32-chars",
 		DatabaseURL:                        "postgres://u:p@db/astronomer?sslmode=require",
 		DexBundledEnabled:                  true,
 		AuthLocalPasswordOnly:              false,
 		ServerURL:                          "https://astronomer.example.com",
 		DeliveryEnabled:                    true,
+		DeliveryLocalFluxBootstrap:         true,
 		AgentImageRepository:               "registry.example.test/astronomer-agent@sha256:" + strings.Repeat("a", 64),
 		DeliveryFluxDistributionRepository: "registry.example.test/astronomer/system",
 		DeliveryFluxDistributionDigest:     "sha256:" + strings.Repeat("b", 64),
@@ -58,6 +60,52 @@ func TestValidateProductionSecurity_WorkerRefusesEmptyOrDevKey(t *testing.T) {
 	}
 }
 
+func TestValidateProductionSecurity_RequiresDedicatedInternalPSK(t *testing.T) {
+	cfg := prodBase()
+	cfg.InternalPSK = ""
+	if err := ValidateProductionSecurity(cfg, true); err == nil ||
+		!strings.Contains(err.Error(), "astronomer_internal_psk") {
+		t.Fatalf("expected dedicated internal PSK validation error, got %v", err)
+	}
+}
+
+func TestValidateProductionSecurity_InternalPSKRotationWindow(t *testing.T) {
+	cfg := prodBase()
+	cfg.InternalPSKPrevious = "previous-dedicated-internal-signing-key-with-32-chars"
+	if err := ValidateProductionSecurity(cfg, true); err != nil {
+		t.Fatalf("valid rotation key rejected: %v", err)
+	}
+
+	for name, previous := range map[string]string{
+		"too short": "short",
+		"same key":  cfg.InternalPSK,
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := *cfg
+			candidate.InternalPSKPrevious = previous
+			if err := ValidateProductionSecurity(&candidate, true); err == nil ||
+				!strings.Contains(err.Error(), "astronomer_internal_psk_previous") {
+				t.Fatalf("invalid previous key accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateProductionSecurity_InternalPSKMustBeDedicated(t *testing.T) {
+	for name, key := range map[string]func(*Config) string{
+		"JWT signing key": func(cfg *Config) string { return cfg.SecretKey },
+		"Fernet key":      func(cfg *Config) string { return cfg.EncryptionKey },
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := prodBase()
+			cfg.InternalPSK = key(cfg)
+			if err := ValidateProductionSecurity(cfg, true); err == nil || !strings.Contains(err.Error(), "must be independent") {
+				t.Fatalf("reused internal key accepted: %v", err)
+			}
+		})
+	}
+}
+
 func TestValidateProductionSecurity_HappyPathAndDevNoop(t *testing.T) {
 	if err := ValidateProductionSecurity(prodBase(), true); err != nil {
 		t.Fatalf("valid production config should pass, got %v", err)
@@ -85,6 +133,33 @@ func TestValidateProductionSecurity_EnforcesTLSAndURL(t *testing.T) {
 	if err := ValidateProductionSecurity(badURL, true); err == nil ||
 		!strings.Contains(err.Error(), "https URL") {
 		t.Fatalf("expected https server_url error, got %v", err)
+	}
+}
+
+func TestDSNEnforcesTLSParsesEffectivePGXConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		dsn  string
+		want bool
+	}{
+		{name: "url require", dsn: "postgres://u:p@db/astronomer?sslmode=require", want: true},
+		{name: "url verify full", dsn: "postgres://u:p@db/astronomer?sslmode=verify-full", want: true},
+		{name: "keyword verify ca", dsn: "host=db user=u dbname=astronomer sslmode=verify-ca", want: true},
+		{name: "prefer permits plaintext fallback", dsn: "postgres://u:p@db/astronomer?sslmode=prefer", want: false},
+		{name: "omitted defaults to prefer", dsn: "postgres://u:p@db/astronomer", want: false},
+		{name: "misleading password", dsn: "postgres://u:sslmode%3Drequire@db/astronomer?sslmode=disable", want: false},
+		{name: "misleading application name", dsn: "host=db user=u sslmode=disable application_name=sslmode=require", want: false},
+		// libpq/pgx keyword names are case-sensitive. An uppercase lookalike must
+		// not be mistaken for an effective TLS setting.
+		{name: "mixed case keyword is not effective", dsn: "host=db user=u SSLMODE=require", want: false},
+		{name: "duplicate URL parameter uses effective last value", dsn: "postgres://u:p@db/astronomer?sslmode=require&sslmode=disable", want: false},
+		{name: "invalid", dsn: "postgres://%", want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DSNEnforcesTLS(tc.dsn); got != tc.want {
+				t.Fatalf("DSNEnforcesTLS() = %t, want %t", got, tc.want)
+			}
+		})
 	}
 }
 

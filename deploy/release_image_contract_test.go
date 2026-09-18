@@ -41,12 +41,13 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 	"agent":    {context: ".", dockerfile: "deploy/docker/Dockerfile.agent", imageName: "astronomer-go-agent"},
 	"migrate":  {context: ".", dockerfile: "deploy/docker/Dockerfile.migrate", imageName: "astronomer-go-migrate"},
 	"shell":    {context: ".", dockerfile: "deploy/docker/Dockerfile.shell", imageName: "astronomer-shell"},
+	"dr":       {context: ".", dockerfile: "deploy/docker/Dockerfile.dr", imageName: "astronomer-dr"},
 	"frontend": {context: "frontend", dockerfile: "frontend/Dockerfile", imageName: "astronomer-frontend"},
 }
 
 const (
-	releaseVersion      = "1.1.0"
-	chartReleaseVersion = "1.1.0"
+	releaseVersion      = "1.2.0"
+	chartReleaseVersion = "1.2.0"
 )
 
 func TestReleaseIdentityIsConsistent(t *testing.T) {
@@ -62,6 +63,7 @@ func TestReleaseIdentityIsConsistent(t *testing.T) {
 		"docker/Dockerfile.worker":      {"ARG VERSION=" + releaseVersion},
 		"docker/Dockerfile.migrate":     {"ARG VERSION=" + releaseVersion},
 		"docker/Dockerfile.shell":       {"ARG VERSION=" + releaseVersion},
+		"docker/Dockerfile.dr":          {"ARG VERSION=" + releaseVersion},
 	}
 	for path, required := range files {
 		contents, err := os.ReadFile(path)
@@ -76,7 +78,7 @@ func TestReleaseIdentityIsConsistent(t *testing.T) {
 	}
 }
 
-func TestReleasePublishesSixTrueMultiPlatformImages(t *testing.T) {
+func TestReleasePublishesAllTrueMultiPlatformImages(t *testing.T) {
 	workflow := readReleaseWorkflow(t)
 	job, ok := workflow.Jobs["build-sign"]
 	if !ok {
@@ -182,7 +184,10 @@ func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
 		"needs: [preflight, qualify]",
 		"publish immutable GitHub Release",
 		"Refuse to overwrite an existing exact tag",
-		"existing tag ${image} is unsigned or has the wrong identity; rebuilding",
+		"refusing to overwrite existing exact tag ${image}: signature identity is invalid",
+		"cosign verify-attestation",
+		"provenance does not bind source ${source_uri}",
+		"published chart contents differ from this commit",
 		"--certificate-oidc-issuer https://token.actions.githubusercontent.com",
 		"RELEASE_IMAGES",
 		"Load immutable image references",
@@ -450,8 +455,8 @@ func TestFreshClusterSmokeExplicitlyChoosesBaselineCapableAgentProfile(t *testin
 	}
 }
 
-func TestSixImageReleaseAndOfflineImportInventoriesMatch(t *testing.T) {
-	wantVars := []string{"IMG_AGENT", "IMG_FRONTEND", "IMG_MIGRATE", "IMG_SERVER", "IMG_SHELL", "IMG_WORKER"}
+func TestReleaseAndOfflineImportInventoriesMatch(t *testing.T) {
+	wantVars := []string{"IMG_AGENT", "IMG_DR", "IMG_FRONTEND", "IMG_MIGRATE", "IMG_SERVER", "IMG_SHELL", "IMG_WORKER"}
 
 	makeBytes, err := os.ReadFile("../Makefile")
 	if err != nil {
@@ -460,7 +465,7 @@ func TestSixImageReleaseAndOfflineImportInventoriesMatch(t *testing.T) {
 	makefile := string(makeBytes)
 	assertStringSet(t, makeImageVariables(makeTargetRecipe(t, makefile, "k3d-import-all")), wantVars, "Make k3d-import-all image inventory")
 	allTarget := makeTargetLine(t, makefile, "docker-build-all")
-	wantTargets := []string{"docker-build-agent", "docker-build-frontend", "docker-build-migrate", "docker-build-server", "docker-build-shell", "docker-build-worker"}
+	wantTargets := []string{"docker-build-agent", "docker-build-dr", "docker-build-frontend", "docker-build-migrate", "docker-build-server", "docker-build-shell", "docker-build-worker"}
 	assertStringSet(t, strings.Fields(strings.TrimSpace(strings.SplitN(strings.SplitN(allTarget, ":", 2)[1], "##", 2)[0])), wantTargets, "Make docker-build-all dependency inventory")
 
 	bootstrapBytes, err := os.ReadFile("../scripts/k3d-bootstrap.sh")
@@ -498,7 +503,7 @@ func TestSixImageReleaseAndOfflineImportInventoriesMatch(t *testing.T) {
 	}
 }
 
-func TestMakeK3DImportedIdentitiesEqualRenderedFirstPartyReferences(t *testing.T) {
+func TestMakeK3DImportsAllBuildsAndRendersActiveFirstPartyReferences(t *testing.T) {
 	const (
 		registry = "mirror.example.test:5443/platform/team"
 		tag      = "ci-contract"
@@ -524,7 +529,7 @@ func TestMakeK3DImportedIdentitiesEqualRenderedFirstPartyReferences(t *testing.T
 		t.Fatalf("Make dry run has no exact k3d import command:\n%s", dryRun)
 	}
 	imported := strings.Fields(importMatch[1])
-	want := []string{
+	wantRendered := []string{
 		registry + "/astronomer-go-agent:" + tag,
 		registry + "/astronomer-frontend:" + tag,
 		registry + "/astronomer-go-migrate:" + tag,
@@ -532,7 +537,8 @@ func TestMakeK3DImportedIdentitiesEqualRenderedFirstPartyReferences(t *testing.T
 		registry + "/astronomer-shell:" + tag,
 		registry + "/astronomer-go-worker:" + tag,
 	}
-	assertStringSet(t, imported, want, "Make k3d imported identities")
+	wantImported := append(append([]string{}, wantRendered...), registry+"/astronomer-dr:"+tag)
+	assertStringSet(t, imported, wantImported, "Make k3d imported identities")
 
 	helmStart := strings.Index(dryRun, "helm upgrade --install")
 	if helmStart < 0 {
@@ -549,7 +555,7 @@ func TestMakeK3DImportedIdentitiesEqualRenderedFirstPartyReferences(t *testing.T
 
 	docs := parseRenderedDocs(t, helmTemplate(t, sets...))
 	rendered := renderedFirstPartyImageReferences(t, docs)
-	assertStringSet(t, rendered, want, "rendered first-party image identities")
+	assertStringSet(t, rendered, wantRendered, "rendered active first-party image identities")
 
 	config := nestedMap(findRenderedDoc(t, docs, "ConfigMap", "astronomer-config"), "data")
 	if got := stringValue(config["KUBECTL_SHELL_IMAGE"]); got != registry+"/astronomer-shell:"+tag {

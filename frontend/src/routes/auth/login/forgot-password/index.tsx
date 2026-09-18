@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { FormShell } from "@/components/ui/form-shell";
 
 /**
  * Forgot-password — collects an email address, posts to
@@ -8,34 +9,36 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { Orbit, Mail, ArrowLeft, Check } from "lucide-react";
-import { toastApiError, toastError } from "@/lib/toast";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { Orbit, ArrowLeft, Check } from "lucide-react";
+import { useAppForm, useStore } from "@/lib/form";
 import { requestPasswordReset } from "@/lib/api/account-security";
 import { ActionButton } from "@/components/ui/action-button";
 
 function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) {
-      toastError("Enter an email address");
-      return;
-    }
-    setLoading(true);
-    try {
-      await requestPasswordReset(email);
-      setSubmitted(true);
-    } catch (err) {
-      // The endpoint always returns 202; surface only network errors.
-      toastApiError("", err, "Could not send reset email");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const form = useAppForm({
+    defaultValues: { email: "" },
+    validators: {
+      onSubmit: ({ value }) =>
+        !value.email.trim() ? "Enter an email address." : undefined,
+    },
+    onSubmit: async ({ value }) => {
+      setSubmissionError(null);
+      try {
+        await requestPasswordReset(value.email.trim());
+        setSubmitted(true);
+      } catch (error) {
+        setSubmissionError(
+          error instanceof Error
+            ? error.message
+            : "Could not send reset email.",
+        );
+      }
+    },
+  });
+  const loading = useStore(form.store, (state) => state.isSubmitting);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-6">
@@ -61,58 +64,54 @@ function ForgotPasswordPage() {
               The link expires in 30 minutes. If you don&apos;t see it, check
               your spam folder or contact your administrator.
             </p>
-            <Link
-              href="/auth/login"
+            <RouterLink
+              to="/auth/login"
               className="inline-flex items-center gap-1 text-sm text-foreground hover:underline"
             >
               <ArrowLeft className="h-4 w-4" /> Back to sign in
-            </Link>
+            </RouterLink>
           </div>
         ) : (
-          <form
-            onSubmit={submit}
-            className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-sm"
+          <FormShell
+            onSubmit={(event) => {
+              event.preventDefault();
+              void form.handleSubmit();
+            }}
+            className="space-y-4 rounded-lg border border-border bg-card p-6 shadow-xs"
           >
-            <div className="space-y-1.5">
-              <label
-                htmlFor="email"
-                className="text-sm font-medium text-foreground"
-              >
-                Email address
-              </label>
-              <div className="relative">
-                <input
-                  id="email"
+            <form.AppForm>
+              <form.FormErrorSummary serverError={submissionError} />
+            </form.AppForm>
+            <form.AppField name="email">
+              {(field) => (
+                <field.TextField
+                  label="Email address"
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
-                  data-initial-focus
-                  className="w-full h-10 pl-9 pr-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="you@example.com"
+                  required
                 />
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              </div>
-            </div>
+              )}
+            </form.AppField>
             <ActionButton
               type="submit"
               intent="primary"
               className="w-full"
-              disabled={loading || !email}
+              disabled={loading}
               loading={loading}
               loadingLabel="Send reset link"
             >
               Send reset link
             </ActionButton>
             <div className="text-center">
-              <Link
-                href="/auth/login"
+              <RouterLink
+                to="/auth/login"
                 className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ArrowLeft className="h-3 w-3" /> Back to sign in
-              </Link>
+              </RouterLink>
             </div>
-          </form>
+          </FormShell>
         )}
       </div>
     </div>

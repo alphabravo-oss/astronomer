@@ -171,6 +171,30 @@ func TestBuildAssignmentGoldenVariants(t *testing.T) {
 	}
 }
 
+func TestBuildAssignmentProjectsExternalHelmValueSecretReferences(t *testing.T) {
+	assignment := helmHTTPAssignment()
+	assignment.ConfigurationDigest = testArtifact
+	assignment.Renderer.Helm.ValueSecretRefs = []protocol.DeliveryHelmValueSecretRef{{
+		Name: "application-credentials", Key: "password", TargetPath: "auth.password",
+	}}
+	materialization, err := BuildAssignment(assignment, testCapabilities(), ValidationPolicy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	release := materialization.Objects[len(materialization.Objects)-1]
+	valuesFrom, found, err := unstructured.NestedSlice(release.Object, "spec", "valuesFrom")
+	if err != nil || !found || len(valuesFrom) != 1 {
+		t.Fatalf("HelmRelease valuesFrom = %#v, found=%v, err=%v", valuesFrom, found, err)
+	}
+	entry, ok := valuesFrom[0].(map[string]any)
+	if !ok || entry["kind"] != "Secret" || entry["name"] != "application-credentials" || entry["valuesKey"] != "password" || entry["targetPath"] != "auth.password" {
+		t.Fatalf("HelmRelease valuesFrom entry = %#v", valuesFrom[0])
+	}
+	if got := release.GetAnnotations()[ConfigurationDigestAnnotation]; got != testArtifact {
+		t.Fatalf("configuration digest annotation = %q", got)
+	}
+}
+
 func assertObjectBoundary(t *testing.T, assignment protocol.DeliveryAssignmentV2, materialization Materialization) {
 	t.Helper()
 	names := Names(assignment.ProjectID, assignment.DeploymentID)

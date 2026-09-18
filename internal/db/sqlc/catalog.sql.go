@@ -21,7 +21,7 @@ UPDATE installed_charts SET
     status = $7,
     revision = $8
 WHERE cluster_id = $1 AND release_name = $2 AND namespace = $3
-RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at
+RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id
 `
 
 type AdoptInstalledChartByReleaseParams struct {
@@ -66,6 +66,9 @@ func (q *Queries) AdoptInstalledChartByRelease(ctx context.Context, arg AdoptIns
 		&i.DriftDetected,
 		&i.DriftDetail,
 		&i.DriftCheckedAt,
+		&i.DriftLockedUntil,
+		&i.DriftClaimToken,
+		&i.ProjectID,
 	)
 	return i, err
 }
@@ -113,6 +116,74 @@ func (q *Queries) BulkCreateHelmChartVersions(ctx context.Context, arg BulkCreat
 			return nil, err
 		}
 		items = append(items, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const claimInstalledChartsForDriftSweep = `-- name: ClaimInstalledChartsForDriftSweep :many
+WITH candidates AS (
+    SELECT id
+    FROM installed_charts
+    WHERE status IN ('installed', 'deployed', 'upgraded')
+      AND (drift_locked_until IS NULL OR drift_locked_until < now())
+    ORDER BY drift_checked_at ASC NULLS FIRST, updated_at ASC, id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT $3
+)
+UPDATE installed_charts AS chart
+SET drift_locked_until = $1,
+    drift_claim_token = $2
+FROM candidates
+WHERE chart.id = candidates.id
+RETURNING chart.id, chart.cluster_id, chart.chart_version_id, chart.release_name, chart.namespace, chart.values_override, chart.status, chart.revision, chart.notes, chart.installed_by_id, chart.request_id, chart.tool_slug, chart.preset_used, chart.created_at, chart.updated_at, chart.drift_detected, chart.drift_detail, chart.drift_checked_at, chart.drift_locked_until, chart.drift_claim_token, chart.project_id
+`
+
+type ClaimInstalledChartsForDriftSweepParams struct {
+	LockedUntil pgtype.Timestamptz `json:"locked_until"`
+	ClaimToken  pgtype.UUID        `json:"claim_token"`
+	QueryLimit  int32              `json:"query_limit"`
+}
+
+// Claim a fair bounded batch so periodic deliveries can run on every worker
+// replica without probing the same Helm release twice.
+func (q *Queries) ClaimInstalledChartsForDriftSweep(ctx context.Context, arg ClaimInstalledChartsForDriftSweepParams) ([]InstalledChart, error) {
+	rows, err := q.db.Query(ctx, claimInstalledChartsForDriftSweep, arg.LockedUntil, arg.ClaimToken, arg.QueryLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InstalledChart{}
+	for rows.Next() {
+		var i InstalledChart
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClusterID,
+			&i.ChartVersionID,
+			&i.ReleaseName,
+			&i.Namespace,
+			&i.ValuesOverride,
+			&i.Status,
+			&i.Revision,
+			&i.Notes,
+			&i.InstalledByID,
+			&i.RequestID,
+			&i.ToolSlug,
+			&i.PresetUsed,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DriftDetected,
+			&i.DriftDetail,
+			&i.DriftCheckedAt,
+			&i.DriftLockedUntil,
+			&i.DriftClaimToken,
+			&i.ProjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -397,13 +468,14 @@ func (q *Queries) CreateHelmRepository(ctx context.Context, arg CreateHelmReposi
 }
 
 const createInstalledChart = `-- name: CreateInstalledChart :one
-INSERT INTO installed_charts (cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at
+INSERT INTO installed_charts (cluster_id, project_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id
 `
 
 type CreateInstalledChartParams struct {
 	ClusterID      uuid.UUID   `json:"cluster_id"`
+	ProjectID      pgtype.UUID `json:"project_id"`
 	ChartVersionID pgtype.UUID `json:"chart_version_id"`
 	ReleaseName    string      `json:"release_name"`
 	Namespace      string      `json:"namespace"`
@@ -420,6 +492,7 @@ type CreateInstalledChartParams struct {
 func (q *Queries) CreateInstalledChart(ctx context.Context, arg CreateInstalledChartParams) (InstalledChart, error) {
 	row := q.db.QueryRow(ctx, createInstalledChart,
 		arg.ClusterID,
+		arg.ProjectID,
 		arg.ChartVersionID,
 		arg.ReleaseName,
 		arg.Namespace,
@@ -452,6 +525,9 @@ func (q *Queries) CreateInstalledChart(ctx context.Context, arg CreateInstalledC
 		&i.DriftDetected,
 		&i.DriftDetail,
 		&i.DriftCheckedAt,
+		&i.DriftLockedUntil,
+		&i.DriftClaimToken,
+		&i.ProjectID,
 	)
 	return i, err
 }
@@ -513,11 +589,9 @@ func (q *Queries) DeleteInstalledChart(ctx context.Context, id uuid.UUID) error 
 }
 
 const getHelmChartByID = `-- name: GetHelmChartByID :one
-
 SELECT id, repository_id, name, display_name, description, icon_url, home_url, category, keywords, maintainers, deprecated, created_at, updated_at FROM helm_charts WHERE id = $1
 `
 
-// Helm Charts
 func (q *Queries) GetHelmChartByID(ctx context.Context, id uuid.UUID) (HelmChart, error) {
 	row := q.db.QueryRow(ctx, getHelmChartByID, id)
 	var i HelmChart
@@ -658,7 +732,7 @@ func (q *Queries) GetHelmRepositoryByID(ctx context.Context, id uuid.UUID) (Helm
 }
 
 const getInstalledChartByClusterAndTool = `-- name: GetInstalledChartByClusterAndTool :one
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id FROM installed_charts
 WHERE cluster_id = $1::uuid
   AND tool_slug = $2::text
 ORDER BY created_at DESC
@@ -695,13 +769,16 @@ func (q *Queries) GetInstalledChartByClusterAndTool(ctx context.Context, arg Get
 		&i.DriftDetected,
 		&i.DriftDetail,
 		&i.DriftCheckedAt,
+		&i.DriftLockedUntil,
+		&i.DriftClaimToken,
+		&i.ProjectID,
 	)
 	return i, err
 }
 
 const getInstalledChartByID = `-- name: GetInstalledChartByID :one
 
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts WHERE id = $1
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id FROM installed_charts WHERE id = $1
 `
 
 // Installed Charts
@@ -727,12 +804,15 @@ func (q *Queries) GetInstalledChartByID(ctx context.Context, id uuid.UUID) (Inst
 		&i.DriftDetected,
 		&i.DriftDetail,
 		&i.DriftCheckedAt,
+		&i.DriftLockedUntil,
+		&i.DriftClaimToken,
+		&i.ProjectID,
 	)
 	return i, err
 }
 
 const getInstalledChartByRelease = `-- name: GetInstalledChartByRelease :one
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts WHERE cluster_id = $1 AND release_name = $2 AND namespace = $3
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id FROM installed_charts WHERE cluster_id = $1 AND release_name = $2 AND namespace = $3
 `
 
 type GetInstalledChartByReleaseParams struct {
@@ -763,6 +843,9 @@ func (q *Queries) GetInstalledChartByRelease(ctx context.Context, arg GetInstall
 		&i.DriftDetected,
 		&i.DriftDetail,
 		&i.DriftCheckedAt,
+		&i.DriftLockedUntil,
+		&i.DriftClaimToken,
+		&i.ProjectID,
 	)
 	return i, err
 }
@@ -800,6 +883,49 @@ func (q *Queries) GetLatestChartVersion(ctx context.Context, chartID uuid.UUID) 
 		&i.ContentHydratedAt,
 	)
 	return i, err
+}
+
+const listCatalogUserDiscovery = `-- name: ListCatalogUserDiscovery :many
+
+SELECT chart_id, favorite, favorite_at, last_viewed_at, view_count
+FROM catalog_user_discovery
+WHERE user_id = $1
+ORDER BY favorite DESC, favorite_at DESC NULLS LAST, last_viewed_at DESC NULLS LAST
+`
+
+type ListCatalogUserDiscoveryRow struct {
+	ChartID      uuid.UUID          `json:"chart_id"`
+	Favorite     bool               `json:"favorite"`
+	FavoriteAt   pgtype.Timestamptz `json:"favorite_at"`
+	LastViewedAt pgtype.Timestamptz `json:"last_viewed_at"`
+	ViewCount    int32              `json:"view_count"`
+}
+
+// Helm Charts
+func (q *Queries) ListCatalogUserDiscovery(ctx context.Context, userID uuid.UUID) ([]ListCatalogUserDiscoveryRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogUserDiscovery, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogUserDiscoveryRow{}
+	for rows.Next() {
+		var i ListCatalogUserDiscoveryRow
+		if err := rows.Scan(
+			&i.ChartID,
+			&i.Favorite,
+			&i.FavoriteAt,
+			&i.LastViewedAt,
+			&i.ViewCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChartVersionStrings = `-- name: ListChartVersionStrings :many
@@ -1237,7 +1363,7 @@ func (q *Queries) ListHelmRepositoriesWithLegacyAuthConfig(ctx context.Context, 
 }
 
 const listInstalledCharts = `-- name: ListInstalledCharts :many
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id FROM installed_charts ORDER BY created_at DESC, id DESC LIMIT $1 OFFSET $2
 `
 
 type ListInstalledChartsParams struct {
@@ -1273,6 +1399,9 @@ func (q *Queries) ListInstalledCharts(ctx context.Context, arg ListInstalledChar
 			&i.DriftDetected,
 			&i.DriftDetail,
 			&i.DriftCheckedAt,
+			&i.DriftLockedUntil,
+			&i.DriftClaimToken,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -1285,7 +1414,7 @@ func (q *Queries) ListInstalledCharts(ctx context.Context, arg ListInstalledChar
 }
 
 const listInstalledChartsByCluster = `-- name: ListInstalledChartsByCluster :many
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id FROM installed_charts WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListInstalledChartsByClusterParams struct {
@@ -1322,55 +1451,9 @@ func (q *Queries) ListInstalledChartsByCluster(ctx context.Context, arg ListInst
 			&i.DriftDetected,
 			&i.DriftDetail,
 			&i.DriftCheckedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listInstalledChartsForDriftSweep = `-- name: ListInstalledChartsForDriftSweep :many
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts
-WHERE status IN ('installed', 'deployed', 'upgraded')
-ORDER BY drift_checked_at ASC NULLS FIRST, updated_at ASC
-LIMIT $1
-`
-
-// Active installed charts the tool-drift sweep probes against their live
-// helm release. Only rows that are supposed to be deployed (not mid-install
-// or already removed) are worth comparing.
-func (q *Queries) ListInstalledChartsForDriftSweep(ctx context.Context, limit int32) ([]InstalledChart, error) {
-	rows, err := q.db.Query(ctx, listInstalledChartsForDriftSweep, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []InstalledChart{}
-	for rows.Next() {
-		var i InstalledChart
-		if err := rows.Scan(
-			&i.ID,
-			&i.ClusterID,
-			&i.ChartVersionID,
-			&i.ReleaseName,
-			&i.Namespace,
-			&i.ValuesOverride,
-			&i.Status,
-			&i.Revision,
-			&i.Notes,
-			&i.InstalledByID,
-			&i.RequestID,
-			&i.ToolSlug,
-			&i.PresetUsed,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DriftDetected,
-			&i.DriftDetail,
-			&i.DriftCheckedAt,
+			&i.DriftLockedUntil,
+			&i.DriftClaimToken,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -1383,7 +1466,7 @@ func (q *Queries) ListInstalledChartsForDriftSweep(ctx context.Context, limit in
 }
 
 const listInstalledChartsForScopes = `-- name: ListInstalledChartsForScopes :many
-SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at FROM installed_charts
+SELECT id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id FROM installed_charts
 WHERE cluster_id = ANY($1::uuid[])
 ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $2
@@ -1423,6 +1506,9 @@ func (q *Queries) ListInstalledChartsForScopes(ctx context.Context, arg ListInst
 			&i.DriftDetected,
 			&i.DriftDetail,
 			&i.DriftCheckedAt,
+			&i.DriftLockedUntil,
+			&i.DriftClaimToken,
+			&i.ProjectID,
 		); err != nil {
 			return nil, err
 		}
@@ -1434,23 +1520,129 @@ func (q *Queries) ListInstalledChartsForScopes(ctx context.Context, arg ListInst
 	return items, nil
 }
 
-const markInstalledChartDrift = `-- name: MarkInstalledChartDrift :exec
+const listUpgradeVersionsForInstalledChart = `-- name: ListUpgradeVersionsForInstalledChart :many
+SELECT candidate.id, candidate.chart_id, candidate.version, candidate.app_version, candidate.digest, candidate.urls, candidate.values_schema, candidate.default_values, candidate.readme, candidate.created_at_upstream, candidate.created_at, candidate.updated_at, candidate.content_hydrated_at
+FROM installed_charts installation
+JOIN helm_chart_versions current_version ON current_version.id=installation.chart_version_id
+JOIN helm_chart_versions candidate ON candidate.chart_id=current_version.chart_id
+JOIN helm_charts chart ON chart.id=candidate.chart_id
+JOIN helm_repositories repository ON repository.id=chart.repository_id
+JOIN catalog_blessed_charts catalog_entry
+  ON catalog_entry.repo_url=repository.url
+ AND catalog_entry.chart_name=chart.name
+ AND catalog_entry.source='catalog-v1'
+WHERE installation.id=$1
+  AND catalog_entry.revoked=false
+  AND catalog_entry.verification_status IN ('verified','digest-verified')
+  AND catalog_entry.artifact->>'version'=candidate.version
+ORDER BY candidate.created_at_upstream DESC NULLS LAST, candidate.created_at DESC
+LIMIT 100
+`
+
+func (q *Queries) ListUpgradeVersionsForInstalledChart(ctx context.Context, id uuid.UUID) ([]HelmChartVersion, error) {
+	rows, err := q.db.Query(ctx, listUpgradeVersionsForInstalledChart, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HelmChartVersion{}
+	for rows.Next() {
+		var i HelmChartVersion
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChartID,
+			&i.Version,
+			&i.AppVersion,
+			&i.Digest,
+			&i.Urls,
+			&i.ValuesSchema,
+			&i.DefaultValues,
+			&i.Readme,
+			&i.CreatedAtUpstream,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ContentHydratedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markInstalledChartDrift = `-- name: MarkInstalledChartDrift :execrows
 UPDATE installed_charts SET
     drift_detected = $2,
     drift_detail = $3,
-    drift_checked_at = now()
+    drift_checked_at = now(),
+    drift_locked_until = NULL,
+    drift_claim_token = NULL
 WHERE id = $1
+  AND drift_claim_token = $4
 `
 
 type MarkInstalledChartDriftParams struct {
-	ID            uuid.UUID `json:"id"`
-	DriftDetected bool      `json:"drift_detected"`
-	DriftDetail   string    `json:"drift_detail"`
+	ID            uuid.UUID   `json:"id"`
+	DriftDetected bool        `json:"drift_detected"`
+	DriftDetail   string      `json:"drift_detail"`
+	ClaimToken    pgtype.UUID `json:"claim_token"`
 }
 
-func (q *Queries) MarkInstalledChartDrift(ctx context.Context, arg MarkInstalledChartDriftParams) error {
-	_, err := q.db.Exec(ctx, markInstalledChartDrift, arg.ID, arg.DriftDetected, arg.DriftDetail)
+func (q *Queries) MarkInstalledChartDrift(ctx context.Context, arg MarkInstalledChartDriftParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markInstalledChartDrift,
+		arg.ID,
+		arg.DriftDetected,
+		arg.DriftDetail,
+		arg.ClaimToken,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordCatalogChartView = `-- name: RecordCatalogChartView :exec
+INSERT INTO catalog_user_discovery (
+    user_id, chart_id, last_viewed_at, view_count
+) VALUES ($1, $2, now(), 1)
+ON CONFLICT (user_id, chart_id) DO UPDATE SET
+    last_viewed_at = now(),
+    view_count = catalog_user_discovery.view_count + 1
+`
+
+type RecordCatalogChartViewParams struct {
+	UserID  uuid.UUID `json:"user_id"`
+	ChartID uuid.UUID `json:"chart_id"`
+}
+
+func (q *Queries) RecordCatalogChartView(ctx context.Context, arg RecordCatalogChartViewParams) error {
+	_, err := q.db.Exec(ctx, recordCatalogChartView, arg.UserID, arg.ChartID)
 	return err
+}
+
+const releaseInstalledChartDriftClaim = `-- name: ReleaseInstalledChartDriftClaim :execrows
+UPDATE installed_charts
+SET drift_checked_at = now(),
+    drift_locked_until = NULL,
+    drift_claim_token = NULL
+WHERE id = $1
+  AND drift_claim_token = $2
+`
+
+type ReleaseInstalledChartDriftClaimParams struct {
+	ID         uuid.UUID   `json:"id"`
+	ClaimToken pgtype.UUID `json:"claim_token"`
+}
+
+func (q *Queries) ReleaseInstalledChartDriftClaim(ctx context.Context, arg ReleaseInstalledChartDriftClaimParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseInstalledChartDriftClaim, arg.ID, arg.ClaimToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const sealHelmRepositoryAuthConfig = `-- name: SealHelmRepositoryAuthConfig :exec
@@ -1474,6 +1666,46 @@ type SealHelmRepositoryAuthConfigParams struct {
 func (q *Queries) SealHelmRepositoryAuthConfig(ctx context.Context, arg SealHelmRepositoryAuthConfigParams) error {
 	_, err := q.db.Exec(ctx, sealHelmRepositoryAuthConfig, arg.ID, arg.AuthConfigEncrypted, arg.AuthConfig)
 	return err
+}
+
+const setCatalogChartFavorite = `-- name: SetCatalogChartFavorite :one
+INSERT INTO catalog_user_discovery (
+    user_id, chart_id, favorite, favorite_at
+) VALUES ($1, $2, $3, CASE WHEN $3 THEN now() ELSE NULL END)
+ON CONFLICT (user_id, chart_id) DO UPDATE SET
+    favorite = EXCLUDED.favorite,
+    favorite_at = CASE
+        WHEN EXCLUDED.favorite THEN COALESCE(catalog_user_discovery.favorite_at, now())
+        ELSE NULL
+    END
+RETURNING chart_id, favorite, favorite_at, last_viewed_at, view_count
+`
+
+type SetCatalogChartFavoriteParams struct {
+	UserID   uuid.UUID `json:"user_id"`
+	ChartID  uuid.UUID `json:"chart_id"`
+	Favorite bool      `json:"favorite"`
+}
+
+type SetCatalogChartFavoriteRow struct {
+	ChartID      uuid.UUID          `json:"chart_id"`
+	Favorite     bool               `json:"favorite"`
+	FavoriteAt   pgtype.Timestamptz `json:"favorite_at"`
+	LastViewedAt pgtype.Timestamptz `json:"last_viewed_at"`
+	ViewCount    int32              `json:"view_count"`
+}
+
+func (q *Queries) SetCatalogChartFavorite(ctx context.Context, arg SetCatalogChartFavoriteParams) (SetCatalogChartFavoriteRow, error) {
+	row := q.db.QueryRow(ctx, setCatalogChartFavorite, arg.UserID, arg.ChartID, arg.Favorite)
+	var i SetCatalogChartFavoriteRow
+	err := row.Scan(
+		&i.ChartID,
+		&i.Favorite,
+		&i.FavoriteAt,
+		&i.LastViewedAt,
+		&i.ViewCount,
+	)
+	return i, err
 }
 
 const updateHelmRepository = `-- name: UpdateHelmRepository :one
@@ -1598,7 +1830,7 @@ UPDATE installed_charts SET
     status = $3,
     revision = $4
 WHERE id = $5
-RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at
+RETURNING id, cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used, created_at, updated_at, drift_detected, drift_detail, drift_checked_at, drift_locked_until, drift_claim_token, project_id
 `
 
 type UpdateInstalledChartValuesParams struct {
@@ -1637,6 +1869,9 @@ func (q *Queries) UpdateInstalledChartValues(ctx context.Context, arg UpdateInst
 		&i.DriftDetected,
 		&i.DriftDetail,
 		&i.DriftCheckedAt,
+		&i.DriftLockedUntil,
+		&i.DriftClaimToken,
+		&i.ProjectID,
 	)
 	return i, err
 }

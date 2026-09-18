@@ -1,5 +1,3 @@
-"use client";
-
 // §HostMounts / §BridgeProtocol — SandboxedExtension: the Tier-2 host component.
 //
 // It builds the cross-origin sandboxed <iframe> (sandbox="allow-scripts" ONLY ⇒
@@ -17,7 +15,7 @@
 //     crosses the bridge.
 //   - brokers ext/data.request -> §DataProxy (fetchExtensionData), gated by the
 //     handshake dataSource allowlist; the server re-runs RBAC on the caller.
-//   - guards ext/navigate against the /dashboard/ allowlist before router.push.
+//   - guards ext/navigate against the /dashboard/ allowlist before navigate.push.
 //   - pushes host/theme on theme change; sends host/teardown on unmount.
 //
 // The per-extension CSP from the manifest is also stamped as a <meta http-equiv>
@@ -25,8 +23,8 @@
 // `sandboxOrigin` (out of the browser's control), but advertising it on the host
 // side documents the intersection and lets a same-origin dev server honor it.
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "@/lib/navigation";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   requestExtensionBridgeToken,
   fetchExtensionData,
@@ -88,7 +86,7 @@ export function SandboxedExtension({
   context,
   manifestSha,
 }: SandboxedExtensionProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const hostTheme = useExtensionTheme();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [state, setState] = useState<BridgeState>("loading");
@@ -111,11 +109,13 @@ export function SandboxedExtension({
 
   // Stable refs the message handler reads without re-subscribing every render.
   const stateRef = useRef(state);
-  stateRef.current = state;
   const themeRef = useRef(theme);
-  themeRef.current = theme;
   const contextRef = useRef(context);
-  contextRef.current = context;
+  useLayoutEffect(() => {
+    stateRef.current = state;
+    themeRef.current = theme;
+    contextRef.current = context;
+  }, [state, theme, context]);
 
   // Post a host->iframe message to the *exact* sandboxOrigin — never "*".
   function postToIframe(msg: BridgeMsg): void {
@@ -249,8 +249,8 @@ export function SandboxedExtension({
           );
           if (nav.ok && nav.to) {
             // Host-side allowlist passed. Route-level RBAC is enforced by the
-            // host router/route guard on push.
-            router.push(nav.to);
+            // host navigate/route guard on push.
+            void navigate({ to: nav.to });
           }
           return;
         }

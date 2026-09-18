@@ -1,6 +1,7 @@
-import { Shield } from "lucide-react";
+import { Copy, Pencil, Shield, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
+import { ActionMenu } from "@/components/ui/action-menu";
 import { formatRelativeTime } from "@/lib/utils";
 import type { ClusterRole, GlobalRole, ProjectRole } from "@/types";
 import {
@@ -18,7 +19,11 @@ function TypeBadge({ builtin }: { builtin: boolean }) {
   );
 }
 
-function roleColumns<T extends RoleLike>(): Column<T>[] {
+function roleColumns<T extends RoleLike & { id: string }>(actions: {
+  onEdit: (role: T) => void;
+  onDuplicate: (role: T) => void;
+  onDelete: (role: T) => void;
+}): Column<T>[] {
   return [
     {
       key: "name",
@@ -86,14 +91,54 @@ function roleColumns<T extends RoleLike>(): Column<T>[] {
       ),
       sortAccessor: (row) => row.createdAt || "",
     },
+    {
+      key: "actions",
+      header: "",
+      accessor: (row) => {
+        const builtin = isBuiltinRole(row);
+        return (
+          <ActionMenu
+            ariaLabel={`Actions for ${roleTitle(row)}`}
+            items={[
+              {
+                label: "Edit role",
+                icon: <Pencil className="h-3.5 w-3.5" />,
+                onClick: () => actions.onEdit(row),
+                disabled: builtin,
+                disabledReason: "Built-in roles are immutable",
+              },
+              {
+                label: "Duplicate role",
+                icon: <Copy className="h-3.5 w-3.5" />,
+                onClick: () => actions.onDuplicate(row),
+              },
+              {
+                label: "Delete role",
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                onClick: () => actions.onDelete(row),
+                variant: "destructive",
+                separator: true,
+                disabled: builtin,
+                disabledReason: "Built-in roles are immutable",
+              },
+            ]}
+          />
+        );
+      },
+      sortable: false,
+      align: "right",
+    },
   ];
 }
 
-interface RolesTabProps<T> {
+interface RolesTabProps<T extends RoleLike & { id: string }> {
   data: T[];
   loading: boolean;
   isError: boolean;
   onRetry: () => void;
+  onEdit: (role: T) => void;
+  onDuplicate: (role: T) => void;
+  onDelete: (role: T) => void;
 }
 
 export function GlobalRolesTab({
@@ -101,17 +146,23 @@ export function GlobalRolesTab({
   loading,
   isError,
   onRetry,
+  onEdit,
+  onDuplicate,
+  onDelete,
 }: RolesTabProps<GlobalRole>) {
   return (
     <DataTable
       data={data}
-      columns={roleColumns<GlobalRole>()}
+      columns={roleColumns<GlobalRole>({ onEdit, onDuplicate, onDelete })}
       keyExtractor={(row) => row.id}
       searchPlaceholder="Search global roles..."
       loading={loading}
       isError={isError}
       onRetry={onRetry}
-      emptyMessage="No global roles defined"
+      emptyState={{
+        title: "No global roles defined",
+        description: "Create the first item to configure this feature.",
+      }}
     />
   );
 }
@@ -121,17 +172,23 @@ export function ClusterRolesTab({
   loading,
   isError,
   onRetry,
+  onEdit,
+  onDuplicate,
+  onDelete,
 }: RolesTabProps<ClusterRole>) {
   return (
     <DataTable
       data={data}
-      columns={roleColumns<ClusterRole>()}
+      columns={roleColumns<ClusterRole>({ onEdit, onDuplicate, onDelete })}
       keyExtractor={(row) => row.id}
       searchPlaceholder="Search cluster roles..."
       loading={loading}
       isError={isError}
       onRetry={onRetry}
-      emptyMessage="No cluster roles defined"
+      emptyState={{
+        title: "No cluster roles defined",
+        description: "Create the first item to configure this feature.",
+      }}
     />
   );
 }
@@ -141,17 +198,23 @@ export function ProjectRolesTab({
   loading,
   isError,
   onRetry,
+  onEdit,
+  onDuplicate,
+  onDelete,
 }: RolesTabProps<ProjectRole>) {
   return (
     <DataTable
       data={data}
-      columns={roleColumns<ProjectRole>()}
+      columns={roleColumns<ProjectRole>({ onEdit, onDuplicate, onDelete })}
       keyExtractor={(row) => row.id}
       searchPlaceholder="Search project roles..."
       loading={loading}
       isError={isError}
       onRetry={onRetry}
-      emptyMessage="No project roles defined"
+      emptyState={{
+        title: "No project roles defined",
+        description: "Create the first item to configure this feature.",
+      }}
     />
   );
 }

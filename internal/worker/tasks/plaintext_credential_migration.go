@@ -38,23 +38,22 @@ func NewPlaintextCredentialMigrationTask() (*asynq.Task, error) {
 }
 
 func (runtime MaintenanceRuntime) HandlePlaintextCredentialMigration(ctx context.Context, _ *asynq.Task) error {
-	deps := runtime.PlaintextCredentials
-	if deps.Queries == nil || deps.Encryptor == nil {
-		return fmt.Errorf("plaintext credential migration runtime is not configured")
-	}
-	if err := migrateBackupStorageCredentials(ctx, deps); err != nil {
-		return err
-	}
-	if err := migrateClusterRegistryCredentials(ctx, deps); err != nil {
-		return err
-	}
-	if err := migrateHelmRepositoryAuthConfigs(ctx, deps); err != nil {
-		return err
-	}
-	if err := migrateMonitoringBackendAuthConfigs(ctx, deps); err != nil {
-		return err
-	}
-	return nil
+	return runPeriodicTaskWithLeader(ctx, PlaintextCredentialMigrationType, func() error {
+		deps := runtime.PlaintextCredentials
+		if deps.Queries == nil || deps.Encryptor == nil {
+			return fmt.Errorf("plaintext credential migration runtime is not configured")
+		}
+		if err := migrateBackupStorageCredentials(ctx, deps); err != nil {
+			return err
+		}
+		if err := migrateClusterRegistryCredentials(ctx, deps); err != nil {
+			return err
+		}
+		if err := migrateHelmRepositoryAuthConfigs(ctx, deps); err != nil {
+			return err
+		}
+		return migrateMonitoringBackendAuthConfigs(ctx, deps)
+	})
 }
 
 // migrateMonitoringBackendAuthConfigs seals pre-146 monitoring-backend

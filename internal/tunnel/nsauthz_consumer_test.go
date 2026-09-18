@@ -9,7 +9,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
-// mockRBACQuerier implements middleware.RBACQuerier for the consumer authz tests.
+// mockRBACQuerier implements rbac.BindingQuerier for the consumer authz tests.
 type mockRBACQuerier struct {
 	bindings []rbac.RoleBinding
 	err      error
@@ -47,8 +47,7 @@ func TestExecConsumer_AuthorizeCluster_NamespaceScoped(t *testing.T) {
 	userID := uuid.New()
 	ctx := context.Background()
 
-	ec := NewExecConsumer(nil, nil)
-	ec.SetAuthorization(engine, &mockRBACQuerier{bindings: namespaceBinding(clusterID, "team-a")})
+	ec := &ExecConsumer{rbacEngine: engine, rbacQuerier: &mockRBACQuerier{bindings: namespaceBinding(clusterID, "team-a")}}
 
 	if !ec.authorizeCluster(ctx, userID, clusterID, "team-a") {
 		t.Error("namespace-scoped user should be allowed to exec in team-a")
@@ -64,8 +63,7 @@ func TestExecConsumer_AuthorizeCluster_ClusterWide(t *testing.T) {
 	userID := uuid.New()
 	ctx := context.Background()
 
-	ec := NewExecConsumer(nil, nil)
-	ec.SetAuthorization(engine, &mockRBACQuerier{bindings: clusterWideBinding(clusterID)})
+	ec := &ExecConsumer{rbacEngine: engine, rbacQuerier: &mockRBACQuerier{bindings: clusterWideBinding(clusterID)}}
 
 	for _, ns := range []string{"team-a", "team-b", ""} {
 		if !ec.authorizeCluster(ctx, userID, clusterID, ns) {
@@ -82,8 +80,7 @@ func TestLogsConsumer_AuthorizeCluster_NamespaceScoped(t *testing.T) {
 	userID := uuid.New()
 	ctx := context.Background()
 
-	lc := NewLogsConsumer(nil, nil)
-	lc.SetAuthorization(engine, &mockRBACQuerier{bindings: namespaceBinding(clusterID, "team-a")})
+	lc := &LogsConsumer{rbacEngine: engine, rbacQuerier: &mockRBACQuerier{bindings: namespaceBinding(clusterID, "team-a")}}
 
 	if !lc.authorizeCluster(ctx, userID, clusterID, "team-a") {
 		t.Error("namespace-scoped user should be allowed to stream logs in team-a")
@@ -99,8 +96,7 @@ func TestLogsConsumer_AuthorizeCluster_ClusterWide(t *testing.T) {
 	userID := uuid.New()
 	ctx := context.Background()
 
-	lc := NewLogsConsumer(nil, nil)
-	lc.SetAuthorization(engine, &mockRBACQuerier{bindings: clusterWideBinding(clusterID)})
+	lc := &LogsConsumer{rbacEngine: engine, rbacQuerier: &mockRBACQuerier{bindings: clusterWideBinding(clusterID)}}
 
 	for _, ns := range []string{"team-a", "team-b", ""} {
 		if !lc.authorizeCluster(ctx, userID, clusterID, ns) {

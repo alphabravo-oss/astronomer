@@ -2,21 +2,25 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type auditReaderV1 interface {
@@ -33,18 +37,54 @@ type auditReaderV1 interface {
 }
 
 type auditFilterReader interface {
-	ListAuditLogV1Filtered(ctx context.Context, arg sqlc.AuditLogFilterParams) ([]sqlc.AuditLog, error)
+	ListAuditLogV1FilteredPage(ctx context.Context, arg sqlc.AuditLogFilterParams) (sqlc.AuditLogPage, error)
+	ListAuditLogV1FilteredKeyset(ctx context.Context, arg sqlc.AuditLogFilterParams) ([]sqlc.AuditLog, error)
 	CountAuditLogV1Filtered(ctx context.Context, arg sqlc.AuditLogFilterParams) (int64, error)
 }
 
+type AuditExportOperationStore interface {
+	GetAuditExportOperation(context.Context, uuid.UUID) (sqlc.GetAuditExportOperationRow, error)
+	GetAuditExportArtifact(context.Context, uuid.UUID) (sqlc.GetAuditExportArtifactRow, error)
+}
+
+type AuditExportMutationTx interface {
+	CreateAuditExportOperation(context.Context, sqlc.CreateAuditExportOperationParams) (sqlc.CreateAuditExportOperationRow, error)
+	audit.OutboxQuerier
+}
+
+type auditExportRunTxFunc func(context.Context, func(AuditExportMutationTx) error) error
+
+const (
+	auditListCountLimit    = sqlc.DefaultAuditLogCountLimit
+	auditCSVExportPageSize = int32(500)
+	auditExportMaxRows     = int64(100_000)
+	auditExportMaxRange    = 31 * 24 * time.Hour
+)
+
 // AuditHandler handles audit log endpoints.
 type AuditHandler struct {
-	queries auditReaderV1
+	queries    auditReaderV1
+	operations AuditExportOperationStore
+	runTx      auditExportRunTxFunc
 }
 
 // NewAuditHandler creates a new audit handler.
 func NewAuditHandler(queries auditReaderV1) *AuditHandler {
-	return &AuditHandler{queries: queries}
+	h := &AuditHandler{queries: queries}
+	if operations, ok := queries.(AuditExportOperationStore); ok {
+		h.operations = operations
+	}
+	return h
+}
+
+func (h *AuditHandler) SetRunTx(runTx auditExportRunTxFunc) {
+	if h != nil {
+		h.runTx = runTx
+	}
+}
+
+func (h *AuditHandler) DurableExportWired() bool {
+	return h != nil && h.operations != nil && h.runTx != nil
 }
 
 // AuditLogResponse represents an audit log entry in API responses.
@@ -60,7 +100,6 @@ type AuditLogResponse struct {
 	ResourceID      string          `json:"resource_id"`
 	ResourceName    string          `json:"resource_name"`
 	Detail          json.RawMessage `json:"detail"`
-	Details         json.RawMessage `json:"details"`
 	ActorAuthMethod string          `json:"actor_auth_method"`
 	HTTPMethod      string          `json:"http_method"`
 	Path            string          `json:"path"`
@@ -92,7 +131,6 @@ func auditLogToResponse(a sqlc.AuditLog) AuditLogResponse {
 		ResourceID:      a.ResourceID,
 		ResourceName:    a.ResourceName,
 		Detail:          a.Detail,
-		Details:         a.Detail,
 		ActorAuthMethod: a.ActorAuthMethod,
 		HTTPMethod:      a.HttpMethod,
 		Path:            a.Path,
@@ -123,7 +161,7 @@ func auditLogToResponse(a sqlc.AuditLog) AuditLogResponse {
 // request_id, cluster_id, project_id, from, and to.
 func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit := auditQueryLimit(r)
-	offset := int32(queryInt(r, "offset", 0))
+	offset := int32(queryOffset(r))
 	filter, filterErr := auditFilterFromRequest(r, limit, offset)
 	if filterErr != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, filterErr.Error())
@@ -137,20 +175,24 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	sinceIDStr := r.URL.Query().Get("since")
 
 	var (
-		logs  []sqlc.AuditLog
-		total int64
-		err   error
+		logs       []sqlc.AuditLog
+		total      int64
+		pagination *paging.Metadata
+		err        error
 	)
 
 	switch {
 	case sinceIDStr == "" && supportsFilteredAudit(h.queries):
 		filterReader := h.queries.(auditFilterReader)
-		logs, err = filterReader.ListAuditLogV1Filtered(r.Context(), filter)
+		page, pageErr := filterReader.ListAuditLogV1FilteredPage(r.Context(), filter)
+		err = pageErr
 		if err != nil {
 			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list audit logs")
 			return
 		}
-		total, err = filterReader.CountAuditLogV1Filtered(r.Context(), filter)
+		logs = page.Logs
+		metadata := paging.Uncounted(int(limit), queryOffset(r), len(logs), page.HasMore)
+		pagination = &metadata
 	case actionClass != "":
 		logs, err = h.queries.ListAuditLogV1ByActionClass(r.Context(), sqlc.ListAuditLogsByActionClassParams{
 			ActionClass: actionClass,
@@ -236,35 +278,38 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count audit logs")
 		return
 	}
+	if pagination == nil && total >= int64(filter.CountLimit) && filter.CountLimit > 0 {
+		w.Header().Set("X-Total-Count-Capped", "true")
+	}
 
 	items := make([]AuditLogResponse, 0, len(logs))
 	for _, a := range logs {
 		items = append(items, auditLogToResponse(a))
 	}
 
-	RespondPaginated(w, r, items, total)
+	if pagination != nil {
+		paging.Write(w, items, *pagination)
+		return
+	}
+	paging.Write(w, items, paging.Exact(total, int(limit), queryOffset(r), len(items)))
 }
 
 // Export handles GET /api/v1/audit/export/?format=csv.
 // Streams audit log entries as CSV. Same filters as the list endpoint.
 func (h *AuditHandler) Export(w http.ResponseWriter, r *http.Request) {
-	format := r.URL.Query().Get("format")
-	if format == "" {
-		format = "csv"
-	}
-	if format != "csv" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "Only 'csv' export format is supported")
+	filter, filterReader, ok := h.validatedAuditExportFilter(w, r)
+	if !ok {
 		return
 	}
-
-	filter, filterErr := auditFilterFromRequest(r, 500, 0)
-	if filterErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, filterErr.Error())
+	filter.CountLimit = int32(auditExportMaxRows + 1)
+	total, err := filterReader.CountAuditLogV1Filtered(r.Context(), filter)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to size audit export")
 		return
 	}
-	sinceIDStr := r.URL.Query().Get("since")
-	if sinceIDStr != "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSince, "since cursor export is not supported")
+	if total > auditExportMaxRows {
+		w.Header().Set("Link", `</api/v1/audit/exports/>; rel="create"`)
+		RespondRequestError(w, r, http.StatusRequestEntityTooLarge, apierror.InvalidFilter, "Audit export exceeds the synchronous limit; create a durable export operation")
 		return
 	}
 
@@ -272,99 +317,261 @@ func (h *AuditHandler) Export(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="audit_log_export.csv"`)
 	w.WriteHeader(http.StatusOK)
 
-	writer := csv.NewWriter(w)
-	defer writer.Flush()
+	if err := writeAuditCSV(r.Context(), filterReader, filter, w); err != nil {
+		return
+	}
+}
 
-	// Header row.
-	_ = writer.Write([]string{
+// CreateExport handles POST /api/v1/audit/exports/ and creates a durable CSV
+// export operation. Query filters intentionally match the bounded GET export.
+func (h *AuditHandler) CreateExport(w http.ResponseWriter, r *http.Request) {
+	if !RequireOperationIdempotencyKey(w, r) {
+		return
+	}
+	filter, _, ok := h.validatedAuditExportFilter(w, r)
+	if !ok {
+		return
+	}
+	h.acceptAuditExport(w, r, filter, strings.TrimSpace(r.Header.Get("Idempotency-Key")))
+}
+
+func (h *AuditHandler) validatedAuditExportFilter(w http.ResponseWriter, r *http.Request) (sqlc.AuditLogFilterParams, auditFilterReader, bool) {
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "csv"
+	}
+	if format != "csv" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFormat, "Only 'csv' export format is supported")
+		return sqlc.AuditLogFilterParams{}, nil, false
+	}
+
+	filter, filterErr := auditFilterFromRequest(r, auditCSVExportPageSize, 0)
+	if filterErr != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, filterErr.Error())
+		return sqlc.AuditLogFilterParams{}, nil, false
+	}
+	sinceIDStr := r.URL.Query().Get("since")
+	if sinceIDStr != "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidSince, "since cursor export is not supported")
+		return sqlc.AuditLogFilterParams{}, nil, false
+	}
+	if !filter.HasFrom || !filter.HasTo {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, "audit export requires explicit from and to timestamps")
+		return sqlc.AuditLogFilterParams{}, nil, false
+	}
+	if !filter.To.After(filter.From) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, "audit export to must be after from")
+		return sqlc.AuditLogFilterParams{}, nil, false
+	}
+	if filter.To.Sub(filter.From) > auditExportMaxRange {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidFilter, "audit export range cannot exceed 31 days")
+		return sqlc.AuditLogFilterParams{}, nil, false
+	}
+	filterReader, ok := h.queries.(auditFilterReader)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ListError, "Audit export is not configured")
+		return sqlc.AuditLogFilterParams{}, nil, false
+	}
+	return filter, filterReader, true
+}
+
+type AuditExportOperationResponse struct {
+	ID          string     `json:"id"`
+	Status      string     `json:"status"`
+	Attempts    int32      `json:"attempt_count"`
+	ErrorCode   string     `json:"error_code,omitempty"`
+	Filename    string     `json:"filename,omitempty"`
+	SHA256      string     `json:"sha256,omitempty"`
+	Size        int64      `json:"size"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	StatusURL   string     `json:"status_url"`
+	DownloadURL string     `json:"download_url,omitempty"`
+}
+
+func (h *AuditHandler) acceptAuditExport(w http.ResponseWriter, r *http.Request, filter sqlc.AuditLogFilterParams, idempotencyKey string) {
+	if h.runTx == nil || h.operations == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Audit export operation store is not configured")
+		return
+	}
+	caller := currentUserUUID(r)
+	if !caller.Valid || caller.Bytes == uuid.Nil {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Invalid caller")
+		return
+	}
+	filter.Offset, filter.CountLimit, filter.HasBefore = 0, 0, false
+	filter.BeforeTime, filter.BeforeID = time.Time{}, uuid.Nil
+	spec, err := json.Marshal(audit.ExportSpec{Filter: filter})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InvalidRequest, "Failed to encode audit export")
+		return
+	}
+	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(idempotencyKey)))
+	var row sqlc.CreateAuditExportOperationRow
+	err = h.runTx(r.Context(), func(q AuditExportMutationTx) error {
+		var createErr error
+		row, createErr = q.CreateAuditExportOperation(r.Context(), sqlc.CreateAuditExportOperationParams{
+			RequestedBy: caller.Bytes, RequestDigest: digest, RequestSpec: spec,
+		})
+		if createErr != nil {
+			return createErr
+		}
+		if !row.Created {
+			var stored audit.ExportSpec
+			if json.Unmarshal(row.RequestSpec, &stored) != nil {
+				return errOperationIdempotencyConflict
+			}
+			storedDigest, storedErr := canonicalOperationRequestDigest(stored)
+			requestDigest, requestErr := canonicalOperationRequestDigest(audit.ExportSpec{Filter: filter})
+			if storedErr != nil || requestErr != nil || storedDigest != requestDigest {
+				return errOperationIdempotencyConflict
+			}
+			return nil
+		}
+		return recordAuditOutbox(r, q, "audit_log.export_accepted", "audit_export_operation", row.ID.String(), "audit-export", http.StatusAccepted,
+			map[string]any{"operation_id": row.ID.String(), "expires_at": row.ExpiresAt.UTC().Format(time.RFC3339)})
+	})
+	if err != nil {
+		if errors.Is(err, errOperationIdempotencyConflict) {
+			RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Idempotency-Key already identifies a different audit export")
+			return
+		}
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DBError, "Failed to persist audit export operation")
+		return
+	}
+	RespondAcceptedOperation(w, auditExportStatusURL(row.ID), auditExportResponse(row.ID, row.Status, row.AttemptCount, row.ErrorCode, row.Filename, row.ArtifactSha256, row.ArtifactSize, row.ExpiresAt, row.CompletedAt, row.CreatedAt, row.UpdatedAt))
+}
+
+func (h *AuditHandler) GetExportOperation(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseScopeID(w, r, "id", "audit export operation")
+	if !ok {
+		return
+	}
+	if h.operations == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Audit export operation store is not configured")
+		return
+	}
+	row, err := h.operations.GetAuditExportOperation(r.Context(), id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Audit export operation not found")
+		return
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to get audit export operation")
+		return
+	}
+	if !auditExportOwnedByCaller(r, row.RequestedBy) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Audit export operation not found")
+		return
+	}
+	RespondJSON(w, http.StatusOK, auditExportResponse(row.ID, row.Status, row.AttemptCount, row.ErrorCode, row.Filename, row.ArtifactSha256, row.ArtifactSize, row.ExpiresAt, row.CompletedAt, row.CreatedAt, row.UpdatedAt))
+}
+
+func (h *AuditHandler) DownloadExport(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseScopeID(w, r, "id", "audit export operation")
+	if !ok {
+		return
+	}
+	if h.operations == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Audit export operation store is not configured")
+		return
+	}
+	row, err := h.operations.GetAuditExportArtifact(r.Context(), id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Completed audit export not found")
+		return
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DBError, "Failed to get audit export artifact")
+		return
+	}
+	if !auditExportOwnedByCaller(r, row.RequestedBy) || !row.ExpiresAt.After(time.Now().UTC()) {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Completed audit export not found")
+		return
+	}
+	w.Header().Set("Content-Type", row.ArtifactContentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, row.Filename))
+	w.Header().Set("Content-Length", strconv.FormatInt(row.ArtifactSize, 10))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(row.Artifact)
+}
+
+func auditExportOwnedByCaller(r *http.Request, owner uuid.UUID) bool {
+	caller := currentUserUUID(r)
+	return caller.Valid && caller.Bytes == owner
+}
+
+func auditExportStatusURL(id uuid.UUID) string {
+	return "/api/v1/audit/exports/" + id.String() + "/"
+}
+
+func auditExportResponse(id uuid.UUID, status string, attempts int32, errorCode, filename string, sha pgtype.Text, size int64, expires time.Time, completed pgtype.Timestamptz, created, updated time.Time) AuditExportOperationResponse {
+	response := AuditExportOperationResponse{ID: id.String(), Status: status, Attempts: attempts, ErrorCode: errorCode, Filename: filename, Size: size, ExpiresAt: expires.UTC(), CreatedAt: created.UTC(), UpdatedAt: updated.UTC(), StatusURL: auditExportStatusURL(id)}
+	if sha.Valid {
+		response.SHA256 = sha.String
+	}
+	if completed.Valid {
+		at := completed.Time.UTC()
+		response.CompletedAt = &at
+	}
+	if status == "succeeded" && expires.After(time.Now().UTC()) {
+		response.DownloadURL = auditExportStatusURL(id) + "download/"
+	}
+	return response
+}
+
+type auditCSVPageReader interface {
+	ListAuditLogV1FilteredKeyset(context.Context, sqlc.AuditLogFilterParams) ([]sqlc.AuditLog, error)
+}
+
+func writeAuditCSV(ctx context.Context, reader auditCSVPageReader, filter sqlc.AuditLogFilterParams, output io.Writer) error {
+	writer := csv.NewWriter(output)
+	if err := writer.Write([]string{
 		"id", "created_at", "user_id", "source", "correlation_id", "action",
 		"action_class", "resource_type", "resource_id", "resource_name",
 		"http_method", "path", "status_code", "duration_ms", "ip_address",
 		"user_agent", "request_id", "detail",
-	})
-
-	const pageSize = 500
-	offset := int32(0)
+	}); err != nil {
+		return err
+	}
 	for {
-		logs, err := h.fetchExportPage(r.Context(), filter, pageSize, offset)
+		logs, err := reader.ListAuditLogV1FilteredKeyset(ctx, filter)
 		if err != nil {
-			// Mid-stream error: log a CSV row with the error and stop.
-			_ = writer.Write([]string{"error", "", "", "", "", "", "", "", "", err.Error()})
-			return
-		}
-		if len(logs) == 0 {
-			return
+			return err
 		}
 		for _, entry := range logs {
-			row := []string{
-				entry.ID.String(),
-				entry.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-				csvNullableUUID(entry.UserID),
-				entry.Source,
-				entry.CorrelationID,
-				entry.Action,
-				entry.ActionClass,
-				entry.ResourceType,
-				entry.ResourceID,
-				entry.ResourceName,
-				entry.HttpMethod,
-				entry.Path,
-				strconv.Itoa(int(entry.StatusCode)),
-				strconv.FormatInt(entry.DurationMs, 10),
-				csvNullableIP(entry.IpAddress),
-				entry.UserAgent,
-				entry.RequestID,
-				string(entry.Detail),
+			if err := writer.Write([]string{
+				entry.ID.String(), entry.CreatedAt.UTC().Format(time.RFC3339), csvNullableUUID(entry.UserID),
+				entry.Source, entry.CorrelationID, entry.Action, entry.ActionClass, entry.ResourceType,
+				entry.ResourceID, entry.ResourceName, entry.HttpMethod, entry.Path,
+				strconv.Itoa(int(entry.StatusCode)), strconv.FormatInt(entry.DurationMs, 10),
+				csvNullableIP(entry.IpAddress), entry.UserAgent, entry.RequestID, string(entry.Detail),
+			}); err != nil {
+				return err
 			}
-			_ = writer.Write(row)
 		}
 		writer.Flush()
-		if len(logs) < pageSize {
-			return
+		if err := writer.Error(); err != nil {
+			return err
 		}
-		offset += pageSize
+		if len(logs) < int(auditCSVExportPageSize) {
+			return nil
+		}
+		last := logs[len(logs)-1]
+		filter.HasBefore, filter.BeforeTime, filter.BeforeID = true, last.CreatedAt, last.ID
 	}
 }
 
-func (h *AuditHandler) fetchExportPage(ctx context.Context, filter sqlc.AuditLogFilterParams, limit, offset int32) ([]sqlc.AuditLog, error) {
-	filter.Limit = limit
-	filter.Offset = offset
-	if filterReader, ok := h.queries.(auditFilterReader); ok {
-		return filterReader.ListAuditLogV1Filtered(ctx, filter)
+func (h *AuditHandler) GenerateAuditExport(ctx context.Context, spec audit.ExportSpec, output io.Writer) error {
+	reader, ok := h.queries.(auditCSVPageReader)
+	if !ok {
+		return errors.New("audit export reader is not configured")
 	}
-	switch {
-	case filter.UserID.Valid:
-		return h.listAuditLogsByUser(ctx, sqlc.ListAuditLogsByUserParams{
-			UserID: filter.UserID,
-			Limit:  limit,
-			Offset: offset,
-		})
-	case filter.ResourceType != "":
-		return h.listAuditLogsByResourceType(ctx, sqlc.ListAuditLogsByResourceTypeParams{
-			ResourceType: filter.ResourceType,
-			Limit:        limit,
-			Offset:       offset,
-		})
-	case filter.Action != "":
-		return h.listAuditLogsByAction(ctx, sqlc.ListAuditLogsByActionParams{
-			Action: filter.Action,
-			Limit:  limit,
-			Offset: offset,
-		})
-	case filter.ActionClass != "":
-		return h.queries.ListAuditLogV1ByActionClass(ctx, sqlc.ListAuditLogsByActionClassParams{
-			ActionClass: filter.ActionClass,
-			Limit:       limit,
-			Offset:      offset,
-		})
-	case filter.CorrelationID != "":
-		_, err := uuid.Parse(filter.CorrelationID)
-		if err != nil {
-			return nil, fmt.Errorf("filtered export requires the composable audit reader")
-		}
-		return nil, fmt.Errorf("filtered export requires the composable audit reader")
-	}
-	return h.listAuditLogs(ctx, sqlc.ListAuditLogsParams{Limit: limit, Offset: offset})
+	spec.Filter.Limit = auditCSVExportPageSize
+	spec.Filter.Offset, spec.Filter.CountLimit, spec.Filter.HasBefore = 0, 0, false
+	return writeAuditCSV(ctx, reader, spec.Filter, output)
 }
 
 func csvNullableUUID(id pgtype.UUID) string {
@@ -433,6 +640,7 @@ func auditFilterFromRequest(r *http.Request, limit, offset int32) (sqlc.AuditLog
 		ProjectID:     strings.TrimSpace(q.Get("project_id")),
 		Limit:         limit,
 		Offset:        offset,
+		CountLimit:    auditListCountLimit,
 	}
 	if filter.ActionClass == "" {
 		filter.ActionClass = strings.TrimSpace(q.Get("actionClass"))

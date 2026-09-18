@@ -1,3 +1,4 @@
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 /**
  * Cluster Template tab — the applied cluster-template binding and its
@@ -8,7 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 
 import { lazy, Suspense, useMemo, useState } from "react";
-import { useParams } from "@/lib/navigation";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { PageHeader, PageShell } from "@/components/ui/page";
@@ -25,7 +26,9 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { queryKeys, useCluster } from "@/lib/hooks";
+import { queryKeys } from "@/lib/query-keys";
+import { useCluster } from "@/lib/hooks/clusters";
+import { QueryStates } from "@/components/ui/query-states";
 import { liveFallback } from "@/lib/live/status-store";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import {
@@ -34,7 +37,7 @@ import {
   getClusterTemplateBinding,
   reapplyClusterTemplate,
   type ClusterTemplateStatus,
-} from "@/lib/api/cluster-detail";
+} from "@/lib/api/cluster-template-binding";
 import { listClusterTemplates } from "@/lib/api/project-detail";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -42,7 +45,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 // Monaco stays a lazy chunk (second of the 2 monaco sites; the first is
 // components/ui/yaml-editor.tsx) so the editor bundle loads only when the
 // applied-spec panel is opened.
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+const MonacoEditor = lazy(() => import("@/components/ui/monaco-editor"));
 
 function EditorLoading() {
   return (
@@ -107,7 +110,7 @@ function TemplateStatusBadge({ status }: { status: ClusterTemplateStatus }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs border font-medium",
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs border font-medium",
         tone,
       )}
     >
@@ -118,12 +121,13 @@ function TemplateStatusBadge({ status }: { status: ClusterTemplateStatus }) {
 }
 
 function ClusterTemplatePage() {
-  const params = useParams();
-  const clusterId = params.id as string;
+  const params = Route.useParams();
+  const clusterId = params.id;
   const queryClient = useQueryClient();
   const { canWrite, reason } = useClustersUpdate(clusterId);
 
-  const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
+  const clusterQuery = useCluster(clusterId);
+  const { data: cluster, isLoading: clusterLoading } = clusterQuery;
 
   const { data: templatesPage, isLoading: tplsLoading } = useQuery({
     queryKey: queryKeys.clusterPages.templates,
@@ -194,13 +198,22 @@ function ClusterTemplatePage() {
     } catch {
       return String(binding.spec);
     }
-  }, [binding?.spec]);
+  }, [binding]);
 
-  if (clusterLoading) {
+  if (clusterLoading || clusterQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={clusterQuery}
+        permission="clusters:read"
+        notFound={
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <Server className="h-8 w-8 mb-3" />
+            <p>Cluster not found</p>
+          </div>
+        }
+      >
+        {() => null}
+      </QueryStates>
     );
   }
   if (!cluster) {
@@ -235,12 +248,12 @@ function ClusterTemplatePage() {
             policies, and labels.
           </p>
           <div className="mt-4 flex items-center gap-2">
-            <select
+            <Select
               value={selectedTemplateId}
               onChange={(e) => setSelectedTemplateId(e.target.value)}
               disabled={tplsLoading || !canWrite}
               className="h-8 px-2 rounded-md border border-border bg-background text-xs
-                focus:outline-none focus:ring-1 focus:ring-ring
+                focus:outline-hidden focus:ring-1 focus:ring-ring
                 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="">Select a template…</option>
@@ -249,7 +262,7 @@ function ClusterTemplatePage() {
                   {t.displayName}
                 </option>
               ))}
-            </select>
+            </Select>
             <button
               onClick={() =>
                 selectedTemplateId && bindMutation.mutate(selectedTemplateId)
@@ -258,7 +271,7 @@ function ClusterTemplatePage() {
                 !selectedTemplateId || bindMutation.isPending || !canWrite
               }
               title={canWrite ? undefined : reason}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                 bg-primary text-primary-foreground hover:bg-primary/90 transition-colors
                 disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -297,14 +310,14 @@ function ClusterTemplatePage() {
                 </div>
                 {binding.lastError && (
                   <div className="mt-3 rounded-md border border-status-error/30 bg-status-error/10 p-2.5 flex items-start gap-2">
-                    <AlertTriangle className="h-3.5 w-3.5 text-status-error flex-shrink-0 mt-0.5" />
+                    <AlertTriangle className="h-3.5 w-3.5 text-status-error shrink-0 mt-0.5" />
                     <pre className="text-xs text-status-error whitespace-pre-wrap break-words font-mono">
                       {binding.lastError}
                     </pre>
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => canWrite && setConfirmReapply(true)}
                   disabled={
@@ -313,7 +326,7 @@ function ClusterTemplatePage() {
                     binding.status === "pending"
                   }
                   title={canWrite ? undefined : reason}
-                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                     border border-border text-foreground hover:bg-accent transition-colors
                     disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -324,7 +337,7 @@ function ClusterTemplatePage() {
                   onClick={() => canWrite && setConfirmDetach(true)}
                   disabled={!canWrite}
                   title={canWrite ? undefined : reason}
-                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
                     border border-border text-foreground hover:text-status-error hover:border-status-error/40 transition-colors
                     disabled:opacity-50 disabled:cursor-not-allowed"
                 >

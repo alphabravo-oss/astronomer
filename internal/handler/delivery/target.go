@@ -6,15 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
-
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
@@ -22,7 +13,16 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type TargetQueries interface {
@@ -55,6 +55,11 @@ type PlatformScopeChecker interface {
 	GetUserByID(context.Context, uuid.UUID) (sqlc.User, error)
 }
 
+type targetConfigurationQueries interface {
+	GetDeliveryConfigurationTemplate(context.Context, sqlc.GetDeliveryConfigurationTemplateParams) (sqlc.DeliveryConfigurationTemplate, error)
+	ListDeliveryOverrideSetsByIDs(context.Context, sqlc.ListDeliveryOverrideSetsByIDsParams) ([]sqlc.DeliveryOverrideSet, error)
+}
+
 type TargetHandler struct {
 	queries   TargetQueries
 	previewer TargetPreviewer
@@ -70,32 +75,6 @@ func (h *TargetHandler) SetRunTx(runTx targetRunTxFunc) {
 }
 
 func (h *TargetHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
-
-func executeTargetMutation[T any](r *http.Request, h *TargetHandler, mutate func(TargetMutationTx) (T, error), fallback func() (T, error), describe func(T) deliveryAuditEvent) (T, error) {
-	var zero T
-	if h == nil {
-		return zero, errors.New("delivery target handler is nil")
-	}
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q TargetMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			return recordAuditOutbox(r, q, describe(result))
-		})
-		return result, err
-	}
-	result, err := fallback()
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
 
 func (h *TargetHandler) SetPlatformScopeChecker(checker PlatformScopeChecker) {
 	if h != nil {
@@ -121,7 +100,31 @@ type targetRequest struct {
 	RolloutPolicy           rolloutPolicy              `json:"rollout_policy"`
 	ReconciliationPolicy    model.ReconciliationPolicy `json:"reconciliation_policy"`
 	MaintenanceWindowPolicy json.RawMessage            `json:"maintenance_window_policy,omitempty"`
+	Overrides               model.TargetOverrides      `json:"overrides"`
+	ConfigurationTemplateID *uuid.UUID                 `json:"configuration_template_id,omitempty"`
+	OverrideSetIDs          []uuid.UUID                `json:"override_set_ids,omitempty"`
 	Suspended               bool                       `json:"suspended"`
+}
+
+// optionalNullableUUID preserves the distinction between an omitted PATCH
+// field and an explicit JSON null. The latter clears the target's template.
+type optionalNullableUUID struct {
+	Set   bool
+	Value *uuid.UUID
+}
+
+func (value *optionalNullableUUID) UnmarshalJSON(data []byte) error {
+	value.Set = true
+	if string(data) == "null" {
+		value.Value = nil
+		return nil
+	}
+	var parsed uuid.UUID
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	value.Value = &parsed
+	return nil
 }
 
 // openapi:request DeliveryTargetPatch
@@ -133,6 +136,9 @@ type updateTargetRequest struct {
 	RolloutPolicy           *rolloutPolicy              `json:"rollout_policy,omitempty"`
 	ReconciliationPolicy    *model.ReconciliationPolicy `json:"reconciliation_policy,omitempty"`
 	MaintenanceWindowPolicy json.RawMessage             `json:"maintenance_window_policy,omitempty"`
+	Overrides               *model.TargetOverrides      `json:"overrides,omitempty"`
+	ConfigurationTemplateID optionalNullableUUID        `json:"configuration_template_id,omitempty"`
+	OverrideSetIDs          *[]uuid.UUID                `json:"override_set_ids,omitempty"`
 	Suspended               *bool                       `json:"suspended,omitempty"`
 }
 
@@ -146,10 +152,15 @@ type targetResponse struct {
 	RolloutPolicy           rolloutPolicy              `json:"rollout_policy"`
 	ReconciliationPolicy    model.ReconciliationPolicy `json:"reconciliation_policy"`
 	MaintenanceWindowPolicy json.RawMessage            `json:"maintenance_window_policy"`
+	Overrides               model.TargetOverrides      `json:"overrides"`
+	OverrideDigest          model.Digest               `json:"override_digest"`
+	ConfigurationTemplateID *uuid.UUID                 `json:"configuration_template_id,omitempty"`
+	OverrideSetIDs          []uuid.UUID                `json:"override_set_ids"`
 	Suspended               bool                       `json:"suspended"`
 	Generation              int64                      `json:"generation"`
 	ResourceVersion         int64                      `json:"resource_version"`
 	DeletionState           string                     `json:"deletion_state"`
+	LastActorID             *uuid.UUID                 `json:"last_actor_id,omitempty"`
 	CreatedAt               time.Time                  `json:"created_at"`
 	UpdatedAt               time.Time                  `json:"updated_at"`
 }
@@ -172,7 +183,7 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 	if name := strings.TrimSpace(r.URL.Query().Get("name")); name != "" {
 		row, err := h.queries.GetDeliveryTargetByName(r.Context(), sqlc.GetDeliveryTargetByNameParams{ProjectID: projectID, Name: name})
 		if errors.Is(err, pgx.ErrNoRows) {
-			respondPage(w, r, []targetResponse{}, 0, limit, offset, false, true)
+			paging.Write(w, []targetResponse{}, paging.Exact(0, int(limit), int(offset), 0))
 			return
 		}
 		if err != nil {
@@ -185,7 +196,7 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		setEntityTag(w, row.ResourceVersion)
-		respondPage(w, r, []targetResponse{item}, 1, limit, offset, false, true)
+		paging.Write(w, []targetResponse{item}, paging.Exact(1, int(limit), int(offset), 1))
 		return
 	}
 	rows, err := h.queries.ListDeliveryTargets(r.Context(), sqlc.ListDeliveryTargetsParams{ProjectID: projectID, QueryLimit: limit, QueryOffset: offset})
@@ -207,7 +218,7 @@ func (h *TargetHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, item)
 	}
-	respondPage(w, r, items, total, limit, offset, int64(offset)+int64(len(items)) < total, true)
+	paging.Write(w, items, paging.Exact(total, int(limit), int(offset), len(items)))
 }
 
 func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -237,6 +248,10 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondTargetBundleError(w, err)
 		return
 	}
+	if err := h.validateConfigurationRefs(r.Context(), projectID, request.ConfigurationTemplateID, request.OverrideSetIDs); err != nil {
+		respondError(w, http.StatusConflict, "configuration_reference_unavailable", err.Error())
+		return
+	}
 	placementJSON, _ := json.Marshal(request.Placement)
 	rolloutJSON, _ := json.Marshal(request.RolloutPolicy)
 	reconcileJSON, _ := json.Marshal(request.ReconciliationPolicy)
@@ -245,19 +260,29 @@ func (h *TargetHandler) Create(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	overrides, err := request.Overrides.Canonical()
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	overridesJSON, _ := json.Marshal(overrides)
+	if err := h.requireTargetOverridesCompatible(r.Context(), projectID, request.BundleVersionID, overrides); err != nil {
+		respondTargetBundleError(w, err)
+		return
+	}
+	actor := reqctx.UserUUID(r.Context())
 	params := sqlc.CreateDeliveryTargetParams{
 		ProjectID: projectID, Name: request.Name, Description: request.Description,
 		BundleVersionID: request.BundleVersionID, Placement: placementJSON,
 		RolloutPolicy: rolloutJSON, ReconciliationPolicy: reconcileJSON,
-		MaintenanceWindowPolicy: maintenanceJSON, Suspended: request.Suspended,
+		MaintenanceWindowPolicy: maintenanceJSON, ConfigurationTemplateID: nullableUUID(request.ConfigurationTemplateID),
+		OverrideSetIds: request.OverrideSetIDs, Overrides: overridesJSON, Suspended: request.Suspended,
 		CreatedBy: actor, UpdatedBy: actor,
 	}
-	row, err := executeTargetMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q TargetMutationTx) (sqlc.DeliveryTarget, error) {
 			return q.CreateDeliveryTarget(r.Context(), params)
 		},
-		func() (sqlc.DeliveryTarget, error) { return h.queries.CreateDeliveryTarget(r.Context(), params) },
 		func(row sqlc.DeliveryTarget) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.target.created", resourceType: "delivery_target", resourceID: row.ID.String(), resourceName: row.Name,
@@ -352,6 +377,10 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 		respondTargetBundleError(w, err)
 		return
 	}
+	if err := h.validateConfigurationRefs(r.Context(), projectID, merged.ConfigurationTemplateID, merged.OverrideSetIDs); err != nil {
+		respondError(w, http.StatusConflict, "configuration_reference_unavailable", err.Error())
+		return
+	}
 	placementJSON, _ := json.Marshal(merged.Placement)
 	rolloutJSON, _ := json.Marshal(merged.RolloutPolicy)
 	reconcileJSON, _ := json.Marshal(merged.ReconciliationPolicy)
@@ -359,14 +388,18 @@ func (h *TargetHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Description: merged.Description, BundleVersionID: merged.BundleVersionID,
 		Placement: placementJSON, RolloutPolicy: rolloutJSON,
 		ReconciliationPolicy: reconcileJSON, MaintenanceWindowPolicy: merged.MaintenanceWindowPolicy,
-		Suspended: merged.Suspended, UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()),
+		ConfigurationTemplateID: nullableUUID(merged.ConfigurationTemplateID), OverrideSetIds: merged.OverrideSetIDs,
+		Overrides: mustJSON(merged.Overrides), Suspended: merged.Suspended, UpdatedBy: reqctx.UserUUID(r.Context()),
 		ID: targetID, ProjectID: projectID, ExpectedResourceVersion: expected,
 	}
-	row, err := executeTargetMutation(r, h,
+	if err := h.requireTargetOverridesCompatible(r.Context(), projectID, merged.BundleVersionID, merged.Overrides); err != nil {
+		respondTargetBundleError(w, err)
+		return
+	}
+	row, err := executeMutation(r, h.runTx,
 		func(q TargetMutationTx) (sqlc.DeliveryTarget, error) {
 			return q.UpdateDeliveryTargetCAS(r.Context(), params)
 		},
-		func() (sqlc.DeliveryTarget, error) { return h.queries.UpdateDeliveryTargetCAS(r.Context(), params) },
 		func(row sqlc.DeliveryTarget) deliveryAuditEvent {
 			return deliveryAuditEvent{
 				action: "delivery.target.updated", resourceType: "delivery_target", resourceID: row.ID.String(), resourceName: row.Name,
@@ -410,10 +443,10 @@ func (h *TargetHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := sqlc.RequestDeliveryTargetDeletionCASParams{
-		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: targetID, ProjectID: projectID,
+		UpdatedBy: reqctx.UserUUID(r.Context()), ID: targetID, ProjectID: projectID,
 		ExpectedResourceVersion: expected,
 	}
-	actor := middleware.AuthenticatedUserUUID(r.Context())
+	actor := reqctx.UserUUID(r.Context())
 	if !actor.Valid || uuid.UUID(actor.Bytes) == uuid.Nil {
 		respondError(w, http.StatusUnauthorized, "authentication_required", "authenticated actor is required")
 		return
@@ -494,15 +527,12 @@ func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	params := sqlc.MarkDeliveryTargetOrphanedParams{
-		UpdatedBy: middleware.AuthenticatedUserUUID(r.Context()), ID: targetID, ProjectID: projectID,
+		UpdatedBy: reqctx.UserUUID(r.Context()), ID: targetID, ProjectID: projectID,
 		ExpectedResourceVersion: expected,
 	}
-	row, err := executeTargetMutation(r, h,
+	row, err := executeMutation(r, h.runTx,
 		func(q TargetMutationTx) (sqlc.MarkDeliveryTargetOrphanedRow, error) {
 			return q.MarkDeliveryTargetOrphaned(r.Context(), params)
-		},
-		func() (sqlc.MarkDeliveryTargetOrphanedRow, error) {
-			return h.queries.MarkDeliveryTargetOrphaned(r.Context(), params)
 		},
 		func(row sqlc.MarkDeliveryTargetOrphanedRow) deliveryAuditEvent {
 			return deliveryAuditEvent{
@@ -522,7 +552,7 @@ func (h *TargetHandler) Orphan(w http.ResponseWriter, r *http.Request) {
 }
 
 func targetChangedFields(request updateTargetRequest) []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 8)
 	if request.Description != nil {
 		fields = append(fields, "description")
 	}
@@ -540,6 +570,15 @@ func targetChangedFields(request updateTargetRequest) []string {
 	}
 	if request.MaintenanceWindowPolicy != nil {
 		fields = append(fields, "maintenance_window_policy")
+	}
+	if request.Overrides != nil {
+		fields = append(fields, "overrides")
+	}
+	if request.ConfigurationTemplateID.Set {
+		fields = append(fields, "configuration_template_id")
+	}
+	if request.OverrideSetIDs != nil {
+		fields = append(fields, "override_set_ids")
 	}
 	if request.Suspended != nil {
 		fields = append(fields, "suspended")
@@ -663,8 +702,42 @@ func validateTargetRequest(request targetRequest) error {
 	if err := request.ReconciliationPolicy.Validate(); err != nil {
 		return err
 	}
+	if err := request.Overrides.Validate(); err != nil {
+		return err
+	}
+	if err := validateTargetConfigurationRefs(request.ConfigurationTemplateID, request.OverrideSetIDs); err != nil {
+		return err
+	}
 	_, err := canonicalJSONObject(request.MaintenanceWindowPolicy)
 	return err
+}
+
+func mustJSON(value any) json.RawMessage {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return encoded
+}
+
+func (h *TargetHandler) requireTargetOverridesCompatible(ctx context.Context, projectID, versionID uuid.UUID, overrides model.TargetOverrides) error {
+	row, err := h.queries.GetComponentBundleVersion(ctx, sqlc.GetComponentBundleVersionParams{ID: versionID, ProjectID: projectID})
+	if err != nil {
+		return err
+	}
+	switch model.RendererKind(row.Renderer) {
+	case model.RendererHelm:
+		if len(overrides.Patches) > 0 {
+			return errors.New("Kubernetes patches require a kustomize bundle")
+		}
+	case model.RendererKustomize:
+		if len(overrides.HelmValues) > 0 {
+			return errors.New("Helm values require a helm bundle")
+		}
+	default:
+		return errors.New("bundle renderer does not support target overrides")
+	}
+	return nil
 }
 
 func (h *TargetHandler) requireReadyBundle(ctx context.Context, projectID, versionID uuid.UUID) error {
@@ -676,13 +749,35 @@ func (h *TargetHandler) requireReadyBundle(ctx context.Context, projectID, versi
 		return errBundleNotReady
 	}
 	if row.Scope == string(model.ScopePlatform) {
-		actor := middleware.AuthenticatedUserUUID(ctx)
+		actor := reqctx.UserUUID(ctx)
 		if !actor.Valid || h.platform == nil {
 			return errPlatformScopeForbidden
 		}
 		user, err := h.platform.GetUserByID(ctx, uuid.UUID(actor.Bytes))
 		if err != nil || !user.IsSuperuser {
 			return errPlatformScopeForbidden
+		}
+	}
+	return nil
+}
+
+func (h *TargetHandler) validateConfigurationRefs(ctx context.Context, projectID uuid.UUID, templateID *uuid.UUID, overrideIDs []uuid.UUID) error {
+	queries, ok := h.queries.(targetConfigurationQueries)
+	if !ok {
+		if templateID != nil || len(overrideIDs) != 0 {
+			return errors.New("configuration persistence is unavailable")
+		}
+		return nil
+	}
+	if templateID != nil {
+		if _, err := queries.GetDeliveryConfigurationTemplate(ctx, sqlc.GetDeliveryConfigurationTemplateParams{ProjectID: projectID, ID: *templateID}); err != nil {
+			return errors.New("configuration template is unavailable in this project")
+		}
+	}
+	if len(overrideIDs) != 0 {
+		rows, err := queries.ListDeliveryOverrideSetsByIDs(ctx, sqlc.ListDeliveryOverrideSetsByIDsParams{ProjectID: projectID, Column2: overrideIDs})
+		if err != nil || len(rows) != len(overrideIDs) {
+			return errors.New("an override set is missing, disabled, or outside this project")
 		}
 	}
 	return nil
@@ -708,6 +803,7 @@ func targetFromRow(row sqlc.DeliveryTarget) (targetResponse, error) {
 	var placementValue model.Placement
 	var rolloutValue rolloutPolicy
 	var reconciliation model.ReconciliationPolicy
+	var overrides model.TargetOverrides
 	if err := decodeStrictJSON(row.Placement, &placementValue); err != nil {
 		return targetResponse{}, err
 	}
@@ -717,16 +813,34 @@ func targetFromRow(row sqlc.DeliveryTarget) (targetResponse, error) {
 	if err := decodeStrictJSON(row.ReconciliationPolicy, &reconciliation); err != nil {
 		return targetResponse{}, err
 	}
+	if err := decodeStrictJSON(row.Overrides, &overrides); err != nil {
+		return targetResponse{}, err
+	}
+	overrideDigest, err := overrides.CanonicalDigest()
+	if err != nil {
+		return targetResponse{}, err
+	}
 	maintenance, err := canonicalJSONObject(row.MaintenanceWindowPolicy)
 	if err != nil {
 		return targetResponse{}, err
+	}
+	var lastActorID *uuid.UUID
+	actor := row.UpdatedBy
+	if !actor.Valid {
+		actor = row.CreatedBy
+	}
+	if actor.Valid {
+		id := uuid.UUID(actor.Bytes)
+		lastActorID = &id
 	}
 	return targetResponse{
 		ID: row.ID, ProjectID: row.ProjectID, Name: row.Name, Description: row.Description,
 		BundleVersionID: row.BundleVersionID, Placement: placementValue, RolloutPolicy: rolloutValue,
 		ReconciliationPolicy: reconciliation, MaintenanceWindowPolicy: maintenance,
+		Overrides: overrides, OverrideDigest: overrideDigest,
+		ConfigurationTemplateID: nullableUUIDPointer(row.ConfigurationTemplateID), OverrideSetIDs: append([]uuid.UUID(nil), row.OverrideSetIds...),
 		Suspended: row.Suspended, Generation: row.Generation, ResourceVersion: row.ResourceVersion,
-		DeletionState: row.DeletionState, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		DeletionState: row.DeletionState, LastActorID: lastActorID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}, nil
 }
 
@@ -750,11 +864,20 @@ func mergeTargetUpdate(current sqlc.DeliveryTarget, request updateTargetRequest)
 	if request.ReconciliationPolicy != nil {
 		merged.ReconciliationPolicy = *request.ReconciliationPolicy
 	}
+	if request.Overrides != nil {
+		merged.Overrides = *request.Overrides
+	}
 	if request.MaintenanceWindowPolicy != nil {
 		merged.MaintenanceWindowPolicy, err = canonicalJSONObject(request.MaintenanceWindowPolicy)
 		if err != nil {
 			return targetResponse{}, err
 		}
+	}
+	if request.ConfigurationTemplateID.Set {
+		merged.ConfigurationTemplateID = request.ConfigurationTemplateID.Value
+	}
+	if request.OverrideSetIDs != nil {
+		merged.OverrideSetIDs = append([]uuid.UUID(nil), (*request.OverrideSetIDs)...)
 	}
 	if request.Suspended != nil {
 		merged.Suspended = *request.Suspended
@@ -771,7 +894,41 @@ func mergeTargetUpdate(current sqlc.DeliveryTarget, request updateTargetRequest)
 	if err := merged.ReconciliationPolicy.Validate(); err != nil {
 		return targetResponse{}, err
 	}
+	if err := merged.Overrides.Validate(); err != nil {
+		return targetResponse{}, err
+	}
+	if err := validateTargetConfigurationRefs(merged.ConfigurationTemplateID, merged.OverrideSetIDs); err != nil {
+		return targetResponse{}, err
+	}
 	return merged, nil
+}
+
+func validateTargetConfigurationRefs(templateID *uuid.UUID, overrideIDs []uuid.UUID) error {
+	if templateID != nil && *templateID == uuid.Nil {
+		return errors.New("configuration_template_id must be a non-zero UUID")
+	}
+	if len(overrideIDs) > 64 {
+		return errors.New("override_set_ids may contain at most 64 entries")
+	}
+	seen := make(map[uuid.UUID]struct{}, len(overrideIDs))
+	for _, id := range overrideIDs {
+		if id == uuid.Nil {
+			return errors.New("override_set_ids must be non-zero UUIDs")
+		}
+		if _, exists := seen[id]; exists {
+			return errors.New("override_set_ids must be unique")
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
+}
+
+func nullableUUIDPointer(value pgtype.UUID) *uuid.UUID {
+	if !value.Valid {
+		return nil
+	}
+	id := uuid.UUID(value.Bytes)
+	return &id
 }
 
 func targetScope(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
@@ -847,6 +1004,8 @@ func respondRolloutError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, asyncop.ErrConflict):
 		respondError(w, http.StatusConflict, "idempotency_conflict", err.Error())
+	case rollout.HasCode(err, rollout.CodeStaleFence):
+		respondError(w, http.StatusPreconditionFailed, string(rollout.CodeStaleFence), err.Error())
 	case rollout.HasCode(err, rollout.CodePreviewStale), rollout.HasCode(err, rollout.CodeTargetChanged), rollout.HasCode(err, rollout.CodeIdempotencyConflict):
 		respondError(w, http.StatusConflict, string(extractRolloutCode(err)), err.Error())
 	case rollout.HasCode(err, rollout.CodeInvalidInput), rollout.HasCode(err, rollout.CodeNoClusters), rollout.HasCode(err, rollout.CodeInvalidCohorts):

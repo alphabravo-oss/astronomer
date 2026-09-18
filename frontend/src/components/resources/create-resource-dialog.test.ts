@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { createPathForManifest } from "./create-resource-dialog";
+import {
+  createPathForManifest,
+  normalizeManifestDocuments,
+} from "./create-resource-dialog";
 
 describe("create resource API path", () => {
   it("prefers live discovery over handwritten kind routing", () => {
@@ -44,5 +47,30 @@ describe("create resource API path", () => {
         metadata: { name: "team-a" },
       }),
     ).toBe("api/v1/namespaces");
+  });
+});
+
+describe("multi-document manifest normalization", () => {
+  it("drops empty separators and retains document order", () => {
+    const deployment = { apiVersion: "apps/v1", kind: "Deployment" };
+    const service = { apiVersion: "v1", kind: "Service" };
+
+    expect(
+      normalizeManifestDocuments([null, deployment, undefined, service]),
+    ).toEqual([deployment, service]);
+  });
+
+  it("rejects empty, scalar, and unbounded document sets", () => {
+    expect(() => normalizeManifestDocuments([])).toThrow(
+      "at least one Kubernetes object",
+    );
+    expect(() => normalizeManifestDocuments(["not-an-object"])).toThrow(
+      "document 1",
+    );
+    expect(() =>
+      normalizeManifestDocuments(
+        Array.from({ length: 51 }, () => ({ kind: "ConfigMap" })),
+      ),
+    ).toThrow("maximum is 50");
   });
 });

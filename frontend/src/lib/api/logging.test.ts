@@ -108,9 +108,13 @@ describe("logging generated API boundary", () => {
   it("maps raw output wire fields and capabilities into the UI model", async () => {
     vi.mocked(generated.getLoggingOutputs).mockResolvedValueOnce({
       data: [outputWire],
-      count: 1,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 1,
+        limit: 100,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
 
     await expect(getLoggingOutputs()).resolves.toEqual([
@@ -266,9 +270,13 @@ describe("logging generated API boundary", () => {
   it("round-trips pipeline destinations through the generated contract", async () => {
     vi.mocked(generated.getLoggingPipelines).mockResolvedValueOnce({
       data: [pipelineWire],
-      count: 1,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 1,
+        limit: 100,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
     await expect(
       getLoggingPipelines({ clusterId: "cluster-1", limit: 200 }),

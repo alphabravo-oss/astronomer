@@ -11,13 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // newTestEncryptor builds a per-test Fernet encryptor by generating
@@ -38,10 +39,8 @@ func newTestEncryptor(t *testing.T) *auth.Encryptor {
 	return e
 }
 
-// recordingSSOSessionStore is the test fake satisfying both the
-// SSOSessionStore (Auth Logout) and ResourceSSOSessionStore (admin
-// force-logout) surfaces. Captures every read/write/delete so tests
-// can assert on the persistence calls without standing up Postgres.
+// recordingSSOSessionStore captures AuthHandler session persistence and can
+// also be attached to the administrative UserMutationTx fixture.
 type recordingSSOSessionStore struct {
 	mu       sync.Mutex
 	rows     map[string]sqlc.SsoSession // keyed by JTI
@@ -230,6 +229,7 @@ func TestLogout_ReturnsRedirectURLWhenSSOSession(t *testing.T) {
 	h.SetSSOSessionStore(store)
 	h.SetEncryptor(enc)
 	h.SetPostLogoutRedirectURL("https://astronomer.example.com/api/v1/auth/logout-done/")
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, revocations: rev})
 
 	// Mint the JWT we'll log out.
 	token, err := jwtMgr.GenerateAccessToken(user.ID)
@@ -299,6 +299,7 @@ func TestLogout_NoRedirectURLForLocalLogin(t *testing.T) {
 	h.SetRevocationQuerier(rev)
 	h.SetSSOSessionStore(store)
 	h.SetEncryptor(enc)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, revocations: rev})
 
 	token, err := jwtMgr.GenerateAccessToken(user.ID)
 	if err != nil {
@@ -344,6 +345,7 @@ func TestLogout_DeletesSSOSessionRow(t *testing.T) {
 	h.SetRevocationQuerier(rev)
 	h.SetSSOSessionStore(store)
 	h.SetEncryptor(enc)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, revocations: rev})
 
 	token, _ := jwtMgr.GenerateAccessToken(user.ID)
 	claims, _ := jwtMgr.ValidateToken(token)
@@ -387,6 +389,7 @@ func TestLogout_NoEndpointFallsBackToLocal(t *testing.T) {
 	h.SetRevocationQuerier(rev)
 	h.SetSSOSessionStore(store)
 	h.SetEncryptor(enc)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, revocations: rev})
 
 	token, _ := jwtMgr.GenerateAccessToken(user.ID)
 	claims, _ := jwtMgr.ValidateToken(token)
@@ -437,7 +440,8 @@ func TestForceLogout_DeletesAllUserSSOSessions(t *testing.T) {
 	store := newRecordingSSOSessionStore()
 	enc := newTestEncryptor(t)
 	bc := &recordingBackchannel{}
-	h.SetSSOSessionStore(store)
+	rq.sessions = store
+	wireAdminUserMutationTx(h, rq)
 	h.SetSSOBackchannelClient(bc)
 	h.SetEncryptor(enc)
 
@@ -466,7 +470,7 @@ func TestForceLogout_DeletesAllUserSSOSessions(t *testing.T) {
 	r.Post("/api/v1/admin/users/{id}/force-logout/", h.ForceLogoutUser)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+target.ID.String()+"/force-logout/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: admin.ID.String(), AuthMethod: "jwt"}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: admin.ID.String(), AuthMethod: "jwt"}))
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -529,23 +533,17 @@ func TestLogoutDoneEndpoint(t *testing.T) {
 // sso_test.go; here we want a tight assertion on the storage shape.
 func TestCallback_PersistsSSOSession(t *testing.T) {
 	user := makeTestUser(t, true)
-	q := newMockQuerier(user)
 	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	enc := newTestEncryptor(t)
 	store := newRecordingSSOSessionStore()
 
-	// queries=nil is the recommended shim for tests that only exercise
-	// SSO persistence: SSOQuerier embeds the full GroupSyncQuerier
-	// surface, which a narrow user-only fake doesn't satisfy. The
-	// only queries path persistSSOSession uses is the audit writer,
-	// and that is a no-op when q is nil.
-	_ = q
-	h := NewSSOHandler(nil, nil, jwtMgr, "/")
-	h.SetSSOSessionWriter(store)
+	h := NewSSOHandler(nil, jwtMgr, "/")
 	h.SetEncryptor(enc)
 
-	token, _ := jwtMgr.GenerateAccessToken(user.ID)
-	claims, _ := jwtMgr.ValidateToken(token)
+	pair, err := jwtMgr.PrepareTokenPairContext(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	info := &auth.SSOUserInfo{
 		Email:              "u@example.com",
@@ -555,14 +553,16 @@ func TestCallback_PersistsSSOSession(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/dex/", nil)
-	h.persistSSOSession(req, user.ID, "dex", token, info)
+	if err := h.persistSSOSession(req.Context(), store, user.ID, "dex", pair, info); err != nil {
+		t.Fatal(err)
+	}
 
 	if len(store.inserts) != 1 {
 		t.Fatalf("inserts = %d, want 1", len(store.inserts))
 	}
 	got := store.inserts[0]
-	if got.Jti != claims.ID {
-		t.Errorf("Jti = %q, want %q", got.Jti, claims.ID)
+	if got.Jti != pair.AccessID() {
+		t.Errorf("Jti = %q, want %q", got.Jti, pair.AccessID())
 	}
 	if got.UserID != user.ID {
 		t.Errorf("UserID mismatch")
@@ -590,29 +590,26 @@ func TestCallback_PersistsSSOSession(t *testing.T) {
 // Google userinfo branches: no id_token => no row written.
 func TestCallback_SkipsPersistenceWhenNoUpstreamToken(t *testing.T) {
 	user := makeTestUser(t, true)
-	q := newMockQuerier(user)
 	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	enc := newTestEncryptor(t)
 	store := newRecordingSSOSessionStore()
 
-	// queries=nil is the recommended shim for tests that only exercise
-	// SSO persistence: SSOQuerier embeds the full GroupSyncQuerier
-	// surface, which a narrow user-only fake doesn't satisfy. The
-	// only queries path persistSSOSession uses is the audit writer,
-	// and that is a no-op when q is nil.
-	_ = q
-	h := NewSSOHandler(nil, nil, jwtMgr, "/")
-	h.SetSSOSessionWriter(store)
+	h := NewSSOHandler(nil, jwtMgr, "/")
 	h.SetEncryptor(enc)
 
-	token, _ := jwtMgr.GenerateAccessToken(user.ID)
+	pair, err := jwtMgr.PrepareTokenPairContext(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 	info := &auth.SSOUserInfo{
 		Email:    "u@example.com",
 		Provider: "github",
 		// no UpstreamIDToken
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/github/", nil)
-	h.persistSSOSession(req, user.ID, "github", token, info)
+	if err := h.persistSSOSession(req.Context(), store, user.ID, "github", pair, info); err != nil {
+		t.Fatal(err)
+	}
 
 	if len(store.inserts) != 0 {
 		t.Errorf("inserts = %d, want 0 for non-OIDC providers", len(store.inserts))

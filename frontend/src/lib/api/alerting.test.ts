@@ -20,6 +20,7 @@ import {
   getAnomalyBaseline,
   getAnomalyBaselines,
   getAlertEvent,
+  getAlertEventSummary,
   getAlertEvents,
   getAlertRule,
   getAlertRules,
@@ -140,6 +141,23 @@ beforeEach(() => {
     if (url === "/api/v1/alerting/events/" && config.method === "GET") {
       return { data: { data: [EVENT], pagination: {} } } as never;
     }
+    if (url === "/api/v1/alerting/events/summary/" && config.method === "GET") {
+      return {
+        data: {
+          data: {
+            total: 42,
+            firing: 5,
+            acknowledged: 3,
+            resolved: 30,
+            silenced: 4,
+            firing_critical: 2,
+            firing_warning: 2,
+            firing_info: 1,
+            as_of: "2026-09-17T12:00:00Z",
+          },
+        },
+      } as never;
+    }
     if (url === "/api/v1/alerting/channels/" && config.method === "GET") {
       return { data: { data: [CHANNEL], pagination: {} } } as never;
     }
@@ -166,13 +184,18 @@ beforeEach(() => {
 
 describe("generated alerting reads", () => {
   it("uses typed pagination and filter parameters for every list", async () => {
+    const signal = new AbortController().signal;
     await expect(
-      getAlertRules({ clusterId: RULE.clusterId ?? undefined, limit: 200 }),
+      getAlertRules(
+        { clusterId: RULE.clusterId ?? undefined, limit: 200 },
+        signal,
+      ),
     ).resolves.toEqual([RULE]);
     expect(lastRequest()?.params).toEqual({
       clusterId: RULE.clusterId,
       limit: 200,
     });
+    expect(lastRequest()?.signal).toBe(signal);
 
     await expect(
       getAlertEvents({
@@ -182,7 +205,7 @@ describe("generated alerting reads", () => {
         limit: "50",
         offset: "10",
       }),
-    ).resolves.toEqual([EVENT]);
+    ).resolves.toEqual({ data: [EVENT], pagination: {} });
     expect(lastRequest()?.params).toEqual({
       status: "firing",
       severity: "warning",
@@ -190,6 +213,16 @@ describe("generated alerting reads", () => {
       limit: 50,
       offset: 10,
     });
+
+    await expect(
+      getAlertEventSummary(RULE.clusterId ?? undefined),
+    ).resolves.toMatchObject({
+      total: 42,
+      firing: 5,
+      firingCritical: 2,
+      firingWarning: 2,
+    });
+    expect(lastRequest()?.params).toEqual({ clusterId: RULE.clusterId });
 
     await expect(getNotificationChannels({ limit: 100 })).resolves.toEqual([
       CHANNEL,
@@ -327,7 +360,9 @@ describe("generated alerting mutations", () => {
     await deleteAlertSilence(SILENCE.id);
 
     expect(
-      request.mock.calls.slice(-9).map(([config]) => [config.method, config.url]),
+      request.mock.calls
+        .slice(-9)
+        .map(([config]) => [config.method, config.url]),
     ).toEqual([
       ["POST", `/api/v1/alerting/rules/${RULE.id}/enable`],
       ["POST", `/api/v1/alerting/rules/${RULE.id}/disable`],

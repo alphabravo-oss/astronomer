@@ -36,7 +36,7 @@ function MatcherChips({ matchers }: { matchers: InhibitionMatcher[] }) {
       {matchers.map((m, i) => (
         <span
           key={`${m.label}-${i}`}
-          className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+          className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
         >
           {m.label}
           {m.isRegex ? "=~" : "="}
@@ -87,7 +87,7 @@ export function InhibitionPanel() {
             {row.equalLabels.map((l) => (
               <span
                 key={l}
-                className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+                className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
               >
                 {l}
               </span>
@@ -170,7 +170,10 @@ export function InhibitionPanel() {
         isError={isError}
         onRetry={() => refetch()}
         searchPlaceholder="Search inhibition rules..."
-        emptyMessage="No inhibition rules configured"
+        emptyState={{
+          title: "No inhibition rules configured",
+          description: "Create the first item to configure this feature.",
+        }}
       />
 
       {showModal && (
@@ -258,7 +261,7 @@ function MatcherEditor({
         <button
           type="button"
           onClick={() => setDraft((d) => ({ ...d, isRegex: !d.isRegex }))}
-          className={`h-8 px-2.5 rounded border text-xs font-mono transition-colors ${
+          className={`h-8 px-2.5 rounded-sm border text-xs font-mono transition-colors ${
             draft.isRegex
               ? "border-primary bg-primary/10 text-primary"
               : "border-border text-muted-foreground hover:text-foreground"
@@ -281,7 +284,7 @@ function MatcherEditor({
           {matchers.map((m, i) => (
             <span
               key={`${m.label}-${i}`}
-              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground font-mono"
+              className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground font-mono"
             >
               {m.label}
               {m.isRegex ? "=~" : "="}
@@ -440,12 +443,12 @@ function InhibitionModal({
       <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
         <form.Field name="enabled">
           {(field) => (
-            <input
+            <Input
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}
               onBlur={field.handleBlur}
-              className="h-4 w-4 rounded border-border"
+              className="h-4 w-4 rounded-sm border-border"
             />
           )}
         </form.Field>

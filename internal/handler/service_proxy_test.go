@@ -14,6 +14,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
+const serviceProxyClusterID = "00000000-0000-4000-8000-000000000001"
+
 type serviceProxyTestRequester struct {
 	path string
 	resp *protocol.K8sResponsePayload
@@ -53,7 +55,7 @@ func TestServiceProxyAllowsEnabledToolService(t *testing.T) {
 	}}})
 	router := serviceProxyTestRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/clusters/cluster-1/proxy/service/observability/grafana:3000/dashboards?orgId=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/clusters/"+serviceProxyClusterID+"/proxy/service/observability/grafana:3000/dashboards?orgId=1", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -77,7 +79,7 @@ func TestServiceProxyAuditsMutatingRequests(t *testing.T) {
 	h.SetAuditWriter(audit)
 	router := serviceProxyTestRouter(h)
 
-	req := httptest.NewRequest(http.MethodPost, "/clusters/cluster-1/proxy/service/observability/grafana:3000/api/admin", nil)
+	req := httptest.NewRequest(http.MethodPost, "/clusters/"+serviceProxyClusterID+"/proxy/service/observability/grafana:3000/api/admin", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -90,7 +92,7 @@ func TestServiceProxyAuditsMutatingRequests(t *testing.T) {
 	if audit.rows[0].Action != "cluster.service_proxy.forwarded" {
 		t.Fatalf("audit action = %q", audit.rows[0].Action)
 	}
-	if audit.rows[0].ResourceID != "cluster-1" || audit.rows[0].ResourceName != "grafana" {
+	if audit.rows[0].ResourceID != serviceProxyClusterID || audit.rows[0].ResourceName != "grafana" {
 		t.Fatalf("audit resource = %s/%s", audit.rows[0].ResourceID, audit.rows[0].ResourceName)
 	}
 }
@@ -119,7 +121,7 @@ func TestServiceProxySanitizesResponseHeaders(t *testing.T) {
 	}}})
 	router := serviceProxyTestRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/clusters/cluster-1/proxy/service/observability/grafana:3000/api/health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/clusters/"+serviceProxyClusterID+"/proxy/service/observability/grafana:3000/api/health", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -161,7 +163,7 @@ func TestServiceProxyAllowsEnabledSubService(t *testing.T) {
 	}}})
 	router := serviceProxyTestRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/clusters/cluster-1/proxy/service/monitoring/prometheus-operated:9090/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/clusters/"+serviceProxyClusterID+"/proxy/service/monitoring/prometheus-operated:9090/", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -180,7 +182,7 @@ func TestServiceProxyBlocksToolWhenMetadataDisallowsProxy(t *testing.T) {
 	}}})
 	router := serviceProxyTestRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/clusters/cluster-1/proxy/service/observability/grafana:3000/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/clusters/"+serviceProxyClusterID+"/proxy/service/observability/grafana:3000/", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -200,7 +202,7 @@ func TestServiceProxyBlocksSubServiceWhenMetadataDisallowsProxy(t *testing.T) {
 	}}})
 	router := serviceProxyTestRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/clusters/cluster-1/proxy/service/monitoring/prometheus-operated:9090/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/clusters/"+serviceProxyClusterID+"/proxy/service/monitoring/prometheus-operated:9090/", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -221,7 +223,7 @@ func TestServiceProxyBlocksUnknownService(t *testing.T) {
 	}}})
 	router := serviceProxyTestRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/clusters/cluster-1/proxy/service/observability/prometheus:9090/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/clusters/"+serviceProxyClusterID+"/proxy/service/observability/prometheus:9090/", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -242,7 +244,7 @@ func TestServiceProxyBlocksSensitiveNamespace(t *testing.T) {
 	}}})
 	router := serviceProxyTestRouter(h)
 
-	req := httptest.NewRequest(http.MethodGet, "/clusters/cluster-1/proxy/service/kube-system/kube-dns:53/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/clusters/"+serviceProxyClusterID+"/proxy/service/kube-system/kube-dns:53/", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

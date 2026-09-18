@@ -4,6 +4,7 @@ import {
   getSecurityScansById,
   postSecurityScans,
 } from "@/lib/api/generated/client";
+import { mapPage } from "@/lib/api/pagination";
 import { API_BASE } from "@/lib/env";
 import type {
   CISFinding,
@@ -78,19 +79,10 @@ export async function getCISScans(params?: {
   const offset =
     params?.offset ?? (limit === undefined ? undefined : (page - 1) * limit);
   const response = await getSecurityScans({ query: { limit, offset } });
-  const data = (response.data ?? []).map(mapCISScan);
-  const total = response.count ?? data.length;
-  const pageSize = limit ?? Math.max(data.length, 1);
-  return {
-    data,
-    count: total,
-    total,
-    next: response.next ?? null,
-    previous: response.previous ?? null,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(total / pageSize)),
-  };
+  return mapPage(
+    { data: response.data ?? [], pagination: response.pagination },
+    mapCISScan,
+  );
 }
 
 export async function getCISScan(id: string): Promise<CISScanDetail> {

@@ -38,7 +38,7 @@ func TestGitOpsUpdate_EncryptsNewAuthAtRest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
-	h := NewGitOpsHandler(q, &fakeRunner{}, nil)
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
 	h.SetEncryptor(enc)
 
 	const freshPAT = "ghp_rotatedTokenValue123"
@@ -100,7 +100,7 @@ func TestGitOpsUpdate_SentinelStillPreservesWithEncryptor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new encryptor: %v", err)
 	}
-	h := NewGitOpsHandler(q, &fakeRunner{}, nil)
+	h := wireGitOpsMutationFixture(NewGitOpsHandler(q, &fakeRunner{}, nil), q)
 	h.SetEncryptor(enc)
 
 	body := []byte(`{

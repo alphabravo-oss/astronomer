@@ -51,13 +51,27 @@ describe("generated management backup API", () => {
   it("translates page semantics into the server limit/offset contract", async () => {
     vi.mocked(getAdminBackupDrillHistory).mockResolvedValueOnce({
       data: [],
-      count: 45,
-      next: null,
-      previous: "/previous",
+      pagination: {
+        total: 45,
+        limit: 20,
+        offset: 40,
+        has_more: false,
+        next_offset: null,
+      },
     });
     await expect(
       listBackupDrillHistory({ page: 3, page_size: 20 }),
-    ).resolves.toEqual(expect.objectContaining({ page: 3, totalPages: 3 }));
+    ).resolves.toEqual(
+      expect.objectContaining({
+        pagination: {
+          total: 45,
+          limit: 20,
+          offset: 40,
+          has_more: false,
+          next_offset: null,
+        },
+      }),
+    );
     expect(getAdminBackupDrillHistory).toHaveBeenCalledWith({
       query: { limit: 20, offset: 40 },
       signal: undefined,

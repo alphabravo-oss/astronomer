@@ -74,3 +74,58 @@ func TestK8sProxyExecuteUpstreamStripsClientAuthHeaders(t *testing.T) {
 		}
 	}
 }
+
+func TestK8sProxyInjectsTypedGrafanaAuthOnlyForDedicatedService(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		auth       *protocol.GrafanaProxyAuth
+		wantCookie string
+		wantTicket string
+	}{
+		{
+			name:       "dedicated proxy",
+			path:       "/api/v1/namespaces/monitoring/services/http:astronomer-grafana-grafana-proxy:8080/proxy/",
+			auth:       &protocol.GrafanaProxyAuth{Cookie: "signed.cookie", Ticket: "one-use-ticket"},
+			wantCookie: protocol.GrafanaProxyCookieName + "=signed.cookie",
+			wantTicket: "one-use-ticket",
+		},
+		{
+			name: "ordinary service cannot receive credentials",
+			path: "/api/v1/namespaces/monitoring/services/http:prometheus:9090/proxy/",
+			auth: &protocol.GrafanaProxyAuth{Cookie: "signed.cookie", Ticket: "one-use-ticket"},
+		},
+		{
+			name: "control characters are rejected",
+			path: "/api/v1/namespaces/monitoring/services/http:astronomer-grafana-grafana-proxy:8080/proxy/",
+			auth: &protocol.GrafanaProxyAuth{Cookie: "bad;cookie", Ticket: "bad\nticket"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			seen := make(chan http.Header, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seen <- r.Header.Clone()
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			proxy := &K8sProxy{restConfig: &rest.Config{Host: server.URL}, httpClient: server.Client(), log: slog.Default()}
+			payload, err := json.Marshal(protocol.K8sRequestPayload{Method: http.MethodGet, Path: tc.path, GrafanaAuth: tc.auth})
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := proxy.executeUpstream(context.Background(), &protocol.Message{Payload: payload})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Release()
+			headers := <-seen
+			if got := headers.Get("Cookie"); got != tc.wantCookie {
+				t.Fatalf("Cookie = %q, want %q", got, tc.wantCookie)
+			}
+			if got := headers.Get(protocol.GrafanaProxyTicketHeader); got != tc.wantTicket {
+				t.Fatalf("ticket = %q, want %q", got, tc.wantTicket)
+			}
+		})
+	}
+}

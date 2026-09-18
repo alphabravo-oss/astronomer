@@ -1,13 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
+import type { SortingState } from "@tanstack/react-table";
+import { useCluster } from "@/lib/hooks/clusters";
 import {
-  useCluster,
   useWorkloads,
   useScaleWorkload,
   useRestartWorkload,
-  useK8sDelete,
-} from "@/lib/hooks";
-import * as apiClient from "@/lib/api";
-import { DataTable, type Column } from "@/components/ui/data-table";
+} from "@/lib/hooks/workloads";
+import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
+import { getWorkloadPods, type WorkloadSort } from "@/lib/api/workloads";
+import type { Column } from "@/components/ui/data-table";
+import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -63,8 +66,8 @@ import {
   type ResourcePermissionDecisions,
 } from "@/components/resources/resource-action-policy";
 import type { Workload } from "@/types";
-import { useParams, useRouter } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   RESOURCE_TITLES,
   WORKLOAD_KINDS,
@@ -88,6 +91,9 @@ import {
   Plus,
 } from "lucide-react";
 import { toastError } from "@/lib/toast";
+import { pageRowCount } from "@/lib/api/pagination";
+
+const WORKLOAD_RESOURCE_PAGE_SIZE = 50;
 
 // ── Per-resource components (each calls only its own hook) ──
 
@@ -211,9 +217,28 @@ function WorkloadsTable({
   kind: string;
   title: string;
 }) {
-  const { data, isLoading } = useWorkloads(clusterId);
-  const router = useRouter();
-  const filtered = (data?.data || []).filter((w) => w.kind === kind);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "namespace", desc: false },
+  ]);
+  const sort = (
+    sorting[0]
+      ? `${sorting[0].id === "age" ? "created" : sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
+      : "namespace_asc"
+  ) as WorkloadSort;
+  const workloadQuery = useWorkloads(clusterId, {
+    kind,
+    search: debouncedSearch.trim() || undefined,
+    sort,
+    page: pageIndex + 1,
+    pageSize: WORKLOAD_RESOURCE_PAGE_SIZE,
+  });
+  const { data, isLoading, isError, error, refetch } = workloadQuery;
+  const resourceType = kindToResourceType(kind);
+  const navigate = useNavigate();
+  const workloads = data?.data || [];
   const scaleWorkload = useScaleWorkload();
   const restartWorkload = useRestartWorkload();
   const k8sDeleteMut = useK8sDelete();
@@ -239,7 +264,7 @@ function WorkloadsTable({
         return;
       }
       try {
-        const pods = await apiClient.getWorkloadPods(
+        const pods = await getWorkloadPods(
           clusterId,
           workload.kind,
           workload.namespace,
@@ -270,8 +295,8 @@ function WorkloadsTable({
         key: "name",
         header: "Name",
         accessor: (row) => (
-          <Link
-            href={workloadDetailHref(
+          <RouterLink
+            to={workloadDetailHref(
               clusterId,
               row.kind,
               row.namespace,
@@ -281,7 +306,7 @@ function WorkloadsTable({
             className="font-medium text-foreground font-mono text-xs hover:underline"
           >
             {row.name}
-          </Link>
+          </RouterLink>
         ),
       },
       ...workloadColumns.slice(1),
@@ -319,6 +344,12 @@ function WorkloadsTable({
       restartWorkload,
     ],
   );
+  const sortableKeys = new Set(["name", "namespace", "age"]);
+  const serverColumns = columns.map((column) => ({
+    ...column,
+    sortable: sortableKeys.has(column.key),
+    filter: undefined,
+  }));
 
   return (
     <>
@@ -334,22 +365,74 @@ function WorkloadsTable({
           Create {kind}
         </ActionButton>
       </div>
-      <DataTable
-        data={filtered}
-        columns={columns}
+      <ExplorerDataTable
+        clusterId={clusterId}
+        resourceType={resourceType}
+        data={workloads}
+        columns={serverColumns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={(row) => {
           if (!permissions.read.allowed) {
             toastPermissionDenied(permissions.read);
             return;
           }
-          router.push(
-            workloadDetailHref(clusterId, row.kind, row.namespace, row.name),
-          );
+          void navigate({
+            to: workloadDetailHref(
+              clusterId,
+              row.kind,
+              row.namespace,
+              row.name,
+            ),
+          });
         }}
         searchPlaceholder={`Search ${title.toLowerCase()}...`}
+        pageSize={WORKLOAD_RESOURCE_PAGE_SIZE}
         loading={isLoading}
-        emptyMessage={`No ${title.toLowerCase()} found`}
+        isError={isError}
+        error={error}
+        onRetry={() => void refetch()}
+        filtersActive={search.trim() !== ""}
+        onClearFilters={() => {
+          setSearch("");
+          setPageIndex(0);
+        }}
+        serverSide={{
+          rowCount: pageRowCount(data),
+          pagination: {
+            pageIndex,
+            pageSize: WORKLOAD_RESOURCE_PAGE_SIZE,
+          },
+          onPaginationChange: (next) => setPageIndex(next.pageIndex),
+          search: {
+            value: search,
+            onChange: (value) => {
+              setSearch(value);
+              setPageIndex(0);
+            },
+          },
+          sorting: {
+            value: sorting,
+            onChange: (next) => {
+              setSorting(next.slice(0, 1));
+              setPageIndex(0);
+            },
+          },
+        }}
+        emptyState={{
+          title: `No ${title.toLowerCase()} found`,
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
+        bulkDelete={{
+          path: (row) =>
+            k8sResourcePath(
+              kindToResourceType(row.kind),
+              row.name,
+              row.namespace,
+            ),
+          label: (row) => `${row.namespace}/${row.name}`,
+          noun: kind,
+        }}
       />
 
       <ScaleDialog
@@ -442,9 +525,9 @@ function WorkloadsTable({
 // ── Main Page Component ──
 
 export function ClusterResourcePage() {
-  const params = useParams();
-  const clusterId = params.id as string;
-  const resource = params.resource as string;
+  const params = useParams({ from: "/dashboard/clusters/$id/$resource/" });
+  const clusterId = params.id;
+  const resource = params.resource;
 
   const title = RESOURCE_TITLES[resource];
   const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);

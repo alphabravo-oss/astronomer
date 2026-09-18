@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -71,9 +71,8 @@ func (h *MonitoringHandler) GetClusterConfig(w http.ResponseWriter, r *http.Requ
 		RespondJSON(w, http.StatusOK, map[string]any{})
 		return
 	}
-	clusterID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	cfg, err := h.queries.GetClusterMonitoringConfig(r.Context(), clusterID)
@@ -93,9 +92,8 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MonitoringError, "monitoring store not configured")
 		return
 	}
-	clusterID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	var req UpdateClusterMonitoringConfigRequest
@@ -150,15 +148,12 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 		LastHealthyAt:           nullableNow(req.Status == "healthy"),
 		CreatedByID:             currentUserUUID(r),
 	}
-	clusterCfg, err := executeMonitoringMutation(r, h,
+	clusterCfg, err := executeMutation(r, h.runTx,
 		func(q MonitoringMutationTx) (sqlc.ClusterMonitoringConfig, error) {
 			return q.UpsertClusterMonitoringConfig(r.Context(), params)
 		},
-		func() (sqlc.ClusterMonitoringConfig, error) {
-			return h.queries.UpsertClusterMonitoringConfig(r.Context(), params)
-		},
-		func(clusterCfg sqlc.ClusterMonitoringConfig) clusterAuditEvent {
-			return clusterAuditEvent{action: "monitoring.cluster_config.update", resourceType: "cluster_monitoring_config", resourceID: clusterCfg.ClusterID.String(), resourceName: clusterCfg.PrometheusReleaseName, status: http.StatusOK, detail: map[string]any{
+		func(clusterCfg sqlc.ClusterMonitoringConfig) mutationAuditEvent {
+			return mutationAuditEvent{action: "monitoring.cluster_config.update", resourceType: "cluster_monitoring_config", resourceID: clusterCfg.ClusterID.String(), resourceName: clusterCfg.PrometheusReleaseName, status: http.StatusOK, detail: map[string]any{
 				"backendId": clusterCfg.BackendID.String(), "stackNamespace": clusterCfg.StackNamespace, "status": clusterCfg.Status,
 			}}
 		})
@@ -170,7 +165,12 @@ func (h *MonitoringHandler) UpdateClusterConfig(w http.ResponseWriter, r *http.R
 }
 
 func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbRead)
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbRead)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
@@ -192,21 +192,15 @@ func (h *MonitoringHandler) PreviewStack(w http.ResponseWriter, r *http.Request)
 
 func (h *MonitoringHandler) stageClusterStackMutation(r *http.Request, clusterID string, req MonitoringStackRequest, values map[string]any, desiredStatus, operationType, auditAction string) (sqlc.MonitoringOperation, error) {
 	opContext := withOperationIdempotency(r, "monitoring")
-	op, err := executeMonitoringMutation(r, h,
+	op, err := executeMutation(r, h.runTx,
 		func(q MonitoringMutationTx) (sqlc.MonitoringOperation, error) {
 			if persistErr := persistStackConfigWith(r.Context(), q, clusterID, req, desiredStatus); persistErr != nil {
 				return sqlc.MonitoringOperation{}, persistErr
 			}
 			return createClusterStackOperationWith(opContext, h, q, currentUserUUID(r), operationType, clusterID, req, values)
 		},
-		func() (sqlc.MonitoringOperation, error) {
-			if persistErr := persistStackConfigWith(r.Context(), h.queries, clusterID, req, desiredStatus); persistErr != nil {
-				return sqlc.MonitoringOperation{}, persistErr
-			}
-			return createClusterStackOperationWith(opContext, h, h.queries, currentUserUUID(r), operationType, clusterID, req, values)
-		},
-		func(op sqlc.MonitoringOperation) clusterAuditEvent {
-			return clusterAuditEvent{action: auditAction, resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: req.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
+		func(op sqlc.MonitoringOperation) mutationAuditEvent {
+			return mutationAuditEvent{action: auditAction, resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: req.ReleaseName, status: http.StatusAccepted, detail: map[string]any{
 				"namespace": req.Namespace, "operationId": op.ID.String(),
 			}}
 		})
@@ -217,7 +211,12 @@ func (h *MonitoringHandler) stageClusterStackMutation(r *http.Request, clusterID
 }
 
 func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbCreate)
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbCreate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
@@ -231,7 +230,12 @@ func (h *MonitoringHandler) InstallStack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbUpdate)
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbUpdate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
@@ -259,7 +263,12 @@ func (h *MonitoringHandler) UpgradeStack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *MonitoringHandler) ReplaceStack(w http.ResponseWriter, r *http.Request) {
-	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, rbac.VerbUpdate)
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
+	clusterID, req, values, err := h.monitoringStackPayload(r.Context(), r, clusterID, rbac.VerbUpdate)
 	if err != nil {
 		respondStackPayloadError(w, r, err)
 		return
@@ -281,15 +290,15 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.HelmError, "helm requester not configured")
 		return
 	}
-	clusterID := chi.URLParam(r, "id")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterUUID := id
+	clusterID := id.String()
 	cfg, _, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
-		return
-	}
-	clusterUUID, parseErr := uuid.Parse(clusterID)
-	if parseErr != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
 	configParams := sqlc.UpsertClusterMonitoringConfigParams{
@@ -306,21 +315,15 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 		Namespace:   cfg.StackNamespace,
 	}
 	opContext := withOperationIdempotency(r, "monitoring")
-	op, err := executeMonitoringMutation(r, h,
+	op, err := executeMutation(r, h.runTx,
 		func(q MonitoringMutationTx) (sqlc.MonitoringOperation, error) {
 			if _, updateErr := q.UpsertClusterMonitoringConfig(r.Context(), configParams); updateErr != nil {
 				return sqlc.MonitoringOperation{}, updateErr
 			}
 			return createClusterStackOperationWith(opContext, h, q, currentUserUUID(r), "uninstall", clusterID, opReq, nil)
 		},
-		func() (sqlc.MonitoringOperation, error) {
-			if _, updateErr := h.queries.UpsertClusterMonitoringConfig(r.Context(), configParams); updateErr != nil {
-				return sqlc.MonitoringOperation{}, updateErr
-			}
-			return createClusterStackOperationWith(opContext, h, h.queries, currentUserUUID(r), "uninstall", clusterID, opReq, nil)
-		},
-		func(op sqlc.MonitoringOperation) clusterAuditEvent {
-			return clusterAuditEvent{action: "monitoring.stack.uninstall", resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: cfg.PrometheusReleaseName, status: http.StatusAccepted, detail: map[string]any{
+		func(op sqlc.MonitoringOperation) mutationAuditEvent {
+			return mutationAuditEvent{action: "monitoring.stack.uninstall", resourceType: "cluster_monitoring_config", resourceID: clusterID, resourceName: cfg.PrometheusReleaseName, status: http.StatusAccepted, detail: map[string]any{
 				"namespace": cfg.StackNamespace, "operationId": op.ID.String(),
 			}}
 		})
@@ -333,7 +336,11 @@ func (h *MonitoringHandler) UninstallStack(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *MonitoringHandler) GetStackStatus(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "id")
+	id, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
+		return
+	}
+	clusterID := id.String()
 	cfg, ok, err := h.loadStackConfig(r.Context(), clusterID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, err.Error())
@@ -372,6 +379,12 @@ func (h *MonitoringHandler) GetStackStatus(w http.ResponseWriter, r *http.Reques
 		status["operation"] = op
 	}
 	if h.requester != nil {
+		if _, grafanaErr := h.findGrafanaServiceName(r.Context(), clusterID, cfg.StackNamespace, cfg.PrometheusReleaseName); grafanaErr == nil {
+			status["grafanaAvailable"] = true
+			status["grafanaProxyPath"] = clusterGrafanaProxyPath(clusterID)
+		} else {
+			status["grafanaAvailable"] = false
+		}
 		path := fmt.Sprintf("/api/v1/namespaces/%s/pods?labelSelector=%s", cfg.StackNamespace, url.QueryEscape("app.kubernetes.io/instance="+cfg.PrometheusReleaseName))
 		resp, doErr := h.requester.Do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
 		if doErr == nil && ensureSuccess(resp) == nil {
@@ -416,11 +429,22 @@ func clusterMonitoringConfigResponse(cfg sqlc.ClusterMonitoringConfig) map[strin
 // It is not decoration: clusterStorageConfigAuthorizer uses it to reproduce
 // exactly which callers could dereference a fleet-wide storage config back when
 // these routes were a global check.
-func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.Request, routeVerb rbac.Verb) (string, MonitoringStackRequest, map[string]any, error) {
-	clusterID := chi.URLParam(r, "id")
+func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.Request, clusterID string, routeVerb rbac.Verb) (string, MonitoringStackRequest, map[string]any, error) {
 	var req MonitoringStackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
 		return "", MonitoringStackRequest{}, nil, fmt.Errorf("invalid JSON body")
+	}
+	// A managed stack's fleet identity is derived from the routed cluster, not
+	// from caller-controlled Helm values. Thanos uses this label to separate
+	// sources and the Grafana proxy uses it as an authorization boundary, so
+	// accepting a different key/value here would let one cluster masquerade as
+	// another in fleet queries. Keep the legacy request fields wire-compatible,
+	// but reject attempts to change the canonical identity.
+	if req.ClusterLabel != "" && req.ClusterLabel != "cluster_id" {
+		return "", MonitoringStackRequest{}, nil, fmt.Errorf("clusterLabel is managed by Astronomer and must be cluster_id")
+	}
+	if req.ClusterLabelValue != "" && req.ClusterLabelValue != clusterID {
+		return "", MonitoringStackRequest{}, nil, fmt.Errorf("clusterLabelValue is managed by Astronomer and must match the routed cluster")
 	}
 	if req.ReleaseName == "" {
 		req.ReleaseName = "prometheus"
@@ -434,18 +458,11 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	if req.StorageSize == "" {
 		req.StorageSize = "50Gi"
 	}
-	if req.StorageClass == "" {
-		req.StorageClass = "default"
-	}
 	if req.ScrapeInterval == "" {
 		req.ScrapeInterval = "30s"
 	}
-	if req.ClusterLabel == "" {
-		req.ClusterLabel = "cluster_id"
-	}
-	if req.ClusterLabelValue == "" {
-		req.ClusterLabelValue = clusterID
-	}
+	req.ClusterLabel = "cluster_id"
+	req.ClusterLabelValue = clusterID
 	if req.ChartVersion == "" {
 		req.ChartVersion = "61.3.2"
 	}
@@ -469,10 +486,56 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	if req.ThanosSidecarEnabled != nil {
 		enableSidecar = *req.ThanosSidecarEnabled
 	}
-	values := map[string]any{
-		"grafana": map[string]any{
-			"enabled": enableGrafana,
+	prometheusPVCSpec := map[string]any{
+		"accessModes": []string{"ReadWriteOnce"},
+		"resources": map[string]any{
+			"requests": map[string]any{
+				"storage": req.StorageSize,
+			},
 		},
+	}
+	if req.StorageClass != "" {
+		prometheusPVCSpec["storageClassName"] = req.StorageClass
+	}
+	grafanaValues := map[string]any{"enabled": enableGrafana}
+	if enableGrafana {
+		rootURL := strings.TrimRight(h.serverURL, "/") + clusterGrafanaProxyPath(clusterID)
+		grafanaValues["grafana.ini"] = map[string]any{
+			"server": map[string]any{
+				"root_url":            rootURL,
+				"serve_from_sub_path": true,
+			},
+			"auth": map[string]any{
+				"disable_login_form":   true,
+				"disable_signout_menu": true,
+			},
+			"auth.anonymous": map[string]any{
+				"enabled":  true,
+				"org_role": "Viewer",
+			},
+			"auth.basic": map[string]any{"enabled": false},
+			"security":   map[string]any{"allow_embedding": true},
+			"users":      map[string]any{"allow_sign_up": false},
+		}
+	}
+	values := map[string]any{
+		"additionalPrometheusRulesMap": map[string]any{
+			"astronomer-cluster-metadata": map[string]any{
+				"groups": []any{
+					map[string]any{
+						"name": "astronomer.cluster.metadata",
+						"rules": []any{
+							map[string]any{
+								"record": "astronomer_cluster_info",
+								"expr":   "vector(1)",
+								"labels": h.monitoringClusterInfoLabels(ctx, clusterID),
+							},
+						},
+					},
+				},
+			},
+		},
+		"grafana": grafanaValues,
 		"alertmanager": map[string]any{
 			"enabled": enableAlertmanager,
 			"alertmanagerSpec": map[string]any{
@@ -482,20 +545,12 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 		"prometheus": map[string]any{
 			"prometheusSpec": map[string]any{
 				"retention":      req.Retention,
-				"externalLabels": map[string]any{req.ClusterLabel: req.ClusterLabelValue},
+				"externalLabels": map[string]any{"cluster_id": clusterID},
 				"scrapeInterval": req.ScrapeInterval,
 				"enableAdminAPI": false,
 				"storageSpec": map[string]any{
 					"volumeClaimTemplate": map[string]any{
-						"spec": map[string]any{
-							"storageClassName": req.StorageClass,
-							"accessModes":      []string{"ReadWriteOnce"},
-							"resources": map[string]any{
-								"requests": map[string]any{
-									"storage": req.StorageSize,
-								},
-							},
-						},
+						"spec": prometheusPVCSpec,
 					},
 				},
 				"thanos": map[string]any{
@@ -503,6 +558,14 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 					"version":   "v0.36.1",
 				},
 			},
+		},
+		// kube-state-metrics keeps the full Kubernetes object relationship
+		// model queryable without copying every arbitrary Pod label onto every
+		// Prometheus series. The curated labels cover placement, ownership and
+		// the app.kubernetes.io identity convention while avoiding rollout
+		// hashes and annotations that cause unbounded cardinality.
+		"kube-state-metrics": map[string]any{
+			"metricLabelsAllowlist": monitoringKubeStateMetricLabelAllowlist,
 		},
 	}
 	if enableSidecar && req.StorageConfigID != "" {
@@ -531,6 +594,63 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 		delete(values["prometheus"].(map[string]any)["prometheusSpec"].(map[string]any), "thanos")
 	}
 	return clusterID, req, values, nil
+}
+
+var monitoringKubeStateMetricLabelAllowlist = []string{
+	"namespaces=[app.kubernetes.io/name,environment,team,owner,cost-center]",
+	"nodes=[kubernetes.io/arch,kubernetes.io/os,node.kubernetes.io/instance-type,topology.kubernetes.io/region,topology.kubernetes.io/zone]",
+	"pods=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"deployments=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"statefulsets=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"daemonsets=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"jobs=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"cronjobs=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+}
+
+// monitoringClusterIdentityReader is deliberately narrower than
+// MonitoringQuerier. Production's *sqlc.Queries implements it, while small
+// handler fakes and deployments without a configured store still receive the
+// mandatory cluster_id label.
+type monitoringClusterIdentityReader interface {
+	GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error)
+}
+
+// monitoringClusterInfoLabels returns the human and infrastructure metadata on
+// the single astronomer_cluster_info series. Only immutable cluster_id belongs
+// in Prometheus externalLabels: Thanos groups blocks by the complete external
+// label set and requires it to remain persistent. Keeping mutable display
+// metadata here lets dashboards join it by cluster_id without fragmenting or
+// duplicating every source series when a cluster is renamed or reclassified.
+func (h *MonitoringHandler) monitoringClusterInfoLabels(ctx context.Context, clusterID string) map[string]any {
+	labels := map[string]any{"cluster_id": clusterID}
+	reader, ok := h.queries.(monitoringClusterIdentityReader)
+	if !ok {
+		return labels
+	}
+	id, err := uuid.Parse(clusterID)
+	if err != nil {
+		return labels
+	}
+	cluster, err := reader.GetClusterByID(ctx, id)
+	if err != nil {
+		return labels
+	}
+	clusterName := cluster.DisplayName
+	if clusterName == "" {
+		clusterName = cluster.Name
+	}
+	for key, value := range map[string]string{
+		"cluster_name":           clusterName,
+		"kubernetes_cluster_uid": cluster.ClusterUid,
+		"environment":            cluster.Environment,
+		"region":                 cluster.Region,
+		"provider":               cluster.Provider,
+	} {
+		if value != "" {
+			labels[key] = value
+		}
+	}
+	return labels
 }
 
 func clusterMonitoringReplaceRequired(cfg sqlc.ClusterMonitoringConfig, exists bool, req MonitoringStackRequest) (bool, []string) {

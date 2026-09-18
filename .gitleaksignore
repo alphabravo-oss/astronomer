@@ -1,0 +1,47 @@
+# Historical findings reviewed during Plan 016 on 2026-09-17. These are
+# commit-bound fingerprints for non-secret fixtures/examples in immutable Git
+# history. New findings remain blocking; never add a fingerprint without review.
+0ad5f1f62e8e62d74ac2583af8abbdb66a61f1cb:docs/rancher-astronomer-comparison.md:generic-api-key:7
+0ad5f1f62e8e62d74ac2583af8abbdb66a61f1cb:internal/handler/password_reset_test.go:generic-api-key:340
+0ad5f1f62e8e62d74ac2583af8abbdb66a61f1cb:internal/handler/supportbundle_operations_test.go:generic-api-key:77
+0ad5f1f62e8e62d74ac2583af8abbdb66a61f1cb:internal/server/session_timeout_test.go:generic-api-key:128
+0ad5f1f62e8e62d74ac2583af8abbdb66a61f1cb:internal/tunnel/internal_auth_test.go:generic-api-key:13
+0ad5f1f62e8e62d74ac2583af8abbdb66a61f1cb:internal/tunnel/internal_auth_test.go:generic-api-key:43
+1a3a04996bc9d34093188258150fccd1e7dbc8d5:.github/workflows/pr-validation.yaml:generic-api-key:160
+2be5b25261e75545aaa546c90567f937172d7b4f:scripts/verify-enterprise.sh:generic-api-key:201
+54b888f37d0648bcc56e96ee926886737772081b:internal/server/session_timeout_test.go:generic-api-key:128
+590b455fcb19841eec00729d728cc1b924158932:advisor-plans/008-enterprise-grade-api-and-rancher-parity-implementation-plan.md:generic-api-key:903
+590b455fcb19841eec00729d728cc1b924158932:docs/rancher-astronomer-comparison.md:generic-api-key:7
+64f0de77401759ace11af4cf5447bd193e19a379:deploy/chart/values-k3d.yaml:generic-api-key:13
+64f0de77401759ace11af4cf5447bd193e19a379:deploy/chart/values-k3d.yaml:generic-api-key:15
+64f0de77401759ace11af4cf5447bd193e19a379:internal/handler/users.go:generic-api-key:20
+6884354868d0fecefe37db11c4a07916fb851c9a:deploy/chart/values.yaml:generic-api-key:238
+715a3232fc9d45c53ec53d2adf3530604946ebc4:advisor-plans/013-production-security-dr-and-supply-chain-plan.md:generic-api-key:54
+718041176280ea2ccefcca2126d117c63e519dd1:.github/workflows/pr-validation.yaml:generic-api-key:90
+718041176280ea2ccefcca2126d117c63e519dd1:internal/server/server.go:generic-api-key:91
+718041176280ea2ccefcca2126d117c63e519dd1:internal/server/server_test.go:generic-api-key:76
+7a86805cd027d0074053bfb936eaf6ad574dfb80:frontend/src/app/dashboard/backups/storage/new/page.tsx:generic-api-key:70
+875f4381445d585f0bd07b255facb29f4c73bab4:deploy/docker-compose.yml:generic-api-key:67
+875f4381445d585f0bd07b255facb29f4c73bab4:deploy/docker-compose.yml:generic-api-key:98
+875f4381445d585f0bd07b255facb29f4c73bab4:deploy/k8s/03-secret.yaml:generic-api-key:16
+875f4381445d585f0bd07b255facb29f4c73bab4:internal/config/production.go:generic-api-key:15
+9256f0d8ccdf656502629362153f4167a18ffd79:internal/handler/password_reset_test.go:generic-api-key:242
+9256f0d8ccdf656502629362153f4167a18ffd79:internal/handler/password_reset_test.go:generic-api-key:276
+9256f0d8ccdf656502629362153f4167a18ffd79:internal/handler/password_reset_test.go:generic-api-key:304
+9256f0d8ccdf656502629362153f4167a18ffd79:internal/server/privilege_groups_test.go:generic-api-key:14
+94d0ddcc8284de71f4f208108c4830ae7f49f054:scripts/check-legacy-delivery-surface.sh:generic-api-key:244
+9cd99d8ea0b1cfc2af12e9958741d902bf451fb5:PARITY_AND_HARDENING_REMEDIATION_2026-07-28.md:generic-api-key:544
+a43ceb2e580114da04a4bb129dbbc052f6652b0f:.tmp-external-render.yaml:generic-api-key:103
+a43ceb2e580114da04a4bb129dbbc052f6652b0f:.tmp-external-render.yaml:generic-api-key:84
+f75d617b266abe7f13fb4ef0fc1146cddafc15a0:advisor-plans/006-charlie-platform-pack-expansion-plan.md:generic-api-key:1236
+fa0527d3c4817c3c400fdfec55a0615f91ab4600:internal/handler/alerting_redaction_test.go:generic-api-key:19
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:.github/workflows/release.yaml:generic-api-key:237
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:Makefile:generic-api-key:62
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:deploy/management_logging_render_test.go:generic-api-key:30
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:deploy/secret_material_render_test.go:generic-api-key:19
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:deploy/secret_material_render_test.go:generic-api-key:52
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:internal/config/production.go:generic-api-key:32
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:internal/config/production.go:generic-api-key:40
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:internal/server/server_test.go:generic-api-key:190
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:scripts/extract-images.sh:generic-api-key:45
+faf062bc098d8dc74fbb0313af57ea47ed017b5d:scripts/verify-enterprise.sh:generic-api-key:194

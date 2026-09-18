@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 )
@@ -20,10 +21,20 @@ func (c *productionComposition) startProductionRuntime(_ context.Context, cfg *c
 	}
 	runtimeTasks, err := c.composeRuntimeTasks(cfg, logger, routed, foundation)
 	if err != nil {
+		shutdownFailedRuntime(foundation.server, logger)
 		return nil, err
 	}
 	if err := c.startRuntimeServices(cfg, logger, foundation, runtimeTasks); err != nil {
+		shutdownFailedRuntime(foundation.server, logger)
 		return nil, err
 	}
 	return foundation.server, nil
+}
+
+func shutdownFailedRuntime(server *Server, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Error("failed to clean up partially started runtime", "error", err)
+	}
 }

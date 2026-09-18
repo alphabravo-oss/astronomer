@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/asyncop"
 	deliverydeployment "github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type DeploymentQueries interface {
@@ -55,6 +55,11 @@ func (h *DeploymentHandler) List(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
 		return
 	}
+	targetID, err := optionalUUIDFilter(r, "target_id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		return
+	}
 	phase, err := deploymentPhaseFilter(r)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
@@ -64,18 +69,18 @@ func (h *DeploymentHandler) List(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery deployment persistence is unavailable")
 		return
 	}
-	params := sqlc.ListClusterDeploymentsParams{ProjectID: projectID, ClusterID: clusterID, Phase: phase, QueryLimit: limit, QueryOffset: offset}
+	params := sqlc.ListClusterDeploymentsParams{ProjectID: projectID, TargetID: targetID, ClusterID: clusterID, Phase: phase, QueryLimit: limit, QueryOffset: offset}
 	rows, err := h.queries.ListClusterDeployments(r.Context(), params)
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
 	}
-	total, err := h.queries.CountClusterDeployments(r.Context(), sqlc.CountClusterDeploymentsParams{ProjectID: projectID, ClusterID: clusterID, Phase: phase})
+	total, err := h.queries.CountClusterDeployments(r.Context(), sqlc.CountClusterDeploymentsParams{ProjectID: projectID, TargetID: targetID, ClusterID: clusterID, Phase: phase})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
 	}
-	respondPage(w, r, rows, total, limit, offset, int64(offset)+int64(len(rows)) < total, true)
+	paging.Write(w, rows, paging.Exact(total, int(limit), int(offset), len(rows)))
 }
 
 func (h *DeploymentHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +126,7 @@ func (h *DeploymentHandler) Events(w http.ResponseWriter, r *http.Request) {
 		respondDatabaseError(w, err)
 		return
 	}
-	respondPage(w, r, rows, total, limit, offset, int64(offset)+int64(len(rows)) < total, true)
+	paging.Write(w, rows, paging.Exact(total, int(limit), int(offset), len(rows)))
 }
 
 func (h *DeploymentHandler) Reconcile(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +177,7 @@ func (h *DeploymentHandler) action(w http.ResponseWriter, r *http.Request, actio
 	}, "")
 	result, err := h.controller.Act(r.Context(), deliverydeployment.Request{
 		ProjectID: projectID, DeploymentID: deploymentID, ExpectedGeneration: expected,
-		Action: action, ActorID: middleware.AuthenticatedUserUUID(r.Context()), IdempotencyKey: key,
+		Action: action, ActorID: reqctx.UserUUID(r.Context()), IdempotencyKey: key,
 		ReasonCode: request.ReasonCode, Audit: auditIntent,
 	})
 	if err != nil {
@@ -191,13 +196,7 @@ func (h *DeploymentHandler) action(w http.ResponseWriter, r *http.Request, actio
 		setEntityTag(w, result.Deployment.DesiredGeneration)
 		events.PublishChanged(h.bus, "cluster_deployment", result.Deployment.ClusterID.String(), deploymentID.String(), map[string]any{"project_id": projectID.String(), "action": string(action)})
 	}
-	if !result.Replayed && !result.AuditPersisted {
-		recordAudit(r, h.queries, deploymentAuditAction(action), "cluster_deployment", deploymentID.String(), "", map[string]any{
-			"project_id": projectID.String(), "cluster_id": result.Deployment.ClusterID.String(),
-			"target_id": result.Deployment.TargetID.String(), "phase": result.Deployment.Phase,
-			"desired_generation": result.Deployment.DesiredGeneration,
-		})
-	}
+
 	respondAcceptedOperation(w, result.Receipt.StatusURL, result.Receipt)
 }
 

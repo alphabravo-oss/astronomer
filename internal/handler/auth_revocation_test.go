@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,13 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // recordingRevocationQuerier captures every revocation write made by
@@ -63,6 +65,8 @@ func TestLogout_RevokesJTI(t *testing.T) {
 	rev := newRecordingRevocationQuerier()
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetRevocationQuerier(rev)
+	h.SetAuditWriter(&recordingAuthAuditWriter{})
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, revocations: rev})
 
 	// Generate the JWT we'll log out.
 	token, err := jwtMgr.GenerateAccessToken(user.ID)
@@ -76,7 +80,7 @@ func TestLogout_RevokesJTI(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", strings.NewReader(""))
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-Forwarded-Proto", "https")
+	req.TLS = &tls.ConnectionState{}
 	req = setAuthUser(req, user.ID.String())
 	rec := httptest.NewRecorder()
 
@@ -96,7 +100,7 @@ func TestLogout_RevokesJTI(t *testing.T) {
 	if rev.revoked[0].Reason != "user_logout" {
 		t.Fatalf("Reason = %q, want user_logout", rev.revoked[0].Reason)
 	}
-	for _, name := range []string{middleware.SessionCookieName, middleware.RefreshCookieName, middleware.CSRFCookieName} {
+	for _, name := range []string{auth.SessionCookieName, auth.RefreshCookieName, auth.CSRFCookieName} {
 		cookie := cookieByName(t, rec.Result(), name)
 		assertCookieSecurity(t, cookie, cookieSecurityWant{
 			value:    "",
@@ -119,6 +123,7 @@ func TestLogout_NoBearerSkipsRevocation(t *testing.T) {
 	rev := newRecordingRevocationQuerier()
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetRevocationQuerier(rev)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, revocations: rev})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout/", strings.NewReader(""))
 	rec := httptest.NewRecorder()
@@ -141,6 +146,14 @@ type resourceQuerierForceLogout struct {
 	users       map[uuid.UUID]sqlc.User
 	invalidated []sqlc.InvalidateAllTokensParams
 	unlocked    []uuid.UUID
+	sessions    *recordingSSOSessionStore
+	audits      []sqlc.UpsertAuditOutboxParams
+}
+
+func wireAdminUserMutationTx(h *ResourceHandler, q *resourceQuerierForceLogout) {
+	h.SetUserRunTx(func(ctx context.Context, fn func(UserMutationTx) error) error {
+		return fn(q)
+	})
 }
 
 func (r *resourceQuerierForceLogout) GetPlatformConfig(_ context.Context) (sqlc.PlatformConfiguration, error) {
@@ -169,6 +182,9 @@ func (r *resourceQuerierForceLogout) GetUserByID(_ context.Context, id uuid.UUID
 		return sqlc.User{}, errNoRows
 	}
 	return u, nil
+}
+func (r *resourceQuerierForceLogout) GetUserByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.User, error) {
+	return r.GetUserByID(ctx, id)
 }
 func (r *resourceQuerierForceLogout) GetUserByEmail(_ context.Context, _ string) (sqlc.User, error) {
 	return sqlc.User{}, errNoRows
@@ -205,6 +221,24 @@ func (r *resourceQuerierForceLogout) InvalidateAllTokens(_ context.Context, arg 
 	r.invalidated = append(r.invalidated, arg)
 	return nil
 }
+func (r *resourceQuerierForceLogout) ListSSOSessionsByUser(ctx context.Context, id uuid.UUID) ([]sqlc.SsoSession, error) {
+	if r.sessions == nil {
+		return nil, nil
+	}
+	return r.sessions.ListSSOSessionsByUser(ctx, id)
+}
+func (r *resourceQuerierForceLogout) DeleteSSOSessionsByUser(ctx context.Context, id uuid.UUID) error {
+	if r.sessions == nil {
+		return nil
+	}
+	return r.sessions.DeleteSSOSessionsByUser(ctx, id)
+}
+func (r *resourceQuerierForceLogout) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.audits = append(r.audits, arg)
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action, ResourceType: arg.ResourceType}, nil
+}
 
 func TestForceLogout_InvalidatesAllUserTokens(t *testing.T) {
 	admin := makeTestUser(t, true)
@@ -218,6 +252,7 @@ func TestForceLogout_InvalidatesAllUserTokens(t *testing.T) {
 		users: map[uuid.UUID]sqlc.User{admin.ID: admin, target.ID: target},
 	}
 	h := NewResourceHandlerWithQueries(rq, nil)
+	wireAdminUserMutationTx(h, rq)
 	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h.SetJWTManager(jwtMgr)
 
@@ -226,7 +261,7 @@ func TestForceLogout_InvalidatesAllUserTokens(t *testing.T) {
 
 	// Authenticate as the admin.
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+target.ID.String()+"/force-logout/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: admin.ID.String(), AuthMethod: "jwt"}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: admin.ID.String(), AuthMethod: "jwt"}))
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -257,12 +292,13 @@ func TestForceLogout_NonSuperuserRejected(t *testing.T) {
 		users: map[uuid.UUID]sqlc.User{caller.ID: caller, target.ID: target},
 	}
 	h := NewResourceHandlerWithQueries(rq, nil)
+	wireAdminUserMutationTx(h, rq)
 
 	r := chi.NewRouter()
 	r.Post("/api/v1/admin/users/{id}/force-logout/", h.ForceLogoutUser)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+target.ID.String()+"/force-logout/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: caller.ID.String(), AuthMethod: "jwt"}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: caller.ID.String(), AuthMethod: "jwt"}))
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -289,12 +325,13 @@ func TestAdminUnlock_ClearsLockoutFields(t *testing.T) {
 		users: map[uuid.UUID]sqlc.User{admin.ID: admin, target.ID: target},
 	}
 	h := NewResourceHandlerWithQueries(rq, nil)
+	wireAdminUserMutationTx(h, rq)
 
 	r := chi.NewRouter()
 	r.Post("/api/v1/admin/users/{id}/unlock/", h.UnlockUser)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+target.ID.String()+"/unlock/", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: admin.ID.String(), AuthMethod: "jwt"}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: admin.ID.String(), AuthMethod: "jwt"}))
 
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)

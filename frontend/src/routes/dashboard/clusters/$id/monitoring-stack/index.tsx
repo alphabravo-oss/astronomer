@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useParams } from "@/lib/navigation";
+
 
 import { ClusterMonitoringStackPage } from "@/components/monitoring/cluster-stack-page";
 
 function ClusterMonitoringStackRoute() {
-  const params = useParams();
-  return <ClusterMonitoringStackPage clusterId={params.id as string} />;
+  const params = Route.useParams();
+  return <ClusterMonitoringStackPage clusterId={params.id} />;
 }
 
 export const Route = createFileRoute(

@@ -1,11 +1,15 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/golang-jwt/jwt/v5"
@@ -13,6 +17,20 @@ import (
 )
 
 const testSecret = "test-secret-key-for-auth-middleware"
+
+type unavailableRevocationChecker struct{}
+
+func (unavailableRevocationChecker) IsJWTRevoked(context.Context, string) (bool, error) {
+	return false, errors.New("revocation store unavailable")
+}
+
+func (unavailableRevocationChecker) IsSessionFamilyRevoked(context.Context, uuid.UUID) (bool, error) {
+	return false, errors.New("revocation store unavailable")
+}
+
+func (unavailableRevocationChecker) UserTokensInvalidatedAt(context.Context, uuid.UUID) (time.Time, bool, error) {
+	return time.Time{}, false, errors.New("revocation store unavailable")
+}
 
 func newTestJWTManager() *auth.JWTManager {
 	return auth.MustNewJWTManager(testSecret, 60)
@@ -51,7 +69,7 @@ func TestAuth(t *testing.T) {
 	// A simple handler that records whether it was called and the auth user.
 	type handlerResult struct {
 		called bool
-		user   *AuthenticatedUser
+		user   *reqctx.User
 	}
 
 	tests := []struct {
@@ -128,7 +146,7 @@ func TestAuth(t *testing.T) {
 
 			inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				result.called = true
-				result.user, _ = GetAuthenticatedUser(r.Context())
+				result.user, _ = reqctx.AuthenticatedUser(r.Context())
 				w.WriteHeader(http.StatusOK)
 			})
 
@@ -171,9 +189,41 @@ func TestAuth(t *testing.T) {
 	}
 }
 
+func TestAuthFailsClosedWhenRevocationStateIsUnavailable(t *testing.T) {
+	manager := newTestJWTManager()
+	token, err := manager.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.SetRevocationChecker(unavailableRevocationChecker{})
+	called := false
+	handler := Auth(manager)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, req)
+
+	if called {
+		t.Fatal("authenticated handler ran while revocation state was unavailable")
+	}
+	if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") != "2" {
+		t.Fatalf("status=%d Retry-After=%q body=%s", response.Code, response.Header().Get("Retry-After"), response.Body.String())
+	}
+	var body map[string]map[string]string
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error"]["code"] != "authentication_dependency_unavailable" {
+		t.Fatalf("error response = %#v", body)
+	}
+}
+
 func TestGetAuthenticatedUser_NoValue(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	user, ok := GetAuthenticatedUser(req.Context())
+	user, ok := reqctx.AuthenticatedUser(req.Context())
 	if ok || user != nil {
 		t.Fatal("expected no authenticated user in empty context")
 	}

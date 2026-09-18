@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo, useState, type KeyboardEvent } from "react";
 import { ArrowLeft } from "lucide-react";
 
@@ -10,9 +8,9 @@ import {
 import type { K8sObject } from "@/components/resources/resource-detail-model";
 import { supportsRolloutHistory } from "@/components/resources/rollout-history";
 import { PermissionState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { ResourceActions } from "@/components/workloads/resource-actions";
-import { useK8sResource } from "@/lib/hooks";
-import { useRouter } from "@/lib/navigation";
+import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import { useClusterResourcePermission } from "@/lib/permission-hooks";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
@@ -36,6 +34,15 @@ const BASE_TABS = [
   { id: "related", label: "Related" },
 ] as const;
 
+const WORKLOAD_RESOURCE_TYPES = new Set([
+  "deployments",
+  "statefulsets",
+  "daemonsets",
+  "replicasets",
+  "jobs",
+  "cronjobs",
+]);
+
 export function ResourceDetail({
   clusterId,
   resourceType,
@@ -44,7 +51,6 @@ export function ResourceDetail({
   k8sPath,
   permissionResource,
 }: ResourceDetailProps) {
-  const router = useRouter();
   const [tab, setTab] = useState<ResourceDetailTabId>("overview");
 
   // These decisions intentionally use the same canonical/override resource as
@@ -80,6 +86,12 @@ export function ResourceDetail({
     "exec",
     permissionResource,
   );
+  const metricsPermission = useClusterResourcePermission(
+    clusterId,
+    "monitoring",
+    "read",
+    "monitoring",
+  );
 
   const isPod = resourceType === "pods";
   const resourceQuery = useK8sResource(clusterId, k8sPath, read.allowed);
@@ -96,7 +108,19 @@ export function ResourceDetail({
     if (namespace && supportsRolloutHistory(obj?.kind ?? "")) {
       available.push({ id: "rollout", label: "Rollout history" });
     }
+    if (namespace && WORKLOAD_RESOURCE_TYPES.has(resourceType)) {
+      available.push(
+        { id: "workload-pods", label: "Pods" },
+        { id: "workload-logs", label: "Logs" },
+      );
+      if (metricsPermission.allowed) {
+        available.push({ id: "workload-metrics", label: "Metrics" });
+      }
+    }
     if (isPod) {
+      if (metricsPermission.allowed) {
+        available.push({ id: "pod-metrics", label: "Metrics" });
+      }
       if (logsPermission.allowed) available.push({ id: "logs", label: "Logs" });
       if (execPermission.allowed) available.push({ id: "exec", label: "Exec" });
     }
@@ -106,8 +130,10 @@ export function ResourceDetail({
     execPermission.allowed,
     isPod,
     logsPermission.allowed,
+    metricsPermission.allowed,
     namespace,
     obj?.kind,
+    resourceType,
   ]);
 
   const handleTabKeyDown = (
@@ -154,12 +180,13 @@ export function ResourceDetail({
 
   const kind = obj?.kind || resourceType;
   const created = obj?.metadata?.creationTimestamp;
+  const detailStatus = isPod ? podStatus(obj) : obj?.status?.phase;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start gap-4">
         <button
-          onClick={() => router.back()}
+          onClick={() => window.history.back()}
           className="mt-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           aria-label="Back"
         >
@@ -171,6 +198,7 @@ export function ResourceDetail({
           </h1>
           <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
             <span>Kind: {kind}</span>
+            {detailStatus && <StatusBadge status={detailStatus} />}
             {namespace && <span>Namespace: {namespace}</span>}
             {created && <span>Age: {formatRelativeTime(created)}</span>}
           </div>
@@ -183,7 +211,9 @@ export function ResourceDetail({
             name={name}
             replicas={obj.spec?.replicas}
             paused={
-              obj.kind === "Deployment" ? (obj.spec?.paused ?? false) : undefined
+              obj.kind === "Deployment"
+                ? (obj.spec?.paused ?? false)
+                : undefined
             }
             suspended={
               obj.kind === "CronJob" ? (obj.spec?.suspend ?? false) : undefined
@@ -195,7 +225,7 @@ export function ResourceDetail({
             }
             k8sPath={k8sPath}
             permissionResource={permissionResource}
-            onDeleted={() => router.back()}
+            onDeleted={() => window.history.back()}
           />
         )}
       </div>
@@ -218,7 +248,7 @@ export function ResourceDetail({
               onClick={() => setTab(item.id)}
               onKeyDown={(event) => handleTabKeyDown(event, index)}
               className={cn(
-                "shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                "shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 tab === item.id
                   ? "border-foreground text-foreground"
                   : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
@@ -246,6 +276,21 @@ export function ResourceDetail({
       />
     </div>
   );
+}
+
+function podStatus(obj?: K8sObject): string | undefined {
+  for (const status of [
+    ...(obj?.status?.initContainerStatuses ?? []),
+    ...(obj?.status?.containerStatuses ?? []),
+  ]) {
+    const waiting = status.state?.waiting;
+    if (waiting?.reason) return waiting.reason;
+    const terminated = status.state?.terminated;
+    if (terminated?.reason && (terminated.exitCode ?? 0) !== 0) {
+      return terminated.reason;
+    }
+  }
+  return obj?.status?.reason ?? obj?.status?.phase;
 }
 
 function asObject(value: unknown): Record<string, unknown> {

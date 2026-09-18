@@ -1,3 +1,5 @@
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +8,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * /dashboard/settings/vault — admin CRUD over HashiCorp Vault
  * connections (migration 067).
@@ -25,13 +27,16 @@ import {
  * blank the stored secret.
  */
 import { useState } from "react";
-import { useRouter } from "@/lib/navigation";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, KeyRound, Plus, Trash2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { useAppForm, useStore } from "@/lib/form";
-import { queryKeys } from "@/lib/hooks";
+import { FormShell } from "@/components/ui/form-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { QueryStates } from "@/components/ui/query-states";
+import { queryKeys } from "@/lib/query-keys";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
   listVaultConnections,
@@ -69,15 +74,19 @@ function blankBody(method: VaultAuthMethod): VaultConnectionWriteRequest {
 }
 
 function VaultConnectionsPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const qc = useQueryClient();
-  const { data: rows = [], isLoading } = useQuery({
+  const vaultConnectionsQuery = useQuery({
     queryKey: queryKeys.vault.connections,
     queryFn: listVaultConnections,
   });
+  const { data: rows = [], isLoading } = vaultConnectionsQuery;
 
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<VaultConnectionView | null>(
+    null,
+  );
 
   const createMu = useMutation({
     mutationFn: (body: VaultConnectionWriteRequest) =>
@@ -115,12 +124,23 @@ function VaultConnectionsPage() {
       qc.invalidateQueries({ queryKey: queryKeys.vault.connections }),
   });
 
+  if (vaultConnectionsQuery.isError) {
+    return (
+      <QueryStates
+        query={vaultConnectionsQuery}
+        permission="vault_connections:list"
+      >
+        {() => null}
+      </QueryStates>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => router.push("/dashboard/settings")}
+          onClick={() => void navigate({ to: "/dashboard/settings" })}
           aria-label="Back to settings"
           className="text-muted-foreground hover:text-foreground"
         >
@@ -131,7 +151,7 @@ function VaultConnectionsPage() {
         </h1>
         <button
           onClick={() => setCreating(true)}
-          className="ml-auto inline-flex items-center gap-2 rounded bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className="ml-auto inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" /> New connection
         </button>
@@ -139,7 +159,7 @@ function VaultConnectionsPage() {
 
       <p className="text-sm text-muted-foreground max-w-3xl">
         Vault references in values blobs use the syntax{" "}
-        <code className="bg-muted px-1 rounded">
+        <code className="bg-muted px-1 rounded-sm">
           {"${vault://<connection>/<engine>/<path>#<key>}"}
         </code>
         . References are resolved in-memory at install time; the resolved value
@@ -149,7 +169,7 @@ function VaultConnectionsPage() {
       {isLoading ? (
         <div className="text-muted-foreground">Loading…</div>
       ) : (
-        <Table className="w-full text-sm border border-border rounded">
+        <Table className="w-full text-sm border border-border rounded-sm">
           <TableHeader className="bg-muted text-left">
             <TableRow>
               <TableHead className="p-2">Name</TableHead>
@@ -195,10 +215,7 @@ function VaultConnectionsPage() {
                       Test
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm(`Delete connection "${row.name}"?`))
-                          delMu.mutate(row.id);
-                      }}
+                      onClick={() => setDeleteTarget(row)}
                       className="text-xs text-status-error inline-flex items-center gap-1"
                     >
                       <Trash2 className="h-3 w-3" /> Delete
@@ -212,22 +229,25 @@ function VaultConnectionsPage() {
       )}
 
       {creating && (
-        <form
-          className="space-y-3 max-w-xl border border-border rounded p-4"
+        <FormShell
+          className="space-y-3 max-w-xl border border-border rounded-sm p-4"
           onSubmit={(e) => {
             e.preventDefault();
             void form.handleSubmit();
           }}
         >
+          <form.AppForm>
+            <form.FormErrorSummary serverError={error} />
+          </form.AppForm>
           <h2 className="font-medium">New connection</h2>
-          {error && <div className="text-status-error text-sm">{error}</div>}
           <label className="block text-sm">
             Name
             <form.Field name="name">
               {(field) => (
-                <input
+                <Input
+                  name={field.name}
                   required
-                  className="block w-full bg-background border border-border rounded p-1.5 mt-1"
+                  className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
@@ -239,9 +259,10 @@ function VaultConnectionsPage() {
             Vault URL
             <form.Field name="addr">
               {(field) => (
-                <input
+                <Input
+                  name={field.name}
                   required
-                  className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                  className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
@@ -251,8 +272,8 @@ function VaultConnectionsPage() {
           </label>
           <label className="block text-sm">
             Auth method
-            <select
-              className="block w-full bg-background border border-border rounded p-1.5 mt-1"
+            <Select
+              className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1"
               value={authMethod}
               onChange={(e) => {
                 const method = e.target.value as VaultAuthMethod;
@@ -264,7 +285,7 @@ function VaultConnectionsPage() {
               <option value="token">Token</option>
               <option value="approle">AppRole</option>
               <option value="kubernetes">Kubernetes</option>
-            </select>
+            </Select>
           </label>
           <form.Field name="auth">
             {(field) => (
@@ -272,10 +293,11 @@ function VaultConnectionsPage() {
                 {authMethod === "token" && (
                   <label className="block text-sm">
                     Token
-                    <input
+                    <Input
+                      name={field.name}
                       type="password"
                       required
-                      className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                      className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
                       value={field.state.value.token ?? ""}
                       onChange={(e) =>
                         field.handleChange({ token: e.target.value })
@@ -288,9 +310,10 @@ function VaultConnectionsPage() {
                   <>
                     <label className="block text-sm">
                       Role ID
-                      <input
+                      <Input
+                        name={field.name}
                         required
-                        className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                        className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
                         value={field.state.value.role_id ?? ""}
                         onChange={(e) =>
                           field.handleChange({
@@ -303,10 +326,11 @@ function VaultConnectionsPage() {
                     </label>
                     <label className="block text-sm">
                       Secret ID
-                      <input
+                      <Input
+                        name={field.name}
                         type="password"
                         required
-                        className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                        className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
                         value={field.state.value.secret_id ?? ""}
                         onChange={(e) =>
                           field.handleChange({
@@ -323,9 +347,10 @@ function VaultConnectionsPage() {
                   <>
                     <label className="block text-sm">
                       Role
-                      <input
+                      <Input
+                        name={field.name}
                         required
-                        className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                        className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
                         value={field.state.value.role ?? ""}
                         onChange={(e) =>
                           field.handleChange({
@@ -338,8 +363,9 @@ function VaultConnectionsPage() {
                     </label>
                     <label className="block text-sm">
                       JWT path (in pod)
-                      <input
-                        className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                      <Input
+                        name={field.name}
+                        className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
                         value={field.state.value.jwt_path ?? ""}
                         onChange={(e) =>
                           field.handleChange({
@@ -359,8 +385,9 @@ function VaultConnectionsPage() {
             Default mount
             <form.Field name="default_mount">
               {(field) => (
-                <input
-                  className="block w-full bg-background border border-border rounded p-1.5 mt-1 font-mono"
+                <Input
+                  name={field.name}
+                  className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
                   value={field.state.value ?? "secret"}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
@@ -372,7 +399,7 @@ function VaultConnectionsPage() {
             <button
               type="submit"
               disabled={createMu.isPending}
-              className="bg-primary text-primary-foreground rounded px-3 py-1.5 text-sm"
+              className="bg-primary text-primary-foreground rounded-sm px-3 py-1.5 text-sm"
             >
               {createMu.isPending ? "Saving…" : "Save"}
             </button>
@@ -382,20 +409,47 @@ function VaultConnectionsPage() {
                 setCreating(false);
                 setError(null);
               }}
-              className="text-sm px-3 py-1.5 border border-border rounded"
+              className="text-sm px-3 py-1.5 border border-border rounded-sm"
             >
               Cancel
             </button>
           </div>
           <p className="text-xs text-muted-foreground">
             Tip: secret fields you don't change in a later edit can be left as
-            <code className="ml-1 bg-muted px-1 rounded">
+            <code className="ml-1 bg-muted px-1 rounded-sm">
               {VAULT_AUTH_SENTINEL}
             </code>{" "}
             to preserve the stored value.
           </p>
-        </form>
+        </FormShell>
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          delMu.mutate(deleteTarget.id, {
+            onSuccess: () => setDeleteTarget(null),
+          });
+        }}
+        title="Delete Vault connection"
+        description="This permanently removes the encrypted connection configuration."
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={delMu.isPending}
+        impact={
+          deleteTarget
+            ? {
+                scope: `${deleteTarget.name} (${deleteTarget.addr})`,
+                consequences: [
+                  "New catalog operations cannot resolve secrets through this connection.",
+                  "Stored authentication material cannot be recovered.",
+                ],
+                recovery: "Create and validate a replacement Vault connection.",
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

@@ -29,6 +29,19 @@ FROM native_rbac_rules
 WHERE user_id = $1
 ORDER BY created_at DESC;
 
+-- name: ListNativeRBACRulesByUserPage :many
+-- Bounded admin authoring view. Authorization evaluation deliberately keeps
+-- using ListNativeRBACRulesByUser so it evaluates the complete cached rule set.
+SELECT id, user_id, cluster_id, namespace, api_group, resource, verbs,
+       created_at, created_by_id
+FROM native_rbac_rules
+WHERE user_id = sqlc.arg(user_id)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountNativeRBACRulesByUser :one
+SELECT count(*) FROM native_rbac_rules WHERE user_id = $1;
+
 -- name: ListNativeRBACRules :many
 -- Admin overview across all users, paged.
 SELECT id, user_id, cluster_id, namespace, api_group, resource, verbs,

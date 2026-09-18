@@ -6,35 +6,20 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
-// RBACQuerier looks up role bindings for a user.
-type RBACQuerier interface {
-	GetUserBindings(ctx context.Context, userID string) ([]rbac.RoleBinding, error)
-}
-
-// RBACCacheInvalidator is implemented by RBACQuerier implementations that
-// front their lookups with a cache. Mutation handlers (CreateBinding /
-// DeleteBinding / UpdateRole / DeleteRole) call Invalidate after a successful
-// DB write so the next authenticated request sees the change immediately
-// instead of waiting for the cache TTL. InvalidateAll is used when a role
-// definition changes — its rules are denormalised into every cached binding
-// holding that role, and we don't keep a reverse index from role → users.
-type RBACCacheInvalidator interface {
-	Invalidate(userID string)
-	InvalidateAll()
-}
-
 // RequirePermission creates middleware that checks if the authenticated user
 // has the required permission (resource + verb) at the appropriate scope.
 // Scope is determined from URL params: {cluster_id} and {project_id} (see
 // permissionScope for the bare-{id} rule); the namespace comes from a route
 // param only (see namespaceContext).
-func RequirePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+func RequirePermission(engine *rbac.Engine, querier rbac.BindingQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	return RequirePermissionForNamespace(engine, querier, resource, verb, namespaceContext)
 }
 
@@ -110,39 +95,22 @@ func ClusterScopeFromIDParam(next http.Handler) http.Handler {
 //   - the gated resource being clusters/projects, which is the older
 //     inference and stays because it also covers the handful of cluster and
 //     project routes registered OUTSIDE those subtrees —
-//     /clusters/{id}/gatekeeper/constraints/*, /clusters/{id}/v2/pods/,
-//     /dashboards/clusters/{id}/ and /projects/{id}/default-vault-connection/.
+//     /clusters/{id}/gatekeeper/constraints/*, /dashboards/clusters/{id}/ and
+//     /projects/{id}/default-vault-connection/.
 //
 // A gate on a route that satisfies neither resolves to uuid.Nil and is a global
 // check, which is what a route with no scope in its URL should be.
-//
-// THERE IS A SECOND RESOLVER, and it does not follow this rule:
-// server.permissionScopeIDs (internal/server/routes.go), used by
-// requireAnyPermission, requireK8sProxyPermission and the workloads list gate,
-// falls back to a bare {id} unconditionally and binds it as both the cluster
-// and the project scope. It fails closed today for the reasons written at its
-// definition. Any change here should be mirrored there, or better, should
-// finish collapsing the two.
 func permissionScope(r *http.Request, resource rbac.Resource) (uuid.UUID, uuid.UUID) {
-	var clusterID, projectID uuid.UUID
-	clusterParam := chi.URLParam(r, "cluster_id")
-	if clusterParam == "" && (idParamNamesCluster(r) || resource == rbac.ResourceClusters) {
-		clusterParam = chi.URLParam(r, "id")
+	clusterParam := "cluster_id"
+	if chi.URLParam(r, clusterParam) == "" && (idParamNamesCluster(r) || resource == rbac.ResourceClusters) {
+		clusterParam = "id"
 	}
-	if clusterParam != "" {
-		if parsed, err := uuid.Parse(clusterParam); err == nil {
-			clusterID = parsed
-		}
+	projectParam := "project_id"
+	if chi.URLParam(r, projectParam) == "" && resource == rbac.ResourceProjects {
+		projectParam = "id"
 	}
-	projectParam := chi.URLParam(r, "project_id")
-	if projectParam == "" && resource == rbac.ResourceProjects {
-		projectParam = chi.URLParam(r, "id")
-	}
-	if projectParam != "" {
-		if parsed, err := uuid.Parse(projectParam); err == nil {
-			projectID = parsed
-		}
-	}
+	clusterID, _ := reqctx.RouteUUID(r, clusterParam)
+	projectID, _ := reqctx.RouteUUID(r, projectParam)
 	return clusterID, projectID
 }
 
@@ -163,7 +131,7 @@ func idParamNamesCluster(r *http.Request) bool {
 // it). If the handler derives its target anywhere else, the query becomes a
 // forgeable key to every namespace-scoped binding the caller holds — use plain
 // RequirePermission, which fails closed.
-func RequireQueryNamespacePermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+func RequireQueryNamespacePermission(engine *rbac.Engine, querier rbac.BindingQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	return RequirePermissionForNamespace(engine, querier, resource, verb, namespaceContextWithQuery)
 }
 
@@ -176,8 +144,8 @@ func RequireQueryNamespacePermission(engine *rbac.Engine, querier RBACQuerier, r
 // without touching w. The control flow (early return on missing user, early
 // return on query error, otherwise proceed with the bindings) is identical to the
 // inline preamble it replaces.
-func authAndBindings(w http.ResponseWriter, r *http.Request, querier RBACQuerier) ([]rbac.RoleBinding, bool) {
-	user, ok := GetAuthenticatedUser(r.Context())
+func authAndBindings(w http.ResponseWriter, r *http.Request, querier rbac.BindingQuerier) ([]rbac.RoleBinding, bool) {
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil {
 		authError(w, "authentication_required", "Authentication is required to access this resource")
 		return nil, false
@@ -217,7 +185,7 @@ func permissionDenied(w http.ResponseWriter) {
 // namespace resolver, for gates whose target namespace is neither a route param
 // nor the query string — notably a create-from-body route, which must be
 // authorized against the namespace inside the manifest it is about to apply.
-func RequirePermissionForNamespace(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb, resolveNamespace func(*http.Request) string) func(http.Handler) http.Handler {
+func RequirePermissionForNamespace(engine *rbac.Engine, querier rbac.BindingQuerier, resource rbac.Resource, verb rbac.Verb, resolveNamespace func(*http.Request) string) func(http.Handler) http.Handler {
 	if resolveNamespace == nil {
 		resolveNamespace = namespaceContext
 	}
@@ -252,7 +220,7 @@ func RequirePermissionForNamespace(engine *rbac.Engine, querier RBACQuerier, res
 // A request that names a specific ?namespace= is NOT given the broad fallback:
 // it is evaluated by the ordinary scope check, so a crafted namespace the caller
 // is not authorized for still yields a clean 403 here.
-func RequireListPermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb, namespaceScoped bool) func(http.Handler) http.Handler {
+func RequireListPermission(engine *rbac.Engine, querier rbac.BindingQuerier, resource rbac.Resource, verb rbac.Verb, namespaceScoped bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			bindings, ok := authAndBindings(w, r, querier)
@@ -292,7 +260,7 @@ func RequireListPermission(engine *rbac.Engine, querier RBACQuerier, resource rb
 // match, so a user whose sole grant is "Cluster Owner on one cluster" is 403'd
 // off the fleet landing page entirely. The fallback grants no visibility on its
 // own: every handler behind it MUST filter (see authorizedScopeIDs).
-func RequireCollectionPermission(engine *rbac.Engine, querier RBACQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
+func RequireCollectionPermission(engine *rbac.Engine, querier rbac.BindingQuerier, resource rbac.Resource, verb rbac.Verb) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			bindings, ok := authAndBindings(w, r, querier)

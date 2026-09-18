@@ -120,6 +120,81 @@ func TestNetworkPolicyRendersExpectedComponentPolicies(t *testing.T) {
 	}
 }
 
+func TestWorkerNetworkPolicyAllowsOnlyManagedMonitoringAPIs(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	worker := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-worker")
+	egress, _ := nestedMap(worker, "spec")["egress"].([]any)
+	found := false
+	for _, rawRule := range egress {
+		rule, _ := rawRule.(map[string]any)
+		ports, _ := rule["ports"].([]any)
+		portSet := map[string]bool{}
+		for _, rawPort := range ports {
+			port, _ := rawPort.(map[string]any)
+			portSet[fmt.Sprint(port["port"])] = true
+		}
+		if !portSet["9090"] || !portSet["9093"] {
+			continue
+		}
+		peers, _ := rule["to"].([]any)
+		if len(peers) != 1 {
+			t.Fatalf("monitoring egress peers = %#v, want one label-scoped peer", peers)
+		}
+		peer, _ := peers[0].(map[string]any)
+		if _, ok := peer["namespaceSelector"]; !ok {
+			t.Fatalf("monitoring egress peer is not namespace-aware: %#v", peer)
+		}
+		podSelector, _ := peer["podSelector"].(map[string]any)
+		expressions, _ := podSelector["matchExpressions"].([]any)
+		if len(expressions) != 1 {
+			t.Fatalf("monitoring pod selector = %#v, want one app identity expression", podSelector)
+		}
+		expression, _ := expressions[0].(map[string]any)
+		values, _ := expression["values"].([]any)
+		if stringValue(expression["key"]) != "app.kubernetes.io/name" || stringValue(expression["operator"]) != "In" || !reflect.DeepEqual(values, []any{"prometheus", "alertmanager"}) {
+			t.Fatalf("monitoring pod selector expression = %#v", expression)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("worker policy has no label-scoped Prometheus/Alertmanager egress on ports 9090/9093")
+	}
+}
+
+func TestServerNetworkPolicyAllowsManagedPrometheusAPI(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	server := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-server")
+	egress, _ := nestedMap(server, "spec")["egress"].([]any)
+	found := false
+	for _, rawRule := range egress {
+		rule, _ := rawRule.(map[string]any)
+		ports, _ := rule["ports"].([]any)
+		if len(ports) != 1 {
+			continue
+		}
+		port, _ := ports[0].(map[string]any)
+		if fmt.Sprint(port["port"]) != "9090" || stringValue(port["protocol"]) != "TCP" {
+			continue
+		}
+		peers, _ := rule["to"].([]any)
+		if len(peers) != 1 {
+			t.Fatalf("Prometheus egress peers = %#v, want one label-scoped peer", peers)
+		}
+		peer, _ := peers[0].(map[string]any)
+		if _, ok := peer["namespaceSelector"]; !ok {
+			t.Fatalf("Prometheus egress peer is not namespace-aware: %#v", peer)
+		}
+		podSelector, _ := peer["podSelector"].(map[string]any)
+		if got := nestedStringMap(podSelector, "matchLabels"); !reflect.DeepEqual(got, map[string]string{"app.kubernetes.io/name": "prometheus"}) {
+			t.Fatalf("Prometheus pod selector = %#v, want exact workload identity", got)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("server policy has no label-scoped Prometheus egress on TCP 9090")
+	}
+}
+
 func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
 	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
@@ -195,11 +270,15 @@ func TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase(t *testing
 				"dex.migration.phase=fresh",
 				"managementBackup.s3.bucket=enterprise-backups",
 				"managementBackup.s3.credentialsSecretRef.name=enterprise-backup-credentials",
+				"managementBackup.encryption.sourceIdentity=test-installation",
+				"managementBackup.encryption.wrappingSecretRef.name=enterprise-backup-wrap",
+				"managementBackup.retention.credentialsSecretRef.name=enterprise-retention-credentials",
 				"managementLogging.enabled=true",
 				"managementLogging.endpoint=https://logs.example.invalid",
 			},
 			requiredKinds: []string{
 				"CronJob/astronomer-management-backup",
+				"CronJob/astronomer-management-backup-retention",
 				"CronJob/astronomer-restore-drill",
 				"DaemonSet/astronomer-mgmt-logging",
 			},
@@ -240,6 +319,59 @@ func TestDefaultDenyOwnershipContractCoversEveryRenderedWorkloadPhase(t *testing
 				}
 			}
 		})
+	}
+}
+
+func TestOptionalProductionWorkloadsHaveDedicatedNarrowPolicies(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"managementBackup.s3.bucket=enterprise-backups",
+		"managementBackup.s3.credentialsSecretRef.name=enterprise-backup-credentials",
+		"managementBackup.encryption.sourceIdentity=test-installation",
+		"managementBackup.encryption.wrappingSecretRef.name=enterprise-backup-wrap",
+		"managementBackup.retention.credentialsSecretRef.name=enterprise-retention-credentials",
+		"managementLogging.enabled=true",
+		"managementLogging.endpoint=https://logs.example.invalid",
+		"managementLogging.networkPolicyPorts[0]=8443",
+		"networkPolicy.objectStoreEgressCIDRs[0]=10.50.0.0/24",
+		"networkPolicy.loggingSinkEgressCIDRs[0]=10.60.0.0/24",
+		"networkPolicy.kubernetesAPIEgressCIDRs[0]=10.40.0.0/24",
+	))
+
+	for _, tt := range []struct {
+		name      string
+		component string
+		want      []string
+		forbid    []string
+	}{
+		{name: "astronomer-management-backup", component: "management-backup", want: []string{"10.50.0.0/24", "5432", "443", "80"}, forbid: []string{"10.60.0.0/24", "6443"}},
+		{name: "astronomer-management-backup-retention", component: "management-backup-retention", want: []string{"10.50.0.0/24", "443", "80"}, forbid: []string{"10.60.0.0/24", "5432", "6443"}},
+		{name: "astronomer-restore-drill", component: "restore-drill", want: []string{"10.50.0.0/24", "5432", "443", "80"}, forbid: []string{"10.60.0.0/24", "6443"}},
+		{name: "astronomer-management-logging", component: "management-logging", want: []string{"10.60.0.0/24", "10.40.0.0/24", "8443", "6443"}, forbid: []string{"10.50.0.0/24", "5432", "80"}},
+	} {
+		policy := findRenderedDoc(t, docs, "NetworkPolicy", tt.name)
+		selector := nestedStringMap(policy, "spec", "podSelector", "matchLabels")
+		if got := selector["app.kubernetes.io/component"]; got != tt.component {
+			t.Errorf("%s selector component = %q, want %q", tt.name, got, tt.component)
+		}
+		rendered := fmt.Sprint(nestedMap(policy, "spec")["egress"])
+		for _, want := range tt.want {
+			if !strings.Contains(rendered, want) {
+				t.Errorf("%s egress missing %q: %s", tt.name, want, rendered)
+			}
+		}
+		for _, forbidden := range append(tt.forbid, "0.0.0.0/0", "::/0") {
+			if strings.Contains(rendered, forbidden) {
+				t.Errorf("%s egress unexpectedly contains %q: %s", tt.name, forbidden, rendered)
+			}
+		}
+	}
+
+	postgres := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-postgres")
+	ingress := fmt.Sprint(nestedMap(postgres, "spec")["ingress"])
+	for _, component := range []string{"management-backup", "restore-drill"} {
+		if !strings.Contains(ingress, component) {
+			t.Errorf("bundled postgres ingress does not admit %s: %s", component, ingress)
+		}
 	}
 }
 
@@ -493,7 +625,6 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
 	sets = append(sets,
 		"managementBackup.s3.bucket=astronomer-backups",
 		"managementBackup.s3.credentialsSecretRef.name=astronomer-backup-creds",
-		"managementBackup.encryptionKeyBackup.wrappingSecretRef.name=astronomer-key-wrap",
 	)
 	out := helmTemplateWithValueFiles(t, []string{prodValues}, sets...)
 	if strings.Contains(out, `cidr: "0.0.0.0/0"`) {
@@ -506,9 +637,9 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
 	}
 
 	docs := parseRenderedDocs(t, out)
-	for _, absent := range []string{"astronomer-postgres", "astronomer-redis"} {
-		if renderedDocExists(docs, "NetworkPolicy", absent) {
-			t.Fatalf("production render should not include bundled %s NetworkPolicy when bundled Postgres/Redis are disabled", absent)
+	for _, required := range []string{"astronomer-postgres", "astronomer-redis", "astronomer-redis-sentinel"} {
+		if !renderedDocExists(docs, "NetworkPolicy", required) {
+			t.Fatalf("production render missing managed HA data-plane NetworkPolicy/%s", required)
 		}
 	}
 }

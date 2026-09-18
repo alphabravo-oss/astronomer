@@ -30,12 +30,7 @@ func newProxyPermissionRouter(t *testing.T, bindings []rbac.RoleBinding) (http.H
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: bindings},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: bindings}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 	return router, token
 }
 
@@ -247,25 +242,20 @@ func TestProxyEvictionRequiresPodsDelete(t *testing.T) {
 // exercised by a read- vs write-scoped token.
 func newHelmMutationRouter(rawToken string, userID uuid.UUID, scopes json.RawMessage, bindings []rbac.RoleBinding) http.Handler {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, scopes),
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: bindings},
-		Catalog:     handler.NewCatalogHandler(nil),
-		Monitoring:  handler.NewMonitoringHandler(),
-		// Resources must be wired so the early /api/v1/settings route group
-		// (which hosts the shared monitoring-stack routes) is registered.
-		Resources: handler.NewResourceHandler(),
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, scopes), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: bindings}}, ClusterResources: ClusterResourceDependencies{Monitoring: handler.NewMonitoringHandler(), Resources: // Resources must be wired so the early /api/v1/settings route group
+	// (which hosts the shared monitoring-stack routes) is registered.
+	handler.NewResourceHandler()}, AdminPlatform:
+
+	// TestHelmMutationRoutesRejectReadScopedTokens is the NEW-1 negative test
+	// (same class as H1): the catalog helm install/upgrade/uninstall and the
+	// shared monitoring-stack install/upgrade/uninstall routes — cluster-mutating
+	// helm operations that previously lacked any scope backstop — must reject a
+	// read-scoped API token with 403 scope_denied, while a clusters:write token
+	// passes the scope gate and reaches the handler.
+	AdminPlatformDependencies{Catalog: handler.NewCatalogHandler(nil)},
 	})
 }
 
-// TestHelmMutationRoutesRejectReadScopedTokens is the NEW-1 negative test
-// (same class as H1): the catalog helm install/upgrade/uninstall and the
-// shared monitoring-stack install/upgrade/uninstall routes — cluster-mutating
-// helm operations that previously lacked any scope backstop — must reject a
-// read-scoped API token with 403 scope_denied, while a clusters:write token
-// passes the scope gate and reaches the handler.
 func TestHelmMutationRoutesRejectReadScopedTokens(t *testing.T) {
 	userID := uuid.New()
 	installID := uuid.New().String()

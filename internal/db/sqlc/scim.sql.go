@@ -7,8 +7,10 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countSCIMGroupNames = `-- name: CountSCIMGroupNames :one
@@ -22,24 +24,41 @@ func (q *Queries) CountSCIMGroupNames(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countSCIMTokens = `-- name: CountSCIMTokens :one
+SELECT count(*) FROM scim_tokens
+`
+
+func (q *Queries) CountSCIMTokens(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countSCIMTokens)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createSCIMToken = `-- name: CreateSCIMToken :one
 
-INSERT INTO scim_tokens (name, token_hash, prefix)
-VALUES ($1, $2, $3)
-RETURNING id, name, token_hash, prefix, last_used_at, created_at
+INSERT INTO scim_tokens (name, token_hash, prefix, expires_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id, name, token_hash, prefix, last_used_at, created_at, expires_at, revoked_at
 `
 
 type CreateSCIMTokenParams struct {
-	Name      string `json:"name"`
-	TokenHash string `json:"token_hash"`
-	Prefix    string `json:"prefix"`
+	Name      string    `json:"name"`
+	TokenHash string    `json:"token_hash"`
+	Prefix    string    `json:"prefix"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// SCIM 2.0 provisioning queries (migration 114). Bearer-token auth +
+// SCIM 2.0 provisioning queries. Bearer-token auth +
 // the User/Group provisioning surface mapped onto the existing users +
 // identity_group_mappings tables.
 func (q *Queries) CreateSCIMToken(ctx context.Context, arg CreateSCIMTokenParams) (ScimToken, error) {
-	row := q.db.QueryRow(ctx, createSCIMToken, arg.Name, arg.TokenHash, arg.Prefix)
+	row := q.db.QueryRow(ctx, createSCIMToken,
+		arg.Name,
+		arg.TokenHash,
+		arg.Prefix,
+		arg.ExpiresAt,
+	)
 	var i ScimToken
 	err := row.Scan(
 		&i.ID,
@@ -48,21 +67,17 @@ func (q *Queries) CreateSCIMToken(ctx context.Context, arg CreateSCIMTokenParams
 		&i.Prefix,
 		&i.LastUsedAt,
 		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
 	)
 	return i, err
 }
 
-const deleteSCIMToken = `-- name: DeleteSCIMToken :exec
-DELETE FROM scim_tokens WHERE id = $1
-`
-
-func (q *Queries) DeleteSCIMToken(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteSCIMToken, id)
-	return err
-}
-
 const getSCIMTokenByHash = `-- name: GetSCIMTokenByHash :one
-SELECT id, name, token_hash, prefix, last_used_at, created_at FROM scim_tokens WHERE token_hash = $1
+SELECT id, name, token_hash, prefix, last_used_at, created_at, expires_at, revoked_at FROM scim_tokens
+WHERE token_hash = $1
+  AND revoked_at IS NULL
+  AND expires_at > now()
 `
 
 func (q *Queries) GetSCIMTokenByHash(ctx context.Context, tokenHash string) (ScimToken, error) {
@@ -75,6 +90,8 @@ func (q *Queries) GetSCIMTokenByHash(ctx context.Context, tokenHash string) (Sci
 		&i.Prefix,
 		&i.LastUsedAt,
 		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -114,25 +131,45 @@ func (q *Queries) ListSCIMGroupNames(ctx context.Context, arg ListSCIMGroupNames
 	return items, nil
 }
 
-const listSCIMTokens = `-- name: ListSCIMTokens :many
-SELECT id, name, token_hash, prefix, last_used_at, created_at FROM scim_tokens ORDER BY created_at DESC
+const listSCIMTokenMetadata = `-- name: ListSCIMTokenMetadata :many
+SELECT id, name, prefix, last_used_at, expires_at, revoked_at, created_at
+FROM scim_tokens
+ORDER BY created_at DESC, id DESC
+LIMIT $2 OFFSET $1
 `
 
-func (q *Queries) ListSCIMTokens(ctx context.Context) ([]ScimToken, error) {
-	rows, err := q.db.Query(ctx, listSCIMTokens)
+type ListSCIMTokenMetadataParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
+
+type ListSCIMTokenMetadataRow struct {
+	ID         uuid.UUID          `json:"id"`
+	Name       string             `json:"name"`
+	Prefix     string             `json:"prefix"`
+	LastUsedAt pgtype.Timestamptz `json:"last_used_at"`
+	ExpiresAt  time.Time          `json:"expires_at"`
+	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt  time.Time          `json:"created_at"`
+}
+
+// Never fetch token_hash for an operator list view.
+func (q *Queries) ListSCIMTokenMetadata(ctx context.Context, arg ListSCIMTokenMetadataParams) ([]ListSCIMTokenMetadataRow, error) {
+	rows, err := q.db.Query(ctx, listSCIMTokenMetadata, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ScimToken{}
+	items := []ListSCIMTokenMetadataRow{}
 	for rows.Next() {
-		var i ScimToken
+		var i ListSCIMTokenMetadataRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.TokenHash,
 			&i.Prefix,
 			&i.LastUsedAt,
+			&i.ExpiresAt,
+			&i.RevokedAt,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -143,6 +180,33 @@ func (q *Queries) ListSCIMTokens(ctx context.Context) ([]ScimToken, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeSCIMToken = `-- name: RevokeSCIMToken :execrows
+UPDATE scim_tokens
+SET revoked_at = now()
+WHERE id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeSCIMToken(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeSCIMToken, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sCIMGroupExists = `-- name: SCIMGroupExists :one
+SELECT EXISTS (
+    SELECT 1 FROM identity_group_mappings WHERE group_name = $1
+)
+`
+
+func (q *Queries) SCIMGroupExists(ctx context.Context, groupName string) (bool, error) {
+	row := q.db.QueryRow(ctx, sCIMGroupExists, groupName)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const touchSCIMToken = `-- name: TouchSCIMToken :exec

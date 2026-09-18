@@ -57,12 +57,12 @@ func TestBearerFromHeader(t *testing.T) {
 	}
 }
 
-func TestAuthorizeStreamRequest_NilJWT_AllowsThrough(t *testing.T) {
-	// Dev/test mode: jwt manager not wired → admit, mirror legacy behavior.
+func TestAuthorizeStreamRequest_NilJWT_Rejects(t *testing.T) {
+	// Missing auth wiring is never an unauthenticated development bypass.
 	req := httptest.NewRequest("GET", "/api/v1/events/stream/", nil)
 	uid, ok := AuthorizeStreamRequest(req, nil, nil)
-	if !ok {
-		t.Fatalf("expected ok=true when jwt is nil")
+	if ok {
+		t.Fatalf("expected ok=false when jwt is nil")
 	}
 	if uid != uuid.Nil {
 		t.Errorf("expected uuid.Nil when jwt is nil, got %v", uid)

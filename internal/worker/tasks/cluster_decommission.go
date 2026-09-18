@@ -47,6 +47,7 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -56,6 +57,8 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ClusterDecommissionType is the asynq task type. Re-exported as
@@ -98,9 +101,16 @@ const decommissionTunnelWaitDefault = 30 * time.Second
 
 // decommissionLeaseTTLSeconds is the lease TTL passed to the
 // MarkClusterDecommissionRunning CAS. It must exceed the cleanup-ACK wait
-// (decommissionTunnelWaitDefault, 30s) so the active runner — which renews the
-// lease on every UpdateClusterDecommissionPhases — is never preempted mid-RPC.
+// (decommissionTunnelWaitDefault, 30s). The active runner renews this lease in
+// the background and on every phase checkpoint, preventing preemption during
+// remote work while retaining crash recovery.
 const decommissionLeaseTTLSeconds = 120
+
+// The sweep timeout bounds one claimed row without coupling useful work to the
+// shorter, renewable ownership lease. Large audit archives can legitimately
+// take longer than one lease interval; the keeper below renews ownership while
+// the phase continues.
+const decommissionSweepRowTimeout = 10 * time.Minute
 
 // maxCleanupAttempts / cleanupGraceTimeout bound how long the reconciler waits
 // for a disconnected/sibling-pod agent to come back and run managed-side
@@ -169,14 +179,14 @@ func graceExhausted(row sqlc.ClusterDecommission, gone bool) bool {
 // stale beyond decommissionGoneHeartbeatStale (or was never recorded). Used
 // only as the fast-path signal into graceExhausted, in combination with the
 // decommissionGoneMinAttempts confirmation floor.
-func clusterDefinitivelyGone(cluster sqlc.Cluster) bool {
+func clusterDefinitivelyGone(cluster sqlc.Cluster, lastHeartbeat pgtype.Timestamptz) bool {
 	if cluster.Status == "disconnected" {
 		return true
 	}
-	if !cluster.LastHeartbeat.Valid {
+	if !lastHeartbeat.Valid {
 		return true
 	}
-	return time.Since(cluster.LastHeartbeat.Time) > decommissionGoneHeartbeatStale
+	return time.Since(lastHeartbeat.Time) > decommissionGoneHeartbeatStale
 }
 
 // clusterGone loads the cluster row and evaluates clusterDefinitivelyGone. A
@@ -184,11 +194,15 @@ func clusterDefinitivelyGone(cluster sqlc.Cluster) bool {
 // treated conservatively as NOT gone so a transient DB hiccup can't
 // prematurely orphan the cluster before the wall-clock/attempt backstops fire.
 func clusterGone(ctx context.Context, deps ClusterDecommissionDeps, clusterID uuid.UUID) bool {
-	cluster, err := deps.Queries.GetClusterByID(ctx, clusterID)
+	cluster, err := deps.Queries.GetClusterByIDIncludingDecommissioned(ctx, clusterID)
 	if err != nil {
 		return strings.Contains(err.Error(), "no rows in result set")
 	}
-	return clusterDefinitivelyGone(cluster)
+	liveness, err := deps.Queries.GetClusterLiveness(ctx, clusterID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	return clusterDefinitivelyGone(cluster, liveness.LastHeartbeat)
 }
 
 // cleanupSatisfied reports whether the reconciler may advance past the
@@ -211,21 +225,23 @@ func cleanupSatisfied(ctx context.Context, deps ClusterDecommissionDeps, phases 
 // needs. Defined locally so the unit tests can stand up a fake without
 // dragging the full Queries surface in.
 type ClusterDecommissionQuerier interface {
-	GetClusterByID(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
+	GetClusterByIDIncludingDecommissioned(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error)
+	GetClusterLiveness(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterLiveness, error)
 	GetClusterDecommissionByID(ctx context.Context, id uuid.UUID) (sqlc.ClusterDecommission, error)
 	GetLatestClusterDecommissionByCluster(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterDecommission, error)
-	// MarkClusterDecommissionRunning is a lease-CAS claim: it returns
+	// MarkClusterDecommissionRunning is a token-fenced lease claim: it returns
 	// pgx.ErrNoRows ("no rows in result set") when a sibling pod (or the
 	// periodic sweep) already holds a live lease, so this runner backs off
 	// instead of double-running the row.
 	MarkClusterDecommissionRunning(ctx context.Context, arg sqlc.MarkClusterDecommissionRunningParams) (sqlc.ClusterDecommission, error)
+	ClaimPendingClusterDecommissions(ctx context.Context, arg sqlc.ClaimPendingClusterDecommissionsParams) ([]sqlc.ClusterDecommission, error)
+	RenewClusterDecommissionClaim(ctx context.Context, arg sqlc.RenewClusterDecommissionClaimParams) (int64, error)
 	// ReleaseClusterDecommissionClaim flips status back to 'pending' so the
 	// owning pod can re-claim during the HA re-queue path.
-	ReleaseClusterDecommissionClaim(ctx context.Context, id uuid.UUID) error
+	ReleaseClusterDecommissionClaim(ctx context.Context, arg sqlc.ReleaseClusterDecommissionClaimParams) (int64, error)
 	UpdateClusterDecommissionPhases(ctx context.Context, arg sqlc.UpdateClusterDecommissionPhasesParams) (sqlc.ClusterDecommission, error)
 	MarkClusterDecommissionSucceeded(ctx context.Context, arg sqlc.MarkClusterDecommissionSucceededParams) (sqlc.ClusterDecommission, error)
 	MarkClusterDecommissionFailed(ctx context.Context, arg sqlc.MarkClusterDecommissionFailedParams) (sqlc.ClusterDecommission, error)
-	ListPendingClusterDecommissions(ctx context.Context, limit int32) ([]sqlc.ClusterDecommission, error)
 
 	// Phase 1: managed-side cleanup is RPC-only, no DB writes here.
 
@@ -361,27 +377,40 @@ func (runtime ClusterDecommissionRuntime) HandleClusterDecommission(ctx context.
 	return runClusterDecommission(ctx, runtime.Deps, id)
 }
 
-// HandleClusterDecommissionAll is the periodic-sweep handler. Walks every
-// pending/running row and re-runs the reconciler. Bounded by a fixed limit
-// to avoid stampeding the DB after a long outage.
+// HandleClusterDecommissionAll is a horizontally distributable periodic
+// sweep. Duplicate scheduler deliveries are safe because
+// MarkClusterDecommissionRunning is the durable per-row lease/CAS; worker
+// replicas race for disjoint rows instead of serializing the fleet behind a
+// global advisory lock. The fixed limit bounds recovery load after an outage.
 func (runtime ClusterDecommissionRuntime) HandleClusterDecommissionAll(ctx context.Context, _ *asynq.Task) error {
-	return runPeriodicTaskWithLeader(ctx, ClusterDecommissionAllType, func() error {
+	return runPeriodicTaskWithRowLeases(ctx, ClusterDecommissionAllType, func() error {
 		if runtime.Deps.Queries == nil {
 			return fmt.Errorf("cluster decommission runtime is not configured")
 		}
-		rows, err := runtime.Deps.Queries.ListPendingClusterDecommissions(ctx, 50)
+		claimToken := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+		rows, err := runtime.Deps.Queries.ClaimPendingClusterDecommissions(ctx, sqlc.ClaimPendingClusterDecommissionsParams{
+			ClaimToken:      claimToken,
+			LeaseTtlSeconds: decommissionLeaseTTLSeconds,
+			QueryLimit:      clusterSweepConcurrency,
+		})
 		if err != nil {
-			return fmt.Errorf("list pending cluster decommissions: %w", err)
+			return fmt.Errorf("claim pending cluster decommissions: %w", err)
 		}
-		for _, row := range rows {
-			if err := runClusterDecommission(ctx, runtime.Deps, row.ID); err != nil {
-				runtimeLogger(ctx).WarnContext(ctx, "cluster decommission sweep step failed",
+		var failuresMu sync.Mutex
+		var failures []error
+		fanOutClusters(ctx, rows, decommissionSweepRowTimeout, func(runCtx context.Context, row sqlc.ClusterDecommission) {
+			if err := runClaimedClusterDecommission(runCtx, runtime.Deps, row, claimToken); err != nil {
+				failure := fmt.Errorf("decommission %s: %w", row.ID, err)
+				failuresMu.Lock()
+				failures = append(failures, failure)
+				failuresMu.Unlock()
+				runtimeLogger(runCtx).WarnContext(runCtx, "cluster decommission sweep step failed",
 					"decommission_id", row.ID.String(),
 					"cluster_id", row.ClusterID.String(),
 					"error", err)
 			}
-		}
-		return nil
+		})
+		return errors.Join(failures...)
 	})
 }
 
@@ -441,7 +470,9 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 	// result means a sibling pod (or the periodic sweep) already holds a
 	// live lease on this row — back off so we never double-run the same
 	// decommission concurrently (L15).
+	claimToken := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	row, err = q.MarkClusterDecommissionRunning(ctx, sqlc.MarkClusterDecommissionRunningParams{
+		ClaimToken:      claimToken,
 		ID:              id,
 		LeaseTtlSeconds: decommissionLeaseTTLSeconds,
 	})
@@ -451,13 +482,94 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		}
 		return fmt.Errorf("mark running: %w", err)
 	}
+	return runClaimedClusterDecommission(ctx, deps, row, claimToken)
+}
+
+// clusterDecommissionLease keeps durable ownership alive while a claimed row
+// performs remote and database side effects. Losing the token cancels the
+// phase context immediately; every state transition also compares the token,
+// so a stale runner cannot overwrite its replacement even if cancellation is
+// observed late by an idempotent external operation.
+type clusterDecommissionLease struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+
+	mu  sync.Mutex
+	err error
+}
+
+func startClusterDecommissionLease(parent context.Context, q ClusterDecommissionQuerier, id uuid.UUID, claimToken pgtype.UUID) (context.Context, *clusterDecommissionLease) {
+	ctx, cancel := context.WithCancel(parent)
+	lease := &clusterDecommissionLease{cancel: cancel, done: make(chan struct{})}
+	go func() {
+		defer close(lease.done)
+		ticker := time.NewTicker(time.Duration(decommissionLeaseTTLSeconds) * time.Second / 3)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				rows, err := q.RenewClusterDecommissionClaim(ctx, sqlc.RenewClusterDecommissionClaimParams{
+					LeaseTtlSeconds: decommissionLeaseTTLSeconds,
+					ID:              id,
+					ClaimToken:      claimToken,
+				})
+				if err == nil && rows == 1 {
+					continue
+				}
+				if err == nil {
+					err = fmt.Errorf("claim ownership lost")
+				}
+				lease.mu.Lock()
+				lease.err = fmt.Errorf("renew cluster decommission claim: %w", err)
+				lease.mu.Unlock()
+				cancel()
+				return
+			}
+		}
+	}()
+	return ctx, lease
+}
+
+func (lease *clusterDecommissionLease) stop() error {
+	lease.cancel()
+	<-lease.done
+	lease.mu.Lock()
+	defer lease.mu.Unlock()
+	return lease.err
+}
+
+func updateClusterDecommissionPhases(ctx context.Context, q ClusterDecommissionQuerier, id uuid.UUID, claimToken pgtype.UUID, phases phasesMap) error {
+	_, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{
+		Phases:          phasesJSON(phases),
+		LeaseTtlSeconds: decommissionLeaseTTLSeconds,
+		ID:              id,
+		ClaimToken:      claimToken,
+	})
+	if err != nil {
+		return fmt.Errorf("update fenced decommission phases: %w", err)
+	}
+	return nil
+}
+
+func runClaimedClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, row sqlc.ClusterDecommission, claimToken pgtype.UUID) (resultErr error) {
+	q := deps.Queries
+	id := row.ID
+	terminalCtx := ctx
+	ctx, lease := startClusterDecommissionLease(ctx, q, id, claimToken)
+	defer func() {
+		resultErr = errors.Join(resultErr, lease.stop())
+	}()
 
 	phases := loadPhases(row.Phases)
 
 	// 1. cleanup_managed_side ------------------------------------------------
 	if shouldRunPhase(phases, PhaseCleanupManagedSide) {
 		startPhase(phases, PhaseCleanupManagedSide)
-		_, _ = q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)})
+		if err := updateClusterDecommissionPhases(ctx, q, id, claimToken, phases); err != nil {
+			return fmt.Errorf("persist phase %s start: %w", PhaseCleanupManagedSide, err)
+		}
 
 		detail, phaseErr := phaseCleanupManagedSide(ctx, deps, row)
 		if phaseErr != nil {
@@ -472,13 +584,24 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 				runtimeLogger(ctx).WarnContext(ctx, "cluster decommission cleanup deferred: agent on a sibling pod, returning task to queue",
 					"decommission_id", id.String(), "cluster_id", row.ClusterID.String(), "error", phaseErr)
 				delete(phases, PhaseCleanupManagedSide)
-				_, _ = q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)})
-				_ = q.ReleaseClusterDecommissionClaim(ctx, id)
+				if err := updateClusterDecommissionPhases(ctx, q, id, claimToken, phases); err != nil {
+					return errors.Join(phaseErr, fmt.Errorf("reset deferred cleanup phase: %w", err))
+				}
+				if err := lease.stop(); err != nil {
+					return errors.Join(phaseErr, err)
+				}
+				released, err := q.ReleaseClusterDecommissionClaim(terminalCtx, sqlc.ReleaseClusterDecommissionClaimParams{ID: id, ClaimToken: claimToken})
+				if err != nil {
+					return errors.Join(phaseErr, fmt.Errorf("release decommission claim: %w", err))
+				}
+				if released != 1 {
+					return errors.Join(phaseErr, fmt.Errorf("release decommission claim: claim ownership lost"))
+				}
 				return phaseErr
 			}
 			finishPhase(phases, PhaseCleanupManagedSide, PhaseStatusFailed, phaseErr.Error(), detail)
 			recordPhaseAudit(ctx, q, row, PhaseCleanupManagedSide, PhaseStatusFailed, phaseErr.Error(), detail)
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseCleanupManagedSide, phaseErr))
+			return persistFailure(terminalCtx, q, lease, id, claimToken, phases, fmt.Sprintf("phase %s: %v", PhaseCleanupManagedSide, phaseErr))
 		}
 		status := PhaseStatusSucceeded
 		// If the agent was unreachable, the phase did its best — we mark the
@@ -492,8 +615,8 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		}
 		finishPhase(phases, PhaseCleanupManagedSide, status, "", detail)
 		recordPhaseAudit(ctx, q, row, PhaseCleanupManagedSide, status, "", detail)
-		if _, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)}); err != nil {
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("persist phase %s: %v", PhaseCleanupManagedSide, err))
+		if err := updateClusterDecommissionPhases(ctx, q, id, claimToken, phases); err != nil {
+			return fmt.Errorf("persist phase %s: %w", PhaseCleanupManagedSide, err)
 		}
 	}
 
@@ -517,12 +640,12 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		if phaseErr != nil {
 			finishPhase(phases, PhaseRevokeAgentToken, PhaseStatusFailed, phaseErr.Error(), detail)
 			recordPhaseAudit(ctx, q, row, PhaseRevokeAgentToken, PhaseStatusFailed, phaseErr.Error(), detail)
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseRevokeAgentToken, phaseErr))
+			return persistFailure(terminalCtx, q, lease, id, claimToken, phases, fmt.Sprintf("phase %s: %v", PhaseRevokeAgentToken, phaseErr))
 		}
 		finishPhase(phases, PhaseRevokeAgentToken, PhaseStatusSucceeded, "", detail)
 		recordPhaseAudit(ctx, q, row, PhaseRevokeAgentToken, PhaseStatusSucceeded, "", detail)
-		if _, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)}); err != nil {
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("persist phase %s: %v", PhaseRevokeAgentToken, err))
+		if err := updateClusterDecommissionPhases(ctx, q, id, claimToken, phases); err != nil {
+			return fmt.Errorf("persist phase %s: %w", PhaseRevokeAgentToken, err)
 		}
 	}
 
@@ -533,12 +656,12 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		if phaseErr != nil {
 			finishPhase(phases, PhaseArchiveAudit, PhaseStatusFailed, phaseErr.Error(), detail)
 			recordPhaseAudit(ctx, q, row, PhaseArchiveAudit, PhaseStatusFailed, phaseErr.Error(), detail)
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseArchiveAudit, phaseErr))
+			return persistFailure(terminalCtx, q, lease, id, claimToken, phases, fmt.Sprintf("phase %s: %v", PhaseArchiveAudit, phaseErr))
 		}
 		finishPhase(phases, PhaseArchiveAudit, PhaseStatusSucceeded, "", detail)
 		recordPhaseAudit(ctx, q, row, PhaseArchiveAudit, PhaseStatusSucceeded, "", detail)
-		if _, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)}); err != nil {
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("persist phase %s: %v", PhaseArchiveAudit, err))
+		if err := updateClusterDecommissionPhases(ctx, q, id, claimToken, phases); err != nil {
+			return fmt.Errorf("persist phase %s: %w", PhaseArchiveAudit, err)
 		}
 	}
 
@@ -549,12 +672,12 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		if phaseErr != nil {
 			finishPhase(phases, PhaseDeleteDependents, PhaseStatusFailed, phaseErr.Error(), detail)
 			recordPhaseAudit(ctx, q, row, PhaseDeleteDependents, PhaseStatusFailed, phaseErr.Error(), detail)
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseDeleteDependents, phaseErr))
+			return persistFailure(terminalCtx, q, lease, id, claimToken, phases, fmt.Sprintf("phase %s: %v", PhaseDeleteDependents, phaseErr))
 		}
 		finishPhase(phases, PhaseDeleteDependents, PhaseStatusSucceeded, "", detail)
 		recordPhaseAudit(ctx, q, row, PhaseDeleteDependents, PhaseStatusSucceeded, "", detail)
-		if _, err := q.UpdateClusterDecommissionPhases(ctx, sqlc.UpdateClusterDecommissionPhasesParams{ID: id, Phases: phasesJSON(phases)}); err != nil {
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("persist phase %s: %v", PhaseDeleteDependents, err))
+		if err := updateClusterDecommissionPhases(ctx, q, id, claimToken, phases); err != nil {
+			return fmt.Errorf("persist phase %s: %w", PhaseDeleteDependents, err)
 		}
 	}
 
@@ -565,15 +688,19 @@ func runClusterDecommission(ctx context.Context, deps ClusterDecommissionDeps, i
 		if phaseErr != nil {
 			finishPhase(phases, PhaseTombstoneCluster, PhaseStatusFailed, phaseErr.Error(), detail)
 			recordPhaseAudit(ctx, q, row, PhaseTombstoneCluster, PhaseStatusFailed, phaseErr.Error(), detail)
-			return persistFailure(ctx, q, id, phases, fmt.Sprintf("phase %s: %v", PhaseTombstoneCluster, phaseErr))
+			return persistFailure(terminalCtx, q, lease, id, claimToken, phases, fmt.Sprintf("phase %s: %v", PhaseTombstoneCluster, phaseErr))
 		}
 		finishPhase(phases, PhaseTombstoneCluster, PhaseStatusSucceeded, "", detail)
 		recordPhaseAudit(ctx, q, row, PhaseTombstoneCluster, PhaseStatusSucceeded, "", detail)
 	}
 
-	if _, err := q.MarkClusterDecommissionSucceeded(ctx, sqlc.MarkClusterDecommissionSucceededParams{
-		ID:     id,
-		Phases: phasesJSON(phases),
+	if err := lease.stop(); err != nil {
+		return err
+	}
+	if _, err := q.MarkClusterDecommissionSucceeded(terminalCtx, sqlc.MarkClusterDecommissionSucceededParams{
+		ID:         id,
+		Phases:     phasesJSON(phases),
+		ClaimToken: claimToken,
 	}); err != nil {
 		return fmt.Errorf("mark succeeded: %w", err)
 	}
@@ -612,11 +739,15 @@ func finishPhase(phases phasesMap, name, status, errMsg string, detail map[strin
 	phases[name] = rec
 }
 
-func persistFailure(ctx context.Context, q ClusterDecommissionQuerier, id uuid.UUID, phases phasesMap, msg string) error {
+func persistFailure(ctx context.Context, q ClusterDecommissionQuerier, lease *clusterDecommissionLease, id uuid.UUID, claimToken pgtype.UUID, phases phasesMap, msg string) error {
+	if err := lease.stop(); err != nil {
+		return errors.Join(fmt.Errorf("original: %s", msg), err)
+	}
 	if _, err := q.MarkClusterDecommissionFailed(ctx, sqlc.MarkClusterDecommissionFailedParams{
-		ID:        id,
-		LastError: msg,
-		Phases:    phasesJSON(phases),
+		ID:         id,
+		LastError:  msg,
+		Phases:     phasesJSON(phases),
+		ClaimToken: claimToken,
 	}); err != nil {
 		return fmt.Errorf("mark failed: %w (original: %s)", err, msg)
 	}
@@ -876,7 +1007,7 @@ func phaseTombstoneCluster(ctx context.Context, deps ClusterDecommissionDeps, ro
 	// Verify the cluster still exists (i.e. wasn't manually hard-deleted by
 	// an operator). If it's gone, the phase has nothing to do — we
 	// succeed.
-	cluster, err := deps.Queries.GetClusterByID(ctx, row.ClusterID)
+	cluster, err := deps.Queries.GetClusterByIDIncludingDecommissioned(ctx, row.ClusterID)
 	if err != nil {
 		// Match "no rows" by message, not errors.Is against a local sentinel:
 		// the real error here is pgx.ErrNoRows (a DIFFERENT value from our

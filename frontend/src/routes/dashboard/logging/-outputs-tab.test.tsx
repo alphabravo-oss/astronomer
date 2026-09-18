@@ -8,13 +8,13 @@ vi.mock("@/lib/toast", () => ({
   toastError: vi.fn(),
 }));
 
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api/logging", () => ({
   deleteLoggingOutput: vi.fn(),
   updateLoggingOutput: vi.fn(),
 }));
 
-vi.mock("@/lib/hooks", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/hooks")>();
+vi.mock("@/lib/hooks/logging", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/hooks/logging")>();
   return {
     ...actual,
     useLoggingOutputs: vi.fn(),
@@ -22,7 +22,7 @@ vi.mock("@/lib/hooks", async (importOriginal) => {
   };
 });
 
-import { useLoggingOutputs } from "@/lib/hooks";
+import { useLoggingOutputs } from "@/lib/hooks/logging";
 import { OutputsTab } from "./-outputs-tab";
 
 const useOutputs = vi.mocked(useLoggingOutputs);

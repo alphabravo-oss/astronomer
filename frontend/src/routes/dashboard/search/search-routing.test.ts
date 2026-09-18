@@ -1,4 +1,4 @@
-import { searchResultHref, SEARCHABLE_TYPES } from "./-page";
+import { searchResultHref, SEARCHABLE_TYPES, WORKLOAD_TYPES } from "./-page";
 import { getResourceDef } from "@/lib/k8s-paths";
 
 // F-02 regression: every searchable type must resolve to a concrete in-app
@@ -6,6 +6,12 @@ import { getResourceDef } from "@/lib/k8s-paths";
 // "Resource not found." page.
 
 const CID = "c1";
+
+it("limits the fleet Workloads view to workload kinds supported by the shared explorer", () => {
+  expect(WORKLOAD_TYPES.map(({ value }) => value)).toEqual([
+    "pods", "deployments", "statefulsets", "daemonsets", "jobs", "cronjobs",
+  ]);
+});
 
 describe("searchResultHref", () => {
   it("routes every SEARCHABLE_TYPES value to a non-empty dashboard path", () => {
@@ -17,18 +23,18 @@ describe("searchResultHref", () => {
     }
   });
 
-  it("sends pods to the workload pod detail", () => {
+  it("sends pods to the canonical explorer detail", () => {
     expect(searchResultHref("pods", CID, "kube-system", "coredns-abc")).toBe(
-      "/dashboard/clusters/c1/workloads/pods/kube-system/coredns-abc",
+      "/dashboard/clusters/c1/pods/kube-system/coredns-abc",
     );
   });
 
-  it("sends workload kinds to their workload detail", () => {
+  it("sends workload kinds to the canonical explorer detail", () => {
     expect(searchResultHref("deployments", CID, "app", "web")).toBe(
-      "/dashboard/clusters/c1/workloads/deployment/app/web",
+      "/dashboard/clusters/c1/deployments/app/web",
     );
     expect(searchResultHref("cronjobs", CID, "batch", "nightly")).toBe(
-      "/dashboard/clusters/c1/workloads/cronjob/batch/nightly",
+      "/dashboard/clusters/c1/cronjobs/batch/nightly",
     );
   });
 

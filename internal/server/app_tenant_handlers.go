@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -31,25 +31,26 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	// a production footgun. Returning an error
 	// surfaces the misconfig at process start instead of letting every
 	// asynq enqueue silently fail downstream.
-	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
+	redisOpt, redisErr := redisconn.Parse(cfg.RedisURL)
 	if redisErr != nil {
-		return fmt.Errorf("parse REDIS_URL %q: %w", cfg.RedisURL, redisErr)
+		return fmt.Errorf("parse REDIS_URL: %w", redisErr)
 	}
 	queue := asynq.NewClient(redisOpt)
-	taskLeader := leader.New(database.Pool(), logger)
+	taskLeader, leaderErr := leader.NewDedicated(ctx, database.Pool(), logger)
+	if leaderErr != nil {
+		return leaderErr
+	}
 	var securityCacheCoordinator *cacheinvalidate.Coordinator
 	var runtimeRedisClient redis.UniversalClient
 	securityTarget := securityCacheTarget{jwt: jwtManager, rbac: rbacQuerier.Cache()}
 	if redisClient, ok := redisOpt.MakeRedisClient().(redis.UniversalClient); ok && redisClient != nil {
 		runtimeRedisClient = redisClient
-		securityCacheCoordinator = cacheinvalidate.New(redisClient, securityTarget, os.Getenv("HOSTNAME"), cacheinvalidate.DefaultPeriod, logger)
-		go securityCacheCoordinator.Run(ctx)
-		go func() { <-ctx.Done(); _ = redisClient.Close() }()
+		securityCacheCoordinator = cacheinvalidate.New(redisClient, securityTarget, cfg.ProcessHostname, cacheinvalidate.DefaultPeriod, logger)
 	} else if cfg.ServerReplicas > 1 {
-		securityCacheCoordinator = cacheinvalidate.New(nil, securityTarget, os.Getenv("HOSTNAME"), cacheinvalidate.DefaultPeriod, logger)
+		securityCacheCoordinator = cacheinvalidate.New(nil, securityTarget, cfg.ProcessHostname, cacheinvalidate.DefaultPeriod, logger)
 		logger.Error("distributed security cache invalidation is unavailable in a multi-replica deployment")
 	} else {
-		securityCacheCoordinator = cacheinvalidate.NewLocalOnly(securityTarget, os.Getenv("HOSTNAME"), logger)
+		securityCacheCoordinator = cacheinvalidate.NewLocalOnly(securityTarget, cfg.ProcessHostname, logger)
 		logger.Warn("distributed security cache invalidation is disabled; using local-only caches")
 	}
 	jwtManager.SetCacheInvalidationCoordinator(securityCacheCoordinator)
@@ -63,15 +64,13 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 		Log:     logger,
 		Bus:     bus,
 	}, Leader: taskLeader}
-	// Phase B3 — project enforcement controller: wire the project handler with
-	// the asynq queue (for AddNamespace → enqueue project:reconcile) and the
-	// shared K8sRequester (for ResourceQuota / LimitRange / NetworkPolicy
-	// server-side apply through the tunnel).
+	// Phase B3 — project enforcement controller. Namespace mutations persist
+	// reconcile intents in their database transaction; the requester is used by
+	// the recovery sweep that applies those intents through the tunnel.
 	projectHandler := handler.NewProjectHandler(queries)
 	// MUST be set — see clusterHandler.SetAuthorization.
 	projectHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	projectHandler.SetEncryptor(encryptor)
-	projectHandler.SetTaskQueue(queue)
 	projectHandler.SetTaskOutbox(queries)
 	projectHandler.SetK8sRequester(requester)
 	projectHandler.SetLogger(logger)
@@ -91,17 +90,12 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	clusterTemplateHandler.SetAuthorization(rbacEngine, rbacQuerier)
 	clusterTemplateHandler.SetRunTx(sqlcMutationTxRunner[handler.ClusterTemplateMutationTx](database))
 	clusterTemplateHandler.SetEventBus(bus)
-	clusterTemplateHandler.SetQueue(queue)
-	clusterTemplateHandler.SetTaskOutbox(queries)
 	// Cluster registries (migration 050). Multi-registry-per-cluster admin
-	// UX. Apply queue uses the same asynq client; tunnel requester is
-	// shared with project enforcement so the /test/ endpoint can dial the
-	// member cluster's network from the management plane.
+	// UX. Registry changes and their apply intents commit through one database
+	// transaction; the tunnel requester lets /test/ dial from the member cluster.
 	clusterRegistriesHandler := handler.NewClusterRegistriesHandler(queries)
 	clusterRegistriesHandler.SetRunTx(sqlcMutationTxRunner[handler.ClusterRegistryMutationTx](database))
 	clusterRegistriesHandler.SetEventBus(bus)
-	clusterRegistriesHandler.SetApplyEnqueue(queue)
-	clusterRegistriesHandler.SetTaskOutbox(queries)
 	clusterRegistriesHandler.SetRequester(requester)
 	clusterRegistriesHandler.SetEncryptor(encryptor)
 	// Network policy templates (migration 068). Sister of cluster
@@ -111,7 +105,6 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	// behavior as every other tunnel-mediated K8s op applies.
 	networkPoliciesHandler := handler.NewNetworkPolicyHandler(queries)
 	networkPoliciesHandler.SetRunTx(sqlcMutationTxRunner[handler.NetworkPolicyMutationTx](database))
-	networkPoliciesHandler.SetQueue(queue)
 	networkPoliciesHandler.SetK8sRequester(requester)
 	networkPolicyRuntime := tasks.NetworkPolicyRuntime{Deps: tasks.NetworkPolicyApplyDeps{
 		Queries:   queries,
@@ -127,8 +120,6 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	cloudCredentialsHandler.SetRunTx(sqlcMutationTxRunner[handler.CloudCredentialMutationTx](database))
 	cloudCredentialsHandler.SetAuditor(queries)
 	cloudCredentialsHandler.SetEncryptor(encryptor)
-	cloudCredentialsHandler.SetEnqueuer(queue)
-	cloudCredentialsHandler.SetTaskOutbox(queries)
 	cloudCredentialsHandler.SetTester(handler.NewDefaultCloudTester())
 	// Dashboard widgets (migration 058). Admin CRUD over widget rows +
 	// datasource rows; render endpoints serve a per-scope widget grid.
@@ -139,12 +130,10 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	// Per-project BYO catalogs (migration 061).
 	projectCatalogsHandler := handler.NewProjectCatalogHandler(queries)
 	projectCatalogsHandler.SetRunTx(sqlcMutationTxRunner[handler.ProjectCatalogMutationTx](database))
-	projectCatalogsHandler.SetAuditor(queries)
 	projectCatalogsHandler.SetEncryptor(encryptor)
 	// Cluster groups (migration 066).
 	clusterGroupsHandler := handler.NewClusterGroupHandler(queries)
 	clusterGroupsHandler.SetRunTx(sqlcMutationTxRunner[handler.ClusterGroupMutationTx](database))
-	clusterGroupsHandler.SetAuditor(queries)
 	handler.RegisterClusterGroupMetrics()
 	tasks.ClusterGroupMetricsRefresher = func(ctx context.Context) {
 		handler.RefreshClusterGroupMetrics(ctx, queries)

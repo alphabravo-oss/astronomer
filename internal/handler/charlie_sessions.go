@@ -13,11 +13,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	charliecontract "github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -433,8 +434,8 @@ func summarizeCharlieToolArguments(value any) any {
 	}
 }
 
-func browserCharlieActor(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, bool) {
-	actor, authenticated := appmiddleware.GetAuthenticatedUser(r.Context())
+func browserCharlieActor(w http.ResponseWriter, r *http.Request) (*reqctx.User, bool) {
+	actor, authenticated := reqctx.AuthenticatedUser(r.Context())
 	if !authenticated || actor == nil || actor.AuthMethod == "api_token" || mustUserID(actor) == uuid.Nil {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Browser authentication is required")
 		return nil, false
@@ -442,7 +443,7 @@ func browserCharlieActor(w http.ResponseWriter, r *http.Request) (*appmiddleware
 	return actor, true
 }
 
-func charlieSessionActorAndID(w http.ResponseWriter, r *http.Request) (*appmiddleware.AuthenticatedUser, uuid.UUID, bool) {
+func charlieSessionActorAndID(w http.ResponseWriter, r *http.Request) (*reqctx.User, uuid.UUID, bool) {
 	actor, ok := browserCharlieActor(w, r)
 	if !ok {
 		return nil, uuid.Nil, false
@@ -455,7 +456,7 @@ func charlieSessionActorAndID(w http.ResponseWriter, r *http.Request) (*appmiddl
 	return actor, sessionID, true
 }
 
-func mustUserID(actor *appmiddleware.AuthenticatedUser) uuid.UUID {
+func mustUserID(actor *reqctx.User) uuid.UUID {
 	if actor == nil {
 		return uuid.Nil
 	}

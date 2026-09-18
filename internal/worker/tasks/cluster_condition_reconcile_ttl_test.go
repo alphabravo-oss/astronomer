@@ -16,11 +16,16 @@ import (
 type ccrTTLQuerier struct {
 	RuntimeQuerier
 	cluster         sqlc.Cluster
+	liveness        sqlc.ClusterLiveness
 	lastTokenExpiry time.Time
 }
 
 func (q *ccrTTLQuerier) GetClusterByID(_ context.Context, _ uuid.UUID) (sqlc.Cluster, error) {
 	return q.cluster, nil
+}
+
+func (q *ccrTTLQuerier) GetClusterLiveness(_ context.Context, _ uuid.UUID) (sqlc.ClusterLiveness, error) {
+	return q.liveness, nil
 }
 
 func (q *ccrTTLQuerier) CreateClusterRegistrationToken(_ context.Context, arg sqlc.CreateClusterRegistrationTokenParams) (sqlc.ClusterRegistrationToken, error) {
@@ -42,10 +47,8 @@ func (q *ccrTTLQuerier) CreateAuditLogV1(_ context.Context, _ sqlc.CreateAuditLo
 func TestReissueRegistrationTokenHonorsConfiguredTTL(t *testing.T) {
 	clusterID := uuid.New()
 	row := sqlc.ClusterCondition{ClusterID: clusterID, Type: ConditionConnected, Status: "False"}
-	staleCluster := sqlc.Cluster{
-		ID:            clusterID,
-		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-5 * time.Minute), Valid: true},
-	}
+	staleCluster := sqlc.Cluster{ID: clusterID}
+	staleLiveness := sqlc.ClusterLiveness{ClusterID: clusterID, LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-5 * time.Minute), Valid: true}}
 	approx := func(t *testing.T, expiry time.Time, want time.Duration) {
 		t.Helper()
 		if expiry.IsZero() {
@@ -57,7 +60,7 @@ func TestReissueRegistrationTokenHonorsConfiguredTTL(t *testing.T) {
 	}
 
 	// Explicit override (3h) flows into the mint.
-	q := &ccrTTLQuerier{cluster: staleCluster}
+	q := &ccrTTLQuerier{cluster: staleCluster, liveness: staleLiveness}
 	overrideCtx := testRuntimeContext(RuntimeDependencies{Queries: q, RegistrationTokenTTLHours: 3})
 	if err := remediateConnectedFalse(overrideCtx, row); err != nil {
 		t.Fatalf("remediate (override): %v", err)
@@ -65,7 +68,7 @@ func TestReissueRegistrationTokenHonorsConfiguredTTL(t *testing.T) {
 	approx(t, q.lastTokenExpiry, 3*time.Hour)
 
 	// CoreRuntime defaults a zero TTL to 1h (not the old 24h).
-	q2 := &ccrTTLQuerier{cluster: staleCluster}
+	q2 := &ccrTTLQuerier{cluster: staleCluster, liveness: staleLiveness}
 	defaultCtx := testRuntimeContext(RuntimeDependencies{Queries: q2})
 	if got := runtimeDependencies(defaultCtx).RegistrationTokenTTLHours; got != 1 {
 		t.Fatalf("CoreRuntime must default RegistrationTokenTTLHours to 1, got %d", got)

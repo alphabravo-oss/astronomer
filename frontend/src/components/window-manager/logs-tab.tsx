@@ -1,12 +1,12 @@
-"use client";
-
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { usePodLogs, type PodLogsStatus } from "@/lib/hooks";
+import { usePodLogs } from "@/lib/hooks/workloads";
+import type { PodLogsStatus } from "@/lib/hooks/workloads";
 import { cn } from "@/lib/utils";
 import {
   ArrowDown,
   Clock,
   Download,
+  History,
   Loader2,
   Pause,
   Play,
@@ -39,6 +39,7 @@ export function LogsTab({
   onStatusChange,
 }: LogsTabProps) {
   const [follow, setFollow] = useState(true);
+  const [previous, setPrevious] = useState(false);
   const [wrap, setWrap] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,7 +59,8 @@ export function LogsTab({
     tailLines: tailRange.kind === "lines" ? tailRange.n : undefined,
     sinceSeconds: tailRange.kind === "seconds" ? tailRange.s : undefined,
     noTail: tailRange.kind === "all",
-    follow,
+    follow: follow && !previous,
+    previous,
   });
 
   useEffect(() => {
@@ -161,9 +163,31 @@ export function LogsTab({
 
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setShowTimestamps((v) => !v)}
+            type="button"
+            onClick={() => {
+              setPrevious((value) => !value);
+              setFollow(false);
+            }}
+            aria-label="Show previous container logs"
+            aria-pressed={previous}
             className={cn(
-              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
+              "inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-2xs transition-colors",
+              previous
+                ? "bg-status-warning/10 text-status-warning"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+            title="Show logs from the previously terminated container"
+          >
+            <History className="h-3 w-3" />
+            <span className="hidden sm:inline">Previous</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowTimestamps((v) => !v)}
+            aria-label="Show timestamps"
+            aria-pressed={showTimestamps}
+            className={cn(
+              "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               showTimestamps
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -173,9 +197,12 @@ export function LogsTab({
             <Clock className="h-3 w-3" />
           </button>
           <button
+            type="button"
             onClick={() => setWrap((v) => !v)}
+            aria-label="Wrap log lines"
+            aria-pressed={wrap}
             className={cn(
-              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
+              "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               wrap
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -185,9 +212,12 @@ export function LogsTab({
             <WrapText className="h-3 w-3" />
           </button>
           <button
+            type="button"
             onClick={() => setShowSearch((v) => !v)}
+            aria-label="Filter log lines"
+            aria-pressed={showSearch}
             className={cn(
-              "inline-flex items-center h-6 px-1.5 rounded text-2xs transition-colors",
+              "inline-flex items-center h-6 px-1.5 rounded-sm text-2xs transition-colors",
               showSearch
                 ? "bg-accent text-foreground"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -197,9 +227,15 @@ export function LogsTab({
             <Search className="h-3 w-3" />
           </button>
           <button
-            onClick={() => setFollow((v) => !v)}
+            type="button"
+            onClick={() => {
+              if (previous) setPrevious(false);
+              setFollow((value) => !value);
+            }}
+            aria-label="Follow new log lines"
+            aria-pressed={follow}
             className={cn(
-              "inline-flex items-center gap-1 h-6 px-1.5 rounded text-2xs transition-colors",
+              "inline-flex items-center gap-1 h-6 px-1.5 rounded-sm text-2xs transition-colors",
               follow
                 ? "bg-status-success/10 text-status-success"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent",
@@ -216,8 +252,10 @@ export function LogsTab({
             </span>
           </button>
           <button
+            type="button"
             onClick={handleDownload}
-            className="inline-flex items-center h-6 px-1.5 rounded text-2xs
+            aria-label="Download logs"
+            className="inline-flex items-center h-6 px-1.5 rounded-sm text-2xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Download logs"
           >
@@ -228,14 +266,15 @@ export function LogsTab({
 
       {showSearch && (
         <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 border-b border-border">
-          <Search className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+          <Search className="h-3 w-3 text-muted-foreground shrink-0" />
           <input
             type="text"
+            aria-label="Filter log lines"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter logs..."
             className="flex-1 h-5 bg-transparent text-xs text-foreground placeholder:text-muted-foreground
-              focus:outline-none"
+              focus:outline-hidden"
             data-initial-focus
           />
           {searchQuery && (
@@ -244,6 +283,8 @@ export function LogsTab({
             </span>
           )}
           <button
+            type="button"
+            aria-label="Close log filter"
             onClick={() => {
               setShowSearch(false);
               setSearchQuery("");
@@ -255,9 +296,22 @@ export function LogsTab({
         </div>
       )}
 
+      <div role="status" aria-live="polite" className="sr-only">
+        {isLoading
+          ? "Loading logs"
+          : searchQuery
+            ? `${filteredLogs.length} matching log lines`
+            : follow
+              ? "Following new log lines"
+              : "Log following paused"}
+      </div>
+
       {/* Log content */}
       <div
         ref={scrollRef}
+        role="log"
+        aria-live="off"
+        aria-label={`Logs for ${namespace}/${pod}`}
         className={cn(
           "log-viewer flex-1 min-h-0 overflow-y-auto p-3",
           wrap ? "overflow-x-hidden" : "overflow-x-auto",
@@ -269,7 +323,7 @@ export function LogsTab({
             <span className="text-xs">Loading logs...</span>
           </div>
         ) : filteredLogs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-zinc-600 text-xs">
+          <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
             {searchQuery ? "No matching log lines" : "No logs available"}
           </div>
         ) : (
@@ -277,12 +331,12 @@ export function LogsTab({
             <div
               key={i}
               className={cn(
-                "flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded",
+                "flex gap-2 hover:bg-white/[0.02] px-1 -mx-1 rounded-sm",
                 getLogLineClass(log),
               )}
             >
               {showTimestamps && (
-                <span className="log-timestamp flex-shrink-0 whitespace-nowrap">
+                <span className="log-timestamp shrink-0 whitespace-nowrap">
                   {new Date(log.timestamp).toLocaleTimeString()}
                 </span>
               )}
@@ -300,14 +354,16 @@ export function LogsTab({
 
       {!follow && filteredLogs.length > 0 && (
         <button
+          type="button"
           onClick={() => {
+            setPrevious(false);
             setFollow(true);
             if (scrollRef.current) {
               scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
             }
           }}
           className="flex items-center justify-center gap-1.5 py-1
-            bg-muted/80 backdrop-blur-sm border-t border-border text-2xs text-muted-foreground
+            bg-muted/80 backdrop-blur-xs border-t border-border text-2xs text-muted-foreground
             hover:text-foreground transition-colors"
         >
           <ArrowDown className="h-3 w-3" />
@@ -410,9 +466,12 @@ function TailRangeSelect({
     return (
       <button
         key={opt.label}
+        type="button"
+        role="option"
+        aria-selected={selected}
         onClick={() => pick(opt)}
         className={cn(
-          "w-full flex items-center px-2 py-1 rounded text-2xs transition-colors",
+          "w-full flex items-center px-2 py-1 rounded-sm text-2xs transition-colors",
           selected
             ? "bg-accent text-foreground"
             : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -426,10 +485,14 @@ function TailRangeSelect({
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
+        aria-label={`Tail range: ${labelForRange(value)}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 h-6 px-2 rounded border border-border bg-background
+        className="inline-flex items-center gap-1 h-6 px-2 rounded-sm border border-border bg-background
           text-2xs text-foreground hover:bg-accent transition-colors
-          focus:outline-none focus:ring-1 focus:ring-ring"
+          focus:outline-hidden focus:ring-1 focus:ring-ring"
         title="Tail range"
       >
         <span className="tabular-nums">{labelForRange(value)}</span>
@@ -451,7 +514,11 @@ function TailRangeSelect({
         </svg>
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-36 rounded-md border border-border bg-popover p-1 shadow-lg z-50">
+        <div
+          role="listbox"
+          aria-label="Log tail range"
+          className="absolute left-0 top-full mt-1 w-36 rounded-md border border-border bg-popover p-1 shadow-lg z-50"
+        >
           {TAIL_LINE_OPTIONS.map(renderOption)}
           <div className="my-1 border-t border-border" />
           {TAIL_TIME_OPTIONS.map(renderOption)}

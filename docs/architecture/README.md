@@ -8,6 +8,8 @@ and machine-enforced release contracts remain under `deploy/release`.
 | Decision | Status | Summary |
 | --- | --- | --- |
 | [Flux-native delivery](decisions/flux-native-delivery.md) | Accepted | Astronomer owns delivery intent, placement, rollout, and status while local Flux controllers converge each managed cluster. Rancher Fleet and Argo are not part of the v1 runtime. |
+| [Frontend application stack](decisions/frontend-application-stack.md) | Accepted | The console uses REST/OpenAPI, generated wire contracts, TanStack Router/Query/Form, and one Node 24 toolchain baseline. |
+| [Go platform tooling](decisions/go-platform-tooling.md) | Accepted | The backend standardizes on `slog`, golang-migrate, OTLP/HTTP, pinned standard lint, digest-pinned Alpine runtime images, and an explicit container rebuild workflow. |
 
 ## Conventions
 

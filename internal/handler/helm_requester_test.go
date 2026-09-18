@@ -61,8 +61,11 @@ func TestTunnelHelmRequester_ForwardsToSibling(t *testing.T) {
 	// Sibling pod stand-in: returns a canned HelmResultPayload.
 	var seen tunnel.InternalHelmRequest
 	sibling := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get(tunnel.InternalPSKHeader) != "psk" {
-			http.Error(w, "bad psk", http.StatusForbidden)
+		if r.Header.Get(tunnel.InternalSourceHeader) != tunnel.InternalSourceValue ||
+			r.Header.Get(tunnel.InternalSignatureHeader) == "" ||
+			r.Header.Get(tunnel.InternalTimestampHeader) == "" ||
+			r.Header.Get(tunnel.InternalNonceHeader) == "" {
+			http.Error(w, "missing signed internal envelope", http.StatusForbidden)
 			return
 		}
 		body, _ := io.ReadAll(r.Body)

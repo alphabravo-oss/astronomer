@@ -10,14 +10,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
-
+	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type listEnvelope struct {
 	Data       []map[string]any `json:"data"`
-	Pagination Pagination       `json:"pagination"`
+	Pagination paging.Metadata  `json:"pagination"`
 }
 
 // TestPageWindow covers the slicing helper the cluster resource list endpoints
@@ -58,6 +60,69 @@ func TestPageWindow(t *testing.T) {
 	page3, pg3 := pageWindow(req3, items)
 	if len(page3) != 0 || pg3.HasMore {
 		t.Fatalf("out-of-range offset should return empty last page, got len=%d has_more=%v", len(page3), pg3.HasMore)
+	}
+}
+
+func TestLayerResourceSummaryUsage(t *testing.T) {
+	nodes := []map[string]any{
+		{"name": "node-1", "cpuUsage": 0, "memoryUsage": 0},
+		{"name": "node-without-metrics", "cpuUsage": 0, "memoryUsage": 0},
+	}
+	namespaces := []map[string]any{
+		{"name": "apps", "cpuUsage": 0, "memoryUsage": 0},
+		{"name": "empty", "cpuUsage": 0, "memoryUsage": 0},
+	}
+	snapshot := clustermetrics.Snapshot{
+		Nodes: map[string]clustermetrics.NodeMetrics{
+			"node-1": {Name: "node-1", CPUUsageMillicores: 725, MemoryUsageBytes: 4 << 30},
+		},
+		Pods: map[string]clustermetrics.PodMetrics{
+			"apps/api":    {Namespace: "apps", Name: "api", CPUUsageMillicores: 125, MemoryUsageBytes: 1 << 20},
+			"apps/worker": {Namespace: "apps", Name: "worker", CPUUsageMillicores: 250, MemoryUsageBytes: 2 << 20},
+		},
+	}
+
+	layerNodeSummaryUsage(nodes, snapshot)
+	layerNamespaceUsage(namespaces, snapshot)
+
+	if got := nodes[0]["cpuUsage"]; got != int64(725) {
+		t.Fatalf("node cpuUsage = %v, want 725", got)
+	}
+	if got := nodes[0]["memoryUsage"]; got != int64(4<<30) {
+		t.Fatalf("node memoryUsage = %v, want %d", got, int64(4<<30))
+	}
+	if got := nodes[1]["cpuUsage"]; got != 0 {
+		t.Fatalf("missing node cpuUsage = %v, want zero fallback", got)
+	}
+	if got := namespaces[0]["cpuUsage"]; got != int64(375) {
+		t.Fatalf("namespace cpuUsage = %v, want 375", got)
+	}
+	if got := namespaces[0]["memoryUsage"]; got != int64(3<<20) {
+		t.Fatalf("namespace memoryUsage = %v, want %d", got, int64(3<<20))
+	}
+	if got := namespaces[1]["memoryUsage"]; got != 0 {
+		t.Fatalf("empty namespace memoryUsage = %v, want zero fallback", got)
+	}
+}
+
+func TestSortWorkloadItemsUsesStableIdentityTieBreaker(t *testing.T) {
+	items := []map[string]any{
+		{"namespace": "team-b", "kind": "Deployment", "name": "same", "createdAt": "2026-01-01T00:00:00Z"},
+		{"namespace": "team-a", "kind": "StatefulSet", "name": "same", "createdAt": "2026-01-02T00:00:00Z"},
+		{"namespace": "team-a", "kind": "Deployment", "name": "alpha", "createdAt": "2026-01-03T00:00:00Z"},
+	}
+	sortWorkloadItems(items, "name_desc")
+	got := []string{
+		items[0]["namespace"].(string) + "/" + items[0]["kind"].(string) + "/" + items[0]["name"].(string),
+		items[1]["namespace"].(string) + "/" + items[1]["kind"].(string) + "/" + items[1]["name"].(string),
+		items[2]["namespace"].(string) + "/" + items[2]["kind"].(string) + "/" + items[2]["name"].(string),
+	}
+	want := []string{"team-a/StatefulSet/same", "team-b/Deployment/same", "team-a/Deployment/alpha"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("sorted identities = %v, want %v", got, want)
+	}
+	if validWorkloadSort("partial-page-local") {
+		t.Fatal("unsupported sort must fail closed")
 	}
 }
 
@@ -111,11 +176,178 @@ func TestListNodes_HonoursLimitOffset(t *testing.T) {
 	}
 }
 
+func TestListEventsClampsUpstreamLimit(t *testing.T) {
+	eventBody, err := json.Marshal(map[string]any{"items": []any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name      string
+		query     string
+		wantLimit string
+	}{
+		{name: "default", wantLimit: "100"},
+		{name: "negative", query: "?limit=-1", wantLimit: "100"},
+		{name: "overflow", query: "?limit=999999999", wantLimit: "500"},
+		{name: "bounded", query: "?limit=25", wantLimit: "25"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clusterID := uuid.NewString()
+			stub := &stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+				if req.Path != "/api/v1/events?limit="+tt.wantLimit {
+					t.Fatalf("upstream path = %q, want bounded limit %s", req.Path, tt.wantLimit)
+				}
+				return &protocol.K8sResponsePayload{
+					StatusCode: http.StatusOK,
+					Body:       base64.StdEncoding.EncodeToString(eventBody),
+				}, nil
+			}}
+			h := NewWorkloadHandlerWithRequester(stub)
+			rc := chi.NewRouteContext()
+			rc.URLParams.Add("cluster_id", clusterID)
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/events/"+tt.query, nil)
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
+			rec := httptest.NewRecorder()
+
+			h.ListEvents(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestListPodsUsesBoundedKubernetesPage(t *testing.T) {
+	pods := make([]map[string]any, 20)
+	for i := range pods {
+		pods[i] = map[string]any{
+			"metadata": map[string]any{
+				"name":              fmt.Sprintf("pod-%02d", i),
+				"namespace":         "default",
+				"creationTimestamp": "2026-09-18T00:00:00Z",
+			},
+			"status": map[string]any{"phase": "Running"},
+		}
+	}
+	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{"continue": "next", "remainingItemCount": 10592},
+		"items":    pods,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stub := &stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+		if req.Path != "/api/v1/pods?limit=20" {
+			t.Fatalf("upstream path = %q, want bounded first page", req.Path)
+		}
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64.StdEncoding.EncodeToString(body)}, nil
+	}}
+	h := NewWorkloadHandlerWithRequester(stub)
+	clusterID := uuid.NewString()
+	route := chi.NewRouteContext()
+	route.URLParams.Add("cluster_id", clusterID)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/pods/?limit=20&offset=0", nil)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+	rec := httptest.NewRecorder()
+
+	h.ListPods(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var envelope listEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(envelope.Data) != 20 || envelope.Pagination.Total == nil || *envelope.Pagination.Total != 10612 {
+		t.Fatalf("unexpected bounded page: rows=%d pagination=%+v", len(envelope.Data), envelope.Pagination)
+	}
+}
+
+func TestListGenericResourcesPagesSearchesAndSortsFullResult(t *testing.T) {
+	page := func(items []map[string]any, next string) *protocol.K8sResponsePayload {
+		body, err := json.Marshal(map[string]any{
+			"metadata": map[string]any{"continue": next},
+			"items":    items,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64.StdEncoding.EncodeToString(body)}
+	}
+	stub := &stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+		if !strings.Contains(req.Path, "limit=500") {
+			t.Fatalf("upstream path is unbounded: %q", req.Path)
+		}
+		if strings.Contains(req.Path, "continue=next") {
+			return page([]map[string]any{{"metadata": map[string]any{"name": "beta", "namespace": "team-a"}}}, ""), nil
+		}
+		return page([]map[string]any{
+			{"metadata": map[string]any{"name": "alpha", "namespace": "team-a"}},
+			{"metadata": map[string]any{"name": "unrelated", "namespace": "team-b"}},
+		}, "next"), nil
+	}}
+	h := &ResourceHandler{requester: stub}
+	clusterID := uuid.NewString()
+	route := chi.NewRouteContext()
+	route.URLParams.Add("cluster_id", clusterID)
+	route.URLParams.Add("resource_type", "configmaps")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/resources/generic/configmaps/?limit=1&offset=1&search=team-a&sort=name_desc", nil)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+	rec := httptest.NewRecorder()
+
+	h.ListGenericResources(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var envelope listEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(envelope.Data) != 1 || envelope.Data[0]["name"] != "alpha" {
+		t.Fatalf("page = %+v, want second globally sorted match alpha", envelope.Data)
+	}
+	if envelope.Pagination.Total == nil || *envelope.Pagination.Total != 2 {
+		t.Fatalf("pagination = %+v, want total 2", envelope.Pagination)
+	}
+}
+
+func TestListNamedResourcesPreservesUpstreamForbidden(t *testing.T) {
+	body := base64.StdEncoding.EncodeToString([]byte(`{"reason":"Forbidden","message":"sensitive upstream detail"}`))
+	stub := &stubK8sRequester{respFn: func(stubReq) (*protocol.K8sResponsePayload, error) {
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusForbidden, Body: body}, nil
+	}}
+	h := &ResourceHandler{requester: stub}
+	clusterID := uuid.NewString()
+	route := chi.NewRouteContext()
+	route.URLParams.Add("cluster_id", clusterID)
+	route.URLParams.Add("resource_type", "grpcroutes")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/resources/grpcroutes/", nil)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+	rec := httptest.NewRecorder()
+
+	h.ListNamedResources(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "sensitive upstream detail") {
+		t.Fatalf("upstream Kubernetes detail leaked to client: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
+		t.Fatalf("response lacks stable forbidden code: %s", rec.Body.String())
+	}
+}
+
 func doListNodes(t *testing.T, h *WorkloadHandler, query string) listEnvelope {
 	t.Helper()
+	clusterID := uuid.NewString()
 	rc := chi.NewRouteContext()
-	rc.URLParams.Add("cluster_id", "c1")
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/nodes/"+query, nil)
+	rc.URLParams.Add("cluster_id", clusterID)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/nodes/"+query, nil)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
 	rec := httptest.NewRecorder()
 	h.ListNodes(rec, req)

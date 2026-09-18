@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
@@ -56,6 +58,7 @@ type PolicyLister interface {
 // evaluates incoming requests against it. Cache TTL is 30s to match
 // the maintenance-window evaluator. Admin writes invalidate the cache.
 type PolicyEvaluator struct {
+	readTier  func(context.Context) string
 	store     PolicyLister
 	ttl       time.Duration
 	clock     func() time.Time
@@ -119,17 +122,18 @@ func (e *PolicyEvaluator) Invalidate() {
 	e.fetchedAt = time.Time{}
 }
 
-// Match returns the first enabled policy whose path_pattern + verbs
+// Match returns the highest-sampling enabled policy whose path_pattern + verbs
 // matches the given route + method, or nil if no policy applies. The
 // pattern compare is "starts with" against the chi route pattern (not
 // the raw URL) so delete-after-pattern doesn't bypass audit by varying
 // the UUID.
 func (e *PolicyEvaluator) Match(ctx context.Context, routePattern, method string) *sqlc.ReadAuditPolicy {
 	policies := e.ListPolicies(ctx)
-	if len(policies) == 0 {
-		return nil
-	}
 	method = strings.ToUpper(method)
+	var matched *sqlc.ReadAuditPolicy
+	if e.readTier != nil && (method == http.MethodGet || method == http.MethodHead) {
+		matched = readAuditTierPolicy(e.readTier(ctx))
+	}
 	for i := range policies {
 		p := &policies[i]
 		if !verbMatches(p.Verbs, method) {
@@ -138,10 +142,16 @@ func (e *PolicyEvaluator) Match(ctx context.Context, routePattern, method string
 		if !pathMatches(p.PathPattern, routePattern) {
 			continue
 		}
-		return p
+		if matched == nil || p.SampleRate > matched.SampleRate {
+			matched = p
+		}
 	}
-	return nil
+	return matched
 }
+
+// SetReadTierReader wires the shared settings cache before serving requests.
+// A tier adds a coverage floor; it never weakens a configured policy.
+func (e *PolicyEvaluator) SetReadTierReader(read func(context.Context) string) { e.readTier = read }
 
 // Sample returns true when the policy's sample_rate fires for the
 // current draw. SampleRate of 1.0 always fires; 0.0 never does;
@@ -410,13 +420,13 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 		}
 		return sqlc.CreateAuditLogV1Params{
 			Source:          "http",
-			CorrelationID:   GetCorrelationID(r.Context()),
-			UserID:          AuthenticatedUserUUID(r.Context()),
+			CorrelationID:   reqctx.CorrelationID(r.Context()),
+			UserID:          reqctx.UserUUID(r.Context()),
 			ActorAuthMethod: authMethod(r.Context()),
 			Action:          "charlie.http.read",
 			ResourceType:    "charlie_http_request",
 			StatusCode:      int32(status),
-			RequestID:       GetRequestID(r.Context()),
+			RequestID:       reqctx.RequestID(r.Context()),
 			Detail:          detail,
 			ActionClass:     "read",
 		}
@@ -434,8 +444,8 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 	js := mustMarshalDetail(rawDetail)
 	return sqlc.CreateAuditLogV1Params{
 		Source:          "http",
-		CorrelationID:   GetCorrelationID(r.Context()),
-		UserID:          AuthenticatedUserUUID(r.Context()),
+		CorrelationID:   reqctx.CorrelationID(r.Context()),
+		UserID:          reqctx.UserUUID(r.Context()),
 		ActorAuthMethod: authMethod(r.Context()),
 		Action:          action,
 		ResourceType:    "",
@@ -445,8 +455,8 @@ func buildReadAuditRow(r *http.Request, status int, routePattern string, pol *sq
 		Path:            r.URL.Path,
 		StatusCode:      int32(status),
 		DurationMs:      0,
-		RequestID:       GetRequestID(r.Context()),
-		IpAddress:       RemoteIPAddr(r),
+		RequestID:       reqctx.RequestID(r.Context()),
+		IpAddress:       reqctx.ClientIP(r),
 		UserAgent:       r.UserAgent(),
 		Detail:          js,
 		ActionClass:     "read",

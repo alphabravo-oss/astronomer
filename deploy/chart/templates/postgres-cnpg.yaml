@@ -1,0 +1,79 @@
+{{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "astronomer.cnpgClusterName" . }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "postgres") | nindent 4 }}
+spec:
+  instances: {{ .Values.postgres.cloudNativePG.instances }}
+  imageName: {{ .Values.postgres.cloudNativePG.imageName | quote }}
+  primaryUpdateStrategy: unsupervised
+  enableSuperuserAccess: false
+  resources:
+    {{- toYaml .Values.postgres.cloudNativePG.resources | nindent 4 }}
+  bootstrap:
+    {{- if .Values.postgres.cloudNativePG.barmanCloud.recovery.enabled }}
+    {{- $_ := required "postgres.cloudNativePG.barmanCloud.recovery.objectStoreName is required when recovery is enabled" .Values.postgres.cloudNativePG.barmanCloud.recovery.objectStoreName }}
+    {{- $_ := required "postgres.cloudNativePG.barmanCloud.recovery.serverName is required when recovery is enabled" .Values.postgres.cloudNativePG.barmanCloud.recovery.serverName }}
+    recovery:
+      source: {{ .Values.postgres.cloudNativePG.barmanCloud.recovery.sourceName | quote }}
+      {{- with .Values.postgres.cloudNativePG.barmanCloud.recovery.targetTime }}
+      recoveryTarget:
+        targetTime: {{ . | quote }}
+      {{- end }}
+    {{- else }}
+    initdb:
+      database: {{ .Values.postgres.database | quote }}
+      owner: {{ .Values.postgres.user | quote }}
+      dataChecksums: true
+    {{- end }}
+  storage:
+    size: {{ .Values.postgres.cloudNativePG.storage.size }}
+    {{- with .Values.postgres.cloudNativePG.storage.storageClassName }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  {{- if .Values.postgres.cloudNativePG.walStorage.enabled }}
+  walStorage:
+    size: {{ .Values.postgres.cloudNativePG.walStorage.size }}
+    {{- with .Values.postgres.cloudNativePG.walStorage.storageClassName }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: kubernetes.io/hostname
+  {{- if or .Values.postgres.cloudNativePG.parameters .Values.postgres.cloudNativePG.synchronousReplication.enabled }}
+  postgresql:
+    {{- with .Values.postgres.cloudNativePG.parameters }}
+    parameters:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if $.Values.postgres.cloudNativePG.synchronousReplication.enabled }}
+    synchronous:
+      method: any
+      number: {{ $.Values.postgres.cloudNativePG.synchronousReplication.number }}
+      dataDurability: required
+    {{- end }}
+  {{- end }}
+  monitoring:
+    enablePodMonitor: {{ .Values.postgres.cloudNativePG.monitoring.enablePodMonitor }}
+  {{- if .Values.postgres.cloudNativePG.barmanCloud.enabled }}
+  {{- $objectStore := required "postgres.cloudNativePG.barmanCloud.objectStoreName is required when Barman Cloud is enabled" .Values.postgres.cloudNativePG.barmanCloud.objectStoreName }}
+  plugins:
+    - name: {{ .Values.postgres.cloudNativePG.barmanCloud.pluginName | quote }}
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ $objectStore | quote }}
+  {{- end }}
+  {{- if .Values.postgres.cloudNativePG.barmanCloud.recovery.enabled }}
+  externalClusters:
+    - name: {{ .Values.postgres.cloudNativePG.barmanCloud.recovery.sourceName | quote }}
+      plugin:
+        name: {{ .Values.postgres.cloudNativePG.barmanCloud.pluginName | quote }}
+        parameters:
+          barmanObjectName: {{ .Values.postgres.cloudNativePG.barmanCloud.recovery.objectStoreName | quote }}
+          serverName: {{ .Values.postgres.cloudNativePG.barmanCloud.recovery.serverName | quote }}
+  {{- end }}
+{{- end }}

@@ -56,7 +56,7 @@ func storedRow(arg sqlc.CreateHelmRepositoryParams) sqlc.HelmRepository {
 func TestCreateRepoFromUIBodyStoresCredentialAndSyncPathSendsIt(t *testing.T) {
 	enc := testEncryptor(t)
 	q := &sealingCatalogQuerier{}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/catalog/repositories/", bytes.NewBufferString(uiCreateBody))
@@ -104,11 +104,11 @@ func TestCreateRepoFromUIBodyStoresCredentialAndSyncPathSendsIt(t *testing.T) {
 // to set is never the right answer; 400 is.
 func TestCreateRepoRejectsTopLevelCredentials(t *testing.T) {
 	q := &sealingCatalogQuerier{}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(testEncryptor(t))
 
 	// Exactly what the UI used to post.
-	body := `{"name":"private","url":"https://charts.example.com","repoType":"helm",` +
+	body := `{"name":"private","url":"https://charts.example.com","repo_type":"helm",` +
 		`"username":"deploy","password":"s3cret"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/catalog/repositories/", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -130,7 +130,7 @@ func TestCreateRepoRejectsTopLevelCredentials(t *testing.T) {
 // `enabled` wants a working repository, not a dormant one.
 func TestCreateRepoDefaultsToEnabledWhenOmitted(t *testing.T) {
 	q := &sealingCatalogQuerier{}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(testEncryptor(t))
 
 	body := `{"name":"public","url":"https://charts.example.com"}`
@@ -148,7 +148,7 @@ func TestCreateRepoDefaultsToEnabledWhenOmitted(t *testing.T) {
 
 	// ...and an explicit false is still honoured.
 	q2 := &sealingCatalogQuerier{}
-	h2 := &CatalogHandler{queries: q2, log: slog.Default()}
+	h2 := newSealingCatalogHandler(q2)
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/catalog/repositories/",
 		bytes.NewBufferString(`{"name":"paused","url":"https://charts.example.com","enabled":false}`))
 	req2.Header.Set("Content-Type", "application/json")
@@ -165,7 +165,7 @@ func TestCreateRepoDefaultsToEnabledWhenOmitted(t *testing.T) {
 func TestCreateRepoInfersAuthTypeFromCredential(t *testing.T) {
 	enc := testEncryptor(t)
 	q := &sealingCatalogQuerier{}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	body := `{"name":"private","url":"https://charts.example.com",` +
@@ -204,7 +204,7 @@ func TestUpdateRepoWithoutAuthConfigKeepsStoredCredential(t *testing.T) {
 		`{"username":"deploy","password":"s3cret"}`)
 	existing.Enabled = true
 	q := &sealingCatalogQuerier{existing: existing}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	// A rename. Nothing about the credential is mentioned.
@@ -249,7 +249,7 @@ func TestUpdateRepoWithNewCredentialReplacesStored(t *testing.T) {
 	existing := sealRepo(t, enc, "private", "https://charts.example.com", "basic",
 		`{"username":"deploy","password":"old-secret"}`)
 	q := &sealingCatalogQuerier{existing: existing}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	body := `{"auth_config":{"username":"deploy","password":"new-secret"}}`
@@ -280,7 +280,7 @@ func TestUpdateRepoWithEmptyAuthConfigClearsCredential(t *testing.T) {
 	existing := sealRepo(t, enc, "private", "https://charts.example.com", "basic",
 		`{"username":"deploy","password":"s3cret"}`)
 	q := &sealingCatalogQuerier{existing: existing}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	body := `{"auth_type":"none","auth_config":{}}`
@@ -308,7 +308,7 @@ func TestUpdateRepoRejectsTopLevelCredentials(t *testing.T) {
 	existing := sealRepo(t, enc, "private", "https://charts.example.com", "basic",
 		`{"username":"deploy","password":"s3cret"}`)
 	q := &sealingCatalogQuerier{existing: existing}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/catalog/repositories/"+existing.ID.String()+"/",
@@ -333,7 +333,7 @@ func TestRepoWriteResponsesNeverEchoCredential(t *testing.T) {
 	existing := sealRepo(t, enc, "private", "https://charts.example.com", "basic",
 		`{"username":"deploy","password":"s3cret"}`)
 	q := &sealingCatalogQuerier{existing: existing}
-	h := &CatalogHandler{queries: q, log: slog.Default()}
+	h := newSealingCatalogHandler(q)
 	h.SetEncryptor(enc)
 
 	createRec := httptest.NewRecorder()

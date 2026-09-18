@@ -29,7 +29,6 @@ package allowlist
 import (
 	"fmt"
 	"net/netip"
-	"os"
 	"sort"
 	"strings"
 )
@@ -128,16 +127,10 @@ func Render(operatorCIDRs, astronomerEgress, emergency []string) []string {
 	return out
 }
 
-// AstronomerEgressFromEnv reads ASTRONOMER_TUNNEL_EGRESS_CIDRS from env
-// (comma-separated). Returns empty when unset so the reconciler can
-// fall back to operator-only. The chart-values path normally sets this
-// via deploy/chart/templates/* on every operator install; this env-
-// based fallback is the dev-laptop / disconnected-test escape hatch.
-//
-// Unparseable entries are silently dropped (logged elsewhere; we don't
-// crash the worker on a typo in chart values).
-func AstronomerEgressFromEnv() []string {
-	raw := strings.TrimSpace(os.Getenv("ASTRONOMER_TUNNEL_EGRESS_CIDRS"))
+// ParseAstronomerEgress parses the startup-resolved comma-separated tunnel
+// egress CIDRs. Invalid entries are omitted consistently with operator CIDRs.
+func ParseAstronomerEgress(raw string) []string {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}

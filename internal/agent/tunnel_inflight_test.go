@@ -210,6 +210,7 @@ func TestInflightRequestsAreBounded(t *testing.T) {
 	}
 	if rejection == nil {
 		t.Fatal("no rejection frame captured")
+		return
 	}
 	if rejection.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("rejection status = %d, want 429 so the originator retries instead of reading an empty success", rejection.StatusCode)

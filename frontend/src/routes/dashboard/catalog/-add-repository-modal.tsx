@@ -50,19 +50,23 @@ export function AddRepositoryModal({ onClose }: { onClose: () => void }) {
         disabled={!repoName || !repoUrl}
         onClick={() => void form.handleSubmit()}
       >
-        Add Repository
+        Add Catalog Source
       </ActionButton>
     </>
   );
 
   return (
     <ModalShell
-      title="Add Repository"
+      title="Add Catalog Source"
       onClose={onClose}
       size="md"
       footer={footer}
       footerClassName="flex items-center justify-end gap-2"
     >
+      <p className="text-xs text-table-secondary">
+        Add a Helm or OCI source. Its charts appear under a separately named,
+        consistently colored Custom source in the catalog browser.
+      </p>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"

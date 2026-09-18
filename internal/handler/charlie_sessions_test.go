@@ -9,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	charliecontract "github.com/alphabravocompany/astronomer-go/internal/charlie/contract"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -69,7 +70,7 @@ func (f *charlieAccessFake) Stream(_ context.Context, actor, session uuid.UUID, 
 func authenticatedCharlieRequest(method, target, body string, actor uuid.UUID, authMethod string) *http.Request {
 	r := httptest.NewRequest(method, target, strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
-	ctx := appmiddleware.SetAuthenticatedUserForTest(r.Context(), &appmiddleware.AuthenticatedUser{ID: actor.String(), Email: "operator@example.test", AuthMethod: authMethod})
+	ctx := reqctx.WithUser(r.Context(), &reqctx.User{ID: actor.String(), Email: "operator@example.test", AuthMethod: authMethod})
 	return r.WithContext(ctx)
 }
 

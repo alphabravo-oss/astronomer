@@ -40,21 +40,41 @@ import pathlib
 import re
 import sys
 
-pattern = re.compile(
-    r"\b(?:ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE(?:\s+TABLE)?)\s+"
-    r"(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?P<relation>"
-    r"[A-Za-z_][A-Za-z0-9_$\"]*(?:\.[A-Za-z_][A-Za-z0-9_$\"]*)?)",
-    re.IGNORECASE,
-)
+relation = r'[A-Za-z_][A-Za-z0-9_$\"]*(?:\.[A-Za-z_][A-Za-z0-9_$\"]*)?'
+patterns = [
+    re.compile(
+        rf"\b(?:ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE(?:\s+TABLE)?)\s+"
+        rf"(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?P<relation>{relation})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:DROP|ALTER)\s+INDEX\s+(?:CONCURRENTLY\s+)?"
+        rf"(?:IF\s+EXISTS\s+)?(?P<relation>{relation})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?"
+        rf"(?:IF\s+NOT\s+EXISTS\s+)?{relation}\s+ON\s+(?:ONLY\s+)?"
+        rf"(?P<relation>{relation})",
+        re.IGNORECASE,
+    ),
+]
 for name in sys.argv[1:]:
     path = pathlib.Path(name)
     if path.name.startswith("001_"):
         continue
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        sql = line.split("--", 1)[0]
-        match = pattern.search(sql)
-        if match and "." not in match.group("relation"):
-            print(f"{path}:{number}:{line.strip()}")
+    text = path.read_text(encoding="utf-8")
+    sql = "\n".join(line.split("--", 1)[0] for line in text.splitlines())
+    for pattern in patterns:
+        for match in pattern.finditer(sql):
+            if "." in match.group("relation"):
+                continue
+            number = sql.count("\n", 0, match.start()) + 1
+            statement = " ".join(match.group(0).split())
+            print(f"{path}:{number}:{statement}")
+    for match in re.finditer(r"(?<!public\.)\bgin_trgm_ops\b", sql, re.IGNORECASE):
+        number = sql.count("\n", 0, match.start()) + 1
+        print(f"{path}:{number}:unqualified gin_trgm_ops")
 PY
 )"
     if [[ -n "$unqualified_ddl" ]]; then

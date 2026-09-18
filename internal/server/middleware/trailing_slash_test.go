@@ -36,6 +36,10 @@ func TestShouldAddTrailingSlash(t *testing.T) {
 		{"/api/v1/clusters/abc/k8s/openapi/v2", false},
 		{"/api/v1/clusters/abc/k8s/api/v1/namespaces", false},
 		{"/api/v1/internal/k8s/clusters/abc/k8s/openapi/v2", false},
+
+		// Grafana proxy paths are also forwarded verbatim.
+		{"/api/v1/clusters/abc/observability/grafana", false},
+		{"/api/v1/clusters/abc/observability/grafana/api/health", false},
 	}
 	for _, tc := range cases {
 		if got := shouldAddTrailingSlash(tc.path); got != tc.want {

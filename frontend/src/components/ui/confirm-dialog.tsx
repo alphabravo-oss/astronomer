@@ -1,6 +1,4 @@
-"use client";
-
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -33,8 +31,13 @@ export interface DestructiveImpactPreview {
   recovery: string;
 }
 
-export function ConfirmDialog({
-  open,
+export function ConfirmDialog(props: ConfirmDialogProps) {
+  return props.open ? (
+    <ConfirmDialogContent key={props.confirmValue ?? props.title} {...props} />
+  ) : null;
+}
+
+function ConfirmDialogContent({
   onClose,
   onConfirm,
   title,
@@ -48,13 +51,6 @@ export function ConfirmDialog({
   children,
 }: ConfirmDialogProps) {
   const [inputValue, setInputValue] = useState("");
-
-  // Reset input when dialog opens/closes
-  useEffect(() => {
-    if (!open) setInputValue("");
-  }, [open]);
-
-  if (!open) return null;
 
   const canConfirm = confirmValue ? inputValue === confirmValue : true;
 

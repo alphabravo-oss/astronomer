@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * /dashboard/settings/monitoring — lifecycle for the SHARED monitoring
@@ -18,14 +17,14 @@
  * stack does. Every mutating verb, install and uninstall included, is
  * monitoring:update at GLOBAL scope.
  */
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft, BarChart3, Database } from "lucide-react";
 
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { PermissionState } from "@/components/ui/empty-state";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { useQuery } from "@tanstack/react-query";
-import { useClusters, useFeatureFlags } from "@/lib/hooks";
+import { useClusters, useFeatureFlags } from "@/lib/hooks/clusters";
 import { queryKeys } from "@/lib/query-keys";
 import { getMonitoringSizer } from "@/lib/api/monitoring-stack";
 import { useB2StorageLocations } from "@/components/backups/hooks";
@@ -100,24 +99,24 @@ export function SharedMonitoringStacksPage() {
     <PageShell>
       <PageHeader
         eyebrow={
-          <Link
-            href="/dashboard/settings"
+          <RouterLink
+            to="/dashboard/settings"
             className="inline-flex items-center gap-1 hover:text-foreground"
           >
             <ArrowLeft className="h-3 w-3" />
             Settings
-          </Link>
+          </RouterLink>
         }
         title="Shared observability stacks"
         description="Optional deployment-wide tier: Thanos (long-term metric retention), Grafana (fleet lobby on grafana.<host>), and Alertmanager (alert routing). Per-cluster monitoring already runs in-cluster on short-lived rolling storage with no object storage — add Thanos here only to keep metrics beyond each cluster's local retention window. Every action is queued and reconciled server-side."
         actions={
-          <Link
-            href="/dashboard/monitoring"
+          <RouterLink
+            to="/dashboard/monitoring"
             className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <BarChart3 className="h-3.5 w-3.5" />
             Shared metrics
-          </Link>
+          </RouterLink>
         }
       />
 
@@ -129,7 +128,7 @@ export function SharedMonitoringStacksPage() {
       ) : (
         <div className="space-y-4">
           <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-            <Database className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+            <Database className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <p>
               Object storage is required only for Thanos below — it reads
               historical blocks from a bucket. To simply collect metrics on a
@@ -207,7 +206,7 @@ function LokiSizerBanner({
           : "flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive"
       }
     >
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <p>
         Loki sizer: <span className="font-medium">{result || "unknown"}</span>
         {mode ? ` (${mode})` : ""}.

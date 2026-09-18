@@ -1,15 +1,15 @@
-"use client";
-
 import { useMemo } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { useClock } from "@/lib/hooks/use-clock";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useCISScans } from "@/components/security/hooks";
-import { useClusters } from "@/lib/hooks";
+import { useClusters } from "@/lib/hooks/clusters";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
 import { formatRelativeTime, cn } from "@/lib/utils";
+import { pageRowCount } from "@/lib/api/pagination";
 import type { CISScanListItem } from "@/types";
 import {
   Plus,
@@ -28,7 +28,8 @@ import {
  * ClusterScan/Report mutation which surfaces through that channel.
  */
 export function CISScansTab() {
-  const router = useRouter();
+  const now = useClock();
+  const navigate = useNavigate();
   const { data: scansPage, isLoading } = useCISScans({ pageSize: 100 });
   const { data: clustersPage } = useClusters({ pageSize: 200 });
 
@@ -50,7 +51,6 @@ export function CISScansTab() {
   // the last 24h. Surfaces the most actionable item at the top.
   const recentFailures = useMemo(() => {
     const dayMs = 24 * 60 * 60 * 1000;
-    const now = Date.now();
     return scans
       .filter((s) => {
         if (!s.completedAt) return false;
@@ -60,7 +60,7 @@ export function CISScansTab() {
       })
       .sort((a, b) => (b.failed ?? 0) - (a.failed ?? 0))
       .slice(0, 3);
-  }, [scans]);
+  }, [scans, now]);
 
   const columns: Column<CISScanListItem>[] = [
     {
@@ -166,13 +166,14 @@ export function CISScansTab() {
       header: "",
       sortable: false,
       accessor: (row) => (
-        <Link
-          href={`/dashboard/security/scans/${row.id}`}
+        <RouterLink
+          to="/dashboard/security/scans/$scanId"
+          params={{ scanId: row.id }}
           onClick={(e) => e.stopPropagation()}
           className="text-xs text-primary hover:underline"
         >
           View
-        </Link>
+        </RouterLink>
       ),
     },
   ];
@@ -193,7 +194,7 @@ export function CISScansTab() {
       {noScans && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
           <div className="flex items-start gap-3">
-            <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+            <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground">
                 No vulnerability reports yet
@@ -204,12 +205,12 @@ export function CISScansTab() {
                 automatically once the operator finishes its first scan window.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                <Link
-                  href="/dashboard/clusters"
+                <RouterLink
+                  to="/dashboard/clusters"
                   className="font-medium text-primary hover:underline"
                 >
                   Apply the Platform Baseline template to a cluster →
-                </Link>
+                </RouterLink>
                 <span className="text-muted-foreground">
                   (installs trivy-operator + the other baseline tools)
                 </span>
@@ -226,7 +227,7 @@ export function CISScansTab() {
       {recentFailures.length > 0 && (
         <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-status-error flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-status-error shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground">
                 {recentFailures.reduce((sum, s) => sum + (s.failed ?? 0), 0)}{" "}
@@ -236,12 +237,13 @@ export function CISScansTab() {
               <ul className="mt-2 space-y-1.5">
                 {recentFailures.map((s) => (
                   <li key={s.id} className="flex items-center gap-2 text-xs">
-                    <Link
-                      href={`/dashboard/security/scans/${s.id}`}
+                    <RouterLink
+                      to="/dashboard/security/scans/$scanId"
+                      params={{ scanId: s.id }}
                       className="text-foreground hover:text-primary hover:underline font-medium"
                     >
                       {clusterById.get(s.clusterId) ?? s.clusterId.slice(0, 8)}
-                    </Link>
+                    </RouterLink>
                     <span className="text-muted-foreground font-mono">
                       {s.scanType}
                     </span>
@@ -266,13 +268,13 @@ export function CISScansTab() {
       {/* Header bar with the New Scan CTA. */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {scansPage?.total ?? scans.length} historical scan
+          {pageRowCount(scansPage)} historical scan
           {scans.length === 1 ? "" : "s"} across all clusters
         </p>
         <ActionButton
           intent="primary"
           icon={<Plus className="h-4 w-4" />}
-          onClick={() => router.push("/dashboard/security/scans/new")}
+          onClick={() => void navigate({ to: "/dashboard/security/scans/new" })}
         >
           New Scan
         </ActionButton>
@@ -284,12 +286,15 @@ export function CISScansTab() {
         keyExtractor={(row) => row.id}
         loading={isLoading}
         searchPlaceholder="Search scans..."
-        emptyMessage={
-          isLoading
-            ? "Loading scans…"
-            : 'No CIS scans yet. Click "New Scan" to run your first benchmark.'
+        emptyState={{
+          title: "No CIS scans yet",
+          description:
+            "Run a benchmark to identify security findings across your clusters.",
+          action: { label: "New scan", href: "/dashboard/security/scans/new" },
+        }}
+        onRowClick={(row) =>
+          void navigate({ to: `/dashboard/security/scans/${row.id}` })
         }
-        onRowClick={(row) => router.push(`/dashboard/security/scans/${row.id}`)}
       />
     </div>
   );

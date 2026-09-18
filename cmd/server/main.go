@@ -35,7 +35,11 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 	}
 
 	if args[0] == "grafana-proxy" {
-		if err := grafanaproxy.Run(); err != nil {
+		cfg, err := grafanaproxy.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("GRAFANA_UPSTREAM"), os.Getenv("ASTRONOMER_URL"), os.Getenv("GRAFANA_PUBLIC_PATH"), os.Getenv("GRAFANA_PROXY_KEY"))
+		if err == nil {
+			err = grafanaproxy.Run(cfg)
+		}
+		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "grafana-proxy: %v\n", err)
 			return true, 1
 		}
@@ -43,7 +47,11 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 	}
 
 	if args[0] == "loki-auth" {
-		if err := lokiauth.Run(); err != nil {
+		cfg, err := lokiauth.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("LOKI_UPSTREAM"), os.Getenv("HASHES_PATH"), os.Getenv("ACL_PATH"), os.Getenv("QUERY_KEY_PATH"))
+		if err == nil {
+			err = lokiauth.Run(cfg)
+		}
+		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "loki-auth: %v\n", err)
 			return true, 1
 		}
@@ -80,7 +88,7 @@ func main() {
 	default:
 		level = slog.LevelInfo
 	}
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 
 	observability.WithEvent(logger, "server_starting").Info("starting astronomer server",
@@ -94,9 +102,17 @@ func main() {
 	// exporter behind the global TracerProvider so the chi otelhttp
 	// middleware, pgx OTel tracer, and tunnel originator spans all
 	// flow into the same backend.
-	tracingCfg := observability.TracingFromEnv()
+	tracingCfg := observability.TracingConfig{
+		Endpoint: cfg.OTELExporterEndpoint, Insecure: cfg.OTELExporterInsecure,
+		Headers:     observability.ParseOTLPHeaders(cfg.OTELExporterHeaders),
+		ServiceName: cfg.OTELServiceName, ServiceVersion: cfg.OTELServiceVersion,
+		SamplerRatio: cfg.OTELSamplerRatio,
+	}
 	tracingCfg.ServiceName = "astronomer-server"
 	tracingCfg.ServiceVersion = version.Version
+	tracingCfg.Environment = cfg.Env
+	tracingCfg.ServiceNamespace = "astronomer"
+	tracingCfg.ServiceInstanceID = cfg.ProcessHostname
 	otelShutdown, err := observability.InitTracing(context.Background(), logger, tracingCfg)
 	if err != nil {
 		logger.Error("failed to init otel tracing", "error", err)
@@ -158,11 +174,27 @@ func main() {
 		auditWriter = audit.NewWriter(queries, logger)
 		auditWriter.Start(context.Background())
 		audit.SetWriter(auditWriter)
+		srv.AddShutdownHook("audit writer", func(ctx context.Context) error {
+			defer audit.SetWriter(nil)
+			err := auditWriter.Shutdown(ctx)
+			if err != nil {
+				observability.WithEvent(logger, "server_audit_shutdown_error").Warn("audit writer shutdown error",
+					"dropped_total", auditWriter.DropCount(),
+					"error", err,
+				)
+			}
+			return err
+		})
 		// Rancher-style: if no users exist, create the admin with either
 		// $ASTRONOMER_BOOTSTRAP_PASSWORD or a random password (logged once)
 		// and flag must_change_password so the dashboard forces a rotation
 		// on first sign-in.
-		if err := auth.EnsureBootstrapAdmin(context.Background(), queries, logger); err != nil {
+		if err := auth.EnsureBootstrapAdmin(context.Background(), queries, auth.BootstrapAdminConfig{
+			Password:            cfg.BootstrapAdminPassword,
+			Username:            cfg.BootstrapAdminUsername,
+			Email:               cfg.BootstrapAdminEmail,
+			ForcePasswordChange: cfg.BootstrapAdminForcePasswordChange,
+		}, logger); err != nil {
 			logger.Error("failed to ensure bootstrap admin", "error", err)
 			os.Exit(1)
 		}
@@ -177,25 +209,49 @@ func main() {
 	// Graceful shutdown on SIGINT / SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	srv.AddShutdownHook("otel pipeline", func(ctx context.Context) error {
+		err := otelShutdown(ctx)
+		if err != nil {
+			observability.WithEvent(logger, "server_otel_shutdown_error").Warn("otel shutdown error", "error", err)
+		}
+		return err
+	})
 
 	if srv.DB() != nil {
-		db.StartMetricsReporter(ctx, srv.DB().Pool(), logger)
+		if err := srv.AddRuntimeLoop("database-metrics-reporter", true, func(ctx context.Context) error {
+			db.RunMetricsReporter(ctx, srv.DB().Pool(), logger)
+			return nil
+		}); err != nil {
+			logger.Error("failed to register database metrics reporter", "error", err)
+			os.Exit(1)
+		}
+	}
+	if cfg.ServerMetricsAddr != "" {
+		if err := srv.AddRuntimeLoop("metrics-listener", true, func(ctx context.Context) error {
+			return server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger)
+		}); err != nil {
+			logger.Error("failed to register metrics listener", "error", err)
+			os.Exit(1)
+		}
 	}
 
-	go func() {
-		if err := srv.Start(":8000"); err != nil {
-			observability.WithEvent(logger, "server_runtime_error").Error("server error", "error", err)
-			os.Exit(1)
+	runtimeResults := make(chan error, 1)
+	go func() { runtimeResults <- srv.Start(":8000") }()
+	runtimeFailed := false
+	runtimeJoined := false
+	select {
+	case <-ctx.Done():
+	case result := <-runtimeResults:
+		runtimeJoined = true
+		if ctx.Err() == nil {
+			runtimeFailed = true
+			if result == nil {
+				result = fmt.Errorf("server exited unexpectedly")
+			}
+			observability.WithEvent(logger, "server_runtime_error").Error("runtime component exited", "error", result)
 		}
-	}()
-	go func() {
-		if err := server.StartMetricsServer(ctx, cfg.ServerMetricsAddr, logger); err != nil {
-			observability.WithEvent(logger, "server_metrics_listener_error").Error("server metrics listener error", "error", err)
-			os.Exit(1)
-		}
-	}()
-
-	<-ctx.Done()
+		stop()
+	}
 	observability.WithEvent(logger, "server_stopping").Info("shutting down server")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -203,31 +259,23 @@ func main() {
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		observability.WithEvent(logger, "server_shutdown_error").Error("shutdown error", "error", err)
-		os.Exit(1)
+		runtimeFailed = true
 	}
-
-	// Drain the audit writer's pending events before we let the DB
-	// pool close. The writer's Shutdown blocks until either the final
-	// batch flushes or the shared 10s shutdownCtx deadline fires —
-	// anything still buffered after the deadline is the same kind of
-	// loss as a hard crash and is counted in the dropped metric.
-	if auditWriter != nil {
-		if err := auditWriter.Shutdown(shutdownCtx); err != nil {
-			observability.WithEvent(logger, "server_audit_shutdown_error").Warn("audit writer shutdown error",
-				"dropped_total", auditWriter.DropCount(),
-				"error", err,
-			)
+	if !runtimeJoined {
+		select {
+		case err := <-runtimeResults:
+			if err != nil {
+				observability.WithEvent(logger, "server_runtime_error").Error("server listener stopped with error", "error", err)
+				runtimeFailed = true
+			}
+		case <-shutdownCtx.Done():
+			observability.WithEvent(logger, "server_shutdown_error").Error("server listener did not join", "error", shutdownCtx.Err())
+			runtimeFailed = true
 		}
-		audit.SetWriter(nil)
-	}
-
-	// Flush + close the OTel pipeline before exit so the last batch of
-	// spans isn't dropped. Bounded by the same 10s window as the HTTP
-	// shutdown — anything still buffered after that loses to graceful
-	// exit pressure.
-	if err := otelShutdown(shutdownCtx); err != nil {
-		observability.WithEvent(logger, "server_otel_shutdown_error").Warn("otel shutdown error", "error", err)
 	}
 
 	observability.WithEvent(logger, "server_stopped").Info("server stopped")
+	if runtimeFailed {
+		os.Exit(1)
+	}
 }

@@ -8,11 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // fakeNativeRBACQuerier records whether a rule was actually persisted so a test
@@ -45,6 +46,12 @@ func (f *fakeNativeRBACQuerier) GetNativeRBACRuleForUpdate(ctx context.Context, 
 func (f *fakeNativeRBACQuerier) ListNativeRBACRulesByUser(context.Context, uuid.UUID) ([]sqlc.NativeRbacRule, error) {
 	return nil, nil
 }
+func (f *fakeNativeRBACQuerier) ListNativeRBACRulesByUserPage(context.Context, sqlc.ListNativeRBACRulesByUserPageParams) ([]sqlc.NativeRbacRule, error) {
+	return nil, nil
+}
+func (f *fakeNativeRBACQuerier) CountNativeRBACRulesByUser(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
 func (f *fakeNativeRBACQuerier) ListNativeRBACRules(context.Context, sqlc.ListNativeRBACRulesParams) ([]sqlc.NativeRbacRule, error) {
 	return nil, nil
 }
@@ -66,13 +73,13 @@ func createNativeRuleReq(t *testing.T, callerID string, body map[string]any) *ht
 		t.Fatalf("marshal body: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/native-rbac-rules/", bytes.NewReader(raw))
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: callerID, AuthMethod: "jwt"})
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: callerID, AuthMethod: "jwt"})
 	return req.WithContext(ctx)
 }
 
 func newGuardedNativeHandler(bindings []rbac.RoleBinding) (*NativeRBACHandler, *fakeNativeRBACQuerier) {
 	q := &fakeNativeRBACQuerier{}
-	h := NewNativeRBACHandler(q)
+	h := wireNativeRBACMutationFixture(NewNativeRBACHandler(q), q)
 	h.SetAuthorization(rbac.NewEngine(), stubNativeEscalationBindings{bindings: bindings})
 	return h, q
 }
@@ -297,7 +304,7 @@ func TestNativeRBACCreate_SuperuserBypass(t *testing.T) {
 func TestNativeRBACCreate_NoAuthzWiredSkipsGuard(t *testing.T) {
 	callerID := uuid.NewString()
 	q := &fakeNativeRBACQuerier{}
-	h := NewNativeRBACHandler(q) // no SetAuthorization
+	h := wireNativeRBACMutationFixture(NewNativeRBACHandler(q), q) // no SetAuthorization
 
 	rec := httptest.NewRecorder()
 	req := createNativeRuleReq(t, callerID, map[string]any{

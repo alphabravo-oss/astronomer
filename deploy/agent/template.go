@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
@@ -48,10 +49,18 @@ type InstallTemplateData struct {
 	PrivilegeProfile     string
 	ServiceAccountName   string
 	PodLabels            map[string]string
+	AgentOverrides       AgentOverrides
 	SystemArtifactURL    string
 	SystemArtifactDigest string
 	SystemOIDCIssuer     string
 	SystemOIDCIdentity   string
+	// Agent tracing is intentionally limited to non-secret routing settings.
+	// Collector authentication headers stay management-plane local unless an
+	// adopted cluster is configured with its own Secret-backed collector path.
+	OTELEndpoint     string
+	OTELInsecure     bool
+	OTELSamplerRatio string
+	Environment      string
 }
 
 // CAChecksumFromPEM computes the Rancher CATTLE_CA_CHECKSUM-style pin for a CA
@@ -97,6 +106,14 @@ func RenderInstallYAML(data InstallTemplateData) string {
 	if trimmed := strings.TrimSpace(data.CACert); trimmed != "" {
 		caCert = base64.StdEncoding.EncodeToString([]byte(trimmed))
 	}
+	otelSamplerRatio := strings.TrimSpace(data.OTELSamplerRatio)
+	if otelSamplerRatio == "" {
+		otelSamplerRatio = "0.05"
+	}
+	environment := strings.TrimSpace(data.Environment)
+	if environment == "" {
+		environment = "managed-cluster"
+	}
 	agentManifest := strings.NewReplacer(
 		"{{AGENT_INSECURE}}", insecure,
 		// L7: every scalar below renders into a double-quoted YAML scalar in
@@ -113,10 +130,19 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{CA_CHECKSUM}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.CAChecksum)),
 		"{{AGENT_IMAGE}}", escapeYAMLDoubleQuoted(data.AgentImage),
 		"{{AGENT_IMAGE_REPOSITORY}}", escapeYAMLDoubleQuoted(imageRepositoryOf(data.AgentImage)),
+		"{{OTEL_EXPORTER_OTLP_ENDPOINT}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.OTELEndpoint)),
+		"{{OTEL_EXPORTER_OTLP_INSECURE}}", strconv.FormatBool(data.OTELInsecure),
+		"{{OTEL_TRACES_SAMPLER_ARG}}", escapeYAMLDoubleQuoted(otelSamplerRatio),
+		"{{AGENT_ENVIRONMENT}}", escapeYAMLDoubleQuoted(environment),
 		"{{SYSTEM_OIDC_ISSUER}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIssuer)),
 		"{{SYSTEM_OIDC_IDENTITY}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIdentity)),
 		"{{AGENT_SERVICE_ACCOUNT_NAME}}", serviceAccountName,
 		"{{AGENT_POD_LABELS}}", PodLabelsYAML(data.PodLabels),
+		"{{AGENT_CONFIGURATION_DIGEST}}", mustAgentOverridesDigest(data.AgentOverrides),
+		"{{AGENT_PROXY_ENV}}", data.AgentOverrides.proxyEnvYAML(),
+		"{{AGENT_RESOURCES}}", data.AgentOverrides.resourcesYAML(),
+		"{{AGENT_AFFINITY}}", data.AgentOverrides.affinityYAML(),
+		"{{AGENT_TOLERATIONS}}", data.AgentOverrides.tolerationsYAML(),
 		"{{PRIVILEGE_PROFILE}}", profile,
 		"{{AGENT_RBAC_RULES}}", RBACRulesYAML(profile),
 		"{{AGENT_DELIVERY_CLUSTER_RULES}}", DeliveryClusterRulesYAML(profile),
@@ -127,6 +153,17 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{DIRECT_KUBECONFIG_RBAC_RULES}}", viewerRBACRulesYAML,
 	).Replace(installTemplate)
 	return fluxdistribution.InstallYAML() + "\n" + agentManifest + renderSystemBootstrap(data)
+}
+
+func mustAgentOverridesDigest(overrides AgentOverrides) string {
+	digest, err := overrides.Digest()
+	if err != nil {
+		// InstallTemplateData is an internal typed rendering boundary. Invalid
+		// values are a programming or persisted-data invariant violation; never
+		// emit a partly customized security-sensitive manifest.
+		panic(err)
+	}
+	return digest
 }
 
 func renderSystemBootstrap(data InstallTemplateData) string {
@@ -288,7 +325,7 @@ func SelfManagementNamespacedRulesYAML() string {
 
 // SelfManagementOwnDeploymentRulesYAML returns the rules block letting the agent
 // patch/update its OWN Deployment (resourceName-scoped to "astronomer-agent"),
-// so an Argo-driven version bump can roll the agent. Like the token Role, this
+// so a governed Flux delivery version bump can roll the agent. Like the token Role, this
 // is operational self-management and is granted for EVERY profile. Mirrors the
 // astronomer-agent-token Role's resourceName-scoping so it never widens to
 // other Deployments in the namespace.
@@ -355,6 +392,11 @@ const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch"]
+  # Storage ownership and default-class posture are part of the read-only
+  # system inventory. Volume contents and credentials are never requested.
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "csidrivers", "csinodes", "csistoragecapacities", "volumeattachments"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "list", "watch"]
@@ -368,10 +410,24 @@ const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints
   # grants nothing). Present so the agent's GatewayClass / Trivy informers don't
   # log RBAC denials where those operators are installed.
   - apiGroups: ["gateway.networking.k8s.io"]
-    resources: ["gatewayclasses"]
+    resources: ["gatewayclasses", "gateways", "httproutes", "grpcroutes", "referencegrants", "tcproutes", "udproutes", "tlsroutes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["aquasecurity.github.io"]
     resources: ["vulnerabilityreports"]
+    verbs: ["get", "list", "watch"]
+  # Optional service-mesh inventory. These are read-only discovery grants;
+  # absent CRDs still return NotFound and do not broaden workload authority.
+  - apiGroups: ["networking.istio.io"]
+    resources: ["gateways", "virtualservices", "destinationrules", "sidecars", "serviceentries"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["security.istio.io"]
+    resources: ["authorizationpolicies", "peerauthentications"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["linkerd.io"]
+    resources: ["serviceprofiles"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["policy.linkerd.io"]
+    resources: ["servers"]
     verbs: ["get", "list", "watch"]
   - nonResourceURLs: ["/healthz", "/livez", "/readyz", "/metrics", "/version"]
     verbs: ["get"]`
@@ -391,6 +447,9 @@ const namespaceViewerRBACRulesYAML = `  # Namespace-scoped read-only inventory a
     verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "httproutes", "grpcroutes", "referencegrants", "tcproutes", "udproutes", "tlsroutes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
@@ -528,7 +587,7 @@ const selfManagementNamespacedRulesYAML = `  # Astronomer manages its own footpr
 
 // selfManagementOwnDeploymentRulesYAML lets the agent manage ONLY its own
 // Deployment (resourceName-scoped), mirroring the astronomer-agent-token Role.
-// This is what lets an Argo-driven version bump roll the agent without granting
+// This lets a governed Flux delivery version bump roll the agent without granting
 // write over other Deployments. Granted for every profile.
 const selfManagementOwnDeploymentRulesYAML = `  - apiGroups: ["apps"]
     resources: ["deployments"]

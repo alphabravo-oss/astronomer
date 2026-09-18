@@ -34,6 +34,10 @@ func TestChartRendersHardenedBackupJobSecurityContexts(t *testing.T) {
 	values := []byte(`
 managementBackup:
   enabled: true
+  encryption:
+    sourceIdentity: test-installation
+    wrappingSecretRef:
+      name: backup-wrap
   s3:
     bucket: astronomer-backups
     credentialsSecretRef:
@@ -46,6 +50,7 @@ managementRestoreDrill:
 	}
 
 	out := helmTemplateWithValueFiles(t, []string{valuesPath})
+	docs := parseRenderedDocs(t, out)
 	assertRenderedContains(t, out,
 		"name: astronomer-management-backup",
 		"name: pgdump-s3",
@@ -62,6 +67,27 @@ managementRestoreDrill:
 		"name: scratch",
 		"mountPath: /tmp",
 	)
+	for _, name := range []string{"astronomer-management-backup", "astronomer-restore-drill"} {
+		doc := findRenderedDoc(t, docs, "CronJob", name)
+		podSpec := podSpecFor(doc)
+		if mounted, ok := podSpec["automountServiceAccountToken"].(bool); !ok || mounted {
+			t.Fatalf("%s automountServiceAccountToken = %#v, want false", name, podSpec["automountServiceAccountToken"])
+		}
+		if serviceAccount := stringValue(podSpec["serviceAccountName"]); serviceAccount != "" {
+			t.Fatalf("%s is coupled to Kubernetes ServiceAccount %q", name, serviceAccount)
+		}
+	}
+}
+
+func renderedDocumentContaining(t *testing.T, rendered, needle string) string {
+	t.Helper()
+	for _, doc := range strings.Split(rendered, "\n---\n") {
+		if strings.Contains(doc, needle) {
+			return doc
+		}
+	}
+	t.Fatalf("rendered document containing %q not found", needle)
+	return ""
 }
 
 func assertRenderedContains(t *testing.T, out string, wants ...string) {

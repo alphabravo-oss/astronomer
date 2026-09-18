@@ -13,19 +13,9 @@ import (
 )
 
 type Planner struct {
-	store        PlanningStore
-	now          func() time.Time
-	newID        IDGenerator
-	requireAudit bool
-}
-
-// RequireTransactionalAudit makes missing audit intent a fail-closed
-// configuration error. Production enables this; narrow domain tests may omit
-// HTTP-originated audit metadata.
-func (p *Planner) RequireTransactionalAudit() {
-	if p != nil {
-		p.requireAudit = true
-	}
+	store PlanningStore
+	now   func() time.Time
+	newID IDGenerator
 }
 
 func NewPlanner(store PlanningStore, now func() time.Time, newID IDGenerator) (*Planner, error) {
@@ -48,7 +38,7 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 	if err := validateCreateRequest(request); err != nil {
 		return FrozenRollout{}, err
 	}
-	if p.requireAudit && request.Audit.IsZero() {
+	if request.Audit.IsZero() {
 		return FrozenRollout{}, audit.ErrOutboxUnavailable
 	}
 	strategyDigest, err := request.Strategy.CanonicalDigest()
@@ -70,9 +60,6 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 	var result FrozenRollout
 	err = p.store.InTransaction(ctx, func(tx PlanningTransaction) error {
 		recordIntent := func() error {
-			if request.Audit.IsZero() {
-				return nil
-			}
 			intent := request.Audit
 			intent.Event.ResourceID = result.ID.String()
 			if intent.Event.Detail == nil {
@@ -151,6 +138,10 @@ func (p *Planner) Create(ctx context.Context, request CreateRequest) (FrozenRoll
 			return cohortErr
 		}
 		for index := range clusters {
+			if desired, exists := snapshot.DesiredByCluster[clusters[index].ClusterID]; exists {
+				copy := desired
+				clusters[index].Desired = &copy
+			}
 			if previous, exists := snapshot.PreviousByCluster[clusters[index].ClusterID]; exists {
 				copy := previous
 				clusters[index].Previous = &copy
@@ -221,10 +212,25 @@ func validateSnapshot(snapshot PlanningSnapshot) error {
 	if err := snapshot.Desired.Validate(); err != nil {
 		return &Error{Code: CodeInvariant, Field: "snapshot.desired", Cause: err}
 	}
+	expectedPlacementDigest := snapshot.Desired.SpecDigest
+	if snapshot.ConfigurationSetDigest != "" {
+		if err := snapshot.ConfigurationSetDigest.Validate(); err != nil {
+			return &Error{Code: CodeInvariant, Field: "snapshot.configuration_set_digest", Cause: err}
+		}
+		expectedPlacementDigest = snapshot.ConfigurationSetDigest
+	}
 	identity := snapshot.PlacementRequest.Identity
 	if identity.TargetGeneration != snapshot.TargetGeneration || identity.BundleVersionID != snapshot.Desired.BundleVersionID ||
-		identity.BundleSpecDigest != snapshot.Desired.SpecDigest || identity.ResolvedRevision != snapshot.Desired.Source.Revision {
+		identity.BundleSpecDigest != expectedPlacementDigest || identity.ResolvedRevision != snapshot.Desired.Source.Revision {
 		return fail(CodeInvariant, "snapshot.placement_identity", "does not match the frozen target and desired version")
+	}
+	for clusterID, desired := range snapshot.DesiredByCluster {
+		if clusterID == uuid.Nil || desired.BundleVersionID != snapshot.Desired.BundleVersionID {
+			return fail(CodeInvariant, "snapshot.desired_by_cluster", "contains an invalid cluster or bundle identity")
+		}
+		if err := desired.Validate(); err != nil {
+			return &Error{Code: CodeInvariant, Field: "snapshot.desired_by_cluster", Cause: err}
+		}
 	}
 	for clusterID, previous := range snapshot.PreviousByCluster {
 		if clusterID == uuid.Nil {
@@ -245,18 +251,34 @@ func approvalDigest(plan FrozenRollout, cohort int) (model.Digest, error) {
 		}
 		clusterIDs = plan.Cohorts[cohort].ClusterIDs
 	}
+	type clusterConfiguration struct {
+		ClusterID uuid.UUID    `json:"cluster_id"`
+		Digest    model.Digest `json:"spec_digest"`
+	}
+	configurations := make([]clusterConfiguration, 0, len(plan.Clusters))
+	for _, cluster := range plan.Clusters {
+		if cohort >= 0 && cluster.Cohort != cohort {
+			continue
+		}
+		digest := plan.Desired.SpecDigest
+		if cluster.Desired != nil {
+			digest = cluster.Desired.SpecDigest
+		}
+		configurations = append(configurations, clusterConfiguration{ClusterID: cluster.ClusterID, Digest: digest})
+	}
 	return model.CanonicalDigest(struct {
-		RolloutID        uuid.UUID    `json:"rollout_id"`
-		TargetID         uuid.UUID    `json:"target_id"`
-		TargetGeneration uint64       `json:"target_generation"`
-		PlacementDigest  model.Digest `json:"placement_digest"`
-		BundleVersionID  uuid.UUID    `json:"bundle_version_id"`
-		SpecDigest       model.Digest `json:"spec_digest"`
-		StrategyDigest   model.Digest `json:"strategy_digest"`
-		Actor            string       `json:"actor"`
-		Cohort           int          `json:"cohort"`
-		ClusterIDs       []uuid.UUID  `json:"cluster_ids,omitempty"`
-	}{plan.ID, plan.TargetID, plan.TargetGeneration, plan.PlacementDigest, plan.Desired.BundleVersionID, plan.Desired.SpecDigest, plan.StrategyDigest, plan.Actor, cohort, clusterIDs})
+		RolloutID        uuid.UUID              `json:"rollout_id"`
+		TargetID         uuid.UUID              `json:"target_id"`
+		TargetGeneration uint64                 `json:"target_generation"`
+		PlacementDigest  model.Digest           `json:"placement_digest"`
+		BundleVersionID  uuid.UUID              `json:"bundle_version_id"`
+		SpecDigest       model.Digest           `json:"spec_digest"`
+		StrategyDigest   model.Digest           `json:"strategy_digest"`
+		Actor            string                 `json:"actor"`
+		Cohort           int                    `json:"cohort"`
+		ClusterIDs       []uuid.UUID            `json:"cluster_ids,omitempty"`
+		Configurations   []clusterConfiguration `json:"configurations"`
+	}{plan.ID, plan.TargetID, plan.TargetGeneration, plan.PlacementDigest, plan.Desired.BundleVersionID, plan.Desired.SpecDigest, plan.StrategyDigest, plan.Actor, cohort, clusterIDs, configurations})
 }
 
 func frozenDigest(plan FrozenRollout) (model.Digest, error) {
@@ -319,6 +341,14 @@ func (plan FrozenRollout) Validate() error {
 				return fail(CodeInvariant, "clusters", "contains duplicate membership")
 			}
 			seen[clusterID] = struct{}{}
+			if cluster.Desired != nil {
+				if desiredErr := cluster.Desired.Validate(); desiredErr != nil {
+					return desiredErr
+				}
+				if cluster.Desired.BundleVersionID != plan.Desired.BundleVersionID {
+					return fail(CodeInvariant, "clusters.desired", "bundle version must match the rollout")
+				}
+			}
 			if cluster.Previous != nil {
 				if previousErr := cluster.Previous.Validate(); previousErr != nil {
 					return previousErr

@@ -143,6 +143,37 @@ func TestExtractK8sPath(t *testing.T) {
 	}
 }
 
+func TestCanonicalK8sProxyPathRejectsAlternateEncodingsAndTraversal(t *testing.T) {
+	tests := []string{
+		"/api/v1/clusters/c1/k8s/api/v1/namespaces/default/%73ecrets/db",
+		"/api/v1/clusters/c1/k8s/api/v1/namespaces/default/secrets%2fdb",
+		"/api/v1/clusters/c1/k8s/api/v1/namespaces/default/../secrets/db",
+	}
+	for _, target := range tests {
+		t.Run(target, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			if _, err := CanonicalK8sProxyPath(req); !errors.Is(err, ErrInvalidK8sProxyPath) {
+				t.Fatalf("CanonicalK8sProxyPath error = %v, want %v", err, ErrInvalidK8sProxyPath)
+			}
+			if _, err := buildK8sRequestPayload(req); !errors.Is(err, ErrInvalidK8sProxyPath) {
+				t.Fatalf("buildK8sRequestPayload error = %v, want %v", err, ErrInvalidK8sProxyPath)
+			}
+		})
+	}
+}
+
+func TestCanonicalK8sProxyPathContextIsAuthoritative(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/c1/k8s/api/v1/pods", nil)
+	req = WithCanonicalK8sProxyPath(req, "/api/v1/secrets")
+	payload, err := buildK8sRequestPayload(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if payload.Path != "/api/v1/secrets" {
+		t.Fatalf("forwarded path = %q, want context path", payload.Path)
+	}
+}
+
 func TestHandleK8sProxy_Timeout(t *testing.T) {
 	hub := NewHub(slog.Default())
 
@@ -266,6 +297,45 @@ func TestHandleK8sProxy_InvalidAgentResponseRecordsMetric(t *testing.T) {
 	}
 	if got := tunnelMetricValue(t, k8sProxyErrorsTotal.WithLabelValues(observability.MetricValues("normal", "invalid_response")...)); got != 1 {
 		t.Fatalf("invalid_response errors = %v, want 1", got)
+	}
+}
+
+func TestHandleK8sProxy_ReplacedAgentReturnsServiceUnavailable(t *testing.T) {
+	k8sProxyErrorsTotal.Reset()
+	hub := NewHub(slog.Default())
+	oldAgent := &AgentConnection{
+		ClusterID: "cluster-replaced",
+		Streams:   NewStreamManager(256),
+		sendCh:    make(chan *protocol.Message, sendChannelSize),
+		cancel:    func() {},
+	}
+	hub.agents.Set("cluster-replaced", oldAgent)
+
+	proxy := NewProxyHandler(hub, slog.Default())
+	r := chi.NewRouter()
+	r.HandleFunc("/api/v1/clusters/{cluster_id}/k8s/*", proxy.HandleK8sProxy)
+
+	go func() {
+		<-oldAgent.sendCh
+		newAgent := &AgentConnection{
+			ClusterID: "cluster-replaced",
+			Streams:   NewStreamManager(256),
+			sendCh:    make(chan *protocol.Message, sendChannelSize),
+			cancel:    func() {},
+		}
+		replaced := hub.agents.Set("cluster-replaced", newAgent)
+		replaced.Streams.CloseAll()
+	}()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/cluster-replaced/k8s/api/v1/events", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := tunnelMetricValue(t, k8sProxyErrorsTotal.WithLabelValues(observability.MetricValues("normal", "agent_replaced")...)); got != 1 {
+		t.Fatalf("agent_replaced errors = %v, want 1", got)
 	}
 }
 

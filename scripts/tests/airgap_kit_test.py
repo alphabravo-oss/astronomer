@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -48,7 +49,7 @@ def subject(name: str, kind: str) -> dict:
 
 
 def manifest() -> dict:
-    names = ("agent", "frontend", "migrate", "server", "shell", "worker")
+    names = ("agent", "dr", "frontend", "migrate", "server", "shell", "worker")
     images = [subject(name, "container_image") for name in names]
     return {
         "schema_version": 1,
@@ -70,7 +71,6 @@ def manifest() -> dict:
                     "valkey/valkey:8-alpine": f"docker.io/valkey/valkey@{DIGEST}",
                     "dexidp/dex:v2.41.1": f"docker.io/dexidp/dex@{DIGEST}",
                     "fluent/fluent-bit:3.2.4": f"docker.io/fluent/fluent-bit@{DIGEST}",
-                    "ghcr.io/alphabravocompany/pgdump-s3:16-awscli": f"ghcr.io/alphabravocompany/pgdump-s3@{DIGEST}",
                 }.items()
             ],
         },
@@ -87,6 +87,47 @@ def manifest() -> dict:
 
 
 class AirgapKitTest(unittest.TestCase):
+    def write_minimal_image_archive(
+        self,
+        path: Path,
+        manifest_path: Path,
+        document: dict,
+        *,
+        index_mutator=None,
+        extra_members: list[tuple[tarfile.TarInfo, bytes]] | None = None,
+        payload: bytes = b"immutable-image-layout",
+    ) -> None:
+        directory = DIGEST.removeprefix("sha256:")
+        payload_name = f"{directory}/manifest.json"
+        sources = KIT.container_images(document, first_party=True)
+        index = {
+            "schema_version": 1,
+            "release_version": document["release"]["version"],
+            "release_manifest_sha256": KIT.sha256_path(manifest_path),
+            "scope": "first_party",
+            "os": "linux",
+            "arch": "amd64",
+            "all_platforms": False,
+            "images": [{"source": source, "digest": DIGEST, "dir": directory} for source in sources],
+            "members": {payload_name: hashlib.sha256(payload).hexdigest()},
+        }
+        if index_mutator is not None:
+            index_mutator(index)
+        with tarfile.open(path, mode="w:gz") as archive:
+            index_bytes = KIT.canonical(index)
+            info = tarfile.TarInfo("index.json")
+            info.size = len(index_bytes)
+            archive.addfile(info, io.BytesIO(index_bytes))
+            directory_info = tarfile.TarInfo(directory)
+            directory_info.type = tarfile.DIRTYPE
+            archive.addfile(directory_info)
+            payload_info = tarfile.TarInfo(payload_name)
+            payload_info.size = len(payload)
+            archive.addfile(payload_info, io.BytesIO(payload))
+            for member, data in extra_members or []:
+                member.size = len(data) if member.isreg() else 0
+                archive.addfile(member, io.BytesIO(data) if member.isreg() else None)
+
     def test_images_txt_is_complete_sorted_and_digest_pinned(self) -> None:
         listing = KIT.images_txt(manifest())
         lines = [line for line in listing.splitlines() if line and not line.startswith("#")]
@@ -99,7 +140,7 @@ class AirgapKitTest(unittest.TestCase):
         self.assertNotIn(f"source.example.test/team/chart@{DIGEST}", lines)
         first_party = KIT.images_txt(manifest(), first_party=True)
         first_lines = [line for line in first_party.splitlines() if line and not line.startswith("#")]
-        self.assertEqual(len(first_lines), 6)
+        self.assertEqual(len(first_lines), 7)
         self.assertTrue(all(line.startswith("source.example.test/team/") for line in first_lines))
 
     def test_destination_rewrite_matches_mirror_plan(self) -> None:
@@ -199,6 +240,18 @@ else exit 2; fi
                 encoding="utf-8",
             )
             skopeo.chmod(skopeo.stat().st_mode | stat.S_IXUSR)
+            cosign = bin_dir / "cosign"
+            cosign.write_text(
+                """#!/usr/bin/env bash
+set -euo pipefail
+test "$1" = verify-blob
+printf '%s\n' "$*" >>"$SKOPEO_LOG"
+""",
+                encoding="utf-8",
+            )
+            cosign.chmod(cosign.stat().st_mode | stat.S_IXUSR)
+            signature = root / "release.sigstore.json"
+            signature.write_text("{}", encoding="utf-8")
             env = os.environ.copy()
             env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
             env["SKOPEO_LOG"] = str(log)
@@ -211,6 +264,7 @@ else exit 2; fi
                 values = root / "values.json"
                 KIT.load(
                     manifest_path=manifest_path,
+                    signature=signature,
                     images_archive=archive,
                     destination_registry="mirror.example.test",
                     values_output=values,
@@ -221,8 +275,10 @@ else exit 2; fi
             logged = log.read_text(encoding="utf-8")
             self.assertIn("--preserve-digests", logged)
             self.assertIn("--override-arch amd64", logged)
+            self.assertIn("verify-blob --bundle", logged)
+            self.assertIn("release.yaml@refs/tags/v1.0.0", logged)
             self.assertNotIn("--all", logged)
-            self.assertNotRegex(logged, r"password|token|secret")
+            self.assertNotRegex(logged, r"password|secret|--token(?:=|\s)")
             self.assertTrue(values.is_file())
             document_values = json.loads(values.read_text(encoding="utf-8"))
             self.assertEqual(document_values["delivery"]["artifacts"]["privateRegistry"], "mirror.example.test")
@@ -230,6 +286,56 @@ else exit 2; fi
     def test_cli_refuses_secret_shaped_arguments(self) -> None:
         self.assertEqual(KIT.main(["list-images", "--manifest", "x", "--password=secret"]), 1)
         self.assertEqual(KIT.main(["load", "--token", "abc"]), 1)
+
+    def test_load_rejects_malicious_archive_before_extraction(self) -> None:
+        document = manifest()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest_path = root / "release.json"
+            manifest_path.write_bytes(MIRROR.canonical(document))
+
+            cases = []
+            cases.append(("wrong-release", lambda index: index.__setitem__("release_version", "v9.9.9"), [], b"immutable-image-layout", "different release"))
+            cases.append(("open-schema", lambda index: index.__setitem__("unexpected", True), [], b"immutable-image-layout", "closed v1"))
+            link = tarfile.TarInfo("link")
+            link.type = tarfile.SYMTYPE
+            link.linkname = "/etc/passwd"
+            cases.append(("symlink", None, [(link, b"")], b"immutable-image-layout", "regular file or directory"))
+            traversal = tarfile.TarInfo("../escape")
+            cases.append(("traversal", None, [(traversal, b"bad")], b"immutable-image-layout", "unsafe member path"))
+            extra = tarfile.TarInfo(f"{DIGEST.removeprefix('sha256:')}/extra")
+            cases.append(("extra-payload", None, [(extra, b"bad")], b"immutable-image-layout", "member set"))
+            duplicate = tarfile.TarInfo(f"{DIGEST.removeprefix('sha256:')}/manifest.json")
+            cases.append(("duplicate", None, [(duplicate, b"again")], b"immutable-image-layout", "duplicate member"))
+            cases.append(("checksum", None, [], b"tampered", "checksum mismatch"))
+
+            for name, mutate, extras, payload, message in cases:
+                with self.subTest(name=name):
+                    archive_path = root / f"{name}.tar.gz"
+                    self.write_minimal_image_archive(
+                        archive_path,
+                        manifest_path,
+                        document,
+                        index_mutator=mutate,
+                        extra_members=extras,
+                        payload=payload,
+                    )
+                    if name == "checksum":
+                        # Keep the authenticated inventory on the original bytes.
+                        def original_checksum(index):
+                            key = next(iter(index["members"]))
+                            index["members"][key] = hashlib.sha256(b"immutable-image-layout").hexdigest()
+
+                        self.write_minimal_image_archive(
+                            archive_path,
+                            manifest_path,
+                            document,
+                            index_mutator=original_checksum,
+                            payload=payload,
+                        )
+                    with tarfile.open(archive_path, mode="r:gz") as archive:
+                        with self.assertRaisesRegex(KIT.KitError, message):
+                            KIT.validate_image_archive(archive, document, manifest_path)
 
 
 if __name__ == "__main__":

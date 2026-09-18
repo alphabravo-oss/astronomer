@@ -21,7 +21,7 @@
    astronomer_db_pool_total_connections - astronomer_db_pool_idle_connections
    rate(astronomer_db_pool_empty_acquire_count_total[5m])
    ```
-   - All conns held with active queries → real load; bump `postgres.pool.maxConns` (chart) and roll.
+   - All conns held with active queries → real load; bump `postgres.pool.maxConns` (chart) and roll. For local qualification with bundled PostgreSQL, also keep `postgres.bundled.maxConnections` above the combined server and worker pool maxima. Production must use external managed/HA PostgreSQL.
    - Active conns << maxConns but acquires still blocking → leaked
      conns (rare; bug); jump to step 3.
 
@@ -49,10 +49,10 @@
 # values-production.yaml
 postgres:
   pool:
-    maxConns: 50          # default 25
+    maxConns: 50          # server default 25; worker derives concurrency + headroom
     minConns: 10          # default 5
 ```
-Then `helm upgrade` (or Argo sync). Watch the empty-acquire rate go
+Then run `helm upgrade` (or reconcile the owning Flux object). Watch the empty-acquire rate go
 to zero before declaring done.
 
 ### Kill stuck Postgres connections (immediate)

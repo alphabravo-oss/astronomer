@@ -15,13 +15,13 @@ func TestParseMinutes(t *testing.T) {
 	}{
 		{name: "missing", want: DefaultMinutes},
 		{name: "null", raw: json.RawMessage("null"), want: DefaultMinutes},
-		{name: "explicit", raw: json.RawMessage("120"), want: 120},
+		{name: "explicit", raw: json.RawMessage("10"), want: 10},
 		{name: "minimum", raw: json.RawMessage("5"), want: MinMinutes},
-		{name: "maximum", raw: json.RawMessage("10080"), want: MaxMinutes},
+		{name: "maximum", raw: json.RawMessage("15"), want: MaxMinutes},
 		{name: "malformed", raw: json.RawMessage(`"120"`), want: DefaultMinutes, wantErr: "JSON integer"},
 		{name: "fractional", raw: json.RawMessage("120.5"), want: DefaultMinutes, wantErr: "integer"},
-		{name: "below minimum", raw: json.RawMessage("4"), want: DefaultMinutes, wantErr: "between 5 and 10080"},
-		{name: "above maximum", raw: json.RawMessage("10081"), want: DefaultMinutes, wantErr: "between 5 and 10080"},
+		{name: "below minimum", raw: json.RawMessage("4"), want: DefaultMinutes, wantErr: "between 5 and 15"},
+		{name: "above maximum", raw: json.RawMessage("16"), want: DefaultMinutes, wantErr: "between 5 and 15"},
 		{name: "trailing data", raw: json.RawMessage("60 120"), want: DefaultMinutes, wantErr: "exactly one"},
 	}
 

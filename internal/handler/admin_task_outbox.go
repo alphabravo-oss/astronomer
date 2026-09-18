@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
 type AdminTaskOutboxQuerier interface {
@@ -102,7 +102,7 @@ func (h *AdminTaskOutboxHandler) List(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, taskOutboxToWire(row))
 	}
-	RespondPaginated(w, r, out, total)
+	paging.Write(w, out, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(out)))
 }
 
 // ListDead handles GET /api/v1/admin/task-outbox/dead/ — the dead-letter view.
@@ -131,7 +131,7 @@ func (h *AdminTaskOutboxHandler) ListDead(w http.ResponseWriter, r *http.Request
 	for _, row := range rows {
 		out = append(out, taskOutboxToWire(row))
 	}
-	RespondPaginated(w, r, out, total)
+	paging.Write(w, out, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(out)))
 }
 
 // Get returns the exact durable row referenced by retry receipts.

@@ -1,14 +1,23 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+	"github.com/google/uuid"
 )
+
+// statusClientClosedRequest is nginx's conventional code for a request whose
+// caller disconnected before a response could be produced. It is deliberately
+// non-standard and never reaches a still-listening browser; recording it keeps
+// canceled route-transition reads out of the platform's 5xx error signal.
+const statusClientClosedRequest = 499
 
 // RespondJSON writes a JSON response wrapped in {"data": payload}.
 func RespondJSON(w http.ResponseWriter, status int, payload any) {
@@ -17,37 +26,65 @@ func RespondJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 // RespondJSONUnwrapped writes a JSON response without the {"data": ...} wrapper.
-// Used for endpoints that must match the Python/DRF response contract directly
-// (bootstrap status, login token payload, auth/me, etc.) — the Next.js frontend
-// reads these top-level keys without an unwrap layer.
+// Used for endpoints with a deliberately unwrapped contract, such as login
+// token payloads and identity discovery.
 func RespondJSONUnwrapped(w http.ResponseWriter, status int, payload any) {
 	writeJSON(w, status, payload)
 }
 
-// RespondError writes a JSON error response matching DRF format.
+// RespondError writes the standard JSON error envelope.
 func RespondError(w http.ResponseWriter, status int, code, message string) {
-	resp := map[string]any{
-		"error": map[string]string{
-			"code":    code,
-			"message": message,
-		},
+	requestID := ""
+	if status >= http.StatusInternalServerError {
+		requestID = uuid.NewString()
+		slog.Error("request failed", "request_id", requestID, "status", status, "code", code, "internal_detail", message)
+		message = publicServerErrorMessage(status)
 	}
+	errObj := map[string]string{"code": code, "message": message}
+	if requestID != "" {
+		errObj["request_id"] = requestID
+	}
+	resp := map[string]any{"error": errObj}
 	writeJSON(w, status, resp)
 }
 
 // RespondRequestError writes a JSON error response that includes the request
 // correlation identifier when RequestID middleware has populated one.
 func RespondRequestError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	if r != nil && errors.Is(r.Context().Err(), context.Canceled) {
+		w.WriteHeader(statusClientClosedRequest)
+		return
+	}
+	requestID := ""
+	if r != nil {
+		requestID = reqctx.RequestID(r.Context())
+	}
+	if status >= http.StatusInternalServerError {
+		if requestID == "" {
+			requestID = uuid.NewString()
+		}
+		slog.Error("request failed", "request_id", requestID, "status", status, "code", code, "internal_detail", message)
+		message = publicServerErrorMessage(status)
+	}
 	errObj := map[string]string{
 		"code":    code,
 		"message": message,
 	}
-	if r != nil {
-		if requestID := middleware.GetRequestID(r.Context()); requestID != "" {
-			errObj["request_id"] = requestID
-		}
+	if requestID != "" {
+		errObj["request_id"] = requestID
 	}
 	writeJSON(w, status, map[string]any{"error": errObj})
+}
+
+func publicServerErrorMessage(status int) string {
+	switch status {
+	case http.StatusBadGateway:
+		return "An upstream service could not complete the request"
+	case http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return "The service is temporarily unavailable"
+	default:
+		return "The request could not be completed"
+	}
 }
 
 // RespondAcceptedOperation writes a durable-operation receipt and the standard
@@ -56,35 +93,6 @@ func RespondAcceptedOperation(w http.ResponseWriter, location string, payload an
 	w.Header().Set("Location", location)
 	w.Header().Set("Retry-After", "2")
 	RespondJSON(w, http.StatusAccepted, payload)
-}
-
-// RespondPaginated writes a paginated JSON response matching DRF list format.
-// It extracts limit and offset from the request's query parameters,
-// defaulting to limit=20 and offset=0. Always responds with status 200.
-func RespondPaginated(w http.ResponseWriter, r *http.Request, items any, total int64) {
-	limit := queryInt(r, "limit", 20)
-	offset := queryInt(r, "offset", 0)
-
-	resp := paginatedResponse{
-		Data:  items,
-		Count: total,
-	}
-
-	if offset+limit < int(total) {
-		next := fmt.Sprintf("%s?limit=%d&offset=%d", r.URL.Path, limit, offset+limit)
-		resp.Next = &next
-	}
-
-	if offset > 0 {
-		prevOffset := offset - limit
-		if prevOffset < 0 {
-			prevOffset = 0
-		}
-		prev := fmt.Sprintf("%s?limit=%d&offset=%d", r.URL.Path, limit, prevOffset)
-		resp.Previous = &prev
-	}
-
-	writeJSON(w, http.StatusOK, resp)
 }
 
 // queryInt extracts an integer query parameter with a default fallback.
@@ -98,6 +106,32 @@ func queryInt(r *http.Request, key string, defaultVal int) int {
 		return defaultVal
 	}
 	return v
+}
+
+// maxPaginationOffset is the compatibility ceiling for legacy offset clients.
+// Fleet endpoints use keyset cursors by default; no request may make
+// PostgreSQL discard an unbounded number of rows.
+const maxPaginationOffset = uint64(10_000)
+
+// queryOffset parses the shared "offset" query parameter into the non-negative
+// bounded range accepted by legacy sqlc pagination queries. Invalid and
+// negative values start at the first page; oversized values clamp before SQL.
+func queryOffset(r *http.Request) int {
+	s := r.URL.Query().Get("offset")
+	if s == "" {
+		return 0
+	}
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		if numErr, ok := err.(*strconv.NumError); ok && numErr.Err == strconv.ErrRange {
+			return int(maxPaginationOffset)
+		}
+		return 0
+	}
+	if v > maxPaginationOffset {
+		return int(maxPaginationOffset)
+	}
+	return int(v)
 }
 
 // queryBool parses a boolean query param; accepts true/1/yes (case-insensitive).
@@ -145,25 +179,9 @@ func queryLimitMax(r *http.Request, defaultLimit, max int) int {
 // limit to [1, 200] (falling back to defaultLimit when missing, unparseable, or
 // < 1) and offset to >= 0.
 func queryLimitOffset(r *http.Request, defaultLimit int) (limit, offset int) {
-	limit = queryInt(r, "limit", defaultLimit)
-	if limit < 1 {
-		limit = defaultLimit
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	offset = queryInt(r, "offset", 0)
-	if offset < 0 {
-		offset = 0
-	}
+	limit = queryLimit(r, defaultLimit)
+	offset = queryOffset(r)
 	return limit, offset
-}
-
-type paginatedResponse struct {
-	Data     any     `json:"data"`
-	Count    int64   `json:"count"`
-	Next     *string `json:"next"`
-	Previous *string `json:"previous"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

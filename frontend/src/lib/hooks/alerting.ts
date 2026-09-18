@@ -9,6 +9,7 @@ import {
   getAnomalyBaseline,
   getAnomalyBaselines,
   getAlertEvents,
+  getAlertEventSummary,
   getAlertRules,
   getAlertSilences,
   getNotificationChannels,
@@ -27,7 +28,7 @@ import { toastApiError, toastSuccess } from "@/lib/toast";
 export function useAlertRules(clusterId?: string) {
   return useQuery({
     queryKey: queryKeys.alerting.rules(clusterId),
-    queryFn: () => getAlertRules({ clusterId, limit: 200 }),
+    queryFn: ({ signal }) => getAlertRules({ clusterId, limit: 200 }, signal),
     refetchInterval: liveFallback(30000),
   });
 }
@@ -78,7 +79,15 @@ export function useDeleteAlertRule() {
 export function useAlertEvents(params?: AlertEventQuery) {
   return useQuery({
     queryKey: queryKeys.alerting.events(params),
-    queryFn: () => getAlertEvents(params),
+    queryFn: ({ signal }) => getAlertEvents(params, signal),
+    refetchInterval: liveFallback(15000),
+  });
+}
+
+export function useAlertEventSummary(clusterId?: string) {
+  return useQuery({
+    queryKey: queryKeys.alerting.eventSummary(clusterId),
+    queryFn: ({ signal }) => getAlertEventSummary(clusterId, signal),
     refetchInterval: liveFallback(15000),
   });
 }
@@ -114,7 +123,7 @@ export function useResolveAlert() {
 export function useNotificationChannels() {
   return useQuery({
     queryKey: queryKeys.alerting.channels,
-    queryFn: () => getNotificationChannels(),
+    queryFn: ({ signal }) => getNotificationChannels(undefined, signal),
   });
 }
 
@@ -149,7 +158,7 @@ export function useTestNotificationChannel() {
 export function useAlertSilences() {
   return useQuery({
     queryKey: queryKeys.alerting.silences,
-    queryFn: () => getAlertSilences(),
+    queryFn: ({ signal }) => getAlertSilences(undefined, signal),
     refetchInterval: liveFallback(30000),
   });
 }
@@ -175,7 +184,7 @@ export function useAnomalyBaselines(params?: {
 }) {
   return useQuery({
     queryKey: queryKeys.anomalyBaselines.list(params),
-    queryFn: () => getAnomalyBaselines(params),
+    queryFn: ({ signal }) => getAnomalyBaselines(params, signal),
     refetchInterval: liveFallback(30000),
   });
 }
@@ -183,7 +192,7 @@ export function useAnomalyBaselines(params?: {
 export function useAnomalyBaseline(id: string) {
   return useQuery({
     queryKey: queryKeys.anomalyBaselines.detail(id),
-    queryFn: () => getAnomalyBaseline(id),
+    queryFn: ({ signal }) => getAnomalyBaseline(id, signal),
     enabled: Boolean(id),
   });
 }

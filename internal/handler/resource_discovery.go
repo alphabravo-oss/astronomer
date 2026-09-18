@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 )
 
@@ -48,11 +46,11 @@ var enterpriseResourceMatrix = []string{
 // Kubernetes discovery, so authorization, response bounds, and policy labels
 // remain consistent across UI, CLI, and automation clients.
 func (h *ResourceHandler) GetResourceDiscovery(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
-	if clusterID == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "cluster_id is required")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
 		return
 	}
+	clusterID := clusterUUID.String()
 	entries := make([]resourceDiscoveryEntry, 0, len(enterpriseResourceMatrix))
 	errorsBySource := map[string]string{}
 	for _, resourceType := range enterpriseResourceMatrix {
@@ -86,10 +84,14 @@ func (h *ResourceHandler) GetResourceDiscovery(w http.ResponseWriter, r *http.Re
 // for one supported resource. Clients use it for guided forms and validation;
 // raw YAML remains an expert-mode projection of the same API contract.
 func (h *ResourceHandler) GetResourceSchema(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, valid := parseClusterID(w, r)
+	if !valid {
+		return
+	}
+	clusterID := clusterUUID.String()
 	resourceType := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("resource_type")))
 	def, ok := resourceDefs[resourceType]
-	if clusterID == "" || resourceType == "" || !ok {
+	if resourceType == "" || !ok {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, "a supported resource_type is required")
 		return
 	}

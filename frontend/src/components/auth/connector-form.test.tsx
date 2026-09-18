@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { ConnectorForm } from "./connector-form";
 import type { DexConnectorTypeSpec } from "@/types";
 
@@ -121,11 +121,20 @@ describe("ConnectorForm validators (ported 1:1 from the imperative checks)", () 
 
     await submit("Create");
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByText("Name is required")).toBeInTheDocument();
-    expect(screen.getByText("Host is required")).toBeInTheDocument();
-    expect(screen.getByText("Bind PW is required")).toBeInTheDocument();
+    const summary = within(screen.getByRole("alert"));
     expect(
-      screen.getByText("User Search · Base DN is required"),
+      summary.getByRole("button", { name: "Name is required" }),
+    ).toBeInTheDocument();
+    expect(
+      summary.getByRole("button", { name: "Host is required" }),
+    ).toBeInTheDocument();
+    expect(
+      summary.getByRole("button", { name: "Bind PW is required" }),
+    ).toBeInTheDocument();
+    expect(
+      summary.getByRole("button", {
+        name: "User Search · Base DN is required",
+      }),
     ).toBeInTheDocument();
   });
 
@@ -141,7 +150,9 @@ describe("ConnectorForm validators (ported 1:1 from the imperative checks)", () 
     await submit("Create");
     expect(onSubmit).not.toHaveBeenCalled();
     expect(
-      screen.getByText("Name must be lowercase letters, digits, and dashes"),
+      within(screen.getByRole("alert")).getByRole("button", {
+        name: "Name must be lowercase letters, digits, and dashes",
+      }),
     ).toBeInTheDocument();
   });
 

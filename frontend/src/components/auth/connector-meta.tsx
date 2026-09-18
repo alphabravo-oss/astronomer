@@ -12,10 +12,9 @@
 import {
   Building2,
   Globe,
-  Github,
+  GitFork,
   GitMerge,
   Box,
-  Chrome,
   KeyRound,
   Lock,
   Server,
@@ -86,7 +85,7 @@ export const CONNECTOR_META: Record<string, ConnectorTypeMeta> = {
   github: {
     label: "GitHub",
     description: "GitHub OAuth — gate by org / team membership.",
-    icon: Github,
+    icon: GitFork,
     fields: {
       clientID: { label: "Client ID" },
       clientSecret: { label: "Client secret" },
@@ -127,7 +126,7 @@ export const CONNECTOR_META: Record<string, ConnectorTypeMeta> = {
   google: {
     label: "Google Workspace",
     description: "Google Workspace / Cloud Identity.",
-    icon: Chrome,
+    icon: Globe,
     fields: {
       clientID: {
         label: "Client ID",

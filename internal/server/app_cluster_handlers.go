@@ -7,6 +7,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
+	"github.com/alphabravocompany/astronomer-go/internal/controlplane"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/scanner"
@@ -20,7 +21,6 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	bus := c.bus
 	hub := c.hub
 	requester := c.requester
-	queue := c.queue
 	rbacEngine := c.rbacEngine
 	rbacQuerier := c.rbacQuerier
 	monitoringHandler := c.monitoringHandler
@@ -80,6 +80,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 		Queries: queries,
 		Driver:  handler.NewVeleroDriverAdapter(requester),
 		Log:     logger,
+		Bus:     c.bus,
 	}}
 	// Migration 071 — service mesh detector. The handler's POST /detect/
 	// path delegates to tasks.DetectAndUpsert, so the deps need to be
@@ -88,6 +89,7 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	meshRuntime := tasks.MeshRuntime{Deps: tasks.MeshDetectDeps{
 		Queries:   queries,
 		Requester: requester,
+		Bus:       c.bus,
 	}}
 	// Sprint 069: CRD-mirror v2 cluster-detail read surface + tunnel
 	// ingest router. The Hub routes MIRROR_EVENT frames into
@@ -132,10 +134,17 @@ func (c *productionComposition) initializeClusterHandlers(ctx context.Context, c
 	// PATH A: mint the scoped apiserver-audit ingest token in CONNECT_ACK so an
 	// agent configured with AUDIT_DELIVERY=http can authenticate its direct POST
 	// to /clusters/{id}/apiserver-audit/ (clusters:write scope + audit_ingest:create).
-	if issuer := auth.NewIngestIssuer(queries); issuer != nil {
+	if issuer := auth.NewIngestIssuer(queries, c.jwtManager); issuer != nil {
 		hub.SetAuditIngestIssuer(issuer)
 	}
-	controlPlaneHandler := handler.NewControlPlaneHandler(queries, monitoringHandler, toolHandler, catalogHandler, backupHandler, loggingHandler, securityHandler, queue)
+	controlPlaneHandler := handler.NewControlPlaneHandler(queries, controlplane.NewService(map[string]controlplane.SummaryProvider{
+		"monitoring": monitoringHandler,
+		"tools":      toolHandler,
+		"catalog":    catalogHandler,
+		"backups":    backupHandler,
+		"logging":    loggingHandler,
+		"security":   securityHandler,
+	}))
 	controlPlaneHandler.SetRunTx(sqlcMutationTxRunner[handler.ControlPlaneMutationTx](database))
 	c.clusterSnapshotsHandler = clusterSnapshotsHandler
 	c.controlPlaneSnapshotHandler = controlPlaneSnapshotHandler

@@ -10,27 +10,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // --- shared fakes for the kubectl-shell handler tests ---
 
 type fakeShellQuerier struct {
-	mu       sync.Mutex
-	sessions map[uuid.UUID]*sqlc.KubectlSession
-	commands map[uuid.UUID][]sqlc.KubectlSessionCommand
-	users    map[uuid.UUID]sqlc.User
-	clusters map[uuid.UUID]sqlc.Cluster
-	audits   []sqlc.CreateAuditLogV1Params
+	mu                     sync.Mutex
+	sessions               map[uuid.UUID]*sqlc.KubectlSession
+	commands               map[uuid.UUID][]sqlc.KubectlSessionCommand
+	users                  map[uuid.UUID]sqlc.User
+	clusters               map[uuid.UUID]sqlc.Cluster
+	audits                 []sqlc.CreateAuditLogV1Params
+	batchCommandCountCalls int
+	lastAdminPage          sqlc.ListAllActiveKubectlSessionsPageParams
 }
 
 // CreateAuditLogV1 captures audit rows so tests can assert on them. The
@@ -109,18 +111,29 @@ func (f *fakeShellQuerier) GetKubectlSessionByID(_ context.Context, id uuid.UUID
 	}
 	return *r, nil
 }
-func (f *fakeShellQuerier) ListActiveKubectlSessionsByCluster(_ context.Context, cid uuid.UUID) ([]sqlc.KubectlSession, error) {
+func (f *fakeShellQuerier) ListActiveKubectlSessionsByCluster(_ context.Context, arg sqlc.ListActiveKubectlSessionsByClusterParams) ([]sqlc.KubectlSession, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []sqlc.KubectlSession
 	for _, r := range f.sessions {
-		if r.ClusterID == cid && (r.Status == "starting" || r.Status == "active") {
+		if r.ClusterID == arg.ClusterID && (r.Status == "starting" || r.Status == "active") {
 			out = append(out, *r)
 		}
 	}
-	return out, nil
+	return shellSessionPage(out, arg.QueryLimit, arg.QueryOffset), nil
 }
-func (f *fakeShellQuerier) ListAllActiveKubectlSessions(_ context.Context) ([]sqlc.KubectlSession, error) {
+func (f *fakeShellQuerier) CountActiveKubectlSessionsByCluster(_ context.Context, cid uuid.UUID) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var count int64
+	for _, r := range f.sessions {
+		if r.ClusterID == cid && (r.Status == "starting" || r.Status == "active") {
+			count++
+		}
+	}
+	return count, nil
+}
+func (f *fakeShellQuerier) activeSessions() []sqlc.KubectlSession {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []sqlc.KubectlSession
@@ -129,10 +142,40 @@ func (f *fakeShellQuerier) ListAllActiveKubectlSessions(_ context.Context) ([]sq
 			out = append(out, *r)
 		}
 	}
-	return out, nil
+	return out
 }
-func (f *fakeShellQuerier) ListExpiredKubectlSessions(_ context.Context) ([]sqlc.KubectlSession, error) {
+func (f *fakeShellQuerier) ListActiveKubectlSessionClusters(_ context.Context, arg sqlc.ListActiveKubectlSessionClustersParams) ([]uuid.UUID, error) {
+	seen := make(map[uuid.UUID]struct{})
+	clusters := make([]uuid.UUID, 0)
+	for _, row := range f.activeSessions() {
+		if _, ok := seen[row.ClusterID]; !ok {
+			seen[row.ClusterID] = struct{}{}
+			clusters = append(clusters, row.ClusterID)
+		}
+	}
+	return shellSessionPage(clusters, arg.QueryLimit, arg.QueryOffset), nil
+}
+func (f *fakeShellQuerier) ListAllActiveKubectlSessionsPage(_ context.Context, arg sqlc.ListAllActiveKubectlSessionsPageParams) ([]sqlc.KubectlSession, error) {
+	f.lastAdminPage = arg
+	return shellSessionPage(f.activeSessions(), arg.QueryLimit, arg.QueryOffset), nil
+}
+func (f *fakeShellQuerier) CountAllActiveKubectlSessions(context.Context) (int64, error) {
+	return int64(len(f.activeSessions())), nil
+}
+func (f *fakeShellQuerier) ListExpiredKubectlSessions(_ context.Context, _ sqlc.ListExpiredKubectlSessionsParams) ([]sqlc.KubectlSession, error) {
 	return nil, nil
+}
+
+func shellSessionPage[T any](rows []T, limit, offset int32) []T {
+	start := int(offset)
+	if start >= len(rows) {
+		return []T{}
+	}
+	end := start + int(limit)
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[start:end]
 }
 func (f *fakeShellQuerier) SetKubectlSessionStatus(_ context.Context, arg sqlc.SetKubectlSessionStatusParams) error {
 	f.mu.Lock()
@@ -183,6 +226,16 @@ func (f *fakeShellQuerier) CountKubectlSessionCommands(_ context.Context, sid uu
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return int64(len(f.commands[sid])), nil
+}
+func (f *fakeShellQuerier) CountKubectlSessionCommandsForSessions(_ context.Context, sessionIDs []uuid.UUID) ([]sqlc.CountKubectlSessionCommandsForSessionsRow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.batchCommandCountCalls++
+	rows := make([]sqlc.CountKubectlSessionCommandsForSessionsRow, 0, len(sessionIDs))
+	for _, id := range sessionIDs {
+		rows = append(rows, sqlc.CountKubectlSessionCommandsForSessionsRow{SessionID: id, CommandCount: int64(len(f.commands[id]))})
+	}
+	return rows, nil
 }
 
 // fakeBindings implements KubectlBindingsQuerier.
@@ -244,7 +297,10 @@ func newTestKubectlHandler(t *testing.T) (*KubectlShellHandler, *fakeShellQuerie
 	clusterID := uuid.New()
 	q.users[userID] = sqlc.User{ID: userID, Email: "op@example.test"}
 	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID}
-	bindings := &fakeBindings{}
+	bindings := &fakeBindings{list: []rbac.RoleBinding{{
+		UserID: userID.String(), ClusterID: clusterID.String(),
+		RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceClusters), Verbs: []string{string(rbac.VerbRead), string(rbac.VerbUpdate)}}},
+	}}}
 	engine := rbac.NewEngine()
 	h := NewKubectlShellHandler(q, bindings, engine, kubectl.Deps{
 		Queries:         q,
@@ -276,7 +332,7 @@ func newTestKubectlHandlerWithRBAC(t *testing.T) (*KubectlShellHandler, *fakeShe
 }
 
 // clusterRoleVerbs decodes a ClusterRole manifest body and returns the
-// verbs of its first rule (the shell manifest only emits one rule).
+// union of verbs across its explicit resource rules.
 func clusterRoleVerbs(t *testing.T, body []byte) []string {
 	t.Helper()
 	if body == nil {
@@ -290,15 +346,23 @@ func clusterRoleVerbs(t *testing.T, body []byte) []string {
 	if err := json.Unmarshal(body, &cr); err != nil {
 		t.Fatalf("decode ClusterRole: %v body=%s", err, body)
 	}
-	if len(cr.Rules) == 0 {
-		return nil
+	seen := map[string]struct{}{}
+	var out []string
+	for _, rule := range cr.Rules {
+		for _, verb := range rule.Verbs {
+			if _, ok := seen[verb]; ok {
+				continue
+			}
+			seen[verb] = struct{}{}
+			out = append(out, verb)
+		}
 	}
-	return cr.Rules[0].Verbs
+	return out
 }
 
 func authReq(method, target string, body string, userID uuid.UUID, isSuperuser bool) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
-	ctx := middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: userID.String(), Email: "op@example.test", AuthMethod: "jwt",
 	})
 	_ = isSuperuser
@@ -447,6 +511,47 @@ func TestKubectlHandler_RequiresSuperuser_AdminEndpoints(t *testing.T) {
 	}
 }
 
+func TestKubectlHandler_AdminListPaginatesAndBatchesCommandCounts(t *testing.T) {
+	h, q, userID, clusterID := newTestKubectlHandler(t)
+	q.users[userID] = sqlc.User{ID: userID, IsSuperuser: true}
+	for i := 0; i < 3; i++ {
+		id := uuid.New()
+		q.sessions[id] = &sqlc.KubectlSession{
+			ID: id, UserID: userID, ClusterID: clusterID, Status: "active",
+			StartedAt: time.Now().Add(time.Duration(i) * time.Minute),
+		}
+		q.commands[id] = []sqlc.KubectlSessionCommand{{SessionID: id, CommandLine: "kubectl get pods"}}
+	}
+
+	req := authReq("GET", "/api/v1/admin/shell-sessions/?limit=2&offset=1", "", userID, true)
+	w := httptest.NewRecorder()
+	newKubectlRouter(h).ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	var body struct {
+		Data       []kubectl.SessionInfo `json:"data"`
+		Pagination paging.Metadata       `json:"pagination"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Data) != 2 || exactPageTotal(t, body.Pagination) != 3 {
+		t.Fatalf("page data=%d count=%d, want 2/3", len(body.Data), exactPageTotal(t, body.Pagination))
+	}
+	if q.lastAdminPage.QueryLimit != 2 || q.lastAdminPage.QueryOffset != 1 {
+		t.Fatalf("page args = %#v", q.lastAdminPage)
+	}
+	if q.batchCommandCountCalls != 1 {
+		t.Fatalf("batch count calls = %d, want 1", q.batchCommandCountCalls)
+	}
+	for _, row := range body.Data {
+		if row.CommandCount != 1 {
+			t.Fatalf("command count = %d, want 1", row.CommandCount)
+		}
+	}
+}
+
 func TestKubectlHandler_AdminCommands_SuperuserSeesAny(t *testing.T) {
 	h, q, userID, clusterID := newTestKubectlHandler(t)
 	r := newKubectlRouter(h)
@@ -581,6 +686,7 @@ func TestKubectlHandler_DefaultShellIsReadOnly(t *testing.T) {
 	bindings.list = []rbac.RoleBinding{{
 		UserID: userID.String(),
 		RoleRules: []rbac.Rule{
+			{Resource: string(rbac.ResourcePods), Verbs: []string{"read", "list", "watch", "create", "update", "delete"}},
 			{Resource: string(rbac.ResourceClusters), Verbs: []string{
 				string(rbac.VerbRead), string(rbac.VerbUpdate), string(rbac.VerbDelete),
 			}},
@@ -664,6 +770,7 @@ func TestKubectlHandler_ElevationGrantsWriteWithRBAC(t *testing.T) {
 	bindings.list = []rbac.RoleBinding{{
 		UserID: userID.String(),
 		RoleRules: []rbac.Rule{
+			{Resource: string(rbac.ResourcePods), Verbs: []string{"read", "create", "update"}},
 			{Resource: string(rbac.ResourceClusters), Verbs: []string{
 				string(rbac.VerbRead), string(rbac.VerbUpdate),
 			}},
@@ -708,7 +815,7 @@ func TestKubectlHandler_SuperuserElevationIsClusterAdmin(t *testing.T) {
 	bindings.list = []rbac.RoleBinding{{UserID: userID.String(), IsSuperuser: true}}
 	r := newKubectlRouter(h)
 
-	// Default (no elevation) → read-only ClusterRole, NOT cluster-admin.
+	// Default (no elevation) → caller-scoped role, NOT cluster-admin.
 	req := authReq("POST", "/api/v1/clusters/"+clusterID.String()+"/shell/sessions/", "", userID, false)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -716,8 +823,11 @@ func TestKubectlHandler_SuperuserElevationIsClusterAdmin(t *testing.T) {
 		t.Fatalf("open: want 201, got %d body=%s", w.Code, w.Body.String())
 	}
 	verbs := clusterRoleVerbs(t, requester.bodyFor("/clusterroles"))
-	if bad := containsAny(verbs, "*", "create", "update", "patch", "delete"); bad != "" {
-		t.Fatalf("superuser default shell must still be read-only, granted %q (verbs=%v)", bad, verbs)
+	// A superuser also holds pods:exec, represented by create on only the
+	// pods/exec subresource. Broad update/patch/delete and wildcards remain
+	// prohibited until explicit elevation.
+	if bad := containsAny(verbs, "*", "update", "patch", "delete"); bad != "" {
+		t.Fatalf("superuser default shell granted broad mutation %q (verbs=%v)", bad, verbs)
 	}
 
 	// Explicit elevation → cluster-admin binding, no per-session ClusterRole.

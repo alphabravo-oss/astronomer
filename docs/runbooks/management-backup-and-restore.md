@@ -7,7 +7,7 @@ the `/api/v1/backups` API and `astro backup` commands.
 | State | Authority | Protection |
 |---|---|---|
 | Users, RBAC, audit, adopted-cluster identity, encrypted credentials, delivery and operation history | PostgreSQL | Provider PITR plus verified logical backup |
-| JWT/Fernet keys | External secret custody | Separately wrapped key bundle and tested recovery |
+| JWT/Fernet keys | External secret custody | Versioned AES-256-GCM key bundle and tested recovery |
 | Committed task/audit intent | PostgreSQL outbox tables | Included in database backup and replayed after restore |
 | Asynq queues/cache | Redis | HA/recovery policy; never treated as the only durable intent |
 | Member-cluster Kubernetes objects | Member cluster/etcd | Provider/Velero policy outside management-plane restore |
@@ -27,11 +27,13 @@ backup encrypted with them has expired.
 
 ## Configure and prove backup
 
-Set `managementBackup.s3`, its credentials Secret reference, retention,
-resources, and `managementBackup.encryptionKeyBackup.wrappingSecretRef` in
-production Helm values. Configure the identical wrapping Secret and key prefix
-under `managementRestoreDrill.decryptCheck`. Retain provider PITR settings and
-the matching external PostgreSQL major-version policy separately.
+Set `managementBackup.s3`, the write-only credentials Secret,
+`managementBackup.encryption.sourceIdentity`, and
+`managementBackup.encryption.wrappingSecretRef` in production Helm values.
+Configure a different delete-capable Secret under
+`managementBackup.retention.credentialsSecretRef`, review retention with
+`dryRun=true`, and require the configured Object Lock duration. Retain provider
+PITR and the matching external PostgreSQL major-version policy separately.
 
 After Helm applies the values, verify that both CronJobs render and that no
 credential value appears in their Pod specs:
@@ -60,10 +62,10 @@ curl --fail --silent --show-error -X POST \
 unset ASTRO_API_TOKEN
 ```
 
-Confirm the Job succeeds, the database dump and wrapped key bundle exist under
-their separate prefixes, checksums/size are plausible, retention tiers are
-present, and metrics/audit contain a successful bounded operation without
-credentials. A successful upload is not restore evidence.
+Confirm the Job succeeds, encrypted dump and key bundle objects exist, the
+authenticated manifest was uploaded last, retention tiers are present, and
+metrics/audit contain a successful bounded operation without credentials. A
+successful upload is not restore evidence.
 
 ## Prove restore continuously
 

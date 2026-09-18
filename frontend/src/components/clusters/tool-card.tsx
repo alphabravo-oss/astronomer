@@ -1,5 +1,3 @@
-"use client";
-
 import { normalizeToolStatus } from "@/lib/tool-status";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { ClusterTool, ClusterToolStatus, ToolStatus } from "@/types";
@@ -41,6 +39,8 @@ interface ToolCardProps {
   onInstall: (slug: string) => void;
   onUninstall: (slug: string) => void;
   onAdopt: (slug: string, releaseName: string) => void;
+  onRecover?: (slug: string, action: "retry" | "rollback") => void;
+  recoveryDisabledReason?: string;
   installDisabledReason?: string;
   adoptDisabledReason?: string;
   uninstallDisabledReason?: string;
@@ -55,6 +55,8 @@ export function ToolCard({
   onInstall,
   onUninstall,
   onAdopt,
+  onRecover,
+  recoveryDisabledReason,
   installDisabledReason,
   adoptDisabledReason,
   uninstallDisabledReason,
@@ -75,7 +77,8 @@ export function ToolCard({
   const enableDisabledReason =
     clusterDisconnectedReason || installDisabledReason;
   const retryDisabledReason =
-    clusterDisconnectedReason || installDisabledReason;
+    clusterDisconnectedReason || recoveryDisabledReason;
+  const canResume = toolStatus?.operation?.status === "failed" || toolStatus?.operation?.status === "superseded";
   const adoptBlockedReason = clusterDisconnectedReason || adoptDisabledReason;
   const uninstallBlockedReason =
     clusterDisconnectedReason || uninstallDisabledReason;
@@ -85,7 +88,7 @@ export function ToolCard({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center">
+          <div className="shrink-0 h-10 w-10 rounded-lg bg-muted/60 flex items-center justify-center">
             <Icon className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
@@ -106,11 +109,26 @@ export function ToolCard({
       <p className="text-xs text-muted-foreground line-clamp-2">
         {tool.description}
       </p>
+      {tool.charts.length > 1 && (
+        <ol
+          aria-label={`${tool.name} releases`}
+          className="text-xs text-muted-foreground space-y-1"
+        >
+          {[...tool.charts]
+            .sort((a, b) => a.order - b.order)
+            .map((chart, index) => (
+              <li key={`${chart.namespace}/${chart.chartName}`}>
+                {index + 1}. {chart.releaseName ?? chart.chartName} ·{" "}
+                {chart.version ?? tool.versionConstraint}
+              </li>
+            ))}
+        </ol>
+      )}
 
       {/* Error message */}
       {status === "failed" && toolStatus?.error && (
         <div className="flex items-start gap-2 p-2.5 rounded-md bg-status-error/5 border border-status-error/20">
-          <AlertTriangle className="h-3.5 w-3.5 text-status-error flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-3.5 w-3.5 text-status-error shrink-0 mt-0.5" />
           <p className="text-xs text-status-error line-clamp-2">
             {toolStatus.error}
           </p>
@@ -143,6 +161,14 @@ export function ToolCard({
 
         {status === "installed" && (
           <div className="flex items-center justify-between">
+            {onRecover && toolStatus?.operation?.operationType === "upgrade" && (
+              <button
+                onClick={() => onRecover(tool.slug, "rollback")}
+                disabled={!!retryDisabledReason}
+                title={retryDisabledReason}
+                className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50"
+              >Roll back upgrade</button>
+            )}
             {toolStatus?.presetUsed && (
               <span className="text-xs text-muted-foreground">
                 Preset:{" "}
@@ -172,7 +198,7 @@ export function ToolCard({
             <button
               onClick={() => {
                 if (toolStatus?.releaseName) {
-                  onAdopt(tool.slug, toolStatus.releaseName);
+                  onAdopt(tool.slug, tool.charts.length > 1 ? tool.slug : toolStatus.releaseName);
                 }
               }}
               disabled={!!adoptBlockedReason}
@@ -195,15 +221,32 @@ export function ToolCard({
         {status === "failed" && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => onInstall(tool.slug)}
-              disabled={installing || !!retryDisabledReason}
-              title={retryDisabledReason}
+              onClick={() => canResume ? onRecover?.(tool.slug, "retry") : onInstall(tool.slug)}
+              disabled={
+                installing ||
+                (canResume ? !!retryDisabledReason || !onRecover : !!enableDisabledReason)
+              }
+              title={canResume ? retryDisabledReason : enableDisabledReason}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-primary text-primary-foreground
                 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {installing && <Loader2 className="h-3 w-3 animate-spin" />}
-              Retry
+              {canResume ? "Retry" : "Complete installation"}
             </button>
+            {onRecover &&
+              toolStatus?.operation &&
+              ["install", "upgrade"].includes(
+                toolStatus.operation.operationType,
+              ) && (
+                <button
+                  onClick={() => onRecover(tool.slug, "rollback")}
+                  disabled={!!retryDisabledReason}
+                  title={retryDisabledReason}
+                  className="h-8 px-3 rounded-md border border-border text-xs disabled:opacity-50"
+                >
+                  Roll back
+                </button>
+              )}
           </div>
         )}
       </div>

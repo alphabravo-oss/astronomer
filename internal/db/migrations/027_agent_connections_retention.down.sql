@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS public.idx_agent_connections_terminal_disconnected_at;
+DROP INDEX IF EXISTS public.idx_agent_connections_cluster_connected_at;

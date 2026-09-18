@@ -1,5 +1,3 @@
-"use client";
-
 import { useState } from "react";
 import {
   Scaling,
@@ -10,17 +8,16 @@ import {
   Zap,
   Download,
 } from "lucide-react";
-import * as apiClient from "@/lib/api";
+import { k8sGetYaml } from "@/lib/api/kubernetes-proxy";
 import { toastApiError } from "@/lib/toast";
 import { ScaleDialog } from "@/components/workloads/scale-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useScaleWorkload, useRestartWorkload } from "@/lib/hooks/workloads";
 import {
-  useScaleWorkload,
-  useRestartWorkload,
   useK8sDelete,
   useK8sPatch,
   useK8sCreate,
-} from "@/lib/hooks";
+} from "@/lib/hooks/kubernetes-proxy";
 import { useClusterResourcePermission } from "@/lib/permission-hooks";
 import {
   k8sResourcePath,
@@ -122,7 +119,7 @@ export function ResourceActions({
   // demand so it isn't pulled for every detail view.
   const downloadYaml = async () => {
     try {
-      const yaml = await apiClient.k8sGetYaml(clusterId, path);
+      const yaml = await k8sGetYaml(clusterId, path);
       const url = URL.createObjectURL(new Blob([yaml], { type: "text/yaml" }));
       const a = document.createElement("a");
       a.href = url;

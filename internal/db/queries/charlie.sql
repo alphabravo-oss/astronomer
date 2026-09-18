@@ -31,11 +31,12 @@ SELECT
     count(*)::bigint AS total_clusters,
     count(*) FILTER (WHERE latest.status = 'connected')::bigint AS connected_clusters,
     count(*) FILTER (WHERE latest.status IS NULL OR latest.status <> 'connected')::bigint AS disconnected_clusters,
-    count(*) FILTER (WHERE COALESCE(latest.last_ping, latest.connected_at, c.last_heartbeat, c.created_at) < now() - make_interval(secs => sqlc.arg(stale_seconds)::int))::bigint AS stale_heartbeats,
+    count(*) FILTER (WHERE COALESCE(l.last_heartbeat, latest.last_ping, latest.connected_at, c.created_at) < now() - make_interval(secs => sqlc.arg(stale_seconds)::int))::bigint AS stale_heartbeats,
     count(*) FILTER (WHERE ops.authentication_state IN ('failed', 'expired', 'revoked') OR ops.registration_state IN ('failed', 'rejected'))::bigint AS authentication_or_registration_failures,
     count(*) FILTER (WHERE ops.audit_ingestion_state IN ('degraded', 'failed') OR ops.metrics_ingestion_state IN ('degraded', 'failed') OR ops.state_ingestion_state IN ('degraded', 'failed'))::bigint AS ingestion_degraded,
     count(*) FILTER (WHERE ops.downstream_api_reachable = false)::bigint AS reported_api_unreachable
 FROM clusters c
+LEFT JOIN cluster_liveness l ON l.cluster_id = c.id
 LEFT JOIN latest ON latest.cluster_id = c.id
 LEFT JOIN agent_operational_statuses ops ON ops.cluster_id = c.id
 WHERE c.decommissioned_at IS NULL;
@@ -47,7 +48,7 @@ SELECT
     COALESCE(latest.agent_id, ops.agent_id, '') AS agent_id,
     COALESCE(latest.agent_version, ops.installed_agent_version, c.agent_version, '') AS installed_agent_version,
     COALESCE(latest.status, 'never') AS connection_state,
-    COALESCE(latest.last_ping, c.last_heartbeat) AS last_heartbeat,
+    COALESCE(l.last_heartbeat, latest.last_ping) AS last_heartbeat,
     ops.last_successful_connection_at,
     COALESCE(ops.authentication_state, 'unknown') AS authentication_state,
     COALESCE(ops.registration_state, 'unknown') AS registration_state,
@@ -68,6 +69,7 @@ SELECT
 	ops.downstream_api_reported_at,
 	ops.last_status_at
 FROM clusters c
+LEFT JOIN cluster_liveness l ON l.cluster_id = c.id
 LEFT JOIN LATERAL (
     SELECT ac.agent_id, ac.agent_version, ac.status, ac.last_ping
     FROM agent_connections ac WHERE ac.cluster_id = c.id
@@ -88,9 +90,10 @@ SELECT
     COALESCE(latest.agent_id, ops.agent_id, '') AS agent_id,
     COALESCE(latest.agent_version, ops.installed_agent_version, c.agent_version, '') AS installed_agent_version,
     COALESCE(latest.status, 'never') AS connection_state,
-    COALESCE(latest.last_ping, c.last_heartbeat) AS last_heartbeat,
+    COALESCE(l.last_heartbeat, latest.last_ping) AS last_heartbeat,
     ops.*
 FROM clusters c
+LEFT JOIN cluster_liveness l ON l.cluster_id = c.id
 LEFT JOIN LATERAL (
     SELECT ac.agent_id, ac.agent_version, ac.status, ac.last_ping
     FROM agent_connections ac WHERE ac.cluster_id = c.id

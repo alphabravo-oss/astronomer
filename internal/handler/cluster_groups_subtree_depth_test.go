@@ -16,7 +16,7 @@ import (
 // reject the move.
 func TestUpdateGroup_RejectsReparentThatOverflowsDescendants(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	// A separate top-level group to reparent under.
 	a := createGroup(t, h, map[string]any{"name": "a"})
@@ -45,7 +45,7 @@ func TestUpdateGroup_RejectsReparentThatOverflowsDescendants(t *testing.T) {
 // C at depth 1 with height 0 — well within the cap.
 func TestUpdateGroup_AllowsReparentWithinCap(t *testing.T) {
 	q := newFakeClusterGroupQuerier()
-	h := NewClusterGroupHandler(q)
+	h := newClusterGroupHandlerForTest(q)
 
 	a := createGroup(t, h, map[string]any{"name": "a"})
 	b := createGroup(t, h, map[string]any{"name": "b"})

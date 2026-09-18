@@ -1,6 +1,4 @@
-"use client";
-
-import { usePathname, useRouter } from "@/lib/navigation";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/lib/theme";
@@ -19,15 +17,21 @@ import {
   AlertTriangle,
   AlertCircle,
   Info,
+  Menu,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore, useAuthStore } from "@/lib/store";
 import {
+  useCluster,
   useClusters,
   useCharlieActivated,
   useFeatureFlags,
-} from "@/lib/hooks";
-import { useAlertEvents } from "@/lib/hooks/alerting";
+} from "@/lib/hooks/clusters";
+import {
+  useAlertEvents,
+  useAlertEventSummary,
+} from "@/lib/hooks/alerting";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime } from "@/lib/utils";
 import { GlobalSearch } from "@/components/layout/global-search";
@@ -35,80 +39,17 @@ import { logoutCurrentSession } from "@/lib/api/account-security";
 import { listCharlieFindings } from "@/lib/api/charlie";
 import { queryKeys } from "@/lib/query-keys";
 import { selectImportantCharlieFindings } from "@/components/charlie/topbar-findings";
+import { generateBreadcrumbs } from "@/lib/breadcrumbs";
+import { liveFallback } from "@/lib/live/status-store";
+import {
+  ClusterScopeControls,
+  clusterIdFromPath,
+} from "@/components/layout/cluster-scope-controls";
+import { ClusterShellLauncher } from "@/components/window-manager/cluster-shell-launcher";
+import { useClusterScopeStore } from "@/lib/cluster-scope";
+import { can } from "@/lib/permissions";
 
 // --- Breadcrumb generation ---
-
-const routeLabels: Record<string, string> = {
-  dashboard: "Dashboard",
-  clusters: "Clusters",
-  workloads: "Workloads",
-  monitoring: "Monitoring",
-  alerting: "Alerting",
-  logging: "Logging",
-  storage: "Storage",
-  networking: "Networking",
-  delivery: "Continuous Delivery",
-  rbac: "RBAC",
-  projects: "Projects",
-  settings: "Settings",
-  register: "Register",
-  // Resource types
-  pods: "Pods",
-  deployments: "Deployments",
-  daemonsets: "DaemonSets",
-  statefulsets: "StatefulSets",
-  jobs: "Jobs",
-  cronjobs: "CronJobs",
-  services: "Services",
-  ingresses: "Ingresses",
-  configmaps: "ConfigMaps",
-  secrets: "Secrets",
-  hpa: "HPA",
-  "network-policies": "Network Policies",
-  "persistent-volumes": "Persistent Volumes",
-  "persistent-volume-claims": "PVCs",
-  "storage-classes": "Storage Classes",
-  resourcequotas: "Resource Quotas",
-  limitranges: "Limit Ranges",
-  poddisruptionbudgets: "PDBs",
-  crds: "CRDs",
-  serviceaccounts: "Service Accounts",
-  "k8s-clusterroles": "Cluster Roles",
-  "k8s-clusterrolebindings": "Cluster Role Bindings",
-  "k8s-roles": "Roles",
-  "k8s-rolebindings": "Role Bindings",
-  endpoints: "Endpoints",
-  replicasets: "ReplicaSets",
-  namespaces: "Namespaces",
-  nodes: "Nodes",
-  events: "Events",
-  charlie: "Charlie",
-};
-
-function generateBreadcrumbs(
-  pathname: string,
-  clusterMap?: Record<string, string>,
-) {
-  const segments = pathname.split("/").filter(Boolean);
-  const crumbs: { label: string; href: string }[] = [];
-  let path = "";
-
-  for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i];
-    path += `/${segment}`;
-
-    let label: string;
-    if (segments[i - 1] === "clusters" && clusterMap?.[segment]) {
-      label = clusterMap[segment];
-    } else {
-      label = routeLabels[segment] || decodeURIComponent(segment);
-    }
-
-    crumbs.push({ label, href: path });
-  }
-
-  return crumbs;
-}
 
 const severityIcon: Record<string, React.ElementType> = {
   critical: AlertCircle,
@@ -123,9 +64,14 @@ const severityColor: Record<string, string> = {
 };
 
 export function Topbar() {
-  const pathname = usePathname();
-  const router = useRouter();
-  const { setCommandPaletteOpen } = useUIStore();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const currentClusterId = clusterIdFromPath(pathname);
+  const rememberedClusterId = useClusterScopeStore(
+    (state) => state.lastClusterId,
+  );
+  const activeClusterId = currentClusterId ?? rememberedClusterId ?? undefined;
+  const navigate = useNavigate();
+  const { setCommandPaletteOpen, setMobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -134,7 +80,16 @@ export function Topbar() {
   // Clusters are still fetched here so breadcrumbs can resolve the
   // /dashboard/clusters/{id}/... slug into the human-readable cluster name.
   const { data: clustersData } = useClusters({ pageSize: 50 });
-  const { data: alertEvents } = useAlertEvents({ status: "firing" });
+  const {
+    data: activeCluster,
+    isLoading: activeClusterLoading,
+    isError: activeClusterError,
+  } = useCluster(activeClusterId ?? "");
+  const { data: alertEventsPage } = useAlertEvents({
+    status: "firing",
+    limit: 5,
+  });
+  const { data: alertEventSummary } = useAlertEventSummary();
   const { data: featureFlags } = useFeatureFlags();
   const { activated: charlieActivated } = useCharlieActivated();
   const { data: charlieFindings } = useQuery({
@@ -147,12 +102,11 @@ export function Topbar() {
     // signed in makes non-executed diagnoses visible in the existing alert
     // bell without opening a browser-to-Charlie transport or running anything
     // while the product feature is disabled.
-    refetchInterval: 30_000,
+    refetchInterval: liveFallback(30_000),
     refetchIntervalInBackground: false,
   });
 
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
 
   const clusterMap = useMemo(() => {
     // Breadcrumbs use the technical RFC-1123 cluster name rather than the
@@ -167,18 +121,25 @@ export function Topbar() {
 
   const breadcrumbs = generateBreadcrumbs(pathname, clusterMap);
 
-  const firingAlerts = alertEvents?.filter((e) => e.status === "firing") || [];
-  const recentAlerts = (alertEvents || []).slice(0, 5);
+  const recentAlerts = alertEventsPage?.data ?? [];
   const actionableCharlieFindings = selectImportantCharlieFindings(
     charlieFindings || [],
   );
   const importantFindings = actionableCharlieFindings.slice(0, 5);
   const notificationCount =
-    firingAlerts.length + actionableCharlieFindings.length;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+    (alertEventSummary?.firing ?? 0) + actionableCharlieFindings.length;
+  const canOpenClusterShell = activeClusterId
+    ? can(user, "shell", "exec", { type: "cluster", id: activeClusterId })
+    : false;
+  const shellDisabledReason = activeClusterLoading
+    ? "Loading cluster details"
+    : activeClusterError || (activeClusterId && !activeCluster)
+      ? "The active cluster is unavailable"
+      : activeCluster?.isLocal
+        ? "Cluster shell is unavailable on the management plane cluster"
+        : !canOpenClusterShell
+          ? "You need shell:exec access for this cluster"
+          : undefined;
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -203,23 +164,26 @@ export function Topbar() {
     else setTheme("light");
   };
 
-  const visibleTheme = mounted ? theme || "system" : "dark";
-  const ThemeIcon = !mounted
-    ? Moon
-    : visibleTheme === "dark"
-      ? Moon
-      : visibleTheme === "light"
-        ? Sun
-        : Monitor;
+  const visibleTheme = theme || "system";
+  const ThemeIcon =
+    visibleTheme === "dark" ? Moon : visibleTheme === "light" ? Sun : Monitor;
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-6 border-b border-border bg-background/80 backdrop-blur-lg">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/80 px-3 backdrop-blur-lg sm:px-6">
+      <button
+        type="button"
+        onClick={() => setMobileSidebarOpen(true)}
+        className="mr-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
+        aria-label="Open navigation"
+      >
+        <Menu className="h-4 w-4" />
+      </button>
       {/* Left: Breadcrumbs */}
-      <nav className="flex items-center gap-1.5 text-sm min-w-0">
+      <nav className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-sm">
         {breadcrumbs.map((crumb, i) => (
           <div key={crumb.href} className="flex items-center gap-1.5 min-w-0">
             {i > 0 && (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             )}
             {i === breadcrumbs.length - 1 ? (
               <span className="text-foreground font-medium truncate">
@@ -227,7 +191,7 @@ export function Topbar() {
               </span>
             ) : (
               <button
-                onClick={() => router.push(crumb.href)}
+                onClick={() => void navigate({ to: crumb.href })}
                 className="text-muted-foreground hover:text-foreground transition-colors truncate"
               >
                 {crumb.label}
@@ -244,10 +208,21 @@ export function Topbar() {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
+        {currentClusterId ? (
+          <ClusterScopeControls clusterId={currentClusterId} />
+        ) : null}
+        <ClusterShellLauncher
+          clusterId={activeClusterId}
+          clusterName={
+            activeCluster?.displayName || activeCluster?.name || undefined
+          }
+          disabled={Boolean(shellDisabledReason)}
+          disabledReason={shellDisabledReason}
+        />
         {/* Command Palette Trigger */}
         <button
           onClick={() => setCommandPaletteOpen(true)}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border text-xs
+          className="hidden items-center gap-1.5 h-8 px-2.5 rounded-md border border-border text-xs sm:inline-flex
             text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
           <Command className="h-3.5 w-3.5" />
@@ -292,9 +267,9 @@ export function Topbar() {
                 <h4 className="text-sm font-medium text-foreground">
                   Notifications
                 </h4>
-                {firingAlerts.length > 0 && (
+                {(alertEventSummary?.firing ?? 0) > 0 && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-status-error/10 text-status-error font-medium">
-                    {firingAlerts.length} firing
+                    {alertEventSummary?.firing} firing
                   </span>
                 )}
               </div>
@@ -304,9 +279,9 @@ export function Topbar() {
                   <button
                     key={`charlie:${finding.id}`}
                     onClick={() => {
-                      router.push(
-                        `/dashboard/charlie?tab=findings&finding=${encodeURIComponent(finding.id)}`,
-                      );
+                      void navigate({
+                        to: `/dashboard/charlie?tab=findings&finding=${encodeURIComponent(finding.id)}`,
+                      });
                       setNotificationOpen(false);
                     }}
                     className="flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left hover:bg-accent/50"
@@ -352,7 +327,7 @@ export function Topbar() {
                       >
                         <SevIcon
                           className={cn(
-                            "h-4 w-4 flex-shrink-0 mt-0.5",
+                            "h-4 w-4 shrink-0 mt-0.5",
                             severityColor[alert.severity] ||
                               "text-muted-foreground",
                           )}
@@ -380,7 +355,7 @@ export function Topbar() {
               <div className="px-4 py-2 border-t border-border">
                 <button
                   onClick={() => {
-                    router.push("/dashboard/alerting");
+                    void navigate({ to: "/dashboard/alerting" });
                     setNotificationOpen(false);
                   }}
                   className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
@@ -399,8 +374,8 @@ export function Topbar() {
             aria-label="User menu"
             className="flex items-center gap-2 h-8 pl-1 pr-2 rounded-md hover:bg-accent transition-colors"
           >
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center">
-              <User className="h-3 w-3 text-zinc-300" />
+            <div className="w-6 h-6 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center">
+              <User className="h-3 w-3 text-primary-foreground" />
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </button>
@@ -416,7 +391,18 @@ export function Topbar() {
               <div className="p-1">
                 <button
                   onClick={() => {
-                    router.push("/dashboard/settings");
+                    void navigate({ to: "/dashboard/account/preferences" });
+                    setUserMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
+                    text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Preferences
+                </button>
+                <button
+                  onClick={() => {
+                    void navigate({ to: "/dashboard/settings" });
                     setUserMenuOpen(false);
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
@@ -427,7 +413,7 @@ export function Topbar() {
                 </button>
                 <button
                   onClick={() => {
-                    router.push("/dashboard/account/security");
+                    void navigate({ to: "/dashboard/account/security" });
                     setUserMenuOpen(false);
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm
@@ -457,7 +443,7 @@ export function Topbar() {
                       // which lands the SPA back on /auth/login.
                       window.location.href = redirectUrl;
                     } else {
-                      router.push("/auth/login");
+                      void navigate({ to: "/auth/login" });
                     }
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm

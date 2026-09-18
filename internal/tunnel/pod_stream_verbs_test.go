@@ -33,6 +33,15 @@ func platformOperatorRules() []rbac.Rule {
 	}
 }
 
+func TestStreamConsumerConstructorsRejectPartialSecurityWiring(t *testing.T) {
+	if consumer, err := NewExecConsumer(nil, nil, StreamConsumerDependencies{}); err == nil || consumer != nil {
+		t.Fatalf("partial exec consumer constructed: consumer=%v err=%v", consumer, err)
+	}
+	if consumer, err := NewLogsConsumer(nil, nil, StreamConsumerDependencies{}); err == nil || consumer != nil {
+		t.Fatalf("partial logs consumer constructed: consumer=%v err=%v", consumer, err)
+	}
+}
+
 // clusterTroubleshooterRules is the exact grant set of the 'Cluster
 // Troubleshooter' built-in in the canonical initial schema. pods:exec and
 // pods:logs, clusters:read — and deliberately no clusters:update.
@@ -94,8 +103,7 @@ func clusterRoleBinding(clusterID uuid.UUID, rules []rbac.Rule) []rbac.RoleBindi
 // bearer tokens and PII) in every namespace.
 func TestLogsConsumer_ClustersReadWithoutPodsLogsIsDenied(t *testing.T) {
 	clusterID := uuid.New()
-	lc := NewLogsConsumer(nil, nil)
-	lc.SetAuthorization(rbac.NewEngine(), &mockRBACQuerier{bindings: globalRoleBinding(monitoringViewerRules())})
+	lc := &LogsConsumer{rbacEngine: rbac.NewEngine(), rbacQuerier: &mockRBACQuerier{bindings: globalRoleBinding(monitoringViewerRules())}}
 
 	if lc.authorizeCluster(context.Background(), uuid.New(), clusterID, "default") {
 		t.Fatal("clusters:read with no pods grant must not stream pod logs")
@@ -106,8 +114,7 @@ func TestLogsConsumer_ClustersReadWithoutPodsLogsIsDenied(t *testing.T) {
 // catalog actually hands out for log reading is now the one consulted.
 func TestLogsConsumer_PodsLogsIsAllowed(t *testing.T) {
 	clusterID := uuid.New()
-	lc := NewLogsConsumer(nil, nil)
-	lc.SetAuthorization(rbac.NewEngine(), &mockRBACQuerier{bindings: globalRoleBinding(loggingViewerRules())})
+	lc := &LogsConsumer{rbacEngine: rbac.NewEngine(), rbacQuerier: &mockRBACQuerier{bindings: globalRoleBinding(loggingViewerRules())}}
 
 	if !lc.authorizeCluster(context.Background(), uuid.New(), clusterID, "default") {
 		t.Fatal("'Logging Viewer' holds pods:logs and must keep log streaming")
@@ -121,8 +128,7 @@ func TestLogsConsumer_PodsLogsIsAllowed(t *testing.T) {
 // ever starts failing, the reduction has been reverted, not fixed.
 func TestExecConsumer_PlatformOperatorIsDeniedExec(t *testing.T) {
 	clusterID := uuid.New()
-	ec := NewExecConsumer(nil, nil)
-	ec.SetAuthorization(rbac.NewEngine(), &mockRBACQuerier{bindings: globalRoleBinding(platformOperatorRules())})
+	ec := &ExecConsumer{rbacEngine: rbac.NewEngine(), rbacQuerier: &mockRBACQuerier{bindings: globalRoleBinding(platformOperatorRules())}}
 
 	if ec.authorizeCluster(context.Background(), uuid.New(), clusterID, "default") {
 		t.Fatal("'Platform Operator' holds no pods grant and must not get an interactive shell")
@@ -133,8 +139,7 @@ func TestExecConsumer_PlatformOperatorIsDeniedExec(t *testing.T) {
 // reduction.
 func TestLogsConsumer_PlatformOperatorIsDeniedLogs(t *testing.T) {
 	clusterID := uuid.New()
-	lc := NewLogsConsumer(nil, nil)
-	lc.SetAuthorization(rbac.NewEngine(), &mockRBACQuerier{bindings: globalRoleBinding(platformOperatorRules())})
+	lc := &LogsConsumer{rbacEngine: rbac.NewEngine(), rbacQuerier: &mockRBACQuerier{bindings: globalRoleBinding(platformOperatorRules())}}
 
 	if lc.authorizeCluster(context.Background(), uuid.New(), clusterID, "default") {
 		t.Fatal("'Platform Operator' holds no pods grant and must not stream pod logs")
@@ -146,8 +151,7 @@ func TestLogsConsumer_PlatformOperatorIsDeniedLogs(t *testing.T) {
 // terminal used to 403 for its intended persona.
 func TestExecConsumer_ClusterTroubleshooterIsAllowedExec(t *testing.T) {
 	clusterID := uuid.New()
-	ec := NewExecConsumer(nil, nil)
-	ec.SetAuthorization(rbac.NewEngine(), &mockRBACQuerier{bindings: clusterRoleBinding(clusterID, clusterTroubleshooterRules())})
+	ec := &ExecConsumer{rbacEngine: rbac.NewEngine(), rbacQuerier: &mockRBACQuerier{bindings: clusterRoleBinding(clusterID, clusterTroubleshooterRules())}}
 
 	if !ec.authorizeCluster(context.Background(), uuid.New(), clusterID, "default") {
 		t.Fatal("'Cluster Troubleshooter' holds pods:exec and must be able to exec")
@@ -158,8 +162,7 @@ func TestExecConsumer_ClusterTroubleshooterIsAllowedExec(t *testing.T) {
 // the global-scope support template.
 func TestExecConsumer_SupportEngineerIsAllowedExec(t *testing.T) {
 	clusterID := uuid.New()
-	ec := NewExecConsumer(nil, nil)
-	ec.SetAuthorization(rbac.NewEngine(), &mockRBACQuerier{bindings: globalRoleBinding(supportEngineerRules())})
+	ec := &ExecConsumer{rbacEngine: rbac.NewEngine(), rbacQuerier: &mockRBACQuerier{bindings: globalRoleBinding(supportEngineerRules())}}
 
 	if !ec.authorizeCluster(context.Background(), uuid.New(), clusterID, "default") {
 		t.Fatal("'Support Engineer' holds pods:exec and must be able to exec")

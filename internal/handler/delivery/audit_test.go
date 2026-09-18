@@ -8,46 +8,48 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type deliveryAuditWriter struct {
-	rows []sqlc.CreateAuditLogV1Params
+	rows []sqlc.UpsertAuditOutboxParams
 }
 
-func (w *deliveryAuditWriter) CreateAuditLogV1(_ context.Context, row sqlc.CreateAuditLogV1Params) error {
+func (w *deliveryAuditWriter) UpsertAuditOutbox(_ context.Context, row sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
 	w.rows = append(w.rows, row)
-	return nil
+	return sqlc.AuditOutbox{ID: row.ID}, nil
 }
 
-func TestRecordAuditPreservesRequestIdentityAndMetadataOnlyDetail(t *testing.T) {
-	audit.SetWriter(nil)
+func TestRecordAuditOutboxPreservesRequestIdentityAndMetadataOnlyDetail(t *testing.T) {
 	writer := &deliveryAuditWriter{}
 	userID := uuid.New()
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources", nil)
 	request.Header.Set("User-Agent", "delivery-audit-test")
-	request = request.WithContext(middleware.SetAuthenticatedUserForTest(request.Context(), &middleware.AuthenticatedUser{
+	request = request.WithContext(reqctx.WithUser(request.Context(), &reqctx.User{
 		ID: userID.String(), AuthMethod: "jwt",
 	}))
 
-	recordAudit(request, writer, "delivery.source.created", "delivery_source", "source-a", "source", map[string]any{
+	err := recordAuditOutbox(request, writer, deliveryAuditEvent{action: "delivery.source.created", resourceType: "delivery_source", resourceID: "source-a", resourceName: "source", status: http.StatusCreated, detail: map[string]any{
 		"project_id":            uuid.NewString(),
 		"source_type":           "git",
 		"credential_configured": true,
-	})
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(writer.rows) != 1 {
 		t.Fatalf("audit rows = %d, want 1", len(writer.rows))
 	}
 	row := writer.rows[0]
 	if row.Action != "delivery.source.created" || row.ResourceType != "delivery_source" || row.ResourceID != "source-a" ||
-		row.HTTPMethod != http.MethodPost || row.Path != "/api/v1/delivery/sources" || row.ActorAuthMethod != "jwt" ||
+		row.HttpMethod != http.MethodPost || row.Path != "/api/v1/delivery/sources" || row.ActorAuthMethod != "jwt" ||
 		!row.UserID.Valid || uuid.UUID(row.UserID.Bytes) != userID {
 		t.Fatalf("unexpected delivery audit row: %+v", row)
 	}

@@ -44,6 +44,9 @@ spec:
           {{- end }}
           image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.postgres.image.repository "tag" .Values.postgres.image.tag "digest" .Values.postgres.image.digest "registry" .Values.postgres.image.registry "fallback" .Values.image.registry) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - -c
+            - {{ printf "max_connections=%d" (int .Values.postgres.bundled.maxConnections) | quote }}
           ports:
             - name: postgres
               containerPort: 5432
@@ -77,6 +80,8 @@ spec:
               command: ["pg_isready", "-U", "{{ .Values.postgres.user }}"]
             initialDelaySeconds: 30
             periodSeconds: 30
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
   volumeClaimTemplates:
     - metadata:
         name: data

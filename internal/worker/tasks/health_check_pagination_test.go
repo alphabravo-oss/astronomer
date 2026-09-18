@@ -9,26 +9,26 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
-// hcPageQuerier embeds RuntimeQuerier and overrides only ListClusters,
+// hcPageQuerier embeds RuntimeQuerier and overrides only ListClusterHealthTargets,
 // serving a fixed slice with real LIMIT/OFFSET semantics so we can prove the
 // health-check sweep walks every page rather than the newest one.
 type hcPageQuerier struct {
 	RuntimeQuerier
-	clusters []sqlc.Cluster
-	calls    []sqlc.ListClustersParams
+	clusters []sqlc.ListClusterHealthTargetsRow
+	calls    []sqlc.ListClusterHealthTargetsParams
 }
 
-func (q *hcPageQuerier) ListClusters(_ context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error) {
+func (q *hcPageQuerier) ListClusterHealthTargets(_ context.Context, arg sqlc.ListClusterHealthTargetsParams) ([]sqlc.ListClusterHealthTargetsRow, error) {
 	q.calls = append(q.calls, arg)
-	start := int(arg.Offset)
+	start := int(arg.QueryOffset)
 	if start >= len(q.clusters) {
-		return []sqlc.Cluster{}, nil
+		return []sqlc.ListClusterHealthTargetsRow{}, nil
 	}
-	end := start + int(arg.Limit)
+	end := start + int(arg.QueryLimit)
 	if end > len(q.clusters) {
 		end = len(q.clusters)
 	}
-	return append([]sqlc.Cluster(nil), q.clusters[start:end]...), nil
+	return append([]sqlc.ListClusterHealthTargetsRow(nil), q.clusters[start:end]...), nil
 }
 
 // TestHealthCheckTargets_PagesEntireFleet is the regression for the 500-row
@@ -38,9 +38,9 @@ func (q *hcPageQuerier) ListClusters(_ context.Context, arg sqlc.ListClustersPar
 // returned only the first healthCheckPageSize rows.
 func TestHealthCheckTargets_PagesEntireFleet(t *testing.T) {
 	const total = healthCheckPageSize*2 + 37 // spans three pages
-	all := make([]sqlc.Cluster, total)
+	all := make([]sqlc.ListClusterHealthTargetsRow, total)
 	for i := range all {
-		all[i] = sqlc.Cluster{ID: uuid.New()}
+		all[i] = sqlc.ListClusterHealthTargetsRow{ID: uuid.New()}
 	}
 	q := &hcPageQuerier{clusters: all}
 	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
@@ -55,7 +55,7 @@ func TestHealthCheckTargets_PagesEntireFleet(t *testing.T) {
 	if len(q.calls) < 3 {
 		t.Fatalf("expected pagination across >=3 pages, got %d ListClusters calls", len(q.calls))
 	}
-	if q.calls[0].Offset != 0 || q.calls[1].Offset != healthCheckPageSize {
+	if q.calls[0].QueryOffset != 0 || q.calls[1].QueryOffset != healthCheckPageSize {
 		t.Fatalf("offsets did not advance by page size: %+v", q.calls)
 	}
 }

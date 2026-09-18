@@ -1,4 +1,4 @@
-{{- if and .Values.managementRestoreDrill.enabled .Values.managementBackup.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name }}
+{{- if and .Values.managementRestoreDrill.enabled .Values.managementBackup.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.s3.credentialsSecretRef.name .Values.managementBackup.encryption.sourceIdentity .Values.managementBackup.encryption.wrappingSecretRef.name }}
 {{- /*
   Management-plane DR: weekly automated proof that the nightly pg_dump
   is actually restorable.
@@ -50,7 +50,9 @@ spec:
             {{- include "astronomer.componentLabels" (dict "context" . "component" "restore-drill") | nindent 12 }}
         spec:
           restartPolicy: OnFailure
-          serviceAccountName: {{ include "astronomer.serviceAccountName" . }}
+          # Restore validation talks only to Postgres and object storage.
+          # Kubernetes API access would add unrelated secret/RBAC authority.
+          automountServiceAccountToken: false
           {{- with .Values.managementRestoreDrill.podSecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -159,27 +161,57 @@ spec:
                   RELEASE="${MANAGEMENT_BACKUP_RELEASE}"
                   DAILY_PFX="${PREFIX}/${RELEASE}/daily/"
 
-                  # --- Discover most recent backup ---------------------------
-                  echo "Listing s3://${BUCKET}/${DAILY_PFX}"
-                  LATEST_KEY="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} \
-                                    --bucket "${BUCKET}" \
-                                    --prefix "${DAILY_PFX}" \
-                                    --query 'Contents[].Key' \
-                                    --output text 2>/dev/null || echo '')"
-                  if [ -z "${LATEST_KEY}" ] || [ "${LATEST_KEY}" = "None" ]; then
-                    fail_and_exit "no backups found under s3://${BUCKET}/${DAILY_PFX}"
+                  # A manifest is the only commit marker for a complete set.
+                  # Select it, authenticate its source/release binding, then use
+                  # only its closed object names. No ciphertext is decrypted
+                  # until both payload digests have also been verified.
+                  echo "Listing committed manifests under s3://${BUCKET}/${DAILY_PFX}"
+                  MANIFEST_KEYS="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} \
+                    --bucket "${BUCKET}" --prefix "${DAILY_PFX}" \
+                    --query 'Contents[?ends_with(Key, `.manifest.json`)].Key' --output text)"
+                  if [ -z "${MANIFEST_KEYS}" ] || [ "${MANIFEST_KEYS}" = None ]; then
+                    fail_and_exit "no authenticated backup manifests found under s3://${BUCKET}/${DAILY_PFX}"
                   fi
-                  # tr tabs/spaces -> newlines, sort, take the last
-                  # (lexical sort works because keys embed ISO-8601
-                  # timestamps — identical to the prune logic in the
-                  # backup CronJob).
-                  BACKUP_KEY="$(echo "${LATEST_KEY}" | tr '\t' '\n' | tr ' ' '\n' | sed '/^$/d' | sort | tail -n1)"
-                  echo "Selected backup: s3://${BUCKET}/${BACKUP_KEY}"
+                  BACKUP_KEY="$(printf '%s\n' "${MANIFEST_KEYS}" | tr '\t ' '\n\n' | sed '/^$/d' | sort | tail -n1)"
+                  STAMP="$(basename "${BACKUP_KEY}" .manifest.json)"
+                  MANIFEST_PATH=/tmp/restore.manifest.json
+                  DUMP_ENVELOPE=/tmp/restore.pgcustom.aead
+                  KEY_ENVELOPE=/tmp/restore.keys.tar.aead
+                  DUMP_PATH=/tmp/restore.pgcustom
+                  KEY_TAR=/tmp/restore.keys.tar
+                  CONTEXT="{\"release\":\"${MANAGEMENT_BACKUP_NAMESPACE}/${RELEASE}\",\"source\":\"${MANAGEMENT_BACKUP_SOURCE_IDENTITY}\",\"stamp\":\"${STAMP}\"}"
+                  aws s3 cp ${AWS_S3_FLAGS} "s3://${BUCKET}/${BACKUP_KEY}" "${MANIFEST_PATH}"
 
-                  # --- Download to scratch -----------------------------------
-                  DUMP_PATH="/tmp/restore.pgcustom"
-                  aws s3 cp ${AWS_S3_FLAGS} "s3://${BUCKET}/${BACKUP_KEY}" "${DUMP_PATH}"
-                  echo "Downloaded $(wc -c < "${DUMP_PATH}") bytes."
+                  verify_manifest() {
+                    dr-crypto manifest-verify --input "${MANIFEST_PATH}" \
+                      --passphrase-file /var/run/astronomer-wrap/passphrase \
+                      --expect-release-name "${RELEASE}" \
+                      --expect-release-namespace "${MANAGEMENT_BACKUP_NAMESPACE}" \
+                      --expect-source-identity "${MANAGEMENT_BACKUP_SOURCE_IDENTITY}" \
+                      --expect-prefix "${PREFIX}/${RELEASE}" "$@"
+                  }
+                  ARCHIVE_KEY="$(verify_manifest --print-field archive.key)" \
+                    || fail_and_exit "backup manifest authentication or archive binding failed"
+                  KEY_BUNDLE_KEY="$(verify_manifest --print-field key_bundle.key)" \
+                    || fail_and_exit "backup manifest key-bundle binding failed"
+                  MANIFEST_SCHEMA_VERSION="$(verify_manifest --print-field source.database_schema_version)" \
+                    || fail_and_exit "backup manifest schema binding failed"
+                  aws s3 cp ${AWS_S3_FLAGS} "s3://${BUCKET}/${ARCHIVE_KEY}" "${DUMP_ENVELOPE}"
+                  aws s3 cp ${AWS_S3_FLAGS} "s3://${BUCKET}/${KEY_BUNDLE_KEY}" "${KEY_ENVELOPE}"
+                  verify_manifest --archive-file "${DUMP_ENVELOPE}" --key-bundle-file "${KEY_ENVELOPE}" \
+                    || fail_and_exit "backup payload digest/size verification failed"
+
+                  dr-crypto decrypt --input "${DUMP_ENVELOPE}" --output "${DUMP_PATH}" \
+                    --passphrase-file /var/run/astronomer-wrap/passphrase \
+                    --expect-purpose database-dump --expect-context "${CONTEXT}" \
+                    || fail_and_exit "database dump authentication/decryption failed"
+                  dr-crypto decrypt --input "${KEY_ENVELOPE}" --output "${KEY_TAR}" \
+                    --passphrase-file /var/run/astronomer-wrap/passphrase \
+                    --expect-purpose key-bundle --expect-context "${CONTEXT}" \
+                    || fail_and_exit "key bundle authentication/decryption failed"
+                  dr-crypto key-bundle-extract --input "${KEY_TAR}" --output /tmp/keys \
+                    || fail_and_exit "authenticated key bundle failed closed extraction"
+                  echo "Authenticated backup set ${BACKUP_KEY} before restore."
 
                   # --- Wait for sidecar Postgres -----------------------------
                   # The readinessProbe gates the initContainer's "ready"
@@ -225,6 +257,9 @@ spec:
                   if [ "${SCHEMA_VERSION}" -lt "${EXPECTED_MIN_SCHEMA_VERSION}" ]; then
                     fail_and_exit "schema_version ${SCHEMA_VERSION} < expected min ${EXPECTED_MIN_SCHEMA_VERSION}"
                   fi
+                  if [ "${SCHEMA_VERSION}" != "${MANIFEST_SCHEMA_VERSION}" ]; then
+                    fail_and_exit "restored schema_version ${SCHEMA_VERSION} does not match authenticated manifest ${MANIFEST_SCHEMA_VERSION}"
+                  fi
 
                   # --- Row-count sanity check --------------------------------
                   # Iterate the comma-separated expected table list and
@@ -244,37 +279,24 @@ spec:
                   done
                   unset IFS
 
-                  # --- Decryptability proof (F4 b) ---------------------------
-                  # A green schema + row-count drill can still hide a DR-FATAL
-                  # problem: the encryption key was never backed up, or has
-                  # drifted from the ciphertext, so the restored rows are
-                  # undecryptable. Download the latest WRAPPED key bundle, unwrap
-                  # it with the separately-held wrapping passphrase, and Fernet-
-                  # verify one known encrypted column from the restored DB. Fail
-                  # the drill if we can't — this is the check that turns "the DB
-                  # restored" into "the DB restored AND is usable".
-                  #
-                  # Requires openssl + python3 in the drill image (python3 uses
-                  # only the stdlib: base64/hmac/hashlib). Gated on the wrapping
-                  # secret being wired, so it stays inert until DR is configured.
+                  # Delivery/catalog tables may legitimately be empty. Verify
+                  # their schema exists separately from the populated baseline.
+                  IFS=','
+                  for TBL in ${REQUIRED_TABLES}; do
+                    EXISTS="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
+                      "SELECT to_regclass('public.${TBL}') IS NOT NULL;" 2>/dev/null || echo 'f')"
+                    if [ "${EXISTS}" != "t" ]; then
+                      fail_and_exit "required table ${TBL} missing from restored DB"
+                    fi
+                    echo "  ${TBL}: schema present"
+                  done
+                  unset IFS
+
+                  # The exact key bundle referenced by the authenticated
+                  # manifest was AEAD-verified and safely extracted before the
+                  # database restore. Prove it matches application ciphertext.
                   if [ -n "${DECRYPT_CHECK_ENABLED:-}" ]; then
                     echo "Verifying decryptability of ${DECRYPT_TABLE}.${DECRYPT_COLUMN}"
-                    KEY_PFX="${PREFIX}/${RELEASE}/${KEYBACKUP_PREFIX}/"
-                    KEY_LIST="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} \
-                                    --bucket "${BUCKET}" --prefix "${KEY_PFX}" \
-                                    --query 'Contents[].Key' --output text 2>/dev/null || echo '')"
-                    if [ -z "${KEY_LIST}" ] || [ "${KEY_LIST}" = "None" ]; then
-                      fail_and_exit "no wrapped key bundle under s3://${BUCKET}/${KEY_PFX} — the encryption key is NOT being backed up, so a real restore would be undecryptable"
-                    fi
-                    LATEST_KEY_OBJ="$(echo "${KEY_LIST}" | tr '\t' '\n' | tr ' ' '\n' | sed '/^$/d' | sort | tail -n1)"
-                    echo "Selected key bundle: s3://${BUCKET}/${LATEST_KEY_OBJ}"
-                    aws s3 cp ${AWS_S3_FLAGS} "s3://${BUCKET}/${LATEST_KEY_OBJ}" /tmp/keys.tar.enc
-                    openssl enc -d -aes-256-cbc -pbkdf2 \
-                      -in /tmp/keys.tar.enc -out /tmp/keys.tar \
-                      -pass file:/var/run/astronomer-wrap/passphrase \
-                      || fail_and_exit "could not unwrap key bundle (wrong wrapping passphrase?)"
-                    mkdir -p /tmp/keys
-                    tar -C /tmp/keys -xf /tmp/keys.tar || fail_and_exit "could not extract key bundle"
                     if [ ! -s /tmp/keys/ASTRONOMER_ENCRYPTION_KEY ]; then
                       fail_and_exit "ASTRONOMER_ENCRYPTION_KEY absent from restored key bundle"
                     fi
@@ -298,8 +320,6 @@ spec:
                       unset SAMPLE_TOKEN
                       echo "  decrypt check OK: ${DECRYPT_TABLE}.${DECRYPT_COLUMN} verifies under the backed-up key"
                     fi
-                    rm -f /tmp/keys.tar.enc /tmp/keys.tar
-                    rm -rf /tmp/keys
                   fi
 
                   # --- Success: write status row -----------------------------
@@ -312,12 +332,18 @@ spec:
                       ('${STARTED_AT}', '${FINISHED_AT}', 'success', '${BACKUP_KEY}',
                        ${SCHEMA_VERSION}, '');
                   "
+                  rm -f "${MANIFEST_PATH}" "${DUMP_ENVELOPE}" "${KEY_ENVELOPE}" "${DUMP_PATH}" "${KEY_TAR}"
+                  rm -rf /tmp/keys
                   echo "Drill OK."
               env:
                 - name: HOME
                   value: /tmp
                 - name: MANAGEMENT_BACKUP_RELEASE
                   value: {{ .Release.Name | quote }}
+                - name: MANAGEMENT_BACKUP_NAMESPACE
+                  value: {{ .Release.Namespace | quote }}
+                - name: MANAGEMENT_BACKUP_SOURCE_IDENTITY
+                  value: {{ .Values.managementBackup.encryption.sourceIdentity | quote }}
                 - name: MANAGEMENT_BACKUP_BUCKET
                   value: {{ .Values.managementBackup.s3.bucket | quote }}
                 - name: MANAGEMENT_BACKUP_REGION
@@ -332,15 +358,15 @@ spec:
                   value: {{ .Values.managementRestoreDrill.expectedMinSchemaVersion | quote }}
                 - name: EXPECTED_TABLES
                   value: {{ join "," .Values.managementRestoreDrill.expectedTables | quote }}
-                {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
+                - name: REQUIRED_TABLES
+                  value: {{ join "," .Values.managementRestoreDrill.requiredTables | quote }}
+                {{- if .Values.managementRestoreDrill.decryptCheck.enabled }}
                 - name: DECRYPT_CHECK_ENABLED
                   value: "1"
                 - name: DECRYPT_TABLE
                   value: {{ .Values.managementRestoreDrill.decryptCheck.table | default "delivery_sources" | quote }}
                 - name: DECRYPT_COLUMN
                   value: {{ .Values.managementRestoreDrill.decryptCheck.column | default "credential_encrypted" | quote }}
-                - name: KEYBACKUP_PREFIX
-                  value: {{ .Values.managementRestoreDrill.decryptCheck.keyPrefix | default "keys" | quote }}
                 {{- end }}
                 - name: DRILL_PASSWORD
                   value: {{ .Values.managementRestoreDrill.sidecar.password | quote }}
@@ -348,12 +374,12 @@ spec:
                 # write at the end. Pulled from the same secret /
                 # configmap the rest of the chart uses so air-gapped
                 # installs don't need a separate wire-up.
-                {{- if .Values.postgres.external.dsnSecretRef.name }}
+                {{- if include "astronomer.databaseSecretName" . }}
                 - name: PROD_DATABASE_URL
                   valueFrom:
                     secretKeyRef:
-                      name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                      key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                      name: {{ include "astronomer.databaseSecretName" . | quote }}
+                      key: {{ include "astronomer.databaseSecretKey" . | quote }}
                 {{- else }}
                 - name: PROD_DATABASE_URL
                   valueFrom:
@@ -367,11 +393,9 @@ spec:
                   readOnly: true
                 - name: scratch
                   mountPath: /tmp
-                {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
                 - name: wrapping-passphrase
                   mountPath: /var/run/astronomer-wrap
                   readOnly: true
-                {{- end }}
               resources:
                 {{- toYaml .Values.managementRestoreDrill.resources | nindent 16 }}
           volumes:
@@ -381,16 +405,12 @@ spec:
                 items:
                   - key: {{ .Values.managementBackup.s3.credentialsSecretRef.key | default "credentials" | quote }}
                     path: credentials
-            {{- if and .Values.managementRestoreDrill.decryptCheck.enabled .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name }}
-            # Same wrapping passphrase the backup used to wrap the key bundle.
-            # Custody MUST be separate from the S3 credentials above.
             - name: wrapping-passphrase
               secret:
-                secretName: {{ .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.name | quote }}
+                secretName: {{ .Values.managementBackup.encryption.wrappingSecretRef.name | quote }}
                 items:
-                  - key: {{ .Values.managementRestoreDrill.decryptCheck.wrappingSecretRef.key | default "passphrase" | quote }}
+                  - key: {{ .Values.managementBackup.encryption.wrappingSecretRef.key | default "passphrase" | quote }}
                     path: passphrase
-            {{- end }}
             - name: scratch
               emptyDir:
                 sizeLimit: {{ .Values.managementRestoreDrill.scratchSizeLimit | default "8Gi" | quote }}

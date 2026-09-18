@@ -19,13 +19,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -510,8 +511,8 @@ func TestServiceMeshHandler_RequiresClusterRead(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := smReq(t, tc.verb, "/", clusterID)
-			req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(),
-				&middleware.AuthenticatedUser{ID: uuid.NewString()}))
+			req = req.WithContext(reqctx.WithUser(req.Context(),
+				&reqctx.User{ID: uuid.NewString()}))
 			rr := httptest.NewRecorder()
 			tc.call(rr, req)
 			if rr.Code != http.StatusForbidden {

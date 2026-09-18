@@ -106,7 +106,7 @@ CREATE FUNCTION public.revoke_charlie_delegations_for_deactivated_user() RETURNS
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    UPDATE charlie_delegations
+    UPDATE public.charlie_delegations
     SET revoked_at = now()
     WHERE principal_id = NEW.id
       AND revoked_at IS NULL;
@@ -123,9 +123,9 @@ CREATE FUNCTION public.revoke_charlie_delegations_for_inactive_connection() RETU
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    UPDATE charlie_delegations AS delegation
+    UPDATE public.charlie_delegations AS delegation
     SET revoked_at = now()
-    FROM charlie_sessions AS session
+    FROM public.charlie_sessions AS session
     WHERE session.connection_id = NEW.id
       AND delegation.session_id = session.id
       AND delegation.revoked_at IS NULL;
@@ -142,7 +142,7 @@ CREATE FUNCTION public.revoke_charlie_delegations_on_rbac_change() RETURNS trigg
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    UPDATE charlie_delegations
+    UPDATE public.charlie_delegations
     SET revoked_at = now()
     WHERE revoked_at IS NULL;
     RETURN NULL;
@@ -1968,7 +1968,7 @@ CREATE TABLE public.component_bundle_versions (
     renderer_spec jsonb DEFAULT '{}'::jsonb NOT NULL,
     reconciliation_policy jsonb DEFAULT '{}'::jsonb NOT NULL,
     health_policy jsonb DEFAULT '{}'::jsonb NOT NULL,
-    requirements jsonb DEFAULT '{}'::jsonb NOT NULL,
+    requirements jsonb DEFAULT '[]'::jsonb NOT NULL,
     dependency_bundle_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
     spec_digest character varying(80) NOT NULL,
     verification_status character varying(24) DEFAULT 'pending'::character varying NOT NULL,
@@ -3709,7 +3709,7 @@ CREATE TABLE public.security_scan_results (
     scan_type character varying(50) NOT NULL,
     status character varying(20) DEFAULT 'running'::character varying NOT NULL,
     summary jsonb DEFAULT '{}'::jsonb NOT NULL,
-    results jsonb DEFAULT '[]'::jsonb NOT NULL,
+    results jsonb DEFAULT '{}'::jsonb NOT NULL,
     started_at timestamptz DEFAULT now() NOT NULL,
     completed_at timestamptz,
     initiated_by_id uuid,

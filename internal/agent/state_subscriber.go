@@ -291,6 +291,10 @@ type StateSubscriber struct {
 	// discover-if-present CRDs). Optional; nil keeps the pre-P4.6
 	// typed-informer-only behavior.
 	meta metadata.Interface
+	// crdAvailable is an optional test seam for discovery. Production callers
+	// leave it nil and isCRDResourceAvailable queries the apiserver discovery
+	// endpoint before starting an optional CRD informer.
+	crdAvailable func(metadataKind) bool
 
 	// startedAt is captured before the informer factory starts so the Events
 	// filter can drop pre-existing items (resyncs include them as Adds).
@@ -700,75 +704,6 @@ func (s *StateSubscriber) startHelmSecretInformer(stopCh <-chan struct{}) {
 		return
 	}
 	go inf.Run(stopCh)
-}
-
-// runCRDInformer loops trying to bring up a metadata informer for a
-// discover-if-present CRD. The CRD may be installed after the agent starts
-// (Velero/Argo/Trivy commonly arrive via the platform baseline post-boot),
-// so each failed bounded sync attempt sleeps and retries instead of giving
-// up. Mirrors MirrorSubscriber.runDynamicGVR's stop-channel discipline.
-func (s *StateSubscriber) runCRDInformer(ctx context.Context, k metadataKind, parentStop <-chan struct{}) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-parentStop:
-			return
-		default:
-		}
-
-		attempt := metadatainformer.NewSharedInformerFactory(s.meta, getStateSubscriberResyncPeriod())
-		inf := attempt.ForResource(k.gvr).Informer()
-		_, _ = inf.AddEventHandler(s.handlers(k.kind, k.apiGroup, k.apiVersion))
-
-		// iterDone scopes the stop-watcher goroutine to THIS iteration; the
-		// watcher owns innerStop's close exclusively so a failed attempt
-		// can't leak a blocked goroutine or double-close on shutdown.
-		innerStop := make(chan struct{})
-		iterDone := make(chan struct{})
-		go func() {
-			select {
-			case <-ctx.Done():
-			case <-parentStop:
-			case <-iterDone:
-			}
-			close(innerStop)
-		}()
-		attempt.Start(innerStop)
-
-		syncStop := make(chan struct{})
-		go func() {
-			select {
-			case <-innerStop:
-			case <-time.After(getStateSubscriberCRDSyncTimeout()):
-			}
-			close(syncStop)
-		}()
-		ok := false
-		for _, v := range attempt.WaitForCacheSync(syncStop) {
-			ok = v
-			break
-		}
-		if ok {
-			s.log.Info("state subscriber: CRD informer online", "gvr", k.gvr.String(), "kind", k.kind)
-			s.recordStore(k.kind, k.apiGroup, k.apiVersion, inf.GetStore(), inf.HasSynced)
-			// Block until shutdown — the informer is running; the watcher
-			// goroutine closes innerStop when ctx/parentStop fire.
-			<-innerStop
-			return
-		}
-
-		close(iterDone)
-		s.log.Debug("state subscriber: CRD not yet available, will retry",
-			"gvr", k.gvr.String(), "retry_in", getStateSubscriberCRDRetry().String())
-		select {
-		case <-ctx.Done():
-			return
-		case <-parentStop:
-			return
-		case <-time.After(getStateSubscriberCRDRetry()):
-		}
-	}
 }
 
 // runGatekeeperConstraints discovers the resources under

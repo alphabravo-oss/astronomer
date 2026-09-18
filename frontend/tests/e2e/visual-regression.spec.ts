@@ -12,6 +12,10 @@ const routes = [
     url: "/dashboard/clusters/c-smoke-1/deployments",
   },
   { name: "logging", url: "/dashboard/logging" },
+  { name: "delivery", url: "/dashboard/delivery" },
+  { name: "rbac", url: "/dashboard/rbac" },
+  { name: "management-backup", url: "/dashboard/settings/backup" },
+  { name: "settings", url: "/dashboard/settings" },
 ];
 
 for (const theme of ["dark", "light"] as const) {
@@ -21,11 +25,13 @@ for (const theme of ["dark", "light"] as const) {
       context,
     }) => {
       const errors = collectErrors(page);
-      await seedAuth(context, page, adminStoreUser);
+      await installStubs(page);
+      await seedAuth(context, page, adminStoreUser, {
+        preferences: { theme },
+      });
       await page.addInitScript((selectedTheme) => {
         window.localStorage.setItem("astronomer-theme", selectedTheme);
       }, theme);
-      await installStubs(page);
       await page.goto(route.url);
       await expect(page.getByTestId("app-shell")).toBeVisible();
       await expect(page).toHaveScreenshot(`${route.name}-${theme}.png`, {

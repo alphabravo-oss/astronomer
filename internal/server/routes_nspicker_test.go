@@ -6,11 +6,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // clusterReadBindings grants clusters:read cluster-wide — the persona that has
@@ -41,7 +42,7 @@ func TestRequireNamespacePickerListPermission(t *testing.T) {
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("cluster_id", clusterID.String())
 		ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-		ctx = appmiddleware.SetAuthenticatedUserForTest(ctx, &appmiddleware.AuthenticatedUser{ID: uuid.New().String()})
+		ctx = reqctx.WithUser(ctx, &reqctx.User{ID: uuid.New().String()})
 		req = req.WithContext(ctx)
 		rec := httptest.NewRecorder()
 		mw(next).ServeHTTP(rec, req)

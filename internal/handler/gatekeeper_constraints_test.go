@@ -8,13 +8,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // --- fakes ---
@@ -102,7 +103,7 @@ func authedConstraintReq(method, target, clusterID string, body any) *http.Reque
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("id", clusterID)
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rc)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: uuid.NewString()})
+	ctx = reqctx.WithUser(ctx, &reqctx.User{ID: uuid.NewString()})
 	return req.WithContext(ctx)
 }
 

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
@@ -33,7 +34,14 @@ func (g *charlieRuntimeGeneration) Run(ctx context.Context) {
 	g.triggers.SetDispatcher(g.dispatcher)
 	g.mu.Unlock()
 	if g.events != nil {
-		go g.events.Run(ctx)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			g.events.Run(ctx)
+		}()
+		<-ctx.Done()
+		<-done
+		return
 	}
 	<-ctx.Done()
 }
@@ -83,6 +91,28 @@ func (g *charlieLifecycleGroup) Start(ctx context.Context) error {
 		return g.runtime.Start(ctx)
 	}
 	return nil
+}
+
+func (g *charlieLifecycleGroup) Run(ctx context.Context) error {
+	if g == nil {
+		<-ctx.Done()
+		return nil
+	}
+	var configurationFailures, runtimeFailures <-chan error
+	if g.configuration != nil {
+		configurationFailures = g.configuration.Failures()
+	}
+	if g.runtime != nil {
+		runtimeFailures = g.runtime.Failures()
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-configurationFailures:
+		return fmt.Errorf("Charlie configuration runtime: %w", err)
+	case err := <-runtimeFailures:
+		return fmt.Errorf("Charlie work runtime: %w", err)
+	}
 }
 
 func (g *charlieLifecycleGroup) Activate(ctx context.Context) error {

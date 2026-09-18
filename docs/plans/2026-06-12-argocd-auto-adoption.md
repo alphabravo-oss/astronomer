@@ -1,5 +1,7 @@
 # ArgoCD Auto-Adoption Plan
 
+> **Status: superseded.** Astronomer now uses Flux-native delivery. This file is retained only as historical context; do not execute it or use it as operator guidance.
+
 **Date:** 2026-06-12  
 **Status:** In progress; auto-adoption and built-in baseline ApplicationSets implemented  
 **Scope:** Automatically register newly adopted clusters into the built-in ArgoCD instance, then use ArgoCD to deploy and reconcile baseline platform components on those clusters.

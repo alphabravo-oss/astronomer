@@ -1,11 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ElementType } from "react";
-import {
-  useLoggingOutputs,
-  useTestLoggingOutput,
-  queryKeys,
-} from "@/lib/hooks";
+import { useLoggingOutputs, useTestLoggingOutput } from "@/lib/hooks/logging";
+import { queryKeys } from "@/lib/query-keys";
 import { deleteLoggingOutput, updateLoggingOutput } from "@/lib/api/logging";
 import {
   clearSharedLoggingURL,
@@ -48,18 +45,23 @@ const outputTypeIcons: Record<string, ElementType> = {
 export function OutputsTab() {
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<LoggingOutput | null>(null);
-  const [queryTarget, setQueryTarget] = useState<LoggingOutput | null>(null);
+  const [querySelection, setQueryTarget] = useState<LoggingOutput | null>();
+  const [sharedFilters] = useState(() =>
+    typeof window === "undefined"
+      ? null
+      : parseSharedLoggingFilters(window.location.href),
+  );
   const [deleting, setDeleting] = useState(false);
   const { data: outputs, isLoading, isError, refetch } = useLoggingOutputs();
   const testOutput = useTestLoggingOutput();
 
-  useEffect(() => {
-    if (queryTarget || !outputs || typeof window === "undefined") return;
-    const shared = parseSharedLoggingFilters(window.location.href);
-    if (!shared) return;
-    const target = outputs.find((output) => output.id === shared.outputId);
-    if (target?.capabilities?.query) setQueryTarget(target);
-  }, [outputs, queryTarget]);
+  const queryTarget =
+    querySelection !== undefined
+      ? querySelection
+      : (outputs?.find(
+          (output) =>
+            output.id === sharedFilters?.outputId && output.capabilities?.query,
+        ) ?? null);
 
   const closeQueryDialog = () => {
     setQueryTarget(null);
@@ -139,7 +141,7 @@ export function OutputsTab() {
       key: "type",
       header: "Type",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {outputTypeOf(row)}
         </span>
       ),
@@ -207,7 +209,7 @@ export function OutputsTab() {
           {row.capabilities?.query ? (
             <button
               onClick={() => setQueryTarget(row)}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               aria-label={`Query ${row.name}`}
             >
               <Search className="h-3 w-3" />
@@ -219,7 +221,7 @@ export function OutputsTab() {
               href={row.capabilities.linkOutUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label={`Open ${row.name} in ${outputTypeOf(row)}`}
             >
               <ExternalLink className="h-3 w-3" />
@@ -229,7 +231,7 @@ export function OutputsTab() {
           <button
             onClick={() => testOutput.mutate(row.id)}
             disabled={testOutput.isPending}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
             title="Test Output"
           >
             <Send className="h-3 w-3" />
@@ -238,7 +240,7 @@ export function OutputsTab() {
           {row.isSystem ? null : (
             <button
               onClick={() => setDeleteTarget(row)}
-              className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+              className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
               title="Delete output"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -260,7 +262,10 @@ export function OutputsTab() {
         loading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
-        emptyMessage="No logging outputs configured"
+        emptyState={{
+          title: "No logging outputs configured",
+          description: "Create the first item to configure this feature.",
+        }}
       />
 
       <ConfirmDialog

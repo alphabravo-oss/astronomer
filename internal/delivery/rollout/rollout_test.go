@@ -354,7 +354,22 @@ func testSnapshot(t *testing.T, count int) (PlanningSnapshot, model.Digest) {
 
 func testCreateRequest(preview model.Digest, strategy model.RolloutStrategy) CreateRequest {
 	return CreateRequest{TargetID: testTargetID, ExpectedTargetGeneration: 7, PreviewDigest: preview, ConfirmAllClusters: true,
-		Strategy: strategy, Actor: "operator@example.test", IdempotencyKey: "release-2026-08-17"}
+		Strategy: strategy, Actor: "operator@example.test", IdempotencyKey: "release-2026-08-17",
+		Audit: audit.Intent{Event: audit.Event{Action: "delivery.rollout.created", ResourceType: "delivery_rollout"}, DedupeKey: "test-rollout-create"}}
+}
+
+func TestPlannerRejectsMissingAuditBeforeTransaction(t *testing.T) {
+	snapshot, preview := testSnapshot(t, 1)
+	store := newMemoryPlanningStore(snapshot)
+	request := testCreateRequest(preview, testStrategy("rolling", 1))
+	request.Audit = audit.Intent{}
+	_, err := mustPlanner(t, store).Create(context.Background(), request)
+	if !errors.Is(err, audit.ErrOutboxUnavailable) {
+		t.Fatalf("missing audit intent error = %v", err)
+	}
+	if store.insertCount != 0 || store.eventCount != 0 || store.enqueueCount != 0 || store.auditCount != 0 {
+		t.Fatal("missing audit intent changed rollout state")
+	}
 }
 
 func mustPlanner(t *testing.T, store PlanningStore) *Planner {

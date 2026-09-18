@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/netip"
@@ -285,6 +286,79 @@ func TestNetworkPolicyPrivateDestinationsRequireHostAndCIDR(t *testing.T) {
 		if policy.allows(test.host, netip.MustParseAddr(test.ip)) {
 			t.Fatalf("policy unexpectedly allowed %s at %s", test.host, test.ip)
 		}
+	}
+}
+
+func TestNetworkPolicyRejectsPrivateLiteralBeforeFetch(t *testing.T) {
+	ctx := context.Background()
+	if err := (NetworkPolicy{}).ValidateURL(ctx, "https://10.42.1.7/artifact"); !HasCode(err, CodeNetworkDenied) {
+		t.Fatalf("private literal error = %v, want network denied", err)
+	}
+	allowed := NetworkPolicy{
+		AllowedPrivateHosts: []string{"10.42.1.7"},
+		AllowedPrivateCIDRs: []netip.Prefix{netip.MustParsePrefix("10.42.1.7/32")},
+	}
+	if err := allowed.ValidateURL(ctx, "https://10.42.1.7/artifact"); err != nil {
+		t.Fatalf("explicit private host/CIDR pair was rejected: %v", err)
+	}
+}
+
+func TestOCIResolverPinsTagToRegistryDigest(t *testing.T) {
+	manifest := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:` + strings.Repeat("0", 64) + `","size":2},"layers":[]}`)
+	manifestDigest := ocidigest.FromBytes(manifest)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodHead || request.URL.Host != "registry.example.test" || request.URL.Path != "/v2/team/app/manifests/release" {
+			t.Fatalf("unexpected registry request: %s %s", request.Method, request.URL.String())
+		}
+		header := make(http.Header)
+		header.Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+		header.Set("Docker-Content-Digest", manifestDigest.String())
+		header.Set("Content-Length", fmt.Sprint(len(manifest)))
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(bytes.NewReader(nil)), Request: request}, nil
+	})}
+	source := unsignedSource(model.SourceOCIArtifact, "oci://registry.example.test/team/app")
+
+	result, err := (ociResolver{}).Resolve(context.Background(), Request{
+		Source: source, RequestedRevision: "release", Limits: Limits{MaxArtifactBytes: 1 << 20},
+	}, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Revision.Kind != model.RevisionOCIDigest || result.Revision.Value != manifestDigest.String() || result.Revision.ArtifactDigest.String() != manifestDigest.String() {
+		t.Fatalf("tag was not pinned to registry digest: %#v", result.Revision)
+	}
+}
+
+func TestOCIResolverPreservesImmutableDigestReference(t *testing.T) {
+	manifest := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:` + strings.Repeat("0", 64) + `","size":2},"layers":[]}`)
+	manifestDigest := ocidigest.FromBytes(manifest)
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodHead || request.URL.Path != "/v2/team/app/manifests/"+manifestDigest.String() {
+			t.Fatalf("immutable OCI request = %s %s", request.Method, request.URL.String())
+		}
+		header := make(http.Header)
+		header.Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
+		header.Set("Docker-Content-Digest", manifestDigest.String())
+		header.Set("Content-Length", fmt.Sprint(len(manifest)))
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(bytes.NewReader(nil)), Request: request}, nil
+	})}
+	result, err := (ociResolver{}).Resolve(context.Background(), Request{
+		Source:            unsignedSource(model.SourceOCIArtifact, "oci://registry.example.test/team/app"),
+		RequestedRevision: manifestDigest.String(),
+		Limits:            Limits{MaxArtifactBytes: 1 << 20},
+	}, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Revision.Value != manifestDigest.String() || result.Revision.ArtifactDigest != mustDigest(t, manifestDigest.String()) {
+		t.Fatalf("immutable digest was not preserved: %#v", result.Revision)
+	}
+}
+
+func TestNetworkPolicyDialRejectsPrivateLiteralBeforeConnecting(t *testing.T) {
+	_, err := (NetworkPolicy{}).dialContext(context.Background(), "tcp", "127.0.0.1:443")
+	if !HasCode(err, CodeNetworkDenied) {
+		t.Fatalf("dialContext() error = %v, want network denial", err)
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -199,11 +201,11 @@ func TestAuditLogWithWriter_PersistsAuditRow(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/660e8400-e29b-41d4-a716-446655440000/", nil)
 	req.RemoteAddr = "203.0.113.9:1234"
 	req.Header.Set("User-Agent", "audit-test")
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         "550e8400-e29b-41d4-a716-446655440000",
 		AuthMethod: "jwt",
 	})
-	ctx = context.WithValue(ctx, contextKey("request_id"), "req-1")
+	ctx = reqctx.WithRequestID(ctx, "req-1", false)
 	req = req.WithContext(ctx)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -279,8 +281,8 @@ func TestAuditLogWithWriter_CharlieMutationUsesContentFreeContract(t *testing.T)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/charlie/findings/resource-SENTINEL/acknowledge/?prompt=query-SENTINEL", strings.NewReader("body-SENTINEL"))
 	req.RemoteAddr = "203.0.113.99:1234"
 	req.Header.Set("User-Agent", "agent-SENTINEL")
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{ID: uuid.NewString(), AuthMethod: "jwt"})
-	ctx = context.WithValue(ctx, contextKey("request_id"), "request-correlation-SENTINEL")
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString(), AuthMethod: "jwt"})
+	ctx = reqctx.WithRequestID(ctx, "request-correlation-SENTINEL", false)
 	req = req.WithContext(ctx)
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
@@ -355,7 +357,7 @@ func TestCharlieHTTPAuditFailuresUseBoundedOperationalSerializer(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prior) })
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/charlie", nil)
-	request = request.WithContext(context.WithValue(request.Context(), requestIDKey, canary))
+	request = request.WithContext(reqctx.WithRequestID(request.Context(), canary, false))
 	writeCharlieAuditLog(request, http.StatusOK, &fakeAuditWriter{err: errors.New(canary)}, 1, "success")
 	if !strings.Contains(output.String(), "charlie.http_audit_persist_failed") || strings.Contains(output.String(), canary) {
 		t.Fatalf("unsafe Charlie HTTP persistence failure log: %s", output.String())
@@ -378,11 +380,11 @@ func TestAuditLogWithWriter_V1OnlyWriter(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/660e8400-e29b-41d4-a716-446655440000/", nil)
 	req.RemoteAddr = "203.0.113.9:1234"
 	req.Header.Set("User-Agent", "audit-test")
-	ctx := SetAuthenticatedUserForTest(req.Context(), &AuthenticatedUser{
+	ctx := reqctx.WithUser(req.Context(), &reqctx.User{
 		ID:         "550e8400-e29b-41d4-a716-446655440000",
 		AuthMethod: "jwt",
 	})
-	ctx = context.WithValue(ctx, contextKey("request_id"), "req-v1")
+	ctx = reqctx.WithRequestID(ctx, "req-v1", false)
 	req = req.WithContext(ctx)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)

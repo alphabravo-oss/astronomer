@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -24,7 +26,7 @@ func TestAuthorizationSupportMissingWiringFailsClosedForAuthenticatedRequests(t 
 		t.Fatalf("unauthenticated direct test request should retain test-mode passthrough")
 	}
 
-	ctx := middleware.SetAuthenticatedUserForTest(context.Background(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(context.Background(), &reqctx.User{
 		ID:         "11111111-1111-1111-1111-111111111111",
 		AuthMethod: "jwt",
 	})
@@ -40,7 +42,7 @@ func TestAuthorizationSupportMissingWiringFailsClosedForAuthenticatedRequests(t 
 
 func TestAuthorizationSupportErrorIncludesRequestID(t *testing.T) {
 	var support authorizationSupport
-	ctx := middleware.SetAuthenticatedUserForTest(context.Background(), &middleware.AuthenticatedUser{
+	ctx := reqctx.WithUser(context.Background(), &reqctx.User{
 		ID:         "11111111-1111-1111-1111-111111111111",
 		AuthMethod: "jwt",
 	})
@@ -124,7 +126,7 @@ func TestRequireSuperuser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			if tt.authUserID != "" {
-				req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: tt.authUserID}))
+				req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: tt.authUserID}))
 			}
 			rec := httptest.NewRecorder()
 			_, ok := requireSuperuser(rec, req, tt.querier, superuserGateConfig{})

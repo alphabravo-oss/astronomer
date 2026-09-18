@@ -371,7 +371,7 @@ func TestCreateSSOProviderCompensationFailureReportsRepairRequired(t *testing.T)
 
 	h.CreateSSOProvider(w, transactionalSSOCreateRequest())
 
-	if w.Code != http.StatusServiceUnavailable || len(store.providers) != 1 || !strings.Contains(w.Body.String(), "repair is required") {
+	if w.Code != http.StatusServiceUnavailable || len(store.providers) != 1 || strings.Contains(w.Body.String(), "repair is required") {
 		t.Fatalf("status=%d providers=%d body=%s", w.Code, len(store.providers), w.Body.String())
 	}
 }

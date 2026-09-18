@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
@@ -51,8 +52,13 @@ const (
 // Claims represents the JWT claims for Astronomer tokens
 type Claims struct {
 	jwt.RegisteredClaims
-	UserID    uuid.UUID `json:"user_id"`
-	TokenType TokenType `json:"token_type"`
+	UserID          uuid.UUID `json:"user_id"`
+	TokenType       TokenType `json:"token_type"`
+	SessionFamilyID uuid.UUID `json:"session_family_id,omitempty"`
+	// BrowserSession marks cookie sessions whose family is checked against
+	// durable storage. Non-browser/internal access JWTs are the explicit
+	// exception; opaque API tokens use a separate authentication boundary.
+	BrowserSession bool `json:"browser_session,omitempty"`
 	// Purpose narrows what a PurposeToken is allowed to do. Empty on
 	// regular access / refresh tokens. The verify handler is the only
 	// thing that should accept a non-empty Purpose; the regular auth
@@ -73,8 +79,14 @@ type Claims struct {
 // set AND the token's iat is before it, the token is rejected.
 type RevocationChecker interface {
 	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
+	IsSessionFamilyRevoked(ctx context.Context, familyID uuid.UUID) (bool, error)
 	UserTokensInvalidatedAt(ctx context.Context, userID uuid.UUID) (time.Time, bool, error)
 }
+
+// ErrRevocationUnavailable identifies an authentication dependency failure.
+// Callers must fail closed and may surface a retryable 503, but must not treat
+// the token as authenticated while revocation state is unknown.
+var ErrRevocationUnavailable = errors.New("token revocation state unavailable")
 
 // JWTManager handles JWT token generation and validation. It supports
 // multi-key rotation: the primary key signs new tokens; all configured
@@ -82,6 +94,8 @@ type RevocationChecker interface {
 // existing callers working unchanged.
 type JWTManager struct {
 	secretKeys           [][]byte // primary first
+	issuer               string
+	audience             string
 	accessTokenLifetime  time.Duration
 	refreshTokenLifetime time.Duration
 
@@ -107,8 +121,14 @@ type JWTManager struct {
 	// freshly-revoked token must be rejected on its next use.
 	cacheMu          sync.RWMutex
 	cacheTTL         time.Duration
+	cacheMaxEntries  int
 	cache            map[string]validationCacheEntry
 	cacheCoordinator cacheinvalidate.Broadcaster
+	validationGroup  singleflight.Group
+	identityGroup    singleflight.Group
+	apiTokenGroup    singleflight.Group
+	apiTokenCache    map[string]apiTokenAuthenticationCacheEntry
+	apiTokenEpoch    uint64
 }
 
 // JWTValidationCacheTTL is the default TTL for the "this JTI is still
@@ -116,11 +136,50 @@ type JWTManager struct {
 // cache hit becomes visible within seconds. The cache key is the JTI;
 // negative outcomes are never cached so a revoke takes effect on the
 // next request.
-const JWTValidationCacheTTL = 30 * time.Second
+const (
+	JWTValidationCacheTTL        = 30 * time.Second
+	JWTValidationCacheMaxEntries = 10_000
+	DefaultJWTIssuer             = "astronomer"
+	DefaultJWTAudience           = "astronomer-browser"
+)
+
+// JWTConfig is the typed trust context for Astronomer-issued JWTs. Issuer and
+// audience are mandatory in production so a token signed with shared key
+// material cannot cross an application or deployment boundary accidentally.
+type JWTConfig struct {
+	SecretKey             string
+	AccessLifetimeMinutes int
+	Issuer                string
+	Audience              string
+}
 
 type validationCacheEntry struct {
-	expiresAt time.Time
-	userID    uuid.UUID
+	expiresAt   time.Time
+	userID      uuid.UUID
+	identity    SessionIdentity
+	hasIdentity bool
+}
+
+// SessionIdentity is the non-sensitive user projection authentication needs
+// after a JWT has passed signature, expiry, and revocation validation. It is
+// kept in the same short-lived, bounded, cross-replica-invalidated cache as the
+// positive revocation verdict. This avoids rereading the users row on every
+// request while preserving the existing immediate invalidation path for user
+// deactivation, deletion, password reset, force logout, and SCIM suspension.
+// Password hashes, lockout state, and other user fields never enter the cache.
+type SessionIdentity struct {
+	UserID             uuid.UUID
+	Email              string
+	Username           string
+	FirstName          string
+	LastName           string
+	IsActive           bool
+	IsStaff            bool
+	IsSuperuser        bool
+	MustChangePassword bool
+	DateJoined         time.Time
+	LastLogin          time.Time
+	HasLastLogin       bool
 }
 
 // NewJWTManager creates a new JWT manager. secretKey is a comma-separated
@@ -139,11 +198,22 @@ type validationCacheEntry struct {
 // zero-length HMAC key, which every reader of this repository can reproduce
 // (dev-keys-default-and-silent).
 func NewJWTManager(secretKey string, accessLifetimeMinutes int) (*JWTManager, error) {
+	return NewJWTManagerWithConfig(JWTConfig{
+		SecretKey: secretKey, AccessLifetimeMinutes: accessLifetimeMinutes,
+		Issuer: DefaultJWTIssuer, Audience: DefaultJWTAudience,
+	})
+}
+
+// NewJWTManagerWithConfig constructs a manager with an explicit token trust
+// context. The compatibility constructor above uses the documented defaults;
+// production composition passes typed configuration here directly.
+func NewJWTManagerWithConfig(cfg JWTConfig) (*JWTManager, error) {
+	accessLifetimeMinutes := cfg.AccessLifetimeMinutes
 	if accessLifetimeMinutes < sessionpolicy.MinMinutes || accessLifetimeMinutes > sessionpolicy.MaxMinutes {
 		accessLifetimeMinutes = sessionpolicy.DefaultMinutes
 	}
 	var keys [][]byte
-	for _, raw := range strings.Split(secretKey, ",") {
+	for _, raw := range strings.Split(cfg.SecretKey, ",") {
 		s := strings.TrimSpace(raw)
 		if s == "" {
 			continue
@@ -153,12 +223,24 @@ func NewJWTManager(secretKey string, accessLifetimeMinutes int) (*JWTManager, er
 	if len(keys) == 0 {
 		return nil, errors.New("jwt: secret key is empty; set SECRET_KEY (chart: secrets.secretKey) to real signing material")
 	}
+	issuer := strings.TrimSpace(cfg.Issuer)
+	if issuer == "" {
+		return nil, errors.New("jwt: issuer is empty; set JWT_ISSUER")
+	}
+	audience := strings.TrimSpace(cfg.Audience)
+	if audience == "" {
+		return nil, errors.New("jwt: audience is empty; set JWT_AUDIENCE")
+	}
 	return &JWTManager{
 		secretKeys:           keys,
+		issuer:               issuer,
+		audience:             audience,
 		accessTokenLifetime:  time.Duration(accessLifetimeMinutes) * time.Minute,
 		refreshTokenLifetime: 7 * 24 * time.Hour, // 7 days
 		cacheTTL:             JWTValidationCacheTTL,
+		cacheMaxEntries:      JWTValidationCacheMaxEntries,
 		cache:                make(map[string]validationCacheEntry),
+		apiTokenCache:        make(map[string]apiTokenAuthenticationCacheEntry),
 	}, nil
 }
 
@@ -185,6 +267,18 @@ func (m *JWTManager) SetRevocationChecker(c RevocationChecker) {
 	m.revMu.Unlock()
 }
 
+// HasRevocationChecker reports whether session validation has a durable
+// revocation dependency. Production composition uses it to reject partial
+// authentication wiring before serving requests.
+func (m *JWTManager) HasRevocationChecker() bool {
+	if m == nil {
+		return false
+	}
+	m.revMu.RLock()
+	defer m.revMu.RUnlock()
+	return m.revocations != nil
+}
+
 // SetValidationCacheTTL overrides the positive-result cache TTL. Pass 0
 // to disable caching. Useful for tests that want to assert revocation
 // is observed immediately without waiting out the default window.
@@ -195,6 +289,23 @@ func (m *JWTManager) SetValidationCacheTTL(d time.Duration) {
 	m.cacheMu.Lock()
 	m.cacheTTL = d
 	m.cache = make(map[string]validationCacheEntry) // drop stale entries
+	m.apiTokenCache = make(map[string]apiTokenAuthenticationCacheEntry)
+	m.apiTokenEpoch++
+	m.cacheMu.Unlock()
+}
+
+// SetValidationCacheMaxEntries bounds the positive-verdict cache. Values below
+// one disable positive caching. Production uses JWTValidationCacheMaxEntries;
+// the setter keeps capacity behavior deterministic in tests.
+func (m *JWTManager) SetValidationCacheMaxEntries(maxEntries int) {
+	if m == nil {
+		return
+	}
+	m.cacheMu.Lock()
+	m.cacheMaxEntries = maxEntries
+	m.cache = make(map[string]validationCacheEntry)
+	m.apiTokenCache = make(map[string]apiTokenAuthenticationCacheEntry)
+	m.apiTokenEpoch++
 	m.cacheMu.Unlock()
 }
 
@@ -207,6 +318,8 @@ func (m *JWTManager) SetCacheInvalidationCoordinator(c cacheinvalidate.Broadcast
 	m.cacheMu.Lock()
 	m.cacheCoordinator = c
 	m.cache = make(map[string]validationCacheEntry)
+	m.apiTokenCache = make(map[string]apiTokenAuthenticationCacheEntry)
+	m.apiTokenEpoch++
 	m.cacheMu.Unlock()
 }
 
@@ -244,16 +357,14 @@ func (m *JWTManager) GenerateTokenPair(userID uuid.UUID) (accessToken, refreshTo
 // access-TTL provider so settings reads inherit request cancellation and
 // deadlines.
 func (m *JWTManager) GenerateTokenPairContext(ctx context.Context, userID uuid.UUID) (accessToken, refreshToken string, err error) {
-	accessToken, err = m.GenerateAccessTokenContext(ctx, userID)
+	pair, err := m.PrepareTokenPairContext(ctx)
 	if err != nil {
-		return "", "", fmt.Errorf("generating access token: %w", err)
+		return "", "", fmt.Errorf("preparing token pair: %w", err)
 	}
-
-	refreshToken, err = m.GenerateRefreshToken(userID)
+	accessToken, refreshToken, err = m.SignPreparedTokenPair(userID, pair)
 	if err != nil {
-		return "", "", fmt.Errorf("generating refresh token: %w", err)
+		return "", "", fmt.Errorf("signing token pair: %w", err)
 	}
-
 	return accessToken, refreshToken, nil
 }
 
@@ -323,12 +434,12 @@ func (m *JWTManager) GenerateAccessToken(userID uuid.UUID) (string, error) {
 // handlers use this through GenerateTokenPairContext; the context-free method
 // remains for non-request callers and compatibility.
 func (m *JWTManager) GenerateAccessTokenContext(ctx context.Context, userID uuid.UUID) (string, error) {
-	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(ctx))
+	return m.generateToken(userID, AccessToken, m.effectiveAccessTTL(ctx), uuid.New(), false)
 }
 
 // GenerateRefreshToken creates a refresh token
 func (m *JWTManager) GenerateRefreshToken(userID uuid.UUID) (string, error) {
-	return m.generateToken(userID, RefreshToken, m.refreshTokenLifetime)
+	return m.generateToken(userID, RefreshToken, m.refreshTokenLifetime, uuid.New(), true)
 }
 
 // GeneratePurposeToken creates a short-lived JWT whose only legitimate use
@@ -348,14 +459,10 @@ func (m *JWTManager) GeneratePurposeToken(userID uuid.UUID, purpose string, ttl 
 	}
 	now := time.Now()
 	claims := Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        uuid.New().String(),
-		},
-		UserID:    userID,
-		TokenType: PurposeToken,
-		Purpose:   purpose,
+		RegisteredClaims: m.registeredClaims(userID, uuid.NewString(), now, now.Add(ttl)),
+		UserID:           userID,
+		TokenType:        PurposeToken,
+		Purpose:          purpose,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(m.secretKeys[0])
@@ -392,11 +499,12 @@ func (m *JWTManager) ValidateTokenContext(ctx context.Context, tokenString strin
 	for _, key := range m.secretKeys {
 		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			if token.Method != jwt.SigningMethodHS256 {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
 			return key, nil
-		})
+		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithIssuer(m.issuer),
+			jwt.WithAudience(m.audience), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
 		if err != nil {
 			lastErr = err
 			continue
@@ -408,8 +516,32 @@ func (m *JWTManager) ValidateTokenContext(ctx context.Context, tokenString strin
 		if claims.UserID == uuid.Nil {
 			return nil, fmt.Errorf("invalid token: missing user_id claim")
 		}
-		if claims.TokenType == "" {
-			return nil, fmt.Errorf("invalid token: missing token_type claim")
+		if claims.Subject != claims.UserID.String() {
+			return nil, fmt.Errorf("invalid token: subject does not match user_id")
+		}
+		if claims.ID == "" {
+			return nil, fmt.Errorf("invalid token: missing jti claim")
+		}
+		switch claims.TokenType {
+		case AccessToken, RefreshToken:
+			if claims.SessionFamilyID == uuid.Nil {
+				return nil, fmt.Errorf("invalid token: missing session family")
+			}
+			if claims.Purpose != "" {
+				return nil, fmt.Errorf("invalid token: session token has purpose claim")
+			}
+			if claims.TokenType == RefreshToken && !claims.BrowserSession {
+				return nil, fmt.Errorf("invalid token: refresh token is not a browser session")
+			}
+		case PurposeToken:
+			if strings.TrimSpace(claims.Purpose) == "" {
+				return nil, fmt.Errorf("invalid token: purpose token has no purpose")
+			}
+			if claims.SessionFamilyID != uuid.Nil {
+				return nil, fmt.Errorf("invalid token: purpose token has session family")
+			}
+		default:
+			return nil, fmt.Errorf("invalid token: unsupported token_type claim")
 		}
 		// Revocation checks — only run when a checker is attached AND
 		// the cache says we haven't recently validated this JTI.
@@ -441,37 +573,50 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 	if jti != "" && m.cacheHit(jti) {
 		return nil
 	}
+	if jti != "" {
+		result := m.validationGroup.DoChan(jti, func() (any, error) {
+			// A request may have populated the cache while this call waited for
+			// the per-JTI flight. Recheck before touching PostgreSQL.
+			if m.cacheHit(jti) {
+				return nil, nil
+			}
+			resolveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+			defer cancel()
+			return nil, m.checkRevocationsUncached(resolveCtx, claims, checker, jti)
+		})
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case resolved := <-result:
+			return resolved.Err
+		}
+	}
+	return m.checkRevocationsUncached(ctx, claims, checker, jti)
+}
 
+func (m *JWTManager) checkRevocationsUncached(ctx context.Context, claims *Claims, checker RevocationChecker, jti string) error {
 	if jti != "" {
 		revoked, err := checker.IsJWTRevoked(ctx, jti)
 		if err != nil {
-			// Failing closed (rejecting) on a DB error would lock
-			// the entire fleet out the moment Postgres hiccups.
-			// Failing open is the conventional auth-middleware
-			// choice — the bcrypt/JWT signature gate already
-			// guarantees the token was issued by us; the revoke
-			// list is an additional layer that's acceptable to
-			// briefly bypass.
-			//
-			// We do NOT cache this outcome — the next request will
-			// retry.
-			if m.securityCacheUnhealthy() {
-				return fmt.Errorf("invalid token: revocation state unavailable")
-			}
-			return nil
+			return fmt.Errorf("%w: token lookup", ErrRevocationUnavailable)
 		}
 		if revoked {
 			return fmt.Errorf("invalid token: token revoked")
 		}
 	}
+	if claims.BrowserSession {
+		revoked, err := checker.IsSessionFamilyRevoked(ctx, claims.SessionFamilyID)
+		if err != nil {
+			return fmt.Errorf("%w: session family lookup", ErrRevocationUnavailable)
+		}
+		if revoked {
+			return fmt.Errorf("invalid token: session family revoked")
+		}
+	}
 
 	cutoff, set, err := checker.UserTokensInvalidatedAt(ctx, claims.UserID)
 	if err != nil {
-		// Same fail-open rationale as above.
-		if m.securityCacheUnhealthy() {
-			return fmt.Errorf("invalid token: user revocation state unavailable")
-		}
-		return nil
+		return fmt.Errorf("%w: user cutoff lookup", ErrRevocationUnavailable)
 	}
 	if set && claims.IssuedAt != nil && !claims.IssuedAt.IsZero() {
 		// iat predates the cutoff -> reject. Use !After so a token
@@ -487,22 +632,12 @@ func (m *JWTManager) checkRevocations(ctx context.Context, claims *Claims) error
 	return nil
 }
 
-func (m *JWTManager) securityCacheUnhealthy() bool {
-	if m == nil {
-		return true
-	}
-	m.cacheMu.RLock()
-	coordinator := m.cacheCoordinator
-	m.cacheMu.RUnlock()
-	return coordinator != nil && !coordinator.Healthy()
-}
-
 func (m *JWTManager) cacheHit(jti string) bool {
-	m.cacheMu.RLock()
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
 	entry, ok := m.cache[jti]
 	ttl := m.cacheTTL
 	coordinator := m.cacheCoordinator
-	m.cacheMu.RUnlock()
 	if coordinator != nil && !coordinator.Healthy() {
 		cacheinvalidate.RecordBypass("jwt", "coordinator_unhealthy")
 		return false
@@ -511,7 +646,7 @@ func (m *JWTManager) cacheHit(jti string) bool {
 		return false
 	}
 	if time.Now().After(entry.expiresAt) {
-		// Lazy eviction; the next put or invalidate will replace it.
+		delete(m.cache, jti)
 		return false
 	}
 	return true
@@ -520,10 +655,138 @@ func (m *JWTManager) cacheHit(jti string) bool {
 func (m *JWTManager) cachePut(jti string, userID uuid.UUID) {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
-	if m.cacheTTL <= 0 || (m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy()) {
+	if m.cacheTTL <= 0 || m.cacheMaxEntries <= 0 || (m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy()) {
 		return
 	}
-	m.cache[jti] = validationCacheEntry{expiresAt: time.Now().Add(m.cacheTTL), userID: userID}
+	now := time.Now()
+	if len(m.cache) >= m.cacheMaxEntries {
+		m.evictCacheEntryLocked(now)
+	}
+	m.cache[jti] = validationCacheEntry{expiresAt: now.Add(m.cacheTTL), userID: userID}
+}
+
+// CachedSessionIdentity returns the user projection previously resolved for a
+// validated JTI. Cache hits are disabled whenever distributed invalidation is
+// unhealthy, matching the revocation-verdict cache's fail-closed behavior.
+func (m *JWTManager) CachedSessionIdentity(jti string) (SessionIdentity, bool) {
+	if m == nil || jti == "" {
+		return SessionIdentity{}, false
+	}
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+	if m.cacheTTL <= 0 || m.cacheMaxEntries <= 0 {
+		return SessionIdentity{}, false
+	}
+	if m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy() {
+		cacheinvalidate.RecordBypass("jwt", "coordinator_unhealthy")
+		return SessionIdentity{}, false
+	}
+	entry, ok := m.cache[jti]
+	if !ok {
+		return SessionIdentity{}, false
+	}
+	if !entry.expiresAt.After(time.Now()) {
+		delete(m.cache, jti)
+		return SessionIdentity{}, false
+	}
+	if !entry.hasIdentity || entry.identity.UserID == uuid.Nil || entry.identity.UserID != entry.userID {
+		return SessionIdentity{}, false
+	}
+	return entry.identity, true
+}
+
+// CacheSessionIdentity attaches an authoritative active-user lookup to the
+// positive JTI cache. The entry is bounded by the normal validation TTL and
+// participates in the same per-JTI, per-user, and global invalidation paths.
+func (m *JWTManager) CacheSessionIdentity(jti string, identity SessionIdentity) {
+	if m == nil || jti == "" || identity.UserID == uuid.Nil {
+		return
+	}
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+	if m.cacheTTL <= 0 || m.cacheMaxEntries <= 0 || (m.cacheCoordinator != nil && !m.cacheCoordinator.Healthy()) {
+		return
+	}
+	now := time.Now()
+	entry, ok := m.cache[jti]
+	if ok && (!entry.expiresAt.After(now) || entry.userID != identity.UserID) {
+		delete(m.cache, jti)
+		ok = false
+	}
+	if !ok {
+		if len(m.cache) >= m.cacheMaxEntries {
+			m.evictCacheEntryLocked(now)
+		}
+		entry = validationCacheEntry{expiresAt: now.Add(m.cacheTTL), userID: identity.UserID}
+	}
+	entry.identity = identity
+	entry.hasIdentity = true
+	m.cache[jti] = entry
+}
+
+// ResolveSessionIdentity returns the cached identity for jti or coalesces
+// concurrent cache misses into one authoritative lookup. The lookup outlives
+// cancellation of the first waiter (within a strict two-second bound), while
+// every waiting request still observes its own cancellation promptly.
+func (m *JWTManager) ResolveSessionIdentity(ctx context.Context, jti string, userID uuid.UUID, resolve func(context.Context) (SessionIdentity, error)) (SessionIdentity, error) {
+	if identity, ok := m.CachedSessionIdentity(jti); ok && identity.UserID == userID {
+		return identity, nil
+	}
+	if resolve == nil {
+		return SessionIdentity{}, errors.New("session identity resolver is not configured")
+	}
+	if jti == "" {
+		return resolve(ctx)
+	}
+	result := m.identityGroup.DoChan(jti, func() (any, error) {
+		if identity, ok := m.CachedSessionIdentity(jti); ok && identity.UserID == userID {
+			return identity, nil
+		}
+		resolveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		identity, err := resolve(resolveCtx)
+		if err != nil {
+			return SessionIdentity{}, err
+		}
+		if identity.UserID == uuid.Nil || identity.UserID != userID {
+			return SessionIdentity{}, errors.New("resolved session identity does not match token subject")
+		}
+		m.CacheSessionIdentity(jti, identity)
+		return identity, nil
+	})
+	select {
+	case <-ctx.Done():
+		return SessionIdentity{}, ctx.Err()
+	case resolved := <-result:
+		if resolved.Err != nil {
+			return SessionIdentity{}, resolved.Err
+		}
+		identity, ok := resolved.Val.(SessionIdentity)
+		if !ok {
+			return SessionIdentity{}, errors.New("resolved session identity has invalid type")
+		}
+		return identity, nil
+	}
+}
+
+// evictCacheEntryLocked removes expired entries first, then the entry closest
+// to expiry if the cache remains full. cacheMu must be held by the caller.
+func (m *JWTManager) evictCacheEntryLocked(now time.Time) {
+	var oldestJTI string
+	var oldestExpiry time.Time
+	for jti, entry := range m.cache {
+		if !entry.expiresAt.After(now) {
+			delete(m.cache, jti)
+			continue
+		}
+		if oldestJTI == "" || entry.expiresAt.Before(oldestExpiry) {
+			oldestJTI = jti
+			oldestExpiry = entry.expiresAt
+		}
+	}
+	if len(m.cache) >= m.cacheMaxEntries && oldestJTI != "" {
+		delete(m.cache, oldestJTI)
+	}
 }
 
 // InvalidateCache drops every entry from the positive-result cache.
@@ -564,53 +827,13 @@ func (m *JWTManager) InvalidateUser(ctx context.Context, userID uuid.UUID) {
 	}
 }
 
-func (m *JWTManager) InvalidateJWTJTILocal(jti string) {
-	if m == nil || jti == "" {
-		return
-	}
-	m.cacheMu.Lock()
-	delete(m.cache, jti)
-	m.cacheMu.Unlock()
-}
-
-func (m *JWTManager) InvalidateJWTUserLocal(userID string) {
-	if m == nil || userID == "" {
-		return
-	}
-	id, err := uuid.Parse(userID)
-	if err != nil {
-		return
-	}
-	m.cacheMu.Lock()
-	for jti, entry := range m.cache {
-		if entry.userID == id {
-			delete(m.cache, jti)
-		}
-	}
-	m.cacheMu.Unlock()
-}
-
-func (m *JWTManager) InvalidateJWTAllLocal() {
-	if m == nil {
-		return
-	}
-	m.cacheMu.Lock()
-	m.cache = make(map[string]validationCacheEntry)
-	m.cacheMu.Unlock()
-}
-
 // generateToken is the internal token generation helper
-func (m *JWTManager) generateToken(userID uuid.UUID, tokenType TokenType, lifetime time.Duration) (string, error) {
+func (m *JWTManager) generateToken(userID uuid.UUID, tokenType TokenType, lifetime time.Duration, familyID uuid.UUID, browserSession bool) (string, error) {
 	now := time.Now()
 
 	claims := Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(lifetime)),
-			IssuedAt:  jwt.NewNumericDate(now),
-			ID:        uuid.New().String(),
-		},
-		UserID:    userID,
-		TokenType: tokenType,
+		RegisteredClaims: m.registeredClaims(userID, uuid.NewString(), now, now.Add(lifetime)),
+		UserID:           userID, TokenType: tokenType, SessionFamilyID: familyID, BrowserSession: browserSession,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -620,4 +843,12 @@ func (m *JWTManager) generateToken(userID uuid.UUID, tokenType TokenType, lifeti
 	}
 
 	return signedToken, nil
+}
+
+func (m *JWTManager) registeredClaims(userID uuid.UUID, id string, issuedAt, expiresAt time.Time) jwt.RegisteredClaims {
+	return jwt.RegisteredClaims{
+		Issuer: m.issuer, Subject: userID.String(), Audience: jwt.ClaimStrings{m.audience},
+		ExpiresAt: jwt.NewNumericDate(expiresAt), NotBefore: jwt.NewNumericDate(issuedAt),
+		IssuedAt: jwt.NewNumericDate(issuedAt), ID: id,
+	}
 }

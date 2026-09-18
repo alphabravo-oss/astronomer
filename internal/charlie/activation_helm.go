@@ -12,45 +12,38 @@ import (
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
+
+	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 )
 
 type InClusterHelmReleaser struct {
 	namespace string
+	runtime   helmruntime.Config
 }
 
-func NewInClusterHelmReleaser(namespace string) *InClusterHelmReleaser {
+func NewInClusterHelmReleaser(namespace string, runtime helmruntime.Config) *InClusterHelmReleaser {
 	if strings.TrimSpace(namespace) == "" {
 		return nil
 	}
-	return &InClusterHelmReleaser{namespace: namespace}
+	runtime.Namespace = namespace
+	return &InClusterHelmReleaser{namespace: namespace, runtime: runtime}
 }
 
 func (r *InClusterHelmReleaser) helmConfig() (*cli.EnvSettings, *action.Configuration, error) {
 	if r == nil {
 		return nil, nil, fmt.Errorf("Charlie agent Helm installer is unavailable")
 	}
-	for key, value := range map[string]string{
-		"HELM_CACHE_HOME": "/tmp/helm/cache", "HELM_CONFIG_HOME": "/tmp/helm/config", "HELM_DATA_HOME": "/tmp/helm/data",
-		"HELM_REGISTRY_CONFIG": "/tmp/helm/config/registry/config.json",
-	} {
-		if os.Getenv(key) == "" {
-			_ = os.Setenv(key, value)
-		}
-	}
-	settings := cli.New()
+	settings := r.runtime.Settings()
 	settings.SetNamespace(r.namespace)
 	cfg := new(action.Configuration)
-	if err := cfg.Init(settings.RESTClientGetter(), r.namespace, os.Getenv("HELM_DRIVER"), func(string, ...interface{}) {}); err != nil {
+	if err := cfg.Init(settings.RESTClientGetter(), r.namespace, r.runtime.Driver, func(string, ...interface{}) {}); err != nil {
 		return nil, nil, fmt.Errorf("init Charlie agent Helm: %w", err)
 	}
 	return settings, cfg, nil
 }
 
 func (r *InClusterHelmReleaser) registryClient(spec HelmReleaseSpec) (*registry.Client, error) {
-	creds := os.Getenv("HELM_REGISTRY_CONFIG")
-	if creds == "" {
-		creds = "/tmp/helm/config/registry/config.json"
-	}
+	creds := r.runtime.Settings().RegistryConfig
 	if err := os.MkdirAll(filepath.Dir(creds), 0o700); err != nil {
 		return nil, fmt.Errorf("Charlie agent registry config: %w", err)
 	}

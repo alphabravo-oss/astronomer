@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+. scripts/lib/docker-test-endpoint.sh
 
 CLUSTER_ROWS="${CLUSTER_ROWS:-100000}"
 OPERATION_ROWS="${OPERATION_ROWS:-1000000}"
@@ -30,14 +31,14 @@ MIGRATE_BIN="$WORK_DIR/astronomer-migrate"
 go build -trimpath -o "$MIGRATE_BIN" ./cmd/migrator
 docker run -d --rm --name "$CONTAINER" \
   -e POSTGRES_PASSWORD=astro -e POSTGRES_USER=astro -e POSTGRES_DB=astronomer \
-  -p 127.0.0.1::5432 pgvector/pgvector:pg17 >/dev/null
+  -p "${DOCKER_TEST_BIND_HOST}::5432" pgvector/pgvector:pg17 >/dev/null
 for _ in $(seq 1 60); do
   docker exec "$CONTAINER" pg_isready -U astro -d astronomer >/dev/null 2>&1 && break
   sleep 1
 done
 docker exec "$CONTAINER" pg_isready -U astro -d astronomer >/dev/null
 PORT="$(docker port "$CONTAINER" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
-DATABASE_URL="postgres://astro:astro@127.0.0.1:${PORT}/astronomer?sslmode=disable"
+DATABASE_URL="postgres://astro:astro@${DOCKER_TEST_CONNECT_HOST}:${PORT}/astronomer?sslmode=disable"
 "$MIGRATE_BIN" -database "$DATABASE_URL" -path internal/db/migrations up >/dev/null
 
 echo "query-plan-certification: seeding ${CLUSTER_ROWS} clusters and ${OPERATION_ROWS} scoped operations"

@@ -1,6 +1,6 @@
 # Distributed security-cache invalidation
 
-Astronomer coordinates the positive JWT-revocation and RBAC binding caches
+Astronomer coordinates the positive JWT-validation/session-identity and RBAC binding caches
 across server replicas through the dedicated Redis channel
 `astronomer:security-cache-invalidation:v1`. This channel is separate from
 user-visible events. Its versioned messages contain only an invalidation kind,
@@ -35,6 +35,16 @@ an unhealthy condition rather than silently becoming zero. Multi-replica
 readiness remains degraded until initial epoch state has been established.
 Explicit single-replica development can use local-only caching and emits a
 startup warning.
+
+The JWT entry contains only the authenticated user's non-sensitive request
+profile (identifier, names, active/staff/superuser flags, password-change flag,
+and login timestamps); it never contains a password hash or credential. Its
+lifetime is the same bounded 30-second window as the validation verdict, and
+all JTI/user/global invalidations remove both together. Concurrent cold misses
+for one JTI are singleflight-coalesced, so a cache expiry or server restart
+cannot stampede PostgreSQL. `/auth/me` reuses this authoritative request
+profile; a superuser does not issue a role-binding query because their
+platform-wide authority is intrinsic.
 
 ## Mutation inventory
 

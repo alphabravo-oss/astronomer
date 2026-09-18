@@ -165,13 +165,7 @@ func TestK8sProxyNamespaceScopedListGate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:                 jwtMgr,
-				RBACEngine:          rbac.NewEngine(),
-				RBACQueries:         routeSecurityRBACQuerier{bindings: tt.bindings},
-				Proxy:               tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-				NamespaceScopedRBAC: tt.flagOn,
-			})
+			router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.bindings}}, ClusterResources: ClusterResourceDependencies{NamespaceScopedRBAC: tt.flagOn}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			req.Header.Set("Authorization", "Bearer "+token)
 			rec := httptest.NewRecorder()

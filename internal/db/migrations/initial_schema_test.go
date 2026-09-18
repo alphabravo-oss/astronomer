@@ -96,6 +96,25 @@ func TestCanonicalTeardownIsScoped(t *testing.T) {
 	}
 }
 
+func TestApplicationCatalogHistoryBackfillQualifiesPgcryptoDigest(t *testing.T) {
+	up := readMigration(t, "054_application_catalog_history_backfill.up.sql")
+	if !strings.Contains(up, "public.digest(installation.values_override, 'sha256')") {
+		t.Fatal("application catalog history backfill must schema-qualify pgcrypto digest when search_path is empty")
+	}
+}
+
+func TestCanonicalCharlieDelegationFunctionsAreSearchPathIndependent(t *testing.T) {
+	up := readMigration(t, "001_initial.up.sql")
+	for _, required := range []string{
+		"UPDATE public.charlie_delegations",
+		"FROM public.charlie_sessions AS session",
+	} {
+		if !strings.Contains(up, required) {
+			t.Fatalf("canonical Charlie delegation functions must contain %q", required)
+		}
+	}
+}
+
 func TestLoggingOutputsSystemUniqueIndex(t *testing.T) {
 	up := readMigration(t, "004_logging_outputs_is_system.up.sql")
 	if !strings.Contains(up, "ADD COLUMN is_system boolean") {

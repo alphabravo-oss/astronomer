@@ -79,6 +79,12 @@ func shouldAddTrailingSlash(p string) bool {
 	if strings.Contains(p, "/k8s/") {
 		return false
 	}
+	// Grafana is another verbatim reverse-proxy surface. Its API distinguishes
+	// paths such as /api/health from /api/health/, so normalization here would
+	// turn valid proxied requests into upstream 404s.
+	if strings.Contains(p, "/observability/grafana") {
+		return false
+	}
 	// Last segment looks like a file (foo.bar) → leave alone. Cheap
 	// heuristic: '.' after the final '/'. We don't care about
 	// false-positives from dotted resource names (rare in REST URLs)

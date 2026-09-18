@@ -225,7 +225,6 @@ describe("generated shared-stack monitoring lifecycle", () => {
     const alertmanager = { managementClusterId: "cluster-1", replicas: 2 };
     const grafana = {
       managementClusterId: "cluster-1",
-      ingressHost: "grafana.example.test",
     };
     const loki = {
       managementClusterId: "cluster-1",

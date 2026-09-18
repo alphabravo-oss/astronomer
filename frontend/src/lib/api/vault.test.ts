@@ -60,7 +60,18 @@ describe("vault generated API boundary", () => {
 
   it("maps redacted wire records and forwards AbortSignal", async () => {
     const controller = new AbortController();
-    mockedList.mockResolvedValueOnce({ data: { items: [wireConnection] } });
+    mockedList.mockResolvedValueOnce({
+      data: {
+        items: [wireConnection],
+        pagination: {
+          total: 1,
+          limit: 20,
+          offset: 0,
+          has_more: false,
+          next_offset: null,
+        },
+      },
+    });
 
     const result = await listVaultConnections({ signal: controller.signal });
 

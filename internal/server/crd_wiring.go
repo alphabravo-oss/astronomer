@@ -6,17 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"sort"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	ctrlrt "sigs.k8s.io/controller-runtime"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/crd"
@@ -35,9 +33,75 @@ import (
 //
 // — which means a unit test of the controller package can be written without
 // dragging the entire server graph along.
+type crdClusterDecommissionMutationTx interface {
+	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
+	CreateClusterDecommission(context.Context, sqlc.CreateClusterDecommissionParams) (sqlc.ClusterDecommission, error)
+}
+
+type crdClusterDecommissionRunTx func(context.Context, func(crdClusterDecommissionMutationTx) error) error
+
+// crdClusterDecommissionService owns the controller-originated lifecycle
+// mutation. Keeping it transaction-bound gives CRD deletion the same durable
+// row/task/audit invariant as the REST endpoint without synthesizing an HTTP
+// request or retaining the bespoke combined SQL statement.
+type crdClusterDecommissionService struct {
+	runTx crdClusterDecommissionRunTx
+}
+
+func (s *crdClusterDecommissionService) Request(ctx context.Context, cluster sqlc.Cluster) (sqlc.ClusterDecommission, error) {
+	if s == nil || s.runTx == nil {
+		return sqlc.ClusterDecommission{}, audit.ErrOutboxUnavailable
+	}
+	var created sqlc.ClusterDecommission
+	err := s.runTx(ctx, func(q crdClusterDecommissionMutationTx) error {
+		row, err := q.CreateClusterDecommission(ctx, sqlc.CreateClusterDecommissionParams{
+			ClusterID: cluster.ID, ClusterName: cluster.Name, RequestedByID: pgtype.UUID{},
+		})
+		if err != nil {
+			return err
+		}
+		task, err := tasks.NewClusterDecommissionTask(row.ID)
+		if err != nil {
+			return err
+		}
+		if _, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{
+			DedupeKey: "crd_cluster_decommission:" + audit.MutationDedupeKey(
+				row.ID.String(), "request", "cluster_decommission", row.ID.String(),
+			),
+			QueueName:           tasks.ClusterTemplateApplyQueueName,
+			MaxRetry:            3,
+			MaxDeliveryAttempts: 20,
+		}); err != nil {
+			return err
+		}
+		event := audit.Event{
+			Source: "server", ActorAuthMethod: "system", ActionClass: "system",
+			Action: "cluster.decommission.requested", ResourceType: "cluster",
+			ResourceID: cluster.ID.String(), ResourceName: cluster.Name,
+			Detail: map[string]any{"decommission_id": row.ID.String(), "trigger": "crd"},
+		}
+		if err = audit.RecordIntent(ctx, q, audit.Intent{
+			Event: event,
+			DedupeKey: audit.MutationDedupeKey(
+				row.ID.String(), event.Action, event.ResourceType, event.ResourceID,
+			),
+		}); err != nil {
+			return err
+		}
+		created = row
+		return nil
+	})
+	if err != nil {
+		return sqlc.ClusterDecommission{}, err
+	}
+	return created, nil
+}
+
 type crdClusterAdapter struct {
-	queries *sqlc.Queries
-	log     *slog.Logger
+	queries      *sqlc.Queries
+	decommission *crdClusterDecommissionService
+	log          *slog.Logger
 }
 
 // EnsureFromCRD upserts the clusters row to match the spec.
@@ -79,7 +143,8 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 			// audit_log entries from the CRD path are emitted by the
 			// controller's slog stream rather than the audit table; we may
 			// add a synthetic system user in a future migration.
-			CreatedByID: pgtype.UUID{},
+			CreatedByID:    pgtype.UUID{},
+			AgentOverrides: json.RawMessage(`{}`),
 		})
 		if cerr != nil {
 			return crd.ClusterStatus{}, fmt.Errorf("create cluster: %w", cerr)
@@ -90,13 +155,14 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 	labels := marshalStringMap(spec.Labels)
 	annotations := marshalStringMap(clusterAnnotationsWithAgentProfile(spec, existing.Annotations))
 	updated, uerr := a.queries.UpdateCluster(ctx, sqlc.UpdateClusterParams{
-		ID:          existing.ID,
-		DisplayName: spec.DisplayName,
-		Description: spec.Description,
-		Environment: envVal,
-		Region:      spec.Region,
-		Labels:      labels,
-		Annotations: annotations,
+		ID:             existing.ID,
+		DisplayName:    spec.DisplayName,
+		Description:    spec.Description,
+		Environment:    envVal,
+		Region:         spec.Region,
+		Labels:         labels,
+		Annotations:    annotations,
+		AgentOverrides: existing.AgentOverrides,
 	})
 	if uerr != nil {
 		return crd.ClusterStatus{}, fmt.Errorf("update cluster: %w", uerr)
@@ -107,8 +173,14 @@ func (a *crdClusterAdapter) EnsureFromCRD(ctx context.Context, spec crd.ClusterS
 	switch {
 	case existing.DecommissionedAt.Valid:
 		phase = "decommissioned"
-	case existing.LastHeartbeat.Valid:
-		phase = "registered"
+	default:
+		liveness, livenessErr := a.queries.GetClusterLiveness(ctx, existing.ID)
+		if livenessErr != nil && !errors.Is(livenessErr, pgx.ErrNoRows) {
+			return crd.ClusterStatus{}, fmt.Errorf("get cluster liveness: %w", livenessErr)
+		}
+		if livenessErr == nil && liveness.LastHeartbeat.Valid {
+			phase = "registered"
+		}
 	}
 
 	status := crd.ClusterStatus{
@@ -218,32 +290,14 @@ func (a *crdClusterAdapter) DeleteByName(ctx context.Context, name string) error
 		}
 	}
 
-	_, err = a.createDecommissionWithOutbox(ctx, cluster)
+	if a.decommission == nil {
+		return errors.New("crdClusterAdapter: decommission service not wired")
+	}
+	_, err = a.decommission.Request(ctx, cluster)
 	if err != nil {
 		return fmt.Errorf("create decommission: %w", err)
 	}
 	return crd.ErrInProgress
-}
-
-func (a *crdClusterAdapter) createDecommissionWithOutbox(ctx context.Context, cluster sqlc.Cluster) (sqlc.ClusterDecommission, error) {
-	decommissionID := uuid.New()
-	task, err := tasks.NewClusterDecommissionTask(decommissionID)
-	if err != nil {
-		return sqlc.ClusterDecommission{}, err
-	}
-	return a.queries.CreateClusterDecommissionWithTaskOutbox(ctx, sqlc.CreateClusterDecommissionWithTaskOutboxParams{
-		ID:                  decommissionID,
-		ClusterID:           cluster.ID,
-		ClusterName:         cluster.Name,
-		RequestedByID:       pgtype.UUID{},
-		DedupeKey:           pgtype.Text{String: fmt.Sprintf("cluster_decommission:%s", decommissionID.String()), Valid: true},
-		TaskType:            task.Type(),
-		Payload:             task.Payload(),
-		QueueName:           "default",
-		MaxRetry:            3,
-		MaxDeliveryAttempts: 20,
-		NextAttemptAt:       pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
-	})
 }
 
 // crdProjectAdapter implements crd.ProjectSync.
@@ -433,7 +487,7 @@ func (a *crdProjectAdapter) DeleteByName(ctx context.Context, name string) error
 	// List + filter; the projects table has no GetProjectByName lookup.
 	// In practice the CRD path tracks 1:1 with metadata.name = spec.name, so
 	// list-and-filter is cheap (small N).
-	page, err := a.queries.ListProjects(ctx, sqlc.ListProjectsParams{Limit: 1000, Offset: 0})
+	page, err := a.queries.ListProjects(ctx, sqlc.ListProjectsParams{QueryLimit: 1000, QueryOffset: 0})
 	if err != nil {
 		return fmt.Errorf("list projects: %w", err)
 	}
@@ -547,9 +601,18 @@ func ownershipMatchesRef(apiVersion, kind, namespace, name string, ref crd.Objec
 // Initial bootstrap failures are fatal in production when CRD_ENABLED=true.
 // Dev/test keeps the previous warn-and-disable behavior so local binaries can
 // run without a kubeconfig.
-func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries) error {
+func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, decommissionRunTx crdClusterDecommissionRunTx) error {
+	run, err := buildCRDControllerRunner(logger, cfg, queries, decommissionRunTx)
+	if err != nil || run == nil {
+		return err
+	}
+	go func() { _ = run(ctx) }()
+	return nil
+}
+
+func buildCRDControllerRunner(logger *slog.Logger, cfg *config.Config, queries *sqlc.Queries, decommissionRunTx crdClusterDecommissionRunTx) (func(context.Context) error, error) {
 	if cfg == nil || !cfg.CRDEnabled {
-		return nil
+		return nil, nil
 	}
 	restCfg, err := rest.InClusterConfig()
 	if err != nil {
@@ -560,21 +623,27 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 		if ferr != nil {
 			err := fmt.Errorf("CRD controller enabled but no Kubernetes config is available: in-cluster=%v; fallback=%v", err, ferr)
 			if isProductionConfig(cfg) {
-				return err
+				return nil, err
 			}
 			logger.Warn("crd_controller_disabled", "reason", "no_kubeconfig", "error", err.Error())
-			return nil
+			return nil, nil
 		}
 		restCfg = fallback
 	}
-	cAdapter := &crdClusterAdapter{queries: queries, log: logger}
+	cAdapter := &crdClusterAdapter{
+		queries: queries,
+		decommission: &crdClusterDecommissionService{
+			runTx: decommissionRunTx,
+		},
+		log: logger,
+	}
 	pAdapter := &crdProjectAdapter{queries: queries, log: logger}
 
 	mgr, err := crd.New(crd.ControllerConfig{
 		K8sConfig:               restCfg,
-		WatchNamespace:          crdWatchNamespace(),
+		WatchNamespace:          crdWatchNamespace(cfg.CRDWatchNamespace),
 		LeaderElection:          true,
-		LeaderElectionNamespace: crdWatchNamespace(),
+		LeaderElectionNamespace: crdWatchNamespace(cfg.CRDWatchNamespace),
 		ClusterHandler:          cAdapter,
 		ProjectHandler:          pAdapter,
 		Log:                     logger,
@@ -582,37 +651,28 @@ func startCRDController(ctx context.Context, logger *slog.Logger, cfg *config.Co
 	if err != nil {
 		err := fmt.Errorf("build CRD controller manager: %w", err)
 		if isProductionConfig(cfg) {
-			return err
+			return nil, err
 		}
 		logger.Warn("crd_controller_disabled", "reason", "build_manager_failed", "error", err.Error())
-		return nil
+		return nil, nil
 	}
 
-	go func() {
-		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace())
+	return func(ctx context.Context) error {
+		logger.Info("crd_controller_starting", "watch_namespace", crdWatchNamespace(cfg.CRDWatchNamespace))
 		if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("crd_controller_stopped", "error", err.Error())
-			return
+			return err
 		}
 		logger.Info("crd_controller_stopped")
-	}()
-	return nil
+		return nil
+	}, nil
 }
 
-// crdWatchNamespace reads CRD_WATCH_NAMESPACE; defaults to "astronomer-mgmt"
-// when unset (matches the chart's crds.watchNamespace default).
-func crdWatchNamespace() string {
-	v := strings.TrimSpace(getenv("CRD_WATCH_NAMESPACE"))
+// crdWatchNamespace normalizes the startup-resolved namespace.
+func crdWatchNamespace(configured string) string {
+	v := strings.TrimSpace(configured)
 	if v == "" {
 		return "astronomer-mgmt"
 	}
 	return v
 }
-
-// getenv is a tiny indirection over os.Getenv used by namespace discovery.
-func getenv(key string) string { return os.Getenv(key) }
-
-// _ keeps the uuid import live — adapters above currently use it via sqlc
-// param structs that take uuid.UUID. This anchors the import so go vet
-// stays clean if the param shapes ever change.
-var _ uuid.UUID

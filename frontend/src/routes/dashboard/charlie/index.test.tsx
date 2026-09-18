@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
 import type { User } from "@/types";
 import type {
   CharlieApproval,
@@ -31,26 +31,18 @@ beforeAll(async () => {
 });
 
 let search = new URLSearchParams();
-const push = vi.fn();
+const navigate = vi.fn();
 
-vi.mock("@/lib/navigation", () => ({
-  useSearchParams: () => search,
-  useRouter: () => ({ push }),
-}));
-vi.mock("@/lib/link", () => ({
-  Link: ({
-    href,
-    children,
-    ...props
-  }: {
-    href: string;
-    children: ReactNode;
-  }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    Link: RouterLinkStub,
+    useNavigate: () => navigate,
+    useLocation: <T,>({ select }: { select: (location: { searchStr: string }) => T }) =>
+      select({ searchStr: search.toString() }),
+  };
+});
 vi.mock("@/lib/api/charlie", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/charlie")>()),
   decideCharlieApproval: vi.fn(),
@@ -128,7 +120,7 @@ function renderHub() {
 describe("Charlie hub acceptance", () => {
   beforeEach(() => {
     search = new URLSearchParams();
-    push.mockReset();
+    navigate.mockReset();
     vi.clearAllMocks();
     vi.mocked(listCharlieSessions).mockResolvedValue([
       privateSession,
@@ -165,7 +157,9 @@ describe("Charlie hub acceptance", () => {
     expect(screen.queryByText("Investigate flapping agent")).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "investigations" }));
-    expect(push).toHaveBeenCalledWith("/dashboard/charlie?tab=investigations");
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/dashboard/charlie?tab=investigations",
+    });
   });
 
   it("uses URL-backed investigation filters and links only the originating product resource", async () => {
@@ -189,12 +183,12 @@ describe("Charlie hub acceptance", () => {
     fireEvent.change(screen.getByLabelText("Investigation severity"), {
       target: { value: "critical" },
     });
-    expect(push).toHaveBeenCalledWith(
-      expect.stringContaining("severity=critical"),
-    );
-    expect(push).toHaveBeenCalledWith(
-      expect.stringContaining("cluster=agent-east"),
-    );
+    expect(navigate).toHaveBeenCalledWith({
+      to: expect.stringContaining("severity=critical"),
+    });
+    expect(navigate).toHaveBeenCalledWith({
+      to: expect.stringContaining("cluster=agent-east"),
+    });
   });
 
   it("shows a blocked finding's exact reason and only its server-authorized lifecycle decisions", async () => {

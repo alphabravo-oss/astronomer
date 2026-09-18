@@ -1,21 +1,18 @@
 import { useState } from "react";
 import { Plus, Ship } from "lucide-react";
-import { useParams } from "@/lib/navigation";
-import { Link } from "@/lib/link";
+import { useParams } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import {
-  useAttachAstronomerLogs,
-  useCluster,
-  useLoggingAttachStatus,
-} from "@/lib/hooks";
+import { useAttachAstronomerLogs, useLoggingAttachStatus } from "@/lib/hooks/logging";
+import { useCluster } from "@/lib/hooks/clusters";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { PipelinesTab } from "@/routes/dashboard/logging/-pipelines-tab";
 import { CreatePipelineModal } from "@/routes/dashboard/logging/-pipeline-modal";
 
 export function ClusterLoggingPage() {
-  const params = useParams();
-  const clusterId = params.id as string;
+  const params = useParams({ from: "/dashboard/clusters/$id" });
+  const clusterId = params.id;
   const { data: cluster } = useCluster(clusterId);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
   const canCreate = usePermissionDecision("logging", "create", {
@@ -35,12 +32,12 @@ export function ClusterLoggingPage() {
         description={`Log pipelines for ${cluster?.displayName || cluster?.name || "this cluster"}`}
         actions={
           <div className="flex items-center gap-2">
-            <Link
-              href="/dashboard/logging"
+            <RouterLink
+              to="/dashboard/logging"
               className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
             >
               Destinations
-            </Link>
+            </RouterLink>
             {showAttach ? (
               <ActionButton
                 intent="primary"

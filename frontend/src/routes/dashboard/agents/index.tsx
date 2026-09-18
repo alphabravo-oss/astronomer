@@ -20,7 +20,8 @@ import {
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { DrawerShell } from "@/components/ui/drawer-shell";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { PermissionState } from "@/components/ui/empty-state";
+import { EmptyState, PermissionState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import {
   createAgentUpgradeOperation,
@@ -30,12 +31,14 @@ import {
   getClusterAgents,
   getAgentOperations,
   runAgentSelfTest,
-} from "@/lib/api";
-import { queryKeys, useCurrentUser } from "@/lib/hooks";
+} from "@/lib/api/cluster-agents";
+import { queryKeys } from "@/lib/query-keys";
+import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 import { cn, formatRelativeTime, downloadBlob } from "@/lib/utils";
+import { pageRowCount } from "@/lib/api/pagination";
 import type {
   AgentDiagnosticsResponse,
   ClusterAgentItem,
@@ -54,9 +57,18 @@ function ClusterAgentsPage() {
   );
   const [upgradePlan, setUpgradePlan] =
     useState<AgentUpgradePlanResponse | null>(null);
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.agents.list({ limit: 250 }),
-    queryFn: ({ signal }) => getClusterAgents({ limit: 250 }, { signal }),
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageSize = 50;
+  const agentsQuery = useQuery({
+    queryKey: queryKeys.agents.list({
+      limit: pageSize,
+      offset: pageIndex * pageSize,
+    }),
+    queryFn: ({ signal }) =>
+      getClusterAgents(
+        { limit: pageSize, offset: pageIndex * pageSize },
+        { signal },
+      ),
     enabled: canRead,
     refetchInterval: liveFallback(30000),
   });
@@ -73,8 +85,8 @@ function ClusterAgentsPage() {
     [queryKeys.agents.all],
   );
 
-  const items = data?.items ?? [];
-  const summary = data?.summary;
+  const items = agentsQuery.data?.data ?? [];
+  const summary = agentsQuery.data?.summary;
   const versionEntries = Object.entries(summary?.versions ?? {}).sort(
     (a, b) => b[1] - a[1],
   );
@@ -149,7 +161,7 @@ function ClusterAgentsPage() {
         <span
           title={row.compatibilityMessage}
           className={cn(
-            "inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium",
+            "inline-flex items-center rounded-sm border px-1.5 py-0.5 text-xs font-medium",
             compatibilityTone(row.compatibilityStatus),
           )}
         >
@@ -164,7 +176,7 @@ function ClusterAgentsPage() {
       accessor: (row) => (
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium",
+            "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium",
             row.privilegeProfile === "admin"
               ? "bg-status-warning/10 text-status-warning"
               : "bg-muted text-muted-foreground",
@@ -187,7 +199,7 @@ function ClusterAgentsPage() {
             .map(([name]) => (
               <span
                 key={name}
-                className="rounded bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
+                className="rounded-sm bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground"
               >
                 {name.replace("_", " ")}
               </span>
@@ -267,67 +279,92 @@ function ClusterAgentsPage() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryTile
-          icon={Server}
-          label="Clusters"
-          value={summary?.totalClusters ?? 0}
-        />
-        <SummaryTile
-          icon={CheckCircle2}
-          label="Connected"
-          value={summary?.connected ?? 0}
-          tone="success"
-        />
-        <SummaryTile
-          icon={AlertTriangle}
-          label="Degraded"
-          value={summary?.degraded ?? 0}
-          tone="warning"
-        />
-        <SummaryTile
-          icon={Unplug}
-          label="Disconnected"
-          value={summary?.disconnected ?? 0}
-          tone="neutral"
-        />
-      </div>
+      <QueryStates
+        query={agentsQuery}
+        loadingTitle="Loading cluster agents"
+        permission="cluster_agents:read"
+        errorTitle="Failed to load cluster agents"
+        isEmpty={(result) => result.data.length === 0}
+        empty={
+          <EmptyState
+            icon={Server}
+            title="No cluster agents connected"
+            description="Register an existing Kubernetes cluster to install its agent and begin reporting health."
+            actionLabel="Register cluster"
+            actionHref="/dashboard/clusters/register"
+          />
+        }
+      >
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryTile
+              icon={Server}
+              label="Clusters"
+              value={summary?.totalClusters ?? 0}
+            />
+            <SummaryTile
+              icon={CheckCircle2}
+              label="Connected"
+              value={summary?.connected ?? 0}
+              tone="success"
+            />
+            <SummaryTile
+              icon={AlertTriangle}
+              label="Degraded"
+              value={summary?.degraded ?? 0}
+              tone="warning"
+            />
+            <SummaryTile
+              icon={Unplug}
+              label="Disconnected"
+              value={summary?.disconnected ?? 0}
+              tone="neutral"
+            />
+          </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <DistributionPanel
-          title="Versions"
-          entries={versionEntries}
-          empty="No agent versions reported"
-        />
-        <DistributionPanel
-          title="Privilege Profiles"
-          entries={profileEntries}
-          empty="No privilege profiles reported"
-        />
-        <DistributionPanel
-          title="Compatibility"
-          entries={compatibilityEntries}
-          empty="No compatibility data"
-        />
-      </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <DistributionPanel
+              title="Versions"
+              entries={versionEntries}
+              empty="No agent versions reported"
+            />
+            <DistributionPanel
+              title="Privilege Profiles"
+              entries={profileEntries}
+              empty="No privilege profiles reported"
+            />
+            <DistributionPanel
+              title="Compatibility"
+              entries={compatibilityEntries}
+              empty="No compatibility data"
+            />
+          </div>
 
-      <DataTable
-        data={items}
-        columns={columns}
-        keyExtractor={(row) => row.clusterId}
-        loading={isLoading}
-        isError={isError}
-        onRetry={() => void refetch()}
-        searchPlaceholder="Search agents..."
-        emptyMessage="No adopted-cluster agents found."
-        pageSize={25}
-      />
+          <DataTable
+            data={items}
+            columns={columns}
+            keyExtractor={(row) => row.clusterId}
+            searchPlaceholder="Search agents..."
+            emptyState={{
+              title: "No agents available",
+              description:
+                "Resources will appear here when they are available in this scope.",
+            }}
+            pageSize={pageSize}
+            serverSide={{
+              rowCount: pageRowCount(agentsQuery.data),
+              pagination: { pageIndex, pageSize },
+              onPaginationChange: (next) => setPageIndex(next.pageIndex),
+            }}
+          />
+        </>
+      </QueryStates>
       {selectedClusterId && (
         <AgentDiagnosticsDrawer
           diagnostics={diagnostics.data}
           loading={diagnostics.isLoading}
           upgradePlan={upgradePlan}
-          operations={operations.data?.items ?? []}
+          operations={operations.data?.data ?? []}
           operationsLoading={operations.isLoading}
           canManage={canManage}
           onClose={() => {
@@ -800,7 +837,7 @@ function SelfTestSection({ result }: { result: AgentSelfTestResponse }) {
         <h3 className="text-sm font-medium text-foreground">Self-test</h3>
         <span
           className={cn(
-            "inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium",
+            "inline-flex items-center rounded-sm border px-1.5 py-0.5 text-xs font-medium",
             selfTestTone(result.status),
           )}
         >

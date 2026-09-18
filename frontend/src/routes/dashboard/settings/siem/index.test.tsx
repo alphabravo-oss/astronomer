@@ -6,15 +6,14 @@ import { useAuthStore } from "@/lib/store";
 import SIEMForwardersPage from "./-page";
 import type { SIEMForwarder } from "@/types";
 
-// Plain-anchor stand-in: these tests assert link text/href, not routing, and
-// the real Link needs a <RouterProvider>.
-vi.mock("@/lib/link", () => ({
-  Link: ({ href, children, ...rest }: React.ComponentProps<"a">) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    Link: RouterLinkStub,
+  };
+});
+
 
 vi.mock("./-hooks", () => ({
   useSIEMForwarders: vi.fn(),

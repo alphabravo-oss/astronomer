@@ -8,11 +8,10 @@ import { createFileRoute } from "@tanstack/react-router";
  * there. Restore of this dump is an operator procedure (not a one-click UI).
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   KeyRound,
-  Loader2,
   Pencil,
   Play,
   Plus,
@@ -21,14 +20,19 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAppForm } from "@/lib/form";
+import { FormShell } from "@/components/ui/form-shell";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { OperationMutationTimeline } from "@/components/ui/operation-mutation-timeline";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { EmptyState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
+import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { cronToHuman } from "@/components/backups/cron";
 import {
   useBackupDrillHistory,
@@ -132,7 +136,11 @@ function formFromDest(row: ManagementBackupDestinationView): DestForm {
   };
 }
 
-function DestinationsSection({ data }: { data: ManagementBackupStatusView }) {
+export function DestinationsSection({
+  data,
+}: {
+  data: ManagementBackupStatusView;
+}) {
   const [editor, setEditor] = useState<
     ManagementBackupDestinationView | "new" | null
   >(null);
@@ -145,7 +153,7 @@ function DestinationsSection({ data }: { data: ManagementBackupStatusView }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h2 className="text-base font-semibold text-foreground">
             S3 destinations
@@ -164,13 +172,18 @@ function DestinationsSection({ data }: { data: ManagementBackupStatusView }) {
         </ActionButton>
       </div>
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-card p-6 space-y-2">
-          <p className="text-sm text-foreground">No dump destinations yet.</p>
-          <p className="text-xs text-muted-foreground">
-            {data.reason ||
-              "Add an S3 bucket to start nightly dumps of Astronomer’s database."}
-          </p>
-        </div>
+        <EmptyState
+          icon={ShieldCheck}
+          title="No backup destinations"
+          description={
+            data.reason ||
+            "Add an S3 bucket to start nightly dumps of Astronomer’s database."
+          }
+          actionLabel="Add destination"
+          actionIcon={Plus}
+          onAction={() => setEditor("new")}
+          className="rounded-xl border border-dashed border-border bg-card p-6"
+        />
       ) : (
         <DataTable
           data={rows}
@@ -283,7 +296,11 @@ function DestinationsSection({ data }: { data: ManagementBackupStatusView }) {
             },
           ]}
           keyExtractor={(row) => row.id}
-          emptyMessage="No destinations"
+          emptyState={{
+            title: "No destinations",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
         />
       )}
       {editor && (
@@ -299,6 +316,10 @@ function DestinationsSection({ data }: { data: ManagementBackupStatusView }) {
             ? "Backup destination removal queued"
             : ""}
       </p>
+      <OperationMutationTimeline
+        label="Backup run"
+        state={run.operationState}
+      />
       <ConfirmDialog
         open={!!remove}
         onClose={() => setRemove(null)}
@@ -373,7 +394,7 @@ function DestinationModal({
         </div>
       }
     >
-      <form
+      <FormShell
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
@@ -482,7 +503,11 @@ function DestinationModal({
         <p className="sr-only" role="status" aria-live="polite">
           {test.isPending ? `Connection test ${test.operationState.phase}` : ""}
         </p>
-      </form>
+        <OperationMutationTimeline
+          label="Connection test"
+          state={test.operationState}
+        />
+      </FormShell>
     </ModalShell>
   );
 }
@@ -511,15 +536,16 @@ function EncryptionCard({ data }: { data: ManagementBackupStatusView }) {
       </div>
       {wrapped ? (
         <p className="text-xs text-muted-foreground">
-          The platform encryption key is wrapped and stored with each dump. A
-          restore onto a new cluster can decrypt agent tokens and SSO secrets.
+          The dump and platform key bundle use authenticated client-side
+          encryption and a source-bound manifest. A restore can reject tampering
+          before it touches PostgreSQL.
         </p>
       ) : (
         <p className="text-xs text-status-warning">
-          Dumps are running without a wrapped copy of the encryption key.
-          Restoring onto a new cluster would leave encrypted columns
-          undecryptable. Set
-          managementBackup.encryptionKeyBackup.wrappingSecretRef in Helm values.
+          Authenticated backup encryption is not configured. Restoring onto a
+          new cluster would leave encrypted columns undecryptable. Set
+          managementBackup.encryption.wrappingSecretRef and sourceIdentity in
+          Helm values.
         </p>
       )}
     </div>
@@ -527,90 +553,94 @@ function EncryptionCard({ data }: { data: ManagementBackupStatusView }) {
 }
 
 function LatestDrillCard() {
-  const { data, isLoading } = useLatestBackupDrill();
-
-  if (isLoading) {
-    return (
-      <div className="rounded-xl border border-border bg-card p-6 flex items-center justify-center h-32">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  const latest = data?.latest ?? null;
-  if (!latest) {
-    return (
-      <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center space-y-2">
-        <p className="text-sm text-foreground">No restore drill has run yet.</p>
-        <p className="text-xs text-muted-foreground">
-          The weekly drill restores the latest dump into a scratch Postgres and
-          records the result here.
-        </p>
-      </div>
-    );
-  }
-
-  const age = data?.latestSuccessAgeSeconds;
-  const stale = age != null && age > 7 * 24 * 3600;
+  const drillQuery = useLatestBackupDrill();
 
   return (
-    <div className="rounded-xl border border-border bg-card p-6 space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Latest restore drill
-          </p>
-          <div className="flex items-center gap-3">
-            <StatusBadge
-              status={statusToVariant(latest.status)}
-              label={latest.status}
-              size="sm"
-            />
-            <span
-              className={cn(
-                "text-xs",
-                stale ? "text-status-warning" : "text-muted-foreground",
-              )}
-            >
-              {formatRelativeTime(latest.finishedAt ?? latest.startedAt)}
-            </span>
+    <QueryStates
+      query={drillQuery}
+      loadingTitle="Loading latest restore drill"
+      permission="settings:read"
+      errorTitle="Failed to load the latest restore drill"
+      isEmpty={(result) => result.latest == null}
+      empty={
+        <EmptyState
+          icon={ShieldCheck}
+          title="No restore drill has run"
+          description="The weekly drill restores the latest dump into a scratch Postgres and records the result here."
+          className="rounded-xl border border-dashed border-border bg-card p-6"
+        />
+      }
+    >
+      {(data) => {
+        const latest = data.latest!;
+        const age = data.latestSuccessAgeSeconds;
+        const stale = age != null && age > 7 * 24 * 3600;
+        return (
+          <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Latest restore drill
+                </p>
+                <div className="flex items-center gap-3">
+                  <StatusBadge
+                    status={statusToVariant(latest.status)}
+                    label={latest.status}
+                    size="sm"
+                  />
+                  <span
+                    className={cn(
+                      "text-xs",
+                      stale ? "text-status-warning" : "text-muted-foreground",
+                    )}
+                  >
+                    {formatRelativeTime(latest.finishedAt ?? latest.startedAt)}
+                  </span>
+                </div>
+                {latest.errorMessage && (
+                  <p className="text-sm text-status-error mt-2">
+                    {latest.errorMessage}
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <Stat
+                  label="Schema version"
+                  value={
+                    latest.schemaVersion != null
+                      ? String(latest.schemaVersion)
+                      : "—"
+                  }
+                />
+                <Stat
+                  label="Duration"
+                  value={durationLabel(latest.startedAt, latest.finishedAt)}
+                />
+                {latest.backupKey && (
+                  <Stat label="Source dump" value={latest.backupKey} />
+                )}
+              </div>
+            </div>
+            {stale && (
+              <div className="rounded-lg border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs text-status-warning">
+                Last successful drill is over a week old. Restore confidence is
+                decaying — check the drill CronJob.
+              </div>
+            )}
           </div>
-          {latest.errorMessage && (
-            <p className="text-sm text-status-error mt-2">
-              {latest.errorMessage}
-            </p>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <Stat
-            label="Schema version"
-            value={
-              latest.schemaVersion != null ? String(latest.schemaVersion) : "—"
-            }
-          />
-          <Stat
-            label="Duration"
-            value={durationLabel(latest.startedAt, latest.finishedAt)}
-          />
-          {latest.backupKey && (
-            <Stat label="Source dump" value={latest.backupKey} />
-          )}
-        </div>
-      </div>
-      {stale && (
-        <div className="rounded-lg border border-status-warning/30 bg-status-warning/5 px-3 py-2 text-xs text-status-warning">
-          Last successful drill is over a week old. Restore confidence is
-          decaying — check the drill CronJob.
-        </div>
-      )}
-    </div>
+        );
+      }}
+    </QueryStates>
   );
 }
 
 function HistoryTable() {
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useBackupDrillHistory({ page, page_size: 25 });
+  const historyQuery = useBackupDrillHistory({ page, page_size: 25 });
+  const data = historyQuery.data;
   const rows = data?.data ?? [];
+  const currentPage = data ? pageNumber(data.pagination) : page;
+  const totalPages = data ? pageCount(data.pagination) : undefined;
 
   const columns: Column<BackupDrillResultView>[] = [
     {
@@ -669,15 +699,34 @@ function HistoryTable() {
       <h2 className="text-base font-semibold text-foreground">
         Restore drill history
       </h2>
-      <DataTable
-        data={rows}
-        columns={columns}
-        keyExtractor={(row) => row.id}
-        loading={isLoading}
-        emptyMessage="No drills recorded"
-        pageSize={25}
-      />
-      {data && data.totalPages > 1 && (
+      <QueryStates
+        query={historyQuery}
+        loadingTitle="Loading restore drill history"
+        permission="settings:read"
+        errorTitle="Failed to load restore drill history"
+        isEmpty={(result) => result.data.length === 0}
+        empty={
+          <EmptyState
+            icon={ShieldCheck}
+            title="No restore drill history"
+            description="Completed restore drills will appear here after the scheduled validation runs."
+            className="rounded-xl border border-dashed border-border bg-card p-6"
+          />
+        }
+      >
+        <DataTable
+          data={rows}
+          columns={columns}
+          keyExtractor={(row) => row.id}
+          emptyState={{
+            title: "No restore drills available",
+            description:
+              "Resources will appear here when they are available in this scope.",
+          }}
+          pageSize={25}
+        />
+      </QueryStates>
+      {data && (data.pagination.offset > 0 || data.pagination.has_more) && (
         <div className="flex items-center justify-end gap-2">
           <button
             type="button"
@@ -688,12 +737,13 @@ function HistoryTable() {
             Previous
           </button>
           <p className="text-xs text-muted-foreground">
-            Page {data.page} of {data.totalPages}
+            Page {currentPage}
+            {totalPages === undefined ? "" : ` of ${totalPages}`}
           </p>
           <button
             type="button"
             onClick={() => setPage((p) => p + 1)}
-            disabled={page >= data.totalPages}
+            disabled={!data.pagination.has_more}
             className="h-8 px-3 rounded-lg border border-border text-xs font-medium disabled:opacity-50"
           >
             Next
@@ -705,18 +755,18 @@ function HistoryTable() {
 }
 
 function AstronomerBackupPage() {
-  const { data, isLoading } = useManagementBackupStatus();
+  const backupQuery = useManagementBackupStatus();
 
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · Backup"
           title={
@@ -727,16 +777,19 @@ function AstronomerBackupPage() {
           }
           description="Nightly dump of Astronomer's own database to one or more S3 buckets. Workload snapshots live on each cluster after Velero is installed there."
         />
-        {isLoading || !data ? (
-          <div className="rounded-xl border border-border bg-card p-6 flex items-center justify-center h-32">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <>
-            <DestinationsSection data={data} />
-            <EncryptionCard data={data} />
-          </>
-        )}
+        <QueryStates
+          query={backupQuery}
+          loadingTitle="Loading backup configuration"
+          permission="settings:read"
+          errorTitle="Failed to load backup configuration"
+        >
+          {(data) => (
+            <>
+              <DestinationsSection data={data} />
+              <EncryptionCard data={data} />
+            </>
+          )}
+        </QueryStates>
         <LatestDrillCard />
         <HistoryTable />
       </PageShell>

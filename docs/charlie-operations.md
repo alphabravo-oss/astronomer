@@ -193,14 +193,14 @@ task payload or become auto-eligible.
 
 Mode drift always reduces authority through `EffectiveMode`; it never adopts
 the more permissive value. Before contacting the Product Bridge, Astronomer
-persists the desired ceiling, updates only the owner-bound Argo Application's
-`runtime.modeCeiling`, forces a non-pruning self-healing sync, waits for the
+persists the desired ceiling, updates only the Astronomer-owned Charlie Helm
+release's `runtime.modeCeiling`, performs a non-pruning reconciliation, waits for the
 StatefulSet rollout, and verifies both ready pods contain the exact immutable
 `CHARLIE_MODE` value. Upward transitions leave central at the lower prior mode
 until that readback succeeds. Downward and emergency transitions close and
 drain write admission first and retain the lower durable product ceiling even
-when Kubernetes, Argo, either replica, the bridge, or central is unavailable.
-Check the UI's product-agent ceiling readback, Argo health, StatefulSet revision,
+when Kubernetes, Flux, either replica, the bridge, or central is unavailable.
+Check the UI's product-agent ceiling readback, Flux health, StatefulSet revision,
 both pod readiness states, agent/central reachability, and the last mode
 revision. Retry the same transition idempotently only after the same connection,
 signing trust, and disclosure digest are confirmed. Never enable pruning to
@@ -218,7 +218,7 @@ trust.
    package scope changes. Routine artifact-pull credentials use renewable
    leases: Astronomer persists a request ID, claims one pending generation
    through the local mTLS product bridge, writes and reads back only the exact
-   image-pull and Argo repository Secrets, then acknowledges their digest.
+   image-pull and Flux source Secrets, then acknowledges their digest.
    Charlie activates the new generation, retains the prior token for a bounded
    24-hour overlap, and scrubs the pending secret. No credential is stored in
    Astronomer's database.
@@ -305,7 +305,7 @@ cause, return exact operator checks; do not enter or mutate that cluster.
 - Rollback selects an already reviewed digest and never downgrades the pinned
   bridge/agent protocol outside its declared compatibility range.
 - Feature disable performs a reversible suspension: disable locally/remotely,
-  stop triggers, settle streams, snapshot the owner-bound Argo desired state,
+  stop triggers, settle streams, snapshot the owner-bound Flux desired state,
   and remove the agent workload and private network surface. Re-enable restores
   those runtime objects in disabled/installing mode; it never restores prior
   write authority. Explicit uninstall still removes all owned agent resources.

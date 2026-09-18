@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 )
@@ -369,5 +370,44 @@ func TestLoadAgentConfig_CADefaultsEmpty(t *testing.T) {
 	// the default OS-trust path.
 	if cfg.CACert != "" || cfg.CAChecksum != "" {
 		t.Fatalf("default CA config should be empty, got cert=%q checksum=%q", cfg.CACert, cfg.CAChecksum)
+	}
+}
+
+func TestLoadAgentConfigCapturesHelmRuntime(t *testing.T) {
+	t.Setenv("ASTRONOMER_SERVER_URL", "wss://example.com")
+	t.Setenv("ASTRONOMER_CLUSTER_ID", "c1")
+	t.Setenv("ASTRONOMER_AGENT_TOKEN", "test-token-abc")
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	t.Setenv("HELM_DRIVER", "configmap")
+	t.Setenv("HELM_REGISTRY_CONFIG", "/typed/registry.json")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://tempo:4318")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0")
+
+	cfg, err := LoadAgentConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HelmRuntime.Driver != "configmap" || cfg.HelmRuntime.RegistryConfig != "/typed/registry.json" {
+		t.Fatalf("HelmRuntime = %#v", cfg.HelmRuntime)
+	}
+	if cfg.OTELExporterEndpoint != "http://tempo:4318" || cfg.OTELSamplerRatio != 0 {
+		t.Fatalf("OTel runtime = endpoint %q ratio %v", cfg.OTELExporterEndpoint, cfg.OTELSamplerRatio)
+	}
+}
+
+func TestLoadUpgradeWatchdogOptions(t *testing.T) {
+	t.Setenv(envWatchdogNamespace, "agent-system")
+	t.Setenv(envWatchdogDeployment, "agent")
+	t.Setenv(envWatchdogOperationID, "operation-1")
+	t.Setenv(envWatchdogTargetImage, "registry.example/agent:new")
+	t.Setenv(envWatchdogRollbackImage, "registry.example/agent:old")
+	t.Setenv(envWatchdogRolloutTimeout, "91")
+
+	opts := LoadUpgradeWatchdogOptions()
+	if opts.Namespace != "agent-system" || opts.OperationID != "operation-1" {
+		t.Fatalf("watchdog options = %#v", opts)
+	}
+	if opts.RolloutTimeout != 91*time.Second {
+		t.Fatalf("RolloutTimeout = %s, want 91s", opts.RolloutTimeout)
 	}
 }

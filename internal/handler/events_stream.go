@@ -3,9 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,7 +15,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // EventStreamHandler serves Server-Sent Events from the in-memory bus
@@ -33,7 +34,7 @@ import (
 type EventStreamHandler struct {
 	bus     *events.Bus
 	jwt     *auth.JWTManager
-	queries middleware.TokenUserQuerier
+	queries auth.TokenUserQuerier
 	tickets *auth.StreamTicketStore
 	authz   authorizationSupport
 	charlie CharlieFindingEventAuthorizer
@@ -53,45 +54,36 @@ type CharlieFindingEventAuthorizer interface {
 	CanReceiveFinding(context.Context, uuid.UUID, uuid.UUID) bool
 }
 
-// NewEventStreamHandler wraps a bus.
-func NewEventStreamHandler(bus *events.Bus) *EventStreamHandler {
-	return &EventStreamHandler{bus: bus}
+type streamAuthorizationSnapshot struct {
+	bindings   []rbac.RoleBinding
+	restricted bool
 }
 
-// SetAuth wires the JWT manager + token querier for legacy query/header
-// stream auth. Both arguments are optional; when nil the handler accepts
-// unauthenticated connections (used by tests / dev runs without auth wired).
-func (h *EventStreamHandler) SetAuth(jwt *auth.JWTManager, queries middleware.TokenUserQuerier) {
-	if h == nil {
-		return
+// NewEventStreamHandler creates an authenticated and RBAC-filtered event
+// stream. Core security dependencies are constructor requirements; Charlie's
+// finding authorizer remains an optional capability and fails closed when it
+// is absent.
+func NewEventStreamHandler(
+	bus *events.Bus,
+	jwt *auth.JWTManager,
+	queries auth.TokenUserQuerier,
+	tickets *auth.StreamTicketStore,
+	engine *rbac.Engine,
+	querier rbac.BindingQuerier,
+	charlie CharlieFindingEventAuthorizer,
+) (*EventStreamHandler, error) {
+	if bus == nil || jwt == nil || queries == nil || tickets == nil || engine == nil || querier == nil {
+		return nil, errors.New("event stream security dependencies must all be configured")
 	}
-	h.jwt = jwt
-	h.queries = queries
-}
-
-func (h *EventStreamHandler) SetStreamTickets(tickets *auth.StreamTicketStore) {
-	if h == nil {
-		return
+	h := &EventStreamHandler{
+		bus:     bus,
+		jwt:     jwt,
+		queries: queries,
+		tickets: tickets,
+		charlie: charlie,
 	}
-	h.tickets = tickets
-}
-
-// SetAuthorization enables per-event cluster RBAC filtering (SEC-R07).
-func (h *EventStreamHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
-	if h == nil {
-		return
-	}
-	h.authz.engine = engine
-	h.authz.querier = querier
-}
-
-// SetCharlieFindingAuthorization installs the live, finding-specific delivery
-// boundary. If it is absent, Charlie finding events fail closed.
-func (h *EventStreamHandler) SetCharlieFindingAuthorization(authorizer CharlieFindingEventAuthorizer) {
-	if h == nil {
-		return
-	}
-	h.charlie = authorizer
+	h.authz.SetAuthorization(engine, querier)
+	return h, nil
 }
 
 // authenticateRequest validates the request via a one-use stream ticket or
@@ -121,12 +113,23 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 	// minutes below (T5/D10) so mid-stream revocations stop leaking events
 	// after at most one interval instead of the entire stream lifetime.
 	bindings, restricted := h.snapshotStreamBindings(r.Context(), userID)
+	var authorizationSnapshot atomic.Pointer[streamAuthorizationSnapshot]
+	authorizationSnapshot.Store(&streamAuthorizationSnapshot{bindings: bindings, restricted: restricted})
 
 	// Subscribe before acknowledging the stream. Browser clients treat the
 	// first flushed response as proof that mutations may safely begin; if the
 	// subscription is installed after that flush, an event published in the
 	// gap is permanently lost because the in-memory bus has no replay buffer.
-	ch := h.bus.Subscribe(r.Context())
+	ch := h.bus.Subscribe(r.Context(), func(ev events.Event) bool {
+		snapshot := authorizationSnapshot.Load()
+		if snapshot == nil {
+			return false
+		}
+		if ev.Type == events.TypeCharlieFindingChanged || isSysEvent(ev.Type) || !snapshot.restricted {
+			return true
+		}
+		return eventAllowedForUser(h.authz, snapshot.bindings, ev)
+	})
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -169,6 +172,7 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 			// empty restricted snapshot, so a control-plane outage fails closed
 			// until the next successful refresh.
 			bindings, restricted = h.snapshotStreamBindings(r.Context(), userID)
+			authorizationSnapshot.Store(&streamAuthorizationSnapshot{bindings: bindings, restricted: restricted})
 		case <-keepalive.C:
 			ping, err := json.Marshal(struct {
 				Type string    `json:"type"`
@@ -193,8 +197,6 @@ func (h *EventStreamHandler) Stream(w http.ResponseWriter, r *http.Request) {
 				if !valid || h.charlie == nil || !h.charlie.CanReceiveFinding(r.Context(), userID, findingID) {
 					continue
 				}
-			} else if restricted && !isSysEvent(ev.Type) && !eventAllowedForUser(h.authz, bindings, ev) {
-				continue
 			}
 			payload, err := json.Marshal(ev)
 			if err != nil {

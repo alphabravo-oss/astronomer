@@ -89,14 +89,22 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 		// Only built when a global (cluster-less) rule exists; cluster-scoped and
 		// anomaly rules don't touch it.
 		var fleet *fleetHealthSnapshot
+		scopedClusterIDs := make([]uuid.UUID, 0, len(rules))
+		hasGlobalRule := false
 		for _, rule := range rules {
 			if !rule.ClusterID.Valid {
-				fleet, err = buildFleetHealthSnapshot(ctx)
-				if err != nil {
-					return err
-				}
-				break
+				hasGlobalRule = true
+				continue
 			}
+			scopedClusterIDs = append(scopedClusterIDs, uuid.UUID(rule.ClusterID.Bytes))
+		}
+		if hasGlobalRule {
+			fleet, err = buildFleetHealthSnapshot(ctx)
+		} else {
+			fleet, err = buildScopedHealthSnapshot(ctx, scopedClusterIDs)
+		}
+		if err != nil {
+			return err
 		}
 		// Two passes over the rule set. The first evaluates every rule and
 		// records which (rule, cluster) alerts are firing THIS tick — that
@@ -147,18 +155,13 @@ func HandleAlertEvaluation(ctx context.Context, t *asynq.Task) error {
 	})
 }
 
-// dispatchAlertNotifications enqueues a notification:send task for every
-// enabled channel bound to the rule. resolved=true marks it as a
-// recovery notification so the formatters render the resolved variant
-// (green swatch, PagerDuty event_action=resolve). Errors are logged but
-// not returned: a single channel/enqueue failure must not abort the
-// evaluation loop for the remaining rules.
-func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event sqlc.AlertEvent, subject, body string, resolved bool) {
-	channels, err := runtimeDependencies(ctx).Queries.ListChannelsForAlertRule(ctx, rule.ID)
+// dispatchAlertNotifications writes one durable task-outbox row per enabled
+// destination through q, which must be bound to the same transaction as the
+// alert event state transition. resolved=true renders the recovery variant.
+func dispatchAlertNotifications(ctx context.Context, q AlertNotificationMutationTx, rule sqlc.AlertRule, event sqlc.AlertEvent, subject, body string, resolved bool) error {
+	channels, err := q.ListChannelsForAlertRule(ctx, rule.ID)
 	if err != nil {
-		runtimeLogger(ctx).ErrorContext(ctx, "failed to list channels for alert rule",
-			"event_id", event.ID.String(), "rule_id", rule.ID.String(), "error", err)
-		return
+		return fmt.Errorf("list notification channels for event %s: %w", event.ID, err)
 	}
 	// Prefer the cluster the event actually fired on. Global rules have an
 	// empty rule.ClusterID, so without this the operator could not tell which
@@ -174,49 +177,48 @@ func dispatchAlertNotifications(ctx context.Context, rule sqlc.AlertRule, event 
 		if !channel.Enabled {
 			continue
 		}
-		task, err := NewNotificationSendTask(NotificationSendPayload{
+		recipients := notificationRecipients(channel)
+		if len(recipients) == 0 {
+			return fmt.Errorf("notification channel %s has no destination", channel.ID)
+		}
+		deliveryID := "alert-event:" + event.ID.String() + ":" + channel.ID.String()
+		if err := EnqueueNotificationOutbox(ctx, q, NotificationSendPayload{
 			Channel:    channel.ChannelType,
 			Subject:    subject,
 			Body:       body,
-			Recipients: notificationRecipients(channel),
+			Recipients: recipients,
 			// Plumb severity/cluster/rule through so the
 			// Slack / PagerDuty / Teams formatters can render
 			// colours + dedup keys + facts instead of just a
 			// dumb text dump.
-			Severity:  rule.Severity,
-			ClusterID: clusterStr,
-			RuleID:    rule.ID.String(),
-			Resolved:  resolved,
-		})
-		if err != nil || task == nil {
-			runtimeLogger(ctx).ErrorContext(ctx, "failed to build alert notification task",
-				"event_id", event.ID.String(),
-				"channel_id", channel.ID.String(),
-				"error", err)
-			continue
+			Severity:   rule.Severity,
+			ClusterID:  clusterStr,
+			RuleID:     rule.ID.String(),
+			ChannelID:  channel.ID.String(),
+			EventID:    event.ID.String(),
+			DeliveryID: deliveryID,
+			FiredAt:    event.FiredAt.UTC().Format(time.RFC3339),
+			Resolved:   resolved,
+		}, deliveryID); err != nil {
+			return fmt.Errorf("persist notification intent for event %s channel %s: %w", event.ID, channel.ID, err)
 		}
-		if runtimeDependencies(ctx).Enqueuer == nil {
-			runtimeLogger(ctx).WarnContext(ctx, "alert notification not delivered: enqueuer not configured",
-				"event_id", event.ID.String(),
-				"channel_id", channel.ID.String())
-			continue
-		}
-		if _, enqErr := runtimeDependencies(ctx).Enqueuer.Enqueue(task); enqErr != nil {
-			runtimeLogger(ctx).ErrorContext(ctx, "failed to enqueue alert notification",
-				"event_id", event.ID.String(),
-				"channel_id", channel.ID.String(),
-				"channel_type", channel.ChannelType,
-				"error", enqErr)
-			continue
-		}
-		runtimeLogger(ctx).InfoContext(ctx, "enqueued alert notification",
+		runtimeLogger(ctx).InfoContext(ctx, "persisted alert notification intent",
 			"event_id", event.ID.String(),
 			"channel_id", channel.ID.String(),
 			"channel_type", channel.ChannelType,
 			"severity", rule.Severity,
 			"resolved", resolved,
-			"recipient_count", len(notificationRecipients(channel)))
+			"recipient_count", len(recipients))
 	}
+	return nil
+}
+
+func runAlertNotificationTx(ctx context.Context, fn func(AlertNotificationMutationTx) error) error {
+	runTx := runtimeDependencies(ctx).AlertNotificationRunTx
+	if runTx == nil {
+		return fmt.Errorf("alert notification transaction runner is not configured")
+	}
+	return runTx(ctx, fn)
 }
 
 // alertEvalSweepPageSize bounds each ListClusters/ListAlertRules/ListAlertSilences
@@ -357,22 +359,22 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 	activeEvents := filterActiveEventsForCluster(existingEvents, targetClusterID)
 	if !eval.triggered {
 		for _, event := range activeEvents {
-			if err := runtimeDependencies(ctx).Queries.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
-				ID:         event.ID,
-				Status:     "resolved",
-				ResolvedAt: pgTime(time.Now()),
-			}); err != nil {
+			err := runAlertNotificationTx(ctx, func(q AlertNotificationMutationTx) error {
+				if err := q.UpdateAlertEventStatus(ctx, sqlc.UpdateAlertEventStatusParams{
+					ID: event.ID, Status: "resolved", ResolvedAt: pgTime(time.Now()),
+				}); err != nil {
+					return err
+				}
+				if event.Status == "firing" || event.Status == "acknowledged" {
+					return dispatchAlertNotifications(ctx, q, rule, event, "Astronomer alert resolved: "+rule.Name,
+						fmt.Sprintf("Alert %q has resolved.", rule.Name), true)
+				}
+				return nil
+			})
+			if err != nil {
 				return err
 			}
 			publishAlertEventChanged(ctx, event.ClusterID, event.ID)
-			// Only "firing"/"acknowledged" events represent an
-			// alert that actually paged someone; "silenced" ones
-			// never notified on trigger, so we don't notify on
-			// resolve either.
-			if event.Status == "firing" || event.Status == "acknowledged" {
-				dispatchAlertNotifications(ctx, rule, event, "Astronomer alert resolved: "+rule.Name,
-					fmt.Sprintf("Alert %q has resolved.", rule.Name), true)
-			}
 		}
 		return nil
 	}
@@ -419,12 +421,16 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 		details, _ = json.Marshal(detailMap)
 		message = fmt.Sprintf("%s (silenced: %s)", message, silence.Reason)
 	}
-	event, err := runtimeDependencies(ctx).Queries.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
-		RuleID:    rule.ID,
-		ClusterID: targetClusterID,
-		Status:    status,
-		Message:   message,
-		Details:   details,
+	var event sqlc.AlertEvent
+	err := runAlertNotificationTx(ctx, func(q AlertNotificationMutationTx) error {
+		var createErr error
+		event, createErr = q.CreateAlertEvent(ctx, sqlc.CreateAlertEventParams{
+			RuleID: rule.ID, ClusterID: targetClusterID, Status: status, Message: message, Details: details,
+		})
+		if createErr != nil || silence != nil {
+			return createErr
+		}
+		return dispatchAlertNotifications(ctx, q, rule, event, "Astronomer alert: "+rule.Name, message, false)
 	})
 	if err != nil {
 		return err
@@ -434,7 +440,6 @@ func processRuleEvaluation(ctx context.Context, rule sqlc.AlertRule, eval ruleCl
 		runtimeLogger(ctx).InfoContext(ctx, "alert matched active silence", "event_id", event.ID.String(), "rule_id", rule.ID.String())
 		return nil
 	}
-	dispatchAlertNotifications(ctx, rule, event, "Astronomer alert: "+rule.Name, message, false)
 	return nil
 }
 
@@ -458,19 +463,24 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
 	}
 	if rule.ClusterID.Valid {
 		details := baseRuleDetails(rule, config)
-		cluster, err := runtimeDependencies(ctx).Queries.GetClusterByID(ctx, uuid.UUID(rule.ClusterID.Bytes))
-		if err != nil {
-			return nil, err
+		scopedID := uuid.UUID(rule.ClusterID.Bytes)
+		if fleet == nil {
+			var err error
+			fleet, err = buildScopedHealthSnapshot(ctx, []uuid.UUID{scopedID})
+			if err != nil {
+				return nil, err
+			}
 		}
-		health, healthErr := runtimeDependencies(ctx).Queries.GetClusterHealthStatus(ctx, cluster.ID)
-		healthKnown := healthErr == nil
-		if healthErr != nil {
-			health = sqlc.ClusterHealthStatus{}
+		cluster, found := fleet.byID[scopedID]
+		if !found {
+			return nil, pgx.ErrNoRows
 		}
+		health, healthKnown := fleet.health[scopedID], fleet.known[scopedID]
+		lastHeartbeat := fleet.liveness[scopedID]
 		details["cluster_id"] = cluster.ID.String()
 		details["cluster_name"] = cluster.Name
 		details["cluster_status"] = cluster.Status
-		details["last_heartbeat"] = nullableWorkerTime(cluster.LastHeartbeat)
+		details["last_heartbeat"] = nullableWorkerTime(lastHeartbeat)
 		details["node_count"] = health.NodeCount
 		details["pod_count"] = health.PodCount
 		details["cpu_usage_percent"] = health.CpuUsagePercent
@@ -480,7 +490,7 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
 		} else if ok {
 			return []ruleClusterEval{{triggered: triggered, message: message, details: payload, clusterID: clusterID}}, nil
 		}
-		triggered, message, payload, clusterID, err := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
+		triggered, message, payload, clusterID, err := evaluateClusterRule(rule, config, cluster, lastHeartbeat, health, healthKnown, details)
 		if err != nil {
 			return nil, err
 		}
@@ -492,37 +502,22 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
 	// identical across rules within a tick, so re-paging the fleet + re-reading
 	// GetClusterHealthStatus per rule (G full-fleet scans + G×C point reads)
 	// was pure redundancy. When fleet is nil (defensive: caller couldn't build
-	// it) fall back to paging the fleet inline so behavior is preserved.
-	var evaluations []ruleClusterEval
-	var allFailed bool
-	if fleet != nil {
-		evaluations, allFailed = evaluateGlobalRuleClusters(ctx, rule, config, fleet.clusters,
-			func(_ context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
-				return fleet.health[c.ID], fleet.known[c.ID]
-			})
-	} else {
-		// Defensive fallback: caller couldn't build the shared snapshot, so page
-		// the fleet inline, then fan out the per-cluster evaluation the same way.
-		var clusters []sqlc.Cluster
-		for offset := int32(0); ; offset += alertEvalSweepPageSize {
-			page, err := runtimeDependencies(ctx).Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
-			if err != nil {
-				return nil, err
-			}
-			if len(page) == 0 {
-				break
-			}
-			clusters = append(clusters, page...)
-			if int32(len(page)) < alertEvalSweepPageSize {
-				break
-			}
+	// it) build the same batched snapshot on demand. There is no point-read
+	// fallback: fleet evaluation must remain O(pages), never O(clusters).
+	if fleet == nil {
+		var err error
+		fleet, err = buildFleetHealthSnapshot(ctx)
+		if err != nil {
+			return nil, err
 		}
-		evaluations, allFailed = evaluateGlobalRuleClusters(ctx, rule, config, clusters,
-			func(ctx context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
-				health, healthErr := runtimeDependencies(ctx).Queries.GetClusterHealthStatus(ctx, c.ID)
-				return health, healthErr == nil
-			})
 	}
+	evaluations, allFailed := evaluateGlobalRuleClusters(ctx, rule, config, fleet.clusters,
+		func(_ context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool) {
+			return fleet.health[c.ID], fleet.known[c.ID]
+		},
+		func(c sqlc.Cluster) pgtype.Timestamptz {
+			return fleet.liveness[c.ID]
+		})
 	if len(evaluations) == 0 {
 		// Non-empty fleet where every cluster errored/timed out: fail the tick
 		// (matching the pre-F6 serial behavior of returning on the first error)
@@ -543,13 +538,13 @@ func evaluateRule(ctx context.Context, rule sqlc.AlertRule, fleet *fleetHealthSn
 // using the pre-fetched (health, healthKnown) so the caller can share one
 // per-tick fleet+health snapshot across every global rule instead of
 // re-querying per rule. Mirrors the per-cluster body of the global fan-out.
-func evaluateGlobalClusterRow(ctx context.Context, rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, health sqlc.ClusterHealthStatus, healthKnown bool) (ruleClusterEval, error) {
+func evaluateGlobalClusterRow(ctx context.Context, rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, lastHeartbeat pgtype.Timestamptz, health sqlc.ClusterHealthStatus, healthKnown bool) (ruleClusterEval, error) {
 	details := baseRuleDetails(rule, config)
 	details["scope"] = "global"
 	details["cluster_id"] = cluster.ID.String()
 	details["cluster_name"] = cluster.Name
 	details["cluster_status"] = cluster.Status
-	details["last_heartbeat"] = nullableWorkerTime(cluster.LastHeartbeat)
+	details["last_heartbeat"] = nullableWorkerTime(lastHeartbeat)
 	details["node_count"] = health.NodeCount
 	details["pod_count"] = health.PodCount
 	details["cpu_usage_percent"] = health.CpuUsagePercent
@@ -559,7 +554,7 @@ func evaluateGlobalClusterRow(ctx context.Context, rule sqlc.AlertRule, config m
 	} else if ok {
 		return ruleClusterEval{triggered: triggered, message: message, details: payload, clusterID: clusterID}, nil
 	}
-	triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, health, healthKnown, details)
+	triggered, message, payload, clusterID, evalErr := evaluateClusterRule(rule, config, cluster, lastHeartbeat, health, healthKnown, details)
 	if evalErr != nil {
 		return ruleClusterEval{}, evalErr
 	}
@@ -594,6 +589,7 @@ func evaluateGlobalRuleClusters(
 	config map[string]any,
 	clusters []sqlc.Cluster,
 	healthFor func(ctx context.Context, c sqlc.Cluster) (sqlc.ClusterHealthStatus, bool),
+	heartbeatFor func(c sqlc.Cluster) pgtype.Timestamptz,
 ) ([]ruleClusterEval, bool) {
 	results := make([]ruleClusterEval, len(clusters))
 	ok := make([]bool, len(clusters))
@@ -609,7 +605,7 @@ func evaluateGlobalRuleClusters(
 			cctx, cancel := context.WithTimeout(gctx, alertEvalPerClusterTimeout)
 			defer cancel()
 			health, known := healthFor(cctx, cluster)
-			eval, err := evaluateGlobalClusterRow(cctx, rule, config, cluster, health, known)
+			eval, err := evaluateGlobalClusterRow(cctx, rule, config, cluster, heartbeatFor(cluster), health, known)
 			if err != nil {
 				runtimeLogger(ctx).WarnContext(cctx, "alert global-rule cluster evaluation failed, skipping",
 					"rule_id", rule.ID.String(), "cluster_id", cluster.ID.String(), "error", err)
@@ -644,16 +640,20 @@ func evaluateGlobalRuleClusters(
 // (G global rules, C clusters) down to one scan + C reads per tick.
 type fleetHealthSnapshot struct {
 	clusters []sqlc.Cluster
+	byID     map[uuid.UUID]sqlc.Cluster
 	health   map[uuid.UUID]sqlc.ClusterHealthStatus
 	known    map[uuid.UUID]bool
+	liveness map[uuid.UUID]pgtype.Timestamptz
 }
 
-// buildFleetHealthSnapshot pages the entire fleet once and reads each cluster's
-// health once, returning the shared snapshot the global-rule fan-out reads from.
+// buildFleetHealthSnapshot pages the entire fleet once and loads health in one
+// batch per page, returning the shared snapshot the global-rule fan-out reads.
 func buildFleetHealthSnapshot(ctx context.Context) (*fleetHealthSnapshot, error) {
 	snap := &fleetHealthSnapshot{
-		health: map[uuid.UUID]sqlc.ClusterHealthStatus{},
-		known:  map[uuid.UUID]bool{},
+		byID:     map[uuid.UUID]sqlc.Cluster{},
+		health:   map[uuid.UUID]sqlc.ClusterHealthStatus{},
+		known:    map[uuid.UUID]bool{},
+		liveness: map[uuid.UUID]pgtype.Timestamptz{},
 	}
 	for offset := int32(0); ; offset += alertEvalSweepPageSize {
 		clusters, err := runtimeDependencies(ctx).Queries.ListClusters(ctx, sqlc.ListClustersParams{Limit: alertEvalSweepPageSize, Offset: offset})
@@ -663,20 +663,83 @@ func buildFleetHealthSnapshot(ctx context.Context) (*fleetHealthSnapshot, error)
 		if len(clusters) == 0 {
 			break
 		}
+		clusterIDs := make([]uuid.UUID, 0, len(clusters))
 		for _, cluster := range clusters {
 			snap.clusters = append(snap.clusters, cluster)
-			health, healthErr := runtimeDependencies(ctx).Queries.GetClusterHealthStatus(ctx, cluster.ID)
-			if healthErr != nil {
-				snap.health[cluster.ID] = sqlc.ClusterHealthStatus{}
-				snap.known[cluster.ID] = false
-				continue
-			}
-			snap.health[cluster.ID] = health
-			snap.known[cluster.ID] = true
+			snap.byID[cluster.ID] = cluster
+			clusterIDs = append(clusterIDs, cluster.ID)
+			snap.known[cluster.ID] = false
+		}
+		healthRows, err := runtimeDependencies(ctx).Queries.ListClusterHealthStatusesForClusters(ctx, clusterIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, health := range healthRows {
+			snap.health[health.ClusterID] = health
+			snap.known[health.ClusterID] = true
+		}
+		livenessRows, err := runtimeDependencies(ctx).Queries.ListClusterLivenessForClusters(ctx, clusterIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, liveness := range livenessRows {
+			snap.liveness[liveness.ClusterID] = liveness.LastHeartbeat
 		}
 		if int32(len(clusters)) < alertEvalSweepPageSize {
 			break
 		}
+	}
+	return snap, nil
+}
+
+// buildScopedHealthSnapshot batches the cluster, health, and liveness reads
+// shared by cluster-scoped alert rules. Duplicate rule targets are collapsed,
+// turning the previous three point reads per rule into three reads per tick.
+func buildScopedHealthSnapshot(ctx context.Context, requested []uuid.UUID) (*fleetHealthSnapshot, error) {
+	snap := &fleetHealthSnapshot{
+		byID:     map[uuid.UUID]sqlc.Cluster{},
+		health:   map[uuid.UUID]sqlc.ClusterHealthStatus{},
+		known:    map[uuid.UUID]bool{},
+		liveness: map[uuid.UUID]pgtype.Timestamptz{},
+	}
+	seen := make(map[uuid.UUID]struct{}, len(requested))
+	ids := make([]uuid.UUID, 0, len(requested))
+	for _, id := range requested {
+		if id == uuid.Nil {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return snap, nil
+	}
+	clusters, err := runtimeDependencies(ctx).Queries.ListClustersByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, cluster := range clusters {
+		snap.clusters = append(snap.clusters, cluster)
+		snap.byID[cluster.ID] = cluster
+		snap.known[cluster.ID] = false
+	}
+	healthRows, err := runtimeDependencies(ctx).Queries.ListClusterHealthStatusesForClusters(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, health := range healthRows {
+		snap.health[health.ClusterID] = health
+		snap.known[health.ClusterID] = true
+	}
+	livenessRows, err := runtimeDependencies(ctx).Queries.ListClusterLivenessForClusters(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, liveness := range livenessRows {
+		snap.liveness[liveness.ClusterID] = liveness.LastHeartbeat
 	}
 	return snap, nil
 }
@@ -860,7 +923,7 @@ func alertInhibited(inhibitions []sqlc.AlertInhibition, firing []map[string]stri
 	return false
 }
 
-func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, health sqlc.ClusterHealthStatus, healthKnown bool, details map[string]any) (bool, string, []byte, pgtype.UUID, error) {
+func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sqlc.Cluster, lastHeartbeat pgtype.Timestamptz, health sqlc.ClusterHealthStatus, healthKnown bool, details map[string]any) (bool, string, []byte, pgtype.UUID, error) {
 	displayName := strutil.FirstNonBlank(cluster.DisplayName, cluster.Name)
 	clusterID := pgtype.UUID{Bytes: cluster.ID, Valid: true}
 	comparison := stringFromWorkerMap(config, "comparison")
@@ -882,7 +945,7 @@ func evaluateClusterRule(rule sqlc.AlertRule, config map[string]any, cluster sql
 	case "absence", "deadman":
 		expected := expectedInterval(config)
 		details["expected_interval_seconds"] = int(expected.Seconds())
-		if cluster.Status == "disconnected" || !cluster.LastHeartbeat.Valid || cluster.LastHeartbeat.Time.UTC().Before(time.Now().UTC().Add(-expected)) {
+		if cluster.Status == "disconnected" || !lastHeartbeat.Valid || lastHeartbeat.Time.UTC().Before(time.Now().UTC().Add(-expected)) {
 			blob, _ := json.Marshal(details)
 			return true, fmt.Sprintf("Cluster %s heartbeat is missing", displayName), blob, clusterID, nil
 		}

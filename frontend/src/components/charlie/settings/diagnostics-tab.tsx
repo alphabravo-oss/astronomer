@@ -14,6 +14,7 @@ import { StatePanel } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { queryKeys } from "@/lib/query-keys";
 import { formatRelativeTime } from "@/lib/utils";
+import { liveFallback } from "@/lib/live/status-store";
 import { completeDiagnostics } from "@/components/charlie/admin-utils";
 import { getCharlieDiagnostics } from "@/lib/api/charlie-admin";
 import { Section, Unavailable, button } from "./shared";
@@ -35,7 +36,7 @@ export function DiagnosticsTab() {
     queryKey: queryKeys.charlie.adminDiagnostics,
     queryFn: ({ signal }) => getCharlieDiagnostics(signal),
     retry: false,
-    refetchInterval: 30000,
+    refetchInterval: liveFallback(30_000),
   });
   if (q.isLoading)
     return (

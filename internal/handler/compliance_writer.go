@@ -75,6 +75,7 @@ type RBACSnapshotQuerier interface {
 // CSV. Uses the existing ListClusters query.
 type ClusterInventoryQuerier interface {
 	ListClusters(ctx context.Context, arg sqlc.ListClustersParams) ([]sqlc.Cluster, error)
+	ListClusterLivenessForClusters(ctx context.Context, clusterIds []uuid.UUID) ([]sqlc.ClusterLiveness, error)
 	GetClusterAgentTokenByClusterID(ctx context.Context, clusterID uuid.UUID) (sqlc.ClusterAgentToken, error)
 }
 
@@ -449,14 +450,26 @@ func WriteClusterInventoryCSV(ctx context.Context, w io.Writer, q ClusterInvento
 		if len(rows) == 0 {
 			break
 		}
+		ids := make([]uuid.UUID, len(rows))
+		for i, cluster := range rows {
+			ids[i] = cluster.ID
+		}
+		livenessRows, err := q.ListClusterLivenessForClusters(ctx, ids)
+		if err != nil {
+			return total, err
+		}
+		liveness := make(map[uuid.UUID]pgtype.Timestamptz, len(livenessRows))
+		for _, row := range livenessRows {
+			liveness[row.ClusterID] = row.LastHeartbeat
+		}
 		for _, c := range rows {
 			labels := ""
 			if len(c.Labels) > 0 {
 				labels = string(c.Labels)
 			}
 			lastHeartbeat := ""
-			if c.LastHeartbeat.Valid {
-				lastHeartbeat = c.LastHeartbeat.Time.UTC().Format(time.RFC3339Nano)
+			if heartbeat := liveness[c.ID]; heartbeat.Valid {
+				lastHeartbeat = heartbeat.Time.UTC().Format(time.RFC3339Nano)
 			}
 			decommissioned := ""
 			if c.DecommissionedAt.Valid {

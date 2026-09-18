@@ -49,23 +49,18 @@ vi.mock("@/lib/api/charlie-admin", () => ({
   getCharlieMode: vi.fn(),
 }));
 
-vi.mock("@/lib/navigation", () => ({
-  usePathname: () => "/dashboard/alerting",
-}));
-vi.mock("@/lib/link", () => ({
-  Link: ({
-    href,
-    children,
-    ...props
-  }: {
-    href: string;
-    children: React.ReactNode;
-  }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    Link: RouterLinkStub,
+    useLocation: <T,>({
+      select,
+    }: {
+      select: (location: { pathname: string }) => T;
+    }) => select({ pathname: "/dashboard/alerting" }),
+  };
+});
 
 function renderShell() {
   const client = new QueryClient({
@@ -238,7 +233,9 @@ describe("Charlie global shell accessibility", () => {
     expect(
       await screen.findByRole("dialog", { name: "Charlie" }),
     ).toBeInTheDocument();
-    expect(getCharlieActiveThread).toHaveBeenCalled();
+    await waitFor(() => expect(getCharlieActiveThread).toHaveBeenCalled(), {
+      timeout: 5_000,
+    });
     expect(screen.getByText("Alerts")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "New chat" }),

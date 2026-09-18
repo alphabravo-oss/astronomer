@@ -92,6 +92,22 @@ func (q *recordingLockoutQuerier) IncrementFailedLoginCount(_ context.Context, a
 	return nil
 }
 
+func (q *recordingLockoutQuerier) RecordFailedLoginAttempt(_ context.Context, arg sqlc.RecordFailedLoginAttemptParams) (sqlc.User, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	u := q.users[arg.ID]
+	u.FailedLoginCount++
+	u.FailedLoginAt = arg.FailedLoginAt
+	q.incCalls++
+	if u.FailedLoginCount >= arg.LockoutThreshold {
+		u.LockedUntil = arg.LockedUntil
+		u.LockedReason = arg.LockedReason
+		q.lockCalls++
+	}
+	q.users[arg.ID] = u
+	return u, nil
+}
+
 func (q *recordingLockoutQuerier) ResetFailedLoginCount(_ context.Context, id uuid.UUID) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -159,6 +175,7 @@ func TestLogin_IncrementsOnFailure(t *testing.T) {
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
 	h.SetLockoutPolicy(5, 15*time.Minute)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q})
 
 	body := newLoginRequestBody(t, user.Email, "wrong-password")
 	rec := doLogin(t, h, body)
@@ -187,6 +204,7 @@ func TestLogin_LocksAfterThreshold(t *testing.T) {
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
 	h.SetLockoutPolicy(5, 15*time.Minute)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q})
 
 	body := newLoginRequestBody(t, user.Email, "wrong-password")
 	rec := doLogin(t, h, body)
@@ -220,6 +238,7 @@ func TestLogin_RejectsLockedAccount(t *testing.T) {
 	h.SetLockoutQuerier(q)
 	auditWriter := &recordingAuthAuditWriter{}
 	h.SetAuditWriter(auditWriter)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, audit: auditWriter})
 
 	// Even submitting the CORRECT password should bounce — the lockout
 	// gate sits before bcrypt.
@@ -248,6 +267,7 @@ func TestLogin_ResetsCountOnSuccess(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q})
 
 	body := newLoginRequestBody(t, user.Email, "testpassword")
 	rec := doLogin(t, h, body)
@@ -273,6 +293,7 @@ func TestLogin_ExpiredLockProceeds(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("test-secret-key", 60)
 	h := NewAuthHandler(q, jwtMgr)
 	h.SetLockoutQuerier(q)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q})
 
 	body := newLoginRequestBody(t, user.Email, "testpassword")
 	rec := doLogin(t, h, body)
@@ -296,6 +317,7 @@ func TestLogin_LockedAuditDetail(t *testing.T) {
 	h.SetLockoutQuerier(q)
 	auditWriter := &recordingAuthAuditWriter{}
 	h.SetAuditWriter(auditWriter)
+	wireAuthTestMutationTx(h, &authTestMutationTx{users: q, audit: auditWriter})
 
 	rec := doLogin(t, h, newLoginRequestBody(t, user.Email, "wrong-password"))
 	if rec.Code != http.StatusUnauthorized {

@@ -9,13 +9,14 @@ import { useTabParam } from "@/lib/use-tab-param";
 
 const nav = vi.hoisted(() => ({
   search: "",
-  replace: vi.fn(),
+  navigate: vi.fn(),
 }));
 
-vi.mock("@/lib/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: nav.replace, back: vi.fn() }),
-  usePathname: () => "/dashboard/security",
-  useSearchParams: () => new URLSearchParams(nav.search),
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => nav.navigate,
+  useLocation: <T,>({ select }: { select: (location: { pathname: string; searchStr: string }) => T }) =>
+    select({ pathname: "/dashboard/security", searchStr: nav.search }),
 }));
 
 const KEYS = ["cis", "templates", "policies"] as const;
@@ -23,7 +24,7 @@ const KEYS = ["cis", "templates", "policies"] as const;
 describe("useTabParam", () => {
   beforeEach(() => {
     nav.search = "";
-    nav.replace.mockClear();
+    nav.navigate.mockClear();
   });
 
   it("falls back when the param is absent", () => {
@@ -51,10 +52,11 @@ describe("useTabParam", () => {
       result.current[1]("templates");
     });
 
-    expect(nav.replace).toHaveBeenCalledWith(
-      "/dashboard/security?cluster=c1&tab=templates",
-      { scroll: false },
-    );
+    expect(nav.navigate).toHaveBeenCalledWith({
+      to: "/dashboard/security?cluster=c1&tab=templates",
+      replace: true,
+      resetScroll: false,
+    });
   });
 
   it("supports a custom param name without touching ?tab=", () => {
@@ -68,9 +70,10 @@ describe("useTabParam", () => {
       result.current[1]("Synced");
     });
 
-    expect(nav.replace).toHaveBeenCalledWith(
-      "/dashboard/security?tab=cis&sync=Synced",
-      { scroll: false },
-    );
+    expect(nav.navigate).toHaveBeenCalledWith({
+      to: "/dashboard/security?tab=cis&sync=Synced",
+      replace: true,
+      resetScroll: false,
+    });
   });
 });

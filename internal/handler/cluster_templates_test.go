@@ -11,14 +11,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
 // fakeClusterTemplateQuerier is the narrow ClusterTemplateQuerier surface
@@ -35,6 +34,16 @@ type fakeClusterTemplateQuerier struct {
 	clusters     map[uuid.UUID]sqlc.Cluster
 	policies     map[uuid.UUID]sqlc.ClusterRegistrationPolicy
 	audits       []sqlc.CreateAuditLogV1Params
+	taskRows     []sqlc.UpsertTaskOutboxParams
+	atomicApps   []sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams
+}
+
+// fakeAtomicClusterTemplateQuerier adds the committed audit rows inspected by
+// the full-replay contract tests. Application and task rows are recorded by
+// the embedded transactional fake.
+type fakeAtomicClusterTemplateQuerier struct {
+	*fakeClusterTemplateQuerier
+	auditOutbox []sqlc.UpsertAuditOutboxParams
 }
 
 func TestClusterTemplateListBoundClustersFiltersUnauthorizedClusters(t *testing.T) {
@@ -67,14 +76,6 @@ func TestClusterTemplateListBoundClustersFiltersUnauthorizedClusters(t *testing.
 	if len(body.Data) != 1 || body.Data[0].ClusterID != allowedID.String() {
 		t.Fatalf("expected only authorized cluster %s, got %#v", allowedID, body.Data)
 	}
-}
-
-type fakeAtomicClusterTemplateQuerier struct {
-	*fakeClusterTemplateQuerier
-
-	atomicApps  []sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams
-	taskRows    []sqlc.UpsertTaskOutboxParams
-	auditOutbox []sqlc.UpsertAuditOutboxParams
 }
 
 func newFakeClusterTemplateQuerier() *fakeClusterTemplateQuerier {
@@ -228,12 +229,34 @@ func (f *fakeClusterTemplateQuerier) UpsertClusterTemplateApplication(_ context.
 	return a, nil
 }
 
-func (f *fakeAtomicClusterTemplateQuerier) UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error) {
+func (f *fakeClusterTemplateQuerier) UpsertClusterTemplateApplicationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertClusterTemplateApplicationWithTaskOutboxParams) (sqlc.ClusterTemplateApplication, error) {
+	f.mu.Lock()
 	f.atomicApps = append(f.atomicApps, arg)
+	f.mu.Unlock()
 	return f.UpsertClusterTemplateApplication(ctx, sqlc.UpsertClusterTemplateApplicationParams{
 		ClusterID:    arg.ClusterID,
 		TemplateID:   arg.TemplateID,
 		SpecSnapshot: arg.SpecSnapshot,
+	})
+}
+
+func (f *fakeClusterTemplateQuerier) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.taskRows = append(f.taskRows, arg)
+	return sqlc.TaskOutbox{ID: uuid.New(), TaskType: arg.TaskType}, nil
+}
+
+func (f *fakeClusterTemplateQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.audits = append(f.audits, auditLogParamsFromOutbox(arg))
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action}, nil
+}
+
+func setClusterTemplateTestRunTx(h *ClusterTemplateHandler, q ClusterTemplateMutationTx) {
+	h.SetRunTx(func(_ context.Context, fn func(ClusterTemplateMutationTx) error) error {
+		return fn(q)
 	})
 }
 
@@ -312,6 +335,7 @@ func withChiParams(req *http.Request, params map[string]string) *http.Request {
 func TestClusterTemplate_CRUD(t *testing.T) {
 	q := newFakeClusterTemplateQuerier()
 	h := NewClusterTemplateHandler(q)
+	setClusterTemplateTestRunTx(h, q)
 
 	// Create a template with a valid spec.
 	body := mustJSON(t, map[string]any{
@@ -357,14 +381,14 @@ func TestClusterTemplate_CRUD(t *testing.T) {
 		t.Fatalf("list: status=%d", rec.Code)
 	}
 	var listResp struct {
-		Data  []ClusterTemplateResponse `json:"data"`
-		Count int64                     `json:"count"`
+		Data       []ClusterTemplateResponse `json:"data"`
+		Pagination paging.Metadata           `json:"pagination"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &listResp); err != nil {
 		t.Fatalf("decode list: %v", err)
 	}
-	if listResp.Count != 1 || len(listResp.Data) != 1 {
-		t.Errorf("list returned count=%d items=%d", listResp.Count, len(listResp.Data))
+	if exactPageTotal(t, listResp.Pagination) != 1 || len(listResp.Data) != 1 {
+		t.Errorf("list returned count=%d items=%d", exactPageTotal(t, listResp.Pagination), len(listResp.Data))
 	}
 
 	// Get.
@@ -472,9 +496,7 @@ func TestClusterTemplateApplyFailsClosedWithoutTransactionRunner(t *testing.T) {
 	q.templates[tmplID] = sqlc.ClusterTemplate{ID: tmplID, Name: "production-web", Spec: spec}
 	q.byName["production-web"] = tmplID
 
-	cap := &captureEnqueuer{}
 	h := NewClusterTemplateHandler(q)
-	h.SetQueue(cap)
 
 	body := mustJSON(t, map[string]string{"template_id": tmplID.String()})
 	rec := httptest.NewRecorder()
@@ -485,63 +507,8 @@ func TestClusterTemplateApplyFailsClosedWithoutTransactionRunner(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("unwired apply: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if cap.count != 0 || len(q.applications) != 0 {
+	if len(q.applications) != 0 {
 		t.Fatalf("unwired apply mutated state or queued work")
-	}
-}
-
-func TestClusterTemplateApplyWritesTaskOutbox(t *testing.T) {
-	q := newFakeClusterTemplateQuerier()
-	clusterID := uuid.New()
-	q.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`), Annotations: json.RawMessage(`{}`)}
-	tmplID := uuid.New()
-	q.templates[tmplID] = sqlc.ClusterTemplate{ID: tmplID, Name: "production-web", Spec: json.RawMessage(`{"tools":[]}`)}
-	outbox := &fakeRegistrationTaskOutbox{}
-	cap := &captureEnqueuer{}
-	h := NewClusterTemplateHandler(q)
-	h.SetQueue(cap)
-	h.SetTaskOutbox(outbox)
-
-	body := mustJSON(t, map[string]string{"template_id": tmplID.String()})
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/template/", bytes.NewReader(body))
-	req.Header.Set("Idempotency-Key", "template-apply-outbox")
-	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
-	h.Apply(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("unwired apply: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if cap.count != 0 || len(outbox.all()) != 0 {
-		t.Fatalf("unwired apply queued direct=%d outbox=%d", cap.count, len(outbox.all()))
-	}
-}
-
-func TestClusterTemplateApplyWritesApplicationAndTaskOutboxAtomically(t *testing.T) {
-	base := newFakeClusterTemplateQuerier()
-	clusterID := uuid.New()
-	base.clusters[clusterID] = sqlc.Cluster{ID: clusterID, Name: "demo", Environment: "development", Labels: json.RawMessage(`{}`), Annotations: json.RawMessage(`{}`)}
-	tmplID := uuid.New()
-	base.templates[tmplID] = sqlc.ClusterTemplate{ID: tmplID, Name: "production-web", Spec: json.RawMessage(`{"tools":[]}`)}
-	q := &fakeAtomicClusterTemplateQuerier{fakeClusterTemplateQuerier: base}
-	outbox := &fakeRegistrationTaskOutbox{}
-	cap := &captureEnqueuer{}
-	h := NewClusterTemplateHandler(q)
-	h.SetQueue(cap)
-	h.SetTaskOutbox(outbox)
-
-	body := mustJSON(t, map[string]string{"template_id": tmplID.String()})
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/template/", bytes.NewReader(body))
-	req.Header.Set("Idempotency-Key", "template-apply-atomic")
-	req = withChiParams(req, map[string]string{"cluster_id": clusterID.String()})
-	h.Apply(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("unwired apply: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if len(q.atomicApps) != 0 || len(outbox.all()) != 0 || cap.count != 0 {
-		t.Fatalf("unwired apply mutated atomic=%d outbox=%d direct=%d", len(q.atomicApps), len(outbox.all()), cap.count)
 	}
 }
 
@@ -638,16 +605,3 @@ func TestIsUniqueViolation_NilSafe(t *testing.T) {
 // ────────────────────────────────────────────────────────────────────────
 
 // mustJSON is shared by the handler test package.
-
-// captureEnqueuer is a minimal ClusterTemplateEnqueuer that counts
-// successful Enqueue calls. Real asynq.Client isn't needed because the
-// handler interfaces against the narrower ClusterTemplateEnqueuer
-// surface (Enqueue only).
-type captureEnqueuer struct {
-	count int
-}
-
-func (c *captureEnqueuer) Enqueue(_ *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
-	c.count++
-	return &asynq.TaskInfo{}, nil
-}

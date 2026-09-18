@@ -96,6 +96,28 @@ func (f *fakeExtensionQuerier) CreateAuditLogV1(context.Context, sqlc.CreateAudi
 	return nil
 }
 
+func (f *fakeExtensionQuerier) GetUIExtensionByNameForUpdate(_ context.Context, name string) (sqlc.UIExtension, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	row, ok := f.rows[name]
+	if !ok {
+		return sqlc.UIExtension{}, pgx.ErrNoRows
+	}
+	return row, nil
+}
+
+func (f *fakeExtensionQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
+	f.audit++
+	return sqlc.AuditOutbox{ID: arg.ID, Action: arg.Action, Detail: arg.Detail}, nil
+}
+
+func mutableExtensionHandler(q *fakeExtensionQuerier) *ExtensionHandler {
+	h := NewExtensionHandler(q)
+	h.SetCurrentVersion("0.9.1")
+	h.SetRunTx(func(_ context.Context, fn func(ExtensionMutationTx) error) error { return fn(q) })
+	return h
+}
+
 func extensionReq(t *testing.T, method, target, body string) *http.Request {
 	t.Helper()
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
@@ -144,8 +166,7 @@ func TestExtensionHandler_ValidateRejectsUnsafeManifest(t *testing.T) {
 
 func TestExtensionHandler_InstallPersistsCompatibleManifest(t *testing.T) {
 	q := newFakeExtensionQuerier()
-	h := NewExtensionHandler(q)
-	h.SetCurrentVersion("0.9.1")
+	h := mutableExtensionHandler(q)
 	manifest := sampleExtensionManifest()
 	raw, _ := json.Marshal(InstallExtensionRequest{Manifest: manifest, Source: "unit-test", Enable: true})
 	rr := httptest.NewRecorder()
@@ -232,8 +253,7 @@ func TestExtensionHandler_EnableBlocksIncompatibleExtension(t *testing.T) {
 		InstalledAt:         time.Now().UTC(),
 		UpdatedAt:           time.Now().UTC(),
 	}
-	h := NewExtensionHandler(q)
-	h.SetCurrentVersion("0.9.1")
+	h := mutableExtensionHandler(q)
 	rr := httptest.NewRecorder()
 	h.Enable(rr, extensionReq(t, http.MethodPost, "/api/v1/extensions/cost-insights/enable/", ""))
 	if rr.Code != http.StatusConflict {
@@ -402,8 +422,7 @@ func TestValidateExtensionManifest_Tier2BadBundle(t *testing.T) {
 
 func TestExtensionHandler_BundleGatedWithoutTrustedKey(t *testing.T) {
 	q := newFakeExtensionQuerier()
-	h := NewExtensionHandler(q) // no trusted key
-	h.SetCurrentVersion("0.9.1")
+	h := mutableExtensionHandler(q) // no trusted key
 	raw, _ := json.Marshal(InstallExtensionRequest{Manifest: tier2Manifest(), Source: "unit-test", Enable: true})
 	rr := httptest.NewRecorder()
 	h.Install(rr, extensionReq(t, http.MethodPost, "/api/v1/extensions/", string(raw)))

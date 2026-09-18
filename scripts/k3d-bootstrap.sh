@@ -114,6 +114,7 @@ IMG_MIGRATE="${IMG_REGISTRY}/astronomer-go-migrate:${IMG_TAG}"
 # Frontend image name kept as astronomer-frontend to match deploy/chart/values.yaml.
 IMG_FRONTEND="${IMG_REGISTRY}/astronomer-frontend:${IMG_TAG}"
 IMG_SHELL="${IMG_REGISTRY}/astronomer-shell:${IMG_TAG}"
+IMG_DR="${IMG_REGISTRY}/astronomer-dr:${IMG_TAG}"
 
 # ── 1. Create cluster (if missing) ───────────────────────────────────────────
 step "Ensuring k3d cluster '${CLUSTER}' exists"
@@ -168,7 +169,7 @@ fi
 if [[ "${SKIP_BUILD}" != "1" ]]; then
   step "Importing images into k3d cluster"
   k3d image import \
-    "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" "${IMG_SHELL}" \
+    "${IMG_SERVER}" "${IMG_AGENT}" "${IMG_WORKER}" "${IMG_MIGRATE}" "${IMG_FRONTEND}" "${IMG_SHELL}" "${IMG_DR}" \
     -c "${CLUSTER}"
 else
   info "SKIP_BUILD=1, pulling exact images from ${IMG_REGISTRY} instead of importing local images"

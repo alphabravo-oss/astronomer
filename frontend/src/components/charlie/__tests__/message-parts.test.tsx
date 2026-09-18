@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CharlieLifecycleNotice, CharlieMessageParts } from "../message-parts";
 import { decideCharlieApproval } from "@/lib/api/charlie";
@@ -11,9 +17,12 @@ vi.mock("@/lib/api/charlie", async (importOriginal) => ({
 }));
 
 describe("Charlie message safety and states", () => {
-  afterEach(() =>
-    useAuthStore.setState({ user: null, isAuthenticated: false }),
-  );
+  afterEach(() => {
+    // End component subscriptions before resetting the shared auth store.
+    cleanup();
+    useAuthStore.setState({ user: null, isAuthenticated: false });
+    vi.clearAllMocks();
+  });
   it.each([
     "reconnecting",
     "retrying",
@@ -127,12 +136,19 @@ describe("Charlie message safety and states", () => {
     expect(screen.getByText(/Requires charlie:approve/)).toBeInTheDocument();
   });
   it("requires a separate confirmation and carries rationale", async () => {
+    let resolveDecision!: () => void;
+    const decision = new Promise<void>((resolve) => {
+      resolveDecision = resolve;
+    });
+    vi.mocked(decideCharlieApproval).mockReturnValueOnce(decision);
+    const onApprovalChanged = vi.fn();
     useAuthStore.setState({
       user: { id: "u", isSuperuser: true } as unknown as User,
       isAuthenticated: true,
     });
     render(
       <CharlieMessageParts
+        onApprovalChanged={onApprovalChanged}
         message={{
           id: "m",
           role: "assistant",
@@ -164,12 +180,78 @@ describe("Charlie message safety and states", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Approve exact action" }),
     );
-    await waitFor(() =>
-      expect(decideCharlieApproval).toHaveBeenCalledWith(
-        "a",
-        "approve",
-        "Health checks are failing",
-      ),
+    expect(decideCharlieApproval).toHaveBeenCalledWith(
+      "a",
+      "approve",
+      "Health checks are failing",
     );
+    expect(
+      screen.getByRole("button", { name: "Approve exact action" }),
+    ).toBeDisabled();
+    expect(onApprovalChanged).not.toHaveBeenCalled();
+    // The request being invoked is not completion: resolve its promise inside
+    // act so the success/finally updates settle before assertions and teardown.
+    await act(async () => {
+      resolveDecision();
+      await decision;
+    });
+    expect(
+      screen.queryByRole("dialog", { name: "Approve exact Charlie action" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Review approval" }),
+    ).toBeEnabled();
+    expect(onApprovalChanged).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a failed decision review open until its asynchronous failure is rendered", async () => {
+    let rejectDecision!: (reason: Error) => void;
+    const decision = new Promise<void>((_resolve, reject) => {
+      rejectDecision = reject;
+    });
+    vi.mocked(decideCharlieApproval).mockReturnValueOnce(decision);
+    const onApprovalChanged = vi.fn();
+    useAuthStore.setState({
+      user: { id: "u", isSuperuser: true } as unknown as User,
+      isAuthenticated: true,
+    });
+    render(
+      <CharlieMessageParts
+        onApprovalChanged={onApprovalChanged}
+        message={{
+          id: "m",
+          role: "assistant",
+          content: "",
+          approval: {
+            id: "a",
+            title: "Restart",
+            state: "pending",
+            eligible: true,
+            capability: "restart",
+            target: "cluster/a",
+            risk: "medium",
+          },
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review denial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deny exact action" }));
+    expect(
+      screen.getByRole("button", { name: "Deny exact action" }),
+    ).toBeDisabled();
+    await act(async () => {
+      rejectDecision(new Error("Approval eligibility changed"));
+      await decision.catch(() => undefined);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Approval eligibility changed",
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Deny exact Charlie action" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Deny exact action" }),
+    ).toBeEnabled();
+    expect(onApprovalChanged).not.toHaveBeenCalled();
   });
 });

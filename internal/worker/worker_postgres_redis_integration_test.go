@@ -460,6 +460,13 @@ func newWorkerTunnelK8sFixture() *workerTunnelK8sFixture {
 	return &workerTunnelK8sFixture{calls: make(map[string]int), unique: make(map[string]map[[32]byte]struct{})}
 }
 
+func (f *workerTunnelK8sFixture) SupportsCapability(_ context.Context, _ string, capability string) (bool, error) {
+	if capability != protocol.AgentCapabilityMutate {
+		return false, fmt.Errorf("unexpected worker integration capability %q", capability)
+	}
+	return true, nil
+}
+
 func (f *workerTunnelK8sFixture) Do(_ context.Context, clusterID, method, path string, body []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
 	key := method + " " + clusterID + " " + path
 	digest := sha256.Sum256(body)
@@ -1131,6 +1138,8 @@ func testWorkerProductionBusinessHandlers(t *testing.T, ctx context.Context, poo
 		TypeEnsureAuditLogPartitions,
 		TypeEnforceAuditLogRetention,
 		tasks.ApiserverAuditRetentionType,
+		tasks.AgentConnectionRetentionType,
+		tasks.InactiveUserRetentionType,
 		tasks.ClusterTombstoneRetentionType,
 		tasks.AgentUpgradeStuckSweepType,
 		TypeCrdMirrorPruneStale,
@@ -1202,8 +1211,8 @@ func testWorkerProductionBusinessHandlers(t *testing.T, ctx context.Context, poo
 		tasks.ClusterDecommissionAllType,
 		tasks.DispatchDeferredType,
 	}
-	if len(taskTypes) != 83 {
-		t.Fatalf("production business handler coverage=%d, want 83", len(taskTypes))
+	if len(taskTypes) != 85 {
+		t.Fatalf("production business handler coverage=%d, want 85", len(taskTypes))
 	}
 	t.Logf("production business handler coverage=%d/%d descriptors", len(taskTypes), len(TaskDescriptors()))
 
@@ -1747,10 +1756,13 @@ spec:
 		{`INSERT INTO cluster_groups (id,name,slug,description) VALUES ($1,'Worker Group','worker-group','integration')`, []any{fixtures.clusterGroupID}},
 		{`INSERT INTO users (id,email,username) VALUES ($1,$2,$3)`, []any{fixtures.kubectlUserID, "worker-kubectl-" + fixtures.kubectlUserID.String() + "@example.test", "worker-kubectl-" + fixtures.kubectlUserID.String()}},
 		{`INSERT INTO maintenance_windows (id,name,mode,cron_open,duration_minutes,timezone,on_block,enabled) VALUES ($1,'Worker Deferred','blackout','0 0 * * *',60,'UTC','defer',true)`, []any{fixtures.deferredWindowID}},
-		{`INSERT INTO clusters (id,name,display_name,status,provider,last_heartbeat) VALUES ($1,$2,$2,'active','self_managed',now())`, []any{fixtures.clusterID, "worker-business-" + fixtures.clusterID.String()}},
+		{`INSERT INTO clusters (id,name,display_name,status,provider) VALUES ($1,$2,$2,'active','self_managed')`, []any{fixtures.clusterID, "worker-business-" + fixtures.clusterID.String()}},
+		{`INSERT INTO cluster_liveness (cluster_id,last_heartbeat,heartbeat_count) VALUES ($1,now(),1)`, []any{fixtures.clusterID}},
 		{`INSERT INTO deferred_operations (id,window_id,operation_type,operation_spec,target_cluster_id,status,deferred_until,expires_at,requested_by) VALUES ($1,$2,$3,$4,$5,'pending',now()-interval '1 minute',now()+interval '1 hour',$6)`, []any{fixtures.deferredOperationID, fixtures.deferredWindowID, maintenance.OpClusterTemplateApply, deferredEnvelope, fixtures.clusterID, fixtures.kubectlUserID}},
-		{`INSERT INTO clusters (id,name,display_name,status,provider,distribution,last_heartbeat) VALUES ($1,$2,$2,'active','self_managed','k3s',now())`, []any{fixtures.controlPlaneSweepCluster, "worker-cp-sweep-" + fixtures.controlPlaneSweepCluster.String()}},
-		{`INSERT INTO clusters (id,name,display_name,status,provider,last_heartbeat) VALUES ($1,$2,$2,'active','self_managed',now()),($3,$4,$4,'active','self_managed',now())`, []any{fixtures.decommissionDirectCluster, "worker-decommission-direct-" + fixtures.decommissionDirectCluster.String(), fixtures.decommissionSweepCluster, "worker-decommission-sweep-" + fixtures.decommissionSweepCluster.String()}},
+		{`INSERT INTO clusters (id,name,display_name,status,provider,distribution) VALUES ($1,$2,$2,'active','self_managed','k3s')`, []any{fixtures.controlPlaneSweepCluster, "worker-cp-sweep-" + fixtures.controlPlaneSweepCluster.String()}},
+		{`INSERT INTO cluster_liveness (cluster_id,last_heartbeat,heartbeat_count) VALUES ($1,now(),1)`, []any{fixtures.controlPlaneSweepCluster}},
+		{`INSERT INTO clusters (id,name,display_name,status,provider) VALUES ($1,$2,$2,'active','self_managed'),($3,$4,$4,'active','self_managed')`, []any{fixtures.decommissionDirectCluster, "worker-decommission-direct-" + fixtures.decommissionDirectCluster.String(), fixtures.decommissionSweepCluster, "worker-decommission-sweep-" + fixtures.decommissionSweepCluster.String()}},
+		{`INSERT INTO cluster_liveness (cluster_id,last_heartbeat,heartbeat_count) VALUES ($1,now(),1),($2,now(),1)`, []any{fixtures.decommissionDirectCluster, fixtures.decommissionSweepCluster}},
 		{`INSERT INTO cluster_decommissions (id,cluster_id,status,cluster_name,force) VALUES ($1,$2,'pending',$3,true),($4,$5,'pending',$6,true)`, []any{fixtures.decommissionDirectID, fixtures.decommissionDirectCluster, "worker-decommission-direct", fixtures.decommissionSweepID, fixtures.decommissionSweepCluster, "worker-decommission-sweep"}},
 		{`INSERT INTO cluster_agent_tokens (cluster_id,token) VALUES ($1,$2),($3,$4)`, []any{fixtures.decommissionDirectCluster, "worker-decommission-token-direct", fixtures.decommissionSweepCluster, "worker-decommission-token-sweep"}},
 		{`INSERT INTO agent_connections (cluster_id,agent_id,session_id,status,last_ping) VALUES ($1,$2,$3,'connected',now())`, []any{fixtures.clusterID, "worker-agent-" + fixtures.clusterID.String(), "worker-session-" + fixtures.clusterID.String()}},
@@ -1862,6 +1874,7 @@ spec:
 		TargetID: deliveryTargetID, ExpectedTargetGeneration: 1, PreviewDigest: preview.PreviewDigest,
 		ConfirmAllClusters: true, Strategy: systemStrategy, Actor: "worker-integration",
 		IdempotencyKey: "worker-rollout-" + fixtures.deliveryRolloutID.String(),
+		Audit:          audit.Intent{Event: audit.Event{Action: "delivery.rollout.created", ResourceType: "delivery_rollout"}, DedupeKey: "worker-rollout-audit-" + fixtures.deliveryRolloutID.String()},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -2610,6 +2623,7 @@ func newWorkerIntegrationConsumer(t *testing.T, redisURL string, descriptors []T
 		mux:         asynq.NewServeMux(),
 		log:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		descriptors: descriptors,
+		done:        make(chan struct{}),
 	}
 }
 

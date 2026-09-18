@@ -26,24 +26,13 @@ const adminUser = {
 };
 
 const awsSpec = {
-  provider: "aws",
-  displayName: "Amazon Web Services",
-  description: "Access key credentials",
-  fields: [
-    {
-      name: "accessKeyId",
-      label: "Access key ID",
-      required: true,
-      secret: true,
-    },
-    {
-      name: "secretAccessKey",
-      label: "Secret access key",
-      required: false,
-      secret: true,
-    },
-    { name: "region", label: "Region", required: true, secret: false },
-  ],
+  name: "aws",
+  display_name: "Amazon Web Services",
+  required_keys: ["access_key_id", "secret_access_key"],
+  optional_keys: ["region", "session_token", "assume_role_arn"],
+  secret_keys: ["access_key_id", "secret_access_key", "session_token"],
+  secret_shape: {},
+  allow_unknown_keys: false,
 };
 
 // Wire shape: snake_case keys camelize into the spec's field names; the
@@ -54,7 +43,7 @@ const credential = {
   name: "my-aws-keys",
   provider: "aws",
   description: "prod keys",
-  config: {
+  data: {
     access_key_id: "",
     secret_access_key: "",
     region: "us-east-1",
@@ -101,7 +90,7 @@ async function mockApi(page: Page) {
       return route.fulfill({ json: apiResponse({ "feature.projects": true }) });
     }
     if (path === "/cloud-credentials/providers") {
-      return route.fulfill({ json: apiResponse([awsSpec]) });
+      return route.fulfill({ json: apiResponse({ items: [awsSpec] }) });
     }
     if (path === "/projects/proj-1") {
       return route.fulfill({
@@ -129,12 +118,30 @@ async function mockApi(page: Page) {
     }
     if (path === "/admin/emails") {
       return route.fulfill({
-        json: { data: [], total: 0, page: 1, pageSize: 25, totalPages: 0 },
+        json: {
+          data: [],
+          pagination: {
+            total: 0,
+            limit: 25,
+            offset: 0,
+            has_more: false,
+            next_offset: null,
+          },
+        },
       });
     }
     if (path === "/clusters") {
       return route.fulfill({
-        json: { data: [], total: 0, page: 1, pageSize: 100, totalPages: 0 },
+        json: {
+          data: [],
+          pagination: {
+            total: 0,
+            limit: 100,
+            offset: 0,
+            has_more: false,
+            next_offset: null,
+          },
+        },
       });
     }
     return route.fulfill({ json: apiResponse([]) });
@@ -170,12 +177,12 @@ test.describe("credential edit (marker secret variant)", () => {
       name: "my-aws-keys",
       provider: "aws",
       description: "prod keys",
-      config: { accessKeyId: "AKIA-ROTATED", region: "us-east-1" },
-      targetRefs: [{ clusterId: "c1", namespaces: ["default"] }],
+      data: { access_key_id: "AKIA-ROTATED", region: "us-east-1" },
+      target_refs: [{ cluster_id: "c1", namespace: "default" }],
     });
     // The untouched stored secret and the echoed markers never ship.
-    expect(body.config).not.toHaveProperty("secretAccessKey");
-    expect(Object.keys(body.config).some((k) => /set$/i.test(k))).toBe(false);
+    expect(body.data).not.toHaveProperty("secret_access_key");
+    expect(Object.keys(body.data).some((k) => /set$/i.test(k))).toBe(false);
   });
 });
 

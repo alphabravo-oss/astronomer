@@ -2,15 +2,17 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type StreamTicketHandler struct {
@@ -29,15 +31,13 @@ type StreamTicketResponse struct {
 	ExpiresAt string `json:"expires_at"`
 }
 
-func NewStreamTicketHandler(store *auth.StreamTicketStore) *StreamTicketHandler {
-	return &StreamTicketHandler{store: store}
-}
-
-func (h *StreamTicketHandler) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
-	if h == nil {
-		return
+func NewStreamTicketHandler(store *auth.StreamTicketStore, engine *rbac.Engine, querier rbac.BindingQuerier) (*StreamTicketHandler, error) {
+	if store == nil || engine == nil || querier == nil {
+		return nil, errors.New("stream ticket security dependencies must all be configured")
 	}
+	h := &StreamTicketHandler{store: store}
 	h.authz.SetAuthorization(engine, querier)
+	return h, nil
 }
 
 func (h *StreamTicketHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +45,7 @@ func (h *StreamTicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.StreamTicketsUnavailable, "Stream tickets are not configured")
 		return
 	}
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
+	user, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || user == nil || user.ID == "" {
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
@@ -144,11 +144,11 @@ func (h *StreamTicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 //   - Pre-044 / empty-scope legacy tokens pass through (opt-in rollout).
 //   - Any other API token must carry `required` (or admin / *).
 func requireTokenScope(r *http.Request, required string) bool {
-	user, _ := middleware.GetAuthenticatedUser(r.Context())
+	user, _ := reqctx.AuthenticatedUser(r.Context())
 	if user == nil || user.AuthMethod != "api_token" {
 		return true
 	}
-	tok, ok := middleware.GetAuthenticatedAPIToken(r.Context())
+	tok, ok := auth.AuthenticatedAPIToken(r.Context())
 	if !ok || tok == nil {
 		return true
 	}

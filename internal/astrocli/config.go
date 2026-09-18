@@ -31,14 +31,17 @@ type Config struct {
 	// (e.g. https://astronomer.example.com:8080). Set on first login.
 	ServerURL string `yaml:"server_url"`
 
-	// AccessToken is the short-lived JWT (~1h) the API accepts. Empty
-	// until first login.
+	// AccessToken is the scoped API token the CLI receives after exchanging a
+	// cookie-bound password login. Empty until first login.
 	AccessToken string `yaml:"access_token,omitempty"`
 
-	// RefreshToken is the long-lived JWT (~7d) used to mint a fresh
-	// access token when the current one expires. Empty until first
-	// login. Stored alongside the access token because the API's
-	// /auth/refresh endpoint takes a refresh JWT.
+	// APITokenID identifies the CLI-owned API token so logout and a subsequent
+	// login can revoke it remotely rather than merely deleting the local copy.
+	APITokenID string `yaml:"api_token_id,omitempty"`
+
+	// RefreshToken is retained only so older config files can be loaded and
+	// scrubbed on the next login/logout. Cookie-only browser sessions no longer
+	// return refresh bearer material and new CLI configs never populate it.
 	RefreshToken string `yaml:"refresh_token,omitempty"`
 
 	// Username is the last-logged-in user, surfaced by `astro whoami`

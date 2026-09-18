@@ -18,7 +18,11 @@ import (
 )
 
 func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 		return
@@ -35,10 +39,25 @@ func (h *MonitoringHandler) PrometheusQuery(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, valid := parseClusterID(w, r)
+	if !valid {
+		return
+	}
+	clusterID := clusterUUID.String()
 	name := chi.URLParam(r, "name")
 	namespace := chi.URLParam(r, "namespace")
 	kind := chi.URLParam(r, "kind")
+	if strings.EqualFold(kind, "pod") || strings.EqualFold(kind, "pods") {
+		if data, ok, err := h.realPodMetrics(r.Context(), clusterID, namespace, name, r.URL.Query().Get("range")); err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
+			return
+		} else if ok {
+			RespondJSON(w, http.StatusOK, data)
+			return
+		}
+		RespondJSON(w, http.StatusOK, h.metricsSeries(nil, r.URL.Query().Get("range"), namespace+"/"+name))
+		return
+	}
 	if data, ok, err := h.realWorkloadMetrics(r.Context(), clusterID, kind, namespace, name, r.URL.Query().Get("range")); err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
 		return
@@ -54,14 +73,47 @@ func (h *MonitoringHandler) PrometheusQueryRange(w http.ResponseWriter, r *http.
 	RespondJSON(w, http.StatusOK, h.metricsSeries(summary, r.URL.Query().Get("range"), namespace+"/"+name))
 }
 
+func (h *MonitoringHandler) realPodMetrics(ctx context.Context, clusterID, namespace, name, rawRange string) (map[string]any, bool, error) {
+	client, cfg, ok, err := h.backendClient(ctx, clusterID)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	clusterSelector := labelSelectorForConfig(cfg)
+	selector := `namespace="` + escapePromLabel(namespace) + `",pod="` + escapePromLabel(name) + `",` + clusterSelector
+	points, span := metricWindow(rawRange)
+	step := span / time.Duration(points-1)
+	end := time.Now().UTC()
+	start := end.Add(-span)
+	data, err := h.promSeriesSet(ctx, client, start, end, step, selector, namespace+"/"+name, map[string]string{
+		"cpuUsage":        `sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD",%s}[5m]))`,
+		"cpuCapacity":     `sum(kube_pod_container_resource_limits{resource="cpu",unit="core",%s})`,
+		"memoryUsage":     `sum(container_memory_working_set_bytes{container!="",container!="POD",%s})`,
+		"memoryCapacity":  `sum(kube_pod_container_resource_limits{resource="memory",unit="byte",%s})`,
+		"networkReceive":  `sum(rate(container_network_receive_bytes_total{%s}[5m]))`,
+		"networkTransmit": `sum(rate(container_network_transmit_bytes_total{%s}[5m]))`,
+		"diskUsage":       `sum(container_fs_usage_bytes{container!="",container!="POD",%s})`,
+	})
+	if err != nil {
+		return nil, true, err
+	}
+	data["podCount"] = rangeSeries("Pod Count", namespace+"/"+name, "count", constantPoints(end, span, points, 1))
+	data["available"] = true
+	return data, true, nil
+}
+
 func (h *MonitoringHandler) ListMetrics(w http.ResponseWriter, r *http.Request) {
 	// Accept either {cluster_id} or {id} so this real-series handler can serve
 	// the cluster-detail metrics route (which uses {id}) as well as the
 	// top-level /clusters/{cluster_id}/metrics route, without a param mismatch.
-	clusterID := chi.URLParam(r, "cluster_id")
-	if clusterID == "" {
-		clusterID = chi.URLParam(r, "id")
+	param := "cluster_id"
+	if chi.URLParam(r, param) == "" {
+		param = "id"
 	}
+	clusterUUID, ok := parseClusterIDParam(w, r, param)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	if r.URL.Path == "/api/v1/clusters/"+clusterID+"/metrics/summary/" {
 		if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err != nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.MetricsError, err.Error())
@@ -564,7 +616,12 @@ func (h *MonitoringHandler) promSeriesSet(ctx context.Context, client *imonitori
 	g, gctx := errgroup.WithContext(ctx)
 	for key, queryFmt := range queries {
 		g.Go(func() error {
-			query := fmt.Sprintf(queryFmt, selector, selector)
+			var query string
+			if strings.Count(queryFmt, "%s") > 1 {
+				query = fmt.Sprintf(queryFmt, selector, selector)
+			} else {
+				query = fmt.Sprintf(queryFmt, selector)
+			}
 			points, err := client.QueryRange(gctx, query, start, end, step)
 			if err != nil {
 				return err
@@ -663,7 +720,11 @@ func (h *MonitoringHandler) LegacyMetricsQuery(w http.ResponseWriter, r *http.Re
 
 // LegacyClusterOverview proxies GET /api/v1/monitoring/metrics/cluster-overview/{cluster_id}/.
 func (h *MonitoringHandler) LegacyClusterOverview(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	if summary, ok, err := h.realClusterSummary(r.Context(), clusterID); err == nil && ok {
 		RespondJSON(w, http.StatusOK, map[string]any{"status": "success", "data": summary})
 		return
@@ -678,7 +739,11 @@ func (h *MonitoringHandler) LegacyClusterOverview(w http.ResponseWriter, r *http
 
 // LegacyWorkloadMetrics proxies GET /api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}/.
 func (h *MonitoringHandler) LegacyWorkloadMetrics(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, valid := parseClusterID(w, r)
+	if !valid {
+		return
+	}
+	clusterID := clusterUUID.String()
 	namespace := chi.URLParam(r, "namespace")
 	workload := chi.URLParam(r, "workload")
 	if data, ok, err := h.realWorkloadMetrics(r.Context(), clusterID, "", namespace, workload, r.URL.Query().Get("range")); err == nil && ok {
@@ -698,7 +763,11 @@ func (h *MonitoringHandler) LegacyWorkloadMetrics(w http.ResponseWriter, r *http
 // Prometheus/Thanos backend when one is configured, falling back to the node's
 // advertised capacity (plus metrics-server usage when wired) otherwise.
 func (h *MonitoringHandler) LegacyNodeMetrics(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, valid := parseClusterID(w, r)
+	if !valid {
+		return
+	}
+	clusterID := clusterUUID.String()
 	node := chi.URLParam(r, "node")
 	if summary, ok, err := h.realNodeSummary(r.Context(), clusterID, node); err == nil && ok {
 		RespondJSON(w, http.StatusOK, map[string]any{"status": "success", "data": summary})

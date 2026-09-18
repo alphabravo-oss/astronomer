@@ -8,8 +8,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * last-sync status; the detail page handles per-source actions.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, GitBranch, Plus, Trash2 } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -25,7 +25,7 @@ import {
 import type { GitOpsSource } from "@/lib/api/gitops";
 
 function GitOpsList() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data, isLoading } = useGitOpsSources();
   const del = useDeleteGitOpsSource();
   const [confirmDelete, setConfirmDelete] = useState<GitOpsSource | null>(null);
@@ -124,7 +124,7 @@ function GitOpsList() {
             e.stopPropagation();
             setConfirmDelete(row);
           }}
-          className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+          className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
           title="Delete source"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -141,9 +141,12 @@ function GitOpsList() {
         keyExtractor={(row) => row.id}
         loading={isLoading}
         onRowClick={(row) =>
-          router.push(`/dashboard/settings/gitops/${row.id}`)
+          void navigate({ to: `/dashboard/settings/gitops/${row.id}` })
         }
-        emptyMessage="No GitOps sources configured"
+        emptyState={{
+          title: "No GitOps sources configured",
+          description: "Create the first item to configure this feature.",
+        }}
         searchPlaceholder="Search sources..."
       />
       <ConfirmDialog
@@ -164,17 +167,17 @@ function GitOpsList() {
 }
 
 function GitOpsSourcesPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   return (
     <SettingsAuthGate>
       <PageShell>
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Settings
-        </Link>
+        </RouterLink>
         <PageHeader
           eyebrow="Settings · GitOps"
           title="GitOps cluster registration"
@@ -183,7 +186,9 @@ function GitOpsSourcesPage() {
             <ActionButton
               intent="primary"
               icon={<Plus className="h-4 w-4" />}
-              onClick={() => router.push("/dashboard/settings/gitops/new")}
+              onClick={() =>
+                void navigate({ to: "/dashboard/settings/gitops/new" })
+              }
             >
               New source
             </ActionButton>

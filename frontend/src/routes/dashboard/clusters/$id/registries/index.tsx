@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Cluster Registries tab — private image-pull credentials, per cluster.
  *
@@ -17,7 +18,7 @@ import {
  */
 
 import { useMemo, useState } from "react";
-import { useParams } from "@/lib/navigation";
+
 import { useAppForm, useStore } from "@/lib/form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
@@ -38,7 +39,8 @@ import {
   XCircle,
 } from "lucide-react";
 
-import { queryKeys, useCluster, useClusterNamespaces } from "@/lib/hooks";
+import { queryKeys } from "@/lib/query-keys";
+import { useCluster, useClusterNamespaces } from "@/lib/hooks/clusters";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import {
   createClusterRegistry,
@@ -49,10 +51,12 @@ import {
   type ClusterRegistry,
   type CreateRegistryRequest,
   type UpdateRegistryRequest,
-} from "@/lib/api/cluster-detail";
+} from "@/lib/api/cluster-registries";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { EmptyState, StatePanel } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import { liveFallback } from "@/lib/live/status-store";
 
 const PASSWORD_SENTINEL = "<set>";
@@ -67,13 +71,13 @@ function fmt(iso?: string) {
 }
 
 function ClusterRegistriesPage() {
-  const params = useParams();
-  const clusterId = params.id as string;
+  const params = Route.useParams();
+  const clusterId = params.id;
   const queryClient = useQueryClient();
   const { canWrite, reason } = useClustersUpdate(clusterId);
 
-  const { data: cluster, isLoading: clusterLoading } = useCluster(clusterId);
-  const { data: registries, isLoading } = useQuery({
+  const clusterQuery = useCluster(clusterId);
+  const registriesQuery = useQuery({
     queryKey: queryKeys.clusterPages.registries(clusterId),
     queryFn: () => listClusterRegistries(clusterId),
     enabled: !!clusterId,
@@ -125,21 +129,30 @@ function ClusterRegistriesPage() {
     },
   });
 
-  if (clusterLoading) {
+  if (
+    clusterQuery.isLoading ||
+    clusterQuery.isError ||
+    clusterQuery.data === undefined
+  ) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <QueryStates
+        query={clusterQuery}
+        loadingTitle="Loading cluster"
+        permission="clusters:read"
+        errorTitle="Failed to load cluster"
+        notFound={
+          <StatePanel
+            icon={Server}
+            title="Cluster not found"
+            description="The cluster may have been removed or is outside your access scope."
+          />
+        }
+      >
+        {null}
+      </QueryStates>
     );
   }
-  if (!cluster) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-        <Server className="h-8 w-8 mb-3" />
-        <p>Cluster not found</p>
-      </div>
-    );
-  }
+  const cluster = clusterQuery.data;
 
   return (
     <PageShell>
@@ -159,142 +172,135 @@ function ClusterRegistriesPage() {
         }
       />
 
-      {isLoading ? (
-        <div className="rounded-lg border border-border bg-card p-12 flex items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : !registries || registries.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card p-12 flex flex-col items-center justify-center text-muted-foreground">
-          <Container className="h-10 w-10 mb-3" />
-          <p className="text-sm font-medium text-foreground">
-            No private registries configured
-          </p>
-          <p className="text-xs mt-1 max-w-md text-center">
-            Add a registry to mount image-pull secrets into namespaces on this
-            cluster.
-          </p>
-          <button
-            onClick={() => canWrite && setNewOpen(true)}
-            disabled={!canWrite}
-            title={canWrite ? undefined : reason}
-            className="mt-4 inline-flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium
-              border border-border text-foreground hover:bg-accent transition-colors
-              disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus className="h-3.5 w-3.5" /> Add registry
-          </button>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <Table className="w-full text-sm">
-            <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
-              <TableRow>
-                <TableHead className="text-left font-medium px-4 py-2.5">
-                  Registry
-                </TableHead>
-                <TableHead className="text-left font-medium px-4 py-2.5">
-                  User
-                </TableHead>
-                <TableHead className="text-left font-medium px-4 py-2.5">
-                  Namespaces
-                </TableHead>
-                <TableHead className="text-left font-medium px-4 py-2.5">
-                  Default SA
-                </TableHead>
-                <TableHead className="text-left font-medium px-4 py-2.5">
-                  Last applied
-                </TableHead>
-                <TableHead className="text-right font-medium px-4 py-2.5">
-                  Actions
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody className="divide-y divide-border">
-              {registries.map((r) => (
-                <TableRow key={r.id} className="hover:bg-accent/30 align-top">
-                  <TableCell className="px-4 py-2.5">
-                    <div className="font-mono text-xs text-foreground break-all">
-                      {r.registryUrl}
-                    </div>
-                    {r.lastApplyError ? (
-                      <div className="text-xs text-status-error mt-1">
-                        {r.lastApplyError}
+      <QueryStates
+        query={registriesQuery}
+        loadingTitle="Loading registries"
+        permission="clusters:read"
+        errorTitle="Failed to load registries"
+        isEmpty={(rows) => rows.length === 0}
+        empty={
+          <EmptyState
+            icon={Container}
+            title="No private registries configured"
+            description="Add a registry to reconcile image-pull credentials into namespaces on this cluster."
+            actionLabel={canWrite ? "Add registry" : undefined}
+            actionIcon={Plus}
+            onAction={canWrite ? () => setNewOpen(true) : undefined}
+          />
+        }
+      >
+        {(registries) => (
+          <div className="rounded-lg border border-border overflow-hidden">
+            <Table className="w-full text-sm">
+              <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
+                <TableRow>
+                  <TableHead className="text-left font-medium px-4 py-2.5">
+                    Registry
+                  </TableHead>
+                  <TableHead className="text-left font-medium px-4 py-2.5">
+                    User
+                  </TableHead>
+                  <TableHead className="text-left font-medium px-4 py-2.5">
+                    Namespaces
+                  </TableHead>
+                  <TableHead className="text-left font-medium px-4 py-2.5">
+                    Default SA
+                  </TableHead>
+                  <TableHead className="text-left font-medium px-4 py-2.5">
+                    Last applied
+                  </TableHead>
+                  <TableHead className="text-right font-medium px-4 py-2.5">
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="divide-y divide-border">
+                {registries.map((r) => (
+                  <TableRow key={r.id} className="hover:bg-accent/30 align-top">
+                    <TableCell className="px-4 py-2.5">
+                      <div className="font-mono text-xs text-foreground break-all">
+                        {r.registryUrl}
                       </div>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5 text-xs text-muted-foreground font-mono">
-                    {r.username}
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5">
-                    <div className="flex flex-wrap gap-1">
-                      {r.namespaces.length === 0 ? (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground border border-border">
-                          (all project namespaces)
-                        </span>
-                      ) : (
-                        r.namespaces.map((ns) => (
-                          <span
-                            key={ns}
-                            className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground border border-border"
-                          >
-                            {ns}
+                      {r.lastApplyError ? (
+                        <div className="text-xs text-status-error mt-1">
+                          {r.lastApplyError}
+                        </div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-xs text-muted-foreground font-mono">
+                      {r.username}
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {r.namespaces.length === 0 ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-xs bg-muted text-muted-foreground border border-border">
+                            (all project namespaces)
                           </span>
-                        ))
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
-                    {r.injectDefaultSa ? "Yes" : "No"}
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <span>{fmt(r.lastAppliedAt)}</span>
-                      <TestStatusPill state={testStatus[r.id]} />
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => testMutation.mutate(r.id)}
-                        disabled={
-                          testMutation.isPending &&
-                          testStatus[r.id] === "pending"
-                        }
-                        title="Test reachability"
-                        className="inline-flex items-center gap-1 h-7 px-2 rounded text-xs text-muted-foreground
+                        ) : (
+                          r.namespaces.map((ns) => (
+                            <span
+                              key={ns}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-xs bg-muted text-muted-foreground border border-border"
+                            >
+                              {ns}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
+                      {r.injectDefaultSa ? "Yes" : "No"}
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <span>{fmt(r.lastAppliedAt)}</span>
+                        <TestStatusPill state={testStatus[r.id]} />
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => testMutation.mutate(r.id)}
+                          disabled={
+                            testMutation.isPending &&
+                            testStatus[r.id] === "pending"
+                          }
+                          title="Test reachability"
+                          className="inline-flex items-center gap-1 h-7 px-2 rounded-sm text-xs text-muted-foreground
                           hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-                      >
-                        <Plug className="h-3.5 w-3.5" />
-                        Test
-                      </button>
-                      <button
-                        onClick={() => canWrite && setEditTarget(r)}
-                        disabled={!canWrite}
-                        title={canWrite ? "Edit" : reason}
-                        className="inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground
+                        >
+                          <Plug className="h-3.5 w-3.5" />
+                          Test
+                        </button>
+                        <button
+                          onClick={() => canWrite && setEditTarget(r)}
+                          disabled={!canWrite}
+                          title={canWrite ? "Edit" : reason}
+                          className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground
                           hover:text-foreground hover:bg-accent transition-colors
                           disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => canWrite && setDeleteTarget(r)}
-                        disabled={!canWrite}
-                        title={canWrite ? "Delete" : reason}
-                        className="inline-flex items-center justify-center h-7 w-7 rounded text-muted-foreground
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => canWrite && setDeleteTarget(r)}
+                          disabled={!canWrite}
+                          title={canWrite ? "Delete" : reason}
+                          className="inline-flex items-center justify-center h-7 w-7 rounded-sm text-muted-foreground
                           hover:text-status-error hover:bg-status-error/10 transition-colors
                           disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </QueryStates>
 
       {newOpen && (
         <RegistryDialog
@@ -332,20 +338,20 @@ function TestStatusPill({ state }: { state?: "ok" | "fail" | "pending" }) {
   if (!state) return null;
   if (state === "pending") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border bg-status-info/10 text-status-info border-status-info/20">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-info/10 text-status-info border-status-info/20">
         <Loader2 className="h-3 w-3 animate-spin" /> Testing
       </span>
     );
   }
   if (state === "ok") {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border bg-status-success/10 text-status-success border-status-success/20">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-success/10 text-status-success border-status-success/20">
         <CheckCircle2 className="h-3 w-3" /> Reachable
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border bg-status-error/10 text-status-error border-status-error/20">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[10px] border bg-status-error/10 text-status-error border-status-error/20">
       <XCircle className="h-3 w-3" /> Failed
     </span>
   );
@@ -464,7 +470,7 @@ function RegistryDialog({
         </label>
         <form.Field name="registryUrl">
           {(field) => (
-            <input
+            <Input
               id="field-31a30446-413"
               type="text"
               value={field.state.value}
@@ -472,7 +478,7 @@ function RegistryDialog({
               onBlur={field.handleBlur}
               placeholder="e.g. registry.example.com or 123.dkr.ecr.us-east-1.amazonaws.com"
               className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
-                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             />
           )}
         </form.Field>
@@ -487,14 +493,14 @@ function RegistryDialog({
           </label>
           <form.Field name="username">
             {(field) => (
-              <input
+              <Input
                 id="field-31a30446-430"
                 type="text"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
                 className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
-                  focus:outline-none focus:ring-2 focus:ring-ring"
+                  focus:outline-hidden focus:ring-2 focus:ring-ring"
               />
             )}
           </form.Field>
@@ -509,7 +515,7 @@ function RegistryDialog({
           <div className="relative">
             <form.Field name="password">
               {(field) => (
-                <input
+                <Input
                   id="field-31a30446-445"
                   type={showPassword ? "text" : "password"}
                   value={field.state.value}
@@ -525,7 +531,7 @@ function RegistryDialog({
                   }}
                   onBlur={field.handleBlur}
                   className="w-full h-9 pl-3 pr-9 rounded-lg border border-border bg-background text-sm font-mono
-                    focus:outline-none focus:ring-2 focus:ring-ring"
+                    focus:outline-hidden focus:ring-2 focus:ring-ring"
                 />
               )}
             </form.Field>
@@ -565,7 +571,7 @@ function RegistryDialog({
         </label>
         <form.Field name="secretName">
           {(field) => (
-            <input
+            <Input
               id="field-31a30446-488"
               type="text"
               value={field.state.value}
@@ -573,7 +579,7 @@ function RegistryDialog({
               onBlur={field.handleBlur}
               placeholder="auto"
               className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm font-mono
-                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
             />
           )}
         </form.Field>
@@ -585,7 +591,7 @@ function RegistryDialog({
       <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer select-none">
         <form.Field name="injectDefaultSa">
           {(field) => (
-            <input
+            <Input
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}
@@ -636,13 +642,13 @@ function NamespaceMultiSelect({
           (empty = all project namespaces)
         </span>
       </label>
-      <input
+      <Input
         type="text"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         placeholder="Filter namespaces…"
         className="w-full h-8 px-2.5 rounded-md border border-border bg-background text-xs
-          placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
       />
       <div className="rounded-md border border-border bg-background max-h-40 overflow-y-auto">
         {filtered.length === 0 ? (
@@ -655,7 +661,7 @@ function NamespaceMultiSelect({
               key={ns}
               className="flex items-center gap-2 px-3 py-1 text-xs hover:bg-accent/40 cursor-pointer"
             >
-              <input
+              <Input
                 type="checkbox"
                 checked={selected.includes(ns)}
                 onChange={() => toggle(ns)}
@@ -672,7 +678,7 @@ function NamespaceMultiSelect({
             <span
               key={ns}
               className={cn(
-                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border",
+                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs border",
                 "bg-muted border-border text-muted-foreground",
               )}
             >
@@ -710,7 +716,7 @@ function Modal({
       size="md"
       titleIcon={
         icon ? (
-          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shrink-0">
             {icon}
           </div>
         ) : undefined

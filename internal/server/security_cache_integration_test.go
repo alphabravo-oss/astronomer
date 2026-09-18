@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
@@ -31,6 +33,9 @@ func (s *sharedRevocations) IsJWTRevoked(_ context.Context, jti string) (bool, e
 	defer s.mu.Unlock()
 	s.reads++
 	return s.revoked[jti], nil
+}
+func (s *sharedRevocations) IsSessionFamilyRevoked(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
 }
 func (s *sharedRevocations) UserTokensInvalidatedAt(_ context.Context, userID uuid.UUID) (time.Time, bool, error) {
 	s.mu.Lock()
@@ -110,6 +115,37 @@ func TestDistributedJWTAndRBACInvalidationAcrossReplicas(t *testing.T) {
 	revocations.mu.Unlock()
 	jwtA.InvalidateJTI(ctx, jtiClaims.ID)
 	waitSecurity(t, time.Second, func() bool { _, err := jwtB.ValidateToken(jtiToken); return err != nil })
+
+	apiUserID := uuid.New()
+	apiTokenHash := "sha256-api-token-test-hash"
+	apiAuthentication := auth.APITokenAuthentication{
+		Token:    sqlc.ApiToken{ID: uuid.New(), UserID: apiUserID},
+		Identity: auth.SessionIdentity{UserID: apiUserID, IsActive: true},
+	}
+	var apiMu sync.Mutex
+	apiRevoked := false
+	resolveAPI := func(context.Context) (auth.APITokenAuthentication, error) {
+		apiMu.Lock()
+		defer apiMu.Unlock()
+		if apiRevoked {
+			return auth.APITokenAuthentication{}, errors.New("API token revoked")
+		}
+		return apiAuthentication, nil
+	}
+	if _, err := jwtA.ResolveAPITokenAuthentication(ctx, apiTokenHash, resolveAPI); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := jwtB.ResolveAPITokenAuthentication(ctx, apiTokenHash, resolveAPI); err != nil {
+		t.Fatal(err)
+	}
+	apiMu.Lock()
+	apiRevoked = true
+	apiMu.Unlock()
+	jwtA.InvalidateUser(ctx, apiUserID)
+	waitSecurity(t, time.Second, func() bool {
+		_, err := jwtB.ResolveAPITokenAuthentication(ctx, apiTokenHash, resolveAPI)
+		return err != nil
+	})
 
 	binding := []rbac.RoleBinding{{UserID: userID.String()}}
 	rbacA.Put(userID.String(), binding)

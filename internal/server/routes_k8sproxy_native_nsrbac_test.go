@@ -94,15 +94,9 @@ func TestK8sProxyNativeNamespaceListFold(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deps := RouterDependencies{
-				JWT:                 jwtMgr,
-				RBACEngine:          rbac.NewEngine(),
-				RBACQueries:         routeSecurityRBACQuerier{bindings: nil},
-				Proxy:               tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-				NamespaceScopedRBAC: tt.flagOn,
-			}
+			deps := RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: nil}}, ClusterResources: ClusterResourceDependencies{NamespaceScopedRBAC: tt.flagOn}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}}
 			if tt.native != nil {
-				deps.NativeAuthz = tt.native
+				deps.ClusterResources.NativeAuthz = tt.native
 			}
 			router := NewRouter(&config.Config{}, deps)
 			req := httptest.NewRequest(http.MethodGet, path, nil)

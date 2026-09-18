@@ -15,6 +15,17 @@
       "reason": "Core auth session endpoints are public or token/cookie-gated by design and have dedicated auth/rate-limit test coverage outside the high-risk route registry."
     },
     {
+      "id": "user-preferences-owner-scoped",
+      "methods": [
+        "PUT"
+      ],
+      "patterns": [
+        "/api/v1/auth/me/preferences"
+      ],
+      "classification": "covered-owner-scoped",
+      "reason": "A user can replace only the typed preferences row identified by the authenticated JWT subject. The handler rejects unknown keys and invalid enum/routes, caps the body, and commits the owner-scoped update with its audit outbox intent."
+    },
+    {
       "id": "apiserver-audit-ingest",
       "methods": [
         "POST"
@@ -104,6 +115,7 @@
       "methods": [
         "POST",
         "PUT",
+        "PATCH",
         "DELETE"
       ],
       "patterns": [
@@ -112,10 +124,12 @@
         "/api/v1/clusters/{id}/monitoring/stack/install",
         "/api/v1/clusters/{id}/monitoring/stack/upgrade",
         "/api/v1/clusters/{id}/monitoring/stack/replace",
-        "/api/v1/clusters/{id}/monitoring/stack/uninstall"
+        "/api/v1/clusters/{id}/monitoring/stack/uninstall",
+        "/api/v1/clusters/{id}/observability/grafana",
+        "/api/v1/clusters/{id}/observability/grafana/*"
       ],
       "classification": "covered-rbac-cluster-scoped",
-      "reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+      "reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
     },
     {
       "id": "monitoring-endpoint-and-metrics-queries",
@@ -153,14 +167,11 @@
         "/api/v1/alerting/silences",
         "/api/v1/alerting/silences/{id}",
         "/api/v1/alerting/silences/{id}/expire",
-        "/api/v1/alerts/rules/{id}/enable",
-        "/api/v1/alerts/rules/{id}/disable",
-        "/api/v1/alerts/silences/{id}/expire",
         "/api/v1/admin/alerting/inhibitions",
         "/api/v1/admin/alerting/inhibitions/{id}"
       ],
       "classification": "covered-rbac-global-alerts",
-      "reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /alerts/* paths are frontend aliases bound to the same handlers and middleware, and the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
+      "reason": "Every alerting mutator carries an explicit per-verb requirePermission on rbac.ResourceAlerts at the router (create on POSTs, update on state changes and tests, delete on DELETEs), inside the authenticated subrouter; the /admin/alerting/inhibitions writers additionally require the admin API-token scope."
     },
     {
       "id": "charlie-alert-policy-admin",
@@ -270,6 +281,17 @@
       "reason": "Authoring native per-CRD rules is an RBAC-management action, so it carries the write-rbac API-token scope plus requirePermission on rbac.ResourceRBAC (create on POST, delete on DELETE) — the same gate as role and binding CRUD."
     },
     {
+      "id": "external-principal-materialization",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/rbac/principals/materialize"
+      ],
+      "classification": "covered-rbac-global-rbac",
+      "reason": "Materializing an external principal requires the write-rbac API-token scope plus both rbac:create and users:create. The handler re-resolves the subject through the configured identity provider before transactionally creating the local identity mapping and its mandatory audit outbox intent."
+    },
+    {
       "id": "extensions-install-and-bridge",
       "methods": [
         "POST"
@@ -324,11 +346,12 @@
         "/api/v1/tools/{slug}/install",
         "/api/v1/tools/{slug}/upgrade",
         "/api/v1/tools/{slug}/uninstall",
+        "/api/v1/tools/{slug}/rollback",
         "/api/v1/tools/{slug}/adopt",
         "/api/v1/tools/operations/{id}/retry"
       ],
       "classification": "covered-rbac-cluster-scoped",
-      "reason": "Tool install/upgrade/uninstall/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview, delete for uninstall) against the cluster named in the request body."
+      "reason": "Tool install/upgrade/uninstall/rollback/adopt run helm against a target cluster and authorize inside the handler with authorizeClusterAction on rbac.ResourceCatalog (create for install/adopt, update for upgrade/preview/rollback, delete for uninstall) against the cluster named in the request body."
     },
     {
       "id": "chart-rating-owner-scoped",
@@ -343,6 +366,28 @@
       ],
       "classification": "covered-owner-scoped",
       "reason": "Per-chart ratings are user-owned content: create binds the row to the authenticated caller, and update/delete refuse unless the caller owns the rating or is a superuser. Blast radius is one review row, not platform state."
+    },
+    {
+      "id": "catalog-preview-read-shaped-post",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/catalog/applications/preview"
+      ],
+      "classification": "covered-rbac-cluster-scoped-read",
+      "reason": "Application preview is POST-shaped only because rendered values and target selection are supplied in the request body. It performs no mutation and requires authenticated catalog browse permission; the handler independently authorizes the selected cluster and target namespace before returning a render plan."
+    },
+    {
+      "id": "catalog-favorite-owner-scoped",
+      "methods": [
+        "PUT"
+      ],
+      "patterns": [
+        "/api/v1/catalog/charts/{id}/favorite"
+      ],
+      "classification": "covered-owner-scoped",
+      "reason": "Favorite state is private user-owned discovery metadata. The authenticated user identity is taken from request context rather than the payload, catalog browse permission is required, and the upsert can only change that user's row for the named chart."
     },
     {
       "id": "image-vuln-rescan-cluster-scoped",
@@ -384,7 +429,7 @@
       "reason": "The SCIM 2.0 provisioning surface is mounted outside the JWT chain because IdPs cannot present a session JWT. Every route sits under deps.SCIM.Auth, which validates the static provisioning bearer token minted by the superuser-gated /admin/scim-tokens surface (see scim-token-admin) and compares its SHA-256 hash in constant time."
     },
     {
-      "id": "gitops-push-webhook-shared-secret",
+      "id": "gitops-push-webhook-source-hmac",
       "methods": [
         "POST"
       ],
@@ -392,12 +437,13 @@
         "/api/v1/gitops/sources/{id}/webhook"
       ],
       "classification": "covered-token-gated",
-      "reason": "A git provider cannot present a JWT, so this push endpoint is deliberately outside the auth chain: the handler compares the X-Astronomer-Webhook-Secret (or bearer) against the configured shared secret in constant time and 503s when no secret is configured. It triggers a sync of the one source named in the path and nothing else."
+      "reason": "A git provider cannot present a JWT, so this push endpoint is deliberately outside the auth chain. It accepts GitHub push events only, verifies X-Hub-Signature-256 over the unmodified body using that source's Fernet-encrypted secret, consumes X-GitHub-Delivery once within the bounded replay window, rate-limits by trusted client IP, and atomically records audit plus one durable sync intent."
     },
     {
       "id": "flux-native-delivery-project-mutations",
       "methods": [
         "POST",
+        "PUT",
         "PATCH",
         "DELETE"
       ],
@@ -409,6 +455,10 @@
         "/api/v1/delivery/bundles",
         "/api/v1/delivery/bundles/{id}",
         "/api/v1/delivery/bundles/{id}/versions",
+        "/api/v1/delivery/configuration-templates",
+        "/api/v1/delivery/configuration-templates/{id}",
+        "/api/v1/delivery/override-sets",
+        "/api/v1/delivery/override-sets/{id}",
         "/api/v1/delivery/targets",
         "/api/v1/delivery/targets/{id}",
         "/api/v1/delivery/targets/{id}/preview",
@@ -425,6 +475,13 @@
       "reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
     },
     {
+      "id": "delivery-effective-configuration-read-shaped-post",
+      "methods": ["POST"],
+      "patterns": ["/api/v1/delivery/override-sets/effective"],
+      "classification": "covered-rbac-project-scoped-read",
+      "reason": "Effective configuration resolution is POST-shaped because bounded base values and override identities are supplied in the body. It performs no mutation, resolves every enabled override inside one normalized project, returns no Secret values, and requires delivery_configuration_templates:read."
+    },
+    {
       "id": "flux-native-delivery-critical-decisions",
       "methods": [
         "POST"
@@ -436,6 +493,17 @@
       ],
       "classification": "covered-rbac-high-risk",
       "reason": "Approval, rollback, and orphan decisions have distinct delivery_approvals:approve, delivery_rollbacks:rollback, and delivery_orphans:orphan grants instead of inheriting ordinary rollout or target update. Every request is project-normalized, authenticated, audited, idempotency-protected, and bound to an exact strong If-Match generation; approvals also bind an exact frozen digest and bounded expiry."
+    },
+    {
+      "id": "support-bundle-durable-generation",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/support-bundles"
+      ],
+      "classification": "covered-superuser-durable-operation",
+      "reason": "Support bundle collection is superuser-only, requires a caller-scoped idempotency key, and commits the operation, tunnel-worker task intent, and acceptance audit in one transaction. The request thread never enumerates logs, events, or Helm state; the worker enforces a bounded artifact and timeout, and completed downloads are separately audited."
     },
     {
       "id": "logging-saved-searches",
@@ -450,6 +518,27 @@
       ],
       "classification": "covered-rbac-cluster-scoped-personal",
       "reason": "Saved searches are private to the authenticated owner, require logging:read on the output's owning cluster on every read and mutation, reject live-tail state for providers without that capability, and audit only a query digest plus bounded metadata rather than query text."
+    },
+    {
+      "id": "admin-governance-mutations",
+      "methods": [
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "patterns": [
+        "/api/v1/admin/compliance-baselines/{id}/apply",
+        "/api/v1/admin/compliance-baseline-applications/{id}/revert",
+        "/api/v1/admin/platform-settings/default-cluster-template",
+        "/api/v1/admin/platform-settings/default-cluster-template/reapply/{cluster_id}",
+        "/api/v1/admin/maintenance-windows",
+        "/api/v1/admin/maintenance-windows/{id}",
+        "/api/v1/admin/deferred-operations/{id}/cancel",
+        "/api/v1/admin/read-audit-policies",
+        "/api/v1/admin/read-audit-policies/{id}"
+      ],
+      "classification": "covered-superuser-gated",
+      "reason": "Platform governance mutations are authenticated, require the admin API-token scope, and enforce superuser ownership in their handlers. Their state transitions use transactional audit/outbox wiring; baseline application, deferred-operation cancellation, and template reapply are additionally bound to the named durable resource."
     }
   ]
 }

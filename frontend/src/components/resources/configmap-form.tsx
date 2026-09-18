@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * DIR-02: schema-lite form for ConfigMap create (name + data keys) as an
@@ -7,7 +6,7 @@
  */
 import { useState } from "react";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { useK8sCreate } from "@/lib/hooks";
+import { useK8sCreate } from "@/lib/hooks/kubernetes-proxy";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 
 type Props = {
@@ -57,7 +56,7 @@ export function ConfigMapFormDialog({
         <label className="block text-sm">
           Name
           <input
-            className="mt-1 w-full border rounded px-2 py-1 bg-background"
+            className="mt-1 w-full border rounded-sm px-2 py-1 bg-background"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -65,7 +64,7 @@ export function ConfigMapFormDialog({
         <label className="block text-sm">
           Data key
           <input
-            className="mt-1 w-full border rounded px-2 py-1 bg-background"
+            className="mt-1 w-full border rounded-sm px-2 py-1 bg-background"
             value={key}
             onChange={(e) => setKey(e.target.value)}
           />
@@ -73,14 +72,14 @@ export function ConfigMapFormDialog({
         <label className="block text-sm">
           Value
           <textarea
-            className="mt-1 w-full border rounded px-2 py-1 bg-background font-mono text-xs min-h-[120px]"
+            className="mt-1 w-full border rounded-sm px-2 py-1 bg-background font-mono text-xs min-h-[120px]"
             value={value}
             onChange={(e) => setValue(e.target.value)}
           />
         </label>
         <button
           type="button"
-          className="rounded bg-primary text-primary-foreground px-3 py-1.5 text-sm"
+          className="rounded-sm bg-primary text-primary-foreground px-3 py-1.5 text-sm"
           onClick={submit}
           disabled={create.isPending}
         >

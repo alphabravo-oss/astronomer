@@ -155,4 +155,6 @@ spec:
               rm -f "${patch_file}"
               trap - EXIT
               echo "Dex legacy configuration staged for the prepare release."
+          resources:
+            {{- toYaml .Values.preflight.resources | nindent 12 }}
 {{- end }}

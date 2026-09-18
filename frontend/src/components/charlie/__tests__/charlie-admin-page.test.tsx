@@ -52,32 +52,21 @@ const auth = vi.hoisted(() => ({
   user: { id: "admin", isSuperuser: true } as User | null,
 }));
 
-vi.mock("@tanstack/react-router", () => ({
-  createFileRoute: () => (config: unknown) => config,
-  lazyRouteComponent: () => () => null,
-}));
-vi.mock("@/lib/hooks", () => ({ useFeatureFlags: () => feature.value }));
+vi.mock("@tanstack/react-router", async () => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    Link: RouterLinkStub,
+    createFileRoute: () => (config: unknown) => config,
+    lazyRouteComponent: () => () => null,
+    useNavigate: () => navigation.push,
+    useLocation: <T,>({ select }: { select: (location: { searchStr: string }) => T }) =>
+      select({ searchStr: navigation.params.toString() }),
+  };
+});
+vi.mock("@/lib/hooks/clusters", () => ({ useFeatureFlags: () => feature.value }));
 vi.mock("@/lib/store", () => ({
   useAuthStore: (selector: (state: { user: User | null }) => unknown) =>
     selector({ user: auth.user }),
-}));
-vi.mock("@/lib/navigation", () => ({
-  useRouter: () => ({ push: navigation.push }),
-  useSearchParams: () => navigation.params,
-}));
-vi.mock("@/lib/link", () => ({
-  Link: ({
-    href,
-    children,
-    ...props
-  }: {
-    href: string;
-    children: ReactNode;
-  }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
 }));
 vi.mock("@/lib/toast", () => ({
   toastApiError: vi.fn(),
@@ -475,9 +464,9 @@ describe("Charlie administration acceptance", () => {
     renderWithClient(<CharlieAdminPage />);
     const connection = await screen.findByRole("tab", { name: "Connection" });
     fireEvent.keyDown(connection, { key: "ArrowRight" });
-    expect(navigation.push).toHaveBeenCalledWith(
-      "/dashboard/settings/charlie?tab=agent&context=cluster-a",
-    );
+    expect(navigation.push).toHaveBeenCalledWith({
+      to: "/dashboard/settings/charlie?tab=agent&context=cluster-a",
+    });
     expect(screen.getByRole("tab", { name: "Agent" })).toHaveAttribute(
       "tabindex",
       "-1",

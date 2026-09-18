@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { type KeyboardEvent } from "react";
 import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
-import { Link } from "@/lib/link";
-import { useRouter, useSearchParams } from "@/lib/navigation";
-import { useFeatureFlags } from "@/lib/hooks";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate, useLocation } from "@tanstack/react-router";
+import { useFeatureFlags } from "@/lib/hooks/clusters";
 import { useAuthStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { PermissionState, StatePanel } from "@/components/ui/empty-state";
@@ -59,8 +59,8 @@ function CharlieAdminPage() {
 export function CharlieAdminContent() {
   const flags = useFeatureFlags();
   const user = useAuthStore((s) => s.user);
-  const router = useRouter();
-  const params = useSearchParams();
+  const navigate = useNavigate();
+  const params = new URLSearchParams(useLocation({ select: (location) => location.searchStr }));
   const requestedTab = normalizeCharlieAdminTab(params.get("tab"));
 
   if (flags.isError)
@@ -94,9 +94,7 @@ export function CharlieAdminContent() {
     : ["connection", "diagnostics"];
   const tab = activeTabs.includes(requestedTab) ? requestedTab : "connection";
   const select = (next: CharlieAdminTab) =>
-    router.push(
-      `/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}`,
-    );
+    void navigate({ to: `/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}` });
   const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
     const next = adjacentTab(activeTabs, tab, event.key);
     if (!next) return;
@@ -107,13 +105,13 @@ export function CharlieAdminContent() {
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-3">
-        <Link
-          href="/dashboard/settings"
+        <RouterLink
+          to="/dashboard/settings"
           aria-label="Back to settings"
-          className="mt-1 rounded p-1 text-muted-foreground hover:bg-accent"
+          className="mt-1 rounded-sm p-1 text-muted-foreground hover:bg-accent"
         >
           <ArrowLeft className="h-4 w-4" />
-        </Link>
+        </RouterLink>
         <div>
           <h1 className="text-2xl font-semibold">Charlie</h1>
           <p className="mt-1 text-sm text-muted-foreground">

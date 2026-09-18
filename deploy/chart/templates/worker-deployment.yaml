@@ -15,8 +15,9 @@ spec:
     metadata:
       labels:
         {{- include "astronomer.componentLabels" (dict "context" . "component" "worker") | nindent 8 }}
-      {{- with .Values.worker.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      {{- with .Values.worker.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
@@ -45,6 +46,8 @@ spec:
               echo "waiting for postgres..."
               until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
               echo "postgres up"
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
         {{- end }}
         {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
         - name: wait-redis
@@ -61,6 +64,8 @@ spec:
               echo "waiting for redis..."
               until nc -z {{ include "astronomer.fullname" . }}-redis 6379; do sleep 1; done
               echo "redis up"
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
         {{- end }}
       containers:
         - name: worker
@@ -107,19 +112,19 @@ spec:
             {{- end }}
             - name: DELIVERY_SOURCE_TRUST_DIRECTORY
               value: /etc/astronomer/delivery-trust
-            {{- if .Values.postgres.external.dsnSecretRef.name }}
+            {{- if include "astronomer.databaseSecretName" . }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                  key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                  name: {{ include "astronomer.databaseSecretName" . | quote }}
+                  key: {{ include "astronomer.databaseSecretKey" . | quote }}
             {{- end }}
-            {{- if .Values.redis.external.passwordSecretRef.name }}
+            {{- if include "astronomer.redisPasswordSecretName" . }}
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.redis.external.passwordSecretRef.name | quote }}
-                  key: {{ .Values.redis.external.passwordSecretRef.key | quote }}
+                  name: {{ include "astronomer.redisPasswordSecretName" . | quote }}
+                  key: {{ include "astronomer.redisPasswordSecretKey" . | quote }}
             {{- end }}
             {{- if .Values.redis.external.urlSecretRef.name }}
             - name: REDIS_URL
@@ -127,7 +132,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.redis.external.urlSecretRef.name | quote }}
                   key: {{ .Values.redis.external.urlSecretRef.key | quote }}
-            {{- else if .Values.redis.external.address }}
+            {{- else if or .Values.redis.external.address (eq (include "astronomer.redisMode" .) "sentinel") }}
             - name: REDIS_URL
               value: {{ include "astronomer.redisURL" . | quote }}
             {{- end }}

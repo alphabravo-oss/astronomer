@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -18,14 +17,14 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/strutil"
 )
 
-// Bootstrap env vars are checked when the database has zero users on boot.
-// Operator-supplied values beat the defaults. The password var matches
-// Rancher's CATTLE_BOOTSTRAP_PASSWORD convention.
-const (
-	bootstrapPasswordEnv = "ASTRONOMER_BOOTSTRAP_PASSWORD"
-	bootstrapUsernameEnv = "ASTRONOMER_BOOTSTRAP_USERNAME"
-	bootstrapEmailEnv    = "ASTRONOMER_BOOTSTRAP_EMAIL"
-)
+// BootstrapAdminConfig is the typed, startup-resolved identity used only when
+// the database contains no users. Environment resolution belongs to config.Load.
+type BootstrapAdminConfig struct {
+	Password            string
+	Username            string
+	Email               string
+	ForcePasswordChange bool
+}
 
 // EnsurePlatformConfigQuerier is the slice of sqlc Queries that the
 // platform-config seed flow needs.
@@ -40,10 +39,9 @@ type EnsurePlatformConfigQuerier interface {
 // always override the URL afterwards through /dashboard/settings, so this is
 // purely a default for fresh installs.
 //
-// The self-management loop won't
-// create the astronomer-self-manage Argo Application until server_url is
-// populated; seeding it here means a `helm install` with no manual setup
-// reaches the self-managed state automatically.
+// Delivery and callback URLs remain incomplete until server_url is populated;
+// seeding it here means a fresh Helm install reaches an operable state without
+// a separate settings mutation.
 func EnsurePlatformConfig(ctx context.Context, q EnsurePlatformConfigQuerier, serverURL, platformName string, logger *slog.Logger) error {
 	if logger == nil {
 		logger = slog.Default()
@@ -98,13 +96,13 @@ type EnsureAdminQuerier interface {
 }
 
 // EnsureBootstrapAdmin creates an admin user the first time the server boots
-// against an empty users table. The password comes from
-// ASTRONOMER_BOOTSTRAP_PASSWORD when set, otherwise a random 24-character
-// URL-safe value is generated. Chart installs persist that password in the
-// bootstrap Secret so operators can retrieve it with kubectl.
+// against an empty users table. The startup-resolved password is used when
+// set; otherwise a random 24-character URL-safe value is generated. Chart
+// installs persist that password in the bootstrap Secret so operators can
+// retrieve it with kubectl.
 //
 // On subsequent boots (when users already exist) this is a no-op.
-func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slog.Logger) error {
+func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, cfg BootstrapAdminConfig, logger *slog.Logger) error {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -117,9 +115,9 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slo
 		return nil
 	}
 
-	password := strings.TrimSpace(os.Getenv(bootstrapPasswordEnv))
-	username := strutil.FirstNonBlankTrimmed(os.Getenv(bootstrapUsernameEnv), "admin")
-	email := strutil.FirstNonBlankTrimmed(os.Getenv(bootstrapEmailEnv), "admin@astronomer.local")
+	password := strings.TrimSpace(cfg.Password)
+	username := strutil.FirstNonBlankTrimmed(cfg.Username, "admin")
+	email := strutil.FirstNonBlankTrimmed(cfg.Email, "admin@astronomer.local")
 	generated := false
 	if password == "" {
 		pw, err := generateBootstrapPassword()
@@ -136,11 +134,12 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slo
 	}
 
 	user, err := q.CreateBootstrapAdmin(ctx, sqlc.CreateBootstrapAdminParams{
-		Email:     email,
-		Username:  username,
-		FirstName: "Admin",
-		LastName:  "",
-		Password:  string(hashed),
+		Email:              email,
+		Username:           username,
+		FirstName:          "Admin",
+		LastName:           "",
+		Password:           string(hashed),
+		MustChangePassword: cfg.ForcePasswordChange,
 	})
 	if err != nil {
 		return fmt.Errorf("create bootstrap admin: %w", err)
@@ -187,5 +186,5 @@ func passwordSourceLabel(generated bool) string {
 	if generated {
 		return "auto-generated"
 	}
-	return bootstrapPasswordEnv
+	return "ASTRONOMER_BOOTSTRAP_PASSWORD"
 }

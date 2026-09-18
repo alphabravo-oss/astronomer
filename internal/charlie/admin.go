@@ -108,16 +108,12 @@ type AdminTriggerRule struct {
 	FlapWindowSeconds      int32    `json:"flap_window_seconds"`
 	FlapCount              int32    `json:"flap_count"`
 	EstateThresholdPercent int32    `json:"estate_threshold_percent"`
-	// FleetThresholdPercent is the deprecated v1 wire alias retained until the
-	// published API sunset. It is always emitted with the same value and is
-	// accepted when an older client has not learned estate_threshold_percent.
-	FleetThresholdPercent int32  `json:"fleet_threshold_percent"`
-	MinimumAgentVersion   string `json:"minimum_agent_version,omitempty"`
-	Suppressed            bool   `json:"suppressed"`
-	MaximumAttempts       int32  `json:"maximum_attempts"`
-	DeadLetterEnabled     bool   `json:"dead_letter_enabled"`
-	ServiceIdentity       string `json:"service_identity"`
-	ModeCeiling           string `json:"mode_ceiling"`
+	MinimumAgentVersion    string   `json:"minimum_agent_version,omitempty"`
+	Suppressed             bool     `json:"suppressed"`
+	MaximumAttempts        int32    `json:"maximum_attempts"`
+	DeadLetterEnabled      bool     `json:"dead_letter_enabled"`
+	ServiceIdentity        string   `json:"service_identity"`
+	ModeCeiling            string   `json:"mode_ceiling"`
 }
 
 type AdminAutomationView struct {
@@ -683,9 +679,16 @@ func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision in
 			if desired != ModeDisabled && kubernetesVisibilityAuthorityPending(connection) {
 				return AdminModeView{}, fmt.Errorf("%w: accept the rediscovered Kubernetes catalog in Astronomer before restoring Charlie authority", ErrAdminConflict)
 			}
-			prerequisites, prerequisitesErr := s.modePrerequisites(ctx)
-			if prerequisitesErr != nil {
-				return AdminModeView{}, prerequisitesErr
+			prerequisites := ModePrerequisites{}
+			// Only Auto consumes these prerequisites. Lower-authority changes must
+			// remain available even when automation identity/catalog checks are
+			// unhealthy so an operator can always fail closed.
+			if desired == ModeAuto {
+				var prerequisitesErr error
+				prerequisites, prerequisitesErr = s.modePrerequisites(ctx)
+				if prerequisitesErr != nil {
+					return AdminModeView{}, prerequisitesErr
+				}
 			}
 			state, err = s.mode.Request(ctx, desired, revision, prerequisites)
 		}
@@ -758,38 +761,6 @@ func (s *AdminService) AcknowledgeDisclosure(ctx context.Context, digest string)
 		return AdminModeView{}, err
 	}
 	return s.enrichMode(ctx, safeAdminMode(connection)), nil
-}
-
-func (s *AdminService) modePrerequisites(ctx context.Context) (ModePrerequisites, error) {
-	connection, err := s.connection(ctx)
-	if err != nil {
-		return ModePrerequisites{}, err
-	}
-	enabled, grants, err := s.automationState(ctx)
-	if err != nil {
-		return ModePrerequisites{}, err
-	}
-	prerequisites := ModePrerequisites{
-		DisclosureAcknowledged:  connection.DisclosureDigest != "" && connection.AcknowledgedDisclosureDigest == connection.DisclosureDigest,
-		AutomationIdentityReady: enabled,
-		AutomationTargetReady:   grants,
-	}
-	if s.bridge == nil {
-		return prerequisites, ErrAdminUnavailable
-	}
-	status, err := s.bridge.AdminStatus(ctx)
-	if err != nil {
-		return prerequisites, err
-	}
-	for _, capability := range status.AutoAllowlist {
-		for _, descriptor := range WriteCapabilityCatalog() {
-			if capability == descriptor.Name && descriptor.AutoEligible {
-				prerequisites.AutomationAllowlistReady = true
-				return prerequisites, nil
-			}
-		}
-	}
-	return prerequisites, nil
 }
 
 func (s *AdminService) Automation(ctx context.Context) (AdminAutomationView, error) {
@@ -982,16 +953,14 @@ func safeAdminTrigger(rule sqlc.CharlieTriggerRule) AdminTriggerRule {
 		ID: rule.ID.String(), Name: rule.Name, Enabled: rule.Enabled, SourceType: rule.RuleType,
 		Severities: []string{rule.MinimumSeverity}, Scopes: scopes, CooldownSeconds: rule.CooldownSeconds,
 		GracePeriodSeconds: integer("grace_period_seconds", rule.WindowSeconds), FlapWindowSeconds: integer("flap_window_seconds", rule.WindowSeconds),
-		FlapCount: integer("flap_count", integer("count", 1)), EstateThresholdPercent: integer("estate_threshold_percent", integer("fleet_threshold_percent", 0)),
-		FleetThresholdPercent: integer("estate_threshold_percent", integer("fleet_threshold_percent", 0)),
-		MinimumAgentVersion:   selectors.MinimumAgentVersion, Suppressed: selectors.Suppressed,
+		FlapCount: integer("flap_count", integer("count", 1)), EstateThresholdPercent: integer("estate_threshold_percent", 0),
+		MinimumAgentVersion: selectors.MinimumAgentVersion, Suppressed: selectors.Suppressed,
 		MaximumAttempts: integer("maximum_attempts", MaxTriggerDispatchAttempts), DeadLetterEnabled: boolean("dead_letter_enabled", true),
 		ServiceIdentity: AutomationUsername, ModeCeiling: rule.ModeCeiling,
 	}
 }
 
 func (s *AdminService) UpdateTrigger(ctx context.Context, id uuid.UUID, input AdminTriggerRule) (AdminTriggerRule, error) {
-	input.normalizeThresholdAlias()
 	connection, err := s.connection(ctx)
 	if err != nil {
 		return AdminTriggerRule{}, err
@@ -1034,7 +1003,6 @@ func (s *AdminService) UpdateTrigger(ctx context.Context, id uuid.UUID, input Ad
 }
 
 func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input AdminTriggerRule) (AdminTriggerRule, error) {
-	input.normalizeThresholdAlias()
 	connection, err := s.connection(ctx)
 	if err != nil {
 		return AdminTriggerRule{}, err
@@ -1071,13 +1039,6 @@ func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input
 		return AdminTriggerRule{}, ErrAdminConflict
 	}
 	return safeAdminTrigger(created), nil
-}
-
-func (r *AdminTriggerRule) normalizeThresholdAlias() {
-	if r.EstateThresholdPercent == 0 && r.FleetThresholdPercent != 0 {
-		r.EstateThresholdPercent = r.FleetThresholdPercent
-	}
-	r.FleetThresholdPercent = r.EstateThresholdPercent
 }
 
 func (s *AdminService) DeleteTrigger(ctx context.Context, id uuid.UUID) error {

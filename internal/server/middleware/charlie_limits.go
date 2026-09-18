@@ -2,11 +2,12 @@ package middleware
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/time/rate"
@@ -101,15 +102,12 @@ func CharlieSessionLimits() func(http.Handler) http.Handler {
 
 func charlieLimitKeys(r *http.Request) []string {
 	keys := make([]string, 0, 3)
-	if user, ok := GetAuthenticatedUser(r.Context()); ok && user != nil && strings.TrimSpace(user.ID) != "" {
+	if user, ok := reqctx.AuthenticatedUser(r.Context()); ok && user != nil && strings.TrimSpace(user.ID) != "" {
 		keys = append(keys, "user:"+user.ID)
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	if host == "" {
-		host = "unknown"
+	host := "unknown"
+	if address := reqctx.ClientIP(r); address != nil {
+		host = address.String()
 	}
 	keys = append(keys, "ip:"+host)
 	if sessionID := strings.TrimSpace(chi.URLParam(r, "session_id")); sessionID != "" {

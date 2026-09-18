@@ -270,6 +270,7 @@ func TestStateSubscriberEmitsOnPodCreate(t *testing.T) {
 
 	if found == nil {
 		t.Fatalf("expected a STATE_UPDATE for Pod default/echo, got none. captured=%d", len(sender.Snapshot()))
+		return
 	}
 	if found.Op != protocol.StateUpdateOpAdded {
 		t.Errorf("expected op=added, got %s", found.Op)

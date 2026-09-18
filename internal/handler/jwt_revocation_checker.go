@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 // interface — doesn't have to import sqlc.
 type JWTRevocationCheckerBackend interface {
 	IsJWTRevoked(ctx context.Context, jti string) (bool, error)
+	IsRefreshSessionFamilyRevoked(ctx context.Context, familyHash []byte) (bool, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 }
 
@@ -46,6 +48,11 @@ func NewJWTRevocationChecker(b JWTRevocationCheckerBackend) auth.RevocationCheck
 
 func (c *jwtRevocationChecker) IsJWTRevoked(ctx context.Context, jti string) (bool, error) {
 	return c.backend.IsJWTRevoked(ctx, jti)
+}
+
+func (c *jwtRevocationChecker) IsSessionFamilyRevoked(ctx context.Context, familyID uuid.UUID) (bool, error) {
+	hash := sha256.Sum256(familyID[:])
+	return c.backend.IsRefreshSessionFamilyRevoked(ctx, hash[:])
 }
 
 func (c *jwtRevocationChecker) UserTokensInvalidatedAt(ctx context.Context, userID uuid.UUID) (time.Time, bool, error) {

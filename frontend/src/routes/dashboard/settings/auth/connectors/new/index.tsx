@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 /**
  * /dashboard/settings/auth/connectors/new/ — three-step connector wizard.
@@ -13,8 +14,8 @@ import { createFileRoute } from "@tanstack/react-router";
  *      skip and apply from the overview page.
  */
 import { useState } from "react";
-import { Link } from "@/lib/link";
-import { useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Search } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
@@ -32,7 +33,7 @@ import type { DexConnectorTypeSpec } from "@/types";
 type WizardStep = "pick" | "configure" | "apply";
 
 function NewConnectorPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
   const { data: types = [], isLoading: typesLoading } = useDexConnectorTypes();
   const createMutation = useCreateDexConnector();
   const applyMutation = useApplyDexConfig();
@@ -82,13 +83,13 @@ function NewConnectorPage() {
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/settings/auth"
+      <RouterLink
+        to="/dashboard/settings/auth"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to Auth
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Auth · New Connector"
@@ -105,12 +106,12 @@ function NewConnectorPage() {
         <>
           <div className="flex items-center gap-2 px-3 rounded-lg border border-border bg-background">
             <Search className="h-4 w-4 text-muted-foreground" />
-            <input
+            <Input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search connector types…"
-              className="flex-1 h-10 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+              className="flex-1 h-10 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-hidden"
             />
           </div>
 
@@ -137,7 +138,7 @@ function NewConnectorPage() {
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                      <div className="shrink-0 w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
                         <Icon className="h-4 w-4 text-foreground" />
                       </div>
                       <div className="min-w-0">
@@ -197,7 +198,7 @@ function NewConnectorPage() {
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-end">
             <ActionButton
-              onClick={() => router.push("/dashboard/settings/auth")}
+              onClick={() => void navigate({ to: "/dashboard/settings/auth" })}
             >
               Apply later
             </ActionButton>
@@ -206,7 +207,7 @@ function NewConnectorPage() {
               onClick={async () => {
                 try {
                   await applyMutation.mutateAsync();
-                  router.push("/dashboard/settings/auth");
+                  void navigate({ to: "/dashboard/settings/auth" });
                 } catch {
                   /* mutation toasts on error */
                 }

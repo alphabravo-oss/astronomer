@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -26,16 +27,19 @@ func (f *fakeCacheCoordinator) Broadcast(context.Context, cacheinvalidate.Kind, 
 type fakeRevocationChecker struct {
 	mu          sync.Mutex
 	revoked     map[string]bool
+	families    map[uuid.UUID]bool
 	cutoff      map[uuid.UUID]time.Time
 	revErr      error
+	familyErr   error
 	cutoffErr   error
 	revokeCalls int
 }
 
 func newFakeRevocationChecker() *fakeRevocationChecker {
 	return &fakeRevocationChecker{
-		revoked: make(map[string]bool),
-		cutoff:  make(map[uuid.UUID]time.Time),
+		revoked:  make(map[string]bool),
+		families: make(map[uuid.UUID]bool),
+		cutoff:   make(map[uuid.UUID]time.Time),
 	}
 }
 
@@ -47,6 +51,15 @@ func (f *fakeRevocationChecker) IsJWTRevoked(_ context.Context, jti string) (boo
 		return false, f.revErr
 	}
 	return f.revoked[jti], nil
+}
+
+func (f *fakeRevocationChecker) IsSessionFamilyRevoked(_ context.Context, familyID uuid.UUID) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.familyErr != nil {
+		return false, f.familyErr
+	}
+	return f.families[familyID], nil
 }
 
 func (f *fakeRevocationChecker) UserTokensInvalidatedAt(_ context.Context, userID uuid.UUID) (time.Time, bool, error) {
@@ -69,6 +82,39 @@ func (f *fakeRevocationChecker) invalidate(userID uuid.UUID, at time.Time) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.cutoff[userID] = at
+}
+
+func TestValidateTokenRejectsRevokedBrowserFamilyButExemptsNonBrowserAccess(t *testing.T) {
+	mgr := MustNewJWTManager("family-revocation-secret", 15)
+	mgr.SetValidationCacheTTL(0)
+	checker := newFakeRevocationChecker()
+	mgr.SetRevocationChecker(checker)
+	userID := uuid.New()
+	access, _, err := mgr.GenerateTokenPair(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := mgr.ValidateToken(access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checker.mu.Lock()
+	checker.families[claims.SessionFamilyID] = true
+	checker.mu.Unlock()
+	if _, err := mgr.ValidateToken(access); err == nil || !strings.Contains(err.Error(), "family revoked") {
+		t.Fatalf("ValidateToken(revoked family) error = %v", err)
+	}
+
+	checker.mu.Lock()
+	checker.familyErr = errors.New("family store unavailable")
+	checker.mu.Unlock()
+	serviceAccess, err := mgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims, err := mgr.ValidateToken(serviceAccess); err != nil || claims.BrowserSession {
+		t.Fatalf("non-browser access validation = %#v, %v", claims, err)
+	}
 }
 
 func TestValidateToken_RejectsRevokedJTI(t *testing.T) {
@@ -158,7 +204,41 @@ func TestValidateToken_NoCheckerLeavesValidationUntouched(t *testing.T) {
 	}
 }
 
-func TestValidateTokenRevocationDBErrorFailsClosedOnlyWhenCoordinatorUnhealthy(t *testing.T) {
+func TestJWTValidationCacheEvictsExpiredEntriesAndStaysBounded(t *testing.T) {
+	mgr := MustNewJWTManager("test-secret", 60)
+	mgr.SetValidationCacheTTL(time.Minute)
+	mgr.SetValidationCacheMaxEntries(2)
+
+	mgr.cachePut("oldest", uuid.New())
+	time.Sleep(time.Millisecond)
+	mgr.cachePut("newer", uuid.New())
+	mgr.cachePut("newest", uuid.New())
+
+	mgr.cacheMu.RLock()
+	if got := len(mgr.cache); got != 2 {
+		t.Fatalf("cache size = %d, want 2", got)
+	}
+	_, hasOldest := mgr.cache["oldest"]
+	mgr.cacheMu.RUnlock()
+	if hasOldest {
+		t.Fatal("oldest cache entry was not evicted at capacity")
+	}
+
+	mgr.cacheMu.Lock()
+	mgr.cache["newer"] = validationCacheEntry{expiresAt: time.Now().Add(-time.Second)}
+	mgr.cacheMu.Unlock()
+	if mgr.cacheHit("newer") {
+		t.Fatal("expired cache entry returned a hit")
+	}
+	mgr.cacheMu.RLock()
+	_, stillCached := mgr.cache["newer"]
+	mgr.cacheMu.RUnlock()
+	if stillCached {
+		t.Fatal("expired cache entry was not removed on lookup")
+	}
+}
+
+func TestValidateTokenRevocationDBErrorAlwaysFailsClosed(t *testing.T) {
 	for _, failure := range []string{"jti", "user_cutoff"} {
 		t.Run(failure, func(t *testing.T) {
 			mgr := MustNewJWTManager("test-secret", 60)
@@ -172,13 +252,13 @@ func TestValidateTokenRevocationDBErrorFailsClosedOnlyWhenCoordinatorUnhealthy(t
 			coordinator := &fakeCacheCoordinator{healthy: true}
 			mgr.SetCacheInvalidationCoordinator(coordinator)
 			token, _ := mgr.GenerateAccessToken(uuid.New())
-			if _, err := mgr.ValidateToken(token); err != nil {
-				t.Fatalf("healthy coordinator changed existing fail-open behavior: %v", err)
+			if _, err := mgr.ValidateToken(token); !errors.Is(err, ErrRevocationUnavailable) {
+				t.Fatalf("healthy coordinator revocation error = %v, want dependency failure", err)
 			}
 
 			coordinator.healthy = false
-			if _, err := mgr.ValidateToken(token); err == nil {
-				t.Fatal("unhealthy coordinator plus DB error must reject")
+			if _, err := mgr.ValidateToken(token); !errors.Is(err, ErrRevocationUnavailable) {
+				t.Fatalf("unhealthy coordinator revocation error = %v, want dependency failure", err)
 			}
 		})
 	}

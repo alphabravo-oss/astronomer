@@ -130,7 +130,7 @@ export async function regenerateRecoveryCodes(
 
 /**
  * Result of POSTing /auth/login. On a fully-authenticated success we get
- * { token, refresh, user }. On TOTP-required we get HTTP 423 with a
+ * { user }. Session JWTs are delivered only as HttpOnly cookies. On TOTP-required we get HTTP 423 with a
  * { error, challenge_token } payload — handled at the call site (see
  * `loginWithCredentialsChallengeAware` below).
  */
@@ -142,8 +142,6 @@ export interface TotpChallenge {
 }
 
 export interface VerifiedLogin {
-  token: string;
-  refresh?: string;
   user: User;
 }
 
@@ -152,20 +150,17 @@ export async function verifyTotpChallenge(
   code: string,
   options?: AccountSecurityRequestOptions,
 ): Promise<VerifiedLogin> {
-  // The /verify endpoint returns the same shape as a normal login success:
-  // { token, refresh, user } wrapped in APIResponse.
+  // The /verify endpoint returns the same cookie-only shape as login.
   const wire = (
     await postAuthTotpVerify({
       body: { challenge_token: challengeToken, code },
       signal: options?.signal,
     })
   ).data;
-  if (!wire?.token || !wire.user) {
+  if (!wire?.user) {
     throw new Error("TOTP verification response omitted session data");
   }
   return {
-    token: wire.token,
-    refresh: wire.refresh,
     user: mapCurrentUser(wire.user),
   };
 }
@@ -174,8 +169,7 @@ export async function verifyTotpChallenge(
  * Login wrapper that surfaces the typed TOTP challenge instead of throwing.
  */
 export type LoginResult =
-  | { kind: "ok"; token: string; refresh?: string; user: User }
-  | { kind: "challenge"; challenge: TotpChallenge };
+  { kind: "ok"; user: User } | { kind: "challenge"; challenge: TotpChallenge };
 
 export async function loginWithCredentialsChallengeAware(
   email: string,
@@ -189,13 +183,11 @@ export async function loginWithCredentialsChallengeAware(
         signal: options?.signal,
       })
     ).data;
-    if (!body?.token || !body.user) {
+    if (!body?.user) {
       throw new Error("Login response omitted session data");
     }
     return {
       kind: "ok",
-      token: body.token,
-      refresh: body.refresh,
       user: mapCurrentUser(body.user),
     };
   } catch (err) {
@@ -204,12 +196,14 @@ export async function loginWithCredentialsChallengeAware(
       response?: { status?: number; data?: unknown };
     };
     const body = requestError.response?.data as
-      | { error?: string; challenge_token?: string; message?: string }
+      | {
+          error?: string | { code?: string; message?: string };
+          challenge_token?: string;
+          message?: string;
+        }
       | undefined;
-    if (
-      (requestError.status ?? requestError.response?.status) === 423 &&
-      body
-    ) {
+    const status = requestError.status ?? requestError.response?.status;
+    if (status === 423 && body) {
       if (
         (body.error === "totp_required" ||
           body.error === "totp_enrollment_required") &&
@@ -224,7 +218,18 @@ export async function loginWithCredentialsChallengeAware(
         };
       }
     }
-    const message = body?.message || requestError.message || "Login failed";
+    // Keep authentication failures useful without revealing whether an email
+    // exists. This also prevents a raw Axios "status code 401" message from
+    // becoming the primary login error if a caller bypasses normalization.
+    if (status === 401) {
+      throw new Error("Incorrect email or password");
+    }
+    const nestedMessage =
+      body?.error && typeof body.error === "object"
+        ? body.error.message
+        : undefined;
+    const message =
+      nestedMessage || body?.message || requestError.message || "Login failed";
     throw new Error(message);
   }
 }

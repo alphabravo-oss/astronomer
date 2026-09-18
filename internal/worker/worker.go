@@ -1,11 +1,14 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/hibiken/asynq"
 )
@@ -142,11 +145,21 @@ const (
 )
 
 // Worker wraps the Asynq server for processing background tasks.
+type asyncTaskServer interface {
+	Start(asynq.Handler) error
+	Shutdown()
+}
+
 type Worker struct {
-	server      *asynq.Server
+	server      asyncTaskServer
 	mux         *asynq.ServeMux
 	log         *slog.Logger
 	descriptors []TaskDescriptor
+
+	lifecycleMu sync.Mutex
+	done        chan struct{}
+	stopping    bool
+	stopOnce    sync.Once
 }
 
 // StandaloneRuntime is the explicit, immutable handler graph owned by the
@@ -184,6 +197,8 @@ type TunnelRuntime struct {
 	SecurityIngest       tasks.SecurityIngestRuntime
 	CRDOwnership         tasks.CRDOwnershipRuntime
 	Dex                  tasks.DexOperationRuntime
+	SupportBundle        tasks.SupportBundleRuntime
+	AuditExport          tasks.AuditExportRuntime
 }
 
 func (runtime TunnelRuntime) handlerBindings() (map[string]asynq.HandlerFunc, error) {
@@ -196,6 +211,26 @@ func (runtime TunnelRuntime) handlerBindings() (map[string]asynq.HandlerFunc, er
 		return nil, err
 	}
 	for taskType, handler := range dexBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	supportBundleBindings, err := runtime.SupportBundle.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range supportBundleBindings {
+		if _, exists := bindings[taskType]; exists {
+			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
+		}
+		bindings[taskType] = handler
+	}
+	auditExportBindings, err := runtime.AuditExport.HandlerBindings()
+	if err != nil {
+		return nil, err
+	}
+	for taskType, handler := range auditExportBindings {
 		if _, exists := bindings[taskType]; exists {
 			return nil, fmt.Errorf("duplicate runtime handler binding for %q", taskType)
 		}
@@ -395,7 +430,10 @@ func bindCoreRuntimeHandlersForDescriptors(core tasks.CoreRuntime, bindings map[
 // footgun in air-gapped or split-network production clusters — the worker
 // would come up, fail every redis op invisibly, and take hours to
 // diagnose. Now a bad URL surfaces at process start.
-func NewWorker(redisURL string, log *slog.Logger, runtime StandaloneRuntime, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
+func NewWorker(redisURL string, concurrency int, log *slog.Logger, runtime StandaloneRuntime, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
+	if concurrency <= 0 {
+		return nil, fmt.Errorf("worker concurrency must be positive")
+	}
 	bindings, err := runtime.handlerBindings()
 	if err != nil {
 		return nil, fmt.Errorf("compose standalone worker runtime: %w", err)
@@ -404,13 +442,13 @@ func NewWorker(redisURL string, log *slog.Logger, runtime StandaloneRuntime, err
 	if err != nil {
 		return nil, fmt.Errorf("compose standalone worker handlers: %w", err)
 	}
-	redisOpt, err := asynq.ParseRedisURI(redisURL)
+	redisOpt, err := redisconn.Parse(redisURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
+		return nil, fmt.Errorf("parse REDIS_URL: %w", err)
 	}
 
 	config := asynq.Config{
-		Concurrency:    10,
+		Concurrency:    concurrency,
 		RetryDelayFunc: retryDelay,
 		Queues: map[string]int{
 			"critical": 6,
@@ -428,6 +466,7 @@ func NewWorker(redisURL string, log *slog.Logger, runtime StandaloneRuntime, err
 		mux:         asynq.NewServeMux(),
 		log:         log,
 		descriptors: descriptors,
+		done:        make(chan struct{}),
 	}, nil
 }
 
@@ -451,9 +490,9 @@ const defaultTunnelWorkerConcurrency = 8
 // short tunnel RPC across the platform. A non-positive value falls back to
 // defaultTunnelWorkerConcurrency.
 func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, runtime TunnelRuntime, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
-	redisOpt, err := asynq.ParseRedisURI(redisURL)
+	redisOpt, err := redisconn.Parse(redisURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
+		return nil, fmt.Errorf("parse REDIS_URL: %w", err)
 	}
 	if concurrency <= 0 {
 		concurrency = defaultTunnelWorkerConcurrency
@@ -482,6 +521,7 @@ func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, runtime
 		mux:         asynq.NewServeMux(),
 		log:         log,
 		descriptors: descriptors,
+		done:        make(chan struct{}),
 	}, nil
 }
 
@@ -504,14 +544,54 @@ func (w *Worker) RegisterHandlers() {
 	w.log.Info("registered worker task handlers", "count", len(w.descriptors))
 }
 
-// Start begins processing tasks. This blocks until Shutdown is called.
+// Start begins processing tasks. Asynq starts its processor goroutines and
+// returns immediately; callers that own the worker lifecycle should use Run.
 func (w *Worker) Start() error {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if w.stopping {
+		return fmt.Errorf("worker is shutting down")
+	}
 	w.log.Info("starting worker")
 	return w.server.Start(w.mux)
 }
 
+// Run starts the asynchronous Asynq server and then remains owned by the
+// caller until its context is cancelled or Shutdown completes. This is the
+// process-lifetime contract used by runtime supervisors.
+func (w *Worker) Run(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := w.Start(); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-w.doneSignal():
+		return nil
+	}
+}
+
+func (w *Worker) doneSignal() chan struct{} {
+	w.lifecycleMu.Lock()
+	defer w.lifecycleMu.Unlock()
+	if w.done == nil {
+		w.done = make(chan struct{})
+	}
+	return w.done
+}
+
 // Shutdown gracefully stops the worker.
 func (w *Worker) Shutdown() {
-	w.log.Info("shutting down worker")
-	w.server.Shutdown()
+	done := w.doneSignal()
+	w.stopOnce.Do(func() {
+		w.lifecycleMu.Lock()
+		w.stopping = true
+		w.lifecycleMu.Unlock()
+		w.log.Info("shutting down worker")
+		w.server.Shutdown()
+		close(done)
+	})
 }

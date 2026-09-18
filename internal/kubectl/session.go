@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
@@ -40,9 +41,11 @@ type K8sResponse struct {
 type SessionQuerier interface {
 	CreateKubectlSession(ctx context.Context, arg sqlc.CreateKubectlSessionParams) (sqlc.KubectlSession, error)
 	GetKubectlSessionByID(ctx context.Context, id uuid.UUID) (sqlc.KubectlSession, error)
-	ListActiveKubectlSessionsByCluster(ctx context.Context, clusterID uuid.UUID) ([]sqlc.KubectlSession, error)
-	ListAllActiveKubectlSessions(ctx context.Context) ([]sqlc.KubectlSession, error)
-	ListExpiredKubectlSessions(ctx context.Context) ([]sqlc.KubectlSession, error)
+	ListActiveKubectlSessionsByCluster(ctx context.Context, arg sqlc.ListActiveKubectlSessionsByClusterParams) ([]sqlc.KubectlSession, error)
+	CountActiveKubectlSessionsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
+	ListActiveKubectlSessionClusters(ctx context.Context, arg sqlc.ListActiveKubectlSessionClustersParams) ([]uuid.UUID, error)
+	CountAllActiveKubectlSessions(ctx context.Context) (int64, error)
+	ListExpiredKubectlSessions(ctx context.Context, arg sqlc.ListExpiredKubectlSessionsParams) ([]sqlc.KubectlSession, error)
 	SetKubectlSessionStatus(ctx context.Context, arg sqlc.SetKubectlSessionStatusParams) error
 	TouchKubectlSessionInput(ctx context.Context, id uuid.UUID) error
 	InsertKubectlSessionCommand(ctx context.Context, arg sqlc.InsertKubectlSessionCommandParams) error
@@ -179,6 +182,7 @@ func Open(ctx context.Context, deps Deps, req OpenRequest) (*SessionInfo, error)
 		Status:       "starting",
 		ClientIp:     req.ClientIP,
 		UserAgent:    req.UserAgent,
+		ExpiresAt:    deps.now().Add(deps.hardCap()),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kubectl: create session row: %w", err)
@@ -327,19 +331,21 @@ func Reap(ctx context.Context, deps Deps) error {
 	if deps.Queries == nil {
 		return errors.New("kubectl: queries not configured")
 	}
-	expired, err := deps.Queries.ListExpiredKubectlSessions(ctx)
+	const reapBatchSize int32 = 200
+	const maxActiveSessionsPerCluster = 500
+	idle := deps.idleTimeout()
+	expired, err := deps.Queries.ListExpiredKubectlSessions(ctx, sqlc.ListExpiredKubectlSessionsParams{
+		IdleTimeout: pgtype.Interval{Microseconds: idle.Microseconds(), Valid: true},
+		QueryLimit:  reapBatchSize,
+	})
 	if err != nil {
 		return fmt.Errorf("list expired: %w", err)
 	}
-	idle := deps.idleTimeout()
-	hard := deps.hardCap()
 	now := deps.now()
 
 	for _, row := range expired {
 		isHard := !row.ExpiresAt.After(now)
 		isIdle := row.LastInputAt.Add(idle).Before(now)
-		_ = hard
-
 		_ = tearDownK8s(ctx, deps, row.ClusterID.String(), namesFromRow(row))
 		_ = deps.Queries.SetKubectlSessionStatus(ctx, sqlc.SetKubectlSessionStatusParams{
 			ID:     row.ID,
@@ -374,40 +380,45 @@ func Reap(ctx context.Context, deps Deps) error {
 		}
 	}
 
-	// Orphan sweep: enumerate active rows per cluster, then list pods
-	// in kube-system with the astronomer.io/component=kubectl-shell
-	// label and delete any not in the active set.
-	active, err := deps.Queries.ListAllActiveKubectlSessions(ctx)
-	if err != nil {
-		return fmt.Errorf("list active: %w", err)
-	}
-	activeByCluster := map[string]map[string]struct{}{}
-	for _, row := range active {
-		c := row.ClusterID.String()
-		if activeByCluster[c] == nil {
-			activeByCluster[c] = map[string]struct{}{}
+	// Orphan cleanup pages cluster IDs and bounds each cluster's active-session
+	// set. A cluster above the explicit ceiling is skipped instead of risking a
+	// false orphan deletion from a truncated set.
+	for offset := int32(0); ; offset += reapBatchSize {
+		clusterIDs, listErr := deps.Queries.ListActiveKubectlSessionClusters(ctx, sqlc.ListActiveKubectlSessionClustersParams{
+			QueryLimit: reapBatchSize, QueryOffset: offset,
+		})
+		if listErr != nil {
+			return fmt.Errorf("list active session clusters: %w", listErr)
 		}
-		activeByCluster[c][row.PodName] = struct{}{}
-	}
-
-	// Best-effort across clusters we know about. The reaper task in
-	// the worker layer iterates all clusters; this function does the
-	// per-cluster work.
-	for clusterID := range activeByCluster {
-		if err := sweepOrphanPods(ctx, deps, clusterID, activeByCluster[clusterID]); err != nil {
-			deps.log().Warn("orphan pod sweep failed",
-				slog.String("cluster_id", clusterID),
-				slog.String("error", err.Error()))
+		for _, clusterID := range clusterIDs {
+			active, listErr := deps.Queries.ListActiveKubectlSessionsByCluster(ctx, sqlc.ListActiveKubectlSessionsByClusterParams{
+				ClusterID: clusterID, QueryLimit: maxActiveSessionsPerCluster + 1, QueryOffset: 0,
+			})
+			if listErr != nil {
+				deps.log().Warn("list active sessions for orphan sweep failed", "cluster_id", clusterID, "error", listErr)
+				continue
+			}
+			if len(active) > maxActiveSessionsPerCluster {
+				deps.log().Warn("orphan pod sweep skipped: active session safety limit exceeded",
+					"cluster_id", clusterID, "limit", maxActiveSessionsPerCluster)
+				continue
+			}
+			activePods := make(map[string]struct{}, len(active))
+			for _, row := range active {
+				activePods[row.PodName] = struct{}{}
+			}
+			if err := sweepOrphanPods(ctx, deps, clusterID.String(), activePods); err != nil {
+				deps.log().Warn("orphan pod sweep failed",
+					slog.String("cluster_id", clusterID.String()),
+					slog.String("error", err.Error()))
+			}
+		}
+		if len(clusterIDs) < int(reapBatchSize) {
+			break
 		}
 	}
-	// T6.065 — gauge update. `active` was loaded earlier and reflects
-	// post-reap state because Reap flips expired rows to 'expired'
-	// before the ListAllActive call below would re-fetch — but we
-	// re-list here for correctness (in case sweepOrphanPods caused
-	// indirect status changes elsewhere).
-	postReap, lerr := deps.Queries.ListAllActiveKubectlSessions(ctx)
-	if lerr == nil {
-		observability.SetKubectlActiveSessions(len(postReap))
+	if activeCount, countErr := deps.Queries.CountAllActiveKubectlSessions(ctx); countErr == nil {
+		observability.SetKubectlActiveSessions(int(activeCount))
 	}
 	return nil
 }

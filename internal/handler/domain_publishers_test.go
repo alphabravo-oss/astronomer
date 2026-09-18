@@ -26,7 +26,7 @@ func pubSubscribe(t *testing.T, bus *events.Bus) <-chan events.Event {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	return bus.Subscribe(ctx)
+	return bus.Subscribe(ctx, events.AcceptAll)
 }
 
 // pubReceive returns the next event of the wanted type, failing after 2s.
@@ -80,6 +80,7 @@ func TestPublisher_BackupDeleteEmitsChanged(t *testing.T) {
 	bus := events.NewBus()
 	ch := pubSubscribe(t, bus)
 	h := NewBackupHandler(q)
+	h.SetRunTx(func(_ context.Context, fn func(BackupMutationTx) error) error { return fn(q) })
 	h.SetEventBus(bus)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/backups/"+backup.ID.String()+"/", nil)
@@ -109,6 +110,7 @@ func TestPublisher_TemplateBindingDetachEmitsChanged(t *testing.T) {
 	bus := events.NewBus()
 	ch := pubSubscribe(t, bus)
 	h := NewClusterTemplateHandler(q)
+	setClusterTemplateTestRunTx(h, q)
 	h.SetEventBus(bus)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/template/", nil)
@@ -355,11 +357,11 @@ func TestPublisher_ScanWriteEmitsCISAndGenericTypes(t *testing.T) {
 
 func TestPublisher_NetworkAccessChangedOnAllowlistPut(t *testing.T) {
 	clusterID := uuid.New()
-	q := &fakeAllowlistQuerier{}
+	q := &transactionalAllowlistQ{fakeAllowlistQuerier: &fakeAllowlistQuerier{}}
 
 	bus := events.NewBus()
 	ch := pubSubscribe(t, bus)
-	h := NewApiserverAllowlistHandler(q)
+	h := transactionalAllowlistHandler(q)
 	h.SetEventBus(bus)
 
 	body, _ := json.Marshal(AllowlistUpdateRequest{
@@ -398,6 +400,7 @@ func TestPublisher_RegistryCreateEmitsChanged(t *testing.T) {
 	clusterID := uuid.New()
 	q := newFakeRegistryQuerier(clusterID)
 	h := NewClusterRegistriesHandler(q)
+	setClusterRegistryTestRunTx(h, q)
 	bus := events.NewBus()
 	ch := pubSubscribe(t, bus)
 	h.SetEventBus(bus)

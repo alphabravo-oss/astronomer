@@ -69,7 +69,7 @@ func transactionalPlatformDefaultHandler(q *transactionalPlatformDefaultQ) *Plat
 }
 
 func TestEveryPlatformDefaultMutationEntryPointUsesTransaction(t *testing.T) {
-	calls := parsedMethodCalls(t, "platform_default_template.go")
+	calls := parsedMethodCalls(t, "PlatformDefaultTemplateHandler")
 	for _, method := range []string{"Update", "Reapply"} {
 		if !calls[method]["runTx"] {
 			t.Errorf("PlatformDefaultTemplateHandler.%s does not call the transaction runner", method)

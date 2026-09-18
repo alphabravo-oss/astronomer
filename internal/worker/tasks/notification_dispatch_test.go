@@ -9,8 +9,66 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
+	"github.com/alphabravocompany/astronomer-go/internal/email"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 )
+
+type recordingNotificationEmail struct {
+	requests []email.Request
+}
+
+func (r *recordingNotificationEmail) Enqueue(_ context.Context, req email.Request) (uuid.UUID, error) {
+	r.requests = append(r.requests, req)
+	return uuid.New(), nil
+}
+
+func TestEmailNotificationPersistsIdempotentMessage(t *testing.T) {
+	emails := &recordingNotificationEmail{}
+	ctx := testRuntimeContext(RuntimeDependencies{NotificationEmail: emails})
+	payload := NotificationSendPayload{
+		Channel: ChannelTypeEmail, Subject: "database unavailable", Body: "database unavailable",
+		Severity: "critical", ClusterID: uuid.NewString(), Recipients: []string{"oncall@example.test"},
+		DeliveryID: "alert-event:" + uuid.NewString() + ":" + uuid.NewString(),
+		FiredAt:    "2026-09-17T12:00:00Z",
+	}
+	task, err := NewNotificationSendTask(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := HandleNotificationSend(ctx, task); err != nil {
+		t.Fatal(err)
+	}
+	if len(emails.requests) != 1 || emails.requests[0].DedupeKey == "" {
+		t.Fatalf("durable email request = %+v", emails.requests)
+	}
+	if strings.Contains(emails.requests[0].DedupeKey, "oncall@example.test") {
+		t.Fatal("email address leaked into durable dedupe identity")
+	}
+}
+
+func TestGenericWebhookCarriesStableDeliveryIdentity(t *testing.T) {
+	defer httpclient.DisableGuardForTest()()
+	var header string
+	var captured map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header = r.Header.Get("Idempotency-Key")
+		_ = json.NewDecoder(r.Body).Decode(&captured)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	payload := NotificationSendPayload{
+		Channel: ChannelTypeWebhook, Subject: "test", Body: "body", Recipients: []string{srv.URL},
+		ChannelID: uuid.NewString(), EventID: uuid.NewString(), DeliveryID: "alert-event:stable-delivery",
+	}
+	if err := postGenericWebhook(context.Background(), srv.Client(), srv.URL, payload); err != nil {
+		t.Fatal(err)
+	}
+	if header != payload.DeliveryID || captured["delivery_id"] != payload.DeliveryID || captured["event_id"] != payload.EventID {
+		t.Fatalf("delivery identity header=%q payload=%v", header, captured)
+	}
+}
 
 // TestSlackPayloadShape locks down the wire format Slack receives so
 // a refactor that drops the `attachments` array or moves the color

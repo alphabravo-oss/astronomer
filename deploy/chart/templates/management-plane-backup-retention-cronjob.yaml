@@ -1,0 +1,161 @@
+{{- if and .Values.managementBackup.enabled .Values.managementBackup.retention.enabled .Values.managementBackup.s3.bucket .Values.managementBackup.retention.credentialsSecretRef.name }}
+{{- /*
+  Retention is deliberately separate from the backup writer. This pod receives
+  only the delete-capable retention identity and never receives the database,
+  runtime-key, or manifest-authentication secrets.
+*/ -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "astronomer.fullname" . }}-management-backup-retention
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "management-backup-retention") | nindent 4 }}
+spec:
+  schedule: {{ .Values.managementBackup.retention.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.managementBackup.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.managementBackup.failedJobsHistoryLimit | default 3 }}
+  startingDeadlineSeconds: {{ .Values.managementBackup.startingDeadlineSeconds | default 600 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.managementBackup.backoffLimit | default 2 }}
+      ttlSecondsAfterFinished: {{ .Values.managementBackup.ttlSecondsAfterFinished | default 86400 }}
+      template:
+        metadata:
+          labels:
+            {{- include "astronomer.componentLabels" (dict "context" . "component" "management-backup-retention") | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          {{- with .Values.managementBackup.podSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.image.pullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.managementBackup.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.managementBackup.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: retention
+              {{- with .Values.managementBackup.securityContext }}
+              securityContext:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.managementBackup.image.repository "tag" .Values.managementBackup.image.tag "digest" .Values.managementBackup.image.digest "registry" .Values.managementBackup.image.registry "fallback" .Values.image.registry) | quote }}
+              imagePullPolicy: {{ .Values.managementBackup.image.pullPolicy | default "IfNotPresent" }}
+              command: ["/bin/sh", "-eu", "-c"]
+              args:
+                - |
+                  set -eu
+                  export AWS_SHARED_CREDENTIALS_FILE=/var/run/aws/credentials
+                  export AWS_DEFAULT_REGION="${MANAGEMENT_BACKUP_REGION}"
+                  AWS_S3_FLAGS=""
+                  if [ -n "${MANAGEMENT_BACKUP_ENDPOINT:-}" ]; then
+                    AWS_S3_FLAGS="--endpoint-url ${MANAGEMENT_BACKUP_ENDPOINT}"
+                  fi
+                  BUCKET="${MANAGEMENT_BACKUP_BUCKET}"
+                  BASE="${MANAGEMENT_BACKUP_PREFIX}/${MANAGEMENT_BACKUP_RELEASE}"
+
+                  remove_object() {
+                    KEY="$1"
+                    if [ "${RETENTION_DRY_RUN}" = true ]; then
+                      echo "DRY RUN delete s3://${BUCKET}/${KEY}"
+                    else
+                      aws s3 rm ${AWS_S3_FLAGS} "s3://${BUCKET}/${KEY}"
+                    fi
+                  }
+
+                  prune_tier() {
+                    TIER="$1"
+                    KEEP="$2"
+                    PFX="${BASE}/${TIER}/"
+                    KEYS="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} --bucket "${BUCKET}" \
+                      --prefix "${PFX}" --query 'Contents[?ends_with(Key, `.manifest.json`)].Key' --output text)"
+                    [ "${KEYS}" = None ] && KEYS=""
+                    printf '%s\n' "${KEYS}" | tr '\t ' '\n\n' | sed '/^$/d' | sort -r \
+                      | tail -n "+$((KEEP + 1))" | while read -r MANIFEST; do
+                          [ -z "${MANIFEST}" ] && continue
+                          STEM="${MANIFEST%.manifest.json}"
+                          # Remove the commit marker before its payload so a
+                          # partial retention run never leaves a valid-looking
+                          # manifest that points at a missing archive.
+                          remove_object "${MANIFEST}"
+                          remove_object "${STEM}.pgcustom.aead"
+                        done
+                  }
+
+                  prune_tier daily "${KEEP_DAILY}"
+                  prune_tier weekly "${KEEP_WEEKLY}"
+                  prune_tier monthly "${KEEP_MONTHLY}"
+
+                  # A key bundle may be shared by daily/weekly/monthly manifests.
+                  # Delete it only after no tier has a manifest with its stamp.
+                  KEY_PFX="${BASE}/${KEYBACKUP_PREFIX}/"
+                  KEY_OBJECTS="$(aws s3api list-objects-v2 ${AWS_S3_FLAGS} --bucket "${BUCKET}" \
+                    --prefix "${KEY_PFX}" --query 'Contents[?ends_with(Key, `.keys.tar.aead`)].Key' --output text)"
+                  [ "${KEY_OBJECTS}" = None ] && KEY_OBJECTS=""
+                  printf '%s\n' "${KEY_OBJECTS}" | tr '\t ' '\n\n' | sed '/^$/d' | while read -r KEY_OBJECT; do
+                    [ -z "${KEY_OBJECT}" ] && continue
+                    STAMP="$(basename "${KEY_OBJECT}" .keys.tar.aead)"
+                    REFERENCED=false
+                    for TIER in daily weekly monthly; do
+                      if aws s3api head-object ${AWS_S3_FLAGS} --bucket "${BUCKET}" \
+                        --key "${BASE}/${TIER}/${STAMP}.manifest.json" >/dev/null 2>&1; then
+                        REFERENCED=true
+                      fi
+                    done
+                    if [ "${REFERENCED}" = false ]; then remove_object "${KEY_OBJECT}"; fi
+                  done
+                  echo "Retention complete (dryRun=${RETENTION_DRY_RUN})."
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: MANAGEMENT_BACKUP_RELEASE
+                  value: {{ .Release.Name | quote }}
+                - name: MANAGEMENT_BACKUP_BUCKET
+                  value: {{ .Values.managementBackup.s3.bucket | quote }}
+                - name: MANAGEMENT_BACKUP_REGION
+                  value: {{ .Values.managementBackup.s3.region | quote }}
+                - name: MANAGEMENT_BACKUP_PREFIX
+                  value: {{ .Values.managementBackup.s3.prefix | default "astronomer-pg" | quote }}
+                - name: RETENTION_DRY_RUN
+                  value: {{ .Values.managementBackup.retention.dryRun | quote }}
+                - name: KEEP_DAILY
+                  value: {{ .Values.managementBackup.retention.daily | quote }}
+                - name: KEEP_WEEKLY
+                  value: {{ .Values.managementBackup.retention.weekly | quote }}
+                - name: KEEP_MONTHLY
+                  value: {{ .Values.managementBackup.retention.monthly | quote }}
+                - name: KEYBACKUP_PREFIX
+                  value: {{ .Values.managementBackup.encryptionKeyBackup.keyPrefix | default "keys" | quote }}
+                {{- with .Values.managementBackup.s3.endpoint }}
+                - name: MANAGEMENT_BACKUP_ENDPOINT
+                  value: {{ . | quote }}
+                {{- end }}
+              volumeMounts:
+                - name: retention-credentials
+                  mountPath: /var/run/aws
+                  readOnly: true
+                - name: scratch
+                  mountPath: /tmp
+              resources:
+                {{- toYaml .Values.managementBackup.resources | nindent 16 }}
+          volumes:
+            - name: retention-credentials
+              secret:
+                secretName: {{ .Values.managementBackup.retention.credentialsSecretRef.name | quote }}
+                items:
+                  - key: {{ .Values.managementBackup.retention.credentialsSecretRef.key | default "credentials" | quote }}
+                    path: credentials
+            - name: scratch
+              emptyDir:
+                sizeLimit: 16Mi
+{{- end }}

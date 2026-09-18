@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
-# Stage 1: build the SPA (Node 22, matching CI).
-FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS build
+# Stage 1: build the SPA (Node 24, matching local development and CI).
+FROM node:24-alpine@sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81 AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -11,8 +11,12 @@ COPY . .
 
 # Baked into the bundle via the Vite `define` (__APP_VERSION__); the release
 # workflow passes VERSION to every component build.
-ARG VERSION=1.1.0
-ENV VERSION=$VERSION
+ARG VERSION=1.2.0
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+ENV VERSION=$VERSION \
+    GIT_COMMIT=$GIT_COMMIT \
+    BUILD_DATE=$BUILD_DATE
 
 # The trailing grep verifies the version string was actually baked into the
 # emitted bundle (release builds must be traceable to their tag).
@@ -23,7 +27,7 @@ RUN npm run build \
 # bump both digests in lockstep (D16).
 FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
 
-ARG VERSION=1.1.0
+ARG VERSION=1.2.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="astronomer-frontend" \
@@ -31,10 +35,6 @@ LABEL org.opencontainers.image.title="astronomer-frontend" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.created="${BUILD_DATE}"
-
-# Pull Alpine package fixes newer than the base image build (CI scans this
-# image with Trivy at HIGH/CRITICAL, ignore-unfixed, exit-code 1).
-RUN apk upgrade --no-cache
 
 RUN rm -rf /etc/nginx/conf.d /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf

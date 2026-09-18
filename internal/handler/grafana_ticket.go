@@ -3,18 +3,18 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
@@ -67,52 +67,6 @@ func (h *MonitoringHandler) SetSessionTTL(fn func(context.Context) time.Duration
 	h.sessionTTL = fn
 }
 
-// MintGrafanaTicket is GET /api/v1/observability/grafana-ticket?return=.
-// Session + monitoring:read (any scope). Allow-lists return. Does not log
-// ticket or return.
-func (h *MonitoringHandler) MintGrafanaTicket(w http.ResponseWriter, r *http.Request) {
-	if !h.authz.authorizeAnyScope(w, r, rbac.ResourceMonitoring, rbac.VerbRead) {
-		return
-	}
-	if h == nil || h.grafanaTickets == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Grafana tickets are not configured")
-		return
-	}
-	user, ok := middleware.GetAuthenticatedUser(r.Context())
-	if !ok || user == nil || user.ID == "" {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
-		return
-	}
-	userID, err := uuid.Parse(user.ID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Invalid authenticated user")
-		return
-	}
-
-	grafanaHost := h.resolvedGrafanaHost(r)
-	returnURL, err := allowListedGrafanaReturn(r.URL.Query().Get("return"), grafanaHost, publicScheme(h.serverURL))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "return URL is not allow-listed")
-		return
-	}
-
-	email, role, explore, admin, clusterIDs := h.grafanaIdentity(r, user)
-	if email == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "authenticated user has no email")
-		return
-	}
-	token, _, err := h.grafanaTickets.Issue(userID, email, role, explore, admin, h.grafanaCookieTTL(r.Context()), clusterIDs)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.TicketError, "Failed to issue Grafana ticket")
-		return
-	}
-	// Do not log ticket or return.
-	if h.log != nil {
-		h.log.Info("grafana ticket minted", "user_id", userID.String(), "role", role)
-	}
-	http.Redirect(w, r, appendTicketQuery(returnURL, token), http.StatusFound)
-}
-
 // openapi:request GrafanaTicketRedeemRequest
 type grafanaTicketRedeemRequest struct {
 	Ticket string `json:"ticket"`
@@ -145,7 +99,7 @@ func (h *MonitoringHandler) RedeemGrafanaTicket(w http.ResponseWriter, r *http.R
 	})
 }
 
-func (h *MonitoringHandler) grafanaIdentity(r *http.Request, session *middleware.AuthenticatedUser) (email, role string, explore, admin bool, clusterIDs []string) {
+func (h *MonitoringHandler) grafanaIdentity(r *http.Request, session *reqctx.User) (email, role string, explore, admin bool, clusterIDs []string) {
 	email = strings.TrimSpace(session.Email)
 	isSuperuser := false
 	if h.users != nil {
@@ -184,32 +138,6 @@ func uuidStrings(ids []uuid.UUID) []string {
 	return out
 }
 
-func (h *MonitoringHandler) resolvedGrafanaHost(r *http.Request) string {
-	if h != nil && h.queries != nil && r != nil {
-		if backend, err := h.queries.GetDefaultMonitoringBackend(r.Context()); err == nil {
-			meta := sharedStackMetadata(backend, "sharedGrafana")
-			if host := strings.TrimSpace(stringFromMap(meta, "grafanaHost")); host != "" {
-				return stripHostScheme(host)
-			}
-			if host := strings.TrimSpace(stringFromMap(meta, "ingressHost")); host != "" {
-				return stripHostScheme(host)
-			}
-		}
-	}
-	if h != nil {
-		return defaultGrafanaHost(h.serverURL)
-	}
-	return ""
-}
-
-func defaultGrafanaHost(serverURL string) string {
-	host := hostnameOf(serverURL)
-	if host == "" {
-		return ""
-	}
-	return "grafana." + host
-}
-
 func hostnameOf(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -222,66 +150,6 @@ func hostnameOf(raw string) string {
 	return u.Hostname()
 }
 
-func stripHostScheme(host string) string {
-	host = strings.TrimSpace(host)
-	host = strings.TrimPrefix(host, "https://")
-	host = strings.TrimPrefix(host, "http://")
-	host = strings.TrimSuffix(host, "/")
-	return host
-}
-
-// allowListedGrafanaReturn accepts only <scheme>://<grafanaHost>/ or
-// /auth/callback. Scheme matches the Astronomer public URL (https unless
-// ServerURL is http). No open redirect, no //, no other hosts.
-func allowListedGrafanaReturn(raw, grafanaHost, scheme string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	grafanaHost = stripHostScheme(grafanaHost)
-	if scheme == "" {
-		scheme = "https"
-	}
-	if raw == "" || grafanaHost == "" {
-		return "", errGrafanaReturnRejected
-	}
-	if strings.ContainsAny(raw, "\n\r\\") {
-		return "", errGrafanaReturnRejected
-	}
-	u, err := url.Parse(raw)
-	if err != nil || !u.IsAbs() {
-		return "", errGrafanaReturnRejected
-	}
-	if !strings.EqualFold(u.Scheme, scheme) {
-		return "", errGrafanaReturnRejected
-	}
-	if u.User != nil {
-		return "", errGrafanaReturnRejected
-	}
-	if !strings.EqualFold(u.Host, grafanaHost) {
-		return "", errGrafanaReturnRejected
-	}
-	path := u.EscapedPath()
-	if path == "" {
-		path = "/"
-	}
-	if path != "/" && path != "/auth/callback" {
-		return "", errGrafanaReturnRejected
-	}
-	if strings.Contains(path, "//") {
-		return "", errGrafanaReturnRejected
-	}
-	return (&url.URL{Scheme: scheme, Host: grafanaHost, Path: path}).String(), nil
-}
-
-func appendTicketQuery(returnURL, ticket string) string {
-	u, err := url.Parse(returnURL)
-	if err != nil {
-		return returnURL
-	}
-	q := u.Query()
-	q.Set("ticket", ticket)
-	u.RawQuery = q.Encode()
-	return u.String()
-}
-
 func (h *MonitoringHandler) grafanaCookieTTL(ctx context.Context) time.Duration {
 	if h != nil && h.sessionTTL != nil {
 		if d := h.sessionTTL(ctx); d > 0 {
@@ -290,12 +158,3 @@ func (h *MonitoringHandler) grafanaCookieTTL(ctx context.Context) time.Duration 
 	}
 	return time.Duration(sessionpolicy.DefaultMinutes) * time.Minute
 }
-
-func publicScheme(serverURL string) string {
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(serverURL)), "http://") {
-		return "http"
-	}
-	return "https"
-}
-
-var errGrafanaReturnRejected = errors.New("grafana return URL rejected")

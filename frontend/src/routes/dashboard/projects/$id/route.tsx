@@ -12,8 +12,8 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
  * Cloud Credentials / Quota) ship as part of the project-detail-tabs sprint.
  * Adding more is a one-line change to the `tabs` array.
  */
-import { Link } from "@/lib/link";
-import { useParams, usePathname } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useLocation } from "@tanstack/react-router";
 import {
   ArrowLeft,
   FolderKanban,
@@ -24,7 +24,7 @@ import {
   LayoutDashboard,
   Package,
 } from "lucide-react";
-import { useProject } from "@/lib/hooks";
+import { useProject } from "@/lib/hooks/projects";
 import { cn } from "@/lib/utils";
 
 const tabs = [
@@ -41,9 +41,9 @@ const tabs = [
 ] as const;
 
 function ProjectDetailLayout() {
-  const params = useParams();
-  const id = params.id as string;
-  const pathname = usePathname();
+  const params = Route.useParams();
+  const id = params.id;
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { data: project, isLoading } = useProject(id);
 
   const base = `/dashboard/projects/${id}`;
@@ -67,13 +67,13 @@ function ProjectDetailLayout() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/dashboard/projects"
+      <RouterLink
+        to="/dashboard/projects"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to Projects
-      </Link>
+      </RouterLink>
 
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -105,9 +105,9 @@ function ProjectDetailLayout() {
             const href = `${base}${tab.segment}`;
             const active = activeKey === tab.key;
             return (
-              <Link
+              <RouterLink
                 key={tab.key}
-                href={href}
+                to={href}
                 className={cn(
                   "flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors",
                   active
@@ -117,7 +117,7 @@ function ProjectDetailLayout() {
               >
                 <Icon className="h-4 w-4" />
                 {tab.label}
-              </Link>
+              </RouterLink>
             );
           })}
         </nav>

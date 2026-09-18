@@ -1,3 +1,5 @@
+import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +8,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * Per-cluster Apps tab — sprint 082+.
  *
@@ -36,7 +38,7 @@ import {
  */
 
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useSearchParams, useRouter } from "@/lib/navigation";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { toastApiError, toastSuccess } from "@/lib/toast";
@@ -53,13 +55,11 @@ import {
   Trash2,
   Plus,
 } from "lucide-react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 
-import {
-  queryKeys,
-  useCluster,
-  useProjects,
-} from "@/lib/hooks";
+import { queryKeys } from "@/lib/query-keys";
+import { useCluster } from "@/lib/hooks/clusters";
+import { useProjects } from "@/lib/hooks/projects";
 import {
   useHelmRepositories,
   useSyncHelmRepository,
@@ -68,6 +68,8 @@ import {
 import { AddRepositoryModal } from "../../../catalog/-add-repository-modal";
 import { RepositoriesTab } from "../../../catalog/-repositories-tab";
 import { liveFallback } from "@/lib/live/status-store";
+import { pageRowCount } from "@/lib/api/pagination";
+import type { PaginatedResponse } from "@/types";
 import {
   usePermissionDecision,
   permissionDeniedReason,
@@ -76,6 +78,7 @@ import {
 import type { PermissionDecision } from "@/lib/permissions";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
+import { QueryStates } from "@/components/ui/query-states";
 import {
   listClusterApps,
   listCatalogCharts,
@@ -83,7 +86,7 @@ import {
   uninstallCatalogRelease,
   deleteFailedClusterApps,
   type ClusterAppRow,
-} from "@/lib/api/cluster-detail";
+} from "@/lib/api/cluster-apps";
 import {
   AppInstallModal,
   AppUninstallModal,
@@ -106,7 +109,7 @@ function statusTone(status: string): string {
     s === "pending_install" ||
     s === "pending_upgrade"
   ) {
-    return "bg-sky-500/10 text-sky-600 border-sky-500/30";
+    return "bg-status-info/10 text-status-info border-status-info/30";
   }
   if (s.startsWith("uninstalling") || s === "pending_uninstall") {
     return "bg-status-warning/10 text-status-warning border-status-warning/30";
@@ -177,16 +180,18 @@ type ModalState =
     };
 
 function ClusterAppsPage() {
-  const params = useParams();
-  const clusterId = params.id as string;
+  const params = Route.useParams();
+  const clusterId = params.id;
   const { data: cluster } = useCluster(clusterId);
   const qc = useQueryClient();
   // Deep-link support: feature pages (image-scans, monitoring, etc.)
   // can drop the user here with ?install=<chartName> to auto-open the
   // install modal for that chart. Reads the search params once and
   // resolves the chart on browse-data arrival.
-  const searchParams = useSearchParams();
-  const router = useRouter();
+  const searchParams = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
+  const navigate = useNavigate();
   const projectsQuery = useProjects({ pageSize: 200 });
   const clusterProjects = useMemo(
     () =>
@@ -209,9 +214,10 @@ function ClusterAppsPage() {
     const next = new URLSearchParams(searchParams);
     if (nextProjectId) next.set("project", nextProjectId);
     else next.delete("project");
-    router.replace(
-      `/dashboard/clusters/${clusterId}/apps${next.size ? `?${next.toString()}` : ""}`,
-    );
+    void navigate({
+      to: `/dashboard/clusters/${clusterId}/apps${next.size ? `?${next.toString()}` : ""}`,
+      replace: true,
+    });
     setModal({ kind: "none" });
   };
   const requestedInstall = searchParams?.get("install") ?? "";
@@ -318,27 +324,29 @@ function ClusterAppsPage() {
     if (!requestedInstall) return;
     if (modal.kind !== "none") return;
     if (browse.isLoading || !browse.data) return;
-    const match = browse.data.items.find((c) => c.name === requestedInstall);
+    const match = browse.data.data.find((c) => c.name === requestedInstall);
     if (match) {
       if (!catalogCreateDecision.allowed) {
         toastPermissionDenied(catalogCreateDecision);
-        router.replace(
-          `/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`,
-        );
+        void navigate({
+          to: `/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`,
+          replace: true,
+        });
         return;
       }
       setModal({ kind: "install", chartId: match.id, chartName: match.name });
       // Drop the query param so a back-button + re-navigate doesn't loop.
-      router.replace(
-        `/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`,
-      );
+      void navigate({
+        to: `/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`,
+        replace: true,
+      });
     }
   }, [
     requestedInstall,
     browse.data,
     browse.isLoading,
     modal.kind,
-    router,
+    navigate,
     clusterId,
     projectId,
     catalogCreateDecision,
@@ -411,12 +419,13 @@ function ClusterAppsPage() {
               " this cluster"
             )}
             . Releases managed by the{" "}
-            <Link
-              href={`/dashboard/clusters/${clusterId}/tools`}
+            <RouterLink
+              to="/dashboard/clusters/$id/tools"
+              params={{ id: clusterId }}
               className="underline"
             >
               Tools tab
-            </Link>{" "}
+            </RouterLink>{" "}
             appear here too with a &quot;Managed by Tools&quot; pivot.
           </p>
         </div>
@@ -424,7 +433,7 @@ function ClusterAppsPage() {
           {section !== "repositories" && (
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               Project visibility
-              <select
+              <Select
                 aria-label="Catalog project"
                 value={projectId}
                 onChange={(event) => setProjectId(event.target.value)}
@@ -437,7 +446,7 @@ function ClusterAppsPage() {
                     {project.displayName || project.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
           {section === "repositories" && (
@@ -459,9 +468,13 @@ function ClusterAppsPage() {
           const active = section === s;
           const count =
             s === "installed"
-              ? installed.data?.total
+              ? installed.data
+                ? pageRowCount(installed.data)
+                : undefined
               : s === "browse"
-                ? browse.data?.total
+                ? browse.data
+                  ? pageRowCount(browse.data)
+                  : undefined
                 : s === "recommended"
                   ? recommended.data?.length
                   : repos?.length;
@@ -514,7 +527,7 @@ function ClusterAppsPage() {
           q={browse}
           search={searchQ}
           setSearch={setSearchQ}
-          installed={installed.data?.items ?? []}
+          installed={installed.data?.data ?? []}
           installDecision={catalogCreateDecision}
           onInstall={openInstall}
         />
@@ -537,7 +550,7 @@ function ClusterAppsPage() {
       {section === "recommended" && projectId && (
         <RecommendedView
           q={recommended}
-          installed={installed.data?.items ?? []}
+          installed={installed.data?.data ?? []}
           installDecision={catalogCreateDecision}
           onInstall={openInstall}
         />
@@ -594,7 +607,7 @@ function ClusterAppsPage() {
       {showDeleteFailed && (
         <DeleteFailedModal
           count={
-            installed.data?.items.filter((r) => {
+            installed.data?.data.filter((r) => {
               const s = r.status.toLowerCase();
               return s === "failed_install" || s === "failed_uninstall";
             }).length ?? 0
@@ -691,7 +704,7 @@ function InstalledView({
   deleteDecision,
 }: {
   clusterId: string;
-  q: ReturnType<typeof useQuery<{ items: ClusterAppRow[]; total: number }>>;
+  q: ReturnType<typeof useQuery<PaginatedResponse<ClusterAppRow>>>;
   onUpgrade: (row: ClusterAppRow) => void;
   onUninstall: (row: ClusterAppRow) => void;
   onDeleteFailed: () => void;
@@ -706,7 +719,7 @@ function InstalledView({
       </div>
     );
   }
-  const items = q.data?.items ?? [];
+  const items = q.data?.data ?? [];
   const staleCount = items.filter((r) => isStale(r).stale).length;
   const failedCount = items.filter((r) => {
     const s = r.status.toLowerCase();
@@ -726,8 +739,10 @@ function InstalledView({
           appear here once installed.
         </p>
         <div className="flex items-center justify-center gap-2 pt-2">
-          <Link
-            href={`/dashboard/clusters/${clusterId}/apps?section=browse`}
+          <RouterLink
+            to="/dashboard/clusters/$id/apps"
+            params={{ id: clusterId }}
+            search={{ section: "browse" }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
             onClick={(e) => {
               e.preventDefault();
@@ -738,13 +753,14 @@ function InstalledView({
             }}
           >
             Browse catalog
-          </Link>
-          <Link
-            href={`/dashboard/clusters/${clusterId}/tools`}
+          </RouterLink>
+          <RouterLink
+            to="/dashboard/clusters/$id/tools"
+            params={{ id: clusterId }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs font-medium hover:bg-muted"
           >
             Open Tools
-          </Link>
+          </RouterLink>
         </div>
       </div>
     );
@@ -753,7 +769,7 @@ function InstalledView({
     <div className="space-y-3">
       {failedCount > 0 && (
         <div className="rounded-md border border-status-error/40 bg-status-error/5 px-3 py-2 text-xs flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-status-error flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-4 w-4 text-status-error shrink-0 mt-0.5" />
           <div className="flex-1">
             <div className="font-medium text-foreground">
               {failedCount} failed install{failedCount === 1 ? "" : "s"} on this
@@ -786,7 +802,7 @@ function InstalledView({
       )}
       {staleCount > 0 && (
         <div className="rounded-md border border-status-warning/40 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-status-warning flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
           <div>
             <div className="font-medium text-foreground">
               {staleCount} release{staleCount === 1 ? "" : "s"} stuck in a
@@ -860,7 +876,7 @@ function InstalledRow({
       <TableCell className="px-3 py-2">
         <div className="flex items-center gap-2">
           {row.chartIconUrl ? (
-            <img src={row.chartIconUrl} alt="" className="h-5 w-5 rounded" />
+            <img src={row.chartIconUrl} alt="" className="h-5 w-5 rounded-sm" />
           ) : (
             <Box className="h-5 w-5 text-muted-foreground" />
           )}
@@ -880,13 +896,14 @@ function InstalledRow({
             </span>
           )}
           {isTool && (
-            <Link
-              href={`/dashboard/clusters/${clusterId}/tools`}
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-border bg-muted text-muted-foreground hover:bg-accent"
+            <RouterLink
+              to="/dashboard/clusters/$id/tools"
+              params={{ id: clusterId }}
+              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm border border-border bg-muted text-muted-foreground hover:bg-accent"
               title="This release is managed by the Tools tab. Open Tools to upgrade or uninstall."
             >
               <Wrench className="h-3 w-3" /> Tools
-            </Link>
+            </RouterLink>
           )}
         </div>
         {row.repoName && (
@@ -905,7 +922,7 @@ function InstalledRow({
       <TableCell className="px-3 py-2">
         <div className="inline-flex items-center gap-1.5">
           <span
-            className={`inline-flex items-center px-2 py-0.5 rounded border text-[11px] font-medium ${statusTone(row.status)}`}
+            className={`inline-flex items-center px-2 py-0.5 rounded-sm border text-[11px] font-medium ${statusTone(row.status)}`}
           >
             {row.status}
           </span>
@@ -921,12 +938,13 @@ function InstalledRow({
       </TableCell>
       <TableCell className="px-3 py-2 text-right">
         {isTool ? (
-          <Link
-            href={`/dashboard/clusters/${clusterId}/tools`}
+          <RouterLink
+            to="/dashboard/clusters/$id/tools"
+            params={{ id: clusterId }}
             className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
           >
             Manage <ExternalLink className="h-3 w-3" />
-          </Link>
+          </RouterLink>
         ) : (
           <div className="inline-flex items-center gap-1">
             <ActionButton
@@ -980,10 +998,9 @@ function BrowseView({
   onInstall,
 }: {
   q: ReturnType<
-    typeof useQuery<{
-      items: import("@/lib/api/cluster-detail").CatalogChartSummary[];
-      total: number;
-    }>
+    typeof useQuery<
+      PaginatedResponse<import("@/lib/api/cluster-apps").CatalogChartSummary>
+    >
   >;
   search: string;
   setSearch: (s: string) => void;
@@ -991,6 +1008,8 @@ function BrowseView({
   installDecision: PermissionDecision;
   onInstall: (chartId: string, chartName: string) => void;
 }) {
+  const charts = q.data?.data ?? [];
+
   // Build a name→releases index so each Browse card knows whether
   // it's already on this cluster (and via what install path). This
   // is the cheap version of "drift detection" — we don't reconcile
@@ -1006,20 +1025,22 @@ function BrowseView({
     <div className="space-y-3">
       <div className="relative max-w-md">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <input
+        <Input
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search charts (kube-prometheus, loki, …)"
           className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm
-            placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
         />
       </div>
-      {q.isLoading ? (
+      {q.isError ? (
+        <QueryStates query={q}>{null}</QueryStates>
+      ) : q.isLoading ? (
         <div className="flex items-center justify-center h-32 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading catalog…
         </div>
-      ) : (q.data?.items.length ?? 0) === 0 ? (
+      ) : charts.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-6 text-center">
           <p className="text-sm font-medium text-foreground">
             No matching charts
@@ -1030,14 +1051,14 @@ function BrowseView({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {q.data!.items.map((c) => {
+          {charts.map((c) => {
             const existing = installedByChart.get(c.name);
             return (
               <article
                 key={c.id}
                 className="border border-border rounded-lg p-3 flex gap-3 bg-card hover:border-muted-foreground/40 transition-colors"
               >
-                <div className="h-10 w-10 flex-shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
+                <div className="h-10 w-10 shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
                   {c.iconUrl ? (
                     <img
                       src={c.iconUrl}
@@ -1054,7 +1075,7 @@ function BrowseView({
                       {c.displayName || c.name}
                     </div>
                     {c.deprecated && (
-                      <span className="text-[10px] text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded">
+                      <span className="text-[10px] text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
                         deprecated
                       </span>
                     )}
@@ -1119,7 +1140,7 @@ function RecommendedView({
   onInstall,
 }: {
   q: ReturnType<
-    typeof useQuery<import("@/lib/api/cluster-detail").RecommendedChart[]>
+    typeof useQuery<import("@/lib/api/cluster-apps").RecommendedChart[]>
   >;
   installed: ClusterAppRow[];
   installDecision: PermissionDecision;

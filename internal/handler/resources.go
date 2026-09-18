@@ -8,18 +8,20 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
-// rbacCacheInvalidator mirrors middleware.RBACCacheInvalidator but is
+// rbacCacheInvalidator mirrors rbac.CacheInvalidator but is
 // duplicated here to avoid an import cycle (server/middleware -> handler is
 // already a dependency direction for the cache wiring).
 type rbacCacheInvalidator interface {
@@ -34,39 +36,28 @@ type ResourceHandler struct {
 	encryptor *auth.Encryptor
 	ssoMgr    SSOProviderRegistrar
 	rbacCache rbacCacheInvalidator
-	// jwt is the optional JWT manager used by the admin force-logout
-	// endpoint to flush its positive-validation cache. Nil-safe.
+	// jwt flushes positive validation-cache entries after an administrative
+	// session revocation commits.
 	jwt *auth.JWTManager
-	// emails is the optional email-enqueue hook used by the admin
-	// UnlockUser path to FYI the user. Optional; best-effort.
+	// emails sends post-commit account notifications.
 	emails EmailNotifier
-	// ssoSessions surfaces the sso_sessions reader/deleter used by
-	// admin force-logout (migration 054) to fire upstream back-channel
-	// logout against every device the target user is signed in from.
-	// Optional; nil keeps the legacy behaviour where force-logout
-	// only stamps tokens_invalidated_at.
-	ssoSessions ResourceSSOSessionStore
-	// ssoBackchannel posts the upstream end_session POST when the
-	// admin path is run. Optional; nil disables back-channel logout
-	// and force-logout falls back to "local invalidation + delete
-	// rows" (the user's existing browsers redirect-loop on next
-	// request because the JWT cutoff was stamped).
+	// ssoBackchannel posts upstream end-session requests after the local
+	// revocation transaction commits.
 	ssoBackchannel SSOBackchannelClient
 	// settingsCache resolves password.* platform settings for local
 	// account create/reset (AUTH-R01). Nil falls back to defaults.
 	settingsCache *SettingsCache
-	// userRunTx commits administrative identity mutations together with their
-	// durable audit intent. Production always wires it; narrow resource tests
-	// retain the direct-query compatibility path.
+	// userRunTx commits administrative identity mutations, session revocation,
+	// SSO-session cleanup, and durable audit intent together.
 	userRunTx userRunTxFunc
-	// runTx is the production transaction boundary for the legacy general
-	// settings and SSO-provider endpoints. It keeps domain state and mandatory
+	// runTx is the transaction boundary for general settings and SSO-provider
+	// endpoints. It keeps domain state and mandatory
 	// audit intent in one commit; runtime/cache effects are applied only after
 	// that commit succeeds.
 	runTx resourceSettingsRunTxFunc
 	// resourceOperations is deliberately separate from ResourceQuerier so the
-	// durable member-cluster mutation surface does not widen every legacy test
-	// fake. resourceMutationRunTx is the only authorized write boundary: the
+	// durable member-cluster mutation surface remains explicit.
+	// resourceMutationRunTx is the only authorized write boundary: the
 	// operation, task intent and mandatory audit intent commit together.
 	resourceOperations    ResourceOperationQuerier
 	resourceMutationRunTx resourceMutationRunTxFunc
@@ -158,14 +149,6 @@ type drainPod struct {
 	} `json:"status"`
 }
 
-// ResourceSSOSessionStore is the narrow sso_sessions surface the
-// admin force-logout handler uses to enumerate + clear a target
-// user's upstream sessions.
-type ResourceSSOSessionStore interface {
-	ListSSOSessionsByUser(ctx context.Context, userID uuid.UUID) ([]sqlc.SsoSession, error)
-	DeleteSSOSessionsByUser(ctx context.Context, userID uuid.UUID) error
-}
-
 // SSOBackchannelClient fires the upstream RP-initiated logout POST.
 // Implemented in production by a tiny http.Client wrapper; tests
 // substitute a recorder. The method intentionally returns nothing
@@ -192,18 +175,7 @@ func (h *ResourceHandler) passwordPolicy(ctx context.Context) auth.PasswordPolic
 	return auth.LoadPasswordPolicy(ctx, h.settingsCache)
 }
 
-// SetSSOSessionStore wires the sso_sessions reader/deleter into the
-// admin handler. Optional; nil keeps the pre-054 force-logout shape.
-func (h *ResourceHandler) SetSSOSessionStore(s ResourceSSOSessionStore) {
-	if h == nil {
-		return
-	}
-	h.ssoSessions = s
-}
-
 // SetSSOBackchannelClient wires the back-channel logout POSTer.
-// Optional; nil disables the upstream POST and force-logout falls
-// back to "stamp cutoff + delete rows".
 func (h *ResourceHandler) SetSSOBackchannelClient(c SSOBackchannelClient) {
 	if h == nil {
 		return
@@ -223,7 +195,6 @@ func (h *ResourceHandler) SetJWTManager(j *auth.JWTManager) {
 
 type ResourceQuerier interface {
 	GetPlatformConfig(ctx context.Context) (sqlc.PlatformConfiguration, error)
-	UpsertPlatformConfig(ctx context.Context, arg sqlc.UpsertPlatformConfigParams) (sqlc.PlatformConfiguration, error)
 	ListAuditLogV1(ctx context.Context, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error)
 	CountAuditLogV1(ctx context.Context) (int64, error)
 	ListUsers(ctx context.Context, arg sqlc.ListUsersParams) ([]sqlc.User, error)
@@ -231,16 +202,15 @@ type ResourceQuerier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetUserByEmail(ctx context.Context, email string) (sqlc.User, error)
 	GetUserByUsername(ctx context.Context, username string) (sqlc.User, error)
-	CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.User, error)
-	UpdateUser(ctx context.Context, arg sqlc.UpdateUserParams) (sqlc.User, error)
-	DeleteUser(ctx context.Context, id uuid.UUID) error
-	UpdateUserPassword(ctx context.Context, arg sqlc.UpdateUserPasswordParams) error
-	// Auth hardening (migration 039). UnlockUser clears the per-account
-	// lockout fields; InvalidateAllTokens bumps the per-user cutoff
-	// timestamp so every in-flight JWT for the user is rejected on its
-	// next validation.
-	UnlockUser(ctx context.Context, id uuid.UUID) error
-	InvalidateAllTokens(ctx context.Context, arg sqlc.InvalidateAllTokensParams) error
+}
+
+// userDirectoryQuerier is deliberately narrower than ResourceQuerier: only
+// the paginated user-directory endpoint needs substring lookup. Keeping this
+// capability local avoids coupling unrelated resource-handler test stores to
+// identity search while production's sqlc.Queries implements it directly.
+type userDirectoryQuerier interface {
+	SearchUsers(ctx context.Context, arg sqlc.SearchUsersParams) ([]sqlc.User, error)
+	CountSearchUsers(ctx context.Context, search string) (int64, error)
 }
 
 type SSOSettingsQuerier interface {
@@ -248,8 +218,6 @@ type SSOSettingsQuerier interface {
 	GetEnabledSSOProviders(ctx context.Context) ([]sqlc.SsoConfiguration, error)
 	GetSSOConfigurationByProvider(ctx context.Context, provider string) (sqlc.SsoConfiguration, error)
 	GetSSOConfigurationByID(ctx context.Context, id uuid.UUID) (sqlc.SsoConfiguration, error)
-	CreateSSOConfiguration(ctx context.Context, arg sqlc.CreateSSOConfigurationParams) (sqlc.SsoConfiguration, error)
-	DeleteSSOConfiguration(ctx context.Context, id uuid.UUID) error
 }
 
 type SSOProviderRegistrar interface {
@@ -267,6 +235,9 @@ type resourceDef struct {
 
 var resourceDefs = map[string]resourceDef{
 	"namespaces":             {apiBase: "/api/v1", namespaced: false, plural: "namespaces"},
+	"nodes":                  {apiBase: "/api/v1", namespaced: false, plural: "nodes"},
+	"pods":                   {apiBase: "/api/v1", namespaced: true, plural: "pods"},
+	"events":                 {apiBase: "/api/v1", namespaced: true, plural: "events"},
 	"services":               {apiBase: "/api/v1", namespaced: true, plural: "services"},
 	"configmaps":             {apiBase: "/api/v1", namespaced: true, plural: "configmaps"},
 	"secrets":                {apiBase: "/api/v1", namespaced: true, plural: "secrets"},
@@ -356,7 +327,11 @@ func (h *ResourceHandler) SetRBACCacheInvalidator(inv rbacCacheInvalidator) {
 }
 
 func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	resourceType := chi.URLParam(r, "resource_type")
 	namespace := r.URL.Query().Get("namespace")
 	path, err := listPath(resourceType, namespace)
@@ -368,38 +343,70 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "tunnel requester not configured")
 		return
 	}
-	// Bypass h.do so we can treat 404 as "CRD not installed" and return [].
-	// This matters for optional resources like the v1alpha2 Gateway API
-	// routes (TCPRoute / UDPRoute) that many clusters lack — the UI should
-	// show "No resources found", not surface a 503.
-	rawResp, err := h.requester.Do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	// Treat 404 as "CRD not installed" for optional Gateway API resources.
+	resp, installed, err := h.listKubernetesResourcePages(r.Context(), clusterID, path, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		respondKubernetesResourceReadError(w, r, err)
 		return
 	}
-	if rawResp == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "empty response")
+	items := make([]map[string]any, 0)
+	if installed {
+		items = flattenNamedResources(clusterID, resourceType, resp)
+	}
+	def := resourceDefs[resourceType]
+	if def.namespaced {
+		resource, known := rbac.KubernetesResource(resourceType)
+		if !known {
+			resource = rbac.ResourceWorkloads
+		}
+		all, allowed, authErr := h.authz.authorizedNamespaces(r.Context(), clusterUUID, resource, rbac.VerbList)
+		if authErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+			return
+		}
+		if !all {
+			items = filterItemsByNamespaceKey(items, "namespace", allowed)
+		}
+	}
+	requestedNamespaces := commaSeparatedSet(r.URL.Query().Get("namespaces"))
+	if r.URL.Query().Has("namespaces") && def.namespaced {
+		if len(requestedNamespaces) == 0 {
+			items = nil
+		} else {
+			items = filterItemsByNamespaceKey(items, "namespace", requestedNamespaces)
+		}
+	}
+	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
+	if search != "" {
+		filtered := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			encoded, marshalErr := json.Marshal(item)
+			if marshalErr == nil && strings.Contains(strings.ToLower(string(encoded)), search) {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+	}
+	sortOrder := strings.TrimSpace(r.URL.Query().Get("sort"))
+	if sortOrder == "" {
+		sortOrder = "namespace_asc"
+	}
+	field, descending, ok := genericResourceSort(sortOrder)
+	if !ok {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid resource sort order")
 		return
 	}
-	if rawResp.StatusCode == http.StatusNotFound {
-		RespondJSON(w, http.StatusOK, []map[string]any{})
-		return
-	}
-	if err := ensureSuccess(rawResp); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
-		return
-	}
-	var resp map[string]any
-	if err := parseJSONResponse(rawResp, &resp); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
-		return
-	}
-	items := flattenNamedResources(clusterID, resourceType, resp)
-	RespondJSON(w, http.StatusOK, items)
+	sortGenericResourceItems(items, field, descending)
+	page, metadata := pageWindow(r, items)
+	paging.Write(w, page, metadata)
 }
 
 func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	resourceType := chi.URLParam(r, "resource_type")
 	namespace := r.URL.Query().Get("namespace")
 	path, err := listPath(resourceType, namespace)
@@ -407,17 +414,218 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
 		return
 	}
-	resp, err := h.do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	resp, _, err := h.listKubernetesResourcePages(r.Context(), clusterID, path, false)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		respondKubernetesResourceReadError(w, r, err)
 		return
 	}
 	items := flattenGenericResources(clusterID, resourceType, resp)
-	RespondJSON(w, http.StatusOK, items)
+
+	def := resourceDefs[resourceType]
+	if def.namespaced {
+		resource, known := rbac.KubernetesResource(resourceType)
+		if !known {
+			resource = rbac.ResourceWorkloads
+		}
+		all, allowed, authErr := h.authz.authorizedNamespaces(r.Context(), clusterUUID, resource, rbac.VerbList)
+		if authErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+			return
+		}
+		if !all {
+			items = filterItemsByNamespaceKey(items, "namespace", allowed)
+		}
+	}
+
+	requestedNamespaces := commaSeparatedSet(r.URL.Query().Get("namespaces"))
+	if r.URL.Query().Has("namespaces") && def.namespaced {
+		if len(requestedNamespaces) == 0 {
+			items = nil
+		} else {
+			items = filterItemsByNamespaceKey(items, "namespace", requestedNamespaces)
+		}
+	}
+	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
+	if search != "" {
+		filtered := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			encoded, marshalErr := json.Marshal(item)
+			if marshalErr == nil && strings.Contains(strings.ToLower(string(encoded)), search) {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+	}
+	sortOrder := strings.TrimSpace(r.URL.Query().Get("sort"))
+	if sortOrder == "" {
+		sortOrder = "namespace_asc"
+	}
+	field, descending, ok := genericResourceSort(sortOrder)
+	if !ok {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid resource sort order")
+		return
+	}
+	sortGenericResourceItems(items, field, descending)
+	page, metadata := pageWindow(r, items)
+	paging.Write(w, page, metadata)
+}
+
+func respondKubernetesResourceReadError(w http.ResponseWriter, r *http.Request, err error) {
+	var upstream *kubernetesResponseError
+	if errors.As(err, &upstream) && upstream.StatusCode == http.StatusForbidden {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+			"The cluster agent is not authorized to list this Kubernetes resource")
+		return
+	}
+	respondClusterAccessError(w, r, err)
+}
+
+const upstreamResourcePageLimit = 500
+
+// listKubernetesResourcePages prevents any one tunnel response from carrying
+// an unbounded Kubernetes List. Callers may still apply full-result search and
+// sorting after the bounded pages have been assembled.
+func (h *ResourceHandler) listKubernetesResourcePages(ctx context.Context, clusterID, path string, optional bool) (map[string]any, bool, error) {
+	if h.requester == nil {
+		return nil, false, fmt.Errorf("tunnel requester not configured")
+	}
+	combined := map[string]any{"items": []any{}}
+	continueToken := ""
+	previousToken := ""
+	for {
+		pageURL, err := url.Parse(path)
+		if err != nil {
+			return nil, false, err
+		}
+		query := pageURL.Query()
+		query.Set("limit", fmt.Sprintf("%d", upstreamResourcePageLimit))
+		if continueToken == "" {
+			query.Del("continue")
+		} else {
+			query.Set("continue", continueToken)
+		}
+		pageURL.RawQuery = query.Encode()
+		response, err := h.requester.Do(ctx, clusterID, http.MethodGet, pageURL.String(), nil, requestHeaders(""))
+		if err != nil {
+			return nil, false, err
+		}
+		if optional && response != nil && response.StatusCode == http.StatusNotFound {
+			return combined, false, nil
+		}
+		if err := ensureSuccess(response); err != nil {
+			return nil, false, err
+		}
+		var payload map[string]any
+		if err := parseJSONResponse(response, &payload); err != nil {
+			return nil, false, err
+		}
+		items, _ := combined["items"].([]any)
+		items = append(items, objectItemsAny(payload)...)
+		combined["items"] = items
+		continueToken = stringValue(payload, "metadata", "continue")
+		if continueToken == "" {
+			return combined, true, nil
+		}
+		if continueToken == previousToken {
+			return nil, false, fmt.Errorf("Kubernetes resource pagination continuation did not advance")
+		}
+		previousToken = continueToken
+	}
+}
+
+func objectItemsAny(payload map[string]any) []any {
+	raw, _ := payload["items"].([]any)
+	return raw
+}
+
+func commaSeparatedSet(raw string) map[string]struct{} {
+	values := map[string]struct{}{}
+	for _, item := range strings.Split(raw, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			values[item] = struct{}{}
+		}
+	}
+	return values
+}
+
+var genericResourceSortFields = map[string]string{
+	"name": "name", "namespace": "namespace", "age": "createdAt",
+	"status": "status", "type": "type", "schedule": "schedule",
+	"lastSchedule": "lastSchedule", "data": "dataCount", "target": "targetName",
+	"minmax": "minReplicas", "replicas": "currentReplicas", "active": "active",
+	"completions": "completions", "currentHealthy": "currentHealthy",
+	"minAvailable": "minAvailable", "maxUnavailable": "maxUnavailable",
+	"group": "group", "kind": "kind", "scope": "scope", "version": "version",
+	"secrets": "secretsCount", "rules": "rulesCount", "role": "roleName",
+	"subjects": "subjectsCount", "endpoints": "addressesCount", "ports": "ports",
+	"desired": "desired", "ready": "ready", "available": "available",
+	"accepted": "accepted", "addresses": "addresses", "capacity": "capacity",
+	"accessModes": "accessModes",
+	"claimRef":    "claimName", "class": "gatewayClassName", "clusterIP": "clusterIP",
+	"controllerName": "controllerName", "created": "createdAt", "egress": "egress",
+	"expansion": "allowVolumeExpansion", "from": "from", "hostnames": "hostnames",
+	"hosts": "hosts", "ingress": "ingress", "ip": "externalIP", "listeners": "listenerSummary",
+	"parents": "parentSummary", "policyTypes": "policyTypes", "programmed": "programmed",
+	"provisioner": "provisioner", "reclaimPolicy": "reclaimPolicy", "roles": "roles",
+	"storageClass": "storageClass", "tls": "tls", "to": "to",
+	"volumeBindingMode": "volumeBindingMode", "volumeName": "volumeName",
+}
+
+func genericResourceSort(order string) (field string, descending bool, ok bool) {
+	directionIndex := strings.LastIndex(order, "_")
+	if directionIndex < 1 {
+		return "", false, false
+	}
+	field, ok = genericResourceSortFields[order[:directionIndex]]
+	if !ok {
+		return "", false, false
+	}
+	switch order[directionIndex+1:] {
+	case "asc":
+		return field, false, true
+	case "desc":
+		return field, true, true
+	default:
+		return "", false, false
+	}
+}
+
+func sortGenericResourceItems(items []map[string]any, field string, descending bool) {
+	compare := func(left, right any) int {
+		leftNumber, leftOK := left.(float64)
+		rightNumber, rightOK := right.(float64)
+		if leftOK && rightOK {
+			switch {
+			case leftNumber < rightNumber:
+				return -1
+			case leftNumber > rightNumber:
+				return 1
+			default:
+				return 0
+			}
+		}
+		return strings.Compare(strings.ToLower(fmt.Sprint(left)), strings.ToLower(fmt.Sprint(right)))
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		comparison := compare(items[i][field], items[j][field])
+		if comparison != 0 {
+			if descending {
+				return comparison > 0
+			}
+			return comparison < 0
+		}
+		leftID := fmt.Sprint(items[i]["namespace"]) + "\x00" + fmt.Sprint(items[i]["name"])
+		rightID := fmt.Sprint(items[j]["namespace"]) + "\x00" + fmt.Sprint(items[j]["name"])
+		return leftID < rightID
+	})
 }
 
 func (h *ResourceHandler) CreateNamedResource(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	resourceType := chi.URLParam(r, "resource_type")
 	body, err := readResourceManifest(w, r)
 	if err != nil {
@@ -446,7 +654,11 @@ func (h *ResourceHandler) CreateNamedResource(w http.ResponseWriter, r *http.Req
 }
 
 func (h *ResourceHandler) DeleteNamedResource(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	resourceType := chi.URLParam(r, "resource_type")
 	name := chi.URLParam(r, "name")
 	namespace := chi.URLParam(r, "namespace")
@@ -464,7 +676,7 @@ func (h *ResourceHandler) DeleteNamedResource(w http.ResponseWriter, r *http.Req
 func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
 	limit := queryLimit(r, 20)
 	if h.queries == nil {
-		RespondList(w, []any{}, NewPagination(0, limit, 0, 0))
+		paging.Write(w, []any{}, paging.Exact(0, limit, 0, 0))
 		return
 	}
 	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
@@ -487,17 +699,17 @@ func (h *ResourceHandler) ListActivity(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	// The activity feed is a fixed-size recent window, so total is unknown.
-	RespondList(w, items, NewPaginationFromPage(limit, 0, len(items)))
+	paging.Write(w, items, paging.FromPage(limit, 0, len(items)))
 }
 
 func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondPaginated(w, r, []any{}, 0)
+		paging.Write(w, []any{}, paging.Exact(0, queryLimit(r, 20), queryOffset(r), len([]any{})))
 		return
 	}
 	logs, err := listAuditLogsForResource(r.Context(), h.queries, sqlc.ListAuditLogsParams{
 		Limit:  int32(queryLimit(r, 20)),
-		Offset: int32(queryInt(r, "offset", 0)),
+		Offset: int32(queryOffset(r)),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.AuditError, "Failed to load audit logs")
@@ -519,7 +731,7 @@ func (h *ResourceHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 			"timestamp":    item.CreatedAt.UTC().Format(timeLayout),
 		})
 	}
-	RespondPaginated(w, r, items, total)
+	paging.Write(w, items, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(items)))
 }
 
 func listAuditLogsForResource(ctx context.Context, q any, arg sqlc.ListAuditLogsParams) ([]sqlc.AuditLog, error) {
@@ -538,23 +750,48 @@ func countAuditLogsForResource(ctx context.Context, q any) (int64, error) {
 
 func (h *ResourceHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	if h.queries == nil {
-		RespondPaginated(w, r, []any{}, 0)
+		paging.Write(w, []any{}, paging.Exact(0, queryLimit(r, 20), queryOffset(r), len([]any{})))
 		return
 	}
-	users, err := h.queries.ListUsers(r.Context(), sqlc.ListUsersParams{
-		Limit:  int32(queryLimit(r, 20)),
-		Offset: int32(queryInt(r, "offset", 0)),
-	})
+	limit := int32(queryLimit(r, 20))
+	offset := int32(queryOffset(r))
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+	if len(search) > 200 {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "search must be at most 200 characters")
+		return
+	}
+	var (
+		users []sqlc.User
+		total int64
+		err   error
+	)
+	if search == "" {
+		users, err = h.queries.ListUsers(r.Context(), sqlc.ListUsersParams{Limit: limit, Offset: offset})
+		if err == nil {
+			total, err = h.queries.CountUsers(r.Context())
+		}
+	} else {
+		directory, ok := h.queries.(userDirectoryQuerier)
+		if !ok {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.UsersError, "user directory search not configured")
+			return
+		}
+		users, err = directory.SearchUsers(r.Context(), sqlc.SearchUsersParams{
+			Search: search, PageLimit: limit, PageOffset: offset,
+		})
+		if err == nil {
+			total, err = directory.CountSearchUsers(r.Context(), search)
+		}
+	}
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UsersError, "Failed to load users")
 		return
 	}
-	total, _ := h.queries.CountUsers(r.Context())
 	items := make([]map[string]any, 0, len(users))
 	for _, user := range users {
 		items = append(items, mapUser(user))
 	}
-	RespondPaginated(w, r, items, total)
+	paging.Write(w, items, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(items)))
 }
 
 func (h *ResourceHandler) GetUser(w http.ResponseWriter, r *http.Request) {
@@ -650,13 +887,16 @@ func (h *ResourceHandler) setNodeSchedulable(w http.ResponseWriter, r *http.Requ
 }
 
 func nodeActionParams(w http.ResponseWriter, r *http.Request) (string, string, bool) {
-	clusterID := chi.URLParam(r, "cluster_id")
-	nodeName := chi.URLParam(r, "node_name")
-	if clusterID == "" || nodeName == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "cluster_id and node_name are required")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
 		return "", "", false
 	}
-	return clusterID, nodeName, true
+	nodeName := chi.URLParam(r, "node_name")
+	if nodeName == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "node_name is required")
+		return "", "", false
+	}
+	return clusterUUID.String(), nodeName, true
 }
 
 func validTaintEffect(effect string) bool {
@@ -749,7 +989,11 @@ func (h *ResourceHandler) UpdateNamedResource(w http.ResponseWriter, r *http.Req
 		h.proxyNamedResourceReadOrDryRun(w, r, true, body)
 		return
 	}
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	resourceType := chi.URLParam(r, "type")
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
@@ -771,7 +1015,11 @@ func (h *ResourceHandler) UpdateNamedResource(w http.ResponseWriter, r *http.Req
 
 // DeleteNamedResourceREST handles DELETE /api/v1/resources/{cluster_id}/{type}/{namespace}/{name}/.
 func (h *ResourceHandler) DeleteNamedResourceREST(w http.ResponseWriter, r *http.Request) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	resourceType := chi.URLParam(r, "type")
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
@@ -790,12 +1038,16 @@ func (h *ResourceHandler) DeleteNamedResourceREST(w http.ResponseWriter, r *http
 // proxy boundary. It permits reads and Kubernetes dry-run validation only;
 // every real mutation must pass through the durable resource operation saga.
 func (h *ResourceHandler) proxyNamedResourceReadOrDryRun(w http.ResponseWriter, r *http.Request, dryRun bool, body []byte) {
-	clusterID := chi.URLParam(r, "cluster_id")
+	clusterUUID, ok := parseClusterID(w, r)
+	if !ok {
+		return
+	}
+	clusterID := clusterUUID.String()
 	resourceType := chi.URLParam(r, "type")
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
-	if clusterID == "" || resourceType == "" || name == "" {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "cluster_id, type and name are required")
+	if resourceType == "" || name == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "type and name are required")
 		return
 	}
 	path, err := resourcePath(resourceType, name, namespace)
@@ -855,7 +1107,7 @@ func listPath(resourceType, namespace string) (string, error) {
 		return "", fmt.Errorf("unsupported resource type %q", resourceType)
 	}
 	if def.namespaced && namespace != "" {
-		return fmt.Sprintf("%s/namespaces/%s/%s", def.apiBase, namespace, def.plural), nil
+		return fmt.Sprintf("%s/namespaces/%s/%s", def.apiBase, url.PathEscape(namespace), def.plural), nil
 	}
 	return fmt.Sprintf("%s/%s", def.apiBase, def.plural), nil
 }

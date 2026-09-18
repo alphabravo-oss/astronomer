@@ -1,5 +1,3 @@
-"use client";
-
 import {
   useEffect,
   useMemo,
@@ -7,7 +5,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import {
   GuidedResourceForm,
@@ -15,10 +13,18 @@ import {
 } from "@/components/resources/guided-resource-form";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlEditor } from "@/components/ui/yaml-editor";
-import { useK8sCreate, useResourceSchema } from "@/lib/hooks";
+import {
+  useK8sCreateBatch,
+  useResourceSchema,
+} from "@/lib/hooks/kubernetes-proxy";
+import type {
+  K8sCreateBatchItem,
+  K8sCreateBatchResult,
+} from "@/lib/hooks/kubernetes-proxy";
 import type { ResourceSchemaView, ResourceType } from "@/lib/api/resources";
 import { k8sTemplates } from "@/lib/k8s-templates";
-import { toastApiError, toastError } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
+import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 interface CreateResourceDialogProps {
@@ -76,6 +82,38 @@ const KIND_TO_PLURAL: Record<string, string> = {
   RoleBinding: "rolebindings",
 };
 
+const MAX_YAML_DOCUMENTS = 50;
+
+export function normalizeManifestDocuments(
+  documents: unknown[],
+): KubernetesManifest[] {
+  const manifests = documents.filter(
+    (document) => document !== null && document !== undefined,
+  );
+  if (manifests.length === 0) {
+    throw new Error("YAML must contain at least one Kubernetes object.");
+  }
+  if (manifests.length > MAX_YAML_DOCUMENTS) {
+    throw new Error(
+      `YAML contains ${manifests.length} objects; the maximum is ${MAX_YAML_DOCUMENTS}.`,
+    );
+  }
+  return manifests.map((document, index) => {
+    if (typeof document !== "object" || Array.isArray(document)) {
+      throw new Error(
+        `YAML document ${index + 1} must be a Kubernetes object.`,
+      );
+    }
+    return document as KubernetesManifest;
+  });
+}
+
+function manifestLabel(body: KubernetesManifest, index: number): string {
+  const metadata = body.metadata as { name?: string } | null | undefined;
+  const kind = typeof body.kind === "string" ? body.kind : "Object";
+  return metadata?.name ? `${kind}/${metadata.name}` : `${kind} #${index + 1}`;
+}
+
 export function createPathForManifest(
   body: KubernetesManifest,
   schema?: ResourceSchemaView,
@@ -102,7 +140,16 @@ export function createPathForManifest(
     : `${base}/namespaces/${namespace}/${plural}`;
 }
 
-export function CreateResourceDialog({
+export function CreateResourceDialog(props: CreateResourceDialogProps) {
+  return props.open ? (
+    <CreateResourceEditor
+      key={`${props.clusterId}:${props.templateKey}`}
+      {...props}
+    />
+  ) : null;
+}
+
+function CreateResourceEditor({
   open,
   onClose,
   clusterId,
@@ -114,12 +161,15 @@ export function CreateResourceDialog({
   const resolvedResourceType =
     resourceType ?? TEMPLATE_RESOURCE_TYPES[templateKey];
   const [mode, setMode] = useState<"guided" | "yaml">("guided");
-  const [yamlContent, setYamlContent] = useState("");
+  const [yamlContent, setYamlContent] = useState(
+    k8sTemplates[templateKey] || "",
+  );
   const [manifest, setManifest] = useState<KubernetesManifest>({});
   const [guidedValid, setGuidedValid] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [applyResults, setApplyResults] = useState<K8sCreateBatchResult[]>([]);
   const modeRequestRef = useRef(0);
-  const k8sCreate = useK8sCreate();
+  const k8sCreateBatch = useK8sCreateBatch();
   const schemaQuery = useResourceSchema(
     clusterId,
     resolvedResourceType ?? "deployments",
@@ -130,10 +180,9 @@ export function CreateResourceDialog({
     if (!open) return;
     modeRequestRef.current += 1;
     const template = k8sTemplates[templateKey] || "";
-    setYamlContent(template);
-    setMode("guided");
-    setParseError(null);
+    let cancelled = false;
     void import("js-yaml").then((yaml) => {
+      if (cancelled) return;
       const parsed = yaml.load(template);
       setManifest(
         parsed && typeof parsed === "object"
@@ -141,6 +190,10 @@ export function CreateResourceDialog({
           : {},
       );
     });
+    return () => {
+      cancelled = true;
+      modeRequestRef.current += 1;
+    };
   }, [open, templateKey]);
 
   const schema = schemaQuery.data;
@@ -159,11 +212,15 @@ export function CreateResourceDialog({
     if (request !== modeRequestRef.current) return;
     if (next === "guided") {
       try {
-        const parsed = yaml.load(yamlContent);
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new Error("YAML must contain one Kubernetes object.");
+        const documents: unknown[] = [];
+        yaml.loadAll(yamlContent, (document) => documents.push(document));
+        const parsed = normalizeManifestDocuments(documents);
+        if (parsed.length !== 1) {
+          throw new Error(
+            "Guided mode supports one object. Keep multi-document definitions in YAML mode.",
+          );
         }
-        setManifest(parsed as KubernetesManifest);
+        setManifest(parsed[0]);
         setParseError(null);
       } catch (error) {
         setParseError(error instanceof Error ? error.message : "Invalid YAML");
@@ -174,11 +231,11 @@ export function CreateResourceDialog({
         yaml.dump(manifest, {
           noRefs: true,
           lineWidth: 100,
-          noCompatMode: true,
         }),
       );
       setParseError(null);
     }
+    setApplyResults([]);
     setMode(next);
   };
 
@@ -212,28 +269,75 @@ export function CreateResourceDialog({
   const handleCreate = async () => {
     const yaml = await import("js-yaml");
     try {
-      const body =
-        mode === "guided"
-          ? manifest
-          : (yaml.load(yamlContent) as KubernetesManifest);
-      if (!body || typeof body !== "object" || Array.isArray(body)) {
-        throw new Error("YAML must contain one Kubernetes object.");
+      let items: K8sCreateBatchItem[];
+      const failed = applyResults.filter((result) => !result.ok);
+      if (failed.length > 0) {
+        items = failed.map(({ id, path, body, label }) => ({
+          id,
+          path,
+          body,
+          label,
+        }));
+      } else {
+        const documents: unknown[] = [];
+        if (mode === "guided") {
+          documents.push(manifest);
+        } else {
+          yaml.loadAll(yamlContent, (document) => documents.push(document));
+        }
+        const bodies = normalizeManifestDocuments(documents);
+        items = bodies.map((body, index) => {
+          // Discovery and an explicit route describe the dialog's primary
+          // resource only. Mixed-document imports derive each endpoint from
+          // its own apiVersion/kind instead of posting every object to one URL.
+          const singleDocument = bodies.length === 1;
+          const path = createPathForManifest(
+            body,
+            singleDocument ? schema : undefined,
+            singleDocument ? apiPath : undefined,
+          );
+          if (!path) {
+            throw new Error(
+              `Cannot determine the API endpoint for ${manifestLabel(body, index)}.`,
+            );
+          }
+          return {
+            id: String(index),
+            path,
+            body,
+            label: manifestLabel(body, index),
+          };
+        });
       }
-      const path = createPathForManifest(body, schema, apiPath);
-      if (!path) {
-        toastError(
-          `Cannot determine the API endpoint for ${String(body.kind || templateKey)}.`,
+
+      const next = await k8sCreateBatch.mutateAsync({ clusterId, items });
+      const merged =
+        failed.length > 0
+          ? applyResults.map(
+              (previous) =>
+                next.find((result) => result.id === previous.id) ?? previous,
+            )
+          : next;
+      setApplyResults(merged);
+      const failedCount = merged.filter((result) => !result.ok).length;
+      if (failedCount === 0) {
+        toastSuccess(
+          `${merged.length} Kubernetes ${merged.length === 1 ? "resource" : "resources"} created`,
         );
-        return;
+      } else {
+        toastError(
+          `${failedCount} of ${merged.length} ${failed.length > 0 ? "retried" : "submitted"} resources failed`,
+        );
       }
-      k8sCreate.mutate({ clusterId, path, body }, { onSuccess: onClose });
     } catch (error) {
       toastApiError("Invalid resource definition", error);
     }
   };
 
+  const allApplied =
+    applyResults.length > 0 && applyResults.every((result) => result.ok);
   const createDisabled =
-    k8sCreate.isPending ||
+    k8sCreateBatch.isPending ||
     (mode === "guided" && (!guidedValid || !hasGuidedTemplate)) ||
     (mode === "yaml" && !!parseError);
 
@@ -249,26 +353,30 @@ export function CreateResourceDialog({
           <p className="text-xs text-muted-foreground">
             {mode === "guided"
               ? "Validated fields are projected to the same Kubernetes object shown in YAML mode."
-              : "YAML mode preserves exact Kubernetes object keys."}
+              : "YAML mode preserves exact keys and accepts up to 50 ordered documents."}
           </p>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="h-8 rounded px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="h-8 rounded-sm px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={handleCreate}
+              onClick={allApplied ? onClose : handleCreate}
               disabled={createDisabled}
-              className="inline-flex h-8 items-center gap-1.5 rounded bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1.5 rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
-              {k8sCreate.isPending && (
+              {k8sCreateBatch.isPending && (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               )}
-              Create
+              {allApplied
+                ? "Done"
+                : applyResults.some((result) => !result.ok)
+                  ? "Retry failed"
+                  : "Create"}
             </button>
           </div>
         </div>
@@ -318,12 +426,49 @@ export function CreateResourceDialog({
         </div>
       )}
 
+      {applyResults.length > 0 && (
+        <div
+          className="max-h-40 overflow-y-auto border-b border-border bg-muted/20"
+          aria-label="Resource creation results"
+        >
+          {applyResults.map((result) => (
+            <div
+              key={result.id}
+              className="flex items-start gap-2 border-b border-border/60 px-5 py-2 text-xs last:border-b-0"
+            >
+              {result.ok ? (
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-success" />
+              ) : (
+                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-status-error" />
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="font-mono text-foreground">
+                  {result.label}
+                </span>
+                {!result.ok && (
+                  <span className="ml-2 text-status-error">
+                    {extractApiErrorMessage(result.error) ?? "Create failed"}
+                  </span>
+                )}
+              </span>
+              <span
+                className={
+                  result.ok ? "text-status-success" : "text-status-error"
+                }
+              >
+                {result.ok ? "Created" : "Failed"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div
         id={`resource-editor-panel-${mode}`}
         role="tabpanel"
         aria-labelledby={`resource-editor-tab-${mode}`}
         tabIndex={0}
-        className="min-h-0 flex-1 overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-h-0 flex-1 overflow-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
         {mode === "guided" ? (
           <GuidedResourceForm
@@ -339,6 +484,7 @@ export function CreateResourceDialog({
             onChange={(next) => {
               setYamlContent(next);
               setParseError(null);
+              setApplyResults([]);
             }}
             className="h-full"
           />

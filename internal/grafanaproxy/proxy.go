@@ -9,9 +9,10 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 const (
@@ -19,12 +20,13 @@ const (
 	proxyBodyLimit = 10 << 20 // 10 MiB
 )
 
-// Config is env-driven. The process must not require Redis or ASTRONOMER_SECRET_KEY.
+// Config is resolved by the executable bootstrap. The proxy must not require
+// Redis or ASTRONOMER_SECRET_KEY.
 type Config struct {
 	ListenAddr    string
 	Upstream      *url.URL
 	AstronomerURL string
-	GrafanaHost   string
+	PublicPath    string
 	HMACKey       []byte
 	Redeem        func(ticket string) (redeemResult, error)
 	Now           func() time.Time
@@ -39,17 +41,24 @@ type redeemResult struct {
 	ClusterIDs []string `json:"clusterIds,omitempty"`
 }
 
-func ConfigFromEnv() (Config, error) {
-	upstreamRaw := strings.TrimSpace(os.Getenv("GRAFANA_UPSTREAM"))
-	astro := strings.TrimRight(strings.TrimSpace(os.Getenv("ASTRONOMER_URL")), "/")
-	host := strings.TrimSpace(os.Getenv("GRAFANA_HOST"))
-	key := strings.TrimSpace(os.Getenv("GRAFANA_PROXY_KEY"))
-	listen := strings.TrimSpace(os.Getenv("LISTEN_ADDR"))
+func ParseConfig(listen, upstreamRaw, astronomerURL, publicPath, key string) (Config, error) {
+	upstreamRaw = strings.TrimSpace(upstreamRaw)
+	astro := strings.TrimRight(strings.TrimSpace(astronomerURL), "/")
+	publicPath = strings.TrimSpace(publicPath)
+	key = strings.TrimSpace(key)
+	listen = strings.TrimSpace(listen)
 	if listen == "" {
 		listen = ":8080"
 	}
-	if upstreamRaw == "" || astro == "" || host == "" || key == "" {
-		return Config{}, fmt.Errorf("GRAFANA_UPSTREAM, ASTRONOMER_URL, GRAFANA_HOST, and GRAFANA_PROXY_KEY are required")
+	if publicPath == "" {
+		publicPath = "/api/v1/observability/grafana/"
+	}
+	if !strings.HasPrefix(publicPath, "/") || strings.ContainsAny(publicPath, "?#\r\n") {
+		return Config{}, fmt.Errorf("GRAFANA_PUBLIC_PATH must be an absolute URL path")
+	}
+	publicPath = "/" + strings.Trim(publicPath, "/") + "/"
+	if upstreamRaw == "" || astro == "" || key == "" {
+		return Config{}, fmt.Errorf("GRAFANA_UPSTREAM, ASTRONOMER_URL, and GRAFANA_PROXY_KEY are required")
 	}
 	if strings.Contains(strings.ToUpper(key), "SECRET_KEY") {
 		return Config{}, fmt.Errorf("GRAFANA_PROXY_KEY must be the Grafana-family HMAC, not ASTRONOMER_SECRET_KEY")
@@ -62,16 +71,12 @@ func ConfigFromEnv() (Config, error) {
 		ListenAddr:    listen,
 		Upstream:      upstream,
 		AstronomerURL: astro,
-		GrafanaHost:   host,
+		PublicPath:    publicPath,
 		HMACKey:       []byte(key),
 	}, nil
 }
 
-func Run() error {
-	cfg, err := ConfigFromEnv()
-	if err != nil {
-		return err
-	}
+func Run(cfg Config) error {
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           New(cfg),
@@ -93,6 +98,9 @@ func New(cfg Config) http.Handler {
 			pr.SetURL(cfg.Upstream)
 			pr.Out.Host = cfg.Upstream.Host
 			stripHopByHop(pr.Out.Header)
+			pr.Out.Header.Del("Authorization")
+			pr.Out.Header.Del("Cookie")
+			pr.Out.Header.Del(protocol.GrafanaProxyTicketHeader)
 			pr.Out.Header.Del("X-WEBAUTH-USER")
 			pr.Out.Header.Del("X-WEBAUTH-ROLE")
 			pr.Out.Header.Del("X-Dashboard-Uid")
@@ -124,59 +132,53 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		r.Body = http.MaxBytesReader(w, r.Body, proxyBodyLimit)
 	}
-	if r.URL.Path == "/auth/callback" || strings.HasPrefix(r.URL.Path, "/auth/callback/") {
-		p.handleCallback(w, r)
-		return
-	}
-	auth, err := p.authFromRequest(r)
+	auth, signed, ttl, err := p.authFromRequest(r)
 	if err != nil {
-		p.redirectToMint(w, r)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	if status := authorizePath(r, auth); status != 0 {
+	if signed != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     grafanaAuthCookie,
+			Value:    signed,
+			Path:     p.cfg.PublicPath,
+			HttpOnly: true,
+			Secure:   strings.HasPrefix(strings.ToLower(p.cfg.AstronomerURL), "https://"),
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   int(ttl / time.Second),
+		})
+	}
+	prepared, status, err := PrepareRequest(r, Identity{
+		Email: auth.Email, Role: auth.Role, Explore: auth.Explore,
+		Admin: auth.Admin, ClusterIDs: auth.ClusterIDs,
+	})
+	if status != 0 {
 		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	if len(auth.ClusterIDs) > 0 {
-		rewritten, err := rewriteTenantQuery(r, auth.ClusterIDs)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		r = rewritten
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
 	}
+	r = prepared
 	r = r.WithContext(context.WithValue(r.Context(), grafanaAuthContextKey{}, auth))
 	p.reverse.ServeHTTP(w, r)
 }
 
-func (p *proxy) authFromRequest(r *http.Request) (grafanaAuth, error) {
+func (p *proxy) authFromRequest(r *http.Request) (grafanaAuth, string, time.Duration, error) {
 	c, err := r.Cookie(grafanaAuthCookie)
-	if err != nil || c.Value == "" {
-		return grafanaAuth{}, errGrafanaAuthInvalid
+	if err == nil && c.Value != "" {
+		if auth, verifyErr := verifyGrafanaAuth(p.cfg.HMACKey, c.Value); verifyErr == nil {
+			return auth, "", 0, nil
+		}
 	}
-	return verifyGrafanaAuth(p.cfg.HMACKey, c.Value)
-}
-
-func (p *proxy) redirectToMint(w http.ResponseWriter, r *http.Request) {
-	scheme := "https"
-	if strings.HasPrefix(strings.ToLower(p.cfg.AstronomerURL), "http://") {
-		scheme = "http"
-	}
-	returnURL := scheme + "://" + p.cfg.GrafanaHost + "/auth/callback"
-	mint := strings.TrimRight(p.cfg.AstronomerURL, "/") + "/api/v1/observability/grafana-ticket?return=" + url.QueryEscape(returnURL)
-	http.Redirect(w, r, mint, http.StatusFound)
-}
-
-func (p *proxy) handleCallback(w http.ResponseWriter, r *http.Request) {
-	ticket := strings.TrimSpace(r.URL.Query().Get("ticket"))
+	ticket := strings.TrimSpace(r.Header.Get(protocol.GrafanaProxyTicketHeader))
 	if ticket == "" {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
+		return grafanaAuth{}, "", 0, errGrafanaAuthInvalid
 	}
 	result, err := p.cfg.Redeem(ticket)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
+		return grafanaAuth{}, "", 0, errGrafanaAuthInvalid
 	}
 	ttl := time.Duration(result.TTL) * time.Second
 	if ttl <= 0 {
@@ -192,19 +194,10 @@ func (p *proxy) handleCallback(w http.ResponseWriter, r *http.Request) {
 		Exp:        exp.Unix(),
 	})
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
+		return grafanaAuth{}, "", 0, errGrafanaAuthInvalid
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     grafanaAuthCookie,
-		Value:    signed,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   strings.HasPrefix(strings.ToLower(p.cfg.AstronomerURL), "https://"),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(ttl / time.Second),
-	})
-	http.Redirect(w, r, "/", http.StatusFound)
+	auth, err := verifyGrafanaAuth(p.cfg.HMACKey, signed)
+	return auth, signed, ttl, err
 }
 
 func (c Config) redeemHTTP(ticket string) (redeemResult, error) {
@@ -237,6 +230,38 @@ func (c Config) redeemHTTP(ticket string) (redeemResult, error) {
 		return redeemResult{}, errGrafanaAuthInvalid
 	}
 	return wrap.Data, nil
+}
+
+// Identity is the authorization context Astronomer derived for one Grafana
+// request. ClusterIDs is empty only for a globally authorized user.
+type Identity struct {
+	Email      string
+	Role       string
+	Explore    bool
+	Admin      bool
+	ClusterIDs []string
+}
+
+// PrepareRequest applies the same path authorization and tenant-query rewrite
+// used by the in-cluster proxy. The management API uses this before forwarding
+// a same-origin request, so an alternate transport cannot bypass the proxy's
+// cluster scoping rules.
+func PrepareRequest(r *http.Request, identity Identity) (*http.Request, int, error) {
+	auth := grafanaAuth{
+		Email: identity.Email, Role: identity.Role, Explore: identity.Explore,
+		Admin: identity.Admin, ClusterIDs: identity.ClusterIDs,
+	}
+	if status := authorizePath(r, auth); status != 0 {
+		return nil, status, nil
+	}
+	if len(auth.ClusterIDs) == 0 {
+		return r, 0, nil
+	}
+	rewritten, err := rewriteTenantQuery(r, auth.ClusterIDs)
+	if err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+	return rewritten, 0, nil
 }
 
 func authorizePath(r *http.Request, auth grafanaAuth) int {

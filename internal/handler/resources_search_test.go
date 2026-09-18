@@ -4,15 +4,21 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
+	"sync"
 	"testing"
+	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -20,8 +26,13 @@ type stubResourcesSearchQuerier struct {
 	clusters []sqlc.Cluster
 }
 
-func (s stubResourcesSearchQuerier) ListClustersByStatus(context.Context, sqlc.ListClustersByStatusParams) ([]sqlc.Cluster, error) {
-	return s.clusters, nil
+func (s stubResourcesSearchQuerier) ListClustersByStatus(_ context.Context, arg sqlc.ListClustersByStatusParams) ([]sqlc.Cluster, error) {
+	start := int(arg.QueryOffset)
+	if start >= len(s.clusters) {
+		return nil, nil
+	}
+	end := min(start+int(arg.QueryLimit), len(s.clusters))
+	return s.clusters[start:end], nil
 }
 
 type stubResourcesSearchRequester struct{}
@@ -31,20 +42,53 @@ func (stubResourcesSearchRequester) Do(context.Context, string, string, string, 
 	return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64.StdEncoding.EncodeToString(body)}, nil
 }
 
+type resourceSearchRequesterFunc func(context.Context, string, string, string, []byte, map[string]string) (*protocol.K8sResponsePayload, error)
+
+func (f resourceSearchRequesterFunc) Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (*protocol.K8sResponsePayload, error) {
+	return f(ctx, clusterID, method, path, body, headers)
+}
+
+func searchPayload(items string, continuation string) *protocol.K8sResponsePayload {
+	body := []byte(`{"metadata":{"continue":` + strconv.Quote(continuation) + `},"items":` + items + `}`)
+	return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64.StdEncoding.EncodeToString(body)}
+}
+
+func searchResponseData(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	var envelope map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	data, _ := envelope["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("response missing data envelope: %s", recorder.Body.String())
+	}
+	return data
+}
+
 // stubPerClusterRequester returns a synthetic single-pod payload per cluster
 // so the test can verify per-cluster RBAC filtering by checking that rows
 // from clusters the caller cannot list never appear in the merged response.
 type stubPerClusterRequester struct {
+	mu     sync.Mutex
 	called map[string]int
 }
 
 func (s *stubPerClusterRequester) Do(_ context.Context, clusterID, _, _ string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.called == nil {
 		s.called = map[string]int{}
 	}
 	s.called[clusterID]++
 	body := []byte(`{"items":[{"metadata":{"name":"pod-` + clusterID + `","namespace":"default"},"status":{"phase":"Running"}}]}`)
 	return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64.StdEncoding.EncodeToString(body)}, nil
+}
+
+func (s *stubPerClusterRequester) callCount(clusterID string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.called[clusterID]
 }
 
 type stubSearchRBACQuerier struct {
@@ -84,7 +128,7 @@ func TestResourcesSearchAuthorizedSearchClustersFiltersByResourceType(t *testing
 		},
 	})
 
-	ctx := middleware.SetAuthenticatedUserForTest(context.Background(), &middleware.AuthenticatedUser{ID: uuid.NewString()})
+	ctx := reqctx.WithUser(context.Background(), &reqctx.User{ID: uuid.NewString()})
 
 	podClusters, err := h.authorizedSearchClusters(ctx, clusters, rbac.ResourcePods)
 	if err != nil {
@@ -119,7 +163,7 @@ func TestResourcesSearchSearchReturnsForbiddenWhenNoClusterPermission(t *testing
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=pods", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	rec := httptest.NewRecorder()
 
 	h.Search(rec, req)
@@ -160,7 +204,7 @@ func TestResourcesSearchSplitResourceFamiliesDoNotFallBackToWorkloads(t *testing
 			})
 
 			deniedReq := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type="+tc.resourceType, nil)
-			deniedReq = deniedReq.WithContext(middleware.SetAuthenticatedUserForTest(deniedReq.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+			deniedReq = deniedReq.WithContext(reqctx.WithUser(deniedReq.Context(), &reqctx.User{ID: uuid.NewString()}))
 			deniedRec := httptest.NewRecorder()
 			h.Search(deniedRec, deniedReq)
 			if deniedRec.Code != http.StatusForbidden {
@@ -177,7 +221,7 @@ func TestResourcesSearchSplitResourceFamiliesDoNotFallBackToWorkloads(t *testing
 				}},
 			})
 			allowedReq := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type="+tc.resourceType, nil)
-			allowedReq = allowedReq.WithContext(middleware.SetAuthenticatedUserForTest(allowedReq.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+			allowedReq = allowedReq.WithContext(reqctx.WithUser(allowedReq.Context(), &reqctx.User{ID: uuid.NewString()}))
 			allowedRec := httptest.NewRecorder()
 			h.Search(allowedRec, allowedReq)
 			if allowedRec.Code != http.StatusOK {
@@ -203,7 +247,7 @@ func TestResourcesSearchSearchAllowsAuthorizedType(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=pods", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	rec := httptest.NewRecorder()
 
 	h.Search(rec, req)
@@ -242,7 +286,7 @@ func TestResourcesSearchSecretsRequireSecretsListAndAudit(t *testing.T) {
 	})
 
 	deniedReq := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=secrets", nil)
-	deniedReq = deniedReq.WithContext(middleware.SetAuthenticatedUserForTest(deniedReq.Context(), &middleware.AuthenticatedUser{ID: userID}))
+	deniedReq = deniedReq.WithContext(reqctx.WithUser(deniedReq.Context(), &reqctx.User{ID: userID}))
 	deniedRec := httptest.NewRecorder()
 	h.Search(deniedRec, deniedReq)
 	if deniedRec.Code != http.StatusForbidden {
@@ -265,7 +309,7 @@ func TestResourcesSearchSecretsRequireSecretsListAndAudit(t *testing.T) {
 	h.SetAuditWriter(audit)
 
 	allowedReq := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=secrets&namespace=default&label=app%3Ddb&name=password&limit=10", nil)
-	allowedReq = allowedReq.WithContext(middleware.SetAuthenticatedUserForTest(allowedReq.Context(), &middleware.AuthenticatedUser{ID: userID, AuthMethod: "jwt"}))
+	allowedReq = allowedReq.WithContext(reqctx.WithUser(allowedReq.Context(), &reqctx.User{ID: userID, AuthMethod: "jwt"}))
 	allowedRec := httptest.NewRecorder()
 	h.Search(allowedRec, allowedReq)
 	if allowedRec.Code != http.StatusOK {
@@ -335,7 +379,7 @@ func TestResourcesSearchSearchFiltersResultsByClusterRBAC(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=pods", nil)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: uuid.NewString()}))
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: uuid.NewString()}))
 	rec := httptest.NewRecorder()
 
 	h.Search(rec, req)
@@ -366,13 +410,13 @@ func TestResourcesSearchSearchFiltersResultsByClusterRBAC(t *testing.T) {
 	}
 
 	// Confirm we never even fanned out to the forbidden clusters.
-	if requester.called[clusterB.String()] != 0 {
-		t.Fatalf("expected zero calls to cluster B, got %d", requester.called[clusterB.String()])
+	if requester.callCount(clusterB.String()) != 0 {
+		t.Fatalf("expected zero calls to cluster B, got %d", requester.callCount(clusterB.String()))
 	}
-	if requester.called[clusterC.String()] != 0 {
-		t.Fatalf("expected zero calls to cluster C, got %d", requester.called[clusterC.String()])
+	if requester.callCount(clusterC.String()) != 0 {
+		t.Fatalf("expected zero calls to cluster C, got %d", requester.callCount(clusterC.String()))
 	}
-	if requester.called[clusterA.String()] == 0 {
+	if requester.callCount(clusterA.String()) == 0 {
 		t.Fatalf("expected at least one call to cluster A, got 0")
 	}
 }
@@ -411,5 +455,104 @@ func TestRBACResourceForTypeMapping(t *testing.T) {
 		if got := rbacResourceForType(resourceType); got != want {
 			t.Errorf("rbacResourceForType(%q) = %q, want %q", resourceType, got, want)
 		}
+	}
+}
+
+func TestResourcesSearchBuildPathPushesDownBoundedLimit(t *testing.T) {
+	path := buildSearchPath(searchResourceDefs["pods"], "team/a", "app=api", "status.phase=Running", 37)
+	parsed, err := url.Parse(path)
+	if err != nil {
+		t.Fatalf("parse path: %v", err)
+	}
+	if parsed.EscapedPath() != "/api/v1/namespaces/team%2Fa/pods" {
+		t.Fatalf("escaped path = %q", parsed.EscapedPath())
+	}
+	query := parsed.Query()
+	if query.Get("limit") != "37" || query.Get("labelSelector") != "app=api" || query.Get("fieldSelector") != "status.phase=Running" {
+		t.Fatalf("query = %v", query)
+	}
+}
+
+func TestResourcesSearchPagesBeyondOneThousandClusters(t *testing.T) {
+	clusters := make([]sqlc.Cluster, 1251)
+	for i := range clusters {
+		clusters[i] = sqlc.Cluster{ID: uuid.New(), Name: fmt.Sprintf("cluster-%04d", i)}
+	}
+	h := NewResourcesSearchHandler(stubResourcesSearchQuerier{clusters: clusters}, stubResourcesSearchRequester{})
+	got, err := h.listActiveClusters(context.Background())
+	if err != nil {
+		t.Fatalf("list active clusters: %v", err)
+	}
+	if len(got) != len(clusters) {
+		t.Fatalf("clusters = %d, want %d", len(got), len(clusters))
+	}
+	if got[1000].ID != clusters[1000].ID || got[1250].ID != clusters[1250].ID {
+		t.Fatal("fleet pagination skipped or duplicated clusters beyond the first 1000")
+	}
+}
+
+func TestResourcesSearchDeadlineReturnsBoundedPartialResults(t *testing.T) {
+	fastID, slowID := uuid.New(), uuid.New()
+	requester := resourceSearchRequesterFunc(func(ctx context.Context, clusterID, _, path string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
+		parsed, err := url.Parse(path)
+		if err != nil {
+			return nil, err
+		}
+		if parsed.Query().Get("limit") != "1" {
+			t.Errorf("pushed-down limit = %q, want 1", parsed.Query().Get("limit"))
+		}
+		if clusterID == slowID.String() {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return searchPayload(`[{"metadata":{"name":"fast-pod","namespace":"default"}}]`, ""), nil
+	})
+	h := NewResourcesSearchHandler(stubResourcesSearchQuerier{clusters: []sqlc.Cluster{
+		{ID: fastID, Name: "fast"},
+		{ID: slowID, Name: "slow"},
+	}}, requester)
+	h.requestTimeout = 40 * time.Millisecond
+	h.perClusterTimeout = time.Second
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=pods&limit=1", nil)
+	rec := httptest.NewRecorder()
+	h.Search(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	data := searchResponseData(t, rec)
+	if got := int(data["clusters_queried"].(float64)); got != 2 {
+		t.Fatalf("clusters_queried = %d, want 2", got)
+	}
+	if got := int(data["clusters_failed"].(float64)); got != 1 {
+		t.Fatalf("clusters_failed = %d, want 1", got)
+	}
+	if truncated, _ := data["truncated"].(bool); !truncated {
+		t.Fatal("deadline-limited response must be marked truncated")
+	}
+	results, _ := data["results"].([]any)
+	if len(results) != 1 {
+		t.Fatalf("partial results = %d, want 1", len(results))
+	}
+	errors, _ := data["errors"].([]any)
+	if len(errors) != 1 {
+		t.Fatalf("cluster errors = %d, want 1", len(errors))
+	}
+}
+
+func TestResourcesSearchMarksKubernetesContinuationAsTruncated(t *testing.T) {
+	clusterID := uuid.New()
+	requester := resourceSearchRequesterFunc(func(_ context.Context, _, _, _ string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
+		return searchPayload(`[{"metadata":{"name":"pod-a","namespace":"default"}}]`, "next-page"), nil
+	})
+	h := NewResourcesSearchHandler(stubResourcesSearchQuerier{clusters: []sqlc.Cluster{{ID: clusterID, Name: "a"}}}, requester)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/search/?type=pods&limit=10", nil)
+	rec := httptest.NewRecorder()
+	h.Search(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if truncated, _ := searchResponseData(t, rec)["truncated"].(bool); !truncated {
+		t.Fatal("Kubernetes continuation token must mark aggregate results truncated")
 	}
 }

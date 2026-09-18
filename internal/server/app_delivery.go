@@ -6,6 +6,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	deliverybuiltin "github.com/alphabravocompany/astronomer-go/internal/delivery/builtin"
+	deliverycatalogapp "github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
 	deliverydeployment "github.com/alphabravocompany/astronomer-go/internal/delivery/deployment"
 	deliveryrollout "github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/systemrollout"
@@ -33,6 +34,12 @@ func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *con
 		database.Close()
 		return err
 	}
+	catalogApplicationDelivery, err := deliverycatalogapp.New(database.Pool(), deliveryPlanningStore, deliveryPlanner)
+	if err != nil {
+		database.Close()
+		return err
+	}
+	c.catalogHandler.SetApplicationDelivery(catalogApplicationDelivery)
 	builtinProvisioner, err := deliverybuiltin.NewProvisioner(
 		database.Pool(), deliveryPlanningStore, deliveryPlanner, clusterRegistrationHandler.Service(),
 	)
@@ -46,19 +53,19 @@ func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *con
 		database.Close()
 		return err
 	}
-	deliveryRolloutController.RequireTransactionalAudit()
+
 	deliveryDeploymentController, err := deliverydeployment.NewPostgresController(database.Pool(), nil)
 	if err != nil {
 		database.Close()
 		return err
 	}
-	deliveryDeploymentController.RequireTransactionalAudit()
+
 	deliverySystemRolloutService, err := systemrollout.New(database.Pool())
 	if err != nil {
 		database.Close()
 		return err
 	}
-	deliverySystemRolloutService.RequireTransactionalAudit()
+
 	deliveryTargetHandler := deliveryhandler.NewTargetHandler(queries, deliveryPlanningStore, bus)
 	deliveryTargetHandler.SetPlatformScopeChecker(queries)
 	deliveryTargetHandler.SetRunTx(sqlcMutationTxRunner[deliveryhandler.TargetMutationTx](database))
@@ -67,9 +74,11 @@ func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *con
 	deliveryBundleHandler := deliveryhandler.NewBundleHandler(queries)
 	deliveryBundleHandler.SetRunTx(sqlcMutationTxRunner[deliveryhandler.BundleMutationTx](database))
 	deliveryRolloutHandler := deliveryhandler.NewRolloutHandler(queries, deliveryPlanner, deliveryRolloutController, bus)
-	deliveryRolloutHandler.EnableTransactionalPlannerAudit()
-	deliverySystemRolloutHandler := deliveryhandler.NewSystemRolloutHandler(deliverySystemRolloutService, queries, bus)
-	deliverySystemRolloutHandler.EnableTransactionalAudit()
+	deliverySystemRolloutHandler := deliveryhandler.NewSystemRolloutHandler(deliverySystemRolloutService, bus)
+	deliveryConfigurationTemplateHandler := deliveryhandler.NewConfigurationTemplateHandler(queries)
+	deliveryConfigurationTemplateHandler.SetRunTx(sqlcMutationTxRunner[deliveryhandler.ConfigurationTemplateMutationTx](database))
+	deliveryOverrideSetHandler := deliveryhandler.NewOverrideSetHandler(queries)
+	deliveryOverrideSetHandler.SetRunTx(sqlcMutationTxRunner[deliveryhandler.OverrideSetMutationTx](database))
 	kubectlShell, kubectlSessionReapRuntime := kubectlShellComponents(queries, rbacQuerier, rbacEngine, requester, cfg, logger, taskLeader)
 	c.deliveryPlanningStore = deliveryPlanningStore
 	c.deliveryRolloutController = deliveryRolloutController
@@ -79,6 +88,8 @@ func (c *productionComposition) initializeDelivery(ctx context.Context, cfg *con
 	c.deliveryBundleHandler = deliveryBundleHandler
 	c.deliveryRolloutHandler = deliveryRolloutHandler
 	c.deliverySystemRolloutHandler = deliverySystemRolloutHandler
+	c.deliveryConfigurationTemplateHandler = deliveryConfigurationTemplateHandler
+	c.deliveryOverrideSetHandler = deliveryOverrideSetHandler
 	c.kubectlShell = kubectlShell
 	c.kubectlSessionReapRuntime = kubectlSessionReapRuntime
 	return nil

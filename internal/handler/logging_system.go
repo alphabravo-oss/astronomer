@@ -37,12 +37,27 @@ func systemLoggingOutputConfiguration(clusterID uuid.UUID, host, port string) js
 		"port":      port,
 		"tls":       "on",
 		"tenant_id": clusterID.String(),
-		"labels":    "cluster=" + clusterID.String() + ",job=fluentbit",
+		"labels":    systemLokiLabels(clusterID.String()),
 	})
 	if err != nil {
 		return json.RawMessage(`{}`)
 	}
 	return raw
+}
+
+// systemLokiLabels is the indexed provenance contract for hosted fleet logs.
+// `cluster` remains during the compatibility window for saved LogQL queries;
+// all new authorization and correlation work can use the unambiguous
+// `cluster_id`. Kubernetes record accessors are populated by Fluent Bit's
+// kubernetes filter for every container log.
+func systemLokiLabels(clusterID string) string {
+	return "cluster=" + clusterID +
+		",cluster_id=" + clusterID +
+		",job=fluentbit" +
+		",namespace=$kubernetes['namespace_name']" +
+		",node=$kubernetes['host']" +
+		",pod=$kubernetes['pod_name']" +
+		",container=$kubernetes['container_name']"
 }
 
 // upsertSystemLoggingOutput creates or updates the single is_system row for

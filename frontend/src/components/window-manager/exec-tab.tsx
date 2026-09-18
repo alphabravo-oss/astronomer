@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -86,7 +85,7 @@ export function ExecTab({
               termActionsRef.current?.focus();
             }}
             disabled={status !== "connected"}
-            className="inline-flex items-center gap-1 h-6 px-2 rounded text-2xs
+            className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-2xs
               text-muted-foreground hover:text-foreground hover:bg-accent transition-colors
               disabled:opacity-40 disabled:cursor-not-allowed"
             title="Clear terminal"
@@ -97,7 +96,7 @@ export function ExecTab({
           {(status === "disconnected" || status === "error") && (
             <button
               onClick={() => setReconnectNonce((n) => n + 1)}
-              className="inline-flex items-center gap-1 h-6 px-2 rounded text-2xs
+              className="inline-flex items-center gap-1 h-6 px-2 rounded-sm text-2xs
                 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Reconnect"
             >

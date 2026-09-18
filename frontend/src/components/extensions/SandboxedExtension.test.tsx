@@ -18,9 +18,9 @@ import type {
   ExtensionDataResponse,
 } from "@/lib/api/extensions";
 
-vi.mock("@/lib/navigation", () => ({
-  __esModule: true,
-  useRouter: () => ({ push: vi.fn() }),
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => vi.fn(),
 }));
 
 vi.mock("@/lib/api/extensions", () => ({

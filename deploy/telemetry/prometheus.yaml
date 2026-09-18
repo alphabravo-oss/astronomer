@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: astronomer-server
+    static_configs:
+      - targets: ["server:9090"]
+  - job_name: astronomer-worker
+    static_configs:
+      - targets: ["worker:9090"]
+  - job_name: telemetry-stack
+    static_configs:
+      - targets:
+          - "tempo:3200"
+          - "loki:3100"
+          - "promtail:9080"
+          - "grafana:3000"

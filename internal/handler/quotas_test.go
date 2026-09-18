@@ -7,13 +7,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"sync"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 )
 
 // fakeQuotaQuerier is the in-memory QuotaQuerier the handler tests
@@ -67,14 +68,22 @@ func newFakeQuotaQuerier(caller sqlc.User) *fakeQuotaQuerier {
 func (f *fakeQuotaQuerier) GetUserByID(_ context.Context, _ uuid.UUID) (sqlc.User, error) {
 	return f.user, nil
 }
-func (f *fakeQuotaQuerier) ListQuotaPlans(_ context.Context) ([]sqlc.QuotaPlan, error) {
+func (f *fakeQuotaQuerier) ListQuotaPlansPage(_ context.Context, arg sqlc.ListQuotaPlansPageParams) ([]sqlc.QuotaPlan, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]sqlc.QuotaPlan, 0, len(f.plans))
 	for _, p := range f.plans {
 		out = append(out, p)
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	start := min(int(arg.QueryOffset), len(out))
+	end := min(start+int(arg.QueryLimit), len(out))
+	return out[start:end], nil
+}
+func (f *fakeQuotaQuerier) CountQuotaPlans(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return int64(len(f.plans)), nil
 }
 func (f *fakeQuotaQuerier) GetQuotaPlan(_ context.Context, name string) (sqlc.QuotaPlan, error) {
 	f.mu.Lock()
@@ -203,7 +212,7 @@ func (f *fakeQuotaQuerier) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertA
 func TestQuotaPlans_CRUD(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 
 	// Create
 	body := []byte(`{"name":"custom","enforcement":"hard","max_clusters_per_project":7}`)
@@ -265,7 +274,7 @@ func TestQuotaPlans_RejectsDeleteWhileInUse(t *testing.T) {
 	q.plans["custom"] = sqlc.QuotaPlan{Name: "custom"}
 	q.projectsUsingPlan["custom"] = 3
 
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 	req := withURLParam(authedRequest(http.MethodDelete, "/api/v1/admin/quota-plans/custom/", callerID, nil), "name", "custom")
 	w := httptest.NewRecorder()
 	h.DeletePlan(w, req)
@@ -277,7 +286,7 @@ func TestQuotaPlans_RejectsDeleteWhileInUse(t *testing.T) {
 func TestQuotaPlans_RejectsReservedDelete(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 	for _, name := range []string{"free", "global"} {
 		req := withURLParam(authedRequest(http.MethodDelete, "/api/v1/admin/quota-plans/"+name+"/", callerID, nil), "name", name)
 		w := httptest.NewRecorder()
@@ -291,7 +300,7 @@ func TestQuotaPlans_RejectsReservedDelete(t *testing.T) {
 func TestQuotaPlans_RejectsBadEnforcement(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: true})
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 
 	body := []byte(`{"name":"weird","enforcement":"loose"}`)
 	req := authedRequest(http.MethodPost, "/api/v1/admin/quota-plans/", callerID, body)
@@ -305,7 +314,7 @@ func TestQuotaPlans_RejectsBadEnforcement(t *testing.T) {
 func TestQuotaPlans_RequiresSuperuser(t *testing.T) {
 	callerID := uuid.New()
 	q := newFakeQuotaQuerier(sqlc.User{ID: callerID, IsSuperuser: false})
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 
 	req := authedRequest(http.MethodGet, "/api/v1/admin/quota-plans/", callerID, nil)
 	w := httptest.NewRecorder()
@@ -321,7 +330,7 @@ func TestQuotaPlans_ListHonorsPaginationContract(t *testing.T) {
 	for _, name := range []string{"alpha", "beta", "gamma"} {
 		q.plans[name] = sqlc.QuotaPlan{Name: name, Enforcement: "hard"}
 	}
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 	w := httptest.NewRecorder()
 	h.ListPlans(w, authedRequest(http.MethodGet, "/api/v1/admin/quota-plans/?limit=1&offset=1", callerID, nil))
 	if w.Code != http.StatusOK {
@@ -329,7 +338,7 @@ func TestQuotaPlans_ListHonorsPaginationContract(t *testing.T) {
 	}
 	var page struct {
 		Data       []quotaPlanResponse `json:"data"`
-		Pagination Pagination          `json:"pagination"`
+		Pagination paging.Metadata     `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
 		t.Fatalf("decode page: %v", err)
@@ -356,7 +365,7 @@ func TestProjectQuota_RendersUsage(t *testing.T) {
 	q.namespacesInProject[projectID] = 4
 	q.membersInProject[projectID] = 2
 
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 	req := withURLParam(authedRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/quota/", callerID, nil), "id", projectID.String())
 	w := httptest.NewRecorder()
 	h.ProjectQuota(w, req)
@@ -389,7 +398,7 @@ func TestMyQuota_RendersUsage(t *testing.T) {
 	q.projectsForUser[callerID] = 1
 	q.tokensForUser[callerID] = 2
 
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 	req := authedRequest(http.MethodGet, "/api/v1/auth/me/quota/", callerID, nil)
 	w := httptest.NewRecorder()
 	h.MyQuota(w, req)
@@ -427,7 +436,7 @@ func TestFleetUsage_TopOffenders(t *testing.T) {
 		},
 	}
 
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 	req := authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil)
 	w := httptest.NewRecorder()
 	h.FleetUsage(w, req)
@@ -462,7 +471,7 @@ func TestFleetUsage_ReadsBeyondFirstSnapshotBatch(t *testing.T) {
 	q.projectSnapshots[quotaSnapshotBatchSize].ClustersInProject = 10
 
 	w := httptest.NewRecorder()
-	NewQuotaHandler(q).FleetUsage(w, authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil))
+	wireQuotaMutationFixture(NewQuotaHandler(q), q).FleetUsage(w, authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -487,7 +496,7 @@ func TestQuotaUsage_AggregatesCorrectly(t *testing.T) {
 	q.totalClusters = 175 // 87.5% — under threshold so should appear in totals only
 	q.totalActiveUsers = 5
 
-	h := NewQuotaHandler(q)
+	h := wireQuotaMutationFixture(NewQuotaHandler(q), q)
 	req := authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil)
 	w := httptest.NewRecorder()
 	h.FleetUsage(w, req)
@@ -520,7 +529,7 @@ func TestQuotaUsageReadersFailClosedOnCountErrors(t *testing.T) {
 		q.plans["global"] = sqlc.QuotaPlan{Name: "global", Enforcement: "hard"}
 		q.totalClustersErr = boom
 		w := httptest.NewRecorder()
-		NewQuotaHandler(q).FleetUsage(w, authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil))
+		wireQuotaMutationFixture(NewQuotaHandler(q), q).FleetUsage(w, authedRequest(http.MethodGet, "/api/v1/admin/quota-usage/", callerID, nil))
 		if w.Code != http.StatusInternalServerError {
 			t.Fatalf("fleet count error returned status=%d body=%s", w.Code, w.Body.String())
 		}
@@ -532,7 +541,7 @@ func TestQuotaUsageReadersFailClosedOnCountErrors(t *testing.T) {
 		q.clustersInProjectErr = boom
 		w := httptest.NewRecorder()
 		req := withURLParam(authedRequest(http.MethodGet, "/api/v1/projects/"+projectID.String()+"/quota/", callerID, nil), "id", projectID.String())
-		NewQuotaHandler(q).ProjectQuota(w, req)
+		wireQuotaMutationFixture(NewQuotaHandler(q), q).ProjectQuota(w, req)
 		if w.Code != http.StatusInternalServerError {
 			t.Fatalf("project count error returned status=%d body=%s", w.Code, w.Body.String())
 		}
@@ -543,7 +552,7 @@ func TestQuotaUsageReadersFailClosedOnCountErrors(t *testing.T) {
 		q.userPlan[callerID] = sqlc.GetEffectiveQuotaForUserRow{UserID: callerID, PlanName: "free", Enforcement: "hard"}
 		q.projectsForUserErr = boom
 		w := httptest.NewRecorder()
-		NewQuotaHandler(q).MyQuota(w, authedRequest(http.MethodGet, "/api/v1/auth/me/quota/", callerID, nil))
+		wireQuotaMutationFixture(NewQuotaHandler(q), q).MyQuota(w, authedRequest(http.MethodGet, "/api/v1/auth/me/quota/", callerID, nil))
 		if w.Code != http.StatusInternalServerError {
 			t.Fatalf("user count error returned status=%d body=%s", w.Code, w.Body.String())
 		}

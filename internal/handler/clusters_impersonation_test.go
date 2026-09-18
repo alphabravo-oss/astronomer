@@ -9,13 +9,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 // impersonationFlagQuerier adds the two capabilities the flag gate asserts for
@@ -34,6 +35,10 @@ func (q *impersonationFlagQuerier) GetUserByID(context.Context, uuid.UUID) (sqlc
 
 func (q *impersonationFlagQuerier) GetClusterHealthStatus(context.Context, uuid.UUID) (sqlc.ClusterHealthStatus, error) {
 	return sqlc.ClusterHealthStatus{Conditions: q.conditions}, nil
+}
+
+func (q *impersonationFlagQuerier) GetClusterByIDForUpdate(ctx context.Context, id uuid.UUID) (sqlc.Cluster, error) {
+	return q.GetClusterByID(ctx, id)
 }
 
 func (q *impersonationFlagQuerier) UpdateCluster(_ context.Context, arg sqlc.UpdateClusterParams) (sqlc.Cluster, error) {
@@ -55,7 +60,7 @@ func updateClusterRequest(t *testing.T, clusterID uuid.UUID, annotations string,
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", clusterID.String())
 	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-	ctx = middleware.SetAuthenticatedUserForTest(ctx, &middleware.AuthenticatedUser{ID: caller.ID.String()})
+	ctx = reqctx.WithUser(ctx, &reqctx.User{ID: caller.ID.String()})
 	return req.WithContext(ctx)
 }
 
@@ -197,6 +202,7 @@ func TestDownstreamImpersonationFlagIsSuperuserWriteOnly(t *testing.T) {
 			q.conditions = []byte(tt.conditions)
 
 			h := NewClusterHandler(q)
+			setClusterTestRunTx(h, q)
 			w := httptest.NewRecorder()
 			h.Update(w, updateClusterRequest(t, clusterID, tt.incoming, q.user))
 
@@ -227,6 +233,10 @@ func (q *preReadFailingQuerier) GetClusterByID(context.Context, uuid.UUID) (sqlc
 	return sqlc.Cluster{}, q.err
 }
 
+func (q *preReadFailingQuerier) GetClusterByIDForUpdate(context.Context, uuid.UUID) (sqlc.Cluster, error) {
+	return sqlc.Cluster{}, q.err
+}
+
 // TestDownstreamImpersonationGateFailsClosedOnReadError is the fail-open
 // regression.
 //
@@ -254,6 +264,7 @@ func TestDownstreamImpersonationGateFailsClosedOnReadError(t *testing.T) {
 			q := &preReadFailingQuerier{impersonationFlagQuerier: base, err: tt.err}
 
 			h := NewClusterHandler(q)
+			setClusterTestRunTx(h, q)
 			w := httptest.NewRecorder()
 			h.Update(w, updateClusterRequest(t, clusterID,
 				`{"astronomer.io/downstream-impersonation":"enforce"}`, base.user))
@@ -271,7 +282,7 @@ func TestDownstreamImpersonationGateFailsClosedOnReadError(t *testing.T) {
 // TestDownstreamImpersonationDefaultsOffOnTheResponse pins the read surface:
 // a cluster nobody has touched reports "off".
 func TestDownstreamImpersonationDefaultsOffOnTheResponse(t *testing.T) {
-	resp := clusterToResponse(sqlc.Cluster{ID: uuid.New(), Annotations: json.RawMessage(`{"owner":"sre"}`)})
+	resp := mustClusterResponse(t, sqlc.Cluster{ID: uuid.New(), Annotations: json.RawMessage(`{"owner":"sre"}`)})
 	if resp.DownstreamImpersonation != string(callerid.ModeOff) {
 		t.Fatalf("downstream_impersonation = %q, want off", resp.DownstreamImpersonation)
 	}

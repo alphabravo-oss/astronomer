@@ -68,24 +68,21 @@ func (q projectBindingQuerier) ListProjectNamespaces(_ context.Context, projectI
 // TestNamespaceScopedRBACEnabledDefaultsOn).
 func projectMemberRouter(t *testing.T, jwtMgr *auth.JWTManager, q projectBindingQuerier) http.Handler {
 	t.Helper()
-	return NewRouter(&config.Config{}, RouterDependencies{
-		JWT:                 jwtMgr,
-		RBACEngine:          rbac.NewEngine(),
-		RBACQueries:         appmiddleware.NewSQLCRBACQuerierWithCache(q, nil),
-		Proxy:               tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-		NamespaceScopedRBAC: true,
+	return NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: appmiddleware.NewSQLCRBACQuerierWithCache(q, nil)}, ClusterResources: ClusterResourceDependencies{NamespaceScopedRBAC: true}, StreamingInternal:
+
+	// TestK8sProxy_ProjectMemberListsPodsInProjectNamespaces is the parity
+	// acceptance: a caller whose only grant is `project-member` on a project that
+	// owns team-a can list pods on that project's cluster. Before project bindings
+	// expanded unconditionally this was a flat 403 — the binding matched nothing on
+	// a URL that carries no project_id.
+	//
+	// The proxy has no agent connected, so an ADMITTED request lands on the handler
+	// and returns 503 while a DENIED one is stopped at 403 by the middleware. That
+	// pair is how every k8s-proxy route test distinguishes the two.
+	StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())},
 	})
 }
 
-// TestK8sProxy_ProjectMemberListsPodsInProjectNamespaces is the parity
-// acceptance: a caller whose only grant is `project-member` on a project that
-// owns team-a can list pods on that project's cluster. Before project bindings
-// expanded unconditionally this was a flat 403 — the binding matched nothing on
-// a URL that carries no project_id.
-//
-// The proxy has no agent connected, so an ADMITTED request lands on the handler
-// and returns 503 while a DENIED one is stopped at 403 by the middleware. That
-// pair is how every k8s-proxy route test distinguishes the two.
 func TestK8sProxy_ProjectMemberListsPodsInProjectNamespaces(t *testing.T) {
 	const (
 		admitted = http.StatusServiceUnavailable
@@ -192,6 +189,43 @@ func TestK8sProxy_ProjectMemberDeniedOutsideProjectNamespaces(t *testing.T) {
 			router.ServeHTTP(rec, req)
 			if rec.Code != http.StatusForbidden {
 				t.Fatalf("status = %d, want 403; body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestK8sProxy_ProjectSecretReaderIsConfinedToProjectNamespaces(t *testing.T) {
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	projectID := uuid.New()
+	clusterID := uuid.New()
+	token := nsRBACProxyToken(t, jwtMgr, userID)
+	router := projectMemberRouter(t, jwtMgr, projectBindingQuerier{
+		userID:    userID,
+		projectID: projectID,
+		roleName:  "project-secret-reader",
+		roleRules: []byte(`[{"resource":"secrets","verbs":["read"]}]`),
+		namespaces: []sqlc.ProjectNamespace{
+			{ProjectID: projectID, ClusterID: clusterID, Namespace: "team-a"},
+		},
+	})
+	base := "/api/v1/clusters/" + clusterID.String() + "/k8s/api/v1/namespaces/"
+
+	for _, tc := range []struct {
+		name      string
+		namespace string
+		want      int
+	}{
+		{name: "owned namespace", namespace: "team-a", want: http.StatusServiceUnavailable},
+		{name: "unowned namespace", namespace: "team-b", want: http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, base+tc.namespace+"/secrets/database", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != tc.want {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, tc.want, recorder.Body.String())
 			}
 		})
 	}

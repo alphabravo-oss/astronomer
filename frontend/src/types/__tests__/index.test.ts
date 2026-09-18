@@ -57,13 +57,16 @@ describe("API Response types", () => {
   it("PaginatedResponse can be created", () => {
     const response: PaginatedResponse<string> = {
       data: ["a", "b"],
-      total: 10,
-      page: 1,
-      pageSize: 2,
-      totalPages: 5,
+      pagination: {
+        total: 10,
+        limit: 2,
+        offset: 0,
+        has_more: true,
+        next_offset: 2,
+      },
     };
     expect(response.data).toHaveLength(2);
-    expect(response.totalPages).toBe(5);
+    expect(response.pagination.total).toBe(10);
   });
 
   it("APIError can be created", () => {
@@ -146,14 +149,12 @@ describe("Cluster types", () => {
 
   it("ClusterStatus accepts all valid values", () => {
     const statuses: ClusterStatus[] = [
+      "pending",
       "active",
-      "connecting",
-      "warning",
       "error",
       "disconnected",
-      "provisioning",
     ];
-    expect(statuses).toHaveLength(6);
+    expect(statuses).toHaveLength(4);
   });
 
   it("ClusterProvider accepts all valid values", () => {
@@ -173,7 +174,7 @@ describe("Cluster types", () => {
       "production",
       "staging",
       "development",
-      "testing",
+      "dev",
     ];
     expect(envs).toHaveLength(4);
   });
@@ -259,6 +260,7 @@ describe("Workload types", () => {
       restarts: 0,
       node: "node-1",
       ip: "10.0.0.5",
+      images: [],
       containers: [],
       conditions: [],
       createdAt: "2024-01-01T00:00:00Z",

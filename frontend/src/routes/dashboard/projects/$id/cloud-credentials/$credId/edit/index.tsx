@@ -8,8 +8,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * backend keeps the existing ciphertext.
  */
 import { useMemo, useState } from "react";
-import { Link } from "@/lib/link";
-import { useParams, useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
@@ -22,10 +22,10 @@ import { ProviderBadge } from "@/components/projects/cloud-credentials/provider-
 import { PageHeader, PageShell } from "@/components/ui/page";
 
 function EditCloudCredentialPage() {
-  const params = useParams();
-  const projectId = params.id as string;
-  const credId = params.credId as string;
-  const router = useRouter();
+  const params = Route.useParams();
+  const projectId = params.id;
+  const credId = params.credId;
+  const navigate = useNavigate();
   const { data: providers = [] } = useCloudCredentialProviders();
   const { data: credential, isLoading } = useProjectCloudCredential(
     projectId,
@@ -69,13 +69,13 @@ function EditCloudCredentialPage() {
   if (!credential || !spec) {
     return (
       <div className="space-y-4">
-        <Link
-          href={backToList}
+        <RouterLink
+          to={backToList}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back
-        </Link>
+        </RouterLink>
         <p className="text-sm text-muted-foreground">
           Credential or provider spec not found.
         </p>
@@ -85,13 +85,13 @@ function EditCloudCredentialPage() {
 
   return (
     <PageShell>
-      <Link
-        href={backToList}
+      <RouterLink
+        to={backToList}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to credentials
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Cloud Credentials · Edit"
@@ -117,12 +117,12 @@ function EditCloudCredentialPage() {
             targetRefs: credential.targetRefs,
             secretsSet,
           }}
-          onCancel={() => router.push(backToList)}
+          onCancel={() => void navigate({ to: backToList })}
           onSubmit={async (body) => {
             setServerError(null);
             try {
               await updateMutation.mutateAsync({ credentialId: credId, body });
-              router.push(backToList);
+              void navigate({ to: backToList });
             } catch (err) {
               const msg =
                 extractApiErrorMessage(err) ?? "Failed to update credential.";

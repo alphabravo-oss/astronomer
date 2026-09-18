@@ -29,6 +29,20 @@ function apiResponse<T>(data: T) {
   return { status: 200, data };
 }
 
+function paginated<T>(data: T[]) {
+  return {
+    data,
+    pagination: {
+      total: data.length,
+      limit: 25,
+      offset: 0,
+      has_more: false,
+      next_offset: null,
+      next_cursor: null,
+    },
+  };
+}
+
 const cluster = {
   id: CLUSTER_ID,
   name: CLUSTER_ID,
@@ -132,7 +146,7 @@ async function mockApi(page: Page) {
       path === `/clusters/${CLUSTER_ID}/resources/services` &&
       method === "GET"
     ) {
-      return route.fulfill({ json: apiResponse([serviceRow]) });
+      return route.fulfill({ json: paginated([serviceRow]) });
     }
     // Events feed (fieldSelector query) — match before the single-object route.
     if (

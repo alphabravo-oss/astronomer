@@ -25,9 +25,7 @@ func (registerQuerierStub) GetRegistrationTokenByToken(context.Context, string) 
 
 func TestRegisterManifestRouteIsRateLimited(t *testing.T) {
 	cfg := &config.Config{TunnelRegisterRateLimitPerMinute: 3}
-	router := NewRouter(cfg, RouterDependencies{
-		Clusters: handler.NewClusterHandler(registerQuerierStub{}),
-	})
+	router := NewRouter(cfg, RouterDependencies{ClusterResources: ClusterResourceDependencies{Clusters: handler.NewClusterHandler(registerQuerierStub{})}})
 
 	// The real one-liner fetch uses the `.yaml` suffix; the dot also keeps the
 	// trailing-slash normalizer from rewriting the path (the handler strips

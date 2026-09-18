@@ -7,6 +7,7 @@ import type {
 } from "@/types";
 
 export type RoleLike = {
+  id?: string;
   name: string;
   displayName?: string;
   description?: string;

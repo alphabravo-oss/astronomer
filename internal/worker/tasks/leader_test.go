@@ -13,10 +13,12 @@ import (
 type fakeLeader struct {
 	held          bool
 	err           error
+	tryCalls      int
 	releaseCalled bool
 }
 
 func (f *fakeLeader) TryLeader(_ context.Context, _ string) (func(), bool, error) {
+	f.tryCalls++
 	if f.err != nil {
 		return nil, false, f.err
 	}
@@ -100,6 +102,27 @@ func TestRunPeriodicTaskWithLeader_PropagatesAcquireError(t *testing.T) {
 	}
 	if got := gaugeValue(t, "job"); got != 0 {
 		t.Fatalf("leader gauge after error = %v, want 0", got)
+	}
+}
+
+func TestRunPeriodicTaskWithRowLeasesDoesNotAcquireGlobalLeader(t *testing.T) {
+	fl := &fakeLeader{held: false}
+	ctx := testRuntimeContext(RuntimeDependencies{Leader: fl})
+	called := false
+	if err := runPeriodicTaskWithRowLeases(ctx, "leased-job", func() error {
+		called = true
+		return nil
+	}); err != nil {
+		t.Fatalf("runPeriodicTaskWithRowLeases: %v", err)
+	}
+	if !called {
+		t.Fatal("row-leased sweep did not run")
+	}
+	if fl.releaseCalled {
+		t.Fatal("row-leased sweep unexpectedly acquired the global leader")
+	}
+	if fl.tryCalls != 0 {
+		t.Fatalf("row-leased sweep attempted %d global leader acquisitions", fl.tryCalls)
 	}
 }
 

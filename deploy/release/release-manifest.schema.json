@@ -47,8 +47,8 @@
         "chart": {"$ref": "#/$defs/artifact"},
         "images": {
           "type": "array",
-          "minItems": 6,
-          "maxItems": 6,
+          "minItems": 7,
+          "maxItems": 7,
           "items": {"$ref": "#/$defs/artifact"}
         },
         "runtime_images": {

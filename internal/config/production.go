@@ -1,15 +1,18 @@
 package config
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 var immutableDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+var keywordSSLModePattern = regexp.MustCompile(`(?:^|\s)sslmode\s*=`)
 
 // Known development sentinel values. A production deployment that still carries
 // either of these has not been configured with real secrets and must fail fast
@@ -47,17 +50,9 @@ var (
 )
 
 // IsProduction reports whether this process is running in production mode. The
-// config value wins, with ASTRONOMER_ENV / ENV as fall-backs so the check still
-// fires for binaries (e.g. the worker) that read the same environment but a
-// leaner config surface.
+// The caller must pass the startup-resolved configuration.
 func IsProduction(cfg *Config) bool {
-	if cfg != nil && strings.EqualFold(strings.TrimSpace(cfg.Env), "production") {
-		return true
-	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("ASTRONOMER_ENV")), "production") {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("ENV")), "production")
+	return cfg != nil && strings.EqualFold(strings.TrimSpace(cfg.Env), "production")
 }
 
 // DSNEnforcesTLS reports whether a Postgres DSN includes an sslmode setting that
@@ -65,10 +60,43 @@ func IsProduction(cfg *Config) bool {
 // else (disable/allow/prefer, or omission — which Postgres treats as prefer and
 // silently downgrades to plaintext) returns false.
 func DSNEnforcesTLS(dsn string) bool {
-	d := strings.ToLower(dsn)
-	return strings.Contains(d, "sslmode=require") ||
-		strings.Contains(d, "sslmode=verify-ca") ||
-		strings.Contains(d, "sslmode=verify-full")
+	dsn = strings.TrimSpace(dsn)
+	if !dsnHasUnambiguousSSLMode(dsn) {
+		return false
+	}
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil || cfg.TLSConfig == nil {
+		return false
+	}
+	// sslmode=prefer and sslmode=allow include a plaintext fallback. Inspect
+	// pgx's effective connection plan so misleading substrings, encoded values,
+	// and duplicate parameters cannot bypass the production gate.
+	for _, fallback := range cfg.Fallbacks {
+		if fallback.TLSConfig == nil {
+			return false
+		}
+	}
+	return true
+}
+
+// dsnHasUnambiguousSSLMode rejects duplicate and case-lookalike settings
+// before pgx resolves them. Different parsers choosing different duplicate
+// values is exactly the kind of configuration ambiguity a production TLS gate
+// must not accept.
+func dsnHasUnambiguousSSLMode(dsn string) bool {
+	if parsed, err := url.Parse(dsn); err == nil && (parsed.Scheme == "postgres" || parsed.Scheme == "postgresql") {
+		found := 0
+		for key, values := range parsed.Query() {
+			if strings.EqualFold(key, "sslmode") {
+				if key != "sslmode" {
+					return false
+				}
+				found += len(values)
+			}
+		}
+		return found == 1
+	}
+	return len(keywordSSLModePattern.FindAllStringIndex(dsn, -1)) == 1
 }
 
 // Metric/label names for the credentials guarded by the dev sentinels. They
@@ -135,6 +163,22 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		case !encryptorReady:
 			errs = append(errs, "astronomer_encryption_key could not initialize encryptor")
 		}
+		internalPSK := strings.TrimSpace(cfg.InternalPSK)
+		if len(internalPSK) < 32 {
+			errs = append(errs, "astronomer_internal_psk must contain at least 32 characters")
+		}
+		if constantTimeStringEqual(internalPSK, secretKey) || constantTimeStringEqual(internalPSK, encryptionKey) {
+			errs = append(errs, "astronomer_internal_psk must be independent from secret_key and astronomer_encryption_key")
+		}
+		previousInternalPSK := strings.TrimSpace(cfg.InternalPSKPrevious)
+		if previousInternalPSK != "" {
+			if len(previousInternalPSK) < 32 {
+				errs = append(errs, "astronomer_internal_psk_previous must contain at least 32 characters when set")
+			}
+			if constantTimeStringEqual(previousInternalPSK, internalPSK) {
+				errs = append(errs, "astronomer_internal_psk_previous must differ from astronomer_internal_psk")
+			}
+		}
 		if !DSNEnforcesTLS(cfg.DatabaseURL) {
 			errs = append(errs, "database_url does not enforce TLS")
 		}
@@ -149,6 +193,9 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		}
 		if !cfg.DeliveryEnabled {
 			errs = append(errs, "delivery_enabled must be true")
+		}
+		if !cfg.DeliveryLocalFluxBootstrap {
+			errs = append(errs, "delivery_local_flux_bootstrap must be true")
 		}
 		validateSignedArtifact := func(name, repository, digest, identity, issuer string) {
 			repository = strings.TrimSpace(repository)
@@ -184,4 +231,11 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		return fmt.Errorf("production security config invalid: %s", strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func constantTimeStringEqual(left, right string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
 }

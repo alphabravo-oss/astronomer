@@ -9,13 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type stagedMonitoringMutationTx struct {
@@ -97,16 +98,12 @@ func TestMonitoringBackendAndAuditCommitTogether(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPut, "/api/v1/settings/monitoring/", nil)
 			params := sqlc.UpsertDefaultMonitoringBackendParams{BackendType: "thanos", QueryUrl: "https://thanos.example.com"}
 
-			_, err := executeMonitoringMutation(request, h,
+			_, err := executeMutation(request, h.runTx,
 				func(q MonitoringMutationTx) (sqlc.MonitoringBackend, error) {
 					return q.UpsertDefaultMonitoringBackend(request.Context(), params)
 				},
-				func() (sqlc.MonitoringBackend, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.MonitoringBackend{}, nil
-				},
-				func(row sqlc.MonitoringBackend) clusterAuditEvent {
-					return clusterAuditEvent{action: "monitoring.endpoint.update", resourceType: "monitoring_backend", resourceID: row.ID.String(), status: http.StatusOK}
+				func(row sqlc.MonitoringBackend) mutationAuditEvent {
+					return mutationAuditEvent{action: "monitoring.endpoint.update", resourceType: "monitoring_backend", resourceID: row.ID.String(), status: http.StatusOK}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -162,7 +159,7 @@ func TestMonitoringRetryReplaysExactReceiptOnceUnderRace(t *testing.T) {
 			defer wg.Done()
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/settings/monitoring/operations/"+op.ID.String()+"/retry/", nil)
 			req.Header.Set("Idempotency-Key", "monitoring-retry-race")
-			req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: callerID.String()}))
+			req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: callerID.String()}))
 			responses[index] = httptest.NewRecorder()
 			router.ServeHTTP(responses[index], req)
 		}(i)
@@ -198,7 +195,7 @@ func TestMonitoringRetryKeyRejectsChangedTarget(t *testing.T) {
 	request := func(id uuid.UUID) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/settings/monitoring/operations/"+id.String()+"/retry/", nil)
 		req.Header.Set("Idempotency-Key", "monitoring-retry-conflict")
-		req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: callerID.String()}))
+		req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: callerID.String()}))
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, req)
 		return response

@@ -1,5 +1,3 @@
-"use client";
-
 // GATE C — dynamic custom-resource (CRD instance) explorer.
 //
 // ponytail: ONE shared component (mounted by both the custom-resources index
@@ -14,9 +12,9 @@
 // URL never has an empty path segment — see crListHref/crDetailHref.
 
 import { useMemo } from "react";
-import { useParams, useRouter } from "@/lib/navigation";
-import { Link } from "@/lib/link";
-import { useK8sResource } from "@/lib/hooks";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import { usePermissionDecision } from "@/lib/permission-hooks";
 import { ResourceDetail } from "@/components/resources/resource-detail";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -39,8 +37,8 @@ function decodeGroup(seg: string): string {
 }
 
 export function CustomResourcesPage({ slug }: { slug: string[] }) {
-  const params = useParams();
-  const clusterId = params.id as string;
+  const params = useParams({ from: "/dashboard/clusters/$id" });
+  const clusterId = params.id;
 
   const read = usePermissionDecision(CR_PERMISSION, "read", {
     type: "cluster",
@@ -174,7 +172,7 @@ const crdColumns: Column<CRDRow>[] = [
     key: "scope",
     header: "Scope",
     accessor: (row) => (
-      <span className="px-1.5 py-0.5 rounded text-2xs bg-muted text-muted-foreground">
+      <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground">
         {row.scope || "-"}
       </span>
     ),
@@ -193,7 +191,7 @@ const crdColumns: Column<CRDRow>[] = [
 ];
 
 function CRDList({ clusterId }: { clusterId: string }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   // E1: a SINGLE proxy GET to the CRD list endpoint — no /apis discovery walk.
   const { data, isLoading } = useK8sResource(
     clusterId,
@@ -210,8 +208,8 @@ function CRDList({ clusterId }: { clusterId: string }) {
       {
         ...crdColumns[0],
         accessor: (row) => (
-          <Link
-            href={crListHref(
+          <RouterLink
+            to={crListHref(
               clusterId,
               row.group,
               row.storageVersion,
@@ -221,7 +219,7 @@ function CRDList({ clusterId }: { clusterId: string }) {
             className="font-medium text-foreground text-xs hover:underline"
           >
             {row.kind}
-          </Link>
+          </RouterLink>
         ),
       },
       ...crdColumns.slice(1),
@@ -239,13 +237,22 @@ function CRDList({ clusterId }: { clusterId: string }) {
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={(row) =>
-          router.push(
-            crListHref(clusterId, row.group, row.storageVersion, row.plural),
-          )
+          void navigate({
+            to: crListHref(
+              clusterId,
+              row.group,
+              row.storageVersion,
+              row.plural,
+            ),
+          })
         }
         searchPlaceholder="Search custom resource definitions..."
         loading={isLoading}
-        emptyMessage="No custom resource definitions found"
+        emptyState={{
+          title: "No custom resource definitions found",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
       />
     </div>
   );
@@ -274,7 +281,7 @@ function CRList({
   version: string;
   plural: string;
 }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   // CR lists can be large → virtualized DataTable.
   const { data, isLoading } = useK8sResource(
     clusterId,
@@ -299,8 +306,8 @@ function CRList({
         key: "name",
         header: "Name",
         accessor: (row) => (
-          <Link
-            href={crDetailHref(
+          <RouterLink
+            to={crDetailHref(
               clusterId,
               group,
               version,
@@ -316,7 +323,7 @@ function CRList({
             className="min-w-0 truncate font-medium text-foreground font-mono text-xs hover:underline"
           >
             {row.name}
-          </Link>
+          </RouterLink>
         ),
         sortAccessor: (row) => row.name,
       },
@@ -347,13 +354,13 @@ function CRList({
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
-        <Link
-          href={crdListHref(clusterId)}
+        <RouterLink
+          to={crdListHref(clusterId)}
           className="mt-1 p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
           aria-label="Back"
         >
           <ArrowLeft className="h-5 w-5" />
-        </Link>
+        </RouterLink>
         <div>
           <h1 className="text-xl font-semibold text-foreground tracking-tight font-mono">
             {plural}
@@ -370,8 +377,8 @@ function CRList({
           r.namespace ? `${r.namespace}/${r.name}` : r.name
         }
         onRowClick={(row) =>
-          router.push(
-            crDetailHref(
+          void navigate({
+            to: crDetailHref(
               clusterId,
               group,
               version,
@@ -379,11 +386,15 @@ function CRList({
               row.name,
               row.namespace,
             ),
-          )
+          })
         }
         searchPlaceholder={`Search ${plural}...`}
         loading={isLoading}
-        emptyMessage={`No ${plural} found`}
+        emptyState={{
+          title: `No ${plural} found`,
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
         virtualized
       />
     </div>

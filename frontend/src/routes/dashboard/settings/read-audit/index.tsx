@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * /dashboard/settings/read-audit — operator UI for the read-side audit
  * policies (migration 063). Each row is a path-prefix + verbs +
@@ -18,13 +18,14 @@ import {
  * Backend: /api/v1/admin/read-audit-policies/. Superuser-gated.
  */
 import { useEffect, useState } from "react";
-import { Link } from "@/lib/link";
+import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   listReadAuditPolicies,
   createReadAuditPolicy,
@@ -46,6 +47,9 @@ function ReadAuditPoliciesList() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ReadAuditPolicyView | null>(
+    null,
+  );
 
   async function refresh(signal?: AbortSignal) {
     try {
@@ -85,11 +89,12 @@ function ReadAuditPoliciesList() {
     }
   }
 
-  async function remove(p: ReadAuditPolicyView) {
-    if (!confirm(`Delete read-audit policy "${p.name}"?`)) return;
-    setBusyId(p.id);
+  async function remove() {
+    if (!deleteTarget) return;
+    setBusyId(deleteTarget.id);
     try {
-      await deleteReadAuditPolicy(p.id);
+      await deleteReadAuditPolicy(deleteTarget.id);
+      setDeleteTarget(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
@@ -100,12 +105,12 @@ function ReadAuditPoliciesList() {
 
   return (
     <PageShell>
-      <Link
-        href="/dashboard/settings"
+      <RouterLink
+        to="/dashboard/settings"
         className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
       >
         <ArrowLeft className="h-4 w-4" /> Settings
-      </Link>
+      </RouterLink>
       <PageHeader
         title="Read-side audit policies"
         description='Configure which GET endpoints emit an audit row. HIPAA / PCI compliance requires "who saw what credential and when" — the seeded policies cover cloud credentials, registry secrets, SSO, webhooks, SIEM auth, the audit log itself, support bundles, and admin settings.'
@@ -176,7 +181,7 @@ function ReadAuditPoliciesList() {
                   <TableCell className="px-4 py-2 text-right">
                     <button
                       disabled={busyId === p.id}
-                      onClick={() => remove(p)}
+                      onClick={() => setDeleteTarget(p)}
                       className="text-muted-foreground hover:text-destructive"
                       title="Delete policy"
                     >
@@ -210,6 +215,28 @@ function ReadAuditPoliciesList() {
           }}
         />
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => void remove()}
+        title="Delete read-audit policy"
+        description="This permanently removes the rule that records matching read requests."
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={busyId === deleteTarget?.id}
+        impact={
+          deleteTarget
+            ? {
+                scope: deleteTarget.name,
+                consequences: [
+                  `Requests matching ${deleteTarget.path_pattern} will no longer be sampled by this policy.`,
+                  "Compliance evidence coverage may be reduced immediately.",
+                ],
+                recovery: "Create an equivalent read-audit policy.",
+              }
+            : undefined
+        }
+      />
     </PageShell>
   );
 }
@@ -298,7 +325,7 @@ function CreatePolicyModal({
         <Input value={verbs} onChange={(e) => setVerbs(e.target.value)} />
       </Field>
       <Field label={`Sample rate: ${Math.round(sampleRate * 100)}%`}>
-        <input
+        <Input
           type="range"
           min={0}
           max={1}
@@ -309,7 +336,7 @@ function CreatePolicyModal({
         />
       </Field>
       <label className="flex items-center gap-2 text-sm text-foreground">
-        <input
+        <Input
           type="checkbox"
           checked={enabled}
           onChange={(e) => setEnabled(e.target.checked)}

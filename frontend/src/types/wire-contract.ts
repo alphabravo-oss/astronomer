@@ -24,7 +24,8 @@
  * inventing a field outright never is.
  */
 import type { OpenAPIComponents } from "@/types/openapi.generated";
-import type { HelmRepository, Cluster } from "@/types";
+import type { HelmRepository } from "@/types";
+import type { ClusterWireView } from "@/types/clusters";
 
 /** Type-level snake_case-to-camelCase transform used by explicit adapters. */
 export type SnakeToCamel<S extends string> =
@@ -71,21 +72,7 @@ export const helmRepositoryMatchesWire: AssertNoPhantomWireKeys<
   WireSchemas["HelmRepository"]
 > = true;
 
-// TODO(wire-contract): `Cluster` does not pass this guard yet. Enabling it
-// reports eight phantom fields:
-//
-// Presentation-only enrichments such as health and capacity live on explicit
-// view models and are no longer claimed as cluster CRUD wire fields.
-//
-// These are not all the same problem — some look like client-side enrichment
-// that belongs in a separate view type, and the API sends cpu_percentage / memory_percentage rather than the
-// usage/capacity pair declared here. Untangling which are undocumented
-// response fields (fix the spec) and which are genuinely absent (fix the
-// type, and the screens reading them) is its own change; it is deliberately
-// not bundled into the catalog chart_count fix.
-//
-//   export const clusterMatchesWire: AssertNoPhantomWireKeys<Cluster, WireSchemas['Cluster']> = true;
-export type _ClusterWirePhantoms = PhantomWireKeys<
-  Cluster,
+export const clusterMatchesWire: AssertNoPhantomWireKeys<
+  ClusterWireView,
   WireSchemas["Cluster"]
->;
+> = true;

@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	projectdomain "github.com/alphabravocompany/astronomer-go/internal/projects"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
-	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 type projectAsyncQuerier struct {
@@ -49,7 +47,13 @@ func (q *projectAsyncQuerier) GetClusterByID(context.Context, uuid.UUID) (sqlc.C
 }
 func (q *projectAsyncQuerier) DeleteProject(context.Context, uuid.UUID) error { return nil }
 func (q *projectAsyncQuerier) CountProjects(context.Context) (int64, error)   { return 0, nil }
+func (q *projectAsyncQuerier) CountProjectsFiltered(context.Context, string) (int64, error) {
+	return 0, nil
+}
 func (q *projectAsyncQuerier) CountProjectsByCluster(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (q *projectAsyncQuerier) CountProjectsByClusterFiltered(context.Context, sqlc.CountProjectsByClusterFilteredParams) (int64, error) {
 	return 0, nil
 }
 func (q *projectAsyncQuerier) UpsertProjectNamespace(_ context.Context, arg sqlc.UpsertProjectNamespaceParams) (sqlc.ProjectNamespace, error) {
@@ -67,14 +71,20 @@ func (q *projectAsyncQuerier) UpsertTaskOutbox(_ context.Context, arg sqlc.Upser
 func (q *projectAsyncQuerier) ListProjectNamespaces(context.Context, uuid.UUID) ([]sqlc.ProjectNamespace, error) {
 	return nil, nil
 }
+func (q *projectAsyncQuerier) UpsertProjectResourceQuotaAllocation(_ context.Context, arg sqlc.UpsertProjectResourceQuotaAllocationParams) (sqlc.ProjectResourceQuotaAllocation, error) {
+	return sqlc.ProjectResourceQuotaAllocation{ProjectID: arg.ProjectID, ClusterID: arg.ClusterID, Namespace: arg.Namespace, CpuLimit: arg.CpuLimit, MemoryLimit: arg.MemoryLimit, PodCount: arg.PodCount}, nil
+}
+func (q *projectAsyncQuerier) DeleteProjectResourceQuotaAllocation(context.Context, sqlc.DeleteProjectResourceQuotaAllocationParams) error {
+	return nil
+}
 func (q *projectAsyncQuerier) ListAllProjectNamespaces(context.Context) ([]sqlc.ProjectNamespace, error) {
 	return nil, nil
 }
 func (q *projectAsyncQuerier) ClaimProjectNamespaceReconcile(context.Context, sqlc.ClaimProjectNamespaceReconcileParams) (sqlc.ProjectNamespace, error) {
 	return sqlc.ProjectNamespace{}, nil
 }
-func (q *projectAsyncQuerier) MarkProjectNamespaceReconciled(context.Context, sqlc.MarkProjectNamespaceReconciledParams) error {
-	return nil
+func (q *projectAsyncQuerier) MarkProjectNamespaceReconciled(context.Context, sqlc.MarkProjectNamespaceReconciledParams) (int64, error) {
+	return 1, nil
 }
 
 // RBAC-matrix surface — async tests don't hit this; satisfy the
@@ -89,92 +99,14 @@ func (q *projectAsyncQuerier) GetUserByID(context.Context, uuid.UUID) (sqlc.User
 	return sqlc.User{}, nil
 }
 
-type noopProjectRequester struct{}
-
-func (noopProjectRequester) Do(context.Context, string, string, string, []byte, map[string]string) (*protocol.K8sResponsePayload, error) {
-	return nil, nil
-}
-
-func TestProjectHandlerUpsertAndEnqueueRunsLocallyWhenRequesterPresent(t *testing.T) {
+func TestProjectDomainEnsureAndEnqueueUsesTaskOutboxWithoutRequester(t *testing.T) {
 	queries := &projectAsyncQuerier{}
-	h := NewProjectHandler(queries)
-	h.requester = noopProjectRequester{}
-
-	got := make(chan tasks.ProjectReconcilePayload, 1)
-	h.runTask = func(_ context.Context, task *asynq.Task) error {
-		var payload tasks.ProjectReconcilePayload
-		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-			return err
-		}
-		got <- payload
-		return nil
-	}
 
 	projectID := uuid.New()
 	clusterID := uuid.New()
-	h.upsertAndEnqueue(context.Background(), projectID, clusterID, "team-a")
-
-	if len(queries.upserts) != 1 {
-		t.Fatalf("expected 1 project namespace upsert, got %d", len(queries.upserts))
+	if err := projectdomain.EnsureAndEnqueue(context.Background(), queries, queries, projectID, clusterID, "team-a"); err != nil {
+		t.Fatalf("EnsureAndEnqueue() error = %v", err)
 	}
-
-	select {
-	case payload := <-got:
-		if payload.Op != "apply" {
-			t.Fatalf("expected op=apply, got %q", payload.Op)
-		}
-		if payload.ProjectID != projectID.String() || payload.ClusterID != clusterID.String() || payload.Namespace != "team-a" {
-			t.Fatalf("unexpected payload: %+v", payload)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected local project reconcile task to run")
-	}
-}
-
-func TestProjectHandlerEnqueueCleanupRunsLocallyWhenRequesterPresent(t *testing.T) {
-	queries := &projectAsyncQuerier{}
-	h := NewProjectHandler(queries)
-	h.requester = noopProjectRequester{}
-
-	got := make(chan tasks.ProjectReconcilePayload, 1)
-	h.runTask = func(_ context.Context, task *asynq.Task) error {
-		var payload tasks.ProjectReconcilePayload
-		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-			return err
-		}
-		got <- payload
-		return nil
-	}
-
-	projectID := uuid.New()
-	clusterID := uuid.New()
-	h.enqueueCleanup(context.Background(), projectID, clusterID, "team-a")
-
-	if len(queries.deletes) != 0 {
-		t.Fatalf("expected no synchronous delete when requester is present, got %d", len(queries.deletes))
-	}
-
-	select {
-	case payload := <-got:
-		if payload.Op != "remove" {
-			t.Fatalf("expected op=remove, got %q", payload.Op)
-		}
-		if payload.ProjectID != projectID.String() || payload.ClusterID != clusterID.String() || payload.Namespace != "team-a" {
-			t.Fatalf("unexpected payload: %+v", payload)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected local project cleanup task to run")
-	}
-}
-
-func TestProjectHandlerUpsertAndEnqueueUsesTaskOutboxWithoutRequester(t *testing.T) {
-	queries := &projectAsyncQuerier{}
-	h := NewProjectHandler(queries)
-	h.SetTaskOutbox(queries)
-
-	projectID := uuid.New()
-	clusterID := uuid.New()
-	h.upsertAndEnqueue(context.Background(), projectID, clusterID, "team-a")
 
 	if len(queries.upserts) != 1 {
 		t.Fatalf("expected 1 project namespace upsert, got %d", len(queries.upserts))
@@ -198,14 +130,14 @@ func TestProjectHandlerUpsertAndEnqueueUsesTaskOutboxWithoutRequester(t *testing
 	}
 }
 
-func TestProjectHandlerEnqueueCleanupUsesTaskOutboxWithoutRequester(t *testing.T) {
+func TestProjectDomainEnqueueCleanupUsesTaskOutboxWithoutRequester(t *testing.T) {
 	queries := &projectAsyncQuerier{}
-	h := NewProjectHandler(queries)
-	h.SetTaskOutbox(queries)
 
 	projectID := uuid.New()
 	clusterID := uuid.New()
-	h.enqueueCleanup(context.Background(), projectID, clusterID, "team-a")
+	if err := projectdomain.EnqueueRemove(context.Background(), queries, projectID, clusterID, "team-a"); err != nil {
+		t.Fatalf("EnqueueRemove() error = %v", err)
+	}
 
 	if len(queries.deletes) != 0 {
 		t.Fatalf("expected task_outbox cleanup to leave DB row for task ownership, got %d deletes", len(queries.deletes))

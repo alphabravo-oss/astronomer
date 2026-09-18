@@ -28,6 +28,16 @@ import (
 )
 
 func main() {
+	if err := newRootCmd().Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// newRootCmd is the complete CLI composition root. Keeping construction
+// separate from process exit makes the shipped command graph directly
+// executable in tests and by future embedded consumers.
+func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "astro",
 		Short: "Astronomer management plane CLI",
@@ -112,9 +122,5 @@ dashboard can perform, this CLI can — and vice versa.`,
 		newConfigCmd(),
 		newCompletionCmd(),
 	)
-
-	if err := root.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	return root
 }

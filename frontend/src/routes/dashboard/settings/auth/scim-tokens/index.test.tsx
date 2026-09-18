@@ -6,15 +6,14 @@ import { useAuthStore } from "@/lib/store";
 import SCIMTokensPage from "./-page";
 import type { SCIMToken } from "@/types";
 
-// Plain-anchor stand-in: these tests assert link text/href, not routing, and
-// the real Link needs a <RouterProvider>.
-vi.mock("@/lib/link", () => ({
-  Link: ({ href, children, ...rest }: React.ComponentProps<"a">) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    Link: RouterLinkStub,
+  };
+});
+
 
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
@@ -61,6 +60,8 @@ const token: SCIMToken = {
   prefix: "astro_scim_ab",
   lastUsedAt: null,
   createdAt: "2026-07-01T00:00:00Z",
+  expiresAt: "2026-09-29T00:00:00Z",
+  revokedAt: null,
 };
 
 describe("SCIMTokensPage", () => {

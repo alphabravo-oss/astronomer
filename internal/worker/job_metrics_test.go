@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 func TestInstrumentTaskRecordsSuccess(t *testing.T) {
@@ -91,6 +92,23 @@ func TestInstrumentTaskLogsTraceID(t *testing.T) {
 			t.Fatalf("trace_id = %v, want %s in line %#v", line["trace_id"], traceID, line)
 		}
 	}
+	metric := &dto.Metric{}
+	if err := workerJobsTotal.WithLabelValues(observability.MetricValues("job.trace", "success")...).Write(metric); err != nil {
+		t.Fatal(err)
+	}
+	exemplar := metric.GetCounter().GetExemplar()
+	if exemplar == nil {
+		t.Fatal("worker counter is missing sampled trace exemplar")
+	}
+	var exemplarTraceID string
+	for _, label := range exemplar.GetLabel() {
+		if label.GetName() == "trace_id" {
+			exemplarTraceID = label.GetValue()
+		}
+	}
+	if exemplarTraceID != traceID {
+		t.Fatalf("metric exemplar trace_id = %q, want %q", exemplarTraceID, traceID)
+	}
 }
 
 func TestInstrumentTaskLogsPayloadIdentifiers(t *testing.T) {
@@ -125,6 +143,21 @@ func TestInstrumentTaskLogsPayloadIdentifiers(t *testing.T) {
 		if line["operation_id"] != "op-456" {
 			t.Fatalf("operation_id = %v, want op-456 in line %#v", line["operation_id"], line)
 		}
+	}
+}
+
+func TestInstrumentTaskPropagatesCorrelationIntoFollowUpContext(t *testing.T) {
+	const correlationID = "request-correlation-123"
+	var got string
+	handler := instrumentTask("job.correlation", func(ctx context.Context, _ *asynq.Task) error {
+		got = reqctx.CorrelationID(ctx)
+		return nil
+	})
+	if err := handler(context.Background(), asynq.NewTask("job.correlation", []byte(`{"_correlation_id":"request-correlation-123"}`))); err != nil {
+		t.Fatal(err)
+	}
+	if got != correlationID {
+		t.Fatalf("correlation ID in worker context = %q, want %q", got, correlationID)
 	}
 }
 

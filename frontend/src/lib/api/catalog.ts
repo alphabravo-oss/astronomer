@@ -2,9 +2,18 @@ import {
   deleteCatalogInstalledById,
   deleteCatalogRepositoriesById,
   deleteChartsByChartIdRatingsByRatingId,
+  getCatalogApplications,
+  getCatalogApplicationSources,
   getCatalogCharts,
+  getCatalogChartsById,
+  getCatalogChartsByIdReadme,
+  getCatalogChartsByIdValues,
   getCatalogChartsByIdVersions,
+  getCatalogDiscovery,
   getCatalogInstalled,
+  getCatalogInstalledByIdUpgradeVersions,
+  getCatalogOperations,
+  getCatalogOperationsById,
   getCatalogRecommendationsPopular,
   getCatalogRecommendationsSimilarByChartId,
   getCatalogRepositories,
@@ -13,10 +22,13 @@ import {
   getChartsByChartIdRatingsMine,
   postCatalogInstalled,
   postCatalogInstalledByIdRollback,
+  postCatalogApplicationsPreview,
+  postCatalogOperationsByIdRetry,
   postCatalogRepositories,
   postCatalogRepositoriesByIdSync,
   postChartsByChartIdRatings,
   putCatalogInstalledByIdUpgrade,
+  putCatalogChartsByIdFavorite,
   putChartsByChartIdRatingsByRatingId,
 } from "@/lib/api/generated/client";
 import { idempotencyHeaderParams } from "@/lib/api/idempotency";
@@ -43,6 +55,26 @@ export type ChartRatingAggregate = CamelizeKeys<
   OpenAPIComponents["schemas"]["ChartRatingAggregate"]
 >;
 export type ChartScore = CamelizeKeys<ChartRecommendationWire>;
+export type CatalogApplicationPresentation =
+  OpenAPIComponents["schemas"]["CatalogApplicationPresentation"];
+export type CatalogInstallationPreview =
+  OpenAPIComponents["schemas"]["CatalogInstallationPreview"];
+export type ApplicationCatalogSource =
+  OpenAPIComponents["schemas"]["ApplicationCatalogSource"];
+export type CatalogOperation =
+  OpenAPIComponents["schemas"]["CatalogOperation"] & {
+    events?: Schemas["CatalogOperationEvent"][];
+  };
+
+export interface CatalogInstallationReceipt {
+  installation: InstalledChart;
+  operation: CatalogOperation;
+}
+
+export type CatalogInstallationAccepted = CatalogInstallationReceipt;
+export type CatalogUserDiscovery = CamelizeKeys<
+  OpenAPIComponents["schemas"]["CatalogUserDiscovery"]
+>;
 
 const CATALOG_PAGE_LIMIT = 200;
 const CHART_CATEGORIES = new Set<HelmChartCategory>([
@@ -57,13 +89,85 @@ const CHART_CATEGORIES = new Set<HelmChartCategory>([
   "other",
 ]);
 
+function unwrapCollection<T>(response: unknown): T[] {
+  let value = response;
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (Array.isArray(value)) return value as T[];
+    if (!value || typeof value !== "object" || !("data" in value)) break;
+    value = (value as { data?: unknown }).data;
+  }
+  return [];
+}
+
+export async function getCatalogApplicationPresentations(
+  signal?: AbortSignal,
+): Promise<CatalogApplicationPresentation[]> {
+  return unwrapCollection<CatalogApplicationPresentation>(
+    await getCatalogApplications({ signal }),
+  );
+}
+
+export async function getApplicationCatalogSources(
+  signal?: AbortSignal,
+): Promise<ApplicationCatalogSource[]> {
+  return unwrapCollection<ApplicationCatalogSource>(
+    await getCatalogApplicationSources({ signal }),
+  );
+}
+
+export async function getCatalogUserDiscovery(
+  signal?: AbortSignal,
+): Promise<CatalogUserDiscovery[]> {
+  const response = await getCatalogDiscovery({ signal });
+  return (response.data ?? []).map((item) => ({
+    chartId: item.chart_id,
+    favorite: item.favorite,
+    favoriteAt: item.favorite_at ?? undefined,
+    lastViewedAt: item.last_viewed_at ?? undefined,
+    viewCount: item.view_count,
+  }));
+}
+
+export async function setCatalogChartFavorite(
+  chartId: string,
+  favorite: boolean,
+  scope?: { clusterId?: string; projectId?: string },
+): Promise<CatalogUserDiscovery> {
+  const response = await putCatalogChartsByIdFavorite({
+    path: { id: chartId },
+    query: {
+      cluster_id: scope?.clusterId,
+      project_id: scope?.projectId,
+    },
+    body: { favorite },
+  });
+  const item = requireData(response, "setCatalogChartFavorite");
+  return {
+    chartId: item.chart_id,
+    favorite: item.favorite,
+    favoriteAt: item.favorite_at ?? undefined,
+    lastViewedAt: item.last_viewed_at ?? undefined,
+    viewCount: item.view_count,
+  };
+}
+
+export async function previewCatalogInstallation(data: {
+  cluster_id: string;
+  chart_version_id: string;
+  namespace: string;
+  values_override?: string;
+}): Promise<CatalogInstallationPreview> {
+  return postCatalogApplicationsPreview({ body: data });
+}
+
 function requiredString(value: string | undefined, field: string): string {
   if (!value) throw new Error(`Catalog API response omitted ${field}`);
   return value;
 }
 
 function requiredNumber(value: number | undefined, field: string): number {
-  if (value === undefined) throw new Error(`Catalog API response omitted ${field}`);
+  if (value === undefined)
+    throw new Error(`Catalog API response omitted ${field}`);
   return value;
 }
 
@@ -76,7 +180,9 @@ function requireData<T>(response: { data?: T }, operation: string): T {
 
 function repositoryType(value: string | undefined): HelmRepoType {
   if (value === "helm" || value === "oci") return value;
-  throw new Error(`Catalog API returned unsupported repository type: ${value ?? "missing"}`);
+  throw new Error(
+    `Catalog API returned unsupported repository type: ${value ?? "missing"}`,
+  );
 }
 
 function chartCategory(value: string | undefined): HelmChartCategory {
@@ -154,8 +260,12 @@ export function mapInstalledChart(
   return {
     id: requiredString(wire.id, "installedChart.id"),
     clusterId: requiredString(wire.cluster_id, "installedChart.cluster_id"),
+    projectId: wire.project_id ?? undefined,
     chartVersionId: wire.chart_version_id,
-    releaseName: requiredString(wire.release_name, "installedChart.release_name"),
+    releaseName: requiredString(
+      wire.release_name,
+      "installedChart.release_name",
+    ),
     namespace: requiredString(wire.namespace, "installedChart.namespace"),
     valuesOverride: wire.values_override,
     status: requiredString(wire.status, "installedChart.status"),
@@ -204,9 +314,13 @@ function mapChartScore(wire: ChartRecommendationWire): ChartScore {
   };
 }
 
-export async function getHelmRepositories(): Promise<HelmRepository[]> {
+export async function getHelmRepositories(
+  clusterId?: string,
+  signal?: AbortSignal,
+): Promise<HelmRepository[]> {
   const response = await getCatalogRepositories({
-    query: { limit: CATALOG_PAGE_LIMIT },
+    query: { cluster_id: clusterId, limit: CATALOG_PAGE_LIMIT },
+    signal,
   });
   const rows = Array.isArray(response) ? response : (response.data ?? []);
   return rows.map(mapHelmRepository);
@@ -248,18 +362,28 @@ export async function deleteHelmRepository(id: string): Promise<void> {
   await deleteCatalogRepositoriesById({ path: { id } });
 }
 
-export async function getHelmCharts(params: {
-  projectId: string;
-  repository?: string;
-  category?: string;
-  search?: string;
-}): Promise<HelmChart[]> {
+export async function getHelmCharts(
+  params: {
+    clusterId?: string;
+    projectId?: string;
+    repository?: string;
+    category?: string;
+    search?: string;
+  },
+  signal?: AbortSignal,
+): Promise<HelmChart[]> {
   const response = await getCatalogCharts({
-    query: { project_id: params.projectId, limit: CATALOG_PAGE_LIMIT },
+    query: {
+      cluster_id: params.clusterId,
+      project_id: params.projectId,
+      limit: CATALOG_PAGE_LIMIT,
+    },
+    signal,
   });
   const search = params.search?.trim().toLocaleLowerCase();
   return (response.data ?? []).map(mapHelmChart).filter((chart) => {
-    if (params.repository && chart.repositoryId !== params.repository) return false;
+    if (params.repository && chart.repositoryId !== params.repository)
+      return false;
     if (params.category && chart.category !== params.category) return false;
     if (!search) return true;
     return [chart.name, chart.displayName, chart.description, ...chart.keywords]
@@ -269,27 +393,114 @@ export async function getHelmCharts(params: {
 }
 
 export async function getHelmChartVersions(
-  projectId: string,
+  scopeId: string,
   chartId: string,
+  scope: "cluster" | "project" = "project",
+  signal?: AbortSignal,
 ): Promise<HelmChartVersion[]> {
   const response = await getCatalogChartsByIdVersions({
     path: { id: chartId },
-    query: { project_id: projectId, limit: 200 },
+    query: {
+      cluster_id: scope === "cluster" ? scopeId : undefined,
+      project_id: scope === "project" ? scopeId : undefined,
+      limit: 200,
+    },
+    signal,
   });
   return (response.data ?? []).map(mapHelmChartVersion);
 }
 
-export async function getInstalledCharts(params?: {
-  cluster?: string;
-}): Promise<InstalledChart[]> {
+export async function getHelmChart(
+  scopeId: string,
+  chartId: string,
+  scope: "cluster" | "project" = "project",
+  signal?: AbortSignal,
+): Promise<HelmChart> {
+  const response = await getCatalogChartsById({
+    path: { id: chartId },
+    query: {
+      cluster_id: scope === "cluster" ? scopeId : undefined,
+      project_id: scope === "project" ? scopeId : undefined,
+    },
+    signal,
+  });
+  return mapHelmChart(requireData(response, "getHelmChart"));
+}
+
+export async function getHelmChartReadme(
+  scopeId: string,
+  chartId: string,
+  version?: string,
+  scope: "cluster" | "project" = "project",
+  signal?: AbortSignal,
+): Promise<string> {
+  const response = await getCatalogChartsByIdReadme({
+    path: { id: chartId },
+    query: {
+      cluster_id: scope === "cluster" ? scopeId : undefined,
+      project_id: scope === "project" ? scopeId : undefined,
+      version,
+    },
+    signal,
+  });
+  return response.readme ?? "";
+}
+
+export async function getHelmChartValues(
+  scopeId: string,
+  chartId: string,
+  version?: string,
+  scope: "cluster" | "project" = "project",
+  signal?: AbortSignal,
+): Promise<{
+  chart: string;
+  version: string;
+  defaultValues: string;
+  valuesSchema: Record<string, unknown>;
+}> {
+  const response = await getCatalogChartsByIdValues({
+    path: { id: chartId },
+    query: {
+      cluster_id: scope === "cluster" ? scopeId : undefined,
+      project_id: scope === "project" ? scopeId : undefined,
+      version,
+    },
+    signal,
+  });
+  return {
+    chart: response.chart ?? "",
+    version: response.version ?? "",
+    defaultValues: response.default_values ?? "",
+    valuesSchema: response.values_schema ?? {},
+  };
+}
+
+export async function getInstalledChartUpgradeVersions(
+  installationId: string,
+  signal?: AbortSignal,
+): Promise<HelmChartVersion[]> {
+  const response = await getCatalogInstalledByIdUpgradeVersions({
+    path: { id: installationId },
+    signal,
+  });
+  return response.data.map(mapHelmChartVersion);
+}
+
+export async function getInstalledCharts(
+  params?: {
+    cluster?: string;
+  },
+  signal?: AbortSignal,
+): Promise<InstalledChart[]> {
   const response = await getCatalogInstalled({
     query: { cluster_id: params?.cluster, limit: CATALOG_PAGE_LIMIT },
+    signal,
   });
   return (response.data ?? []).map(mapInstalledChart);
 }
 
 export interface InstallHelmChartRequest {
-  project_id: string;
+  project_id?: string;
   cluster_id: string;
   chart_version_id: string;
   release_name: string;
@@ -299,7 +510,7 @@ export interface InstallHelmChartRequest {
 
 export async function installHelmChart(
   data: InstallHelmChartRequest,
-): Promise<InstalledChart> {
+): Promise<CatalogInstallationReceipt> {
   const payload = requireData(
     await postCatalogInstalled({
       headerParams: idempotencyHeaderParams(),
@@ -307,7 +518,36 @@ export async function installHelmChart(
     }),
     "installHelmChart",
   );
-  return mapInstalledChart(payload.installation);
+  return {
+    installation: mapInstalledChart(payload.installation),
+    operation: payload.operation,
+  };
+}
+
+/** Detail is the only catalog endpoint that exposes persisted stage events. */
+export async function getCatalogOperation(
+  id: string,
+): Promise<CatalogOperation> {
+  return getCatalogOperationsById({ path: { id } });
+}
+
+export async function listCatalogOperations(
+  signal?: AbortSignal,
+): Promise<CatalogOperation[]> {
+  const response = await getCatalogOperations({
+    query: { limit: CATALOG_PAGE_LIMIT },
+    signal,
+  });
+  return response.data ?? [];
+}
+
+export async function retryCatalogOperation(
+  id: string,
+): Promise<CatalogOperation> {
+  return postCatalogOperationsByIdRetry({
+    path: { id },
+    headerParams: idempotencyHeaderParams(),
+  });
 }
 
 export async function upgradeInstalledChart(
@@ -332,7 +572,10 @@ export async function uninstallChart(id: string): Promise<void> {
   });
 }
 
-export async function rollbackChart(id: string, revision: number): Promise<void> {
+export async function rollbackChart(
+  id: string,
+  revision: number,
+): Promise<void> {
   await postCatalogInstalledByIdRollback({
     path: { id },
     headerParams: idempotencyHeaderParams(),
@@ -368,7 +611,9 @@ export async function getChartRatingAggregate(
   const response = await getChartsByChartIdRatingsAggregate({
     path: { chart_id: chartId },
   });
-  return mapChartRatingAggregate(requireData(response, "getChartRatingAggregate"));
+  return mapChartRatingAggregate(
+    requireData(response, "getChartRatingAggregate"),
+  );
 }
 
 export async function getMyChartRating(

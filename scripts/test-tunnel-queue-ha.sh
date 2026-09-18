@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+. scripts/lib/docker-test-endpoint.sh
 
 for tool in docker go; do
   command -v "$tool" >/dev/null 2>&1 || {
@@ -24,9 +25,9 @@ trap cleanup EXIT
 
 docker run -d --rm --name "$POSTGRES_CONTAINER" \
   -e POSTGRES_PASSWORD=astro -e POSTGRES_USER=astro -e POSTGRES_DB=astronomer \
-  -p 127.0.0.1::5432 pgvector/pgvector:pg17 >/dev/null
+  -p "${DOCKER_TEST_BIND_HOST}::5432" pgvector/pgvector:pg17 >/dev/null
 docker run -d --rm --name "$REDIS_CONTAINER" \
-  -p 127.0.0.1::6379 redis:7-alpine >/dev/null
+  -p "${DOCKER_TEST_BIND_HOST}::6379" redis:7-alpine >/dev/null
 
 for _ in $(seq 1 60); do
   docker exec "$POSTGRES_CONTAINER" pg_isready -U astro -d astronomer >/dev/null 2>&1 &&
@@ -38,8 +39,8 @@ docker exec "$REDIS_CONTAINER" redis-cli ping >/dev/null
 
 POSTGRES_PORT="$(docker port "$POSTGRES_CONTAINER" 5432/tcp | awk -F: 'NR==1 {print $NF}')"
 REDIS_PORT="$(docker port "$REDIS_CONTAINER" 6379/tcp | awk -F: 'NR==1 {print $NF}')"
-DATABASE_URL="postgres://astro:astro@127.0.0.1:$POSTGRES_PORT/astronomer?sslmode=disable"
-REDIS_URL="redis://127.0.0.1:$REDIS_PORT/0"
+DATABASE_URL="postgres://astro:astro@${DOCKER_TEST_CONNECT_HOST}:$POSTGRES_PORT/astronomer?sslmode=disable"
+REDIS_URL="redis://${DOCKER_TEST_CONNECT_HOST}:$REDIS_PORT/0"
 
 go build -trimpath -o "$WORK_DIR/migrator" ./cmd/migrator
 "$WORK_DIR/migrator" -database "$DATABASE_URL" -path internal/db/migrations up >/dev/null

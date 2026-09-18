@@ -1,10 +1,7 @@
 // Package handler — Rancher-style global settings hub.
 //
-// Migration 046 introduced the `platform_settings` key/value table; this
-// file is the API surface in front of it. The motivation is the same as
-// Rancher's /v3/settings: operators need a single place to tune branding,
-// banners (compliance MOTD), feature flags, token TTL, and the
-// telemetry-opt-in — all without redeploying the chart.
+// Operators manage branding, feature flags, session policy and governance
+// through validated, transactionally audited settings without redeployment.
 //
 // Endpoints (all under /api/v1):
 //
@@ -50,6 +47,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/platformsettings"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
 )
 
@@ -76,38 +74,6 @@ type PlatformSettingsMutationTx interface {
 }
 
 type platformSettingsRunTxFunc func(context.Context, func(PlatformSettingsMutationTx) error) error
-
-func executePlatformSettingsMutation[T any](
-	r *http.Request,
-	h *PlatformSettingsHandler,
-	mutate func(PlatformSettingsQuerier) (T, error),
-	describe func(T) clusterAuditEvent,
-) (T, error) {
-	var zero T
-	if h == nil || h.queries == nil {
-		return zero, errors.New("platform settings handler is not configured")
-	}
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q PlatformSettingsMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(result)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return result, err
-	}
-	result, err := mutate(h.queries)
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
 
 // settingType enumerates the JSON shapes the handler accepts. Anything
 // else PUT-ed returns 400 validation_error.
@@ -155,40 +121,49 @@ const (
 	NamespaceRegistration = "registration"
 )
 
+func registeredFeatureDefault(key string) bool {
+	value, ok := platformsettings.FeatureDefault(key)
+	if !ok {
+		panic("unregistered platform feature: " + key)
+	}
+	return value
+}
+
 // settingsRegistry enumerates every legal key. Adding a new key to
 // platform_settings means adding it here too — otherwise PUT will
 // reject it as `unknown_key` and reads will skip it.
 var settingsRegistry = map[string]settingSpec{
-	"branding.product_name":  {Type: typeString, Default: "Astronomer", Description: "Product display name shown in the header and tab title"},
-	"branding.logo_url":      {Type: typeString, Default: "", Description: "URL of the logo PNG/SVG; empty string falls back to the built-in mark"},
-	"branding.primary_color": {Type: typeString, Default: "#0066CC", Description: "Primary brand color (hex); applied as a CSS variable across the SPA"},
-	"branding.support_url":   {Type: typeString, Default: "", Description: "Link rendered in the in-app help menu; empty = hide the menu entry"},
-	"branding.copyright":     {Type: typeString, Default: "", Description: "Footer copyright text; empty = hide the footer line"},
-	"banner.login_text":      {Type: typeString, Default: "", Description: "Pre-login banner text; markdown supported. Empty = no banner"},
-	"banner.global_text":     {Type: typeString, Default: "", Description: "Persistent in-app banner text; markdown supported. Empty = no banner"},
-	"banner.global_color":    {Type: typeEnum, Default: "info", Description: "Banner severity: info | warning | critical", Enum: []string{"info", "warning", "critical"}},
-	"feature.catalog":        {Type: typeBool, Default: true, Description: "Helm chart catalog tab"},
-	"feature.projects":       {Type: typeBool, Default: true, Description: "Projects (multi-tenancy) tab"},
-	"feature.monitoring":     {Type: typeBool, Default: true, Description: "Cluster monitoring tab"},
-	"feature.shared_grafana": {Type: typeBool, Default: true, Description: "Shared Grafana panel on Shared stacks (hide only when exactly false)"},
-	"feature.hosted_loki":    {Type: typeBool, Default: false, Description: "Optional Astronomer Loki on Shared stacks (API and panel off until exactly true)"},
-	"feature.security":       {Type: typeBool, Default: true, Description: "Security / CIS scans tab"},
-	"feature.backups":        {Type: typeBool, Default: true, Description: "Backup and restore tab"},
-	"feature.charlie":        {Type: typeBool, Default: false, Description: "Charlie SRE assistant integration"},
+	platformsettings.InactiveUserRetentionKey: {Type: typeInt, Default: platformsettings.DefaultInactiveUserRetentionDays, Description: "Deactivate inactive non-superuser human accounts after this many days; revokes sessions and API tokens. Daily sweep; service accounts and superusers are excluded", MinInt: 1, MaxInt: platformsettings.MaxInactiveUserRetentionDays},
+	platformsettings.ReadAuditTierKey:         {Type: typeEnum, Default: "standard", Description: "Read-audit coverage: standard uses configured policies; diagnostic adds a 10% sample of all authenticated reads; incident records all authenticated reads. No request or response bodies are recorded. Takes effect within 30 seconds", Enum: []string{"standard", "diagnostic", "incident"}},
+	"branding.product_name":                   {Type: typeString, Default: "Astronomer", Description: "Product display name shown in the header and tab title"},
+	"branding.logo_url":                       {Type: typeString, Default: "", Description: "URL of the logo PNG/SVG; empty string falls back to the built-in mark"},
+	"branding.primary_color":                  {Type: typeString, Default: "#0066CC", Description: "Primary brand color (hex); applied as a CSS variable across the SPA"},
+	"branding.support_url":                    {Type: typeString, Default: "", Description: "Link rendered in the in-app help menu; empty = hide the menu entry"},
+	"branding.copyright":                      {Type: typeString, Default: "", Description: "Footer copyright text; empty = hide the footer line"},
+	"banner.login_text":                       {Type: typeString, Default: "", Description: "Pre-login banner text; markdown supported. Empty = no banner"},
+	"banner.global_text":                      {Type: typeString, Default: "", Description: "Persistent in-app banner text; markdown supported. Empty = no banner"},
+	"banner.global_color":                     {Type: typeEnum, Default: "info", Description: "Banner severity: info | warning | critical", Enum: []string{"info", "warning", "critical"}},
+	platformsettings.FeatureCatalog:           {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureCatalog), Description: "Helm chart catalog tab"},
+	platformsettings.FeatureProjects:          {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureProjects), Description: "Projects (multi-tenancy) tab"},
+	platformsettings.FeatureMonitoring:        {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureMonitoring), Description: "Cluster monitoring tab"},
+	platformsettings.FeatureSharedGrafana:     {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureSharedGrafana), Description: "Shared Grafana panel on Shared stacks (hide only when exactly false)"},
+	platformsettings.FeatureHostedLoki:        {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureHostedLoki), Description: "Optional Astronomer Loki on Shared stacks (API and panel off until exactly true)"},
+	platformsettings.FeatureSecurity:          {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureSecurity), Description: "Security / CIS scans tab"},
+	platformsettings.FeatureBackups:           {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureBackups), Description: "Backup and restore tab"},
+	platformsettings.FeatureDelivery:          {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureDelivery), Description: "Flux-native application and platform delivery"},
+	platformsettings.FeatureAlerting:          {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureAlerting), Description: "Alert rules, channels, silences, and notifications"},
+	platformsettings.FeatureCharlie:           {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureCharlie), Description: "Charlie SRE assistant integration"},
 	// Off until the extension marketplace has something to install. Same
 	// fail-closed posture as Charlie: no DB row means the SPA hides the
 	// page and FeatureGateDefault 404s the API.
-	"feature.extensions": {Type: typeBool, Default: false, Description: "UI extension registry (off until the marketplace is built out)"},
-	// New opt-in features — Default FALSE (disabled until an operator enables).
-	// NOTE: the FeatureGate middleware hard-codes a true fallback, so these are
-	// additionally gated server-side (config flag for control-plane snapshots;
-	// explicit BoolValue(...,false) for native RBAC / shell scoping).
-	"feature.control_plane_snapshots": {Type: typeBool, Default: false, Description: "Control-plane (etcd) DR snapshots for self-managed clusters (k3s/RKE2/kubeadm)"},
-	"feature.shell_scope_to_caller":   {Type: typeBool, Default: false, Description: "Scope the kubectl shell to the caller's own RBAC instead of the agent SA's cluster-wide grant"},
-	"token.default_ttl_min":           {Type: typeInt, Default: 60, Description: "API token default expiry in minutes; 0 = no expiry", MinInt: 0, MaxInt: 525600 * 10},
-	"token.max_ttl_min":               {Type: typeInt, Default: 525600, Description: "Maximum allowed API token expiry in minutes (1 year default)", MinInt: 1, MaxInt: 525600 * 10},
-	"telemetry.enabled":               {Type: typeBool, Default: false, Description: "Opt-in: send anonymized aggregate telemetry nightly"},
-	"telemetry.endpoint":              {Type: typeString, Default: "https://telemetry.alphabravo.io/astronomer", Description: "HTTPS endpoint that anonymized telemetry POSTs land at"},
+	platformsettings.FeatureExtensions: {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureExtensions), Description: "UI extension registry (off until the marketplace is built out)"},
+	// New opt-in features — default false until an operator enables them. The
+	// route middleware resolves these defaults from this shared registry.
+	platformsettings.FeatureControlPlaneSnapshots: {Type: typeBool, Default: registeredFeatureDefault(platformsettings.FeatureControlPlaneSnapshots), Description: "Control-plane (etcd) DR snapshots for self-managed clusters (k3s/RKE2/kubeadm)"},
+	"token.default_ttl_min":                       {Type: typeInt, Default: 60, Description: "API token default expiry in minutes; 0 = no expiry", MinInt: 0, MaxInt: 525600 * 10},
+	"token.max_ttl_min":                           {Type: typeInt, Default: 525600, Description: "Maximum allowed API token expiry in minutes (1 year default)", MinInt: 1, MaxInt: 525600 * 10},
+	"telemetry.enabled":                           {Type: typeBool, Default: false, Description: "Opt-in: send anonymized aggregate telemetry nightly"},
+	"telemetry.endpoint":                          {Type: typeString, Default: "https://telemetry.alphabravo.io/astronomer", Description: "HTTPS endpoint that anonymized telemetry POSTs land at"},
 	// MFA enforcement (migration 043 + compliance baselines). When true,
 	// every local-password user must complete TOTP enrollment + challenge
 	// at login; unenrolled accounts are forced into the enroll-only
@@ -259,8 +234,7 @@ func NewPlatformSettingsHandler(queries PlatformSettingsQuerier) *PlatformSettin
 	return &PlatformSettingsHandler{queries: queries}
 }
 
-// SetRunTx wires the production transaction used by every platform-setting
-// mutation. Narrow handler fakes may omit it and retain the legacy direct path.
+// SetRunTx wires the transaction required by every platform-setting mutation.
 func (h *PlatformSettingsHandler) SetRunTx(runTx platformSettingsRunTxFunc) {
 	if h != nil {
 		h.runTx = runTx
@@ -430,14 +404,14 @@ func (h *PlatformSettingsHandler) BatchUpdate(w http.ResponseWriter, r *http.Req
 		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
 		return
 	}
-	rows, err := executePlatformSettingsMutation(r, h,
-		func(q PlatformSettingsQuerier) ([]sqlc.PlatformSetting, error) {
+	rows, err := executeMutation(r, h.runTx,
+		func(q PlatformSettingsMutationTx) ([]sqlc.PlatformSetting, error) {
 			return q.BatchUpsertPlatformSettings(r.Context(), sqlc.BatchUpsertPlatformSettingsParams{
 				Payload: payload, UpdatedBy: uuid.UUID(actor.Bytes),
 			})
 		},
-		func(rows []sqlc.PlatformSetting) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(rows []sqlc.PlatformSetting) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.platform_settings.batch_updated", resourceType: "platform_settings",
 				resourceID: "batch", resourceName: "batch", status: http.StatusOK,
 				detail: map[string]any{"keys": keys, "setting_count": len(rows)},
@@ -533,8 +507,8 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 		hadValue  bool
 		wasChange bool
 	}
-	result, err := executePlatformSettingsMutation(r, h,
-		func(q PlatformSettingsQuerier) (updateResult, error) {
+	result, err := executeMutation(r, h.runTx,
+		func(q PlatformSettingsMutationTx) (updateResult, error) {
 			var oldValue json.RawMessage
 			hadValue := false
 			if prev, getErr := q.GetPlatformSetting(r.Context(), key); getErr == nil {
@@ -548,8 +522,8 @@ func (h *PlatformSettingsHandler) Update(w http.ResponseWriter, r *http.Request)
 			})
 			return updateResult{row: row, hadValue: hadValue, wasChange: !hadValue || string(oldValue) != string(req.Value)}, updateErr
 		},
-		func(result updateResult) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(result updateResult) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.platform_settings.updated", resourceType: "platform_setting",
 				resourceID: key, resourceName: key, status: http.StatusOK,
 				detail: map[string]any{"key": key, "previous_override": result.hadValue, "value_changed": result.wasChange},
@@ -613,8 +587,8 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	type deleteResult struct{ hadValue bool }
-	_, err := executePlatformSettingsMutation(r, h,
-		func(q PlatformSettingsQuerier) (deleteResult, error) {
+	_, err := executeMutation(r, h.runTx,
+		func(q PlatformSettingsMutationTx) (deleteResult, error) {
 			_, getErr := q.GetPlatformSetting(r.Context(), key)
 			hadValue := getErr == nil
 			if getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
@@ -622,8 +596,8 @@ func (h *PlatformSettingsHandler) Delete(w http.ResponseWriter, r *http.Request)
 			}
 			return deleteResult{hadValue: hadValue}, q.DeletePlatformSetting(r.Context(), key)
 		},
-		func(result deleteResult) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(result deleteResult) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "admin.platform_settings.reset", resourceType: "platform_setting",
 				resourceID: key, resourceName: key, status: http.StatusOK,
 				detail: map[string]any{"key": key, "previous_override": result.hadValue},
@@ -795,10 +769,6 @@ func featureSubsetResponse(rows []sqlc.PlatformSetting) map[string]bool {
 		}
 		out[key] = value
 	}
-	// Deprecated API compatibility alias. The stored/operator-facing key is
-	// feature.shared_grafana; older generated clients still deserialize the
-	// original name during the documented v1 sunset window.
-	out["feature.fleet_grafana"] = out["feature.shared_grafana"]
 	return out
 }
 

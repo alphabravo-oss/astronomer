@@ -127,7 +127,7 @@ func TestPolicyPublisherStillPublishesInAppWhenPlannerFails(t *testing.T) {
 	bus := events.NewBus()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sub := bus.Subscribe(ctx)
+	sub := bus.Subscribe(ctx, events.AcceptAll)
 	fake := &alertPlannerFake{connection: sqlc.CharlieConnection{ID: uuid.New(), Active: true}, policyErr: errors.New("planner unavailable"), created: map[string]sqlc.CreateCharlieAlertDeliveryWithOutboxParams{}}
 	publisher := NewPolicyFindingPublisher(bus, &FindingAlertPlanner{queries: fake, now: time.Now})
 	alert := FindingAlert{FindingID: uuid.NewString(), Severity: "high", Status: "open"}

@@ -13,9 +13,9 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
-	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -29,7 +29,6 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	requester := c.requester
 	rbacEngine := c.rbacEngine
 	rbacQuerier := c.rbacQuerier
-	controlPlaneHandler := c.controlPlaneHandler
 	authHandler := c.authHandler
 	totpHandler := c.totpHandler
 	ssoHandler := c.ssoHandler
@@ -45,13 +44,6 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	resourceHandler.SetEncryptor(encryptor)
 	resourceHandler.SetSSOManager(ssoManager)
 	resourceHandler.SetJWTManager(jwtManager)
-	// Admin force-logout SLO clean-up (migration 054). The handler
-	// enumerates the target user's sso_sessions rows and fires
-	// best-effort back-channel end-session POSTs against each IdP
-	// before deleting the rows. Wired unconditionally; the encryptor
-	// gate inside the handler is what actually decides whether the
-	// back-channel POST can fire.
-	resourceHandler.SetSSOSessionStore(queries)
 	resourceHandler.SetSSOBackchannelClient(handler.NewDefaultSSOBackchannelClient())
 	// User delete cascades through *_role_bindings; signal the RBAC cache to
 	// drop the per-user entry instead of waiting out the TTL.
@@ -107,7 +99,6 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 			totpHandler.SetEmailNotifier(notifier)
 		}
 		resourceHandler.SetEmailNotifier(notifier)
-		controlPlaneHandler.SetEmailNotifier(notifier)
 		authHandler.SetPasswordResetStore(queries)
 	}
 
@@ -181,19 +172,21 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	}
 	// CORR-R02: cross-pod event fan-out for SSE (webhook/SIEM taps skip Remote).
 	if cfg.RedisURL != "" {
-		if opt, rerr := asynq.ParseRedisURI(cfg.RedisURL); rerr == nil {
+		if opt, rerr := redisconn.Parse(cfg.RedisURL); rerr == nil {
 			if client, ok := opt.MakeRedisClient().(*redis.Client); ok && client != nil {
 				bus.AttachRedis(client, events.DefaultRedisChannel, logger,
 					events.WithRedisRelayQueueCapacity(cfg.EventRelayQueueCapacity))
-				go bus.StartRedisRelay(ctx)
+				c.eventRelayClient = client
 				logger.Info("events bus redis fan-out enabled",
 					"channel", events.DefaultRedisChannel,
 					"queue_capacity", bus.RelayStatus().Capacity)
 			}
 		}
 	}
-	streamTicketHandler := handler.NewStreamTicketHandler(streamTickets)
-	streamTicketHandler.SetAuthorization(rbacEngine, rbacQuerier)
+	streamTicketHandler, err := handler.NewStreamTicketHandler(streamTickets, rbacEngine, rbacQuerier)
+	if err != nil {
+		return err
+	}
 	settingsCache := handler.NewSettingsCache(queries, 30*time.Second)
 	c.resourceHandler = resourceHandler
 	c.platformCharts = platformCharts

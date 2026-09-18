@@ -1,7 +1,7 @@
 package rollout
 
 import (
-	"slices"
+	"reflect"
 	"testing"
 	"time"
 
@@ -65,7 +65,7 @@ func TestSchedulerHardConcurrencyOrderingAndIdempotency(t *testing.T) {
 	input := evaluateInput(runtime, testNow)
 	first := mustEvaluate(t, input)
 	second := mustEvaluate(t, input)
-	if first.ID != second.ID || !slices.Equal(first.Releases, second.Releases) {
+	if first.ID != second.ID || !reflect.DeepEqual(first.Releases, second.Releases) {
 		t.Fatalf("same snapshot changed decision:\n%+v\n%+v", first, second)
 	}
 	if len(first.Releases) != 3 {

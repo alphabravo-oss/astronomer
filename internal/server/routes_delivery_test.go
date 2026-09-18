@@ -317,11 +317,7 @@ func TestDeliveryMutationRequiresProjectsWriteTokenScope(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			rawToken := "astro_delivery_scope_" + strings.ReplaceAll(test.name, " ", "_")
 			jwtManager := auth.MustNewJWTManager("delivery-route-test-secret", 60)
-			router := NewRouter(&config.Config{}, RouterDependencies{
-				JWT: jwtManager, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, test.scopes),
-				RBACEngine: rbac.NewEngine(), RBACQueries: deliveryRouteRBACQuerier{bindings: bindings},
-				DeliverySources: deliveryhandler.NewSourceHandler(store, nil, 1),
-			})
+			router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtManager, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, test.scopes), RBACEngine: rbac.NewEngine(), RBACQueries: deliveryRouteRBACQuerier{bindings: bindings}}, Delivery: DeliveryDependencies{Sources: newDeliverySourceRouteHandler(store)}})
 			request := httptest.NewRequest(http.MethodPost, "/api/v1/delivery/sources/", strings.NewReader(body))
 			request.Header.Set("Authorization", "Bearer "+rawToken)
 			recorder := httptest.NewRecorder()
@@ -405,6 +401,14 @@ func TestDeliveryCreateRouteIdempotencyRunsAfterAuthorization(t *testing.T) {
 	}
 }
 
+func newDeliverySourceRouteHandler(store *deliverySourceRouteStore) *deliveryhandler.SourceHandler {
+	handler := deliveryhandler.NewSourceHandler(store, nil, 1)
+	handler.SetRunTx(func(_ context.Context, fn func(deliveryhandler.SourceMutationTx) error) error {
+		return fn(store)
+	})
+	return handler
+}
+
 func newDeliveryRouteTestRouter(t *testing.T, bindings []rbac.RoleBinding, sources *deliverySourceRouteStore, bundles *deliveryBundleRouteStore) (http.Handler, string) {
 	t.Helper()
 	jwtManager := auth.MustNewJWTManager("delivery-route-test-secret", 60)
@@ -412,16 +416,12 @@ func newDeliveryRouteTestRouter(t *testing.T, bindings []rbac.RoleBinding, sourc
 	if err != nil {
 		t.Fatalf("generate access token: %v", err)
 	}
-	deps := RouterDependencies{
-		JWT: jwtManager, RBACEngine: rbac.NewEngine(), RBACQueries: deliveryRouteRBACQuerier{bindings: bindings},
-	}
+	deps := RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtManager, RBACEngine: rbac.NewEngine(), RBACQueries: deliveryRouteRBACQuerier{bindings: bindings}}}
 	if sources != nil {
-		handler := deliveryhandler.NewSourceHandler(sources, nil, 1)
-		handler.SetRunTx(func(_ context.Context, fn func(deliveryhandler.SourceMutationTx) error) error { return fn(sources) })
-		deps.DeliverySources = handler
+		deps.Delivery.Sources = newDeliverySourceRouteHandler(sources)
 	}
 	if bundles != nil {
-		deps.DeliveryBundles = deliveryhandler.NewBundleHandler(bundles)
+		deps.Delivery.Bundles = deliveryhandler.NewBundleHandler(bundles)
 	}
 	return NewRouter(&config.Config{}, deps), token
 }

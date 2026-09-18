@@ -64,17 +64,13 @@ func TestExecuteRBACMutationCommitsRoleAndAuditTogether(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, "/api/v1/rbac/global-roles/", nil)
 			params := sqlc.CreateGlobalRoleParams{Name: "incident-responder", DisplayName: "Incident Responder"}
 
-			_, err := executeRBACMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q RBACMutationTx) (sqlc.GlobalRole, error) { return q.CreateGlobalRole(r.Context(), params) },
-				func() (sqlc.GlobalRole, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.GlobalRole{}, nil
-				},
-				func(role sqlc.GlobalRole) rbacAuditEvent {
-					return rbacAuditEvent{action: "role.create", resourceType: "global_role", resourceID: role.ID.String(), resourceName: role.Name, status: http.StatusCreated}
+				func(role sqlc.GlobalRole) mutationAuditEvent {
+					return mutationAuditEvent{action: "role.create", resourceType: "global_role", resourceID: role.ID.String(), resourceName: role.Name, status: http.StatusCreated}
 				})
 			if (err != nil) != tc.wantErr {
-				t.Fatalf("executeRBACMutation error = %v, wantErr=%v", err, tc.wantErr)
+				t.Fatalf("executeMutation error = %v, wantErr=%v", err, tc.wantErr)
 			}
 			if len(committedRoles) != tc.wantRoles || len(committedAudits) != tc.wantAudits {
 				t.Fatalf("committed roles/audits = %d/%d, want %d/%d", len(committedRoles), len(committedAudits), tc.wantRoles, tc.wantAudits)
@@ -113,12 +109,42 @@ func TestCreateGlobalRoleReturnsAuditUnavailableAndRollsBack(t *testing.T) {
 	}
 }
 
-func TestEveryRBACPrivilegeMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("rbac.go")
-	if err != nil {
-		t.Fatal(err)
+func TestRoleDocumentsEnforceDurableJSONShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		permissions string
+		rules       string
+		wantOK      bool
+	}{
+		{name: "defaults", wantOK: true},
+		{name: "explicit shapes", permissions: `{}`, rules: `[]`, wantOK: true},
+		{name: "permissions array", permissions: `[]`, rules: `[]`},
+		{name: "rules object", permissions: `{}`, rules: `{}`},
+		{name: "permissions null", permissions: `null`, rules: `[]`},
+		{name: "rules null", permissions: `{}`, rules: `null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/rbac/global-roles/", nil)
+			permissions, rules, ok := roleDocuments(recorder, request, roleRequest{
+				Permissions: []byte(tc.permissions),
+				Rules:       []byte(tc.rules),
+			})
+			if ok != tc.wantOK {
+				t.Fatalf("roleDocuments ok = %t, want %t; response=%s", ok, tc.wantOK, recorder.Body.String())
+			}
+			if tc.wantOK && (string(permissions) != "{}" || string(rules) != "[]") {
+				t.Fatalf("normalized documents = %s/%s, want {}/[]", permissions, rules)
+			}
+			if !tc.wantOK && recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", recorder.Code)
+			}
+		})
 	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+}
+
+func TestEveryRBACPrivilegeMutationUsesTransactionalExecutor(t *testing.T) {
+	paths, err := filepath.Glob("rbac*.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,28 +156,37 @@ func TestEveryRBACPrivilegeMutationUsesTransactionalExecutor(t *testing.T) {
 		"CreateClusterRoleBinding": false, "DeleteClusterRoleBinding": false,
 		"CreateProjectRoleBinding": false, "DeleteProjectRoleBinding": false,
 	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
 			continue
 		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			t.Fatal(parseErr)
 		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if _, tracked := want[fn.Name.Name]; !tracked {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeMutation" {
+					want[fn.Name.Name] = true
+				}
 				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeRBACMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
+			})
+		}
 	}
 	for name, found := range want {
 		if !found {
-			t.Errorf("%s does not use executeRBACMutation", name)
+			t.Errorf("%s does not use executeMutation", name)
 		}
 	}
 }

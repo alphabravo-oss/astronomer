@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,10 @@ const (
 	defaultSweepLimit     = 16
 )
 
+func nullableDigest(value string) pgtype.Text {
+	return pgtype.Text{String: value, Valid: value != ""}
+}
+
 // Reconciler claims rollout rows with a monotonically increasing database
 // fence, evaluates the pure scheduler, then commits desired deployments,
 // rollout state, counters, events, and the next durable wake-up atomically.
@@ -31,7 +36,18 @@ type Reconciler struct {
 	owner   string
 	now     func() time.Time
 	lease   time.Duration
+
+	runtimeMu    sync.Mutex
+	runtimeCache map[uuid.UUID]runtimeCacheEntry
 }
+
+type runtimeCacheEntry struct {
+	generation int64
+	rows       []sqlc.ListDeliveryRolloutRuntimeRow
+	usedAt     time.Time
+}
+
+const maxRuntimeCacheEntries = 1_024
 
 func NewPostgresReconciler(pool *pgxpool.Pool, windows maintenance.WindowEvaluator, owner string) (*Reconciler, error) {
 	if pool == nil {
@@ -43,7 +59,10 @@ func NewPostgresReconciler(pool *pgxpool.Pool, windows maintenance.WindowEvaluat
 	if len(owner) > MaxLeaseOwnerLength {
 		return nil, fail(CodeInvalidInput, "owner", "exceeds lease owner limit")
 	}
-	return &Reconciler{pool: pool, windows: windows, owner: owner, now: time.Now, lease: defaultReconcileLease}, nil
+	return &Reconciler{
+		pool: pool, windows: windows, owner: owner, now: time.Now, lease: defaultReconcileLease,
+		runtimeCache: make(map[uuid.UUID]runtimeCacheEntry),
+	}, nil
 }
 
 // ReconcileOne is an idempotent wake-up. Another replica holding a live lease
@@ -98,7 +117,7 @@ func (r *Reconciler) reconcileClaimed(ctx context.Context, claimed sqlc.Delivery
 		return err
 	}
 	queries := sqlc.New(r.pool)
-	rows, err := queries.ListDeliveryRolloutRuntime(ctx, claimed.ID)
+	rows, runtimeGeneration, err := r.loadRuntime(ctx, queries, claimed)
 	if err != nil {
 		return fmt.Errorf("load rollout runtime: %w", err)
 	}
@@ -124,7 +143,69 @@ func (r *Reconciler) reconcileClaimed(ctx context.Context, claimed sqlc.Delivery
 	if err != nil {
 		return fmt.Errorf("evaluate rollout decision: %w", err)
 	}
-	return r.applyDecision(ctx, claimed, plan, rowByCluster, decision, now)
+	return r.applyDecision(ctx, claimed, plan, rowByCluster, decision, runtimeGeneration, now)
+}
+
+func (r *Reconciler) loadRuntime(ctx context.Context, queries *sqlc.Queries, claimed sqlc.DeliveryRollout) ([]sqlc.ListDeliveryRolloutRuntimeRow, int64, error) {
+	if claimed.TotalClusters > MaxRolloutClusters {
+		return nil, 0, fail(CodeInvariant, "rollout.total_clusters", "exceeds runtime evaluation limit")
+	}
+	if rows, ok := r.cachedRuntime(claimed.ID, claimed.RuntimeGeneration); ok {
+		return rows, claimed.RuntimeGeneration, nil
+	}
+
+	rows, err := queries.ListDeliveryRolloutRuntime(ctx, sqlc.ListDeliveryRolloutRuntimeParams{
+		RolloutID: claimed.ID, QueryLimit: MaxRolloutClusters + 1,
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(rows) > MaxRolloutClusters {
+		return nil, 0, fail(CodeInvariant, "rollout.runtime", "exceeds runtime evaluation limit")
+	}
+	if len(rows) == 0 {
+		return rows, claimed.RuntimeGeneration, nil
+	}
+	generation := rows[0].RuntimeGeneration
+	for index := 1; index < len(rows); index++ {
+		if rows[index].RuntimeGeneration != generation {
+			return nil, 0, fail(CodeInvariant, "runtime_generation", "runtime snapshot contains mixed generations")
+		}
+	}
+	r.storeRuntime(claimed.ID, generation, rows)
+	return rows, generation, nil
+}
+
+func (r *Reconciler) cachedRuntime(rolloutID uuid.UUID, generation int64) ([]sqlc.ListDeliveryRolloutRuntimeRow, bool) {
+	r.runtimeMu.Lock()
+	defer r.runtimeMu.Unlock()
+	if cached, ok := r.runtimeCache[rolloutID]; ok && cached.generation == generation {
+		cached.usedAt = r.now().UTC()
+		r.runtimeCache[rolloutID] = cached
+		rows := append([]sqlc.ListDeliveryRolloutRuntimeRow(nil), cached.rows...)
+		return rows, true
+	}
+	return nil, false
+}
+
+func (r *Reconciler) storeRuntime(rolloutID uuid.UUID, generation int64, rows []sqlc.ListDeliveryRolloutRuntimeRow) {
+	r.runtimeMu.Lock()
+	defer r.runtimeMu.Unlock()
+	if _, exists := r.runtimeCache[rolloutID]; !exists && len(r.runtimeCache) >= maxRuntimeCacheEntries {
+		var oldestID uuid.UUID
+		var oldest time.Time
+		for id, entry := range r.runtimeCache {
+			if oldestID == uuid.Nil || entry.usedAt.Before(oldest) {
+				oldestID, oldest = id, entry.usedAt
+			}
+		}
+		delete(r.runtimeCache, oldestID)
+	}
+	r.runtimeCache[rolloutID] = runtimeCacheEntry{
+		generation: generation,
+		rows:       append([]sqlc.ListDeliveryRolloutRuntimeRow(nil), rows...),
+		usedAt:     r.now().UTC(),
+	}
 }
 
 func runtimeFromRows(plan FrozenRollout, claimed sqlc.DeliveryRollout, rows []sqlc.ListDeliveryRolloutRuntimeRow) (RuntimeSnapshot, map[uuid.UUID]sqlc.ListDeliveryRolloutRuntimeRow, error) {
@@ -209,7 +290,7 @@ func (r *Reconciler) maintenanceGate(ctx context.Context, plan FrozenRollout, ro
 	return MaintenanceGate{Open: true}, nil
 }
 
-func (r *Reconciler) applyDecision(ctx context.Context, claimed sqlc.DeliveryRollout, plan FrozenRollout, rowByCluster map[uuid.UUID]sqlc.ListDeliveryRolloutRuntimeRow, decision Decision, now time.Time) error {
+func (r *Reconciler) applyDecision(ctx context.Context, claimed sqlc.DeliveryRollout, plan FrozenRollout, rowByCluster map[uuid.UUID]sqlc.ListDeliveryRolloutRuntimeRow, decision Decision, runtimeGeneration int64, now time.Time) error {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("begin rollout decision transaction: %w", err)
@@ -218,6 +299,7 @@ func (r *Reconciler) applyDecision(ctx context.Context, claimed sqlc.DeliveryRol
 	queries := sqlc.New(tx)
 	locked, err := queries.GetClaimedDeliveryRolloutForUpdate(ctx, sqlc.GetClaimedDeliveryRolloutForUpdateParams{
 		ID: claimed.ID, LeaseOwner: r.owner, ExpectedFence: claimed.FencingGeneration,
+		ExpectedRuntimeGeneration: runtimeGeneration,
 	})
 	if err != nil {
 		return fmt.Errorf("fence rollout decision: %w", err)
@@ -260,12 +342,25 @@ func (r *Reconciler) applyDecision(ctx context.Context, claimed sqlc.DeliveryRol
 		if planned.Previous != nil {
 			previousVersion = pgtype.UUID{Bytes: planned.Previous.Version.BundleVersionID, Valid: true}
 		}
+		desiredOverrides, err := json.Marshal(release.Version.Overrides)
+		if err != nil {
+			return fmt.Errorf("marshal desired overrides for cluster %s: %w", release.ClusterID, err)
+		}
+		rendererSpec := []byte(nil)
+		if release.Version.Renderer != nil {
+			rendererSpec, err = json.Marshal(release.Version.Renderer)
+			if err != nil {
+				return fail(CodeInvariant, "renderer", "frozen renderer cannot be encoded")
+			}
+		}
 		deployment, err := queries.UpsertClusterDeploymentDesired(ctx, sqlc.UpsertClusterDeploymentDesiredParams{
 			TargetID: plan.TargetID, ClusterID: release.ClusterID,
 			CurrentRolloutID: pgtype.UUID{Bytes: plan.ID, Valid: true}, DesiredBundleVersionID: pgtype.UUID{Bytes: release.Version.BundleVersionID, Valid: true},
 			PreviousBundleVersionID: previousVersion, DesiredGeneration: release.Generation,
-			DesiredSpecDigest: release.Version.SpecDigest.String(), DesiredRevision: release.Version.Source.Revision.Value,
-			Action: string(model.ActionApply), Phase: string(model.DeploymentPending),
+			DesiredSpecDigest: release.Version.SpecDigest.String(), DesiredOverrides: desiredOverrides, DesiredRevision: release.Version.Source.Revision.Value,
+			DesiredRendererSpec:        rendererSpec,
+			DesiredConfigurationDigest: nullableDigest(release.Version.ConfigurationDigest.String()),
+			Action:                     string(model.ActionApply), Phase: string(model.DeploymentPending),
 		})
 		if err != nil {
 			return fmt.Errorf("persist desired deployment for cluster %s: %w", release.ClusterID, err)

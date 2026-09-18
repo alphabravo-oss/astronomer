@@ -1,11 +1,15 @@
-"use client";
-
 import { useMemo } from "react";
 import { Loader2 } from "lucide-react";
 
-import { Link } from "@/lib/link";
-import { useK8sResource, useWorkloadPods } from "@/lib/hooks";
-import { detailHref, KIND_TO_RESOURCE_TYPE } from "@/lib/k8s-paths";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
+import { useWorkloadPods } from "@/lib/hooks/workloads";
+import {
+  detailHref,
+  KIND_TO_RESOURCE_TYPE,
+  k8sListPath,
+} from "@/lib/k8s-paths";
+import { useClusterResourcePermission } from "@/lib/permission-hooks";
 import type { PermissionDecision } from "@/lib/permissions";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import type { Pod } from "@/types";
@@ -24,6 +28,11 @@ import {
 import { YamlPanel } from "@/components/ui/yaml-view-dialog";
 import { PodLogsViewer } from "@/components/workloads/pod-logs-viewer";
 import { PodTerminal } from "@/components/workloads/pod-terminal";
+import {
+  ResourceMetricsTab,
+  WorkloadResourceTabPanel,
+  type WorkloadResourceTabId,
+} from "@/components/resources/workload-resource-tabs";
 
 export type ResourceDetailTabId =
   | "overview"
@@ -33,7 +42,9 @@ export type ResourceDetailTabId =
   | "related"
   | "rollout"
   | "logs"
-  | "exec";
+  | "exec"
+  | "pod-metrics"
+  | WorkloadResourceTabId;
 
 interface ResourceDetailTabPanelProps {
   tab: ResourceDetailTabId;
@@ -65,6 +76,7 @@ export function ResourceDetailTabPanel({
   onRetry,
 }: ResourceDetailTabPanelProps) {
   const isPod = resourceType === "pods";
+  const isWorkloadTab = tab.startsWith("workload-");
   const conditions = obj?.status?.conditions ?? [];
   const kind = obj?.kind || resourceType;
 
@@ -74,7 +86,7 @@ export function ResourceDetailTabPanel({
       role="tabpanel"
       aria-labelledby={`resource-tab-${tab}`}
       tabIndex={0}
-      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
     >
       {tab === "overview" &&
         (isLoading ? (
@@ -91,7 +103,13 @@ export function ResourceDetailTabPanel({
             className="py-24"
           />
         ) : (
-          <ResourceOverview obj={obj} resourceType={resourceType} />
+          <ResourceOverview
+            obj={obj}
+            resourceType={resourceType}
+            clusterId={clusterId}
+            namespace={namespace}
+            name={name}
+          />
         ))}
 
       {tab === "yaml" && (
@@ -151,6 +169,23 @@ export function ResourceDetailTabPanel({
             containers={podContainerNames(obj)}
           />
         </div>
+      )}
+      {tab === "pod-metrics" && isPod && namespace && (
+        <ResourceMetricsTab
+          clusterId={clusterId}
+          resourceType="pods"
+          namespace={namespace}
+          name={name}
+        />
+      )}
+      {isWorkloadTab && namespace && (
+        <WorkloadResourceTabPanel
+          tab={tab as WorkloadResourceTabId}
+          clusterId={clusterId}
+          resourceType={resourceType}
+          namespace={namespace}
+          name={name}
+        />
       )}
     </div>
   );
@@ -360,6 +395,30 @@ function RelatedResources({
     name,
   );
   const showPods = !!workloadKind && !!namespace;
+  const servicesPermission = useClusterResourcePermission(
+    clusterId,
+    "services",
+    "read",
+  );
+  const servicesQuery = useK8sResource(
+    clusterId,
+    namespace ? k8sListPath("services", namespace) : "",
+    kind === "Pod" && !!namespace && servicesPermission.allowed,
+  );
+  const selectedByServices = useMemo(() => {
+    if (kind !== "Pod") return [];
+    const labels = obj?.metadata?.labels ?? {};
+    const items = (servicesQuery.data as { items?: K8sObject[] } | undefined)
+      ?.items;
+    return (items ?? []).filter((service) => {
+      const selector = service.spec?.selector ?? {};
+      const entries = Object.entries(selector);
+      return (
+        entries.length > 0 &&
+        entries.every(([key, value]) => labels[key] === value)
+      );
+    });
+  }, [kind, obj?.metadata?.labels, servicesQuery.data]);
 
   return (
     <div className="space-y-6">
@@ -379,15 +438,13 @@ function RelatedResources({
                 const ownerType = KIND_TO_RESOURCE_TYPE[reference.kind];
                 return (
                   <TableRow
-                    key={
-                      reference.uid || `${reference.kind}/${reference.name}`
-                    }
+                    key={reference.uid || `${reference.kind}/${reference.name}`}
                   >
                     <TableCell className="text-xs">{reference.kind}</TableCell>
                     <TableCell className="font-mono text-xs">
                       {ownerType ? (
-                        <Link
-                          href={detailHref(
+                        <RouterLink
+                          to={detailHref(
                             clusterId,
                             ownerType,
                             namespace,
@@ -396,7 +453,7 @@ function RelatedResources({
                           className="text-foreground hover:underline"
                         >
                           {reference.name}
-                        </Link>
+                        </RouterLink>
                       ) : (
                         reference.name
                       )}
@@ -426,8 +483,8 @@ function RelatedResources({
                 {pods.map((pod) => (
                   <TableRow key={`${pod.namespace}/${pod.name}`}>
                     <TableCell className="font-mono text-xs">
-                      <Link
-                        href={detailHref(
+                      <RouterLink
+                        to={detailHref(
                           clusterId,
                           "pods",
                           pod.namespace,
@@ -436,13 +493,71 @@ function RelatedResources({
                         className="text-foreground hover:underline"
                       >
                         {pod.name}
-                      </Link>
+                      </RouterLink>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {pod.status}
                     </TableCell>
                     <TableCell className="text-center text-xs tabular-nums">
                       {pod.restarts}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DetailSection>
+      )}
+
+      {kind === "Pod" && namespace && (
+        <DetailSection title="Selected by Services">
+          {!servicesPermission.allowed ? (
+            <p className="text-xs text-muted-foreground">
+              Service relationships require services:read for this cluster.
+            </p>
+          ) : servicesQuery.isLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Resolving service
+              selectors…
+            </div>
+          ) : selectedByServices.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No Service selector currently targets this pod.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Cluster IP</TableHead>
+                  <TableHead>Selector</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedByServices.map((service) => (
+                  <TableRow
+                    key={service.metadata?.uid ?? service.metadata?.name}
+                  >
+                    <TableCell className="font-mono text-xs">
+                      <RouterLink
+                        to={detailHref(
+                          clusterId,
+                          "services",
+                          namespace,
+                          service.metadata?.name ?? "",
+                        )}
+                        className="text-foreground hover:underline"
+                      >
+                        {service.metadata?.name}
+                      </RouterLink>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {service.spec?.clusterIP ?? "—"}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {Object.entries(service.spec?.selector ?? {})
+                        .map(([key, value]) => `${key}=${value}`)
+                        .join(", ")}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -479,13 +594,50 @@ function podContainerNames(obj?: K8sObject): string[] {
 }
 
 function podForViewer(obj: K8sObject | undefined, namespace: string): Pod {
-  const containers = (obj?.spec?.containers ?? []).map((container) => ({
-    name: container.name ?? "",
-    image: container.image ?? "",
-    status: "running" as const,
-    ready: true,
-    restartCount: 0,
-  }));
+  const viewerContainers = (
+    specs: NonNullable<K8sObject["spec"]>["containers"],
+    statuses: NonNullable<K8sObject["status"]>["containerStatuses"],
+    init: boolean,
+  ): Pod["containers"] => {
+    const byName = new Map(
+      (statuses ?? []).map((status) => [status.name ?? "", status]),
+    );
+    return (specs ?? []).map((container) => {
+      const status = byName.get(container.name ?? "");
+      const state = status?.state ?? {};
+      const currentState: Pod["containers"][number]["status"] = state.running
+        ? "running"
+        : state.waiting
+          ? "waiting"
+          : "terminated";
+      const detail = state[currentState];
+      return {
+        name: container.name ?? "",
+        image: container.image ?? status?.image ?? "",
+        status: currentState,
+        ready: status?.ready ?? false,
+        restartCount: status?.restartCount ?? 0,
+        init,
+        reason: detail?.reason,
+        message: detail?.message,
+        imageId: status?.imageID,
+        state: status?.state,
+        lastState: status?.lastState,
+      };
+    });
+  };
+  const containers = [
+    ...viewerContainers(
+      obj?.spec?.containers,
+      obj?.status?.containerStatuses,
+      false,
+    ),
+    ...viewerContainers(
+      obj?.spec?.initContainers,
+      obj?.status?.initContainerStatuses,
+      true,
+    ),
+  ];
   return {
     name: obj?.metadata?.name ?? "",
     namespace,
@@ -496,6 +648,7 @@ function podForViewer(obj: K8sObject | undefined, namespace: string): Pod {
     restarts: 0,
     node: obj?.spec?.nodeName ?? "",
     ip: obj?.status?.podIP ?? "",
+    images: containers.map((container) => container.image).filter(Boolean),
     containers,
     conditions: [],
     createdAt: obj?.metadata?.creationTimestamp ?? "",

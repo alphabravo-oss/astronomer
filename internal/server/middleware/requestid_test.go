@@ -5,15 +5,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 )
 
 func TestRequestIDMiddleware_GeneratesID(t *testing.T) {
 	handler := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := GetRequestID(r.Context())
+		id := reqctx.RequestID(r.Context())
 		if id == "" {
 			t.Fatal("expected request ID in context, got empty string")
 		}
-		if correlationID := GetCorrelationID(r.Context()); correlationID != id {
+		if correlationID := reqctx.CorrelationID(r.Context()); correlationID != id {
 			t.Fatalf("expected matching correlation ID, got %q and %q", correlationID, id)
 		}
 	}))
@@ -40,7 +42,7 @@ func TestRequestIDMiddleware_ReusesID(t *testing.T) {
 
 	var ctxID string
 	handler := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctxID = GetRequestID(r.Context())
+		ctxID = reqctx.RequestID(r.Context())
 	}))
 
 	rr := httptest.NewRecorder()
@@ -64,7 +66,7 @@ func TestRequestIDMiddleware_PrefersCorrelationID(t *testing.T) {
 
 	var ctxID string
 	handler := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctxID = GetCorrelationID(r.Context())
+		ctxID = reqctx.CorrelationID(r.Context())
 	}))
 
 	rr := httptest.NewRecorder()
@@ -131,8 +133,8 @@ func TestGetGeneratedRequestID(t *testing.T) {
 	capture := func(t *testing.T, setHeader func(*http.Request)) (shared, generated string) {
 		t.Helper()
 		handler := RequestID(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			shared = GetRequestID(r.Context())
-			generated = GetGeneratedRequestID(r.Context())
+			shared = reqctx.RequestID(r.Context())
+			generated = reqctx.GeneratedRequestID(r.Context())
 		}))
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		setHeader(req)
@@ -172,12 +174,12 @@ func TestGetGeneratedRequestID(t *testing.T) {
 	})
 
 	t.Run("a context that never met the middleware has no generated id", func(t *testing.T) {
-		ctx := context.WithValue(context.Background(), requestIDKey, "planted")
-		if got := GetGeneratedRequestID(ctx); got != "" {
+		ctx := reqctx.WithRequestID(context.Background(), "planted", false)
+		if got := reqctx.GeneratedRequestID(ctx); got != "" {
 			t.Fatalf("generated id = %q, want empty without a provenance marker", got)
 		}
 		//nolint:staticcheck // deliberately passing nil to prove it fails safe.
-		if got := GetGeneratedRequestID(nil); got != "" {
+		if got := reqctx.GeneratedRequestID(nil); got != "" {
 			t.Fatalf("generated id = %q for a nil context", got)
 		}
 	})
@@ -185,14 +187,14 @@ func TestGetGeneratedRequestID(t *testing.T) {
 
 func TestGetRequestID(t *testing.T) {
 	t.Run("with value", func(t *testing.T) {
-		ctx := context.WithValue(context.Background(), requestIDKey, "abc-456")
-		if got := GetRequestID(ctx); got != "abc-456" {
+		ctx := reqctx.WithRequestID(context.Background(), "abc-456", false)
+		if got := reqctx.RequestID(ctx); got != "abc-456" {
 			t.Fatalf("expected %q, got %q", "abc-456", got)
 		}
 	})
 
 	t.Run("without value", func(t *testing.T) {
-		if got := GetRequestID(context.Background()); got != "" {
+		if got := reqctx.RequestID(context.Background()); got != "" {
 			t.Fatalf("expected empty string, got %q", got)
 		}
 	})

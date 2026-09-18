@@ -3,8 +3,8 @@
 // Operates over ~/.config/astronomer/config.yaml via the same
 // astrocli.LoadConfig/SaveConfig helpers the rest of the CLI uses, so
 // the 0600 file perms (enforced by SaveConfig) are preserved on every
-// write. Only the safe, user-settable keys are exposed; the access /
-// refresh tokens are managed by `astro login` / `astro logout`.
+// write. Only the safe, user-settable keys are exposed; API credential fields
+// are managed by `astro login` / `astro logout`.
 
 package main
 
@@ -35,11 +35,15 @@ var configKeys = map[string]struct {
 		set: func(c *astrocli.Config, v string) { c.Username = v },
 	},
 	"access_token": {
-		get:      func(c *astrocli.Config) string { return c.AccessToken },
+		get:      func(c *astrocli.Config) string { return redactToken(c.AccessToken) },
+		readOnly: true,
+	},
+	"api_token_id": {
+		get:      func(c *astrocli.Config) string { return c.APITokenID },
 		readOnly: true,
 	},
 	"refresh_token": {
-		get:      func(c *astrocli.Config) string { return c.RefreshToken },
+		get:      func(c *astrocli.Config) string { return redactToken(c.RefreshToken) },
 		readOnly: true,
 	},
 }
@@ -61,7 +65,8 @@ func newConfigCmd() *cobra.Command {
 at chmod 0600 because it carries the bearer token.
 
 Settable keys: server_url, username.
-Read-only keys (managed by login/logout): access_token, refresh_token.`,
+Read-only keys (managed by login/logout): access_token, api_token_id,
+refresh_token. Secret values are redacted in every output format.`,
 	}
 	cmd.AddCommand(
 		newConfigGetCmd(),
@@ -146,14 +151,15 @@ func newConfigCurrentCmd() *cobra.Command {
 				return err
 			}
 			path, _ := astrocli.ConfigPath()
-			// For json/yaml output, expose the raw config so automation
-			// can read it; the table form redacts secrets.
+			// Never expose persisted bearer material through command output. Users
+			// that deliberately need the token already control the mode-0600 config.
 			payload := map[string]any{
 				"path":          path,
 				"server_url":    cfg.ServerURL,
 				"username":      cfg.Username,
-				"access_token":  cfg.AccessToken,
-				"refresh_token": cfg.RefreshToken,
+				"access_token":  redactToken(cfg.AccessToken),
+				"api_token_id":  cfg.APITokenID,
+				"refresh_token": redactToken(cfg.RefreshToken),
 			}
 			return render(cmd, payload, func(w io.Writer) error {
 				if _, err := fmt.Fprintf(w, "Path:          %s\n", path); err != nil {
@@ -168,7 +174,10 @@ func newConfigCurrentCmd() *cobra.Command {
 				if _, err := fmt.Fprintf(w, "Access token:  %s\n", redactToken(cfg.AccessToken)); err != nil {
 					return err
 				}
-				_, err := fmt.Fprintf(w, "Refresh token: %s\n", redactToken(cfg.RefreshToken))
+				if _, err := fmt.Fprintf(w, "API token ID:  %s\n", defaultStr(cfg.APITokenID, "—")); err != nil {
+					return err
+				}
+				_, err := fmt.Fprintf(w, "Legacy refresh: %s\n", redactToken(cfg.RefreshToken))
 				return err
 			})
 		},

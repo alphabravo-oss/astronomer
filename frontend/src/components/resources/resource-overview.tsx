@@ -7,10 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type {
-  ContainerStatus,
-  K8sObject,
-} from "@/components/resources/resource-detail-model";
+import type { K8sObject } from "@/components/resources/resource-detail-model";
 import {
   asRecord,
   displayNumber,
@@ -30,17 +27,24 @@ import {
   RoleBindingOverview,
   RoleOverview,
   RouteOverview,
-  SecretOverview,
   ServiceAccountOverview,
   StorageClassOverview,
 } from "@/components/resources/resource-overview-additional";
+import { PodResourceOverview } from "@/components/resources/pod-resource-overview";
+import { SecretDataOverview } from "@/components/resources/secret-data-overview";
 
 export function ResourceOverview({
   obj,
   resourceType,
+  clusterId = "",
+  namespace,
+  name,
 }: {
   obj?: K8sObject;
   resourceType: string;
+  clusterId?: string;
+  namespace?: string;
+  name?: string;
 }) {
   const meta = obj?.metadata;
   if (!meta) {
@@ -53,7 +57,14 @@ export function ResourceOverview({
   const kindSpecific = (() => {
     switch (resourceType) {
       case "pods":
-        return <PodOverview obj={obj!} />;
+        return (
+          <PodResourceOverview
+            obj={obj!}
+            clusterId={clusterId}
+            namespace={namespace ?? meta.namespace ?? ""}
+            name={name ?? meta.name ?? ""}
+          />
+        );
       case "services":
         return <ServiceOverview obj={obj!} />;
       case "configmaps":
@@ -75,7 +86,7 @@ export function ResourceOverview({
       case "hpa":
         return <HPAOverview obj={obj!} />;
       case "secrets":
-        return <SecretOverview obj={obj!} />;
+        return <SecretDataOverview obj={obj!} clusterId={clusterId} />;
       case "persistentvolumes":
         return <PVOverview obj={obj!} />;
       case "networkpolicies":
@@ -120,6 +131,7 @@ export function ResourceOverview({
           obj={obj}
           resourceType={resourceType}
           showStatus={false}
+          showData={resourceType !== "secrets"}
         />
       </div>
     );
@@ -131,10 +143,12 @@ function GenericOverview({
   obj,
   resourceType,
   showStatus,
+  showData = true,
 }: {
   obj?: K8sObject;
   resourceType: string;
   showStatus?: boolean;
+  showData?: boolean;
 }) {
   const meta = obj?.metadata;
   if (!meta) {
@@ -188,9 +202,10 @@ function GenericOverview({
 
   // ponytail: mask secret 'data' values; only secrets carries this.
   const isSecret = resourceType === "secrets";
-  const dataEntries = obj?.data
-    ? (Object.entries(obj.data) as Array<[string, string]>)
-    : [];
+  const dataEntries =
+    showData && obj?.data
+      ? (Object.entries(obj.data) as Array<[string, string]>)
+      : [];
 
   return (
     <div className="space-y-6">
@@ -249,85 +264,6 @@ function GenericOverview({
         </Section>
       )}
     </div>
-  );
-}
-
-// ── Kind-specific overviews (plan A4 / C1) ──
-//
-// ponytail: only the few highest-value kinds get tailored sections; everything
-// else uses GenericOverview. No per-kind framework — just small components.
-
-function PodOverview({ obj }: { obj: K8sObject }) {
-  const spec = obj.spec ?? {};
-  const status = obj.status ?? {};
-  const statuses = status.containerStatuses ?? [];
-  const totalRestarts = statuses.reduce(
-    (sum, c) => sum + (c.restartCount ?? 0),
-    0,
-  );
-
-  // Merge spec containers (image) with status containers (ready/restarts/state).
-  const byName = new Map<string, ContainerStatus>();
-  for (const c of statuses) if (c.name) byName.set(c.name, c);
-  const rows = (spec.containers ?? []).map((c) => {
-    const st = byName.get(c.name ?? "");
-    return {
-      name: c.name ?? "-",
-      image: c.image ?? st?.image ?? "-",
-      ready: st?.ready ?? false,
-      restarts: st?.restartCount ?? 0,
-      state: st?.state ? (Object.keys(st.state)[0] ?? "unknown") : "unknown",
-    };
-  });
-
-  const summary: Array<[string, string]> = [];
-  if (status.phase) summary.push(["phase", status.phase]);
-  if (spec.nodeName) summary.push(["node", spec.nodeName]);
-  if (status.podIP) summary.push(["podIP", status.podIP]);
-  summary.push(["restarts", String(totalRestarts)]);
-
-  return (
-    <>
-      <Section title="Pod">
-        <KeyValueTable entries={summary} />
-      </Section>
-      <Section title="Containers">
-        {rows.length === 0 ? (
-          <p className="text-xs text-muted-foreground">None</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Image</TableHead>
-                <TableHead className="text-center">Ready</TableHead>
-                <TableHead className="text-center">Restarts</TableHead>
-                <TableHead>State</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((c) => (
-                <TableRow key={c.name}>
-                  <TableCell className="font-mono text-xs">{c.name}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground break-all">
-                    {c.image}
-                  </TableCell>
-                  <TableCell className="text-xs text-center">
-                    {c.ready ? "Yes" : "No"}
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums text-center">
-                    {c.restarts}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {c.state}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Section>
-    </>
   );
 }
 
@@ -561,8 +497,10 @@ function JobOverview({ obj }: { obj: K8sObject }) {
     summary.push(["parallelism", displayNumber(spec.parallelism)]);
   if (spec.backoffLimit != null)
     summary.push(["backoffLimit", displayNumber(spec.backoffLimit)]);
-  if (status.active != null) summary.push(["active", displayNumber(status.active)]);
-  if (status.failed != null) summary.push(["failed", displayNumber(status.failed)]);
+  if (status.active != null)
+    summary.push(["active", displayNumber(status.active)]);
+  if (status.failed != null)
+    summary.push(["failed", displayNumber(status.failed)]);
   if (spec.suspend != null)
     summary.push(["suspended", spec.suspend ? "Yes" : "No"]);
   const started = rel(status.startTime);

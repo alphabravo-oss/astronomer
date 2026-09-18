@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -65,11 +66,7 @@ func TestManagementBackupJobOutcomeIsTruthful(t *testing.T) {
 }
 
 func TestManagementBackupHTTPEntriesContainNoRemoteEffects(t *testing.T) {
-	raw, err := os.ReadFile("admin_management_backup_destinations.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := string(raw)
+	source := managementBackupProductionSource(t)
 	for _, method := range []string{"CreateDestination", "UpdateDestination", "DeleteDestination", "TestDestination", "RunDestination"} {
 		start := strings.Index(source, "func (h *AdminDrillHandler) "+method)
 		if start < 0 {
@@ -96,10 +93,11 @@ func TestManagementBackupProductionTransactionAndWorkerWiring(t *testing.T) {
 			"SetRunTx(sqlcMutationTxRunner[handler.ManagementBackupMutationTx](database))",
 		},
 		"../server/app_router_composition.go": {
-			"AdminDrill: newManagementBackupHandler(cfg.ManagementBackupEnabled, queries, database, encryptor, localK8s, localNamespace)",
+			"deps.AdminPlatform.AdminDrill = newManagementBackupHandler(",
+			"c.queries,\n\t\tc.database,\n\t\tc.encryptor,\n\t\tc.localK8s,\n\t\tc.localNamespace,",
 		},
 		"../server/app_runtime_tasks.go": {
-			"ManagementBackup: routed.deps.AdminDrill",
+			"ManagementBackup: routed.deps.AdminPlatform.AdminDrill",
 		},
 	}
 	for path, required := range files {
@@ -117,11 +115,7 @@ func TestManagementBackupProductionTransactionAndWorkerWiring(t *testing.T) {
 }
 
 func TestManagementBackupMutationEntriesUseMandatoryTransactionalAudit(t *testing.T) {
-	raw, err := os.ReadFile("admin_management_backup_destinations.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := string(raw)
+	source := managementBackupProductionSource(t)
 	for _, method := range []string{"CreateDestination", "UpdateDestination", "DeleteDestination", "TestDestination", "RunDestination"} {
 		start := strings.Index(source, "func (h *AdminDrillHandler) "+method)
 		if start < 0 {
@@ -181,11 +175,7 @@ func TestManagementBackupClaimsAreGenerationFencedAndRecoverable(t *testing.T) {
 }
 
 func TestManagementBackupOperationReceiptHasPollingHeadersAndRetryTruth(t *testing.T) {
-	raw, err := os.ReadFile("admin_management_backup_destinations.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := string(raw)
+	source := managementBackupProductionSource(t)
 	for _, required := range []string{
 		`w.Header().Set("Location", operationURL)`,
 		`w.Header().Set("Retry-After", "2")`,
@@ -197,6 +187,27 @@ func TestManagementBackupOperationReceiptHasPollingHeadersAndRetryTruth(t *testi
 			t.Fatalf("management backup receipt/retry contract missing %q", required)
 		}
 	}
+}
+
+func managementBackupProductionSource(t *testing.T) string {
+	t.Helper()
+	paths, err := filepath.Glob("admin_management_backup*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var source strings.Builder
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		source.Write(raw)
+		source.WriteByte('\n')
+	}
+	return source.String()
 }
 
 func TestManagementBackupCrashWindowClaimMissesRemainRetryable(t *testing.T) {

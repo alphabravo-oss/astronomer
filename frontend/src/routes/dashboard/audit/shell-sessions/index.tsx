@@ -9,17 +9,18 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@/lib/link";
-import { ArrowLeft, TerminalSquare, Loader2 } from "lucide-react";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { ArrowLeft, TerminalSquare } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryStates } from "@/components/ui/query-states";
 import {
   listShellSessions,
   listShellSessionCommands,
-  type ShellSession,
-} from "@/lib/api";
+} from "@/lib/api/admin-security";
+import type { ShellSession } from "@/lib/api/admin-security";
 import { queryKeys } from "@/lib/query-keys";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 
@@ -74,7 +75,7 @@ function ShellSessionsPage() {
       key: "status",
       header: "Status",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.status}
         </span>
       ),
@@ -103,13 +104,13 @@ function ShellSessionsPage() {
   return (
     <PageShell>
       <div>
-        <Link
-          href="/dashboard/audit"
+        <RouterLink
+          to="/dashboard/audit"
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Audit Log
-        </Link>
+        </RouterLink>
         <PageHeader
           className="mt-2"
           title={
@@ -131,7 +132,11 @@ function ShellSessionsPage() {
         isError={isError}
         onRetry={() => refetch()}
         onRowClick={(row) => setSelected(row)}
-        emptyMessage="No active shell sessions"
+        emptyState={{
+          title: "No active shell sessions",
+          description:
+            "Resources will appear here when they are available in this scope.",
+        }}
       />
 
       {selected && (
@@ -151,7 +156,7 @@ function SessionCommandsDrawer({
   session: ShellSession;
   onClose: () => void;
 }) {
-  const { data: commands = [], isLoading } = useQuery({
+  const commandsQuery = useQuery({
     queryKey: queryKeys.adminSecurity.shellSessionCommands(session.id),
     queryFn: ({ signal }) => listShellSessionCommands(session.id, signal),
   });
@@ -163,31 +168,35 @@ function SessionCommandsDrawer({
       onClose={onClose}
       size="lg"
     >
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading commands…
-        </div>
-      ) : commands.length === 0 ? (
-        <EmptyState
-          icon={TerminalSquare}
-          title="No commands recorded"
-          description="This session has not executed any audited commands yet."
-        />
-      ) : (
-        <ol className="space-y-1.5 font-mono text-xs">
-          {commands.map((cmd, i) => (
-            <li key={i} className="flex gap-3 rounded-md bg-muted/40 px-3 py-2">
-              <span className="text-muted-foreground whitespace-nowrap">
-                {formatDate(cmd.commandAt)}
-              </span>
-              <span className="text-foreground break-all">
-                {cmd.commandLine}
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
+      <QueryStates
+        query={commandsQuery}
+        loadingTitle="Loading command trail"
+        errorTitle="Could not load command trail"
+        permission="shell-sessions:read"
+        isEmpty={(commands) => commands.length === 0}
+        empty={
+          <EmptyState
+            icon={TerminalSquare}
+            title="No commands recorded"
+            description="This session has not executed any audited commands yet."
+          />
+        }
+      >
+        {(commands) => (
+          <ol className="space-y-1.5 font-mono text-xs">
+            {commands.map((cmd, i) => (
+              <li key={i} className="flex gap-3 rounded-md bg-muted/40 px-3 py-2">
+                <span className="text-muted-foreground whitespace-nowrap">
+                  {formatDate(cmd.commandAt)}
+                </span>
+                <span className="text-foreground break-all">
+                  {cmd.commandLine}
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </QueryStates>
     </ModalShell>
   );
 }

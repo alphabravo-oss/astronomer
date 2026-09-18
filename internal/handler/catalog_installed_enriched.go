@@ -22,11 +22,11 @@ package handler
 import (
 	"net/http"
 
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ListClusterApps handles GET /api/v1/clusters/{cluster_id}/apps/.
@@ -42,7 +42,7 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	offset := int32(queryInt(r, "offset", 0))
+	offset := int32(queryOffset(r))
 
 	rows, err := h.queries.ListInstalledChartsWithMetadataByCluster(r.Context(), sqlc.ListInstalledChartsWithMetadataByClusterParams{
 		ClusterID: clusterID,
@@ -65,7 +65,7 @@ func (h *CatalogHandler) ListClusterApps(w http.ResponseWriter, r *http.Request)
 		out = append(out, enrichedInstalledRowJSON(row))
 	}
 
-	RespondPaginated(w, r, out, total)
+	paging.Write(w, out, paging.Exact(total, queryLimit(r, 50), queryOffset(r), len(out)))
 }
 
 // DeleteFailedClusterApps handles DELETE /api/v1/clusters/{cluster_id}/apps/failed/.
@@ -93,14 +93,20 @@ func (h *CatalogHandler) DeleteFailedClusterApps(w http.ResponseWriter, r *http.
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbDelete) {
 		return
 	}
-	rows, err := h.queries.DeleteFailedInstallationsByCluster(r.Context(), clusterID)
+	rows, err := executeMutation(r, h.runTx,
+		func(q CatalogMutationTx) (int64, error) {
+			return q.DeleteFailedInstallationsByCluster(r.Context(), clusterID)
+		},
+		func(deleted int64) mutationAuditEvent {
+			return mutationAuditEvent{
+				action: "catalog.installations.delete_failed", resourceType: "cluster", resourceID: clusterID.String(), status: http.StatusOK,
+				detail: map[string]any{"deleted_count": deleted},
+			}
+		})
 	if err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete failed installations")
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.DeleteError, "Failed to delete failed installations")
 		return
 	}
-	recordAudit(r, h.queries, "catalog.installations.delete_failed", "cluster", clusterID.String(), "", map[string]any{
-		"deleted_count": rows,
-	})
 	RespondJSON(w, http.StatusOK, map[string]any{"deleted": rows})
 }
 

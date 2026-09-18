@@ -108,17 +108,21 @@ export const operationMetadata = {
   "adminWebhookTest": { method: "POST", path: "/api/v1/admin/webhooks/{id}/test", pathParameters: ["id"], responseType: "json" },
   "adminWebhookUpdate": { method: "PUT", path: "/api/v1/admin/webhooks/{id}", pathParameters: ["id"], responseType: "json" },
   "charlieActivation": { method: "GET", path: "/api/v1/charlie/activation/", pathParameters: [], responseType: "json" },
+  "countClusterResources": { method: "GET", path: "/api/v1/clusters/{cluster_id}/resource-counts", pathParameters: ["cluster_id"], responseType: "json" },
+  "createAuditExport": { method: "POST", path: "/api/v1/audit/exports/", pathParameters: [], responseType: "json" },
   "createCharlieSession": { method: "POST", path: "/api/v1/charlie/sessions/", pathParameters: [], responseType: "json" },
   "createCharlieSessionMessage": { method: "POST", path: "/api/v1/charlie/sessions/{session_id}/messages/", pathParameters: ["session_id"], responseType: "json" },
   "createCharlieThread": { method: "POST", path: "/api/v1/charlie/threads/new/", pathParameters: [], responseType: "json" },
   "createCharlieThreadMessage": { method: "POST", path: "/api/v1/charlie/threads/messages/", pathParameters: [], responseType: "json" },
   "createControlPlaneSnapshot": { method: "POST", path: "/api/v1/clusters/{cluster_id}/control-plane-snapshots/", pathParameters: ["cluster_id"], responseType: "json" },
   "createNamedClusterResource": { method: "POST", path: "/api/v1/clusters/{cluster_id}/resources/{resource_type}", pathParameters: ["cluster_id","resource_type"], responseType: "json" },
+  "createSupportBundle": { method: "POST", path: "/api/v1/support-bundles", pathParameters: [], responseType: "json" },
   "decideCharlieApproval": { method: "POST", path: "/api/v1/charlie/approvals/{approval_id}/decision/", pathParameters: ["approval_id"], responseType: "json" },
   "deleteAdminAlertingInhibitionsById": { method: "DELETE", path: "/api/v1/admin/alerting/inhibitions/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteAdminDashboardWidgetsById": { method: "DELETE", path: "/api/v1/admin/dashboard-widgets/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteAdminGitopsSourcesById": { method: "DELETE", path: "/api/v1/admin/gitops-sources/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteAdminGroupMappingsById": { method: "DELETE", path: "/api/v1/admin/group-mappings/{id}", pathParameters: ["id"], responseType: "json" },
+  "deleteAdminMaintenanceWindowsById": { method: "DELETE", path: "/api/v1/admin/maintenance-windows/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteAdminManagementBackupDestinationsById": { method: "DELETE", path: "/api/v1/admin/management-backup/destinations/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteAdminNetworkPolicyTemplatesById": { method: "DELETE", path: "/api/v1/admin/network-policy-templates/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteAdminPrometheusDatasourcesById": { method: "DELETE", path: "/api/v1/admin/prometheus-datasources/{id}", pathParameters: ["id"], responseType: "json" },
@@ -134,7 +138,6 @@ export const operationMetadata = {
   "deleteBackupsById": { method: "DELETE", path: "/api/v1/backups/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteBackupsSchedulesById": { method: "DELETE", path: "/api/v1/backups/schedules/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteBackupsStorageById": { method: "DELETE", path: "/api/v1/backups/storage/{id}", pathParameters: ["id"], responseType: "json" },
-  "deleteBackupsStorageConfigsById": { method: "DELETE", path: "/api/v1/backups/storage-configs/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteCatalogInstalledById": { method: "DELETE", path: "/api/v1/catalog/installed/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteCatalogRepositoriesById": { method: "DELETE", path: "/api/v1/catalog/repositories/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteChartsByChartIdRatingsByRatingId": { method: "DELETE", path: "/api/v1/charts/{chart_id}/ratings/{rating_id}", pathParameters: ["chart_id","rating_id"], responseType: "json" },
@@ -151,10 +154,14 @@ export const operationMetadata = {
   "deleteClustersById": { method: "DELETE", path: "/api/v1/clusters/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteClustersByIdGatekeeperConstraintsByName": { method: "DELETE", path: "/api/v1/clusters/{id}/gatekeeper/constraints/{name}/", pathParameters: ["id","name"], responseType: "json" },
   "deleteClustersByIdMonitoringStackUninstall": { method: "DELETE", path: "/api/v1/clusters/{id}/monitoring/stack/uninstall", pathParameters: ["id"], responseType: "json" },
+  "deleteClustersByIdObservabilityGrafana": { method: "DELETE", path: "/api/v1/clusters/{id}/observability/grafana", pathParameters: ["id"], responseType: "json" },
+  "deleteClustersByIdObservabilityGrafanaProxy": { method: "DELETE", path: "/api/v1/clusters/{id}/observability/grafana/*", pathParameters: ["id"], responseType: "json" },
   "deleteClustersByIdRegistry": { method: "DELETE", path: "/api/v1/clusters/{id}/registry", pathParameters: ["id"], responseType: "json" },
   "deleteClusterTemplatesById": { method: "DELETE", path: "/api/v1/cluster-templates/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteControllersSilencesById": { method: "DELETE", path: "/api/v1/controllers/silences/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteDeliveryBundlesById": { method: "DELETE", path: "/api/v1/delivery/bundles/{id}/", pathParameters: ["id"], responseType: "json" },
+  "deleteDeliveryConfigurationTemplatesById": { method: "DELETE", path: "/api/v1/delivery/configuration-templates/{id}/", pathParameters: ["id"], responseType: "json" },
+  "deleteDeliveryOverrideSetsById": { method: "DELETE", path: "/api/v1/delivery/override-sets/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteDeliverySourcesById": { method: "DELETE", path: "/api/v1/delivery/sources/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteDeliveryTargetsById": { method: "DELETE", path: "/api/v1/delivery/targets/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteLoggingOutputsById": { method: "DELETE", path: "/api/v1/logging/outputs/{id}", pathParameters: ["id"], responseType: "json" },
@@ -164,6 +171,8 @@ export const operationMetadata = {
   "deleteNamedClusterResource": { method: "DELETE", path: "/api/v1/clusters/{cluster_id}/resources/{resource_type}/{namespace}/{name}", pathParameters: ["cluster_id","resource_type","namespace","name"], responseType: "json" },
   "deleteNamedResourceREST": { method: "DELETE", path: "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}", pathParameters: ["cluster_id","type","namespace","name"], responseType: "json" },
   "deleteNativeRbacRulesById": { method: "DELETE", path: "/api/v1/native-rbac-rules/{id}", pathParameters: ["id"], responseType: "json" },
+  "deleteObservabilityGrafana": { method: "DELETE", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "deleteObservabilityGrafanaProxy": { method: "DELETE", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "deletePersistentVolume": { method: "DELETE", path: "/api/v1/clusters/{cluster_id}/resources/persistentvolumes/{name}", pathParameters: ["cluster_id","name"], responseType: "json" },
   "deleteProjectsById": { method: "DELETE", path: "/api/v1/projects/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteProjectsByProjectIdCatalogsByCatalogId": { method: "DELETE", path: "/api/v1/projects/{project_id}/catalogs/{catalog_id}/", pathParameters: ["project_id","catalog_id"], responseType: "json" },
@@ -191,10 +200,10 @@ export const operationMetadata = {
   "deleteUsersById": { method: "DELETE", path: "/api/v1/users/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteWorkloadsPodsByClusterIdByNamespaceByPod": { method: "DELETE", path: "/api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/", pathParameters: ["cluster_id","namespace","pod"], responseType: "json" },
   "dismissCharlieFinding": { method: "POST", path: "/api/v1/charlie/findings/{finding_id}/dismiss/", pathParameters: ["finding_id"], responseType: "json" },
+  "downloadSupportBundle": { method: "GET", path: "/api/v1/support-bundles/{id}/download", pathParameters: ["id"], responseType: "blob" },
   "exportAuditLogs": { method: "GET", path: "/api/v1/audit/export/", pathParameters: [], responseType: "blob" },
   "getActiveCharlieThread": { method: "GET", path: "/api/v1/charlie/threads/active/", pathParameters: [], responseType: "json" },
   "getActivity": { method: "GET", path: "/api/v1/activity", pathParameters: [], responseType: "json" },
-  "getActivityLegacy": { method: "GET", path: "/api/v1/activity/", pathParameters: [], responseType: "json" },
   "getAdminAlertingInhibitions": { method: "GET", path: "/api/v1/admin/alerting/inhibitions/", pathParameters: [], responseType: "json" },
   "getAdminAlertingInhibitionsById": { method: "GET", path: "/api/v1/admin/alerting/inhibitions/{id}/", pathParameters: ["id"], responseType: "json" },
   "getAdminBackupDrill": { method: "GET", path: "/api/v1/admin/backup-drill/", pathParameters: [], responseType: "json" },
@@ -203,17 +212,23 @@ export const operationMetadata = {
   "getAdminComplianceExportsById": { method: "GET", path: "/api/v1/admin/compliance/exports/{id}", pathParameters: ["id"], responseType: "blob" },
   "getAdminDashboardWidgets": { method: "GET", path: "/api/v1/admin/dashboard-widgets", pathParameters: [], responseType: "json" },
   "getAdminDashboardWidgetsById": { method: "GET", path: "/api/v1/admin/dashboard-widgets/{id}", pathParameters: ["id"], responseType: "json" },
+  "getAdminDeferredOperations": { method: "GET", path: "/api/v1/admin/deferred-operations", pathParameters: [], responseType: "json" },
   "getAdminGitopsSources": { method: "GET", path: "/api/v1/admin/gitops-sources", pathParameters: [], responseType: "json" },
   "getAdminGitopsSourcesById": { method: "GET", path: "/api/v1/admin/gitops-sources/{id}", pathParameters: ["id"], responseType: "json" },
   "getAdminGitopsSourcesByIdClusters": { method: "GET", path: "/api/v1/admin/gitops-sources/{id}/clusters", pathParameters: ["id"], responseType: "json" },
   "getAdminGitopsSourcesByIdPreview": { method: "GET", path: "/api/v1/admin/gitops-sources/{id}/preview", pathParameters: ["id"], responseType: "json" },
   "getAdminGroupMappings": { method: "GET", path: "/api/v1/admin/group-mappings", pathParameters: [], responseType: "json" },
   "getAdminGroupMappingsById": { method: "GET", path: "/api/v1/admin/group-mappings/{id}", pathParameters: ["id"], responseType: "json" },
+  "getAdminMaintenanceWindows": { method: "GET", path: "/api/v1/admin/maintenance-windows", pathParameters: [], responseType: "json" },
+  "getAdminMaintenanceWindowsActive": { method: "GET", path: "/api/v1/admin/maintenance-windows/active", pathParameters: [], responseType: "json" },
+  "getAdminMaintenanceWindowsById": { method: "GET", path: "/api/v1/admin/maintenance-windows/{id}", pathParameters: ["id"], responseType: "json" },
   "getAdminManagementBackup": { method: "GET", path: "/api/v1/admin/management-backup/", pathParameters: [], responseType: "json" },
   "getAdminManagementBackupDestinationsById": { method: "GET", path: "/api/v1/admin/management-backup/destinations/{id}/", pathParameters: ["id"], responseType: "json" },
   "getAdminManagementBackupOperationById": { method: "GET", path: "/api/v1/admin/management-backup/operations/{id}/", pathParameters: ["id"], responseType: "json" },
   "getAdminNetworkPolicyTemplates": { method: "GET", path: "/api/v1/admin/network-policy-templates", pathParameters: [], responseType: "json" },
   "getAdminNetworkPolicyTemplatesById": { method: "GET", path: "/api/v1/admin/network-policy-templates/{id}", pathParameters: ["id"], responseType: "json" },
+  "getAdminPlatformSettingsDefaultClusterTemplate": { method: "GET", path: "/api/v1/admin/platform-settings/default-cluster-template", pathParameters: [], responseType: "json" },
+  "getAdminPlatformSettingsDefaultClusterTemplateCoverage": { method: "GET", path: "/api/v1/admin/platform-settings/default-cluster-template/coverage", pathParameters: [], responseType: "json" },
   "getAdminPrometheusDatasources": { method: "GET", path: "/api/v1/admin/prometheus-datasources", pathParameters: [], responseType: "json" },
   "getAdminQueues": { method: "GET", path: "/api/v1/admin/queues", pathParameters: [], responseType: "json" },
   "getAdminQueuesByQueueDlq": { method: "GET", path: "/api/v1/admin/queues/{queue}/dlq", pathParameters: ["queue"], responseType: "json" },
@@ -231,19 +246,25 @@ export const operationMetadata = {
   "getAlertingChannelsById": { method: "GET", path: "/api/v1/alerting/channels/{id}", pathParameters: ["id"], responseType: "json" },
   "getAlertingEvents": { method: "GET", path: "/api/v1/alerting/events/", pathParameters: [], responseType: "json" },
   "getAlertingEventsById": { method: "GET", path: "/api/v1/alerting/events/{id}", pathParameters: ["id"], responseType: "json" },
+  "getAlertingEventsSummary": { method: "GET", path: "/api/v1/alerting/events/summary/", pathParameters: [], responseType: "json" },
   "getAlertingRules": { method: "GET", path: "/api/v1/alerting/rules", pathParameters: [], responseType: "json" },
   "getAlertingRulesById": { method: "GET", path: "/api/v1/alerting/rules/{id}", pathParameters: ["id"], responseType: "json" },
   "getAlertingSilences": { method: "GET", path: "/api/v1/alerting/silences", pathParameters: [], responseType: "json" },
   "getAnomalyBaselines": { method: "GET", path: "/api/v1/anomaly-baselines", pathParameters: [], responseType: "json" },
   "getAnomalyBaselinesById": { method: "GET", path: "/api/v1/anomaly-baselines/{id}", pathParameters: ["id"], responseType: "json" },
+  "getAuditExportsById": { method: "GET", path: "/api/v1/audit/exports/{id}", pathParameters: ["id"], responseType: "json" },
+  "getAuditExportsByIdDownload": { method: "GET", path: "/api/v1/audit/exports/{id}/download", pathParameters: ["id"], responseType: "blob" },
   "getAuditLog": { method: "GET", path: "/api/v1/audit/{id}/", pathParameters: ["id"], responseType: "json" },
+  "getAuthCallbackByProvider": { method: "GET", path: "/api/v1/auth/callback/{provider}", pathParameters: ["provider"], responseType: "json" },
   "getAuthDexConnectors": { method: "GET", path: "/api/v1/auth/dex/connectors/", pathParameters: [], responseType: "json" },
   "getAuthDexConnectorsById": { method: "GET", path: "/api/v1/auth/dex/connectors/{id}/", pathParameters: ["id"], responseType: "json" },
   "getAuthDexConnectorTypes": { method: "GET", path: "/api/v1/auth/dex/connector-types/", pathParameters: [], responseType: "json" },
   "getAuthDexOperation": { method: "GET", path: "/api/v1/auth/dex/operations/{operation_id}/", pathParameters: ["operation_id"], responseType: "json" },
   "getAuthDexSettings": { method: "GET", path: "/api/v1/auth/dex/settings/", pathParameters: [], responseType: "json" },
+  "getAuthLoginByProvider": { method: "GET", path: "/api/v1/auth/login/{provider}", pathParameters: ["provider"], responseType: "json" },
   "getAuthLogoutDone": { method: "GET", path: "/api/v1/auth/logout-done/", pathParameters: [], responseType: "json" },
   "getAuthMe": { method: "GET", path: "/api/v1/auth/me/", pathParameters: [], responseType: "json" },
+  "getAuthMePreferences": { method: "GET", path: "/api/v1/auth/me/preferences/", pathParameters: [], responseType: "json" },
   "getAuthMeQuota": { method: "GET", path: "/api/v1/auth/me/quota", pathParameters: [], responseType: "json" },
   "getAuthTokens": { method: "GET", path: "/api/v1/auth/tokens/", pathParameters: [], responseType: "json" },
   "getAuthTotpStatus": { method: "GET", path: "/api/v1/auth/totp/status/", pathParameters: [], responseType: "json" },
@@ -252,21 +273,22 @@ export const operationMetadata = {
   "getBackupsControllerStatus": { method: "GET", path: "/api/v1/backups/controller/status", pathParameters: [], responseType: "json" },
   "getBackupsRestores": { method: "GET", path: "/api/v1/backups/restores", pathParameters: [], responseType: "json" },
   "getBackupsRestoresById": { method: "GET", path: "/api/v1/backups/restores/{id}", pathParameters: ["id"], responseType: "json" },
-  "getBackupsRuns": { method: "GET", path: "/api/v1/backups/runs", pathParameters: [], responseType: "json" },
   "getBackupsSchedules": { method: "GET", path: "/api/v1/backups/schedules", pathParameters: [], responseType: "json" },
   "getBackupsSchedulesById": { method: "GET", path: "/api/v1/backups/schedules/{id}", pathParameters: ["id"], responseType: "json" },
   "getBackupsStorage": { method: "GET", path: "/api/v1/backups/storage", pathParameters: [], responseType: "json" },
   "getBackupsStorageById": { method: "GET", path: "/api/v1/backups/storage/{id}", pathParameters: ["id"], responseType: "json" },
-  "getBackupsStorageConfigs": { method: "GET", path: "/api/v1/backups/storage-configs", pathParameters: [], responseType: "json" },
-  "getBackupsStorageConfigsById": { method: "GET", path: "/api/v1/backups/storage-configs/{id}", pathParameters: ["id"], responseType: "json" },
+  "getCatalogApplications": { method: "GET", path: "/api/v1/catalog/applications/", pathParameters: [], responseType: "json" },
+  "getCatalogApplicationSources": { method: "GET", path: "/api/v1/catalog/application-sources/", pathParameters: [], responseType: "json" },
   "getCatalogCharts": { method: "GET", path: "/api/v1/catalog/charts/", pathParameters: [], responseType: "json" },
   "getCatalogChartsById": { method: "GET", path: "/api/v1/catalog/charts/{id}/", pathParameters: ["id"], responseType: "json" },
   "getCatalogChartsByIdReadme": { method: "GET", path: "/api/v1/catalog/charts/{id}/readme/", pathParameters: ["id"], responseType: "json" },
   "getCatalogChartsByIdValues": { method: "GET", path: "/api/v1/catalog/charts/{id}/values/", pathParameters: ["id"], responseType: "json" },
   "getCatalogChartsByIdVersions": { method: "GET", path: "/api/v1/catalog/charts/{id}/versions/", pathParameters: ["id"], responseType: "json" },
   "getCatalogControllerStatus": { method: "GET", path: "/api/v1/catalog/controller/status/", pathParameters: [], responseType: "json" },
+  "getCatalogDiscovery": { method: "GET", path: "/api/v1/catalog/discovery/", pathParameters: [], responseType: "json" },
   "getCatalogInstalled": { method: "GET", path: "/api/v1/catalog/installed/", pathParameters: [], responseType: "json" },
   "getCatalogInstalledByIdRevisions": { method: "GET", path: "/api/v1/catalog/installed/{id}/revisions", pathParameters: ["id"], responseType: "json" },
+  "getCatalogInstalledByIdUpgradeVersions": { method: "GET", path: "/api/v1/catalog/installed/{id}/upgrade-versions/", pathParameters: ["id"], responseType: "json" },
   "getCatalogInstalledByIdValues": { method: "GET", path: "/api/v1/catalog/installed/{id}/values/", pathParameters: ["id"], responseType: "json" },
   "getCatalogOperations": { method: "GET", path: "/api/v1/catalog/operations/", pathParameters: [], responseType: "json" },
   "getCatalogOperationsById": { method: "GET", path: "/api/v1/catalog/operations/{id}/", pathParameters: ["id"], responseType: "json" },
@@ -347,7 +369,6 @@ export const operationMetadata = {
   "getClustersByIdDecommission": { method: "GET", path: "/api/v1/clusters/{id}/decommission", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdGatekeeperConstraints": { method: "GET", path: "/api/v1/clusters/{id}/gatekeeper/constraints/", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdHealth": { method: "GET", path: "/api/v1/clusters/{id}/health", pathParameters: ["id"], responseType: "json" },
-  "getClustersByIdKubeconfigLegacy": { method: "GET", path: "/api/v1/clusters/{id}/kubeconfig", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdKubeconfigPreview": { method: "GET", path: "/api/v1/clusters/{id}/kubeconfig-preview", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdLoggingOutputsAttachAstronomer": { method: "GET", path: "/api/v1/clusters/{id}/logging/outputs/attach-astronomer", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdManifest": { method: "GET", path: "/api/v1/clusters/{id}/manifest/", pathParameters: ["id"], responseType: "text" },
@@ -355,11 +376,14 @@ export const operationMetadata = {
   "getClustersByIdMetricsSummary": { method: "GET", path: "/api/v1/clusters/{id}/metrics/summary", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdMonitoringConfig": { method: "GET", path: "/api/v1/clusters/{id}/monitoring/config", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdMonitoringStackStatus": { method: "GET", path: "/api/v1/clusters/{id}/monitoring/stack/status", pathParameters: ["id"], responseType: "json" },
+  "getClustersByIdObservabilityGrafana": { method: "GET", path: "/api/v1/clusters/{id}/observability/grafana", pathParameters: ["id"], responseType: "json" },
+  "getClustersByIdObservabilityGrafanaProxy": { method: "GET", path: "/api/v1/clusters/{id}/observability/grafana/*", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdRegistrationStatus": { method: "GET", path: "/api/v1/clusters/{id}/registration/status/", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdRegistry": { method: "GET", path: "/api/v1/clusters/{id}/registry", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdShellSessions": { method: "GET", path: "/api/v1/clusters/{id}/shell/sessions/", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdVulnerabilitiesImages": { method: "GET", path: "/api/v1/clusters/{id}/vulnerabilities/images/", pathParameters: ["id"], responseType: "json" },
   "getClustersByIdVulnerabilitiesSummary": { method: "GET", path: "/api/v1/clusters/{id}/vulnerabilities/summary/", pathParameters: ["id"], responseType: "json" },
+  "getClustersSummary": { method: "GET", path: "/api/v1/clusters/summary/", pathParameters: [], responseType: "json" },
   "getClusterTemplates": { method: "GET", path: "/api/v1/cluster-templates", pathParameters: [], responseType: "json" },
   "getClusterTemplatesById": { method: "GET", path: "/api/v1/cluster-templates/{id}", pathParameters: ["id"], responseType: "json" },
   "getClusterTemplatesByIdClusters": { method: "GET", path: "/api/v1/cluster-templates/{id}/clusters", pathParameters: ["id"], responseType: "json" },
@@ -378,11 +402,14 @@ export const operationMetadata = {
   "getDeliveryBundlesByIdVersions": { method: "GET", path: "/api/v1/delivery/bundles/{id}/versions/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryBundlesByIdVersionsByVersionId": { method: "GET", path: "/api/v1/delivery/bundles/{id}/versions/{versionId}/", pathParameters: ["id","versionId"], responseType: "json" },
   "getDeliveryClustersByClusterIdInventory": { method: "GET", path: "/api/v1/delivery/clusters/{clusterId}/inventory/", pathParameters: ["clusterId"], responseType: "json" },
+  "getDeliveryConfigurationTemplates": { method: "GET", path: "/api/v1/delivery/configuration-templates/", pathParameters: [], responseType: "json" },
+  "getDeliveryConfigurationTemplatesById": { method: "GET", path: "/api/v1/delivery/configuration-templates/{id}/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryDeployments": { method: "GET", path: "/api/v1/delivery/deployments/", pathParameters: [], responseType: "json" },
   "getDeliveryDeploymentsById": { method: "GET", path: "/api/v1/delivery/deployments/{id}/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryDeploymentsByIdEvents": { method: "GET", path: "/api/v1/delivery/deployments/{id}/events/", pathParameters: ["id"], responseType: "json" },
-  "getDeliveryEstate": { method: "GET", path: "/api/v1/delivery/estate/", pathParameters: [], responseType: "json" },
-  "getDeliveryFleetLegacy": { method: "GET", path: "/api/v1/delivery/fleet/", pathParameters: [], responseType: "json" },
+  "getDeliveryFleet": { method: "GET", path: "/api/v1/delivery/estate/", pathParameters: [], responseType: "json" },
+  "getDeliveryOverrideSets": { method: "GET", path: "/api/v1/delivery/override-sets/", pathParameters: [], responseType: "json" },
+  "getDeliveryOverrideSetsById": { method: "GET", path: "/api/v1/delivery/override-sets/{id}/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryRollouts": { method: "GET", path: "/api/v1/delivery/rollouts/", pathParameters: [], responseType: "json" },
   "getDeliveryRolloutsById": { method: "GET", path: "/api/v1/delivery/rollouts/{id}/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryRolloutsByIdClusters": { method: "GET", path: "/api/v1/delivery/rollouts/{id}/clusters/", pathParameters: ["id"], responseType: "json" },
@@ -392,9 +419,11 @@ export const operationMetadata = {
   "getDeliverySystemCompatibility": { method: "GET", path: "/api/v1/delivery/system/compatibility/", pathParameters: [], responseType: "json" },
   "getDeliveryTargets": { method: "GET", path: "/api/v1/delivery/targets/", pathParameters: [], responseType: "json" },
   "getDeliveryTargetsById": { method: "GET", path: "/api/v1/delivery/targets/{id}/", pathParameters: ["id"], responseType: "json" },
+  "getEventsStream": { method: "GET", path: "/api/v1/events/stream", pathParameters: [], responseType: "json" },
   "getExtensions": { method: "GET", path: "/api/v1/extensions/", pathParameters: [], responseType: "json" },
   "getExtensionsMounts": { method: "GET", path: "/api/v1/extensions/mounts/", pathParameters: [], responseType: "json" },
   "getExtensionsSampleManifest": { method: "GET", path: "/api/v1/extensions/sample-manifest/", pathParameters: [], responseType: "json" },
+  "getLicense": { method: "GET", path: "/api/v1/license", pathParameters: [], responseType: "json" },
   "getLoggingControllerStatus": { method: "GET", path: "/api/v1/logging/controller/status", pathParameters: [], responseType: "json" },
   "getLoggingOperations": { method: "GET", path: "/api/v1/logging/operations", pathParameters: [], responseType: "json" },
   "getLoggingOperationsById": { method: "GET", path: "/api/v1/logging/operations/{id}", pathParameters: ["id"], responseType: "json" },
@@ -410,7 +439,9 @@ export const operationMetadata = {
   "getNamedResource": { method: "GET", path: "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}", pathParameters: ["cluster_id","type","namespace","name"], responseType: "json" },
   "getNativeRbacRules": { method: "GET", path: "/api/v1/native-rbac-rules", pathParameters: [], responseType: "json" },
   "getNodeOperation": { method: "GET", path: "/api/v1/nodes/{cluster_id}/{node_name}/operations/{id}/", pathParameters: ["cluster_id","node_name","id"], responseType: "json" },
-  "getObservabilityGrafanaTicket": { method: "GET", path: "/api/v1/observability/grafana-ticket", pathParameters: [], responseType: "json" },
+  "getObservabilityGrafana": { method: "GET", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "getObservabilityGrafanaProxy": { method: "GET", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
+  "getPlatformHealthSummary": { method: "GET", path: "/api/v1/platform/health-summary", pathParameters: [], responseType: "json" },
   "getProjects": { method: "GET", path: "/api/v1/projects/", pathParameters: [], responseType: "json" },
   "getProjectsById": { method: "GET", path: "/api/v1/projects/{id}/", pathParameters: ["id"], responseType: "json" },
   "getProjectsByIdClusters": { method: "GET", path: "/api/v1/projects/{id}/clusters/", pathParameters: ["id"], responseType: "json" },
@@ -434,6 +465,7 @@ export const operationMetadata = {
   "getRbacMyPermissions": { method: "GET", path: "/api/v1/rbac/my-permissions", pathParameters: [], responseType: "json" },
   "getRbacMyRoles": { method: "GET", path: "/api/v1/rbac/my-roles", pathParameters: [], responseType: "json" },
   "getRbacMyRolesCheck": { method: "GET", path: "/api/v1/rbac/my-roles/check", pathParameters: [], responseType: "json" },
+  "getRbacPrincipals": { method: "GET", path: "/api/v1/rbac/principals", pathParameters: [], responseType: "json" },
   "getRbacProjectBindings": { method: "GET", path: "/api/v1/rbac/project-bindings", pathParameters: [], responseType: "json" },
   "getRbacProjectRoleBindings": { method: "GET", path: "/api/v1/rbac/project-role-bindings", pathParameters: [], responseType: "json" },
   "getRbacProjectRoles": { method: "GET", path: "/api/v1/rbac/project-roles", pathParameters: [], responseType: "json" },
@@ -479,7 +511,7 @@ export const operationMetadata = {
   "getSettingsSso": { method: "GET", path: "/api/v1/settings/sso", pathParameters: [], responseType: "json" },
   "getSettingsSsoPresets": { method: "GET", path: "/api/v1/settings/sso/presets", pathParameters: [], responseType: "json" },
   "getSettingsTokens": { method: "GET", path: "/api/v1/settings/tokens", pathParameters: [], responseType: "json" },
-  "getSupportBundle": { method: "GET", path: "/api/v1/support-bundle", pathParameters: [], responseType: "blob" },
+  "getSupportBundleOperation": { method: "GET", path: "/api/v1/support-bundles/{id}", pathParameters: ["id"], responseType: "json" },
   "getTools": { method: "GET", path: "/api/v1/tools/", pathParameters: [], responseType: "json" },
   "getToolsBySlug": { method: "GET", path: "/api/v1/tools/{slug}", pathParameters: ["slug"], responseType: "json" },
   "getToolsControllerStatus": { method: "GET", path: "/api/v1/tools/controller/status", pathParameters: [], responseType: "json" },
@@ -494,8 +526,13 @@ export const operationMetadata = {
   "getWorkloadsPodsByClusterIdByNamespaceByPodLogs": { method: "GET", path: "/api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/logs/", pathParameters: ["cluster_id","namespace","pod"], responseType: "json" },
   "headClustersByClusterIdK8sProxy": { method: "HEAD", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
   "headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { method: "HEAD", path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", pathParameters: ["cluster_id","namespace","service_port"], responseType: "blob" },
+  "headClustersByIdObservabilityGrafana": { method: "HEAD", path: "/api/v1/clusters/{id}/observability/grafana", pathParameters: ["id"], responseType: "json" },
+  "headClustersByIdObservabilityGrafanaProxy": { method: "HEAD", path: "/api/v1/clusters/{id}/observability/grafana/*", pathParameters: ["id"], responseType: "json" },
+  "headObservabilityGrafana": { method: "HEAD", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "headObservabilityGrafanaProxy": { method: "HEAD", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "internalTunnelHelm": { method: "POST", path: "/internal/tunnel/helm/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
   "internalTunnelK8s": { method: "POST", path: "/internal/tunnel/k8s/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
+  "internalTunnelK8sCapability": { method: "GET", path: "/internal/tunnel/k8s/{cluster_id}/capabilities/{capability}", pathParameters: ["cluster_id","capability"], responseType: "json" },
   "k8sProxyDelete": { method: "DELETE", path: "/api/v1/clusters/{cluster_id}/k8s/{path}", pathParameters: ["cluster_id","path"], responseType: "blob" },
   "k8sProxyGet": { method: "GET", path: "/api/v1/clusters/{cluster_id}/k8s/{path}", pathParameters: ["cluster_id","path"], responseType: "blob" },
   "k8sProxyHead": { method: "HEAD", path: "/api/v1/clusters/{cluster_id}/k8s/{path}", pathParameters: ["cluster_id","path"], responseType: "blob" },
@@ -516,16 +553,24 @@ export const operationMetadata = {
   "listNamedClusterResources": { method: "GET", path: "/api/v1/clusters/{cluster_id}/resources/{resource_type}", pathParameters: ["cluster_id","resource_type"], responseType: "json" },
   "optionsClustersByClusterIdK8sProxy": { method: "OPTIONS", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
   "optionsClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { method: "OPTIONS", path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", pathParameters: ["cluster_id","namespace","service_port"], responseType: "blob" },
+  "optionsClustersByIdObservabilityGrafana": { method: "OPTIONS", path: "/api/v1/clusters/{id}/observability/grafana", pathParameters: ["id"], responseType: "json" },
+  "optionsClustersByIdObservabilityGrafanaProxy": { method: "OPTIONS", path: "/api/v1/clusters/{id}/observability/grafana/*", pathParameters: ["id"], responseType: "json" },
+  "optionsObservabilityGrafana": { method: "OPTIONS", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "optionsObservabilityGrafanaProxy": { method: "OPTIONS", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "patchAuthDexConnectorsById": { method: "PATCH", path: "/api/v1/auth/dex/connectors/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchClusterGroupsById": { method: "PATCH", path: "/api/v1/cluster-groups/{id}", pathParameters: ["id"], responseType: "json" },
   "patchClustersByClusterIdK8sProxy": { method: "PATCH", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
   "patchClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { method: "PATCH", path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", pathParameters: ["cluster_id","namespace","service_port"], responseType: "blob" },
   "patchClustersByClusterIdWorkloadsByKindByNamespaceByNameScale": { method: "PATCH", path: "/api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale/", pathParameters: ["cluster_id","kind","namespace","name"], responseType: "json" },
   "patchClustersById": { method: "PATCH", path: "/api/v1/clusters/{id}", pathParameters: ["id"], responseType: "json" },
+  "patchClustersByIdObservabilityGrafana": { method: "PATCH", path: "/api/v1/clusters/{id}/observability/grafana", pathParameters: ["id"], responseType: "json" },
+  "patchClustersByIdObservabilityGrafanaProxy": { method: "PATCH", path: "/api/v1/clusters/{id}/observability/grafana/*", pathParameters: ["id"], responseType: "json" },
   "patchClusterTemplatesById": { method: "PATCH", path: "/api/v1/cluster-templates/{id}", pathParameters: ["id"], responseType: "json" },
   "patchDeliveryBundlesById": { method: "PATCH", path: "/api/v1/delivery/bundles/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchDeliverySourcesById": { method: "PATCH", path: "/api/v1/delivery/sources/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchDeliveryTargetsById": { method: "PATCH", path: "/api/v1/delivery/targets/{id}/", pathParameters: ["id"], responseType: "json" },
+  "patchObservabilityGrafana": { method: "PATCH", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "patchObservabilityGrafanaProxy": { method: "PATCH", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "patchProjectsById": { method: "PATCH", path: "/api/v1/projects/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchProjectsByIdPolicy": { method: "PATCH", path: "/api/v1/projects/{id}/policy/", pathParameters: ["id"], responseType: "json" },
   "patchProjectsByProjectIdCloudCredentialsById": { method: "PATCH", path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/", pathParameters: ["project_id","id"], responseType: "json" },
@@ -536,13 +581,16 @@ export const operationMetadata = {
   "podLogsWebSocket": { method: "GET", path: "/api/v1/ws/logs/{cluster_id}/{namespace}/{pod}/{container}", pathParameters: ["cluster_id","namespace","pod","container"], responseType: "json" },
   "postAdminAlertingInhibitions": { method: "POST", path: "/api/v1/admin/alerting/inhibitions/", pathParameters: [], responseType: "json" },
   "postAdminDashboardWidgets": { method: "POST", path: "/api/v1/admin/dashboard-widgets", pathParameters: [], responseType: "json" },
+  "postAdminDeferredOperationsByIdCancel": { method: "POST", path: "/api/v1/admin/deferred-operations/{id}/cancel", pathParameters: ["id"], responseType: "json" },
   "postAdminGitopsSources": { method: "POST", path: "/api/v1/admin/gitops-sources", pathParameters: [], responseType: "json" },
   "postAdminGitopsSourcesByIdSync": { method: "POST", path: "/api/v1/admin/gitops-sources/{id}/sync", pathParameters: ["id"], responseType: "json" },
   "postAdminGroupMappings": { method: "POST", path: "/api/v1/admin/group-mappings", pathParameters: [], responseType: "json" },
+  "postAdminMaintenanceWindows": { method: "POST", path: "/api/v1/admin/maintenance-windows", pathParameters: [], responseType: "json" },
   "postAdminManagementBackupDestinations": { method: "POST", path: "/api/v1/admin/management-backup/destinations/", pathParameters: [], responseType: "json" },
   "postAdminManagementBackupDestinationsByIdRun": { method: "POST", path: "/api/v1/admin/management-backup/destinations/{id}/run/", pathParameters: ["id"], responseType: "json" },
   "postAdminManagementBackupDestinationsByIdTest": { method: "POST", path: "/api/v1/admin/management-backup/destinations/{id}/test/", pathParameters: ["id"], responseType: "json" },
   "postAdminNetworkPolicyTemplates": { method: "POST", path: "/api/v1/admin/network-policy-templates", pathParameters: [], responseType: "json" },
+  "postAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId": { method: "POST", path: "/api/v1/admin/platform-settings/default-cluster-template/reapply/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
   "postAdminPrometheusDatasources": { method: "POST", path: "/api/v1/admin/prometheus-datasources", pathParameters: [], responseType: "json" },
   "postAdminPrometheusDatasourcesByIdTest": { method: "POST", path: "/api/v1/admin/prometheus-datasources/{id}/test", pathParameters: ["id"], responseType: "json" },
   "postAdminQueuesByQueueDlqByIdRetry": { method: "POST", path: "/api/v1/admin/queues/{queue}/dlq/{id}/retry", pathParameters: ["queue","id"], responseType: "json" },
@@ -562,9 +610,6 @@ export const operationMetadata = {
   "postAlertingRulesByIdEnable": { method: "POST", path: "/api/v1/alerting/rules/{id}/enable", pathParameters: ["id"], responseType: "json" },
   "postAlertingSilences": { method: "POST", path: "/api/v1/alerting/silences", pathParameters: [], responseType: "json" },
   "postAlertingSilencesByIdExpire": { method: "POST", path: "/api/v1/alerting/silences/{id}/expire", pathParameters: ["id"], responseType: "json" },
-  "postAlertsRulesByIdDisable": { method: "POST", path: "/api/v1/alerts/rules/{id}/disable", pathParameters: ["id"], responseType: "json" },
-  "postAlertsRulesByIdEnable": { method: "POST", path: "/api/v1/alerts/rules/{id}/enable", pathParameters: ["id"], responseType: "json" },
-  "postAlertsSilencesByIdExpire": { method: "POST", path: "/api/v1/alerts/silences/{id}/expire", pathParameters: ["id"], responseType: "json" },
   "postAuthChangePassword": { method: "POST", path: "/api/v1/auth/change-password/", pathParameters: [], responseType: "json" },
   "postAuthDexApply": { method: "POST", path: "/api/v1/auth/dex/apply/", pathParameters: [], responseType: "json" },
   "postAuthDexConnectors": { method: "POST", path: "/api/v1/auth/dex/connectors/", pathParameters: [], responseType: "json" },
@@ -585,10 +630,8 @@ export const operationMetadata = {
   "postBackupsSchedules": { method: "POST", path: "/api/v1/backups/schedules", pathParameters: [], responseType: "json" },
   "postBackupsSchedulesByIdTriggerNow": { method: "POST", path: "/api/v1/backups/schedules/{id}/trigger-now", pathParameters: ["id"], responseType: "json" },
   "postBackupsStorage": { method: "POST", path: "/api/v1/backups/storage", pathParameters: [], responseType: "json" },
-  "postBackupsStorageByIdTest": { method: "POST", path: "/api/v1/backups/storage/{id}/test", pathParameters: ["id"], responseType: "json" },
   "postBackupsStorageByIdTestConnection": { method: "POST", path: "/api/v1/backups/storage/{id}/test-connection", pathParameters: ["id"], responseType: "json" },
-  "postBackupsStorageConfigs": { method: "POST", path: "/api/v1/backups/storage-configs", pathParameters: [], responseType: "json" },
-  "postBackupsStorageConfigsByIdTestConnection": { method: "POST", path: "/api/v1/backups/storage-configs/{id}/test-connection", pathParameters: ["id"], responseType: "json" },
+  "postCatalogApplicationsPreview": { method: "POST", path: "/api/v1/catalog/applications/preview/", pathParameters: [], responseType: "json" },
   "postCatalogInstalled": { method: "POST", path: "/api/v1/catalog/installed/", pathParameters: [], responseType: "json" },
   "postCatalogInstalledByIdRollback": { method: "POST", path: "/api/v1/catalog/installed/{id}/rollback/", pathParameters: ["id"], responseType: "json" },
   "postCatalogOperationsByIdRetry": { method: "POST", path: "/api/v1/catalog/operations/{id}/retry/", pathParameters: ["id"], responseType: "json" },
@@ -626,13 +669,14 @@ export const operationMetadata = {
   "postClustersByIdGatekeeperConstraintsValidate": { method: "POST", path: "/api/v1/clusters/{id}/gatekeeper/constraints/validate/", pathParameters: ["id"], responseType: "json" },
   "postClustersByIdGenerateDirectKubeconfig": { method: "POST", path: "/api/v1/clusters/{id}/generate-direct-kubeconfig", pathParameters: ["id"], responseType: "text" },
   "postClustersByIdGenerateKubeconfig": { method: "POST", path: "/api/v1/clusters/{id}/generate-kubeconfig", pathParameters: ["id"], responseType: "text" },
-  "postClustersByIdGenerateKubeconfigLegacy": { method: "POST", path: "/api/v1/clusters/{id}/generate_kubeconfig", pathParameters: ["id"], responseType: "text" },
   "postClustersByIdLoggingOutputsAttachAstronomer": { method: "POST", path: "/api/v1/clusters/{id}/logging/outputs/attach-astronomer", pathParameters: ["id"], responseType: "json" },
   "postClustersByIdLoggingOutputsByOutputIdRotateToken": { method: "POST", path: "/api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token", pathParameters: ["id","output_id"], responseType: "json" },
   "postClustersByIdMetrics": { method: "POST", path: "/api/v1/clusters/{id}/metrics", pathParameters: ["id"], responseType: "json" },
   "postClustersByIdMonitoringStackInstall": { method: "POST", path: "/api/v1/clusters/{id}/monitoring/stack/install", pathParameters: ["id"], responseType: "json" },
   "postClustersByIdMonitoringStackPreview": { method: "POST", path: "/api/v1/clusters/{id}/monitoring/stack/preview", pathParameters: ["id"], responseType: "json" },
   "postClustersByIdMonitoringStackReplace": { method: "POST", path: "/api/v1/clusters/{id}/monitoring/stack/replace", pathParameters: ["id"], responseType: "json" },
+  "postClustersByIdObservabilityGrafana": { method: "POST", path: "/api/v1/clusters/{id}/observability/grafana", pathParameters: ["id"], responseType: "json" },
+  "postClustersByIdObservabilityGrafanaProxy": { method: "POST", path: "/api/v1/clusters/{id}/observability/grafana/*", pathParameters: ["id"], responseType: "json" },
   "postClustersByIdOwnershipTakeover": { method: "POST", path: "/api/v1/clusters/{id}/ownership/takeover/", pathParameters: ["id"], responseType: "json" },
   "postClustersByIdRegister": { method: "POST", path: "/api/v1/clusters/{id}/register", pathParameters: ["id"], responseType: "json" },
   "postClustersByIdRegistrationCancel": { method: "POST", path: "/api/v1/clusters/{id}/registration/cancel", pathParameters: ["id"], responseType: "json" },
@@ -645,14 +689,17 @@ export const operationMetadata = {
   "postControllersSilences": { method: "POST", path: "/api/v1/controllers/silences", pathParameters: [], responseType: "json" },
   "postDeliveryBundles": { method: "POST", path: "/api/v1/delivery/bundles/", pathParameters: [], responseType: "json" },
   "postDeliveryBundlesByIdVersions": { method: "POST", path: "/api/v1/delivery/bundles/{id}/versions/", pathParameters: ["id"], responseType: "json" },
-  "postDeliveryDeploymentsByIdReconcile": { method: "POST", path: "/api/v1/delivery/deployments/{id}/reconcile/", pathParameters: ["id","id"], responseType: "json" },
-  "postDeliveryDeploymentsByIdResume": { method: "POST", path: "/api/v1/delivery/deployments/{id}/resume/", pathParameters: ["id","id"], responseType: "json" },
-  "postDeliveryDeploymentsByIdSuspend": { method: "POST", path: "/api/v1/delivery/deployments/{id}/suspend/", pathParameters: ["id","id"], responseType: "json" },
-  "postDeliveryRolloutsByIdAbort": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/abort/", pathParameters: ["id","id"], responseType: "json" },
+  "postDeliveryConfigurationTemplates": { method: "POST", path: "/api/v1/delivery/configuration-templates/", pathParameters: [], responseType: "json" },
+  "postDeliveryDeploymentsByIdReconcile": { method: "POST", path: "/api/v1/delivery/deployments/{id}/reconcile/", pathParameters: ["id"], responseType: "json" },
+  "postDeliveryDeploymentsByIdResume": { method: "POST", path: "/api/v1/delivery/deployments/{id}/resume/", pathParameters: ["id"], responseType: "json" },
+  "postDeliveryDeploymentsByIdSuspend": { method: "POST", path: "/api/v1/delivery/deployments/{id}/suspend/", pathParameters: ["id"], responseType: "json" },
+  "postDeliveryOverrideSets": { method: "POST", path: "/api/v1/delivery/override-sets/", pathParameters: [], responseType: "json" },
+  "postDeliveryOverrideSetsEffective": { method: "POST", path: "/api/v1/delivery/override-sets/effective/", pathParameters: [], responseType: "json" },
+  "postDeliveryRolloutsByIdAbort": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/abort/", pathParameters: ["id"], responseType: "json" },
   "postDeliveryRolloutsByIdApprove": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/approve/", pathParameters: ["id"], responseType: "json" },
-  "postDeliveryRolloutsByIdPause": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/pause/", pathParameters: ["id","id"], responseType: "json" },
-  "postDeliveryRolloutsByIdResume": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/resume/", pathParameters: ["id","id"], responseType: "json" },
-  "postDeliveryRolloutsByIdRetry": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/retry/", pathParameters: ["id","id"], responseType: "json" },
+  "postDeliveryRolloutsByIdPause": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/pause/", pathParameters: ["id"], responseType: "json" },
+  "postDeliveryRolloutsByIdResume": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/resume/", pathParameters: ["id"], responseType: "json" },
+  "postDeliveryRolloutsByIdRetry": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/retry/", pathParameters: ["id"], responseType: "json" },
   "postDeliveryRolloutsByIdRollback": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/rollback/", pathParameters: ["id"], responseType: "json" },
   "postDeliverySources": { method: "POST", path: "/api/v1/delivery/sources/", pathParameters: [], responseType: "json" },
   "postDeliverySourcesByIdRotateCredential": { method: "POST", path: "/api/v1/delivery/sources/{id}/rotate-credential/", pathParameters: ["id"], responseType: "json" },
@@ -692,9 +739,12 @@ export const operationMetadata = {
   "postNodesByClusterIdByNodeNameTaints": { method: "POST", path: "/api/v1/nodes/{cluster_id}/{node_name}/taints/", pathParameters: ["cluster_id","node_name"], responseType: "json" },
   "postNodesByClusterIdByNodeNameTaintsRemove": { method: "POST", path: "/api/v1/nodes/{cluster_id}/{node_name}/taints/remove/", pathParameters: ["cluster_id","node_name"], responseType: "json" },
   "postNodesByClusterIdByNodeNameUncordon": { method: "POST", path: "/api/v1/nodes/{cluster_id}/{node_name}/uncordon/", pathParameters: ["cluster_id","node_name"], responseType: "json" },
+  "postObservabilityGrafana": { method: "POST", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "postObservabilityGrafanaProxy": { method: "POST", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "postObservabilityGrafanaTicketRedeem": { method: "POST", path: "/api/v1/observability/grafana-ticket/redeem", pathParameters: [], responseType: "json" },
   "postProjects": { method: "POST", path: "/api/v1/projects/", pathParameters: [], responseType: "json" },
   "postProjectsByIdAddNamespace": { method: "POST", path: "/api/v1/projects/{id}/add-namespace/", pathParameters: ["id"], responseType: "json" },
+  "postProjectsByIdApplyRbacTemplate": { method: "POST", path: "/api/v1/projects/{id}/apply-rbac-template", pathParameters: ["id"], responseType: "json" },
   "postProjectsByIdOwnershipTakeover": { method: "POST", path: "/api/v1/projects/{id}/ownership/takeover/", pathParameters: ["id"], responseType: "json" },
   "postProjectsByIdRemoveNamespace": { method: "POST", path: "/api/v1/projects/{id}/remove-namespace/", pathParameters: ["id"], responseType: "json" },
   "postProjectsByProjectIdCatalogs": { method: "POST", path: "/api/v1/projects/{project_id}/catalogs/", pathParameters: ["project_id"], responseType: "json" },
@@ -708,6 +758,7 @@ export const operationMetadata = {
   "postRbacGlobalRoleBindings": { method: "POST", path: "/api/v1/rbac/global-role-bindings", pathParameters: [], responseType: "json" },
   "postRbacGlobalRoles": { method: "POST", path: "/api/v1/rbac/global-roles", pathParameters: [], responseType: "json" },
   "postRbacPermissionPreview": { method: "POST", path: "/api/v1/rbac/permission-preview", pathParameters: [], responseType: "json" },
+  "postRbacPrincipalsMaterialize": { method: "POST", path: "/api/v1/rbac/principals/materialize", pathParameters: [], responseType: "json" },
   "postRbacProjectBindings": { method: "POST", path: "/api/v1/rbac/project-bindings", pathParameters: [], responseType: "json" },
   "postRbacProjectRoleBindings": { method: "POST", path: "/api/v1/rbac/project-role-bindings", pathParameters: [], responseType: "json" },
   "postRbacProjectRoles": { method: "POST", path: "/api/v1/rbac/project-roles", pathParameters: [], responseType: "json" },
@@ -736,6 +787,7 @@ export const operationMetadata = {
   "postToolsBySlugAdopt": { method: "POST", path: "/api/v1/tools/{slug}/adopt", pathParameters: ["slug"], responseType: "json" },
   "postToolsBySlugInstall": { method: "POST", path: "/api/v1/tools/{slug}/install", pathParameters: ["slug"], responseType: "json" },
   "postToolsBySlugPreview": { method: "POST", path: "/api/v1/tools/{slug}/preview", pathParameters: ["slug"], responseType: "json" },
+  "postToolsBySlugRollback": { method: "POST", path: "/api/v1/tools/{slug}/rollback", pathParameters: ["slug"], responseType: "json" },
   "postToolsOperationsByIdRetry": { method: "POST", path: "/api/v1/tools/operations/{id}/retry", pathParameters: ["id"], responseType: "json" },
   "postUsers": { method: "POST", path: "/api/v1/users", pathParameters: [], responseType: "json" },
   "postUsersByIdResetPassword": { method: "POST", path: "/api/v1/users/{id}/reset-password", pathParameters: ["id"], responseType: "json" },
@@ -743,8 +795,10 @@ export const operationMetadata = {
   "putAdminAlertingInhibitionsById": { method: "PUT", path: "/api/v1/admin/alerting/inhibitions/{id}/", pathParameters: ["id"], responseType: "json" },
   "putAdminDashboardWidgetsById": { method: "PUT", path: "/api/v1/admin/dashboard-widgets/{id}", pathParameters: ["id"], responseType: "json" },
   "putAdminGitopsSourcesById": { method: "PUT", path: "/api/v1/admin/gitops-sources/{id}", pathParameters: ["id"], responseType: "json" },
+  "putAdminMaintenanceWindowsById": { method: "PUT", path: "/api/v1/admin/maintenance-windows/{id}", pathParameters: ["id"], responseType: "json" },
   "putAdminManagementBackupDestinationsById": { method: "PUT", path: "/api/v1/admin/management-backup/destinations/{id}/", pathParameters: ["id"], responseType: "json" },
   "putAdminNetworkPolicyTemplatesById": { method: "PUT", path: "/api/v1/admin/network-policy-templates/{id}", pathParameters: ["id"], responseType: "json" },
+  "putAdminPlatformSettingsDefaultClusterTemplate": { method: "PUT", path: "/api/v1/admin/platform-settings/default-cluster-template", pathParameters: [], responseType: "json" },
   "putAdminPrometheusDatasourcesById": { method: "PUT", path: "/api/v1/admin/prometheus-datasources/{id}", pathParameters: ["id"], responseType: "json" },
   "putAdminQuotaPlansByName": { method: "PUT", path: "/api/v1/admin/quota-plans/{name}", pathParameters: ["name"], responseType: "json" },
   "putAdminSettings": { method: "PUT", path: "/api/v1/admin/settings", pathParameters: [], responseType: "json" },
@@ -752,9 +806,10 @@ export const operationMetadata = {
   "putAlertingChannelsById": { method: "PUT", path: "/api/v1/alerting/channels/{id}", pathParameters: ["id"], responseType: "json" },
   "putAlertingRulesById": { method: "PUT", path: "/api/v1/alerting/rules/{id}", pathParameters: ["id"], responseType: "json" },
   "putAuthDexSettings": { method: "PUT", path: "/api/v1/auth/dex/settings/", pathParameters: [], responseType: "json" },
+  "putAuthMePreferences": { method: "PUT", path: "/api/v1/auth/me/preferences/", pathParameters: [], responseType: "json" },
   "putBackupsSchedulesById": { method: "PUT", path: "/api/v1/backups/schedules/{id}", pathParameters: ["id"], responseType: "json" },
   "putBackupsStorageById": { method: "PUT", path: "/api/v1/backups/storage/{id}", pathParameters: ["id"], responseType: "json" },
-  "putBackupsStorageConfigsById": { method: "PUT", path: "/api/v1/backups/storage-configs/{id}", pathParameters: ["id"], responseType: "json" },
+  "putCatalogChartsByIdFavorite": { method: "PUT", path: "/api/v1/catalog/charts/{id}/favorite/", pathParameters: ["id"], responseType: "json" },
   "putCatalogInstalledByIdUpgrade": { method: "PUT", path: "/api/v1/catalog/installed/{id}/upgrade/", pathParameters: ["id"], responseType: "json" },
   "putCatalogRepositoriesById": { method: "PUT", path: "/api/v1/catalog/repositories/{id}/", pathParameters: ["id"], responseType: "json" },
   "putChartsByChartIdRatingsByRatingId": { method: "PUT", path: "/api/v1/charts/{chart_id}/ratings/{rating_id}", pathParameters: ["chart_id","rating_id"], responseType: "json" },
@@ -767,14 +822,20 @@ export const operationMetadata = {
   "putClustersById": { method: "PUT", path: "/api/v1/clusters/{id}", pathParameters: ["id"], responseType: "json" },
   "putClustersByIdMonitoringConfig": { method: "PUT", path: "/api/v1/clusters/{id}/monitoring/config", pathParameters: ["id"], responseType: "json" },
   "putClustersByIdMonitoringStackUpgrade": { method: "PUT", path: "/api/v1/clusters/{id}/monitoring/stack/upgrade", pathParameters: ["id"], responseType: "json" },
+  "putClustersByIdObservabilityGrafana": { method: "PUT", path: "/api/v1/clusters/{id}/observability/grafana", pathParameters: ["id"], responseType: "json" },
+  "putClustersByIdObservabilityGrafanaProxy": { method: "PUT", path: "/api/v1/clusters/{id}/observability/grafana/*", pathParameters: ["id"], responseType: "json" },
   "putClustersByIdRegistrationOptions": { method: "PUT", path: "/api/v1/clusters/{id}/registration/options/", pathParameters: ["id"], responseType: "json" },
   "putClustersByIdRegistry": { method: "PUT", path: "/api/v1/clusters/{id}/registry", pathParameters: ["id"], responseType: "json" },
   "putClusterTemplatesById": { method: "PUT", path: "/api/v1/cluster-templates/{id}", pathParameters: ["id"], responseType: "json" },
   "putControllersPolicy": { method: "PUT", path: "/api/v1/controllers/policy", pathParameters: [], responseType: "json" },
+  "putDeliveryConfigurationTemplatesById": { method: "PUT", path: "/api/v1/delivery/configuration-templates/{id}/", pathParameters: ["id"], responseType: "json" },
+  "putDeliveryOverrideSetsById": { method: "PUT", path: "/api/v1/delivery/override-sets/{id}/", pathParameters: ["id"], responseType: "json" },
   "putLoggingOutputsById": { method: "PUT", path: "/api/v1/logging/outputs/{id}", pathParameters: ["id"], responseType: "json" },
   "putLoggingPipelinesById": { method: "PUT", path: "/api/v1/logging/pipelines/{id}", pathParameters: ["id"], responseType: "json" },
   "putLoggingSavedSearchesById": { method: "PUT", path: "/api/v1/logging/saved-searches/{id}", pathParameters: ["id"], responseType: "json" },
   "putMonitoringEndpointsById": { method: "PUT", path: "/api/v1/monitoring/endpoints/{id}", pathParameters: ["id"], responseType: "json" },
+  "putObservabilityGrafana": { method: "PUT", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "putObservabilityGrafanaProxy": { method: "PUT", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "putProjectsById": { method: "PUT", path: "/api/v1/projects/{id}/", pathParameters: ["id"], responseType: "json" },
   "putProjectsByIdDefaultVaultConnection": { method: "PUT", path: "/api/v1/projects/{id}/default-vault-connection/", pathParameters: ["id"], responseType: "json" },
   "putProjectsByProjectIdCloudCredentialsById": { method: "PUT", path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/", pathParameters: ["project_id","id"], responseType: "json" },
@@ -791,7 +852,6 @@ export const operationMetadata = {
   "putSettingsMonitoringThanosUpgrade": { method: "PUT", path: "/api/v1/settings/monitoring/thanos/upgrade", pathParameters: [], responseType: "json" },
   "putToolsBySlugUpgrade": { method: "PUT", path: "/api/v1/tools/{slug}/upgrade", pathParameters: ["slug"], responseType: "json" },
   "putUsersById": { method: "PUT", path: "/api/v1/users/{id}", pathParameters: ["id"], responseType: "json" },
-  "remoteV2ListPods": { method: "GET", path: "/api/v1/clusters/{id}/v2/pods", pathParameters: ["id"], responseType: "json" },
   "requestCharlieFindingVerification": { method: "POST", path: "/api/v1/charlie/findings/{finding_id}/request-verification/", pathParameters: ["finding_id"], responseType: "json" },
   "resolveCharlieFinding": { method: "POST", path: "/api/v1/charlie/findings/{finding_id}/resolve/", pathParameters: ["finding_id"], responseType: "json" },
   "searchCharlieContext": { method: "GET", path: "/api/v1/charlie/context/search/", pathParameters: [], responseType: "json" },
@@ -816,14 +876,6 @@ export const operationMetadata = {
   "streamCharlieSessionEvents": { method: "GET", path: "/api/v1/charlie/sessions/{session_id}/events/", pathParameters: ["session_id"], responseType: "json" },
   "traceClustersByClusterIdK8sProxy": { method: "TRACE", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
   "traceClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { method: "TRACE", path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", pathParameters: ["cluster_id","namespace","service_port"], responseType: "blob" },
-  "tunnelConnectDelete": { method: "DELETE", path: "/api/v1/connect/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
-  "tunnelConnectGet": { method: "GET", path: "/api/v1/connect/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
-  "tunnelConnectHead": { method: "HEAD", path: "/api/v1/connect/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
-  "tunnelConnectOptions": { method: "OPTIONS", path: "/api/v1/connect/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
-  "tunnelConnectPatch": { method: "PATCH", path: "/api/v1/connect/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
-  "tunnelConnectPost": { method: "POST", path: "/api/v1/connect/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
-  "tunnelConnectPut": { method: "PUT", path: "/api/v1/connect/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
-  "tunnelConnectTrace": { method: "TRACE", path: "/api/v1/connect/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
   "tunnelHealthCheck": { method: "GET", path: "/health", pathParameters: [], responseType: "json" },
   "updateNamedResource": { method: "PUT", path: "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}", pathParameters: ["cluster_id","type","namespace","name"], responseType: "json" },
 } as const satisfies Record<OpenAPIOperationId, OperationMetadata>;
@@ -1234,6 +1286,16 @@ export function charlieActivation(args?: OpenAPIArguments<"charlieActivation">) 
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
+export function countClusterResources(args: OpenAPIArguments<"countClusterResources">) {
+  const operationId = "countClusterResources" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function createAuditExport(args: OpenAPIArguments<"createAuditExport">) {
+  const operationId = "createAuditExport" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function createCharlieSession(args: OpenAPIArguments<"createCharlieSession">) {
   const operationId = "createCharlieSession" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -1264,6 +1326,11 @@ export function createNamedClusterResource(args: OpenAPIArguments<"createNamedCl
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function createSupportBundle(args: OpenAPIArguments<"createSupportBundle">) {
+  const operationId = "createSupportBundle" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function decideCharlieApproval(args: OpenAPIArguments<"decideCharlieApproval">) {
   const operationId = "decideCharlieApproval" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -1286,6 +1353,11 @@ export function deleteAdminGitopsSourcesById(args: OpenAPIArguments<"deleteAdmin
 
 export function deleteAdminGroupMappingsById(args: OpenAPIArguments<"deleteAdminGroupMappingsById">) {
   const operationId = "deleteAdminGroupMappingsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function deleteAdminMaintenanceWindowsById(args: OpenAPIArguments<"deleteAdminMaintenanceWindowsById">) {
+  const operationId = "deleteAdminMaintenanceWindowsById" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -1361,11 +1433,6 @@ export function deleteBackupsSchedulesById(args: OpenAPIArguments<"deleteBackups
 
 export function deleteBackupsStorageById(args: OpenAPIArguments<"deleteBackupsStorageById">) {
   const operationId = "deleteBackupsStorageById" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function deleteBackupsStorageConfigsById(args: OpenAPIArguments<"deleteBackupsStorageConfigsById">) {
-  const operationId = "deleteBackupsStorageConfigsById" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -1449,6 +1516,16 @@ export function deleteClustersByIdMonitoringStackUninstall(args: OpenAPIArgument
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function deleteClustersByIdObservabilityGrafana(args: OpenAPIArguments<"deleteClustersByIdObservabilityGrafana">) {
+  const operationId = "deleteClustersByIdObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function deleteClustersByIdObservabilityGrafanaProxy(args: OpenAPIArguments<"deleteClustersByIdObservabilityGrafanaProxy">) {
+  const operationId = "deleteClustersByIdObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function deleteClustersByIdRegistry(args: OpenAPIArguments<"deleteClustersByIdRegistry">) {
   const operationId = "deleteClustersByIdRegistry" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -1466,6 +1543,16 @@ export function deleteControllersSilencesById(args: OpenAPIArguments<"deleteCont
 
 export function deleteDeliveryBundlesById(args: OpenAPIArguments<"deleteDeliveryBundlesById">) {
   const operationId = "deleteDeliveryBundlesById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function deleteDeliveryConfigurationTemplatesById(args: OpenAPIArguments<"deleteDeliveryConfigurationTemplatesById">) {
+  const operationId = "deleteDeliveryConfigurationTemplatesById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function deleteDeliveryOverrideSetsById(args: OpenAPIArguments<"deleteDeliveryOverrideSetsById">) {
+  const operationId = "deleteDeliveryOverrideSetsById" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -1512,6 +1599,16 @@ export function deleteNamedResourceREST(args: OpenAPIArguments<"deleteNamedResou
 export function deleteNativeRbacRulesById(args: OpenAPIArguments<"deleteNativeRbacRulesById">) {
   const operationId = "deleteNativeRbacRulesById" as const;
   return executeOpenAPIOperation(operationId, args);
+}
+
+export function deleteObservabilityGrafana(args?: OpenAPIArguments<"deleteObservabilityGrafana">) {
+  const operationId = "deleteObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function deleteObservabilityGrafanaProxy(args?: OpenAPIArguments<"deleteObservabilityGrafanaProxy">) {
+  const operationId = "deleteObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
 export function deletePersistentVolume(args: OpenAPIArguments<"deletePersistentVolume">) {
@@ -1649,6 +1746,11 @@ export function dismissCharlieFinding(args: OpenAPIArguments<"dismissCharlieFind
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function downloadSupportBundle(args: OpenAPIArguments<"downloadSupportBundle">) {
+  const operationId = "downloadSupportBundle" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function exportAuditLogs(args?: OpenAPIArguments<"exportAuditLogs">) {
   const operationId = "exportAuditLogs" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -1661,11 +1763,6 @@ export function getActiveCharlieThread(args?: OpenAPIArguments<"getActiveCharlie
 
 export function getActivity(args?: OpenAPIArguments<"getActivity">) {
   const operationId = "getActivity" as const;
-  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
-}
-
-export function getActivityLegacy(args?: OpenAPIArguments<"getActivityLegacy">) {
-  const operationId = "getActivityLegacy" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
@@ -1709,6 +1806,11 @@ export function getAdminDashboardWidgetsById(args: OpenAPIArguments<"getAdminDas
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getAdminDeferredOperations(args?: OpenAPIArguments<"getAdminDeferredOperations">) {
+  const operationId = "getAdminDeferredOperations" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function getAdminGitopsSources(args?: OpenAPIArguments<"getAdminGitopsSources">) {
   const operationId = "getAdminGitopsSources" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -1739,6 +1841,21 @@ export function getAdminGroupMappingsById(args: OpenAPIArguments<"getAdminGroupM
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getAdminMaintenanceWindows(args?: OpenAPIArguments<"getAdminMaintenanceWindows">) {
+  const operationId = "getAdminMaintenanceWindows" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getAdminMaintenanceWindowsActive(args?: OpenAPIArguments<"getAdminMaintenanceWindowsActive">) {
+  const operationId = "getAdminMaintenanceWindowsActive" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getAdminMaintenanceWindowsById(args: OpenAPIArguments<"getAdminMaintenanceWindowsById">) {
+  const operationId = "getAdminMaintenanceWindowsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function getAdminManagementBackup(args?: OpenAPIArguments<"getAdminManagementBackup">) {
   const operationId = "getAdminManagementBackup" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -1762,6 +1879,16 @@ export function getAdminNetworkPolicyTemplates(args?: OpenAPIArguments<"getAdmin
 export function getAdminNetworkPolicyTemplatesById(args: OpenAPIArguments<"getAdminNetworkPolicyTemplatesById">) {
   const operationId = "getAdminNetworkPolicyTemplatesById" as const;
   return executeOpenAPIOperation(operationId, args);
+}
+
+export function getAdminPlatformSettingsDefaultClusterTemplate(args?: OpenAPIArguments<"getAdminPlatformSettingsDefaultClusterTemplate">) {
+  const operationId = "getAdminPlatformSettingsDefaultClusterTemplate" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getAdminPlatformSettingsDefaultClusterTemplateCoverage(args?: OpenAPIArguments<"getAdminPlatformSettingsDefaultClusterTemplateCoverage">) {
+  const operationId = "getAdminPlatformSettingsDefaultClusterTemplateCoverage" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
 export function getAdminPrometheusDatasources(args?: OpenAPIArguments<"getAdminPrometheusDatasources">) {
@@ -1849,6 +1976,11 @@ export function getAlertingEventsById(args: OpenAPIArguments<"getAlertingEventsB
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getAlertingEventsSummary(args?: OpenAPIArguments<"getAlertingEventsSummary">) {
+  const operationId = "getAlertingEventsSummary" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function getAlertingRules(args?: OpenAPIArguments<"getAlertingRules">) {
   const operationId = "getAlertingRules" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -1874,8 +2006,23 @@ export function getAnomalyBaselinesById(args: OpenAPIArguments<"getAnomalyBaseli
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getAuditExportsById(args: OpenAPIArguments<"getAuditExportsById">) {
+  const operationId = "getAuditExportsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getAuditExportsByIdDownload(args: OpenAPIArguments<"getAuditExportsByIdDownload">) {
+  const operationId = "getAuditExportsByIdDownload" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function getAuditLog(args: OpenAPIArguments<"getAuditLog">) {
   const operationId = "getAuditLog" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getAuthCallbackByProvider(args: OpenAPIArguments<"getAuthCallbackByProvider">) {
+  const operationId = "getAuthCallbackByProvider" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -1904,6 +2051,11 @@ export function getAuthDexSettings(args?: OpenAPIArguments<"getAuthDexSettings">
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
+export function getAuthLoginByProvider(args: OpenAPIArguments<"getAuthLoginByProvider">) {
+  const operationId = "getAuthLoginByProvider" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function getAuthLogoutDone(args?: OpenAPIArguments<"getAuthLogoutDone">) {
   const operationId = "getAuthLogoutDone" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -1911,6 +2063,11 @@ export function getAuthLogoutDone(args?: OpenAPIArguments<"getAuthLogoutDone">) 
 
 export function getAuthMe(args?: OpenAPIArguments<"getAuthMe">) {
   const operationId = "getAuthMe" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getAuthMePreferences(args?: OpenAPIArguments<"getAuthMePreferences">) {
+  const operationId = "getAuthMePreferences" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
@@ -1954,11 +2111,6 @@ export function getBackupsRestoresById(args: OpenAPIArguments<"getBackupsRestore
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function getBackupsRuns(args?: OpenAPIArguments<"getBackupsRuns">) {
-  const operationId = "getBackupsRuns" as const;
-  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
-}
-
 export function getBackupsSchedules(args?: OpenAPIArguments<"getBackupsSchedules">) {
   const operationId = "getBackupsSchedules" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -1979,14 +2131,14 @@ export function getBackupsStorageById(args: OpenAPIArguments<"getBackupsStorageB
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function getBackupsStorageConfigs(args?: OpenAPIArguments<"getBackupsStorageConfigs">) {
-  const operationId = "getBackupsStorageConfigs" as const;
+export function getCatalogApplications(args?: OpenAPIArguments<"getCatalogApplications">) {
+  const operationId = "getCatalogApplications" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
-export function getBackupsStorageConfigsById(args: OpenAPIArguments<"getBackupsStorageConfigsById">) {
-  const operationId = "getBackupsStorageConfigsById" as const;
-  return executeOpenAPIOperation(operationId, args);
+export function getCatalogApplicationSources(args?: OpenAPIArguments<"getCatalogApplicationSources">) {
+  const operationId = "getCatalogApplicationSources" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
 export function getCatalogCharts(args?: OpenAPIArguments<"getCatalogCharts">) {
@@ -2019,6 +2171,11 @@ export function getCatalogControllerStatus(args?: OpenAPIArguments<"getCatalogCo
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
+export function getCatalogDiscovery(args?: OpenAPIArguments<"getCatalogDiscovery">) {
+  const operationId = "getCatalogDiscovery" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function getCatalogInstalled(args?: OpenAPIArguments<"getCatalogInstalled">) {
   const operationId = "getCatalogInstalled" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -2026,6 +2183,11 @@ export function getCatalogInstalled(args?: OpenAPIArguments<"getCatalogInstalled
 
 export function getCatalogInstalledByIdRevisions(args: OpenAPIArguments<"getCatalogInstalledByIdRevisions">) {
   const operationId = "getCatalogInstalledByIdRevisions" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getCatalogInstalledByIdUpgradeVersions(args: OpenAPIArguments<"getCatalogInstalledByIdUpgradeVersions">) {
+  const operationId = "getCatalogInstalledByIdUpgradeVersions" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -2429,11 +2591,6 @@ export function getClustersByIdHealth(args: OpenAPIArguments<"getClustersByIdHea
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function getClustersByIdKubeconfigLegacy(args: OpenAPIArguments<"getClustersByIdKubeconfigLegacy">) {
-  const operationId = "getClustersByIdKubeconfigLegacy" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
 export function getClustersByIdKubeconfigPreview(args: OpenAPIArguments<"getClustersByIdKubeconfigPreview">) {
   const operationId = "getClustersByIdKubeconfigPreview" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -2469,6 +2626,16 @@ export function getClustersByIdMonitoringStackStatus(args: OpenAPIArguments<"get
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getClustersByIdObservabilityGrafana(args: OpenAPIArguments<"getClustersByIdObservabilityGrafana">) {
+  const operationId = "getClustersByIdObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getClustersByIdObservabilityGrafanaProxy(args: OpenAPIArguments<"getClustersByIdObservabilityGrafanaProxy">) {
+  const operationId = "getClustersByIdObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function getClustersByIdRegistrationStatus(args: OpenAPIArguments<"getClustersByIdRegistrationStatus">) {
   const operationId = "getClustersByIdRegistrationStatus" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -2492,6 +2659,11 @@ export function getClustersByIdVulnerabilitiesImages(args: OpenAPIArguments<"get
 export function getClustersByIdVulnerabilitiesSummary(args: OpenAPIArguments<"getClustersByIdVulnerabilitiesSummary">) {
   const operationId = "getClustersByIdVulnerabilitiesSummary" as const;
   return executeOpenAPIOperation(operationId, args);
+}
+
+export function getClustersSummary(args?: OpenAPIArguments<"getClustersSummary">) {
+  const operationId = "getClustersSummary" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
 export function getClusterTemplates(args?: OpenAPIArguments<"getClusterTemplates">) {
@@ -2584,6 +2756,16 @@ export function getDeliveryClustersByClusterIdInventory(args: OpenAPIArguments<"
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getDeliveryConfigurationTemplates(args: OpenAPIArguments<"getDeliveryConfigurationTemplates">) {
+  const operationId = "getDeliveryConfigurationTemplates" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getDeliveryConfigurationTemplatesById(args: OpenAPIArguments<"getDeliveryConfigurationTemplatesById">) {
+  const operationId = "getDeliveryConfigurationTemplatesById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function getDeliveryDeployments(args: OpenAPIArguments<"getDeliveryDeployments">) {
   const operationId = "getDeliveryDeployments" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -2599,14 +2781,19 @@ export function getDeliveryDeploymentsByIdEvents(args: OpenAPIArguments<"getDeli
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function getDeliveryEstate(args?: OpenAPIArguments<"getDeliveryEstate">) {
-  const operationId = "getDeliveryEstate" as const;
+export function getDeliveryFleet(args?: OpenAPIArguments<"getDeliveryFleet">) {
+  const operationId = "getDeliveryFleet" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
-export function getDeliveryFleetLegacy(args?: OpenAPIArguments<"getDeliveryFleetLegacy">) {
-  const operationId = "getDeliveryFleetLegacy" as const;
-  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+export function getDeliveryOverrideSets(args: OpenAPIArguments<"getDeliveryOverrideSets">) {
+  const operationId = "getDeliveryOverrideSets" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getDeliveryOverrideSetsById(args: OpenAPIArguments<"getDeliveryOverrideSetsById">) {
+  const operationId = "getDeliveryOverrideSetsById" as const;
+  return executeOpenAPIOperation(operationId, args);
 }
 
 export function getDeliveryRollouts(args: OpenAPIArguments<"getDeliveryRollouts">) {
@@ -2654,6 +2841,11 @@ export function getDeliveryTargetsById(args: OpenAPIArguments<"getDeliveryTarget
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getEventsStream(args?: OpenAPIArguments<"getEventsStream">) {
+  const operationId = "getEventsStream" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function getExtensions(args?: OpenAPIArguments<"getExtensions">) {
   const operationId = "getExtensions" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -2666,6 +2858,11 @@ export function getExtensionsMounts(args?: OpenAPIArguments<"getExtensionsMounts
 
 export function getExtensionsSampleManifest(args?: OpenAPIArguments<"getExtensionsSampleManifest">) {
   const operationId = "getExtensionsSampleManifest" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getLicense(args?: OpenAPIArguments<"getLicense">) {
+  const operationId = "getLicense" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
@@ -2744,8 +2941,18 @@ export function getNodeOperation(args: OpenAPIArguments<"getNodeOperation">) {
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function getObservabilityGrafanaTicket(args?: OpenAPIArguments<"getObservabilityGrafanaTicket">) {
-  const operationId = "getObservabilityGrafanaTicket" as const;
+export function getObservabilityGrafana(args?: OpenAPIArguments<"getObservabilityGrafana">) {
+  const operationId = "getObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getObservabilityGrafanaProxy(args?: OpenAPIArguments<"getObservabilityGrafanaProxy">) {
+  const operationId = "getObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getPlatformHealthSummary(args?: OpenAPIArguments<"getPlatformHealthSummary">) {
+  const operationId = "getPlatformHealthSummary" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
@@ -2861,6 +3068,11 @@ export function getRbacMyRoles(args?: OpenAPIArguments<"getRbacMyRoles">) {
 
 export function getRbacMyRolesCheck(args: OpenAPIArguments<"getRbacMyRolesCheck">) {
   const operationId = "getRbacMyRolesCheck" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getRbacPrincipals(args: OpenAPIArguments<"getRbacPrincipals">) {
+  const operationId = "getRbacPrincipals" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3089,9 +3301,9 @@ export function getSettingsTokens(args?: OpenAPIArguments<"getSettingsTokens">) 
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
-export function getSupportBundle(args?: OpenAPIArguments<"getSupportBundle">) {
-  const operationId = "getSupportBundle" as const;
-  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+export function getSupportBundleOperation(args: OpenAPIArguments<"getSupportBundleOperation">) {
+  const operationId = "getSupportBundleOperation" as const;
+  return executeOpenAPIOperation(operationId, args);
 }
 
 export function getTools(args?: OpenAPIArguments<"getTools">) {
@@ -3164,6 +3376,26 @@ export function headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function headClustersByIdObservabilityGrafana(args: OpenAPIArguments<"headClustersByIdObservabilityGrafana">) {
+  const operationId = "headClustersByIdObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function headClustersByIdObservabilityGrafanaProxy(args: OpenAPIArguments<"headClustersByIdObservabilityGrafanaProxy">) {
+  const operationId = "headClustersByIdObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function headObservabilityGrafana(args?: OpenAPIArguments<"headObservabilityGrafana">) {
+  const operationId = "headObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function headObservabilityGrafanaProxy(args?: OpenAPIArguments<"headObservabilityGrafanaProxy">) {
+  const operationId = "headObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function internalTunnelHelm(args: OpenAPIArguments<"internalTunnelHelm">) {
   const operationId = "internalTunnelHelm" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3171,6 +3403,11 @@ export function internalTunnelHelm(args: OpenAPIArguments<"internalTunnelHelm">)
 
 export function internalTunnelK8s(args: OpenAPIArguments<"internalTunnelK8s">) {
   const operationId = "internalTunnelK8s" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function internalTunnelK8sCapability(args: OpenAPIArguments<"internalTunnelK8sCapability">) {
+  const operationId = "internalTunnelK8sCapability" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3274,6 +3511,26 @@ export function optionsClustersByClusterIdProxyServiceByNamespaceByServicePortPr
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function optionsClustersByIdObservabilityGrafana(args: OpenAPIArguments<"optionsClustersByIdObservabilityGrafana">) {
+  const operationId = "optionsClustersByIdObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function optionsClustersByIdObservabilityGrafanaProxy(args: OpenAPIArguments<"optionsClustersByIdObservabilityGrafanaProxy">) {
+  const operationId = "optionsClustersByIdObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function optionsObservabilityGrafana(args?: OpenAPIArguments<"optionsObservabilityGrafana">) {
+  const operationId = "optionsObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function optionsObservabilityGrafanaProxy(args?: OpenAPIArguments<"optionsObservabilityGrafanaProxy">) {
+  const operationId = "optionsObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function patchAuthDexConnectorsById(args: OpenAPIArguments<"patchAuthDexConnectorsById">) {
   const operationId = "patchAuthDexConnectorsById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3304,6 +3561,16 @@ export function patchClustersById(args: OpenAPIArguments<"patchClustersById">) {
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function patchClustersByIdObservabilityGrafana(args: OpenAPIArguments<"patchClustersByIdObservabilityGrafana">) {
+  const operationId = "patchClustersByIdObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function patchClustersByIdObservabilityGrafanaProxy(args: OpenAPIArguments<"patchClustersByIdObservabilityGrafanaProxy">) {
+  const operationId = "patchClustersByIdObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function patchClusterTemplatesById(args: OpenAPIArguments<"patchClusterTemplatesById">) {
   const operationId = "patchClusterTemplatesById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3321,6 +3588,16 @@ export function patchDeliverySourcesById(args: OpenAPIArguments<"patchDeliverySo
 
 export function patchDeliveryTargetsById(args: OpenAPIArguments<"patchDeliveryTargetsById">) {
   const operationId = "patchDeliveryTargetsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function patchObservabilityGrafana(args: OpenAPIArguments<"patchObservabilityGrafana">) {
+  const operationId = "patchObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function patchObservabilityGrafanaProxy(args: OpenAPIArguments<"patchObservabilityGrafanaProxy">) {
+  const operationId = "patchObservabilityGrafanaProxy" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3374,6 +3651,11 @@ export function postAdminDashboardWidgets(args: OpenAPIArguments<"postAdminDashb
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function postAdminDeferredOperationsByIdCancel(args: OpenAPIArguments<"postAdminDeferredOperationsByIdCancel">) {
+  const operationId = "postAdminDeferredOperationsByIdCancel" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function postAdminGitopsSources(args: OpenAPIArguments<"postAdminGitopsSources">) {
   const operationId = "postAdminGitopsSources" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3386,6 +3668,11 @@ export function postAdminGitopsSourcesByIdSync(args: OpenAPIArguments<"postAdmin
 
 export function postAdminGroupMappings(args: OpenAPIArguments<"postAdminGroupMappings">) {
   const operationId = "postAdminGroupMappings" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postAdminMaintenanceWindows(args: OpenAPIArguments<"postAdminMaintenanceWindows">) {
+  const operationId = "postAdminMaintenanceWindows" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3406,6 +3693,11 @@ export function postAdminManagementBackupDestinationsByIdTest(args: OpenAPIArgum
 
 export function postAdminNetworkPolicyTemplates(args: OpenAPIArguments<"postAdminNetworkPolicyTemplates">) {
   const operationId = "postAdminNetworkPolicyTemplates" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId(args: OpenAPIArguments<"postAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId">) {
+  const operationId = "postAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3501,21 +3793,6 @@ export function postAlertingSilences(args: OpenAPIArguments<"postAlertingSilence
 
 export function postAlertingSilencesByIdExpire(args: OpenAPIArguments<"postAlertingSilencesByIdExpire">) {
   const operationId = "postAlertingSilencesByIdExpire" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function postAlertsRulesByIdDisable(args: OpenAPIArguments<"postAlertsRulesByIdDisable">) {
-  const operationId = "postAlertsRulesByIdDisable" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function postAlertsRulesByIdEnable(args: OpenAPIArguments<"postAlertsRulesByIdEnable">) {
-  const operationId = "postAlertsRulesByIdEnable" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function postAlertsSilencesByIdExpire(args: OpenAPIArguments<"postAlertsSilencesByIdExpire">) {
-  const operationId = "postAlertsSilencesByIdExpire" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3619,23 +3896,13 @@ export function postBackupsStorage(args: OpenAPIArguments<"postBackupsStorage">)
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function postBackupsStorageByIdTest(args: OpenAPIArguments<"postBackupsStorageByIdTest">) {
-  const operationId = "postBackupsStorageByIdTest" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
 export function postBackupsStorageByIdTestConnection(args: OpenAPIArguments<"postBackupsStorageByIdTestConnection">) {
   const operationId = "postBackupsStorageByIdTestConnection" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function postBackupsStorageConfigs(args: OpenAPIArguments<"postBackupsStorageConfigs">) {
-  const operationId = "postBackupsStorageConfigs" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function postBackupsStorageConfigsByIdTestConnection(args: OpenAPIArguments<"postBackupsStorageConfigsByIdTestConnection">) {
-  const operationId = "postBackupsStorageConfigsByIdTestConnection" as const;
+export function postCatalogApplicationsPreview(args: OpenAPIArguments<"postCatalogApplicationsPreview">) {
+  const operationId = "postCatalogApplicationsPreview" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3824,11 +4091,6 @@ export function postClustersByIdGenerateKubeconfig(args: OpenAPIArguments<"postC
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function postClustersByIdGenerateKubeconfigLegacy(args: OpenAPIArguments<"postClustersByIdGenerateKubeconfigLegacy">) {
-  const operationId = "postClustersByIdGenerateKubeconfigLegacy" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
 export function postClustersByIdLoggingOutputsAttachAstronomer(args: OpenAPIArguments<"postClustersByIdLoggingOutputsAttachAstronomer">) {
   const operationId = "postClustersByIdLoggingOutputsAttachAstronomer" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3856,6 +4118,16 @@ export function postClustersByIdMonitoringStackPreview(args: OpenAPIArguments<"p
 
 export function postClustersByIdMonitoringStackReplace(args: OpenAPIArguments<"postClustersByIdMonitoringStackReplace">) {
   const operationId = "postClustersByIdMonitoringStackReplace" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postClustersByIdObservabilityGrafana(args: OpenAPIArguments<"postClustersByIdObservabilityGrafana">) {
+  const operationId = "postClustersByIdObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postClustersByIdObservabilityGrafanaProxy(args: OpenAPIArguments<"postClustersByIdObservabilityGrafanaProxy">) {
+  const operationId = "postClustersByIdObservabilityGrafanaProxy" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -3919,6 +4191,11 @@ export function postDeliveryBundlesByIdVersions(args: OpenAPIArguments<"postDeli
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function postDeliveryConfigurationTemplates(args: OpenAPIArguments<"postDeliveryConfigurationTemplates">) {
+  const operationId = "postDeliveryConfigurationTemplates" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function postDeliveryDeploymentsByIdReconcile(args: OpenAPIArguments<"postDeliveryDeploymentsByIdReconcile">) {
   const operationId = "postDeliveryDeploymentsByIdReconcile" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3931,6 +4208,16 @@ export function postDeliveryDeploymentsByIdResume(args: OpenAPIArguments<"postDe
 
 export function postDeliveryDeploymentsByIdSuspend(args: OpenAPIArguments<"postDeliveryDeploymentsByIdSuspend">) {
   const operationId = "postDeliveryDeploymentsByIdSuspend" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postDeliveryOverrideSets(args: OpenAPIArguments<"postDeliveryOverrideSets">) {
+  const operationId = "postDeliveryOverrideSets" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postDeliveryOverrideSetsEffective(args: OpenAPIArguments<"postDeliveryOverrideSetsEffective">) {
+  const operationId = "postDeliveryOverrideSetsEffective" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4154,6 +4441,16 @@ export function postNodesByClusterIdByNodeNameUncordon(args: OpenAPIArguments<"p
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function postObservabilityGrafana(args?: OpenAPIArguments<"postObservabilityGrafana">) {
+  const operationId = "postObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function postObservabilityGrafanaProxy(args?: OpenAPIArguments<"postObservabilityGrafanaProxy">) {
+  const operationId = "postObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function postObservabilityGrafanaTicketRedeem(args: OpenAPIArguments<"postObservabilityGrafanaTicketRedeem">) {
   const operationId = "postObservabilityGrafanaTicketRedeem" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4166,6 +4463,11 @@ export function postProjects(args: OpenAPIArguments<"postProjects">) {
 
 export function postProjectsByIdAddNamespace(args: OpenAPIArguments<"postProjectsByIdAddNamespace">) {
   const operationId = "postProjectsByIdAddNamespace" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postProjectsByIdApplyRbacTemplate(args: OpenAPIArguments<"postProjectsByIdApplyRbacTemplate">) {
+  const operationId = "postProjectsByIdApplyRbacTemplate" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4231,6 +4533,11 @@ export function postRbacGlobalRoles(args: OpenAPIArguments<"postRbacGlobalRoles"
 
 export function postRbacPermissionPreview(args: OpenAPIArguments<"postRbacPermissionPreview">) {
   const operationId = "postRbacPermissionPreview" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postRbacPrincipalsMaterialize(args: OpenAPIArguments<"postRbacPrincipalsMaterialize">) {
+  const operationId = "postRbacPrincipalsMaterialize" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4374,6 +4681,11 @@ export function postToolsBySlugPreview(args: OpenAPIArguments<"postToolsBySlugPr
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function postToolsBySlugRollback(args: OpenAPIArguments<"postToolsBySlugRollback">) {
+  const operationId = "postToolsBySlugRollback" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function postToolsOperationsByIdRetry(args: OpenAPIArguments<"postToolsOperationsByIdRetry">) {
   const operationId = "postToolsOperationsByIdRetry" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4409,6 +4721,11 @@ export function putAdminGitopsSourcesById(args: OpenAPIArguments<"putAdminGitops
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function putAdminMaintenanceWindowsById(args: OpenAPIArguments<"putAdminMaintenanceWindowsById">) {
+  const operationId = "putAdminMaintenanceWindowsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function putAdminManagementBackupDestinationsById(args: OpenAPIArguments<"putAdminManagementBackupDestinationsById">) {
   const operationId = "putAdminManagementBackupDestinationsById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4416,6 +4733,11 @@ export function putAdminManagementBackupDestinationsById(args: OpenAPIArguments<
 
 export function putAdminNetworkPolicyTemplatesById(args: OpenAPIArguments<"putAdminNetworkPolicyTemplatesById">) {
   const operationId = "putAdminNetworkPolicyTemplatesById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putAdminPlatformSettingsDefaultClusterTemplate(args: OpenAPIArguments<"putAdminPlatformSettingsDefaultClusterTemplate">) {
+  const operationId = "putAdminPlatformSettingsDefaultClusterTemplate" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4454,6 +4776,11 @@ export function putAuthDexSettings(args: OpenAPIArguments<"putAuthDexSettings">)
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function putAuthMePreferences(args: OpenAPIArguments<"putAuthMePreferences">) {
+  const operationId = "putAuthMePreferences" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function putBackupsSchedulesById(args: OpenAPIArguments<"putBackupsSchedulesById">) {
   const operationId = "putBackupsSchedulesById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4464,8 +4791,8 @@ export function putBackupsStorageById(args: OpenAPIArguments<"putBackupsStorageB
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function putBackupsStorageConfigsById(args: OpenAPIArguments<"putBackupsStorageConfigsById">) {
-  const operationId = "putBackupsStorageConfigsById" as const;
+export function putCatalogChartsByIdFavorite(args: OpenAPIArguments<"putCatalogChartsByIdFavorite">) {
+  const operationId = "putCatalogChartsByIdFavorite" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4529,6 +4856,16 @@ export function putClustersByIdMonitoringStackUpgrade(args: OpenAPIArguments<"pu
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function putClustersByIdObservabilityGrafana(args: OpenAPIArguments<"putClustersByIdObservabilityGrafana">) {
+  const operationId = "putClustersByIdObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putClustersByIdObservabilityGrafanaProxy(args: OpenAPIArguments<"putClustersByIdObservabilityGrafanaProxy">) {
+  const operationId = "putClustersByIdObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function putClustersByIdRegistrationOptions(args: OpenAPIArguments<"putClustersByIdRegistrationOptions">) {
   const operationId = "putClustersByIdRegistrationOptions" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4549,6 +4886,16 @@ export function putControllersPolicy(args: OpenAPIArguments<"putControllersPolic
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function putDeliveryConfigurationTemplatesById(args: OpenAPIArguments<"putDeliveryConfigurationTemplatesById">) {
+  const operationId = "putDeliveryConfigurationTemplatesById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putDeliveryOverrideSetsById(args: OpenAPIArguments<"putDeliveryOverrideSetsById">) {
+  const operationId = "putDeliveryOverrideSetsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function putLoggingOutputsById(args: OpenAPIArguments<"putLoggingOutputsById">) {
   const operationId = "putLoggingOutputsById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4566,6 +4913,16 @@ export function putLoggingSavedSearchesById(args: OpenAPIArguments<"putLoggingSa
 
 export function putMonitoringEndpointsById(args: OpenAPIArguments<"putMonitoringEndpointsById">) {
   const operationId = "putMonitoringEndpointsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putObservabilityGrafana(args: OpenAPIArguments<"putObservabilityGrafana">) {
+  const operationId = "putObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putObservabilityGrafanaProxy(args: OpenAPIArguments<"putObservabilityGrafanaProxy">) {
+  const operationId = "putObservabilityGrafanaProxy" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4646,11 +5003,6 @@ export function putToolsBySlugUpgrade(args: OpenAPIArguments<"putToolsBySlugUpgr
 
 export function putUsersById(args: OpenAPIArguments<"putUsersById">) {
   const operationId = "putUsersById" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function remoteV2ListPods(args: OpenAPIArguments<"remoteV2ListPods">) {
-  const operationId = "remoteV2ListPods" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4771,46 +5123,6 @@ export function traceClustersByClusterIdK8sProxy(args: OpenAPIArguments<"traceCl
 
 export function traceClustersByClusterIdProxyServiceByNamespaceByServicePortProxy(args: OpenAPIArguments<"traceClustersByClusterIdProxyServiceByNamespaceByServicePortProxy">) {
   const operationId = "traceClustersByClusterIdProxyServiceByNamespaceByServicePortProxy" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function tunnelConnectDelete(args: OpenAPIArguments<"tunnelConnectDelete">) {
-  const operationId = "tunnelConnectDelete" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function tunnelConnectGet(args: OpenAPIArguments<"tunnelConnectGet">) {
-  const operationId = "tunnelConnectGet" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function tunnelConnectHead(args: OpenAPIArguments<"tunnelConnectHead">) {
-  const operationId = "tunnelConnectHead" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function tunnelConnectOptions(args: OpenAPIArguments<"tunnelConnectOptions">) {
-  const operationId = "tunnelConnectOptions" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function tunnelConnectPatch(args: OpenAPIArguments<"tunnelConnectPatch">) {
-  const operationId = "tunnelConnectPatch" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function tunnelConnectPost(args: OpenAPIArguments<"tunnelConnectPost">) {
-  const operationId = "tunnelConnectPost" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function tunnelConnectPut(args: OpenAPIArguments<"tunnelConnectPut">) {
-  const operationId = "tunnelConnectPut" as const;
-  return executeOpenAPIOperation(operationId, args);
-}
-
-export function tunnelConnectTrace(args: OpenAPIArguments<"tunnelConnectTrace">) {
-  const operationId = "tunnelConnectTrace" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 

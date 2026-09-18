@@ -25,9 +25,10 @@ import (
 	"context"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -184,12 +185,12 @@ func IsMachineOrigin(ctx context.Context) bool {
 
 // WithUser stamps an already-authenticated user onto ctx for code paths that
 // authenticate outside the standard middleware chain and therefore have no
-// middleware.AuthenticatedUser in context — specifically the exec and logs
+// reqctx.User in context — specifically the exec and logs
 // WebSocket front doors, which validate a single-use stream ticket or a bearer
 // token themselves and hold the resulting uuid.
 //
 // The input MUST be the output of an authentication check. This is the same
-// "server-side, from the session" source as GetAuthenticatedUser; it is not a
+// "server-side, from the session" source as reqctx.AuthenticatedUser; it is not a
 // second, weaker channel, and it reads nothing from the request.
 func WithUser(ctx context.Context, id uuid.UUID) context.Context {
 	if id == uuid.Nil {
@@ -207,10 +208,10 @@ func WithUser(ctx context.Context, id uuid.UUID) context.Context {
 //     click) is still a machine path — §10 says those must never be
 //     impersonated, so the positive marker is authoritative.
 //  2. An explicitly stamped authenticated user (exec/logs front doors).
-//  3. middleware.GetAuthenticatedUser — the normal authenticated route.
+//  3. reqctx.AuthenticatedUser — the normal authenticated route.
 //  4. Otherwise UNATTRIBUTED. Not machine. Deliberately: §7 invariant 4.
 //
-// RequestID is taken from middleware.GetGeneratedRequestID, NOT
+// RequestID is taken from reqctx.GeneratedRequestID, NOT
 // GetCorrelationID: the correlation id may have been supplied by the client in
 // X-Correlation-Id / X-Request-ID, and §7 invariant 3 says every field of this
 // envelope comes from the session. A client-chosen id would let the caller
@@ -222,7 +223,7 @@ func Resolve(ctx context.Context) protocol.CallerIdentity {
 	if ctx == nil {
 		return protocol.CallerIdentity{}
 	}
-	requestID := middleware.GetGeneratedRequestID(ctx)
+	requestID := reqctx.GeneratedRequestID(ctx)
 	if s, ok := MachineSourceFromContext(ctx); ok {
 		id := Machine(s)
 		id.RequestID = requestID
@@ -231,7 +232,7 @@ func Resolve(ctx context.Context) protocol.CallerIdentity {
 	if subject, ok := ctx.Value(userSubjectKey).(string); ok && subject != "" {
 		return protocol.CallerIdentity{User: subject, Origin: protocol.OriginUser, RequestID: requestID}
 	}
-	if user, ok := middleware.GetAuthenticatedUser(ctx); ok && user != nil {
+	if user, ok := reqctx.AuthenticatedUser(ctx); ok && user != nil {
 		if id, err := uuid.Parse(user.ID); err == nil && id != uuid.Nil {
 			return protocol.CallerIdentity{User: UserSubject(id), Origin: protocol.OriginUser, RequestID: requestID}
 		}

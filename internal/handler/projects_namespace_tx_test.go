@@ -14,6 +14,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
+	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 )
 
 // fakeProjectTxStore is the committed backing store the transactional
@@ -27,7 +28,9 @@ type fakeProjectTxStore struct {
 	upsertErr error
 	deleteErr error
 	auditErr  error
+	taskErr   error
 	audits    []sqlc.AuditOutbox
+	tasks     []sqlc.UpsertTaskOutboxParams
 }
 
 func newFakeProjectTxStore(p sqlc.Project, namespaces ...string) *fakeProjectTxStore {
@@ -47,13 +50,15 @@ func (s *fakeProjectTxStore) runTx() projectRunTxFunc {
 			scratchRows[k] = v
 		}
 		scratchAudits := append([]sqlc.AuditOutbox(nil), s.audits...)
-		scratch := &fakeProjectTx{store: s, project: s.project, nsRows: scratchRows, audits: scratchAudits}
+		scratchTasks := append([]sqlc.UpsertTaskOutboxParams(nil), s.tasks...)
+		scratch := &fakeProjectTx{store: s, project: s.project, nsRows: scratchRows, audits: scratchAudits, tasks: scratchTasks}
 		if err := fn(scratch); err != nil {
 			return err // rollback: discard scratch
 		}
 		s.project = scratch.project
 		s.nsRows = scratch.nsRows
 		s.audits = scratch.audits
+		s.tasks = scratch.tasks
 		return nil
 	}
 }
@@ -63,6 +68,7 @@ type fakeProjectTx struct {
 	project sqlc.Project
 	nsRows  map[string]bool
 	audits  []sqlc.AuditOutbox
+	tasks   []sqlc.UpsertTaskOutboxParams
 }
 
 func (t *fakeProjectTx) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAuditOutboxParams) (sqlc.AuditOutbox, error) {
@@ -81,6 +87,19 @@ func (t *fakeProjectTx) UpsertAuditOutbox(_ context.Context, arg sqlc.UpsertAudi
 	}
 	t.audits = append(t.audits, row)
 	return row, nil
+}
+
+func (t *fakeProjectTx) UpsertTaskOutbox(_ context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error) {
+	if t.store.taskErr != nil {
+		return sqlc.TaskOutbox{}, t.store.taskErr
+	}
+	for _, existing := range t.tasks {
+		if existing.DedupeKey == arg.DedupeKey {
+			return sqlc.TaskOutbox{DedupeKey: existing.DedupeKey, TaskType: existing.TaskType, Payload: existing.Payload, QueueName: existing.QueueName}, nil
+		}
+	}
+	t.tasks = append(t.tasks, arg)
+	return sqlc.TaskOutbox{ID: uuid.New(), DedupeKey: arg.DedupeKey, TaskType: arg.TaskType, Payload: arg.Payload, QueueName: arg.QueueName}, nil
 }
 
 func (t *fakeProjectTx) GetProjectByIDForUpdate(_ context.Context, _ uuid.UUID) (sqlc.Project, error) {
@@ -208,6 +227,44 @@ func TestAddNamespace_TxCommitsBothHalves(t *testing.T) {
 	if len(store.audits) != 1 || store.audits[0].Action != "project.add_namespace" {
 		t.Fatalf("transactional audit rows = %#v", store.audits)
 	}
+	if len(store.tasks) != 1 {
+		t.Fatalf("transactional task rows = %d, want 1", len(store.tasks))
+	}
+}
+
+func TestAddNamespace_RebalancesEveryNamespaceImmediately(t *testing.T) {
+	q := newPolicyTestQuerier()
+	callerID, clusterID := uuid.New(), uuid.New()
+	id, p := seedTxProject(q, clusterID, []string{"alpha"})
+	p.ResourceQuotaCpuLimit = "1"
+	p.ResourceQuotaMemoryLimit = "2"
+	p.ResourceQuotaPodCount = 2
+	q.projects[id] = p
+
+	store := newFakeProjectTxStore(p, "alpha")
+	h := NewProjectHandler(q)
+	h.SetRunTx(store.runTx())
+	grantClusterNamespaceAssignment(h, clusterID)
+
+	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "beta"})
+	req = patchURLParam(req, "id", id.String())
+	rec := httptest.NewRecorder()
+	h.AddNamespace(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	got := map[string]bool{}
+	for _, row := range store.tasks {
+		var payload tasks.ProjectReconcilePayload
+		if err := json.Unmarshal(row.Payload, &payload); err != nil {
+			t.Fatalf("decode task payload: %v", err)
+		}
+		got[payload.Namespace] = true
+	}
+	if !got["alpha"] || !got["beta"] {
+		t.Fatalf("reconcile tasks = %v, want alpha and beta", got)
+	}
 }
 
 func TestAddNamespace_TxRollsBackWhenAuditIntentFails(t *testing.T) {
@@ -232,6 +289,111 @@ func TestAddNamespace_TxRollsBackWhenAuditIntentFails(t *testing.T) {
 	}
 	if got := decodeNamespaceList(store.project.Namespaces); len(got) != 0 || store.nsRows["payments"] || len(store.audits) != 0 {
 		t.Fatalf("rollback state namespaces=%v sidecar=%v audits=%d", got, store.nsRows["payments"], len(store.audits))
+	}
+}
+
+func TestAddNamespace_TxRollsBackWhenTaskIntentFails(t *testing.T) {
+	q := newPolicyTestQuerier()
+	callerID, clusterID := uuid.New(), uuid.New()
+	id, p := seedTxProject(q, clusterID, []string{"alpha"})
+	store := newFakeProjectTxStore(p, "alpha")
+	store.taskErr = errors.New("task outbox unavailable")
+	h := NewProjectHandler(q)
+	h.SetRunTx(store.runTx())
+	grantClusterNamespaceAssignment(h, clusterID)
+
+	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "beta"})
+	req = patchURLParam(req, "id", id.String())
+	rec := httptest.NewRecorder()
+	h.AddNamespace(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s, want 500", rec.Code, rec.Body.String())
+	}
+	if got := decodeNamespaceList(store.project.Namespaces); len(got) != 1 || got[0] != "alpha" {
+		t.Fatalf("project namespaces = %v, want [alpha] after rollback", got)
+	}
+	if store.nsRows["beta"] || len(store.tasks) != 0 || len(store.audits) != 0 {
+		t.Fatalf("rollback state sidecar=%v tasks=%d audits=%d", store.nsRows["beta"], len(store.tasks), len(store.audits))
+	}
+}
+
+func TestRemoveNamespace_CommitsCleanupAndRebalanceIntents(t *testing.T) {
+	q := newPolicyTestQuerier()
+	callerID, clusterID := uuid.New(), uuid.New()
+	id, p := seedTxProject(q, clusterID, []string{"alpha", "beta"})
+	store := newFakeProjectTxStore(p, "alpha", "beta")
+	h := NewProjectHandler(q)
+	h.SetRunTx(store.runTx())
+
+	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/remove-namespace/", callerID, map[string]any{"namespace": "beta"})
+	req = patchURLParam(req, "id", id.String())
+	rec := httptest.NewRecorder()
+	h.RemoveNamespace(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s, want 200", rec.Code, rec.Body.String())
+	}
+	if store.nsRows["beta"] {
+		t.Fatal("removed namespace sidecar still exists")
+	}
+	if len(store.tasks) != 2 || len(store.audits) != 1 {
+		t.Fatalf("transaction writes tasks=%d audits=%d, want 2/1", len(store.tasks), len(store.audits))
+	}
+	seen := map[string]string{}
+	for _, row := range store.tasks {
+		var payload tasks.ProjectReconcilePayload
+		if err := json.Unmarshal(row.Payload, &payload); err != nil {
+			t.Fatalf("decode task payload: %v", err)
+		}
+		seen[payload.Namespace] = payload.Op
+	}
+	if seen["beta"] != "remove" || seen["alpha"] != "apply" {
+		t.Fatalf("task intents = %#v, want beta/remove and alpha/apply", seen)
+	}
+}
+
+func TestRemoveNamespace_TxRollsBackWhenTaskIntentFails(t *testing.T) {
+	q := newPolicyTestQuerier()
+	callerID, clusterID := uuid.New(), uuid.New()
+	id, p := seedTxProject(q, clusterID, []string{"alpha", "beta"})
+	store := newFakeProjectTxStore(p, "alpha", "beta")
+	store.taskErr = errors.New("task outbox unavailable")
+	h := NewProjectHandler(q)
+	h.SetRunTx(store.runTx())
+
+	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/remove-namespace/", callerID, map[string]any{"namespace": "beta"})
+	req = patchURLParam(req, "id", id.String())
+	rec := httptest.NewRecorder()
+	h.RemoveNamespace(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s, want 500", rec.Code, rec.Body.String())
+	}
+	if got := decodeNamespaceList(store.project.Namespaces); len(got) != 2 || got[0] != "alpha" || got[1] != "beta" {
+		t.Fatalf("project namespaces = %v, want [alpha beta] after rollback", got)
+	}
+	if !store.nsRows["beta"] || len(store.tasks) != 0 || len(store.audits) != 0 {
+		t.Fatalf("rollback state beta_sidecar=%v tasks=%d audits=%d", store.nsRows["beta"], len(store.tasks), len(store.audits))
+	}
+}
+
+func TestNamespaceMutationWithoutTransactionRunnerFailsClosed(t *testing.T) {
+	q := newPolicyTestQuerier()
+	callerID, clusterID := uuid.New(), uuid.New()
+	id, _ := seedTxProject(q, clusterID, nil)
+	h := NewProjectHandler(q)
+	grantClusterNamespaceAssignment(h, clusterID)
+
+	req := authedProjectRequest(t, http.MethodPost, "/api/v1/projects/"+id.String()+"/add-namespace/", callerID, map[string]any{"namespace": "payments"})
+	req = patchURLParam(req, "id", id.String())
+	rec := httptest.NewRecorder()
+	h.AddNamespace(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"code":"audit_unavailable"`) {
+		t.Fatalf("status=%d body=%s, want 503 audit_unavailable", rec.Code, rec.Body.String())
+	}
+	if got := decodeNamespaceList(q.projects[id].Namespaces); len(got) != 0 {
+		t.Fatalf("project namespaces = %v, want unchanged", got)
 	}
 }
 

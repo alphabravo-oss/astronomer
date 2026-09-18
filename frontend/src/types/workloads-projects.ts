@@ -36,8 +36,10 @@ export interface Pod {
   status: string;
   ready: string;
   restarts: number;
+  lastRestartAt?: string;
   node: string;
   ip: string;
+  images: string[];
   containers: Container[];
   conditions: PodCondition[];
   createdAt: string;
@@ -50,11 +52,25 @@ export interface Container {
   status: "running" | "waiting" | "terminated";
   ready: boolean;
   restartCount: number;
+  init?: boolean;
+  reason?: string;
+  message?: string;
+  imageId?: string;
+  state?: Record<string, ContainerStateDetail | undefined>;
+  lastState?: Record<string, ContainerStateDetail | undefined>;
   cpuRequest?: string;
   cpuLimit?: string;
   memoryRequest?: string;
   memoryLimit?: string;
   ports?: ContainerPort[];
+}
+
+export interface ContainerStateDetail {
+  reason?: string;
+  message?: string;
+  exitCode?: number;
+  startedAt?: string;
+  finishedAt?: string;
 }
 
 export interface ContainerPort {

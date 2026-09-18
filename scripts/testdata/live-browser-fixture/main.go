@@ -29,6 +29,8 @@ import (
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
+	"github.com/alphabravocompany/astronomer-go/internal/astrocli"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	deliveryrollout "github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -43,7 +45,7 @@ const (
 
 func main() {
 	if len(os.Args) != 2 {
-		fatalf("usage: live-browser-fixture agent|seed|direct-rbac")
+		fatalf("usage: live-browser-fixture agent|seed|direct-rbac|api-token")
 	}
 	var err error
 	switch os.Args[1] {
@@ -53,12 +55,33 @@ func main() {
 		err = seed()
 	case "direct-rbac":
 		err = renderDirectRBAC()
+	case "api-token":
+		err = issueAdminAPIToken()
 	default:
 		err = fmt.Errorf("unknown mode %q", os.Args[1])
 	}
 	if err != nil {
 		fatalf("%v", err)
 	}
+}
+
+func issueAdminAPIToken() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	credential, err := astrocli.IssuePasswordAPIToken(
+		ctx,
+		requiredEnv("LIVE_FIXTURE_SERVER_URL"),
+		requiredEnv("LIVE_FIXTURE_ADMIN_EMAIL"),
+		requiredEnv("LIVE_FIXTURE_ADMIN_PASSWORD"),
+		"live-browser-"+uuid.NewString(),
+		1,
+	)
+	if err != nil {
+		return fmt.Errorf("exchange live browser session for API token: %w", err)
+	}
+	return json.NewEncoder(os.Stdout).Encode(map[string]string{
+		"id": credential.ID, "token": credential.Token,
+	})
 }
 
 const directReaderManifest = `apiVersion: v1
@@ -336,7 +359,7 @@ func seed() error {
 		args  []any
 	}{
 		{`INSERT INTO projects (id,name,display_name,cluster_id) VALUES ($1,$2,$3,$4)`, []any{projectID, fixtureProjectName, "Live Browser Enterprise", clusterID}},
-		{`INSERT INTO delivery_controller_inventory (cluster_id,flux_version,components,ready,compatibility_status) VALUES ($1,$2,$3,true,'compatible') ON CONFLICT (cluster_id) DO UPDATE SET flux_version=EXCLUDED.flux_version,components=EXCLUDED.components,ready=true,compatibility_status='compatible'`, []any{clusterID, fluxdistribution.Version(), controllerVersionsJSON}},
+		{`INSERT INTO delivery_controller_inventory (cluster_id,flux_version,components,ready,compatibility_status,status_digest,agent_session_id,agent_sequence,semantic_sequence) VALUES ($1,$2,$3,true,'compatible','sha256:0000000000000000000000000000000000000000000000000000000000000000','fixture',1,1) ON CONFLICT (cluster_id) DO UPDATE SET flux_version=EXCLUDED.flux_version,components=EXCLUDED.components,ready=true,compatibility_status='compatible'`, []any{clusterID, fluxdistribution.Version(), controllerVersionsJSON}},
 		{`INSERT INTO delivery_sources (id,project_id,name,source_type,url,ca_bundle_encrypted,credential_epoch,trust_policy,status) VALUES ($1,$2,'live-browser-source','git',$3,$4,1,'{"allow_unsigned":true}','ready')`, []any{sourceID, projectID, sourceURL, encryptedCA}},
 		{`INSERT INTO component_bundles (id,project_id,name) VALUES ($1,$2,'live-browser-bundle')`, []any{bundleID, projectID}},
 		{`INSERT INTO component_bundle_versions (id,bundle_id,source_id,version,renderer,requested_revision,resolved_revision,artifact_digest,source_spec,renderer_spec,reconciliation_policy,requirements,spec_digest,verification_status,state) VALUES ($1,$2,$3,'v1','kustomize',$4,$4,$5,$6,'{"kind":"kustomize","kustomize":{"path":"./kustomize","target_namespace":"live-delivery"}}','{"interval":"5s","retry_interval":"5s","timeout":"2m0s","prune":true,"wait":true,"drift":"repair"}','[]',$7,'verified','ready')`, []any{versionID, bundleID, sourceID, revision, digest, sourceSpec, specDigest}},
@@ -373,6 +396,10 @@ func seed() error {
 	plan, err := planner.Create(ctx, deliveryrollout.CreateRequest{
 		TargetID: targetID, ExpectedTargetGeneration: 1, PreviewDigest: preview.PreviewDigest,
 		ConfirmAllClusters: true, Actor: "live-browser-fixture", IdempotencyKey: "live-browser-rollout",
+		Audit: audit.Intent{
+			Event:     audit.Event{Source: "fixture", Action: "delivery.rollout.created", ResourceType: "delivery_rollout"},
+			DedupeKey: "live-browser-fixture:rollout:create",
+		},
 		Strategy: model.RolloutStrategy{
 			Type: model.StrategyRolling, MaxConcurrent: 1,
 			MaxUnavailable:   model.Amount{Type: model.AmountCount, Value: 1},
@@ -386,6 +413,10 @@ func seed() error {
 	rollbackPlan, err := planner.Create(ctx, deliveryrollout.CreateRequest{
 		TargetID: targetID, ExpectedTargetGeneration: 1, PreviewDigest: preview.PreviewDigest,
 		ConfirmAllClusters: true, Actor: "live-browser-fixture", IdempotencyKey: "live-browser-rollback",
+		Audit: audit.Intent{
+			Event:     audit.Event{Source: "fixture", Action: "delivery.rollout.created", ResourceType: "delivery_rollout"},
+			DedupeKey: "live-browser-fixture:rollback:create",
+		},
 		Strategy: model.RolloutStrategy{
 			Type: model.StrategyRolling, MaxConcurrent: 1,
 			MaxUnavailable:   model.Amount{Type: model.AmountCount, Value: 1},
@@ -406,6 +437,10 @@ func seed() error {
 			TargetID: trivyTarget.id, ExpectedTargetGeneration: trivyTarget.generation,
 			PreviewDigest: trivyPreview.PreviewDigest, ConfirmAllClusters: true,
 			Actor: "live-browser-fixture", IdempotencyKey: "live-browser-trivy-rollout",
+			Audit: audit.Intent{
+				Event:     audit.Event{Source: "fixture", Action: "delivery.rollout.created", ResourceType: "delivery_rollout"},
+				DedupeKey: "live-browser-fixture:trivy-rollout:create",
+			},
 			Strategy: model.RolloutStrategy{
 				Type: model.StrategyRolling, MaxConcurrent: 1,
 				MaxUnavailable:   model.Amount{Type: model.AmountCount, Value: 1},

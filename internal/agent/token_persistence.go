@@ -44,7 +44,7 @@ func resolveStartupCredential(ctx context.Context, cfg *AgentConfig, log *slog.L
 	if log == nil {
 		log = slog.Default()
 	}
-	if strings.TrimSpace(os.Getenv("KUBERNETES_SERVICE_HOST")) == "" {
+	if !cfg.InCluster {
 		cfg.AgentToken = strings.TrimSpace(cfg.AgentToken)
 		cfg.CredentialSource = CredentialSourceEnvironment
 		return nil

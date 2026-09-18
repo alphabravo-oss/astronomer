@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { useLoggingOperations, useRetryLoggingOperation } from "@/lib/hooks";
+import {
+  useLoggingOperations,
+  useRetryLoggingOperation,
+} from "@/lib/hooks/logging";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
@@ -31,7 +34,7 @@ export function OperationsTab() {
       key: "targetType",
       header: "Target Type",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.targetType}
         </span>
       ),
@@ -41,7 +44,7 @@ export function OperationsTab() {
       key: "operation",
       header: "Operation",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground capitalize">
           {row.operation}
         </span>
       ),
@@ -108,7 +111,7 @@ export function OperationsTab() {
             <button
               onClick={() => retryOperation.mutate(row.id)}
               disabled={retryOperation.isPending}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
                 hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
               title="Retry operation"
             >
@@ -140,7 +143,8 @@ export function OperationsTab() {
           id="logging-ops-status"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-8 w-auto text-xs"
+          className="h-8 text-xs"
+          containerClassName="w-auto"
         >
           <option value="">All</option>
           <option value="pending">Pending</option>
@@ -159,7 +163,8 @@ export function OperationsTab() {
           id="logging-ops-target"
           value={targetFilter}
           onChange={(e) => setTargetFilter(e.target.value)}
-          className="h-8 w-auto text-xs"
+          className="h-8 text-xs"
+          containerClassName="w-auto"
         >
           <option value="">All</option>
           <option value="output">Output</option>
@@ -187,7 +192,11 @@ export function OperationsTab() {
         loading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
-        emptyMessage="No reconciler activity yet."
+        emptyState={{
+          title: "No reconciler activity yet",
+          description:
+            "New observations will appear here as they are reported.",
+        }}
         pageSize={20}
       />
     </div>

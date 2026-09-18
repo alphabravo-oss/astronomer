@@ -1,6 +1,7 @@
+import { Select } from "@/components/ui/select";
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { Link } from "@/lib/link";
-import { useParams, usePathname } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useLocation } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Boxes,
@@ -9,8 +10,11 @@ import {
   Layers,
   Radio,
   Route as RouteIcon,
+  ServerCog,
+  SlidersHorizontal,
+  SlidersVertical,
 } from "lucide-react";
-import { useCluster } from "@/lib/hooks";
+import { useCluster } from "@/lib/hooks/clusters";
 import { cn } from "@/lib/utils";
 import { useDeliveryProjectScope } from "@/components/delivery/shared";
 
@@ -26,12 +30,30 @@ const tabs = [
   { key: "sources", label: "Sources", icon: GitBranch, segment: "/sources" },
   { key: "bundles", label: "Bundles", icon: Boxes, segment: "/bundles" },
   { key: "targets", label: "Targets", icon: Crosshair, segment: "/targets" },
+  {
+    key: "configuration-templates",
+    label: "Templates",
+    icon: SlidersHorizontal,
+    segment: "/configuration-templates",
+  },
+  {
+    key: "override-sets",
+    label: "Overrides",
+    icon: SlidersVertical,
+    segment: "/override-sets",
+  },
+  {
+    key: "system-components",
+    label: "System Components",
+    icon: ServerCog,
+    segment: "/system-components",
+  },
 ] as const;
 
 function ClusterDeliveryLayout() {
-  const params = useParams();
-  const clusterId = params.id as string;
-  const pathname = usePathname();
+  const params = Route.useParams();
+  const clusterId = params.id;
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { data: cluster } = useCluster(clusterId);
   const { projectId, projects, setProjectId } = useDeliveryProjectScope({
     clusterId,
@@ -55,13 +77,13 @@ function ClusterDeliveryLayout() {
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/dashboard/delivery"
+      <RouterLink
+        to="/dashboard/delivery"
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Back to delivery fleet
-      </Link>
+        Back to delivery estate
+      </RouterLink>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -78,7 +100,7 @@ function ClusterDeliveryLayout() {
         {projects.length > 1 ? (
           <label className="flex min-w-56 items-center gap-2 text-sm">
             <span className="text-muted-foreground">Project</span>
-            <select
+            <Select
               aria-label="Delivery project"
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
@@ -90,7 +112,7 @@ function ClusterDeliveryLayout() {
                   {project.displayName || project.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : null}
       </div>
@@ -101,9 +123,9 @@ function ClusterDeliveryLayout() {
             const href = `${base}${tab.segment}${projectQuery}`;
             const active = activeKey === tab.key;
             return (
-              <Link
+              <RouterLink
                 key={tab.key}
-                href={href}
+                to={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-2 border-b-2 pb-3 text-sm font-medium transition-colors",
@@ -114,7 +136,7 @@ function ClusterDeliveryLayout() {
               >
                 <Icon className="h-4 w-4" />
                 {tab.label}
-              </Link>
+              </RouterLink>
             );
           })}
         </nav>

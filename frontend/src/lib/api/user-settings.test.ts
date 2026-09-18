@@ -42,9 +42,13 @@ describe("user/settings generated API boundary", () => {
   it("maps paginated user rows and preserves the real superuser flag", async () => {
     vi.mocked(generated.getUsers).mockResolvedValueOnce({
       data: [userWire],
-      count: 1,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 1,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
 
     const result = await getUsers({ page: 1, pageSize: 50 });
@@ -108,9 +112,13 @@ describe("user/settings generated API boundary", () => {
           scopes: ["read"],
         },
       ],
-      count: 1,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 1,
+        limit: 50,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
     vi.mocked(generated.postSettingsSso).mockResolvedValueOnce({
       data: {

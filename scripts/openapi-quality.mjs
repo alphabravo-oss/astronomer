@@ -14,7 +14,7 @@ const ids = new Map();
 const failures = [];
 let operationCount = 0;
 let actionable202Count = 0;
-const EXPECTED_ACTIONABLE_202_COUNT = 104;
+const EXPECTED_ACTIONABLE_202_COUNT = 107;
 const EXPECTED_202_EXCEPTION_COUNT = 5;
 const async202Exceptions = new Map([
   ['POST /api/v1/gitops/sources/{id}/webhook', {
@@ -42,6 +42,7 @@ const seenAsync202Exceptions = new Set();
 const exactStatusReads = new Map([
   ['createControlPlaneSnapshot', '/api/v1/clusters/{cluster_id}/control-plane-snapshots/{id}/'],
   ['postClustersByClusterIdSnapshots', '/api/v1/clusters/{cluster_id}/snapshots/{id}'],
+  ['createSupportBundle', '/api/v1/support-bundles/{id}'],
 ]);
 
 function resolve(ref) {

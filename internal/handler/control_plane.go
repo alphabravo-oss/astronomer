@@ -4,23 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
+	"github.com/alphabravocompany/astronomer-go/internal/controlplane"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
-	"github.com/alphabravocompany/astronomer-go/internal/observability"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ControlPlaneQuerier interface {
@@ -41,46 +39,17 @@ type ControlPlaneQuerier interface {
 type ControlPlaneMutationTx interface {
 	ControlPlaneQuerier
 	audit.OutboxQuerier
+	tasks.TaskOutboxWriter
 }
 
 type controlPlaneRunTxFunc func(context.Context, func(ControlPlaneMutationTx) error) error
 
-func executeControlPlaneMutation[T any](r *http.Request, h *ControlPlaneHandler, mutate func(ControlPlaneQuerier) (T, error), describe func(T) clusterAuditEvent) (T, error) {
-	var zero T
-	if h.runTx != nil {
-		var result T
-		err := h.runTx(r.Context(), func(q ControlPlaneMutationTx) error {
-			var mutationErr error
-			result, mutationErr = mutate(q)
-			if mutationErr != nil {
-				return mutationErr
-			}
-			event := describe(result)
-			return recordAuditOutbox(r, q, event.action, event.resourceType, event.resourceID, event.resourceName, event.status, event.detail)
-		})
-		return result, err
-	}
-	result, err := mutate(h.queries)
-	if err != nil {
-		return zero, err
-	}
-	event := describe(result)
-	recordAudit(r, h.queries, event.action, event.resourceType, event.resourceID, event.resourceName, event.detail)
-	return result, nil
-}
-
 type ControlPlaneHandler struct {
 	queries    ControlPlaneQuerier
-	Monitoring *MonitoringHandler
-	Tools      *ToolHandler
-	Catalog    *CatalogHandler
-	Backups    *BackupHandler
-	Logging    *LoggingHandler
-	Security   *SecurityHandler
-	queue      *asynq.Client
-	emails     EmailNotifier
+	service    *controlplane.Service
 	runTx      controlPlaneRunTxFunc
 	mu         sync.Mutex
+	evaluateCh chan struct{}
 }
 
 func (h *ControlPlaneHandler) SetRunTx(runTx controlPlaneRunTxFunc) {
@@ -90,13 +59,6 @@ func (h *ControlPlaneHandler) SetRunTx(runTx controlPlaneRunTxFunc) {
 }
 
 func (h *ControlPlaneHandler) TransactionalAuditWired() bool { return h != nil && h.runTx != nil }
-
-// SetEmailNotifier attaches the SMTP email enqueuer used by the
-// alert-fired dispatch path to render and persist email_messages
-// rows for every email-class notification channel that fires. The
-// existing webhook/slack dispatch (via asynq notification:send) is
-// unaffected.
-func (h *ControlPlaneHandler) SetEmailNotifier(n EmailNotifier) { h.emails = n }
 
 // openapi:request ControlPlanePolicyRequest
 type UpdateControlPlanePolicyRequest struct {
@@ -123,16 +85,14 @@ type CreateControlPlaneSilenceRequest struct {
 	Duration      string `json:"duration"`
 }
 
-func NewControlPlaneHandler(queries ControlPlaneQuerier, monitoring *MonitoringHandler, tools *ToolHandler, catalog *CatalogHandler, backups *BackupHandler, logging *LoggingHandler, security *SecurityHandler, queue *asynq.Client) *ControlPlaneHandler {
+func NewControlPlaneHandler(queries ControlPlaneQuerier, service *controlplane.Service) *ControlPlaneHandler {
+	if service == nil {
+		service = controlplane.NewService(nil)
+	}
 	return &ControlPlaneHandler{
 		queries:    queries,
-		Monitoring: monitoring,
-		Tools:      tools,
-		Catalog:    catalog,
-		Backups:    backups,
-		Logging:    logging,
-		Security:   security,
-		queue:      queue,
+		service:    service,
+		evaluateCh: make(chan struct{}, 1),
 	}
 }
 
@@ -140,26 +100,37 @@ func (h *ControlPlaneHandler) StartEvaluator(ctx context.Context) {
 	if h == nil || h.queries == nil {
 		return
 	}
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		h.evaluate(ctx)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				h.evaluate(ctx)
-			}
+	go h.RunEvaluator(ctx)
+}
+
+func (h *ControlPlaneHandler) RunEvaluator(ctx context.Context) {
+	if h == nil || h.queries == nil {
+		return
+	}
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	h.evaluate(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			h.evaluate(ctx)
+		case <-h.evaluateCh:
+			h.evaluate(ctx)
 		}
-	}()
+	}
 }
 
 func (h *ControlPlaneHandler) Status(w http.ResponseWriter, r *http.Request) {
 	policy, _ := h.queries.GetDefaultControlPlanePolicy(r.Context())
-	out, summary := h.statusPayload(r.Context(), policy)
+	snapshot := h.service.Snapshot(r.Context(), controlPlaneDomainPolicy(policy))
+	out := make(map[string]any, len(snapshot.Controllers)+2)
+	for name, summary := range snapshot.Controllers {
+		out[name] = summary
+	}
 	out["policy"] = controlPlanePolicyResponse(policy)
-	out["summary"] = summary
+	out["summary"] = snapshot.Aggregate
 	RespondJSON(w, http.StatusOK, out)
 }
 
@@ -193,12 +164,12 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		CatalogRecentFailureThreshold:    atLeastOne(req.CatalogRecentFailureThreshold),
 		RecentFailureWindowMinutes:       atLeastOne(req.RecentFailureWindowMinutes),
 	}
-	policy, err := executeControlPlaneMutation(r, h,
-		func(q ControlPlaneQuerier) (sqlc.ControlPlanePolicy, error) {
+	policy, err := executeMutation(r, h.runTx,
+		func(q ControlPlaneMutationTx) (sqlc.ControlPlanePolicy, error) {
 			return q.UpsertDefaultControlPlanePolicy(r.Context(), params)
 		},
-		func(policy sqlc.ControlPlanePolicy) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(policy sqlc.ControlPlanePolicy) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "controlplane.policy.update", resourceType: "control_plane_policy", resourceID: policy.ID.String(), status: http.StatusOK,
 				detail: map[string]any{
 					"monitoring_queue_depth_threshold": policy.MonitoringQueueDepthThreshold,
@@ -214,14 +185,17 @@ func (h *ControlPlaneHandler) UpdatePolicy(w http.ResponseWriter, r *http.Reques
 		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.PolicyError, "Failed to update control plane policy")
 		return
 	}
-	go h.evaluate(context.Background())
+	select {
+	case h.evaluateCh <- struct{}{}:
+	default:
+	}
 	RespondJSON(w, http.StatusOK, controlPlanePolicyResponse(policy))
 }
 
 func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	arg := sqlc.ListControlPlaneAlertsParams{
 		Limit:  int32(queryLimit(r, 50)),
-		Offset: int32(queryInt(r, "offset", 0)),
+		Offset: int32(queryOffset(r)),
 	}
 	if status := r.URL.Query().Get("status"); status != "" {
 		arg.Status = pgtype.Text{String: status, Valid: true}
@@ -238,7 +212,7 @@ func (h *ControlPlaneHandler) ListAlerts(w http.ResponseWriter, r *http.Request)
 	for _, alert := range alerts {
 		resp = append(resp, controlPlaneAlertResponse(alert))
 	}
-	RespondList(w, resp, NewPaginationFromPage(int(arg.Limit), int(arg.Offset), len(resp)))
+	paging.Write(w, resp, paging.FromPage(int(arg.Limit), int(arg.Offset), len(resp)))
 }
 
 func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
@@ -247,12 +221,12 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid alert ID")
 		return
 	}
-	alert, err := executeControlPlaneMutation(r, h,
-		func(q ControlPlaneQuerier) (sqlc.ControlPlaneAlert, error) {
+	alert, err := executeMutation(r, h.runTx,
+		func(q ControlPlaneMutationTx) (sqlc.ControlPlaneAlert, error) {
 			return q.AcknowledgeControlPlaneAlert(r.Context(), sqlc.AcknowledgeControlPlaneAlertParams{ID: id, AcknowledgedByID: currentUserUUID(r)})
 		},
-		func(alert sqlc.ControlPlaneAlert) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(alert sqlc.ControlPlaneAlert) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "controlplane.alert.acknowledge", resourceType: "control_plane_alert", resourceID: id.String(), resourceName: alert.Controller, status: http.StatusOK,
 				detail: map[string]any{"condition_type": alert.ConditionType, "status": alert.Status},
 			}
@@ -272,7 +246,7 @@ func (h *ControlPlaneHandler) AcknowledgeAlert(w http.ResponseWriter, r *http.Re
 func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Request) {
 	items, err := h.queries.ListControlPlaneSilences(r.Context(), sqlc.ListControlPlaneSilencesParams{
 		Limit:  int32(queryLimit(r, 50)),
-		Offset: int32(queryInt(r, "offset", 0)),
+		Offset: int32(queryOffset(r)),
 	})
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.SilenceError, "Failed to list control plane silences")
@@ -282,7 +256,7 @@ func (h *ControlPlaneHandler) ListSilences(w http.ResponseWriter, r *http.Reques
 	for _, item := range items {
 		resp = append(resp, controlPlaneSilenceResponse(item))
 	}
-	RespondList(w, resp, NewPaginationFromPage(queryLimit(r, 50), queryInt(r, "offset", 0), len(resp)))
+	paging.Write(w, resp, paging.FromPage(queryLimit(r, 50), queryOffset(r), len(resp)))
 }
 
 func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Request) {
@@ -304,12 +278,12 @@ func (h *ControlPlaneHandler) CreateSilence(w http.ResponseWriter, r *http.Reque
 		EndsAt:        time.Now().UTC().Add(duration),
 		CreatedByID:   currentUserUUID(r),
 	}
-	item, err := executeControlPlaneMutation(r, h,
-		func(q ControlPlaneQuerier) (sqlc.ControlPlaneSilence, error) {
+	item, err := executeMutation(r, h.runTx,
+		func(q ControlPlaneMutationTx) (sqlc.ControlPlaneSilence, error) {
 			return q.CreateControlPlaneSilence(r.Context(), params)
 		},
-		func(item sqlc.ControlPlaneSilence) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(item sqlc.ControlPlaneSilence) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "controlplane.silence.create", resourceType: "control_plane_silence", resourceID: item.ID.String(), resourceName: item.Controller, status: http.StatusCreated,
 				detail: map[string]any{"controller": item.Controller, "condition_type": item.ConditionType, "duration": duration.String()},
 			}
@@ -329,12 +303,12 @@ func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid silence ID")
 		return
 	}
-	_, err = executeControlPlaneMutation(r, h,
-		func(q ControlPlaneQuerier) (sqlc.ControlPlaneSilence, error) {
+	_, err = executeMutation(r, h.runTx,
+		func(q ControlPlaneMutationTx) (sqlc.ControlPlaneSilence, error) {
 			return q.DeleteControlPlaneSilence(r.Context(), id)
 		},
-		func(item sqlc.ControlPlaneSilence) clusterAuditEvent {
-			return clusterAuditEvent{
+		func(item sqlc.ControlPlaneSilence) mutationAuditEvent {
+			return mutationAuditEvent{
 				action: "controlplane.silence.delete", resourceType: "control_plane_silence", resourceID: item.ID.String(), resourceName: item.Controller, status: http.StatusNoContent,
 				detail: map[string]any{"condition_type": item.ConditionType},
 			}
@@ -351,111 +325,6 @@ func (h *ControlPlaneHandler) DeleteSilence(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *ControlPlaneHandler) statusPayload(ctx context.Context, policy sqlc.ControlPlanePolicy) (map[string]any, map[string]any) {
-	out := map[string]any{}
-	totalQueue := 0
-	totalStale := 0
-	controllersWithFailures := 0
-	degraded := 0
-
-	for name, summary := range h.collectSummaries(ctx) {
-		evaluated := h.applyPolicy(name, summary, policy)
-		out[name] = evaluated
-		totalQueue += extractQueueDepth(evaluated)
-		totalStale += extractStaleRunning(evaluated)
-		if hasLatestFailure(evaluated) {
-			controllersWithFailures++
-		}
-		if controllerHealth(evaluated) != "healthy" {
-			degraded++
-		}
-	}
-
-	return out, map[string]any{
-		"controllers":             len(out),
-		"queueDepth":              totalQueue,
-		"staleRunningCount":       totalStale,
-		"controllersWithFailures": controllersWithFailures,
-		"degradedControllers":     degraded,
-		"health":                  ternaryHealth(degraded == 0),
-	}
-}
-
-func (h *ControlPlaneHandler) collectSummaries(ctx context.Context) map[string]map[string]any {
-	out := map[string]map[string]any{}
-	if h.Monitoring != nil {
-		if summary, err := h.Monitoring.controllerSummary(ctx); err == nil {
-			out["monitoring"] = summary
-		}
-	}
-	if h.Tools != nil {
-		if summary, err := h.Tools.controllerSummary(ctx); err == nil {
-			out["tools"] = summary
-		}
-	}
-	if h.Catalog != nil {
-		if summary, err := h.Catalog.controllerSummary(ctx); err == nil {
-			out["catalog"] = summary
-		}
-	}
-	if h.Backups != nil {
-		if summary, err := h.Backups.controllerSummary(ctx); err == nil {
-			out["backups"] = summary
-		}
-	}
-	if h.Logging != nil {
-		if summary, err := h.Logging.controllerSummary(ctx); err == nil {
-			out["logging"] = summary
-		}
-	}
-	if h.Security != nil {
-		if summary, err := h.Security.controllerSummary(ctx); err == nil {
-			out["security"] = summary
-		}
-	}
-	return out
-}
-
-func (h *ControlPlaneHandler) applyPolicy(name string, summary map[string]any, policy sqlc.ControlPlanePolicy) map[string]any {
-	if !policyManagedController(name) {
-		if _, ok := summary["health"]; !ok {
-			summary["health"] = "unknown"
-		}
-		if _, ok := summary["healthReasons"]; !ok {
-			summary["healthReasons"] = []string{}
-		}
-		summary["policy"] = map[string]any{"managed": false}
-		return summary
-	}
-	queueThreshold, staleThreshold, failureThreshold := thresholdsFor(name, policy)
-	queueDepth := extractQueueDepth(summary)
-	staleRunning := extractStaleRunning(summary)
-	recentFailures := extractRecentFailureCount(summary)
-	health := "healthy"
-	reasons := []string{}
-	if queueDepth >= int(queueThreshold) {
-		health = "degraded"
-		reasons = append(reasons, "queue_depth")
-	}
-	if staleRunning >= int(staleThreshold) {
-		health = "degraded"
-		reasons = append(reasons, "stale_running")
-	}
-	if recentFailures >= int(failureThreshold) {
-		health = "degraded"
-		reasons = append(reasons, "recent_failures")
-	}
-	summary["health"] = health
-	summary["healthReasons"] = reasons
-	summary["policy"] = map[string]any{
-		"queueDepthThreshold":        queueThreshold,
-		"staleRunningThreshold":      staleThreshold,
-		"recentFailureThreshold":     failureThreshold,
-		"recentFailureWindowMinutes": policy.RecentFailureWindowMinutes,
-	}
-	return summary
-}
-
 func (h *ControlPlaneHandler) evaluate(ctx context.Context) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -464,23 +333,25 @@ func (h *ControlPlaneHandler) evaluate(ctx context.Context) {
 		return
 	}
 	silences, _ := h.queries.GetActiveControlPlaneSilences(ctx)
-	for name, summary := range h.collectSummaries(ctx) {
-		evaluated := h.applyPolicy(name, summary, policy)
-		if !policyManagedController(name) {
+	for _, evaluated := range h.service.Snapshot(ctx, controlPlaneDomainPolicy(policy)).Evaluations {
+		if !evaluated.Managed {
 			continue
 		}
-		h.reconcileAlert(ctx, name, "queue_depth", extractQueueDepth(evaluated) >= int(thresholdQueue(name, policy)), evaluated, silences)
-		h.reconcileAlert(ctx, name, "stale_running", extractStaleRunning(evaluated) >= int(thresholdStale(name, policy)), evaluated, silences)
-		h.reconcileAlert(ctx, name, "recent_failures", extractRecentFailureCount(evaluated) >= int(thresholdFailures(name, policy)), evaluated, silences)
+		h.reconcileAlert(ctx, evaluated.Controller, "queue_depth", evaluated.QueueDepthExceeded, evaluated.Summary, silences)
+		h.reconcileAlert(ctx, evaluated.Controller, "stale_running", evaluated.StaleRunningExceeded, evaluated.Summary, silences)
+		h.reconcileAlert(ctx, evaluated.Controller, "recent_failures", evaluated.RecentFailuresExceeded, evaluated.Summary, silences)
 	}
 }
 
-func policyManagedController(name string) bool {
-	switch name {
-	case "monitoring", "delivery", "tools", "catalog":
-		return true
-	default:
-		return false
+func controlPlaneDomainPolicy(policy sqlc.ControlPlanePolicy) controlplane.Policy {
+	return controlplane.Policy{
+		RecentFailureWindowMinutes: policy.RecentFailureWindowMinutes,
+		Controllers: map[string]controlplane.Thresholds{
+			"monitoring": {QueueDepth: policy.MonitoringQueueDepthThreshold, StaleRunning: policy.MonitoringStaleRunningThreshold, RecentFailure: policy.MonitoringRecentFailureThreshold},
+			"delivery":   {QueueDepth: policy.DeliveryQueueDepthThreshold, StaleRunning: policy.DeliveryStaleRunningThreshold, RecentFailure: policy.DeliveryRecentFailureThreshold},
+			"tools":      {QueueDepth: policy.ToolsQueueDepthThreshold, StaleRunning: policy.ToolsStaleRunningThreshold, RecentFailure: policy.ToolsRecentFailureThreshold},
+			"catalog":    {QueueDepth: policy.CatalogQueueDepthThreshold, StaleRunning: policy.CatalogStaleRunningThreshold, RecentFailure: policy.CatalogRecentFailureThreshold},
+		},
 	}
 }
 
@@ -494,15 +365,21 @@ func (h *ControlPlaneHandler) reconcileAlert(ctx context.Context, controller, co
 			return
 		}
 		raw, _ := json.Marshal(summary)
-		alert, err := h.queries.CreateControlPlaneAlert(ctx, sqlc.CreateControlPlaneAlertParams{
-			Controller:    controller,
-			ConditionType: condition,
-			Status:        "active",
-			Message:       controller + " controller degraded: " + condition,
-			Detail:        raw,
-		})
-		if err == nil && !isSilenced(controller, condition, silences) {
-			h.enqueueNotifications(ctx, alert)
+		if h.runTx == nil {
+			return
+		}
+		if txErr := h.runTx(ctx, func(q ControlPlaneMutationTx) error {
+			alert, createErr := q.CreateControlPlaneAlert(ctx, sqlc.CreateControlPlaneAlertParams{
+				Controller: controller, ConditionType: condition, Status: "active",
+				Message: controller + " controller degraded: " + condition, Detail: raw,
+			})
+			if createErr != nil || isSilenced(controller, condition, silences) {
+				return createErr
+			}
+			return enqueueControlPlaneNotifications(ctx, q, alert)
+		}); txErr != nil {
+			slog.ErrorContext(ctx, "control-plane alert transaction failed",
+				"controller", controller, "condition", condition, "error", txErr)
 		}
 		return
 	}
@@ -515,55 +392,32 @@ func (h *ControlPlaneHandler) reconcileAlert(ctx context.Context, controller, co
 	}
 }
 
-func (h *ControlPlaneHandler) enqueueNotifications(ctx context.Context, alert sqlc.ControlPlaneAlert) {
-	if h == nil || h.queue == nil || h.queries == nil {
-		return
-	}
-	channels, err := h.queries.ListEnabledNotificationChannels(ctx)
+func enqueueControlPlaneNotifications(ctx context.Context, q ControlPlaneMutationTx, alert sqlc.ControlPlaneAlert) error {
+	channels, err := q.ListEnabledNotificationChannels(ctx)
 	if err != nil {
-		return
+		return err
 	}
 	for _, channel := range channels {
 		recipients := controlPlaneChannelRecipients(channel)
 		if len(recipients) == 0 {
 			continue
 		}
-		// Email channels: enqueue through the SMTP path so the
-		// admin-email audit view sees them and the operator gets a
-		// real templated message. Falls back to the legacy
-		// notification:send asynq task when the email enqueuer
-		// isn't wired (test scaffolding, pre-encryption-key boot).
-		if strings.EqualFold(channel.ChannelType, "email") && h.emails != nil {
-			for _, recipient := range recipients {
-				h.emails.EnqueueAndLog(ctx, EmailNotifierRequest{
-					To:       recipient,
-					Template: "alert_fired",
-					Subject:  alert.Controller + " " + alert.ConditionType,
-					Data: map[string]any{
-						"AlertName":    alert.Controller + ":" + alert.ConditionType,
-						"Severity":     alert.Status,
-						"FiredAt":      alert.FiredAt.UTC().Format(time.RFC3339),
-						"Resource":     alert.Controller,
-						"Message":      alert.Message,
-						"DashboardURL": "",
-					},
-				})
-			}
-			continue
-		}
-		task, err := tasks.NewNotificationSendTask(tasks.NotificationSendPayload{
+		deliveryID := "control-plane-alert:" + alert.ID.String() + ":" + channel.ID.String()
+		if err := tasks.EnqueueNotificationOutbox(ctx, q, tasks.NotificationSendPayload{
 			Channel:    channel.ChannelType,
 			Subject:    "Control plane alert: " + alert.Controller + " " + alert.ConditionType,
 			Body:       alert.Message,
 			Recipients: recipients,
-		})
-		if err != nil {
-			continue
+			Severity:   alert.Status,
+			ChannelID:  channel.ID.String(),
+			EventID:    alert.ID.String(),
+			DeliveryID: deliveryID,
+			FiredAt:    alert.FiredAt.UTC().Format(time.RFC3339),
+		}, deliveryID); err != nil {
+			return err
 		}
-		payload := observability.EnrichTaskPayload(ctx, task.Payload(), middleware.GetCorrelationID(ctx))
-		task = asynq.NewTask(task.Type(), payload)
-		_, _ = h.queue.Enqueue(task)
 	}
+	return nil
 }
 
 func controlPlaneChannelRecipients(channel sqlc.NotificationChannel) []string {
@@ -637,106 +491,9 @@ func controlPlaneSilenceResponse(item sqlc.ControlPlaneSilence) map[string]any {
 	}
 }
 
-func thresholdsFor(name string, policy sqlc.ControlPlanePolicy) (int32, int32, int32) {
-	return thresholdQueue(name, policy), thresholdStale(name, policy), thresholdFailures(name, policy)
-}
-
-func thresholdQueue(name string, policy sqlc.ControlPlanePolicy) int32 {
-	switch name {
-	case "monitoring":
-		return policy.MonitoringQueueDepthThreshold
-	case "delivery":
-		return policy.DeliveryQueueDepthThreshold
-	case "tools":
-		return policy.ToolsQueueDepthThreshold
-	default:
-		return policy.CatalogQueueDepthThreshold
-	}
-}
-
-func thresholdStale(name string, policy sqlc.ControlPlanePolicy) int32 {
-	switch name {
-	case "monitoring":
-		return policy.MonitoringStaleRunningThreshold
-	case "delivery":
-		return policy.DeliveryStaleRunningThreshold
-	case "tools":
-		return policy.ToolsStaleRunningThreshold
-	default:
-		return policy.CatalogStaleRunningThreshold
-	}
-}
-
-func thresholdFailures(name string, policy sqlc.ControlPlanePolicy) int32 {
-	switch name {
-	case "monitoring":
-		return policy.MonitoringRecentFailureThreshold
-	case "delivery":
-		return policy.DeliveryRecentFailureThreshold
-	case "tools":
-		return policy.ToolsRecentFailureThreshold
-	default:
-		return policy.CatalogRecentFailureThreshold
-	}
-}
-
-func extractQueueDepth(summary map[string]any) int {
-	reconciler, ok := summary["reconciler"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	return controlPlaneIntValue(reconciler["queueDepth"])
-}
-
-func extractStaleRunning(summary map[string]any) int {
-	reconciler, ok := summary["reconciler"].(map[string]any)
-	if !ok {
-		return 0
-	}
-	return controlPlaneIntValue(reconciler["staleRunningCount"])
-}
-
-func extractRecentFailureCount(summary map[string]any) int {
-	return controlPlaneIntValue(summary["recentFailureCount"])
-}
-
-func controllerHealth(summary map[string]any) string {
-	if value, ok := summary["health"].(string); ok {
-		return value
-	}
-	return "unknown"
-}
-
-func hasLatestFailure(summary map[string]any) bool {
-	value, ok := summary["latestFailure"]
-	return ok && value != nil
-}
-
-func controlPlaneIntValue(value any) int {
-	switch v := value.(type) {
-	case int:
-		return v
-	case int32:
-		return int(v)
-	case int64:
-		return int(v)
-	case float64:
-		return int(v)
-	default:
-		return 0
-	}
-}
-
 func atLeastOne(v int32) int32 {
 	if v < 1 {
 		return 1
 	}
 	return v
-}
-
-func ternaryHealth(healthy bool) string {
-	if healthy {
-		return "healthy"
-	}
-	return "degraded"
 }

@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 /**
  * Project · Cloud Credentials · New — three-step wizard.
@@ -12,8 +13,8 @@ import { createFileRoute } from "@tanstack/react-router";
  * at the bottom.
  */
 import { useMemo, useState } from "react";
-import { Link } from "@/lib/link";
-import { useParams, useRouter } from "@/lib/navigation";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Loader2, Search, Cloud } from "lucide-react";
 import {
   useCloudCredentialProviders,
@@ -27,9 +28,9 @@ import type { CloudCredentialProviderSpec } from "@/lib/api/project-detail";
 import { cn } from "@/lib/utils";
 
 function NewCloudCredentialPage() {
-  const params = useParams();
-  const projectId = params.id as string;
-  const router = useRouter();
+  const params = Route.useParams();
+  const projectId = params.id;
+  const navigate = useNavigate();
   const { data: providers = [], isLoading } = useCloudCredentialProviders();
   const createMutation = useCreateCloudCredential(projectId);
 
@@ -55,13 +56,13 @@ function NewCloudCredentialPage() {
 
   return (
     <PageShell>
-      <Link
-        href={backToList}
+      <RouterLink
+        to={backToList}
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to credentials
-      </Link>
+      </RouterLink>
 
       <PageHeader
         eyebrow="Cloud Credentials · New"
@@ -76,12 +77,12 @@ function NewCloudCredentialPage() {
         <>
           <div className="flex items-center gap-2 px-3 rounded-lg border border-border bg-background">
             <Search className="h-4 w-4 text-muted-foreground" />
-            <input
+            <Input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search providers…"
-              className="flex-1 h-10 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none"
+              className="flex-1 h-10 bg-transparent text-sm placeholder:text-muted-foreground focus:outline-hidden"
             />
           </div>
 
@@ -105,7 +106,7 @@ function NewCloudCredentialPage() {
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                    <div className="shrink-0 w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
                       <Cloud className="h-4 w-4 text-foreground" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -152,7 +153,7 @@ function NewCloudCredentialPage() {
               setServerError(null);
               try {
                 await createMutation.mutateAsync(body);
-                router.push(backToList);
+                void navigate({ to: backToList });
               } catch (err) {
                 const msg =
                   extractApiErrorMessage(err) ?? "Failed to create credential.";

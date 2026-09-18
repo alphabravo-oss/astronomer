@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import type { HelmRepository } from "@/types";
@@ -18,8 +20,9 @@ export interface RepositoriesTableProps {
   repos: HelmRepository[];
   loading?: boolean;
   onSync: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
   syncPending?: boolean;
+  deletePending?: boolean;
 }
 
 export function RepositoriesTable({
@@ -28,7 +31,9 @@ export function RepositoriesTable({
   onSync,
   onDelete,
   syncPending,
+  deletePending,
 }: RepositoriesTableProps) {
+  const [deleteTarget, setDeleteTarget] = useState<HelmRepository | null>(null);
   const repoColumns: Column<HelmRepository>[] = [
     {
       key: "name",
@@ -38,7 +43,7 @@ export function RepositoriesTable({
           <Globe className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-foreground">{row.name}</span>
           {row.isDefault && (
-            <span className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
+            <span className="text-2xs px-1.5 py-0.5 rounded-sm bg-primary/10 text-primary font-medium">
               Default
             </span>
           )}
@@ -58,7 +63,7 @@ export function RepositoriesTable({
       key: "type",
       header: "Type",
       accessor: (row) => (
-        <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground uppercase">
+        <span className="text-xs px-2 py-0.5 rounded-sm bg-muted text-muted-foreground uppercase">
           {row.repoType}
         </span>
       ),
@@ -113,7 +118,7 @@ export function RepositoriesTable({
           <button
             onClick={() => onSync(row.id)}
             disabled={syncPending}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-muted-foreground
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs text-muted-foreground
               hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
             title="Sync repository"
           >
@@ -123,12 +128,8 @@ export function RepositoriesTable({
             Sync
           </button>
           <button
-            onClick={() => {
-              if (confirm(`Delete repository "${row.name}"?`)) {
-                onDelete(row.id);
-              }
-            }}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
+            onClick={() => setDeleteTarget(row)}
+            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
             title="Delete repository"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -140,13 +141,44 @@ export function RepositoriesTable({
   ];
 
   return (
-    <DataTable
-      data={repos}
-      columns={repoColumns}
-      keyExtractor={(row) => row.id}
-      searchPlaceholder="Search repositories..."
-      loading={loading}
-      emptyMessage="No repositories configured"
-    />
+    <>
+      <DataTable
+        data={repos}
+        columns={repoColumns}
+        keyExtractor={(row) => row.id}
+        searchPlaceholder="Search repositories..."
+        loading={loading}
+        emptyState={{
+          title: "No repositories configured",
+          description: "Create the first item to configure this feature.",
+        }}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          await onDelete(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        title="Delete repository"
+        description="This removes the repository from the shared catalog."
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={deletePending}
+        impact={
+          deleteTarget
+            ? {
+                scope: deleteTarget.name,
+                consequences: [
+                  "Charts from this repository will no longer be available for new installations.",
+                  "Existing Helm releases are not uninstalled.",
+                ],
+                recovery: "Add and sync the repository again.",
+              }
+            : undefined
+        }
+      />
+    </>
   );
 }

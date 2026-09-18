@@ -359,8 +359,10 @@ func newAdminWebhookDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes && !adminConfirm(cmd, fmt.Sprintf("Delete webhook %s?", args[0])) {
-				return fmt.Errorf("aborted")
+			if !yes {
+				if err := confirmAction(cmd, fmt.Sprintf("Delete webhook %s?", args[0])); err != nil {
+					return err
+				}
 			}
 			client, err := newAstroClient(cmd)
 			if err != nil {
@@ -450,7 +452,7 @@ func newAdminWebhookDeliveriesCmd() *cobra.Command {
 			if resp.JSON200 == nil {
 				return adminStatusErr("list webhook deliveries", resp.StatusCode(), resp.Body)
 			}
-			return renderSDK(cmd, resp.JSON200.Data.Items)
+			return renderSDK(cmd, resp.JSON200.Data)
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 0, "max deliveries to return")
@@ -512,7 +514,8 @@ func newAdminVaultCmd() *cobra.Command {
 }
 
 func newAdminVaultListCmd() *cobra.Command {
-	return &cobra.Command{
+	var limit, offset int
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List Vault connections",
 		Args:  cobra.NoArgs,
@@ -521,7 +524,9 @@ func newAdminVaultListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.AdminVaultConnectionsListWithResponse(cmd.Context())
+			params := &astroclient.AdminVaultConnectionsListParams{}
+			applyLimitOffset(&params.Limit, &params.Offset, limit, offset)
+			resp, err := client.AdminVaultConnectionsListWithResponse(cmd.Context(), params)
 			if err != nil {
 				return err
 			}
@@ -531,6 +536,8 @@ func newAdminVaultListCmd() *cobra.Command {
 			return renderSDK(cmd, resp.JSON200.Data.Items)
 		},
 	}
+	addLimitOffsetFlags(cmd, &limit, &offset)
+	return cmd
 }
 
 func newAdminVaultGetCmd() *cobra.Command {
@@ -633,8 +640,10 @@ func newAdminVaultDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes && !adminConfirm(cmd, fmt.Sprintf("Delete vault connection %s?", args[0])) {
-				return fmt.Errorf("aborted")
+			if !yes {
+				if err := confirmAction(cmd, fmt.Sprintf("Delete vault connection %s?", args[0])); err != nil {
+					return err
+				}
 			}
 			client, err := newAstroClient(cmd)
 			if err != nil {
@@ -875,8 +884,10 @@ func newAdminNPTDeleteCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if !yes && !adminConfirm(cmd, fmt.Sprintf("Delete network policy template %s?", args[0])) {
-				return fmt.Errorf("aborted")
+			if !yes {
+				if err := confirmAction(cmd, fmt.Sprintf("Delete network policy template %s?", args[0])); err != nil {
+					return err
+				}
 			}
 			client, err := newAstroClient(cmd)
 			if err != nil {
@@ -961,7 +972,7 @@ func newAdminEmailsListCmd() *cobra.Command {
 			if resp.JSON200 == nil {
 				return adminStatusErr("list emails", resp.StatusCode(), resp.Body)
 			}
-			return renderSDK(cmd, resp.JSON200.Data.Items)
+			return renderSDK(cmd, resp.JSON200.Data)
 		},
 	}
 	cmd.Flags().IntVar(&limit, "limit", 0, "max emails to return")
@@ -1082,16 +1093,4 @@ func adminStatusErr(action string, status int, body []byte) error {
 		msg = msg[:2000] + "…"
 	}
 	return fmt.Errorf("%s failed: HTTP %d: %s", action, status, msg)
-}
-
-// adminConfirm prompts the operator for a y/N confirmation, mirroring the
-// cluster delete flow.
-func adminConfirm(cmd *cobra.Command, prompt string) bool {
-	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s [y/N] ", prompt); err != nil {
-		return false
-	}
-	var resp string
-	_, _ = fmt.Scanln(&resp)
-	resp = strings.ToLower(strings.TrimSpace(resp))
-	return resp == "y" || resp == "yes"
 }

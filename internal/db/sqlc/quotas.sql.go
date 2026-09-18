@@ -88,6 +88,17 @@ func (q *Queries) CountProjectsUsingQuotaPlan(ctx context.Context, quotaPlan str
 	return count, err
 }
 
+const countQuotaPlans = `-- name: CountQuotaPlans :one
+SELECT count(*) FROM quota_plans
+`
+
+func (q *Queries) CountQuotaPlans(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countQuotaPlans)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTotalActiveUsers = `-- name: CountTotalActiveUsers :one
 SELECT count(*)::bigint AS count FROM users WHERE is_active = true
 `
@@ -363,14 +374,21 @@ func (q *Queries) ListProjectQuotaSnapshots(ctx context.Context, arg ListProject
 	return items, nil
 }
 
-const listQuotaPlans = `-- name: ListQuotaPlans :many
+const listQuotaPlansPage = `-- name: ListQuotaPlansPage :many
 
-SELECT name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at FROM quota_plans ORDER BY name ASC
+SELECT name, enforcement, description, max_clusters_per_project, max_namespaces_per_project, max_members_per_project, max_projects_per_user, max_tokens_per_user, max_streams_per_user, max_total_clusters, max_total_users, created_at, updated_at FROM quota_plans
+ORDER BY name ASC
+LIMIT $2 OFFSET $1
 `
 
+type ListQuotaPlansPageParams struct {
+	QueryOffset int32 `json:"query_offset"`
+	QueryLimit  int32 `json:"query_limit"`
+}
+
 // Quota plans CRUD --------------------------------------------------------
-func (q *Queries) ListQuotaPlans(ctx context.Context) ([]QuotaPlan, error) {
-	rows, err := q.db.Query(ctx, listQuotaPlans)
+func (q *Queries) ListQuotaPlansPage(ctx context.Context, arg ListQuotaPlansPageParams) ([]QuotaPlan, error) {
+	rows, err := q.db.Query(ctx, listQuotaPlansPage, arg.QueryOffset, arg.QueryLimit)
 	if err != nil {
 		return nil, err
 	}

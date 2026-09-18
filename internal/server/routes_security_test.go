@@ -35,9 +35,7 @@ import (
 	deliveryhandler "github.com/alphabravocompany/astronomer-go/internal/handler/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/kubectl"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
-	"github.com/alphabravocompany/astronomer-go/internal/tunnel2"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -99,6 +97,45 @@ func (w *routeSecurityAuditWriter) Rows() []sqlc.CreateAuditLogV1Params {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return append([]sqlc.CreateAuditLogV1Params(nil), w.rows...)
+}
+
+func mustNewTestStreamSecurity(
+	hub *tunnel.Hub,
+	jwt *auth.JWTManager,
+	queries auth.TokenUserQuerier,
+	auditWriter *routeSecurityAuditWriter,
+	bindings []rbac.RoleBinding,
+) (*tunnel.ExecConsumer, *tunnel.LogsConsumer, *auth.StreamTicketStore, *handler.StreamTicketHandler) {
+	if queries == nil {
+		queries = routeSecurityTokenAuthQuerier{}
+	}
+	if auditWriter == nil {
+		auditWriter = &routeSecurityAuditWriter{}
+	}
+	engine := rbac.NewEngine()
+	querier := routeSecurityRBACQuerier{bindings: bindings}
+	tickets := auth.NewStreamTicketStore(time.Minute)
+	security := tunnel.StreamConsumerDependencies{
+		JWT:         jwt,
+		Queries:     queries,
+		Tickets:     tickets,
+		AuditWriter: auditWriter,
+		RBACEngine:  engine,
+		RBACQuerier: querier,
+	}
+	execConsumer, err := tunnel.NewExecConsumer(hub, slog.Default(), security)
+	if err != nil {
+		panic(err)
+	}
+	logsConsumer, err := tunnel.NewLogsConsumer(hub, slog.Default(), security)
+	if err != nil {
+		panic(err)
+	}
+	ticketHandler, err := handler.NewStreamTicketHandler(tickets, engine, querier)
+	if err != nil {
+		panic(err)
+	}
+	return execConsumer, logsConsumer, tickets, ticketHandler
 }
 
 func waitForAuditRows(t *testing.T, audit *routeSecurityAuditWriter, want int) []sqlc.CreateAuditLogV1Params {
@@ -247,7 +284,7 @@ func (routeSecurityClusterQuerier) CreateClusterDecommission(context.Context, sq
 func (routeSecurityClusterQuerier) GetLatestClusterDecommissionByCluster(context.Context, uuid.UUID) (sqlc.ClusterDecommission, error) {
 	return sqlc.ClusterDecommission{}, pgx.ErrNoRows
 }
-func (routeSecurityClusterQuerier) ListPendingClusterDecommissions(context.Context, int32) ([]sqlc.ClusterDecommission, error) {
+func (routeSecurityClusterQuerier) ListPendingClusterDecommissionsForClusters(context.Context, []uuid.UUID) ([]sqlc.ClusterDecommission, error) {
 	return nil, nil
 }
 
@@ -308,11 +345,12 @@ func (routeSecuritySCIMTokenQuerier) GetUserByID(context.Context, uuid.UUID) (sq
 func (routeSecuritySCIMTokenQuerier) CreateSCIMToken(context.Context, sqlc.CreateSCIMTokenParams) (sqlc.ScimToken, error) {
 	return sqlc.ScimToken{}, nil
 }
-func (routeSecuritySCIMTokenQuerier) ListSCIMTokens(context.Context) ([]sqlc.ScimToken, error) {
+func (routeSecuritySCIMTokenQuerier) ListSCIMTokenMetadata(context.Context, sqlc.ListSCIMTokenMetadataParams) ([]sqlc.ListSCIMTokenMetadataRow, error) {
 	return nil, nil
 }
-func (routeSecuritySCIMTokenQuerier) DeleteSCIMToken(context.Context, uuid.UUID) error {
-	return nil
+func (routeSecuritySCIMTokenQuerier) CountSCIMTokens(context.Context) (int64, error) { return 0, nil }
+func (routeSecuritySCIMTokenQuerier) RevokeSCIMToken(context.Context, uuid.UUID) (int64, error) {
+	return 1, nil
 }
 
 type routeSecurityShellQuerier struct{}
@@ -329,13 +367,22 @@ func (routeSecurityShellQuerier) CreateKubectlSession(context.Context, sqlc.Crea
 func (routeSecurityShellQuerier) GetKubectlSessionByID(context.Context, uuid.UUID) (sqlc.KubectlSession, error) {
 	return sqlc.KubectlSession{}, pgx.ErrNoRows
 }
-func (routeSecurityShellQuerier) ListActiveKubectlSessionsByCluster(context.Context, uuid.UUID) ([]sqlc.KubectlSession, error) {
+func (routeSecurityShellQuerier) ListActiveKubectlSessionsByCluster(context.Context, sqlc.ListActiveKubectlSessionsByClusterParams) ([]sqlc.KubectlSession, error) {
 	return nil, nil
 }
-func (routeSecurityShellQuerier) ListAllActiveKubectlSessions(context.Context) ([]sqlc.KubectlSession, error) {
+func (routeSecurityShellQuerier) CountActiveKubectlSessionsByCluster(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (routeSecurityShellQuerier) ListActiveKubectlSessionClusters(context.Context, sqlc.ListActiveKubectlSessionClustersParams) ([]uuid.UUID, error) {
 	return nil, nil
 }
-func (routeSecurityShellQuerier) ListExpiredKubectlSessions(context.Context) ([]sqlc.KubectlSession, error) {
+func (routeSecurityShellQuerier) ListAllActiveKubectlSessionsPage(context.Context, sqlc.ListAllActiveKubectlSessionsPageParams) ([]sqlc.KubectlSession, error) {
+	return nil, nil
+}
+func (routeSecurityShellQuerier) CountAllActiveKubectlSessions(context.Context) (int64, error) {
+	return 0, nil
+}
+func (routeSecurityShellQuerier) ListExpiredKubectlSessions(context.Context, sqlc.ListExpiredKubectlSessionsParams) ([]sqlc.KubectlSession, error) {
 	return nil, nil
 }
 func (routeSecurityShellQuerier) SetKubectlSessionStatus(context.Context, sqlc.SetKubectlSessionStatusParams) error {
@@ -353,41 +400,19 @@ func (routeSecurityShellQuerier) ListKubectlSessionCommands(context.Context, sql
 func (routeSecurityShellQuerier) CountKubectlSessionCommands(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
+func (routeSecurityShellQuerier) CountKubectlSessionCommandsForSessions(context.Context, []uuid.UUID) ([]sqlc.CountKubectlSessionCommandsForSessionsRow, error) {
+	return nil, nil
+}
 
-func TestLongLivedClusterRoutesRequireAuth(t *testing.T) {
+func TestFeatureFlagRouteRequiresAuth(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
-	clusterID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:                 jwtMgr,
-		RBACEngine:          rbac.NewEngine(),
-		RBACQueries:         routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ClusterRegistration: handler.NewClusterRegistrationHandler(nil, events.NewBus()),
-		PlatformSettings:    handler.NewPlatformSettingsHandler(nil),
-		RemoteServer:        tunnel2.NewRemoteServer(slog.Default(), nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, AdminPlatform: AdminPlatformDependencies{PlatformSettings: handler.NewPlatformSettingsHandler(nil)}})
 
-	cases := []struct {
-		name string
-		path string
-	}{
-		{
-			name: "remotedialer pod demo",
-			path: "/api/v1/clusters/" + clusterID.String() + "/v2/pods/",
-		},
-		{
-			name: "feature flags",
-			path: "/api/v1/settings/features/",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-			if rec.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
-			}
-		})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/settings/features/", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
 	}
 }
 
@@ -455,9 +480,9 @@ func isRouterAnonymousReachablePattern(pattern string) bool {
 	if isRouterPublicReadPattern(pattern) || isPublicAuthFlow(pattern) {
 		return true
 	}
-	// A git provider cannot present a JWT: the handler authenticates the push
-	// with the X-Astronomer-Webhook-Secret shared secret and 503s until one is
-	// configured (which is why it answers here at all).
+	// A git provider cannot present a JWT: the handler authenticates GitHub push
+	// deliveries with the source-specific HMAC-SHA256 signature over the raw body,
+	// then consumes the delivery ID once before queuing the audited mutation.
 	if pattern == "/api/v1/gitops/sources/{id}/webhook" {
 		return true
 	}
@@ -465,11 +490,11 @@ func isRouterAnonymousReachablePattern(pattern string) bool {
 		"/health",
 		"/readyz",
 		"/helm-repo",
+		// SCIM authenticates with its own static bearer-token middleware, not
+		// the browser/API JWT chain. An unavailable token store fails closed.
+		"/scim/v2",
 		"/api/v1/openapi.yaml",
 		"/api/v1/docs",
-		// Agent CONNECT: authenticated by the join/agent token inside the
-		// websocket handshake, not by the JWT middleware.
-		"/api/v1/connect",
 		// PSK-guarded cross-pod tunnel listeners.
 		"/api/v1/internal",
 		"/internal/tunnel",
@@ -521,6 +546,7 @@ func TestRouteInventoryCanBeGenerated(t *testing.T) {
 	}{
 		{method: http.MethodGet, pattern: "/api/v1/audit/", securityRegistryID: "audit-log-list"},
 		{method: http.MethodGet, pattern: "/api/v1/audit/export/", securityRegistryID: "audit-log-export"},
+		{method: http.MethodPost, pattern: "/api/v1/audit/exports/", securityRegistryID: "audit-log-export-create"},
 		{method: http.MethodGet, pattern: "/api/v1/audit/{id}/", securityRegistryID: "audit-log-detail"},
 		{method: http.MethodGet, pattern: "/api/v1/settings/audit-logs/", securityRegistryID: "legacy-settings-audit-log-list"},
 	} {
@@ -628,7 +654,7 @@ func TestBrowserCookieMutatingRoutesRequireCSRF(t *testing.T) {
 		checked++
 		t.Run(entry.ID, func(t *testing.T) {
 			req := httptest.NewRequest(method, entry.SamplePath, nil)
-			req.AddCookie(&http.Cookie{Name: appmiddleware.SessionCookieName, Value: token})
+			req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 			if rec.Code != http.StatusUnauthorized {
@@ -652,12 +678,7 @@ func TestUserManagementRoutesRequireUsersRBACAndAdminScope(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 
-	noUsersRBAC := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
-		Resources:   handler.NewResourceHandler(),
-	})
+	noUsersRBAC := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler()}})
 	deniedReq := httptest.NewRequest(http.MethodPost, "/api/v1/users/", nil)
 	deniedReq.Header.Set("Authorization", "Bearer "+token)
 	deniedRec := httptest.NewRecorder()
@@ -666,12 +687,7 @@ func TestUserManagementRoutesRequireUsersRBACAndAdminScope(t *testing.T) {
 		t.Fatalf("no users RBAC status = %d, want %d; body=%s", deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
 	}
 
-	usersRBAC := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityUserBindings(rbac.VerbCreate)},
-		Resources:   handler.NewResourceHandler(),
-	})
+	usersRBAC := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityUserBindings(rbac.VerbCreate)}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler()}})
 	allowedReq := httptest.NewRequest(http.MethodPost, "/api/v1/users/", nil)
 	allowedReq.Header.Set("Authorization", "Bearer "+token)
 	allowedRec := httptest.NewRecorder()
@@ -681,16 +697,11 @@ func TestUserManagementRoutesRequireUsersRBACAndAdminScope(t *testing.T) {
 	}
 
 	rawToken := "astro_user_route_scope_test"
-	scopedAPIRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT: jwtMgr,
-		AuthQueries: routeSecurityAPITokenQuerier(
-			rawToken,
-			userID,
-			json.RawMessage(`["read"]`),
-		),
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityUserBindings(rbac.VerbCreate)},
-		Resources:   handler.NewResourceHandler(),
+	scopedAPIRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(
+		rawToken,
+		userID,
+		json.RawMessage(`["read"]`),
+	), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityUserBindings(rbac.VerbCreate)}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler()},
 	})
 	scopeReq := httptest.NewRequest(http.MethodPost, "/api/v1/users/", nil)
 	scopeReq.Header.Set("Authorization", "Bearer "+rawToken)
@@ -712,16 +723,11 @@ func TestManifestEndpointRequiresWriteScope(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	rawToken := "astro_user_manifest_scope_test"
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT: jwtMgr,
-		AuthQueries: routeSecurityAPITokenQuerier(
-			rawToken,
-			userID,
-			json.RawMessage(`["read"]`),
-		),
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbUpdate)},
-		Clusters:    handler.NewClusterHandler(nil),
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(
+		rawToken,
+		userID,
+		json.RawMessage(`["read"]`),
+	), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbUpdate)}}, ClusterResources: ClusterResourceDependencies{Clusters: handler.NewClusterHandler(nil)},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+uuid.New().String()+"/manifest/", nil)
 	req.Header.Set("Authorization", "Bearer "+rawToken)
@@ -743,12 +749,7 @@ func TestLegacySettingsMutatorsRequireRBACAndAdminScope(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 
-	noSettingsRBAC := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
-		Resources:   handler.NewResourceHandler(),
-	})
+	noSettingsRBAC := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler()}})
 	settingsReq := httptest.NewRequest(http.MethodPut, "/api/v1/settings/general/", nil)
 	settingsReq.Header.Set("Authorization", "Bearer "+token)
 	settingsRec := httptest.NewRecorder()
@@ -757,12 +758,7 @@ func TestLegacySettingsMutatorsRequireRBACAndAdminScope(t *testing.T) {
 		t.Fatalf("settings without RBAC status = %d, want %d; body=%s", settingsRec.Code, http.StatusForbidden, settingsRec.Body.String())
 	}
 
-	withSettingsRBAC := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSettings, rbac.VerbUpdate)},
-		Resources:   handler.NewResourceHandler(),
-	})
+	withSettingsRBAC := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSettings, rbac.VerbUpdate)}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler()}})
 	allowedReq := httptest.NewRequest(http.MethodPut, "/api/v1/settings/general/", strings.NewReader(`{}`))
 	allowedReq.Header.Set("Authorization", "Bearer "+token)
 	allowedRec := httptest.NewRecorder()
@@ -772,16 +768,11 @@ func TestLegacySettingsMutatorsRequireRBACAndAdminScope(t *testing.T) {
 	}
 
 	rawToken := "astro_settings_route_scope_test"
-	scopedAPIRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT: jwtMgr,
-		AuthQueries: routeSecurityAPITokenQuerier(
-			rawToken,
-			userID,
-			json.RawMessage(`["read"]`),
-		),
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSSO, rbac.VerbCreate)},
-		Resources:   handler.NewResourceHandler(),
+	scopedAPIRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(
+		rawToken,
+		userID,
+		json.RawMessage(`["read"]`),
+	), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSSO, rbac.VerbCreate)}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler()},
 	})
 	scopeReq := httptest.NewRequest(http.MethodPost, "/api/v1/settings/sso/", nil)
 	scopeReq.Header.Set("Authorization", "Bearer "+rawToken)
@@ -804,13 +795,7 @@ func TestAuditLogRoutesRequireAuditLogRBAC(t *testing.T) {
 	}
 	paths := []string{"/api/v1/audit/", "/api/v1/settings/audit-logs/"}
 
-	noAuditRBAC := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSettings, rbac.VerbRead)},
-		Audit:       handler.NewAuditHandler(routeSecurityAuditReader{}),
-		Resources:   handler.NewResourceHandler(),
-	})
+	noAuditRBAC := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSettings, rbac.VerbRead)}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler()}, AdminPlatform: AdminPlatformDependencies{Audit: handler.NewAuditHandler(routeSecurityAuditReader{})}})
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -821,13 +806,7 @@ func TestAuditLogRoutesRequireAuditLogRBAC(t *testing.T) {
 		}
 	}
 
-	withAuditRBAC := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceAuditLogs, rbac.VerbRead)},
-		Audit:       handler.NewAuditHandler(routeSecurityAuditReader{}),
-		Resources:   handler.NewResourceHandler(),
-	})
+	withAuditRBAC := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceAuditLogs, rbac.VerbRead)}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandler()}, AdminPlatform: AdminPlatformDependencies{Audit: handler.NewAuditHandler(routeSecurityAuditReader{})}})
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -850,120 +829,53 @@ func routeSecurityRouterDependencies(t *testing.T) (RouterDependencies, string) 
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	hub := tunnel.NewHub(slog.Default())
-	execConsumer := tunnel.NewExecConsumer(hub, slog.Default())
-	execConsumer.SetAuth(jwtMgr, nil)
-	logsConsumer := tunnel.NewLogsConsumer(hub, slog.Default())
-	logsConsumer.SetAuth(jwtMgr, nil)
+	execConsumer, logsConsumer, streamTickets, streamTicketHandler := mustNewTestStreamSecurity(hub, jwtMgr, nil, nil, routeSecurityAdminBindings())
 	shellHandler := handler.NewKubectlShellHandler(routeSecurityShellQuerier{}, nil, rbac.NewEngine(), kubectl.Deps{})
 	shellHandler.SetStreamAuth(jwtMgr, nil)
 	rbacEngine := rbac.NewEngine()
 	rbacQueries := routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}
+	eventBus := events.NewBus()
+	eventStream, err := handler.NewEventStreamHandler(
+		eventBus,
+		jwtMgr,
+		routeSecurityTokenAuthQuerier{},
+		streamTickets,
+		rbacEngine,
+		rbacQueries,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new event stream: %v", err)
+	}
 	clusterTemplates := handler.NewClusterTemplateHandler(nil)
 	clusterTemplates.SetAuthorization(rbacEngine, rbacQueries)
-	return RouterDependencies{
-		JWT:                 jwtMgr,
-		RBACEngine:          rbacEngine,
-		RBACQueries:         rbacQueries,
-		Clusters:            handler.NewClusterHandler(routeSecurityClusterQuerier{}),
-		ClusterRegistration: handler.NewClusterRegistrationHandler(nil, events.NewBus()),
-		Auth:                handler.NewAuthHandler(nil, jwtMgr),
-		TOTP:                handler.NewTOTPHandler(nil, nil, nil, jwtMgr),
-		Audit:               handler.NewAuditHandler(routeSecurityAuditReader{}),
-		Resources:           handler.NewResourceHandler(),
-		ResourcesSearch:     handler.NewResourcesSearchHandler(nil, nil),
-		ClusterRegistries:   handler.NewClusterRegistriesHandler(nil),
-		CloudCredentials:    handler.NewCloudCredentialHandler(nil),
-		Vault:               handler.NewVaultHandler(nil),
-		SMTP:                handler.NewSMTPHandler(nil, nil, nil),
-		Webhooks:            handler.NewWebhookHandler(nil, nil, nil),
-		DexConfig:           handler.NewDexHandler(nil),
-		Projects:            handler.NewProjectHandler(nil),
-		DeliverySources:     deliveryhandler.NewSourceHandler(nil, nil, 1),
-		DeliveryBundles:     deliveryhandler.NewBundleHandler(nil),
-		DeliveryTargets:     deliveryhandler.NewTargetHandler(nil, nil, nil),
-		DeliveryRollouts:    deliveryhandler.NewRolloutHandler(nil, nil, nil, nil),
-		DeliveryDeployments: deliveryhandler.NewDeploymentHandler(nil, nil, nil),
-		DeliveryInventory:   deliveryhandler.NewInventoryHandler(nil),
-		RBAC:                handler.NewRBACHandler(nil),
-		Backups:             handler.NewBackupHandler(nil),
-		ClusterSnapshots:    handler.NewClusterSnapshotsHandler(nil),
-		Catalog:             handler.NewCatalogHandler(nil),
-		ProjectCatalogs:     handler.NewProjectCatalogHandler(nil),
-		ClusterGroups:       handler.NewClusterGroupHandler(nil),
-		ClusterAgent:        handler.NewClusterAgentHandler(nil),
-		ApiserverAudit:      handler.NewApiserverAuditHandler(nil),
-		ApiserverAllowlist:  handler.NewApiserverAllowlistHandler(nil),
-		ClusterTemplates:    clusterTemplates,
-		// Wired so the monitoring surface — including the /settings/monitoring
-		// routes that answered unauthenticated reads until the 2026-07-28 fix —
-		// is visible to the registry-driven route security tests at all.
-		Monitoring:      handler.NewMonitoringHandler(),
-		NetworkPolicies: handler.NewNetworkPolicyHandler(nil),
-		Workloads:       handler.NewWorkloadHandler(),
-		ServiceMesh:     handler.NewServiceMeshHandler(nil),
-		Proxy:           tunnel.NewProxyHandler(hub, slog.Default()),
-		ServiceProxy:    routeSecurityServiceProxy(),
-		InternalK8s:     tunnel.NewInternalK8sHandler(hub, "route-security-psk", slog.Default()),
-		InternalHelm:    tunnel.NewInternalHelmHandler(hub, "route-security-psk", slog.Default()),
-		Exec:            execConsumer,
-		Logs:            logsConsumer,
-		RemoteServer:    tunnel2.NewRemoteServer(slog.Default(), nil),
-		KubectlShell:    shellHandler,
-		SCIMTokenAdmin:  handler.NewSCIMTokenAdminHandler(routeSecuritySCIMTokenQuerier{}),
-		// Every handler-typed dep below gates a whole route group behind a
-		// `deps.X != nil` check. While they were nil, those groups were
-		// invisible to EVERY registry-driven test in this file — the route
-		// table golden, the generated inventory, the CSRF sweep, the
-		// classification sweep and the default-deny sweep all walked a router
-		// that simply did not contain them. That is how the monitoring routes
-		// went unnoticed. Nil-arg constructors are enough for router-shape
-		// tests: the group must be MOUNTED, the handlers never run.
-		// TestRouteSecurityRouterWiresEveryHandlerDependency keeps this list
-		// honest.
-		Alerting:          handler.NewAlertingHandler(nil),
-		Anomaly:           handler.NewAnomalyHandler(nil),
-		ChartRatings:      handler.NewChartRatingsHandler(nil),
-		AdminQueues:       handler.NewAdminQueuesHandler(nil, nil),
-		AdminTaskOutbox:   handler.NewAdminTaskOutboxHandler(nil),
-		AdminDrill:        handler.NewAdminDrillHandler(nil),
-		GroupMappings:     handler.NewGroupMappingsHandler(nil),
-		CharlieOnboarding: handler.NewCharlieOnboardingHandler(nil),
-		CharlieAdmin:      handler.NewCharlieAdminHandler(nil, nil),
-		CharlieSessions:   handler.NewCharlieSessionHandler(nil, nil),
-		CharlieThreads:    handler.NewCharlieThreadHandler(nil),
-		CharlieFindings:   handler.NewCharlieFindingHandler(nil),
-		CharlieOperations: handler.NewCharlieOperationHandler(nil),
-		CharlieContext:    handler.NewCharlieContextHandler(routeSecurityCharlieContextSearcher{}),
-		CharlieApprovals:  handler.NewCharlieApprovalHandler(nil),
-		ClusterResources:  handler.NewClusterResourcesHandler(nil),
-		Compliance:        handler.NewComplianceHandler(nil, nil),
-		CompliancePosture: handler.NewCompliancePostureHandler(nil, 0),
-		ControlPlane:      handler.NewControlPlaneHandler(nil, nil, nil, nil, nil, nil, nil, nil),
-		Dashboards:        handler.NewDashboardHandler(nil),
-		Extensions:        handler.NewExtensionHandler(nil),
-		Gatekeeper:        handler.NewGatekeeperConstraintsHandler(nil, nil),
-		GitOps:            handler.NewGitOpsHandler(nil, nil, slog.Default()),
-		ImageVulns:        handler.NewImageVulnHandler(nil),
-		Logging:           handler.NewLoggingHandler(nil),
-		NativeRBAC:        handler.NewNativeRBACHandler(nil),
-		PlatformSettings:  handler.NewPlatformSettingsHandler(nil),
-		Quotas:            handler.NewQuotaHandler(nil),
-		SCIM:              handler.NewSCIMHandler(nil),
-		SSOPresets:        handler.NewSSOPresetsHandler(),
-		Security:          handler.NewSecurityHandler(nil),
-		SIEMForwarders:    handler.NewSIEMHandler(nil, nil, slog.Default()),
-		StreamTickets:     handler.NewStreamTicketHandler(nil),
-		SupportBundle:     handler.NewSupportBundleHandler(nil, nil, ""),
-		Tools:             handler.NewToolHandler(nil),
+	return RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbacEngine, RBACQueries: rbacQueries, Auth: handler.NewAuthHandler(nil, jwtMgr), TOTP: handler.NewTOTPHandler(nil, nil, nil, jwtMgr), SSO: handler.NewSSOHandler(nil, jwtMgr, ""), RBAC: handler.NewRBACHandler(nil), Principals: handler.NewPrincipalHandler(nil, nil), SCIMTokenAdmin: // Wired so the monitoring surface — including the /settings/monitoring
+	// routes that answered unauthenticated reads until the 2026-07-28 fix —
+	// is visible to the registry-driven route security tests at all.
+
+	handler.NewSCIMTokenAdminHandler(routeSecuritySCIMTokenQuerier{}), SCIM:// Every handler-typed dep below gates a whole route group behind a
+	// `deps.X != nil` check. While they were nil, those groups were
+	// invisible to EVERY registry-driven test in this file — the route
+	// table golden, the generated inventory, the CSRF sweep, the
+	// classification sweep and the default-deny sweep all walked a router
+	// that simply did not contain them. That is how the monitoring routes
+	// went unnoticed. Nil-arg constructors are enough for router-shape
+	// tests: the group must be MOUNTED, the handlers never run.
+	// TestRouteSecurityRouterWiresEveryHandlerDependency keeps this list
+	// honest.
+
+	handler.NewSCIMHandler(nil), SSOPresets: handler.NewSSOPresetsHandler()}, ClusterResources: ClusterResourceDependencies{Clusters: handler.NewClusterHandler(routeSecurityClusterQuerier{}), ClusterRegistration: handler.NewClusterRegistrationHandler(nil, eventBus), Resources: handler.NewResourceHandler(), ResourcesSearch: handler.NewResourcesSearchHandler(nil, nil), ClusterRegistries: handler.NewClusterRegistriesHandler(nil), CloudCredentials: handler.NewCloudCredentialHandler(nil), Vault: handler.NewVaultHandler(nil), Projects: handler.NewProjectHandler(nil), Backups: handler.NewBackupHandler(nil), ClusterSnapshots: handler.NewClusterSnapshotsHandler(nil), ProjectCatalogs: handler.NewProjectCatalogHandler(nil), ClusterGroups: handler.NewClusterGroupHandler(nil), ClusterAgent: handler.NewClusterAgentHandler(nil), ApiserverAudit: handler.NewApiserverAuditHandler(nil), ApiserverAllowlist: handler.NewApiserverAllowlistHandler(nil), ClusterTemplates: clusterTemplates, Monitoring: handler.NewMonitoringHandler(), NetworkPolicies: handler.NewNetworkPolicyHandler(nil), Workloads: handler.NewWorkloadHandler(), ServiceMesh: handler.NewServiceMeshHandler(nil), ServiceProxy: routeSecurityServiceProxy(), ClusterResources: handler.NewClusterResourcesHandler(nil), ControlPlane: handler.NewControlPlaneHandler(nil, nil), Gatekeeper: handler.NewGatekeeperConstraintsHandler(nil, nil), ImageVulns: handler.NewImageVulnHandler(nil), Logging: handler.NewLoggingHandler(nil), NativeRBAC: handler.NewNativeRBACHandler(nil), Tools: handler.NewToolHandler(nil)}, Delivery: DeliveryDependencies{
+
+		// TestRouteSecurityRouterWiresEveryHandlerDependency is the structural backstop
+		// for the bug class above: a handler-typed RouterDependencies field left nil in
+		// newRouteSecurityRouter silently removes its whole route group from every
+		// registry-driven test in this file. Reflect over the struct so adding a new
+		// handler dep fails HERE (loudly, with the field name) instead of quietly
+		// shrinking the audited surface.
+		Sources: deliveryhandler.NewSourceHandler(nil, nil, 1), Bundles: deliveryhandler.NewBundleHandler(nil), Targets: deliveryhandler.NewTargetHandler(nil, nil, nil), Rollouts: deliveryhandler.NewRolloutHandler(nil, nil, nil, nil), Deployments: deliveryhandler.NewDeploymentHandler(nil, nil, nil), Inventory: deliveryhandler.NewInventoryHandler(nil), ConfigurationTemplates: deliveryhandler.NewConfigurationTemplateHandler(nil), OverrideSets: deliveryhandler.NewOverrideSetHandler(nil), GitOps: handler.NewGitOpsHandler(nil, nil, slog.Default())}, AdminPlatform: AdminPlatformDependencies{Audit: handler.NewAuditHandler(routeSecurityAuditReader{}), SMTP: handler.NewSMTPHandler(nil, nil, nil), Webhooks: handler.NewWebhookHandler(nil, nil, nil), DexConfig: handler.NewDexHandler(nil), Catalog: handler.NewCatalogHandler(nil), Alerting: handler.NewAlertingHandler(nil), Anomaly: handler.NewAnomalyHandler(nil), ChartRatings: handler.NewChartRatingsHandler(nil), AdminQueues: handler.NewAdminQueuesHandler(nil, nil), AdminTaskOutbox: handler.NewAdminTaskOutboxHandler(nil), AdminDrill: handler.NewAdminDrillHandler(nil), GroupMappings: handler.NewGroupMappingsHandler(nil), CharlieOnboarding: handler.NewCharlieOnboardingHandler(nil), CharlieAdmin: handler.NewCharlieAdminHandler(nil, nil), CharlieSessions: handler.NewCharlieSessionHandler(nil, nil), CharlieThreads: handler.NewCharlieThreadHandler(nil), CharlieFindings: handler.NewCharlieFindingHandler(nil), CharlieOperations: handler.NewCharlieOperationHandler(nil), CharlieContext: handler.NewCharlieContextHandler(routeSecurityCharlieContextSearcher{}), CharlieApprovals: handler.NewCharlieApprovalHandler(nil), Compliance: handler.NewComplianceHandler(nil, nil), CompliancePosture: handler.NewCompliancePostureHandler(nil, 0), ComplianceBaselines: handler.NewComplianceBaselinesHandler(nil, nil, slog.Default()), Dashboards: handler.NewDashboardHandler(nil), Extensions: handler.NewExtensionHandler(nil), PlatformSettings: handler.NewPlatformSettingsHandler(nil), PlatformDefaultTemplate: handler.NewPlatformDefaultTemplateHandler(nil), PlatformBaselineCoverage: handler.NewPlatformBaselineCoverageHandler(nil), PlatformHealth: handler.NewPlatformHealthHandler(nil), License: handler.NewLicenseHandler(), Maintenance: handler.NewMaintenanceHandler(nil, nil), ReadAuditPolicies: handler.NewReadAuditPolicyHandler(nil, slog.Default()), Quotas: handler.NewQuotaHandler(nil), Security: handler.NewSecurityHandler(nil), SIEMForwarders: handler.NewSIEMHandler(nil, nil, slog.Default()), SupportBundle: handler.NewSupportBundleHandler(nil, nil, nil, "")}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(hub, slog.Default()), InternalK8s: tunnel.NewInternalK8sHandler(hub, tunnel.InternalRequestKeyring{Current: "route-security-psk"}, slog.Default()), InternalHelm: tunnel.NewInternalHelmHandler(hub, tunnel.InternalRequestKeyring{Current: "route-security-psk"}, slog.Default()), Exec: execConsumer, Logs: logsConsumer, EventStream: eventStream, KubectlShell: shellHandler, StreamTickets: streamTicketHandler, StreamTicketStore: streamTickets},
 	}, clusterID.String()
 }
 
-// TestRouteSecurityRouterWiresEveryHandlerDependency is the structural backstop
-// for the bug class above: a handler-typed RouterDependencies field left nil in
-// newRouteSecurityRouter silently removes its whole route group from every
-// registry-driven test in this file. Reflect over the struct so adding a new
-// handler dep fails HERE (loudly, with the field name) instead of quietly
-// shrinking the audited surface.
 func TestRouteSecurityRouterWiresEveryHandlerDependency(t *testing.T) {
 	deps, _ := routeSecurityRouterDependencies(t)
 	value := reflect.ValueOf(deps)
@@ -971,21 +883,25 @@ func TestRouteSecurityRouterWiresEveryHandlerDependency(t *testing.T) {
 
 	var unwired []string
 	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		if field.Type.Kind() != reflect.Pointer {
-			continue
-		}
-		elem := field.Type.Elem()
-		// Only the handler-owned route groups: those are the ones guarded by a
-		// `deps.X != nil` check in the route registration functions.
-		if elem.PkgPath() != "github.com/alphabravocompany/astronomer-go/internal/handler" {
-			continue
-		}
-		if routeSecurityRouterOptionalDeps[field.Name] {
-			continue
-		}
-		if value.Field(i).IsNil() {
-			unwired = append(unwired, field.Name)
+		groupType := typ.Field(i)
+		groupValue := value.Field(i)
+		for j := 0; j < groupType.Type.NumField(); j++ {
+			field := groupType.Type.Field(j)
+			if field.Type.Kind() != reflect.Pointer {
+				continue
+			}
+			elem := field.Type.Elem()
+			// Only the handler-owned route groups: those are the ones guarded by
+			// a dependency nil check in the route registration functions.
+			if elem.PkgPath() != "github.com/alphabravocompany/astronomer-go/internal/handler" {
+				continue
+			}
+			if routeSecurityRouterOptionalDeps[field.Name] {
+				continue
+			}
+			if groupValue.Field(j).IsNil() {
+				unwired = append(unwired, groupType.Name+"."+field.Name)
+			}
 		}
 	}
 	if len(unwired) > 0 {
@@ -1014,18 +930,6 @@ var routeSecurityRouterOptionalDeps = map[string]bool{
 	// Not route-owning: caches, policy evaluators and sub-handlers reached
 	// through another dep.
 	"SettingsCache": true,
-	// Remaining unmounted admin/platform surfaces. Wiring these is the next
-	// increment of the same cleanup; they are listed explicitly so the gap is
-	// visible rather than implied by a nil field.
-	"ComplianceBaselines":      true,
-	"EventStream":              true,
-	"License":                  true,
-	"Maintenance":              true,
-	"PlatformBaselineCoverage": true,
-	"PlatformDefaultTemplate":  true,
-	"PlatformHealth":           true,
-	"ReadAuditPolicies":        true,
-	"SSO":                      true,
 }
 
 // registerProtectedRoutes and the route modules it owns inherit JWT
@@ -1071,15 +975,8 @@ func TestExecAndLogsRejectQueryJWT(t *testing.T) {
 	clusterID := uuid.New()
 	hub := tunnel.NewHub(slog.Default())
 	authQueries := routeSecurityTokenAuthQuerier{user: sqlc.User{ID: userID, IsActive: true}}
-	execConsumer := tunnel.NewExecConsumer(hub, slog.Default())
-	execConsumer.SetAuth(jwtMgr, authQueries)
-	logsConsumer := tunnel.NewLogsConsumer(hub, slog.Default())
-	logsConsumer.SetAuth(jwtMgr, authQueries)
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:  jwtMgr,
-		Exec: execConsumer,
-		Logs: logsConsumer,
-	})
+	execConsumer, logsConsumer, _, _ := mustNewTestStreamSecurity(hub, jwtMgr, authQueries, nil, routeSecurityAdminBindings())
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr}, StreamingInternal: StreamingInternalDependencies{Exec: execConsumer, Logs: logsConsumer}})
 
 	cases := []struct {
 		name string
@@ -1116,17 +1013,8 @@ func TestDirectExecAndLogsStreamsAuditOpen(t *testing.T) {
 	clusterID := uuid.New()
 	audit := &routeSecurityAuditWriter{}
 	hub := tunnel.NewHub(slog.Default())
-	execConsumer := tunnel.NewExecConsumer(hub, slog.Default())
-	execConsumer.SetAuth(jwtMgr, nil)
-	execConsumer.SetAuditWriter(audit)
-	logsConsumer := tunnel.NewLogsConsumer(hub, slog.Default())
-	logsConsumer.SetAuth(jwtMgr, nil)
-	logsConsumer.SetAuditWriter(audit)
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:  jwtMgr,
-		Exec: execConsumer,
-		Logs: logsConsumer,
-	})
+	execConsumer, logsConsumer, _, _ := mustNewTestStreamSecurity(hub, jwtMgr, nil, audit, routeSecurityAdminBindings())
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr}, StreamingInternal: StreamingInternalDependencies{Exec: execConsumer, Logs: logsConsumer}})
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -1151,39 +1039,10 @@ func TestDirectExecAndLogsStreamsAuditOpen(t *testing.T) {
 	assertStreamAuditRow(t, findAuditRow(t, rows, "pod.logs.opened"), "pod.logs.opened", userID, clusterID, "default/example/app", "logs")
 }
 
-func TestRemotedialerPodDemoRouteDisabledInProduction(t *testing.T) {
-	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
-	userID := uuid.New()
-	token, err := jwtMgr.GenerateAccessToken(userID)
-	if err != nil {
-		t.Fatalf("generate token: %v", err)
-	}
-	clusterID := uuid.New()
-	router := NewRouter(&config.Config{Env: "production"}, RouterDependencies{
-		JWT:          jwtMgr,
-		RBACEngine:   rbac.NewEngine(),
-		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		RemoteServer: tunnel2.NewRemoteServer(slog.Default(), nil),
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/v2/pods/", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
-	}
-}
-
 func TestK8sProxyRequiresAuth(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/pods", nil)
 	rec := httptest.NewRecorder()
@@ -1201,12 +1060,7 @@ func TestK8sProxyMutationsRequireWritePermission(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 	clusterID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 
 	readReq := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/pods", nil)
 	readReq.Header.Set("Authorization", "Bearer "+token)
@@ -1287,12 +1141,7 @@ func TestK8sProxyUsesCanonicalResourceRBAC(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deniedRouter := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules},
-				Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-			})
+			deniedRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 			deniedReq := httptest.NewRequest(tt.method, tt.path, nil)
 			deniedReq.Header.Set("Authorization", "Bearer "+token)
 			deniedRec := httptest.NewRecorder()
@@ -1301,12 +1150,7 @@ func TestK8sProxyUsesCanonicalResourceRBAC(t *testing.T) {
 				t.Fatalf("denied status = %d, want %d; body=%s", deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
 			}
 
-			allowedRouter := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: tt.allowRules},
-				Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-			})
+			allowedRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.allowRules}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 			allowedReq := httptest.NewRequest(tt.method, tt.path, nil)
 			allowedReq.Header.Set("Authorization", "Bearer "+token)
 			allowedRec := httptest.NewRecorder()
@@ -1315,6 +1159,26 @@ func TestK8sProxyUsesCanonicalResourceRBAC(t *testing.T) {
 				t.Fatalf("allowed status = %d, want proxy handler %d; body=%s", allowedRec.Code, http.StatusServiceUnavailable, allowedRec.Body.String())
 			}
 		})
+	}
+}
+
+func TestK8sProxyRejectsEncodedResourceBeforeAuthorizationAndForwarding(t *testing.T) {
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	token, err := jwtMgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clusterID := uuid.New()
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
+
+	req := httptest.NewRequest(http.MethodGet,
+		"/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/namespaces/default/%73ecrets/db-password", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("encoded Secret path status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
 
@@ -1327,12 +1191,7 @@ func TestK8sProxySecretReadsRequireSecretsRBACAndAudit(t *testing.T) {
 	}
 	clusterID := uuid.New()
 
-	podListRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourcePods, rbac.VerbList)},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	podListRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourcePods, rbac.VerbList)}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 	podReq := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/pods", nil)
 	podReq.Header.Set("Authorization", "Bearer "+token)
 	podRec := httptest.NewRecorder()
@@ -1341,12 +1200,7 @@ func TestK8sProxySecretReadsRequireSecretsRBACAndAudit(t *testing.T) {
 		t.Fatalf("pod list status = %d, want proxy handler %d; body=%s", podRec.Code, http.StatusServiceUnavailable, podRec.Body.String())
 	}
 
-	clusterReadRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	clusterReadRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 	secretReq := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/namespaces/default/secrets/db-password", nil)
 	secretReq.Header.Set("Authorization", "Bearer "+token)
 	secretRec := httptest.NewRecorder()
@@ -1356,13 +1210,7 @@ func TestK8sProxySecretReadsRequireSecretsRBACAndAudit(t *testing.T) {
 	}
 
 	secretReadAudit := &routeSecurityAuditWriter{}
-	secretReadRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSecrets, rbac.VerbRead)},
-		AuditWriter: secretReadAudit,
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	secretReadRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSecrets, rbac.VerbRead)}, AuditWriter: secretReadAudit}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 	namedReq := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/namespaces/default/secrets/db-password", nil)
 	namedReq.Header.Set("Authorization", "Bearer "+token)
 	namedRec := httptest.NewRecorder()
@@ -1396,12 +1244,7 @@ func TestK8sProxySecretReadsRequireSecretsRBACAndAudit(t *testing.T) {
 		t.Fatalf("secret list with read-only status = %d, want %d; body=%s", listRec.Code, http.StatusForbidden, listRec.Body.String())
 	}
 
-	secretListRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSecrets, rbac.VerbList)},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	secretListRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSecrets, rbac.VerbList)}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 	allowedListReq := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/namespaces/default/secrets", nil)
 	allowedListReq.Header.Set("Authorization", "Bearer "+token)
 	allowedListRec := httptest.NewRecorder()
@@ -1410,12 +1253,7 @@ func TestK8sProxySecretReadsRequireSecretsRBACAndAudit(t *testing.T) {
 		t.Fatalf("secret list status = %d, want proxy handler %d; body=%s", allowedListRec.Code, http.StatusServiceUnavailable, allowedListRec.Body.String())
 	}
 
-	secretWatchRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSecrets, rbac.VerbList)},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	secretWatchRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSecrets, rbac.VerbList)}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 	watchReq := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/namespaces/default/secrets?watch=true", nil)
 	watchReq.Header.Set("Authorization", "Bearer "+token)
 	watchRec := httptest.NewRecorder()
@@ -1436,12 +1274,7 @@ func TestGenericSecretResourcesRequireSecretsListAndAudit(t *testing.T) {
 	resourceHandler := handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{})
 	path := "/api/v1/clusters/" + clusterID.String() + "/resources/generic/secrets/?namespace=default"
 
-	clusterReadRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)},
-		Resources:   resourceHandler,
-	})
+	clusterReadRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)}}, ClusterResources: ClusterResourceDependencies{Resources: resourceHandler}})
 	deniedReq := httptest.NewRequest(http.MethodGet, path, nil)
 	deniedReq.Header.Set("Authorization", "Bearer "+token)
 	deniedRec := httptest.NewRecorder()
@@ -1451,13 +1284,7 @@ func TestGenericSecretResourcesRequireSecretsListAndAudit(t *testing.T) {
 	}
 
 	audit := &routeSecurityAuditWriter{}
-	secretListRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSecrets, rbac.VerbList)},
-		AuditWriter: audit,
-		Resources:   resourceHandler,
-	})
+	secretListRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceSecrets, rbac.VerbList)}, AuditWriter: audit}, ClusterResources: ClusterResourceDependencies{Resources: resourceHandler}})
 	allowedReq := httptest.NewRequest(http.MethodGet, path, nil)
 	allowedReq.Header.Set("Authorization", "Bearer "+token)
 	allowedRec := httptest.NewRecorder()
@@ -1495,12 +1322,7 @@ func TestResourcesGroupVersionKindRouteDeleted(t *testing.T) {
 	}
 	clusterID := uuid.New()
 
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)},
-		Resources:   handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead)}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{})}})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/resources/core/v1/secrets/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
@@ -1554,12 +1376,7 @@ func TestGenericResourceListsRequireCanonicalRBAC(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deniedRouter := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules},
-				Resources:   resourceHandler,
-			})
+			deniedRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules}}, ClusterResources: ClusterResourceDependencies{Resources: resourceHandler}})
 			deniedReq := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			deniedReq.Header.Set("Authorization", "Bearer "+token)
 			deniedRec := httptest.NewRecorder()
@@ -1568,12 +1385,7 @@ func TestGenericResourceListsRequireCanonicalRBAC(t *testing.T) {
 				t.Fatalf("denied status = %d, want %d; body=%s", deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
 			}
 
-			allowedRouter := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(tt.allowResource, rbac.VerbList)},
-				Resources:   resourceHandler,
-			})
+			allowedRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(tt.allowResource, rbac.VerbList)}}, ClusterResources: ClusterResourceDependencies{Resources: resourceHandler}})
 			allowedReq := httptest.NewRequest(http.MethodGet, tt.path, nil)
 			allowedReq.Header.Set("Authorization", "Bearer "+token)
 			allowedRec := httptest.NewRecorder()
@@ -1613,18 +1425,14 @@ func TestNamespaceScopedBindingsAreEnforcedOnGenericResourceRoutes(t *testing.T)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:        jwtMgr,
-				RBACEngine: rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: []rbac.RoleBinding{{
-					ClusterID: clusterID.String(),
-					Namespace: "payments",
-					RoleRules: []rbac.Rule{{
-						Resource: string(tt.resource),
-						Verbs:    []string{string(rbac.VerbList)},
-					}},
-				}}},
-				Resources: handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
+			router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: []rbac.RoleBinding{{
+				ClusterID: clusterID.String(),
+				Namespace: "payments",
+				RoleRules: []rbac.Rule{{
+					Resource: string(tt.resource),
+					Verbs:    []string{string(rbac.VerbList)},
+				}},
+			}}}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{})},
 			})
 
 			allowedReq := httptest.NewRequest(http.MethodGet, tt.path+"?namespace=payments", nil)
@@ -1699,12 +1507,7 @@ func TestNamedResourceRoutesRequireCanonicalRBAC(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deniedRouter := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules},
-				Resources:   handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
-			})
+			deniedRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{})}})
 			deniedReq := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			deniedReq.Header.Set("Authorization", "Bearer "+token)
 			deniedReq.Header.Set("Idempotency-Key", "route-rbac-test")
@@ -1714,12 +1517,7 @@ func TestNamedResourceRoutesRequireCanonicalRBAC(t *testing.T) {
 				t.Fatalf("denied status = %d, want %d; body=%s", deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
 			}
 
-			allowedRouter := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: tt.allowRules},
-				Resources:   handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{}),
-			})
+			allowedRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.allowRules}}, ClusterResources: ClusterResourceDependencies{Resources: handler.NewResourceHandlerWithRequester(routeSecurityGenericResourceRequester{})}})
 			allowedReq := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			allowedReq.Header.Set("Authorization", "Bearer "+token)
 			allowedReq.Header.Set("Idempotency-Key", "route-rbac-test")
@@ -1801,13 +1599,7 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deniedRouter := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules},
-				Resources:   newNodeHandler(),
-				Workloads:   handler.NewWorkloadHandlerWithRequester(routeSecurityGenericResourceRequester{}),
-			})
+			deniedRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.deniedRules}}, ClusterResources: ClusterResourceDependencies{Resources: newNodeHandler(), Workloads: handler.NewWorkloadHandlerWithRequester(routeSecurityGenericResourceRequester{})}})
 			deniedReq := httptest.NewRequest(tt.method, tt.path, nil)
 			deniedReq.Header.Set("Authorization", "Bearer "+token)
 			deniedRec := httptest.NewRecorder()
@@ -1816,13 +1608,7 @@ func TestNodeRoutesRequireNodeRBAC(t *testing.T) {
 				t.Fatalf("denied status = %d, want %d; body=%s", deniedRec.Code, http.StatusForbidden, deniedRec.Body.String())
 			}
 
-			allowedRouter := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: tt.allowRules},
-				Resources:   newNodeHandler(),
-				Workloads:   handler.NewWorkloadHandlerWithRequester(routeSecurityGenericResourceRequester{}),
-			})
+			allowedRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.allowRules}}, ClusterResources: ClusterResourceDependencies{Resources: newNodeHandler(), Workloads: handler.NewWorkloadHandlerWithRequester(routeSecurityGenericResourceRequester{})}})
 			body := strings.NewReader("")
 			if tt.name == "drain requires nodes manage" {
 				body = strings.NewReader(`{}`)
@@ -1871,13 +1657,7 @@ func TestK8sProxyMutationsAreAudited(t *testing.T) {
 	}
 	clusterID := uuid.New()
 	audit := &routeSecurityAuditWriter{}
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		AuditWriter: audit,
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}, AuditWriter: audit}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/clusters/"+clusterID.String()+"/k8s/api/v1/namespaces/default/pods/example", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -1920,12 +1700,7 @@ func TestK8sProxyPodExecRequiresPodExecPermission(t *testing.T) {
 	}
 	clusterID := uuid.New()
 
-	readOnlyRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	readOnlyRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 	execPath := "/api/v1/clusters/" + clusterID.String() + "/k8s/api/v1/namespaces/default/pods/example/exec"
 	readOnlyReq := httptest.NewRequest(http.MethodPost, execPath, nil)
 	readOnlyReq.Header.Set("Authorization", "Bearer "+token)
@@ -1935,12 +1710,7 @@ func TestK8sProxyPodExecRequiresPodExecPermission(t *testing.T) {
 		t.Fatalf("read-only exec status = %d, want %d; body=%s", readOnlyRec.Code, http.StatusForbidden, readOnlyRec.Body.String())
 	}
 
-	execRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityPodExecBindings()},
-		Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-	})
+	execRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityPodExecBindings()}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 	execReq := httptest.NewRequest(http.MethodPost, execPath, nil)
 	execReq.Header.Set("Authorization", "Bearer "+token)
 	execRec := httptest.NewRecorder()
@@ -2098,12 +1868,7 @@ func TestK8sProxySubresourceRequiresProxyVerb(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(&config.Config{}, RouterDependencies{
-				JWT:         jwtMgr,
-				RBACEngine:  rbac.NewEngine(),
-				RBACQueries: routeSecurityRBACQuerier{bindings: tt.bindings},
-				Proxy:       tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default()),
-			})
+			router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.bindings}}, StreamingInternal: StreamingInternalDependencies{Proxy: tunnel.NewProxyHandler(tunnel.NewHub(slog.Default()), slog.Default())}})
 			req := httptest.NewRequest(tt.method, "/api/v1/clusters/"+clusterID.String()+"/k8s"+tt.k8sPath, nil)
 			req.Header.Set("Authorization", "Bearer "+token)
 			rec := httptest.NewRecorder()
@@ -2118,12 +1883,7 @@ func TestK8sProxySubresourceRequiresProxyVerb(t *testing.T) {
 func TestServiceProxyRequiresAuth(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:          jwtMgr,
-		RBACEngine:   rbac.NewEngine(),
-		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ServiceProxy: routeSecurityServiceProxy(),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/grafana:3000/", nil)
 	rec := httptest.NewRecorder()
@@ -2133,7 +1893,7 @@ func TestServiceProxyRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestServiceProxyMutationsRequireClusterUpdate(t *testing.T) {
+func TestServiceProxyRequiresServicesProxy(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
@@ -2141,19 +1901,14 @@ func TestServiceProxyMutationsRequireClusterUpdate(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 	clusterID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:          jwtMgr,
-		RBACEngine:   rbac.NewEngine(),
-		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityReadOnlyBindings()},
-		ServiceProxy: routeSecurityServiceProxy(),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceClusters, rbac.VerbRead, rbac.VerbUpdate)}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
 
 	readReq := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/grafana:3000/", nil)
 	readReq.Header.Set("Authorization", "Bearer "+token)
 	readRec := httptest.NewRecorder()
 	router.ServeHTTP(readRec, readReq)
-	if readRec.Code != http.StatusNoContent {
-		t.Fatalf("read status = %d, want %d; body=%s", readRec.Code, http.StatusNoContent, readRec.Body.String())
+	if readRec.Code != http.StatusForbidden {
+		t.Fatalf("read status = %d, want %d; body=%s", readRec.Code, http.StatusForbidden, readRec.Body.String())
 	}
 
 	writeReq := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/grafana:3000/", nil)
@@ -2165,7 +1920,7 @@ func TestServiceProxyMutationsRequireClusterUpdate(t *testing.T) {
 	}
 }
 
-func TestServiceProxyAllowsClusterUpdateMutation(t *testing.T) {
+func TestServiceProxyAllowsServicesProxy(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	userID := uuid.New()
 	token, err := jwtMgr.GenerateAccessToken(userID)
@@ -2173,12 +1928,7 @@ func TestServiceProxyAllowsClusterUpdateMutation(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 	clusterID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:          jwtMgr,
-		RBACEngine:   rbac.NewEngine(),
-		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ServiceProxy: routeSecurityServiceProxy(),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityBindings(rbac.ResourceServices, rbac.VerbProxy)}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/grafana:3000/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -2189,19 +1939,55 @@ func TestServiceProxyAllowsClusterUpdateMutation(t *testing.T) {
 	}
 }
 
+func TestControlPlaneSnapshotTriggerRequiresEveryPrivilegedGrant(t *testing.T) {
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	token, err := jwtMgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clusterID := uuid.New()
+	rules := func(pairs ...rbac.Rule) []rbac.RoleBinding {
+		return []rbac.RoleBinding{{RoleRules: pairs}}
+	}
+	rule := func(resource rbac.Resource, verbs ...rbac.Verb) rbac.Rule {
+		values := make([]string, 0, len(verbs))
+		for _, verb := range verbs {
+			values = append(values, string(verb))
+		}
+		return rbac.Rule{Resource: string(resource), Verbs: values}
+	}
+	tests := []struct {
+		name     string
+		bindings []rbac.RoleBinding
+		want     int
+	}{
+		{"clusters update alone denied", routeSecurityBindings(rbac.ResourceClusters, rbac.VerbUpdate), http.StatusForbidden},
+		{"missing pod exec denied", rules(rule(rbac.ResourceClusters, rbac.VerbUpdate), rule(rbac.ResourceNodes, rbac.VerbManage)), http.StatusForbidden},
+		{"missing node manage denied", rules(rule(rbac.ResourceClusters, rbac.VerbUpdate), rule(rbac.ResourcePods, rbac.VerbExec)), http.StatusForbidden},
+		{"all grants reach handler", rules(rule(rbac.ResourceClusters, rbac.VerbUpdate), rule(rbac.ResourceNodes, rbac.VerbManage), rule(rbac.ResourcePods, rbac.VerbExec)), http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: tt.bindings}}, ClusterResources: ClusterResourceDependencies{ControlPlaneSnapshots: handler.NewControlPlaneSnapshotHandler(nil)}})
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/control-plane-snapshots/", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tt.want, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestServiceProxyAPITokenMutationsRequireWriteScope(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
 	clusterID := uuid.New()
 	userID := uuid.New()
-	rawToken := "astro_route_security_service_proxy_scope"
+	rawToken := "astro_route_security_service_proxy_read_scope"
 
-	readOnlyRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:          jwtMgr,
-		AuthQueries:  routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["read"]`)),
-		RBACEngine:   rbac.NewEngine(),
-		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ServiceProxy: routeSecurityServiceProxy(),
-	})
+	readOnlyRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["read"]`)), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
 	readOnlyReq := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/grafana:3000/", nil)
 	readOnlyReq.Header.Set("Authorization", "Bearer "+rawToken)
 	readOnlyRec := httptest.NewRecorder()
@@ -2210,15 +1996,10 @@ func TestServiceProxyAPITokenMutationsRequireWriteScope(t *testing.T) {
 		t.Fatalf("read-only token status = %d, want %d; body=%s", readOnlyRec.Code, http.StatusForbidden, readOnlyRec.Body.String())
 	}
 
-	writeRouter := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:          jwtMgr,
-		AuthQueries:  routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["clusters:write"]`)),
-		RBACEngine:   rbac.NewEngine(),
-		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ServiceProxy: routeSecurityServiceProxy(),
-	})
+	writeToken := "astro_route_security_service_proxy_write_scope"
+	writeRouter := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(writeToken, userID, json.RawMessage(`["clusters:write"]`)), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
 	writeReq := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/grafana:3000/", nil)
-	writeReq.Header.Set("Authorization", "Bearer "+rawToken)
+	writeReq.Header.Set("Authorization", "Bearer "+writeToken)
 	writeRec := httptest.NewRecorder()
 	writeRouter.ServeHTTP(writeRec, writeReq)
 	if writeRec.Code != http.StatusNoContent {
@@ -2237,13 +2018,7 @@ func TestApiserverAuditIngestRequiresWriteScope(t *testing.T) {
 	// clears the group-level RequireWriteScopeForMutations("") backstop, so
 	// only the per-route clusters:write pin can reject it on the audit-ingest
 	// POST — this isolates the fail-open this fix closes.
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:            jwtMgr,
-		AuthQueries:    routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["projects:write"]`)),
-		RBACEngine:     rbac.NewEngine(),
-		RBACQueries:    routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ApiserverAudit: handler.NewApiserverAuditHandler(nil),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["projects:write"]`)), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ApiserverAudit: handler.NewApiserverAuditHandler(nil)}})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/clusters/"+clusterID.String()+"/apiserver-audit/", nil)
 	req.Header.Set("Authorization", "Bearer "+rawToken)
 	rec := httptest.NewRecorder()
@@ -2263,15 +2038,10 @@ func TestMonitoringMutationsRequireWriteScope(t *testing.T) {
 	userID := uuid.New()
 	rawToken := "astro_route_security_monitoring_scope"
 
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:         jwtMgr,
-		AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["projects:write"]`)),
-		RBACEngine:  rbac.NewEngine(),
-		RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		// The /settings group (and therefore /settings/monitoring) is only
-		// mounted when Resources is wired.
-		Resources:  handler.NewResourceHandler(),
-		Monitoring: handler.NewMonitoringHandler(),
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, AuthQueries: routeSecurityAPITokenQuerier(rawToken, userID, json.RawMessage(`["projects:write"]`)), RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources:
+	// The /settings group (and therefore /settings/monitoring) is only
+	// mounted when Resources is wired.
+	ClusterResourceDependencies{Resources: handler.NewResourceHandler(), Monitoring: handler.NewMonitoringHandler()},
 	})
 
 	for _, tc := range []struct {
@@ -2299,12 +2069,7 @@ func TestServiceProxyRejectsTargetsOutsideAllowlist(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 	clusterID := uuid.New()
-	router := NewRouter(&config.Config{}, RouterDependencies{
-		JWT:          jwtMgr,
-		RBACEngine:   rbac.NewEngine(),
-		RBACQueries:  routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()},
-		ServiceProxy: routeSecurityServiceProxy(),
-	})
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: routeSecurityAdminBindings()}}, ClusterResources: ClusterResourceDependencies{ServiceProxy: routeSecurityServiceProxy()}})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID.String()+"/proxy/service/observability/prometheus:9090/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -2339,6 +2104,24 @@ func routeSecurityBindings(resource rbac.Resource, verbs ...rbac.Verb) []rbac.Ro
 
 func routeSecurityUserBindings(verbs ...rbac.Verb) []rbac.RoleBinding {
 	return routeSecurityBindings(rbac.ResourceUsers, verbs...)
+}
+
+func TestPrincipalDiscoveryRequiresBothIdentityPermissions(t *testing.T) {
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	token, err := jwtMgr.GenerateAccessToken(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings := []rbac.RoleBinding{{RoleRules: []rbac.Rule{{Resource: string(rbac.ResourceRBAC), Verbs: []string{string(rbac.VerbRead)}}}}}
+	router := NewRouter(&config.Config{}, RouterDependencies{CoreAuth: CoreAuthDependencies{JWT: jwtMgr, RBACEngine: rbac.NewEngine(), RBACQueries: routeSecurityRBACQuerier{bindings: bindings}, Principals: handler.NewPrincipalHandler(nil, nil)}})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/rbac/principals/?q=alice", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 without users:read; body=%s", recorder.Code, recorder.Body.String())
+	}
 }
 
 func routeSecurityPodExecBindings() []rbac.RoleBinding {
@@ -2395,10 +2178,6 @@ func routeRequiresBrowserCSRF(entry securitySensitiveRoute) bool {
 
 func routeRequiresProxyInventory(pattern string) bool {
 	switch {
-	case pattern == "/api/v1/connect/{cluster_id}":
-		return true
-	case strings.Contains(pattern, "/v2/pods"):
-		return true
 	case strings.Contains(pattern, "/k8s/"):
 		return true
 	case strings.Contains(pattern, "/proxy/service/"):
@@ -2662,7 +2441,6 @@ func routeHandlerOwner(pattern string) string {
 		{"/readyz", "internal/server readiness handler"},
 		{"/api/v1/openapi.yaml", "handler.DocsHandler"},
 		{"/api/v1/docs", "handler.DocsHandler"},
-		{"/api/v1/connect", "internal/tunnel2.RemoteServer"},
 		{"/api/v1/ws/clusters", "handler.KubectlShellHandler"},
 		{"/api/v1/ws/exec", "internal/tunnel.ExecConsumer"},
 		{"/api/v1/ws/logs", "internal/tunnel.LogsConsumer"},
@@ -2732,7 +2510,7 @@ func routeHandlerOwner(pattern string) string {
 		{"/api/v1/settings/tokens", "handler.AuthHandler"},
 		{"/api/v1/settings", "handler.ResourceHandler / settings handlers"},
 		{"/api/v1/streams/tickets", "handler.StreamTicketHandler"},
-		{"/api/v1/support-bundle", "handler.SupportBundleHandler"},
+		{"/api/v1/support-bundles", "handler.SupportBundleHandler"},
 		{"/api/v1/compliance/posture", "handler.CompliancePostureHandler"},
 		{"/api/v1/license", "handler.LicenseHandler"},
 		{"/api/v1/users", "handler.ResourceHandler"},
@@ -2758,8 +2536,6 @@ func routeSurface(pattern string) string {
 		return "internal machine-to-machine tunnel surface"
 	case strings.HasPrefix(pattern, "/internal/tunnel/"):
 		return "server-to-server tunnel forwarding surface"
-	case strings.HasPrefix(pattern, "/api/v1/connect"):
-		return "agent tunnel connection"
 	case strings.HasPrefix(pattern, "/api/v1/ws/"):
 		return "browser stream endpoint"
 	case strings.HasPrefix(pattern, "/api/v1/auth/"):
@@ -2789,8 +2565,6 @@ func routeAuthPosture(pattern string) string {
 		return "public read endpoint"
 	case pattern == "/readyz":
 		return "public readiness endpoint; response must avoid secrets"
-	case strings.HasPrefix(pattern, "/api/v1/connect"):
-		return "agent bearer token"
 	case strings.HasPrefix(pattern, "/api/v1/internal/"):
 		return "machine-to-machine PSK or cluster-scoped proxy token"
 	case strings.HasPrefix(pattern, "/internal/tunnel/"):
@@ -2810,8 +2584,6 @@ func routeRBACPosture(method string, pattern string) string {
 	switch {
 	case pattern == "/health" || pattern == "/readyz" || strings.HasPrefix(pattern, "/helm-repo") || pattern == "/api/v1/openapi.yaml" || strings.HasPrefix(pattern, "/api/v1/docs") || isPublicAuthFlow(pattern):
 		return "not applicable: public endpoint"
-	case strings.HasPrefix(pattern, "/api/v1/connect"):
-		return "not user RBAC: valid cluster agent token identifies the tunnel"
 	case strings.HasPrefix(pattern, "/api/v1/internal/"):
 		return "not user RBAC: internal shared-secret route"
 	case strings.HasPrefix(pattern, "/internal/tunnel/"):
@@ -2835,7 +2607,7 @@ func routeCSRFPosture(method string, pattern string) string {
 	switch {
 	case !isMutatingHTTPMethod(method):
 		return "not applicable: safe HTTP method"
-	case strings.HasPrefix(pattern, "/api/v1/internal/") || strings.HasPrefix(pattern, "/api/v1/connect"):
+	case strings.HasPrefix(pattern, "/api/v1/internal/"):
 		return "not applicable: machine-to-machine route"
 	case strings.HasPrefix(pattern, "/internal/tunnel/"):
 		return "not applicable: server-to-server shared-secret route"
@@ -2854,8 +2626,6 @@ func routeAuditPosture(method string, pattern string) string {
 		return "explicit stream-open audit for pod exec"
 	case strings.HasPrefix(pattern, "/api/v1/ws/logs"):
 		return "explicit stream-open audit for pod logs"
-	case strings.HasPrefix(pattern, "/api/v1/connect"):
-		return "agent connection lifecycle metrics/events"
 	case isMutatingHTTPMethod(method):
 		return "mutating request audit middleware or explicit handler audit"
 	case strings.HasPrefix(pattern, "/api/v1/audit") || strings.Contains(pattern, "audit"):

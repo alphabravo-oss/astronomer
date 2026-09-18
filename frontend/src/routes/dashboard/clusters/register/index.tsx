@@ -1,37 +1,34 @@
-import { createFileRoute } from "@tanstack/react-router";
-// Wizard page 1 — form. Replaces the legacy <RegisterClusterModal />.
-// On submit:
-//   1. POST /clusters/   (creates the row at phase=created)
-//   2. PUT  /clusters/{id}/registration/options/ (records install_baseline choice)
-//   3. router.push(/dashboard/clusters/register/{id}/connect)
-//
-// The "Install Platform Baseline" checkbox defaults OFF — matches the
-// Rancher posture called out in the sprint plan (operators must
-// explicitly opt in to installing tools).
-
-import { useRouter } from "@/lib/navigation";
+import { useState } from "react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toastError } from "@/lib/toast";
 import { Server, Info, AlertTriangle } from "lucide-react";
-import { createCluster } from "@/lib/api";
-import { setRegistrationOptions } from "@/lib/api";
-import { useClusters } from "@/lib/hooks";
+import { createCluster, updateCluster } from "@/lib/api/clusters";
+import { setRegistrationOptions } from "@/lib/api/cluster-registration";
+import { useClusterSearch } from "@/lib/hooks/cluster-search";
 import { useAppForm, useStore } from "@/lib/form";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { FormShell } from "@/components/ui/form-shell";
 import { ActionButton } from "@/components/ui/action-button";
+import { RegistrationConnectStep } from "@/components/clusters/registration-connect-step";
+import {
+  parseRegistrationSearch,
+  registrationSearch,
+} from "@/components/clusters/registration-flow";
+import {
+  REGISTRATION_STEPS,
+  WizardStepper,
+} from "@/components/ui/wizard-stepper";
 import type { ClusterEnvironment } from "@/types";
 
 function RegisterClusterWizardPage() {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const { clusterId } = Route.useSearch();
+  const [draftClusterId, setDraftClusterId] = useState<string | null>(null);
 
-  // Live name-availability check: cluster names are unique, so warn before
-  // submit rather than letting the create POST come back 409.
-  const { data: clustersData } = useClusters({ pageSize: 1000 });
-  const existingNames = new Set(
-    (clustersData?.data ?? []).map((c) => c.name.toLowerCase()),
-  );
-
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
     defaultValues: {
       name: "",
@@ -43,26 +40,65 @@ function RegisterClusterWizardPage() {
       privilegeProfile: "viewer",
       apiServerUrl: "",
       caCertificate: "",
+      agentRequestCPU: "",
+      agentRequestMemory: "",
+      agentLimitCPU: "",
+      agentLimitMemory: "",
+      agentHTTPSProxy: "",
+      agentHTTPProxy: "",
+      agentNoProxy: "",
     },
     onSubmit: async ({ value }) => {
+      setSubmissionError(null);
       // Old guard (`if (!form.name || nameTaken) return`) — the submit button's
       // disabled gate below is the same condition; re-checked here 1:1.
-      if (!value.name || existingNames.has(value.name)) return;
+      if (!value.name || nameTaken) return;
       try {
-        const cluster = await createCluster({
-          name: value.name,
-          displayName: value.displayName || value.name,
-          description: value.description || undefined,
-          environment: value.environment,
-          // distribution is auto-detected by the agent on connect (node labels /
-          // providerID) and persisted via heartbeat — no manual choice needed.
-          region: value.region || undefined,
-          annotations: {
-            "astronomer.io/agent-privilege-profile": value.privilegeProfile,
+        const annotations = {
+          "astronomer.io/agent-privilege-profile": value.privilegeProfile,
+        };
+        const agentOverrides = {
+          resources: {
+            requests: {
+              cpu: value.agentRequestCPU || undefined,
+              memory: value.agentRequestMemory || undefined,
+            },
+            limits: {
+              cpu: value.agentLimitCPU || undefined,
+              memory: value.agentLimitMemory || undefined,
+            },
           },
-          apiServerUrl: value.apiServerUrl || undefined,
-          caCertificate: value.caCertificate || undefined,
-        });
+          proxy: {
+            https_proxy: value.agentHTTPSProxy || undefined,
+            http_proxy: value.agentHTTPProxy || undefined,
+            no_proxy: value.agentNoProxy || undefined,
+          },
+        };
+        const cluster = draftClusterId
+          ? await updateCluster(draftClusterId, {
+              display_name: value.displayName || value.name,
+              description: value.description || undefined,
+              environment: value.environment,
+              region: value.region || undefined,
+              annotations,
+              api_server_url: value.apiServerUrl || undefined,
+              ca_certificate: value.caCertificate || undefined,
+              agent_overrides: agentOverrides,
+            })
+          : await createCluster({
+              name: value.name,
+              displayName: value.displayName || value.name,
+              description: value.description || undefined,
+              environment: value.environment,
+              // Distribution is detected from node labels/provider IDs after
+              // the agent connects; it is never guessed during adoption.
+              region: value.region || undefined,
+              annotations,
+              apiServerUrl: value.apiServerUrl || undefined,
+              caCertificate: value.caCertificate || undefined,
+              agentOverrides,
+            });
+        setDraftClusterId(cluster.id);
         // Record the operator's choice. The backend keeps install_baseline
         // NULL until this call so it can distinguish "hasn't decided" from
         // "opted out". A viewer agent is read-only and physically can't deploy
@@ -71,8 +107,15 @@ function RegisterClusterWizardPage() {
         const installBaseline =
           value.privilegeProfile === "viewer" ? false : value.installBaseline;
         await setRegistrationOptions(cluster.id, installBaseline);
-        router.push(`/dashboard/clusters/register/${cluster.id}/connect`);
+        void navigate({
+          to: "/dashboard/clusters/register",
+          search: registrationSearch(cluster.id),
+          replace: true,
+        });
       } catch (err) {
+        setSubmissionError(
+          err instanceof Error ? err.message : "The request failed. Try again.",
+        );
         const msg = err instanceof Error ? err.message : "Unknown error";
         toastError(`Failed to register cluster: ${msg}`);
       }
@@ -80,13 +123,44 @@ function RegisterClusterWizardPage() {
   });
 
   const name = useStore(form.store, (s) => s.values.name);
+  // Name availability is a bounded server search; the create endpoint remains
+  // the final uniqueness authority if another registration races this check.
+  const [debouncedName] = useDebouncedValue(name.trim(), { wait: 250 });
+  const nameMatches = useClusterSearch(debouncedName, debouncedName.length > 0);
   const submitting = useStore(form.store, (s) => s.isSubmitting);
   const privilegeProfile = useStore(
     form.store,
     (s) => s.values.privilegeProfile,
   );
-  const nameTaken = name.length > 0 && existingNames.has(name);
+  const nameTaken =
+    name.length > 0 &&
+    (nameMatches.data?.pages ?? []).some((page) =>
+      page.data.some(
+        (cluster) =>
+          cluster.id !== draftClusterId &&
+          cluster.name.toLowerCase() === name.trim().toLowerCase(),
+      ),
+    );
   const isViewer = privilegeProfile === "viewer";
+
+  if (clusterId) {
+    return (
+      <RegistrationConnectStep
+        clusterId={clusterId}
+        onBack={() => {
+          if (draftClusterId === clusterId) {
+            void navigate({
+              to: "/dashboard/clusters/register",
+              search: registrationSearch(),
+              replace: true,
+            });
+          } else {
+            void navigate({ to: "/dashboard/clusters" });
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div>
@@ -99,9 +173,6 @@ function RegisterClusterWizardPage() {
             <h1 className="text-2xl font-semibold text-foreground">
               Register an existing cluster
             </h1>
-            <p className="text-sm text-muted-foreground">
-              Step 1 of 3 — Cluster details
-            </p>
           </div>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -110,19 +181,28 @@ function RegisterClusterWizardPage() {
           infrastructure, or add nodes — you install a lightweight agent and it
           adopts the cluster as-is.
         </p>
+        <WizardStepper
+          steps={REGISTRATION_STEPS}
+          currentStep={1}
+          className="mt-5"
+        />
       </div>
 
-      <form
+      <FormShell
         onSubmit={(e) => {
           e.preventDefault();
           void form.handleSubmit();
         }}
         className="space-y-5"
       >
+        <form.AppForm>
+          <form.FormErrorSummary serverError={submissionError} />
+        </form.AppForm>
         <Field label="Cluster name" required>
           <form.Field name="name">
             {(field) => (
               <Input
+                name={field.name}
                 type="text"
                 value={field.state.value}
                 onChange={(e) =>
@@ -149,6 +229,7 @@ function RegisterClusterWizardPage() {
           <form.Field name="displayName">
             {(field) => (
               <Input
+                name={field.name}
                 type="text"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -163,6 +244,7 @@ function RegisterClusterWizardPage() {
           <form.Field name="description">
             {(field) => (
               <Textarea
+                name={field.name}
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
@@ -179,6 +261,7 @@ function RegisterClusterWizardPage() {
             <form.Field name="environment">
               {(field) => (
                 <Select
+                  name={field.name}
                   aria-label="Environment"
                   value={field.state.value}
                   onChange={(e) =>
@@ -198,6 +281,7 @@ function RegisterClusterWizardPage() {
             <form.Field name="region">
               {(field) => (
                 <Input
+                  name={field.name}
                   type="text"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -218,6 +302,7 @@ function RegisterClusterWizardPage() {
           <form.Field name="apiServerUrl">
             {(field) => (
               <Input
+                name={field.name}
                 type="url"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -237,6 +322,7 @@ function RegisterClusterWizardPage() {
           <form.Field name="caCertificate">
             {(field) => (
               <Textarea
+                name={field.name}
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
@@ -248,10 +334,78 @@ function RegisterClusterWizardPage() {
           </form.Field>
         </Field>
 
+        <section className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+          <div>
+            <h2 className="text-sm font-medium text-foreground">
+              Agent runtime
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Optional Kubernetes resource quantities and egress proxy settings.
+              Defaults are applied when fields are empty.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {(
+              [
+                ["agentRequestCPU", "Request CPU", "100m"],
+                ["agentRequestMemory", "Request memory", "128Mi"],
+                ["agentLimitCPU", "Limit CPU", "500m"],
+                ["agentLimitMemory", "Limit memory", "512Mi"],
+              ] as const
+            ).map(([name, label, placeholder]) => (
+              <Field key={name} label={label}>
+                <form.Field name={name}>
+                  {(field) => (
+                    <Input
+                      name={field.name}
+                      value={field.state.value}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                      onBlur={field.handleBlur}
+                      placeholder={placeholder}
+                    />
+                  )}
+                </form.Field>
+              </Field>
+            ))}
+          </div>
+          <div className="space-y-3">
+            {(
+              [
+                [
+                  "agentHTTPSProxy",
+                  "HTTPS proxy",
+                  "http://proxy.internal:3128",
+                ],
+                ["agentHTTPProxy", "HTTP proxy", "http://proxy.internal:3128"],
+                ["agentNoProxy", "NO_PROXY", ".svc,.cluster.local,10.0.0.0/8"],
+              ] as const
+            ).map(([name, label, placeholder]) => (
+              <Field key={name} label={`${label} (optional)`}>
+                <form.Field name={name}>
+                  {(field) => (
+                    <Input
+                      name={field.name}
+                      value={field.state.value}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                      onBlur={field.handleBlur}
+                      placeholder={placeholder}
+                    />
+                  )}
+                </form.Field>
+              </Field>
+            ))}
+          </div>
+        </section>
+
         <Field label="Agent privilege profile">
           <form.Field name="privilegeProfile">
             {(field) => (
               <Select
+                name={field.name}
                 aria-label="Agent privilege profile"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -310,7 +464,8 @@ function RegisterClusterWizardPage() {
         >
           <form.Field name="installBaseline">
             {(field) => (
-              <input
+              <Input
+                name={field.name}
                 type="checkbox"
                 // A viewer agent can't deploy — force unchecked and disabled so the
                 // read-only + install-baseline contradiction can't be submitted.
@@ -318,7 +473,7 @@ function RegisterClusterWizardPage() {
                 disabled={isViewer}
                 onChange={(e) => field.handleChange(e.target.checked)}
                 onBlur={field.handleBlur}
-                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-ring disabled:cursor-not-allowed"
+                className="mt-0.5 h-4 w-4 rounded-sm border-border text-primary focus:ring-ring disabled:cursor-not-allowed"
               />
             )}
           </form.Field>
@@ -351,7 +506,7 @@ function RegisterClusterWizardPage() {
         <div className="flex items-center justify-end gap-2 pt-2">
           <ActionButton
             type="button"
-            onClick={() => router.push("/dashboard/clusters")}
+            onClick={() => void navigate({ to: "/dashboard/clusters" })}
           >
             Cancel
           </ActionButton>
@@ -365,7 +520,7 @@ function RegisterClusterWizardPage() {
             Next: Get install command →
           </ActionButton>
         </div>
-      </form>
+      </FormShell>
     </div>
   );
 }
@@ -391,5 +546,6 @@ function Field({
 }
 
 export const Route = createFileRoute("/dashboard/clusters/register/")({
+  validateSearch: parseRegistrationSearch,
   component: RegisterClusterWizardPage,
 });

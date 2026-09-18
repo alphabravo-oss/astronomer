@@ -50,9 +50,11 @@ RETURNING *;
 -- gap in the admin view.
 INSERT INTO email_messages (
     to_address, cc_address, subject, template,
-    body_text, body_html, user_id, status, last_error
+    body_text, body_html, user_id, status, last_error, dedupe_key
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, sqlc.narg('dedupe_key'))
+ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO UPDATE
+SET dedupe_key = EXCLUDED.dedupe_key
 RETURNING *;
 
 -- name: ListQueuedEmails :many

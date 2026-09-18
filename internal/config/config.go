@@ -27,9 +27,33 @@ type Config struct {
 	DBMaxConnIdleMin       int   `mapstructure:"db_max_conn_idle_minutes"`
 	DBHealthCheckPeriodSec int   `mapstructure:"db_health_check_period_seconds"`
 
-	SecretKey string `mapstructure:"secret_key"`
-	Env       string `mapstructure:"env"`
-	Debug     bool   `mapstructure:"debug"`
+	SecretKey   string `mapstructure:"secret_key"`
+	JWTIssuer   string `mapstructure:"jwt_issuer"`
+	JWTAudience string `mapstructure:"jwt_audience"`
+	Env         string `mapstructure:"env"`
+	Debug       bool   `mapstructure:"debug"`
+
+	// ProcessIdentity and Kubernetes runtime metadata are injected by the
+	// deployment once and then passed explicitly through composition. Runtime
+	// packages must not consult process-global environment state themselves.
+	ProcessHostname        string `mapstructure:"hostname"`
+	PodIP                  string `mapstructure:"astronomer_pod_ip"`
+	PodNamespace           string `mapstructure:"pod_namespace"`
+	ReleaseName            string `mapstructure:"release_name"`
+	ChartVersion           string `mapstructure:"chart_version"`
+	ServerImage            string `mapstructure:"astronomer_server_image"`
+	HelmDriver             string `mapstructure:"helm_driver"`
+	HelmRegistryConfig     string `mapstructure:"helm_registry_config"`
+	HelmRepositoryConfig   string `mapstructure:"helm_repository_config"`
+	HelmRepositoryCache    string `mapstructure:"helm_repository_cache"`
+	HelmPluginsDirectory   string `mapstructure:"helm_plugins"`
+	TunnelEgressCIDRs      string `mapstructure:"astronomer_tunnel_egress_cidrs"`
+	RCAllowPrivateWebhooks bool   `mapstructure:"astronomer_rc_allow_private_webhooks"`
+
+	BootstrapAdminPassword            string `mapstructure:"astronomer_bootstrap_password"`
+	BootstrapAdminUsername            string `mapstructure:"astronomer_bootstrap_username"`
+	BootstrapAdminEmail               string `mapstructure:"astronomer_bootstrap_email"`
+	BootstrapAdminForcePasswordChange bool   `mapstructure:"astronomer_bootstrap_force_password_change"`
 
 	CORSAllowedOrigins string `mapstructure:"cors_allowed_origins"`
 	// TrustedProxyCIDRs is the explicit set of reverse-proxy networks allowed
@@ -49,11 +73,6 @@ type Config struct {
 	// (GET /api/v1/register/signed/{cluster_id}). Empty falls back to
 	// SecretKey at wiring time so a single-secret install still works.
 	ManifestSigningSecret string `mapstructure:"manifest_signing_secret"`
-	// GitopsWebhookSecret is the shared secret a git-provider push webhook must
-	// present (X-Astronomer-Webhook-Secret) to trigger an immediate gitops sync.
-	// Empty (default) leaves the webhook endpoint disabled.
-	GitopsWebhookSecret string `mapstructure:"gitops_webhook_secret"`
-
 	// ServerURL is the externally-reachable URL of this Astronomer install.
 	// It seeds platform_configuration.server_url on first boot and is used in
 	// signed downstream registration manifests. Operators may set it later when
@@ -61,6 +80,13 @@ type Config struct {
 	ServerURL string `mapstructure:"server_url"`
 
 	EncryptionKey string `mapstructure:"astronomer_encryption_key"`
+	// InternalPSK authenticates body-bound, short-lived cross-pod tunnel RPC.
+	// It must be independent from both the JWT signing and Fernet keys.
+	InternalPSK string `mapstructure:"astronomer_internal_psk"`
+	// InternalPSKPrevious is accepted for verification only during an
+	// operator-controlled rotation window. New sibling requests are always signed
+	// with InternalPSK; clear this value after every replica has the new key.
+	InternalPSKPrevious string `mapstructure:"astronomer_internal_psk_previous"`
 
 	GithubClientID     string `mapstructure:"github_client_id"`
 	GithubClientSecret string `mapstructure:"github_client_secret"`
@@ -86,6 +112,7 @@ type Config struct {
 	// point the repositories at their verified internal mirror while preserving
 	// the release digests and signing policy.
 	DeliveryEnabled                             bool   `mapstructure:"delivery_enabled"`
+	DeliveryLocalFluxBootstrap                  bool   `mapstructure:"delivery_local_flux_bootstrap"`
 	DeliveryKubernetesMinMinor                  string `mapstructure:"delivery_kubernetes_min_minor"`
 	DeliveryKubernetesMaxMinor                  string `mapstructure:"delivery_kubernetes_max_minor"`
 	DeliveryFluxVersion                         string `mapstructure:"delivery_flux_version"`
@@ -117,6 +144,18 @@ type Config struct {
 	ClusterTombstoneRetentionDays int    `mapstructure:"cluster_tombstone_retention_days"`
 	ServerMetricsAddr             string `mapstructure:"server_metrics_addr"`
 	WorkerMetricsAddr             string `mapstructure:"worker_metrics_addr"`
+
+	OTELExporterEndpoint string  `mapstructure:"otel_exporter_otlp_endpoint"`
+	OTELExporterInsecure bool    `mapstructure:"otel_exporter_otlp_insecure"`
+	OTELExporterHeaders  string  `mapstructure:"otel_exporter_otlp_headers"`
+	OTELServiceName      string  `mapstructure:"otel_service_name"`
+	OTELServiceVersion   string  `mapstructure:"otel_service_version"`
+	OTELSamplerRatio     float64 `mapstructure:"otel_traces_sampler_arg"`
+	// Adopted-cluster agents need their own collector route because management-
+	// plane service DNS is generally not reachable from a remote cluster.
+	AgentOTELExporterEndpoint string  `mapstructure:"agent_otel_exporter_otlp_endpoint"`
+	AgentOTELExporterInsecure bool    `mapstructure:"agent_otel_exporter_otlp_insecure"`
+	AgentOTELSamplerRatio     float64 `mapstructure:"agent_otel_traces_sampler_arg"`
 
 	// Charlie MCP is a separate, private mTLS listener. The chart mounts these
 	// files from the installation-owned Secret; an empty address leaves the
@@ -205,14 +244,49 @@ type Config struct {
 	// DexBundledEnabled mirrors the chart's dex.enabled runtime switch.
 	// AuthLocalPasswordOnly is the production acknowledgement required when no
 	// bundled Dex is deployed.
-	DexBundledEnabled     bool `mapstructure:"dex_bundled_enabled"`
-	AuthLocalPasswordOnly bool `mapstructure:"auth_local_password_only"`
+	DexBundledEnabled           bool   `mapstructure:"dex_bundled_enabled"`
+	AuthLocalPasswordOnly       bool   `mapstructure:"auth_local_password_only"`
+	DexBundledNamespace         string `mapstructure:"dex_bundled_namespace"`
+	DexBundledReleaseName       string `mapstructure:"dex_bundled_release_name"`
+	DexBundledDeploymentName    string `mapstructure:"dex_bundled_deployment_name"`
+	DexBundledServiceName       string `mapstructure:"dex_bundled_service_name"`
+	DexBundledRuntimeSecretName string `mapstructure:"dex_bundled_runtime_secret_name"`
+	DexBundledMigrationPhase    string `mapstructure:"dex_bundled_migration_phase"`
+	DexBundledIssuerURL         string `mapstructure:"dex_bundled_issuer_url"`
+
+	CRDWatchNamespace string `mapstructure:"crd_watch_namespace"`
+
+	ManagementBackupImage          string `mapstructure:"management_backup_image"`
+	ManagementBackupServiceAccount string `mapstructure:"management_backup_service_account"`
+	ManagementLogsMaxLines         int    `mapstructure:"management_logs_max_lines"`
+	ManagementLogsMaxBytes         int    `mapstructure:"management_logs_max_bytes"`
+
+	ExtensionBundleTrustedKey string `mapstructure:"extension_bundle_trusted_key"`
+	GatewayClass              string `mapstructure:"astronomer_gateway_class"`
+	IngressClass              string `mapstructure:"astronomer_ingress_class"`
+	GatewayName               string `mapstructure:"astronomer_gateway_name"`
+	GatewayNamespace          string `mapstructure:"astronomer_gateway_namespace"`
+	TLSIssuerName             string `mapstructure:"astronomer_tls_issuer"`
+	TLSIssuerKind             string `mapstructure:"astronomer_tls_issuer_kind"`
 
 	// CatalogURL points at the astronomer-catalog repo's catalog.yaml (raw
 	// HTTPS). On boot the server fetches it and reconciles the platform-default
 	// helm_repositories + catalog_blessed_charts overlays. Empty = skip (keep
 	// whatever defaults are already seeded). Fetch failures are non-fatal.
-	CatalogURL string `mapstructure:"astronomer_catalog_url"`
+	CatalogURL                 string  `mapstructure:"astronomer_catalog_url"`
+	ChartRatingBayesianAverage float64 `mapstructure:"chart_rating_bayesian_avg"`
+	ChartRatingBayesianWeight  float64 `mapstructure:"chart_rating_bayesian_weight"`
+	CatalogDigest              string  `mapstructure:"astronomer_catalog_digest"`
+	CatalogMirrors             string  `mapstructure:"astronomer_catalog_mirrors"`
+	CatalogProxyURL            string  `mapstructure:"astronomer_catalog_proxy_url"`
+	CatalogCAFile              string  `mapstructure:"astronomer_catalog_ca_file"`
+	CatalogAllowPrivateMirrors bool    `mapstructure:"astronomer_catalog_allow_private_mirrors"`
+	CatalogSignatureRequired   bool    `mapstructure:"astronomer_catalog_signature_required"`
+	CatalogSignatureProvider   string  `mapstructure:"astronomer_catalog_signature_provider"`
+	CatalogSignatureIdentity   string  `mapstructure:"astronomer_catalog_signature_identity"`
+	CatalogSignatureIssuer     string  `mapstructure:"astronomer_catalog_signature_issuer"`
+	CatalogSignatureKeyRef     string  `mapstructure:"astronomer_catalog_signature_key_ref"`
+	CatalogTrustDirectory      string  `mapstructure:"astronomer_catalog_trust_directory"`
 
 	// A4 — tunnel connect rate-limit + replay defense. The connect limiter is a
 	// FAILURE-keyed fixed-window counter (per source IP): an IP is throttled only
@@ -231,11 +305,20 @@ type Config struct {
 	// TunnelRegisterRateLimitPerMinute caps requests to the public
 	// GET /register/{token} bootstrap-manifest endpoint per source IP (L3).
 	TunnelRegisterRateLimitPerMinute int `mapstructure:"tunnel_register_rate_limit_per_minute"`
+	// APIK8sProxyRateLimitRPS and APIK8sProxyRateLimitBurst tune the
+	// authenticated per-caller Kubernetes proxy bucket. The aggregate
+	// per-cluster ceiling remains a separate defense-in-depth limit.
+	APIK8sProxyRateLimitRPS   float64 `mapstructure:"api_k8s_proxy_rate_limit_rps"`
+	APIK8sProxyRateLimitBurst int     `mapstructure:"api_k8s_proxy_rate_limit_burst"`
 	// TunnelWorkerConcurrency is the number of tunnel-bound worker tasks (cluster
 	// apply/drift/decommission/gatekeeper/etc.) a server pod runs at once (M11).
 	// Was hardcoded to 2, so two long helm --wait installs (up to ~10m each)
 	// starved every short tunnel RPC. Default 8. Per-pod; scales with replicas.
 	TunnelWorkerConcurrency int `mapstructure:"tunnel_worker_concurrency"`
+	// WorkerConcurrency bounds concurrent jobs in each standalone worker pod.
+	// Fleet sweeps fan out internally, so this is intentionally independent of
+	// both database pool sizing and tunnel-bound worker concurrency.
+	WorkerConcurrency int `mapstructure:"worker_concurrency"`
 	// ServerReplicas is the configured server replica count (Helm injects it from
 	// .Values.server.replicaCount). Used for the L19 HA self-check: with >1
 	// replica and a RedisURL set but no ASTRONOMER_POD_IP, the cross-pod tunnel
@@ -256,6 +339,8 @@ func Load() (*Config, error) {
 	// Bind env vars for secret/optional fields without defaults so AutomaticEnv resolves them.
 	if err := envconfig.BindEnv(v,
 		"astronomer_encryption_key",
+		"astronomer_internal_psk",
+		"astronomer_internal_psk_previous",
 		"github_client_id",
 		"github_client_secret",
 		"google_client_id",
@@ -268,6 +353,7 @@ func Load() (*Config, error) {
 		"release_manifest_path",
 		"release_mirror_mapping_path",
 		"delivery_enabled",
+		"delivery_local_flux_bootstrap",
 		"delivery_kubernetes_min_minor",
 		"delivery_kubernetes_max_minor",
 		"delivery_flux_version",
@@ -292,12 +378,40 @@ func Load() (*Config, error) {
 		"redis_url",
 		"event_relay_queue_capacity",
 		"secret_key",
+		"jwt_issuer",
+		"jwt_audience",
+		"hostname",
+		"astronomer_pod_ip",
+		"pod_namespace",
+		"release_name",
+		"chart_version",
+		"astronomer_server_image",
+		"helm_driver",
+		"helm_registry_config",
+		"helm_repository_config",
+		"helm_repository_cache",
+		"helm_plugins",
+		"astronomer_tunnel_egress_cidrs",
+		"astronomer_rc_allow_private_webhooks",
+		"astronomer_bootstrap_password",
+		"astronomer_bootstrap_username",
+		"astronomer_bootstrap_email",
+		"astronomer_bootstrap_force_password_change",
 		"trusted_proxy_cidrs",
 		"server_url",
 		"audit_log_retention_months",
 		"cluster_tombstone_retention_days",
 		"server_metrics_addr",
 		"worker_metrics_addr",
+		"otel_exporter_otlp_endpoint",
+		"otel_exporter_otlp_insecure",
+		"otel_exporter_otlp_headers",
+		"otel_service_name",
+		"otel_service_version",
+		"otel_traces_sampler_arg",
+		"agent_otel_exporter_otlp_endpoint",
+		"agent_otel_exporter_otlp_insecure",
+		"agent_otel_traces_sampler_arg",
 		"charlie_mcp_listen_address",
 		"charlie_mcp_tls_cert_file",
 		"charlie_mcp_tls_key_file",
@@ -326,16 +440,49 @@ func Load() (*Config, error) {
 		"native_rbac_enabled",
 		"namespace_scoped_rbac_enabled",
 		"manifest_signing_secret",
-		"gitops_webhook_secret",
 		"dex_bundled_enabled",
+		"dex_bundled_namespace",
+		"dex_bundled_release_name",
+		"dex_bundled_deployment_name",
+		"dex_bundled_service_name",
+		"dex_bundled_runtime_secret_name",
+		"dex_bundled_migration_phase",
+		"dex_bundled_issuer_url",
 		"auth_local_password_only",
+		"crd_watch_namespace",
+		"management_backup_image",
+		"management_backup_service_account",
+		"management_logs_max_lines",
+		"management_logs_max_bytes",
+		"extension_bundle_trusted_key",
+		"astronomer_gateway_class",
+		"astronomer_ingress_class",
+		"astronomer_gateway_name", "astronomer_gateway_namespace",
+		"astronomer_tls_issuer",
+		"astronomer_tls_issuer_kind",
 		"astronomer_catalog_url",
+		"chart_rating_bayesian_avg",
+		"chart_rating_bayesian_weight",
+		"astronomer_catalog_digest",
+		"astronomer_catalog_mirrors",
+		"astronomer_catalog_proxy_url",
+		"astronomer_catalog_ca_file",
+		"astronomer_catalog_allow_private_mirrors",
+		"astronomer_catalog_signature_required",
+		"astronomer_catalog_signature_provider",
+		"astronomer_catalog_signature_identity",
+		"astronomer_catalog_signature_issuer",
+		"astronomer_catalog_signature_key_ref",
+		"astronomer_catalog_trust_directory",
 		"tunnel_connect_auth_failure_limit",
 		"tunnel_connect_auth_failure_window_minutes",
 		"tunnel_connect_clock_skew_minutes",
 		"tunnel_register_rate_limit_per_minute",
+		"api_k8s_proxy_rate_limit_rps",
+		"api_k8s_proxy_rate_limit_burst",
 		"server_replicas",
 		"tunnel_worker_concurrency",
+		"worker_concurrency",
 	); err != nil {
 		return nil, err
 	}
@@ -346,11 +493,22 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "event_relay_queue_capacity", Value: 1024},
 		envconfig.Default{Key: "env", Value: "development"},
 		envconfig.Default{Key: "debug", Value: false},
+		envconfig.Default{Key: "release_name", Value: "astronomer"},
+		envconfig.Default{Key: "helm_registry_config", Value: "/tmp/helm/config/registry/config.json"},
+		envconfig.Default{Key: "helm_repository_config", Value: "/tmp/helm/config/repositories.yaml"},
+		envconfig.Default{Key: "helm_repository_cache", Value: "/tmp/helm/cache/repository"},
+		envconfig.Default{Key: "helm_plugins", Value: "/tmp/helm/data/plugins"},
+		envconfig.Default{Key: "astronomer_bootstrap_username", Value: "admin"},
+		envconfig.Default{Key: "astronomer_bootstrap_email", Value: "admin@astronomer.local"},
+		envconfig.Default{Key: "astronomer_bootstrap_force_password_change", Value: false},
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
 		envconfig.Default{Key: "trusted_proxy_cidrs", Value: ""},
 		envconfig.Default{Key: "session_timeout_minutes", Value: sessionpolicy.DefaultMinutes},
+		envconfig.Default{Key: "jwt_issuer", Value: "astronomer"},
+		envconfig.Default{Key: "jwt_audience", Value: "astronomer-browser"},
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "delivery_enabled", Value: true},
+		envconfig.Default{Key: "delivery_local_flux_bootstrap", Value: true},
 		envconfig.Default{Key: "delivery_kubernetes_min_minor", Value: "1.33"},
 		envconfig.Default{Key: "delivery_kubernetes_max_minor", Value: "1.35"},
 		envconfig.Default{Key: "delivery_flux_version", Value: "v2.9.3"},
@@ -381,15 +539,31 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "kubectl_shell_session_hard_cap_hours", Value: 4},
 		envconfig.Default{Key: "server_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
+		envconfig.Default{Key: "otel_traces_sampler_arg", Value: 0.05},
+		envconfig.Default{Key: "agent_otel_traces_sampler_arg", Value: 0.05},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
+		envconfig.Default{Key: "dex_bundled_namespace", Value: "astronomer"},
+		envconfig.Default{Key: "dex_bundled_release_name", Value: "astronomer"},
+		envconfig.Default{Key: "dex_bundled_deployment_name", Value: "astronomer-dex"},
+		envconfig.Default{Key: "dex_bundled_service_name", Value: "astronomer-dex"},
+		envconfig.Default{Key: "dex_bundled_runtime_secret_name", Value: "astronomer-dex-runtime"},
+		envconfig.Default{Key: "dex_bundled_migration_phase", Value: "fresh"},
 		envconfig.Default{Key: "auth_local_password_only", Value: false},
+		envconfig.Default{Key: "chart_rating_bayesian_avg", Value: 4.0},
+		envconfig.Default{Key: "chart_rating_bayesian_weight", Value: 10.0},
+		envconfig.Default{Key: "crd_watch_namespace", Value: "astronomer-mgmt"},
+		envconfig.Default{Key: "astronomer_catalog_mirrors", Value: "{}"},
+		envconfig.Default{Key: "astronomer_catalog_allow_private_mirrors", Value: false},
 		// A4 — generous tunnel-connect failure limiter + lenient replay window.
 		envconfig.Default{Key: "tunnel_connect_auth_failure_limit", Value: 50},
 		envconfig.Default{Key: "tunnel_connect_auth_failure_window_minutes", Value: 5},
 		envconfig.Default{Key: "tunnel_connect_clock_skew_minutes", Value: 5},
 		envconfig.Default{Key: "tunnel_register_rate_limit_per_minute", Value: 30},
+		envconfig.Default{Key: "api_k8s_proxy_rate_limit_rps", Value: 1.0},
+		envconfig.Default{Key: "api_k8s_proxy_rate_limit_burst", Value: 20},
 		envconfig.Default{Key: "server_replicas", Value: 1},
 		envconfig.Default{Key: "tunnel_worker_concurrency", Value: 8},
+		envconfig.Default{Key: "worker_concurrency", Value: 32},
 	)
 
 	cfg := &Config{}

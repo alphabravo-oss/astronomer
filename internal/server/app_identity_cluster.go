@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/charlie"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	"github.com/jackc/pgx/v5"
 )
@@ -25,13 +25,13 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	bus := c.bus
 	hub := c.hub
 	requester := c.requester
-	queue := c.queue
 	rbacEngine := c.rbacEngine
 	rbacQuerier := c.rbacQuerier
 	monitoringHandler := c.monitoringHandler
 	workloadHandler := c.workloadHandler
 	authHandler := handler.NewAuthHandlerWithTokens(queries, queries, jwtManager)
 	authHandler.SetRunTx(sqlcMutationTxRunner[handler.AuthMutationTx](database))
+	authHandler.SetUserPreferences(queries, sqlcMutationTxRunner[handler.UserPreferencesMutationTx](database))
 	authHandler.SetPasswordRehasher(queries)
 	authHandler.SetRoleBindings(queries)
 	authHandler.SetAuditWriter(queries)
@@ -65,11 +65,12 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	var totpHandler *handler.TOTPHandler
 	if encryptor != nil {
 		totpHandler = handler.NewTOTPHandler(queries, queries, encryptor, jwtManager)
+		totpHandler.SetRunTx(sqlcMutationTxRunner[handler.TOTPMutationTx](database))
 		totpHandler.SetIssuer(cfg.TOTPIssuer)
-		totpHandler.SetAuditWriter(queries)
 		totpHandler.SetLogger(logger)
 		totpHandler.SetPasswordRehasher(queries)
 		totpHandler.SetRequireAll(cfg.TOTPRequire)
+		totpHandler.SetLockoutPolicy(cfg.LoginFailureThreshold, time.Duration(cfg.LockoutDurationMinutes)*time.Minute)
 		authHandler.SetTOTPGate(totpHandler)
 		authHandler.SetTOTPRequireAll(cfg.TOTPRequire)
 		// Runtime MFA-enforcement policy: read the admin-toggleable
@@ -101,13 +102,8 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 
 	var ssoHandler *handler.SSOHandler
 	if ssoManager != nil {
-		ssoHandler = handler.NewSSOHandler(ssoManager, queries, jwtManager, "/")
-		// SLO persistence (migration 054). Wire both the writer + the
-		// encryptor so the Callback can store Fernet-encrypted upstream
-		// id_tokens onto the sso_sessions row keyed by the access JWT's
-		// JTI. Without either, the Callback silently skips persistence
-		// and Logout degrades to "JWT revoked locally only".
-		ssoHandler.SetSSOSessionWriter(queries)
+		ssoHandler = handler.NewSSOHandler(ssoManager, jwtManager, "/")
+		ssoHandler.SetRunTx(sqlcMutationTxRunner[handler.SSOCallbackTx](database))
 		if encryptor != nil {
 			ssoHandler.SetEncryptor(encryptor)
 		}
@@ -119,6 +115,13 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	// /apply endpoint short-circuits with a 503 when the K8s requester is
 	// unavailable.
 	dexHandler := handler.NewDexHandler(queries)
+	if cfg.DexBundledEnabled {
+		dexHandler.SetBundledRuntimeIdentity(handler.DexRuntimeIdentity{
+			Namespace: cfg.DexBundledNamespace, ChartReleaseName: cfg.DexBundledReleaseName,
+			DeploymentName: cfg.DexBundledDeploymentName, ServiceName: cfg.DexBundledServiceName,
+			RuntimeSecretName: cfg.DexBundledRuntimeSecretName, MigrationPhase: cfg.DexBundledMigrationPhase,
+		})
+	}
 	dexHandler.SetRunTx(sqlcMutationTxRunner[handler.DexMutationTx](database))
 	dexHandler.SetEncryptor(encryptor)
 	dexHandler.SetK8sRequester(requester)
@@ -132,6 +135,7 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	clusterHandler.SetEncryptor(encryptor)
 	clusterHandler.SetAgentDisconnector(hub)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
+	clusterHandler.SetAgentTelemetry(cfg.AgentOTELExporterEndpoint, cfg.AgentOTELExporterInsecure, cfg.AgentOTELSamplerRatio, cfg.Env)
 	clusterHandler.SetDeliverySystemBootstrap(
 		cfg.DeliveryFluxDistributionRepository,
 		cfg.DeliveryFluxDistributionDigest,
@@ -163,11 +167,10 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	if hub != nil {
 		hub.SetRegistrationAdvancer(clusterRegistrationHandler.Service())
 	}
-	// Wire the asynq client into the DELETE handler so the cluster
-	// decommission reconciler fires immediately on remove-cluster click.
-	// The periodic sweep is the safety net when redis is briefly down.
-	clusterHandler.SetDecommissionQueue(queue)
-	clusterHandler.SetTaskOutbox(queries)
+	// Cluster decommission intent is written to the task outbox in the same
+	// transaction as the lifecycle row and audit evidence. The dispatcher and
+	// periodic sweep are recovery consumers; HTTP success never depends on a
+	// best-effort Redis enqueue.
 	// Wire metrics: tunnel requester for remote clusters, in-cluster clients
 	// for the local cluster. Both are nil-safe; missing deps fall back to zero.
 	clusterHandler.SetMetricsRequester(requester)
@@ -179,12 +182,12 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	if localK8s != nil {
 		clusterHandler.SetMetricsLocalClient(localK8s, localMetrics)
 	}
-	localNamespace := detectReleaseNamespace()
-	localReleaseName := strings.TrimSpace(os.Getenv("RELEASE_NAME"))
+	localNamespace := detectReleaseNamespace(cfg.PodNamespace)
+	localReleaseName := strings.TrimSpace(cfg.ReleaseName)
 	if localReleaseName == "" {
 		localReleaseName = "astronomer"
 	}
-	localChartVersion := strings.TrimSpace(os.Getenv("CHART_VERSION"))
+	localChartVersion := strings.TrimSpace(cfg.ChartVersion)
 	charlieFeatures := charlieLiveFeatures{queries: queries}
 	var charlieOnboardingHandler *handler.CharlieOnboardingHandler
 	var charlieAgentRuntime *charlie.KubernetesRuntimeActivator
@@ -194,7 +197,11 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 		if err != nil {
 			charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.secret_writer_unavailable", "")
 		} else {
-			charlieHelm = charlie.NewInClusterHelmReleaser("astronomer-charlie")
+			charlieHelm = charlie.NewInClusterHelmReleaser("astronomer-charlie", helmruntime.Config{
+				Driver: cfg.HelmDriver, RegistryConfig: cfg.HelmRegistryConfig,
+				RepositoryConfig: cfg.HelmRepositoryConfig, RepositoryCache: cfg.HelmRepositoryCache,
+				PluginsDirectory: cfg.HelmPluginsDirectory, BurstLimit: 100,
+			})
 			runtime, runtimeErr := charlie.NewKubernetesRuntimeActivator(localK8s, localNamespace, charlieHelm)
 			if runtimeErr != nil {
 				charlie.LogOperationalFailure(context.Background(), logger, "bootstrap.runtime_activator_unavailable", "")

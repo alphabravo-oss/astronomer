@@ -168,7 +168,7 @@ export function CreateUserModal({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             aria-label={showPassword ? "Hide password" : "Show password"}
-            className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             {showPassword ? (
               <EyeOff className="h-3.5 w-3.5" />
@@ -240,8 +240,8 @@ export function EditUserModal({
       }
     >
       <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center flex-shrink-0">
-          <span className="text-sm font-medium text-zinc-300">
+        <div className="w-10 h-10 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center shrink-0">
+          <span className="text-sm font-medium text-primary-foreground">
             {(user.displayName || user.username).charAt(0).toUpperCase()}
           </span>
         </div>
@@ -374,7 +374,7 @@ export function ResetPasswordResultModal({
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="absolute right-1 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               {showPassword ? (
                 <EyeOff className="h-3.5 w-3.5" />

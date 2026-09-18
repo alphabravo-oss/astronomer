@@ -33,7 +33,7 @@ var (
 )
 
 type Querier interface {
-	ListClusterDeliveryAssignments(context.Context, uuid.UUID) ([]sqlc.ListClusterDeliveryAssignmentsRow, error)
+	ListClusterDeliveryAssignments(context.Context, sqlc.ListClusterDeliveryAssignmentsParams) ([]sqlc.ListClusterDeliveryAssignmentsRow, error)
 	GetClusterDeliverySystemRelease(context.Context, uuid.UUID) (sqlc.GetClusterDeliverySystemReleaseRow, error)
 	AdvanceDeliveryAssignmentSnapshot(context.Context, sqlc.AdvanceDeliveryAssignmentSnapshotParams) (sqlc.DeliveryAssignmentReceipt, error)
 	FinalizeDeliveryAssignmentSnapshot(context.Context, sqlc.FinalizeDeliveryAssignmentSnapshotParams) (sqlc.DeliveryAssignmentReceipt, error)
@@ -144,7 +144,9 @@ func (p *Provider) Snapshot(ctx context.Context, authenticatedCluster uuid.UUID,
 }
 
 func (p *Provider) build(ctx context.Context, clusterID uuid.UUID) (protocol.DeliveryStateResponseV2, []sqlc.ListClusterDeliveryAssignmentsRow, *sqlc.GetClusterDeliverySystemReleaseRow, string, string, error) {
-	rows, err := p.queries.ListClusterDeliveryAssignments(ctx, clusterID)
+	rows, err := p.queries.ListClusterDeliveryAssignments(ctx, sqlc.ListClusterDeliveryAssignmentsParams{
+		ClusterID: clusterID, QueryLimit: protocol.MaxDeliveryAssignments + protocol.MaxDeliveryDeletions + 1,
+	})
 	if err != nil {
 		return protocol.DeliveryStateResponseV2{}, nil, nil, "", "", fmt.Errorf("list cluster delivery assignments: %w", err)
 	}
@@ -256,6 +258,13 @@ func (p *Provider) assignmentMetadata(row sqlc.ListClusterDeliveryAssignmentsRow
 	if string(renderer.Kind) != row.Renderer {
 		return protocol.DeliveryAssignmentV2{}, errors.New("renderer column and immutable renderer spec disagree")
 	}
+	var overrides model.TargetOverrides
+	if err := decodeStrict(row.DesiredOverrides, &overrides); err != nil {
+		return protocol.DeliveryAssignmentV2{}, fmt.Errorf("decode frozen target overrides: %w", err)
+	}
+	if err := overrides.Validate(); err != nil {
+		return protocol.DeliveryAssignmentV2{}, fmt.Errorf("validate frozen target overrides: %w", err)
+	}
 	var policy model.ReconciliationPolicy
 	if err := decodeStrict(row.ReconciliationPolicy, &policy); err != nil {
 		return protocol.DeliveryAssignmentV2{}, fmt.Errorf("decode reconciliation policy: %w", err)
@@ -297,20 +306,38 @@ func (p *Provider) assignmentMetadata(row sqlc.ListClusterDeliveryAssignmentsRow
 			Timeout: time.Duration(policy.Timeout).String(), Drift: string(policy.Drift), Prune: policy.Prune,
 		},
 	}
+	if row.DesiredConfigurationDigest.Valid {
+		assignment.ConfigurationDigest = row.DesiredConfigurationDigest.String
+	}
 	switch renderer.Kind {
 	case model.RendererKustomize:
+		if len(overrides.HelmValues) != 0 {
+			return protocol.DeliveryAssignmentV2{}, errors.New("helm values overrides cannot be applied by a kustomize renderer")
+		}
 		assignment.Source.Path = strings.TrimPrefix(renderer.Kustomize.Path, "./")
 		assignment.Renderer = protocol.DeliveryRendererV2{Kind: protocol.DeliveryRendererKustomize, Kustomize: &protocol.DeliveryKustomizeRenderer{
 			TargetNamespace: renderer.Kustomize.TargetNamespace, ServiceAccount: names.Applier,
-			Prune: policy.Prune, Wait: policy.Wait, Patches: append([]string(nil), renderer.Kustomize.Patches...),
+			Prune: policy.Prune, Wait: policy.Wait, Patches: append(append([]string(nil), renderer.Kustomize.Patches...), overrides.Patches...),
 		}}
 	case model.RendererHelm:
+		if len(overrides.Patches) != 0 {
+			return protocol.DeliveryAssignmentV2{}, errors.New("kubernetes patches cannot be applied by a helm renderer")
+		}
+		values, err := model.MergeHelmValues(renderer.Helm.Values, overrides.HelmValues)
+		if err != nil {
+			return protocol.DeliveryAssignmentV2{}, fmt.Errorf("merge frozen helm values overrides: %w", err)
+		}
 		assignment.Source.Chart = renderer.Helm.Chart
+		valueSecretRefs := make([]protocol.DeliveryHelmValueSecretRef, 0, len(renderer.Helm.ValueSecretRefs))
+		for _, ref := range renderer.Helm.ValueSecretRefs {
+			valueSecretRefs = append(valueSecretRefs, protocol.DeliveryHelmValueSecretRef{Name: ref.Name, Key: ref.Key, TargetPath: ref.TargetPath})
+		}
 		assignment.Renderer = protocol.DeliveryRendererV2{Kind: protocol.DeliveryRendererHelm, Helm: &protocol.DeliveryHelmRenderer{
 			Chart: renderer.Helm.Chart, Version: renderer.Helm.ChartVersion, ReleaseName: renderer.Helm.ReleaseName,
 			TargetNamespace: renderer.Helm.TargetNamespace, ServiceAccount: names.Applier,
-			Values: append(json.RawMessage(nil), renderer.Helm.Values...), InstallRetries: int(renderer.Helm.InstallRetries),
-			UpgradeRetries: int(renderer.Helm.UpgradeRetries), UpgradeRemediation: "rollback", EnableTests: renderer.Helm.Test,
+			Values: values, InstallRetries: int(renderer.Helm.InstallRetries),
+			ValueSecretRefs: valueSecretRefs,
+			UpgradeRetries:  int(renderer.Helm.UpgradeRetries), UpgradeRemediation: "rollback", EnableTests: renderer.Helm.Test,
 			DriftMode: driftMode(policy.Drift),
 		}}
 	}

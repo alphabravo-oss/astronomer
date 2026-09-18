@@ -6,11 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/google/uuid"
 )
 
 // apiserverAuditStore is the narrow DB surface the apiserver-audit
@@ -158,9 +157,8 @@ type ingestApiserverAuditResponse struct {
 // Body: {"events": [<audit.k8s.io Event>, ...]}. Events without an auditID
 // are skipped; persistence is idempotent on (cluster_id, auditID).
 func (h *ApiserverAuditHandler) Ingest(w http.ResponseWriter, r *http.Request) {
-	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return
 	}
 
@@ -255,9 +253,8 @@ func (h *ApiserverAuditHandler) PersistAuditEvents(ctx context.Context, clusterI
 
 // List handles GET /api/v1/clusters/{cluster_id}/apiserver-audit/.
 func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
-	clusterID, err := uuid.Parse(chi.URLParam(r, "cluster_id"))
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterID(w, r)
+	if !ok {
 		return
 	}
 
@@ -268,7 +265,7 @@ func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
 	if limit > 500 {
 		limit = 500
 	}
-	offset := int32(queryInt(r, "offset", 0))
+	offset := int32(queryOffset(r))
 	if offset < 0 {
 		offset = 0
 	}
@@ -298,5 +295,5 @@ func (h *ApiserverAuditHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	RespondPaginated(w, r, events, total)
+	paging.Write(w, events, paging.Exact(total, queryLimitMax(r, 50, 500), queryOffset(r), len(events)))
 }

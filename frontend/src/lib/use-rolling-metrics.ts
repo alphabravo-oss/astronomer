@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 import type { MetricsSummary, MetricsSeries } from "@/types";
 
 // A bounded live window: at a 30–60s summary poll this is ~1–2h of history.
@@ -50,6 +50,24 @@ export interface RollingMetrics {
   count: number;
 }
 
+type RollingAction = {
+  clusterId: string;
+  summary: SummaryScalars;
+  timestamp: string;
+};
+
+function rollingMetricsReducer(
+  state: RollingState,
+  action: RollingAction,
+): RollingState {
+  return appendRollingSample(
+    state,
+    action.clusterId,
+    action.summary,
+    action.timestamp,
+  );
+}
+
 // useRollingMetrics accumulates the scalar /metrics/summary samples the page
 // already polls into an in-memory time-series, so live CPU / memory / pod trends
 // render without any Prometheus backend.
@@ -57,16 +75,18 @@ export function useRollingMetrics(
   clusterId: string,
   summary: SummaryScalars | undefined,
 ): RollingMetrics {
-  const [state, setState] = useState<RollingState>({
+  const [state, appendSample] = useReducer(rollingMetricsReducer, {
     cid: clusterId,
     samples: [],
   });
 
   useEffect(() => {
     if (!summary || !clusterId) return;
-    setState((prev) =>
-      appendRollingSample(prev, clusterId, summary, new Date().toISOString()),
-    );
+    appendSample({
+      clusterId,
+      summary,
+      timestamp: new Date().toISOString(),
+    });
   }, [summary, clusterId]);
 
   // Guard against a one-render mismatch right after a cluster switch (state still

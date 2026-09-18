@@ -34,7 +34,8 @@
 
 ## Current Behavior
 
-- server and worker process loggers use `slog` JSON handlers
+- server, worker, agent, and migrator process loggers use `slog` JSON handlers
+  and write operational records to stderr
 - startup loggers are wrapped with `astronomer_instance_id` after the platform
   singleton config has been read or initialized
 - HTTP request completion logs emit `event=http_request` and include
@@ -55,6 +56,15 @@
   `server_metrics_listener_started` and `worker_metrics_listener_started`
 - request correlation currently flows through middleware and audit records; log
   call sites are still being migrated to emit explicit `event` names
+
+## Sensitive-content boundary
+
+Operational logs never intentionally include request or response bodies,
+tunnel payloads, bearer values, encryption material, terminal output, or shell
+command text. Shell command input remains only in its bounded, access-controlled
+PostgreSQL audit table; it is not forwarded to application logs or Loki. Trace
+attributes and metric labels follow the same boundary. Sampled metrics use a
+`trace_id` exemplar rather than an unbounded label.
 
 ## Compatibility
 

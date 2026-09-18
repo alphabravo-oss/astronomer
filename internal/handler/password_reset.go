@@ -25,6 +25,11 @@ var _ context.Context // imported indirectly by the sqlc method signatures
 // user to act, short enough that a leaked link is hard to exploit.
 const passwordResetTTL = 30 * time.Minute
 
+var (
+	errPasswordResetConsumed = errors.New("password reset token was already consumed")
+	errPasswordResetStale    = errors.New("password reset token is no longer valid")
+)
+
 // PasswordResetRequest is the body of POST /auth/password-reset/request/.
 // openapi:request-operation postAuthPasswordResetRequest
 type PasswordResetRequest struct {
@@ -145,8 +150,12 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "token and new_password are required")
 		return
 	}
-	if h.passwordResets == nil || h.queries == nil {
+	if h == nil || h.passwordResets == nil || h.queries == nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.NotConfigured, "Password reset is not configured")
+		return
+	}
+	if h.runTx == nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.RunnerUnwired, "Password reset transaction runner is not configured")
 		return
 	}
 	// AUTH-R01: enforce the live platform password policy so a reset
@@ -179,62 +188,66 @@ func (h *AuthHandler) PasswordResetComplete(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Reset token has expired")
 		return
 	}
-	user, err := h.queries.GetUserByID(r.Context(), row.UserID)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Reset token is invalid")
-		return
-	}
-	// Snapshot check: if the password has changed since the token
-	// was issued, refuse — that handles "user changed password
-	// already, the link in the old email is stale".
-	if user.Password != row.PasswordHashAtIssue {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Reset token is no longer valid")
-		return
-	}
-
 	newHash, err := auth.HashPassword(req.NewPassword)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.HashError, "Failed to hash password")
 		return
 	}
 
-	// Race guard: ConsumePasswordResetToken returns 0 if a parallel
-	// request already consumed the row, so the password update is
-	// gated on this UPDATE first.
-	rows, err := h.passwordResets.ConsumePasswordResetToken(r.Context(), sqlc.ConsumePasswordResetTokenParams{
-		TokenHash: tokenHash,
-		UsedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	// Token consumption, the password change, reset-token invalidation, session
+	// revocation, and audit evidence are one commit. A failure at any point rolls
+	// everything back, so a retry never sees a burned token paired with an old
+	// password or a new password paired with still-valid sessions.
+	completedAt := time.Now().UTC()
+	var user sqlc.User
+	err = h.runTx(r.Context(), func(q AuthMutationTx) error {
+		var mutationErr error
+		user, mutationErr = q.GetUserByIDForUpdate(r.Context(), row.UserID)
+		if mutationErr != nil {
+			return errPasswordResetStale
+		}
+		if user.Password != row.PasswordHashAtIssue {
+			return errPasswordResetStale
+		}
+		rows, mutationErr := q.ConsumePasswordResetToken(r.Context(), sqlc.ConsumePasswordResetTokenParams{
+			TokenHash: tokenHash,
+			UsedAt:    pgtype.Timestamptz{Time: completedAt, Valid: true},
+		})
+		if mutationErr != nil {
+			return mutationErr
+		}
+		if rows == 0 {
+			return errPasswordResetConsumed
+		}
+		if mutationErr = q.UpdateUserPassword(r.Context(), sqlc.UpdateUserPasswordParams{ID: user.ID, Password: newHash}); mutationErr != nil {
+			return mutationErr
+		}
+		if mutationErr = q.DeletePasswordResetTokensForUser(r.Context(), user.ID); mutationErr != nil {
+			return mutationErr
+		}
+		if mutationErr = q.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
+			ID: user.ID, TokensInvalidatedAt: pgtype.Timestamptz{Time: completedAt, Valid: true},
+		}); mutationErr != nil {
+			return mutationErr
+		}
+		return recordAuditOutboxAs(r, q, pgtype.UUID{Bytes: user.ID, Valid: true},
+			"auth.password_reset_complete", "user", user.ID.String(), user.Username, http.StatusOK, nil)
 	})
-	if err != nil || rows == 0 {
+	if errors.Is(err, errPasswordResetConsumed) {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Reset token has already been used")
 		return
 	}
-	if err := h.passwordResets.UpdateUserPassword(r.Context(), sqlc.UpdateUserPasswordParams{
-		ID:       user.ID,
-		Password: newHash,
-	}); err != nil {
-		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update password")
+	if errors.Is(err, errPasswordResetStale) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidToken, "Reset token is no longer valid")
 		return
 	}
-	// Wipe every other outstanding reset token for the user so an
-	// attacker who somehow has two emails can't replay the second
-	// after the first lands.
-	_ = h.passwordResets.DeletePasswordResetTokensForUser(r.Context(), user.ID)
-	// Invalidate all existing sessions: anyone holding a JWT issued
-	// before now should be forced to re-auth with the new password.
-	if h.revocation != nil {
-		if err := h.revocation.InvalidateAllTokens(r.Context(), sqlc.InvalidateAllTokensParams{
-			ID:                  user.ID,
-			TokensInvalidatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		}); err == nil {
-			h.jwt.InvalidateUser(r.Context(), user.ID)
-		} else if h.log != nil {
-			h.log.Error("password reset completed but session invalidation failed", "user_id", user.ID.String(), "error", err)
-		}
+	if err != nil {
+		respondTransactionalMutationError(w, r, err, http.StatusInternalServerError, apierror.UpdateError, "Failed to update password")
+		return
 	}
-
-	recordAuditAs(r, h.audit, pgtype.UUID{Bytes: user.ID, Valid: true},
-		"auth.password_reset_complete", "user", user.ID.String(), user.Username, nil)
+	if h.jwt != nil {
+		h.jwt.InvalidateUser(r.Context(), user.ID)
+	}
 	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Password updated",

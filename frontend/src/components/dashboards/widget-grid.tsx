@@ -19,7 +19,6 @@
  *   - grafana_panel: sandboxed iframe at the templated URL.
  *   - url_iframe: same as grafana_panel but no panel-id postfix.
  */
-"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
@@ -217,9 +216,13 @@ function WidgetBody({ widget }: { widget: RenderedWidget }) {
       );
     }
     case "url_iframe": {
-      const url = widget.specResolved?.url ?? "";
+      const url = safeIframeURL(widget.specResolved?.url);
       if (!url)
-        return <div className="text-xs text-muted-foreground">Missing url</div>;
+        return (
+          <div className="text-xs text-muted-foreground">
+            Missing or unsafe HTTPS URL
+          </div>
+        );
       return (
         <iframe
           className="flex-1 w-full h-full border-0"
@@ -249,8 +252,10 @@ function formatStat(value: number, format: string): string {
 
 function grafanaIframeURL(spec: WidgetSpec | undefined): string {
   if (!spec || !spec.base_url || !spec.dashboard_uid) return "";
-  const base = String(spec.base_url).replace(/\/$/, "");
-  const path = `/d-solo/${encodeURIComponent(spec.dashboard_uid)}`;
+  const base = safeIframeURL(spec.base_url);
+  if (!base) return "";
+  const url = new URL(base);
+  url.pathname = `${url.pathname.replace(/\/$/, "")}/d-solo/${encodeURIComponent(spec.dashboard_uid)}`;
   const qs = new URLSearchParams();
   if (spec.panel_id !== undefined) qs.set("panelId", String(spec.panel_id));
   if (spec.vars && typeof spec.vars === "object") {
@@ -260,5 +265,17 @@ function grafanaIframeURL(spec: WidgetSpec | undefined): string {
   }
   // Theme dark fits the SPA shell; operators can override via vars.
   if (!qs.has("theme")) qs.set("theme", "dark");
-  return `${base}${path}?${qs.toString()}`;
+  url.search = qs.toString();
+  return url.toString();
+}
+
+function safeIframeURL(raw: unknown): string {
+  if (typeof raw !== "string" || raw.trim() === "") return "";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" || url.username || url.password) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
 }

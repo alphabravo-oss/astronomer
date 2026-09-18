@@ -67,8 +67,8 @@ baseline updates.
 Build and verify the catalog-backed artifact with:
 
 ```bash
-./scripts/build-builtin-bundles.sh --output dist/astronomer-builtin-bundles-v1.1.0.tar.gz
-./scripts/build-builtin-bundles.sh --check dist/astronomer-builtin-bundles-v1.1.0.tar.gz
+./scripts/build-builtin-bundles.sh --output dist/astronomer-builtin-bundles-v1.2.0.tar.gz
+./scripts/build-builtin-bundles.sh --check dist/astronomer-builtin-bundles-v1.2.0.tar.gz
 make release-contract-check
 ```
 

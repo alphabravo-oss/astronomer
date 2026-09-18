@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -48,6 +50,8 @@ type fakePasswordResetStore struct {
 	consumed              atomic.Int32
 	updates               atomic.Int32
 	deletes               atomic.Int32
+	invalidations         atomic.Int32
+	invalidateErr         error
 	tokensByHash          map[string]sqlc.PasswordResetToken
 	currentPasswordByUser map[uuid.UUID]string
 }
@@ -97,6 +101,18 @@ func (f *fakePasswordResetStore) UpdateUserPassword(_ context.Context, arg sqlc.
 	return nil
 }
 
+func (f *fakePasswordResetStore) RevokeJWT(context.Context, sqlc.RevokeJWTParams) error {
+	return nil
+}
+
+func (f *fakePasswordResetStore) InvalidateAllTokens(context.Context, sqlc.InvalidateAllTokensParams) error {
+	if f.invalidateErr != nil {
+		return f.invalidateErr
+	}
+	f.invalidations.Add(1)
+	return nil
+}
+
 // recordingEmailNotifier counts calls.
 type recordingEmailNotifier struct {
 	calls atomic.Int32
@@ -120,7 +136,51 @@ func newPasswordResetHandler(t *testing.T) (*AuthHandler, *fakeAuthQuerier, *fak
 	notifier := &recordingEmailNotifier{}
 	h.SetPasswordResetStore(store)
 	h.SetEmailNotifier(notifier)
+	tx := &authTestMutationTx{
+		users:          q,
+		revocations:    store,
+		passwordResets: store,
+	}
+	wireAuthTestMutationTx(h, tx)
+	// Model transaction rollback so failure-path assertions exercise the same
+	// all-or-nothing contract as the production pgx transaction.
+	h.SetRunTx(func(_ context.Context, fn func(AuthMutationTx) error) error {
+		tokens := cloneResetTokens(store.tokensByHash)
+		passwords := clonePasswordMap(store.currentPasswordByUser)
+		consumed, updates := store.consumed.Load(), store.updates.Load()
+		deletes, invalidations := store.deletes.Load(), store.invalidations.Load()
+		auditRows := append([]sqlc.CreateAuditLogV1Params(nil), tx.audit.rows...)
+		outboxRows := append([]sqlc.UpsertAuditOutboxParams(nil), tx.audits...)
+		if err := fn(tx); err != nil {
+			store.tokensByHash = tokens
+			store.currentPasswordByUser = passwords
+			store.consumed.Store(consumed)
+			store.updates.Store(updates)
+			store.deletes.Store(deletes)
+			store.invalidations.Store(invalidations)
+			tx.audit.rows = auditRows
+			tx.audits = outboxRows
+			return err
+		}
+		return nil
+	})
 	return h, q, store, notifier
+}
+
+func cloneResetTokens(source map[string]sqlc.PasswordResetToken) map[string]sqlc.PasswordResetToken {
+	cloned := make(map[string]sqlc.PasswordResetToken, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func clonePasswordMap(source map[uuid.UUID]string) map[uuid.UUID]string {
+	cloned := make(map[uuid.UUID]string, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 func seedUser(t *testing.T, q *fakeAuthQuerier, password string) sqlc.User {
@@ -248,6 +308,13 @@ func TestPasswordReset_CompleteVerifiesToken(t *testing.T) {
 	if store.updates.Load() != 1 {
 		t.Errorf("expected 1 password update, got %d", store.updates.Load())
 	}
+	if store.deletes.Load() != 1 || store.invalidations.Load() != 1 {
+		t.Fatalf("reset cleanup/session invalidation = %d/%d, want 1/1", store.deletes.Load(), store.invalidations.Load())
+	}
+	audits := h.audit.(*recordingAuthAuditWriter).rows
+	if len(audits) != 2 || audits[1].Action != "auth.password_reset_complete" {
+		t.Fatalf("audit rows=%+v, want issued and completed events", audits)
+	}
 
 	// Replay the same token — must fail (single-use enforcement).
 	rec = httptest.NewRecorder()
@@ -255,6 +322,38 @@ func TestPasswordReset_CompleteVerifiesToken(t *testing.T) {
 	h.PasswordResetComplete(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("replay should fail, got %d", rec.Code)
+	}
+}
+
+func TestPasswordReset_CompleteRollsBackWhenSessionInvalidationFails(t *testing.T) {
+	h, q, store, _ := newPasswordResetHandler(t)
+	user := seedUser(t, q, "OriginalPass123")
+	tokenPlain := strings.Repeat("a", 64)
+	tokenHash := auth.HashOpaqueToken(tokenPlain)
+	store.tokensByHash = map[string]sqlc.PasswordResetToken{
+		tokenHash: {
+			ID: uuid.New(), UserID: user.ID, TokenHash: tokenHash,
+			PasswordHashAtIssue: user.Password, ExpiresAt: time.Now().Add(time.Hour),
+		},
+	}
+	store.invalidateErr = errors.New("session cutoff unavailable")
+	body, _ := json.Marshal(PasswordResetComplete{Token: tokenPlain, NewPassword: "BrandNew1234X"})
+	rec := httptest.NewRecorder()
+	h.PasswordResetComplete(rec, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body)))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if row := store.tokensByHash[tokenHash]; row.UsedAt.Valid {
+		t.Fatalf("failed transaction consumed reset token: %+v", row.UsedAt)
+	}
+	if store.updates.Load() != 0 || store.deletes.Load() != 0 || store.invalidations.Load() != 0 {
+		t.Fatalf("failed transaction retained writes: updates=%d deletes=%d invalidations=%d", store.updates.Load(), store.deletes.Load(), store.invalidations.Load())
+	}
+	for _, row := range h.audit.(*recordingAuthAuditWriter).rows {
+		if row.Action == "auth.password_reset_complete" {
+			t.Fatalf("failed transaction retained completion audit: %+v", row)
+		}
 	}
 }
 

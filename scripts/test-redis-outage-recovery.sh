@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+. scripts/lib/docker-test-endpoint.sh
 
 for tool in docker go openssl; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
@@ -24,11 +25,11 @@ docker run -d --rm --name "$postgres_container" \
   -e POSTGRES_USER=redis_outage_test \
   -e POSTGRES_PASSWORD="$credential" \
   -e POSTGRES_DB=redis_outage_test \
-  -p 127.0.0.1::5432 pgvector/pgvector:pg16 >/dev/null
+  -p "${DOCKER_TEST_BIND_HOST}::5432" pgvector/pgvector:pg16 >/dev/null
 # Do not use --rm: this exact container and port are stopped for the outage,
 # then restarted by the integration test to prove recovery of the durable row.
 docker run -d --name "$redis_container" \
-  -p 127.0.0.1::6379 redis:7-alpine >/dev/null
+  -p "${DOCKER_TEST_BIND_HOST}::6379" redis:7-alpine >/dev/null
 
 for attempt in $(seq 1 60); do
   if docker exec "$postgres_container" pg_isready -U redis_outage_test -d redis_outage_test >/dev/null 2>&1 && \
@@ -45,8 +46,8 @@ done
 
 postgres_port="$(docker port "$postgres_container" 5432/tcp | awk -F: 'NR == 1 {print $NF}')"
 redis_port="$(docker port "$redis_container" 6379/tcp | awk -F: 'NR == 1 {print $NF}')"
-export ASTRONOMER_REDIS_OUTAGE_DATABASE_URL="postgres://redis_outage_test:${credential}@127.0.0.1:${postgres_port}/redis_outage_test?sslmode=disable"
-export ASTRONOMER_REDIS_OUTAGE_REDIS_URL="redis://127.0.0.1:${redis_port}/0"
+export ASTRONOMER_REDIS_OUTAGE_DATABASE_URL="postgres://redis_outage_test:${credential}@${DOCKER_TEST_CONNECT_HOST}:${postgres_port}/redis_outage_test?sslmode=disable"
+export ASTRONOMER_REDIS_OUTAGE_REDIS_URL="redis://${DOCKER_TEST_CONNECT_HOST}:${redis_port}/0"
 export ASTRONOMER_REDIS_OUTAGE_CONTAINER="$redis_container"
 export ASTRONOMER_REDIS_OUTAGE_DEDICATED=1
 

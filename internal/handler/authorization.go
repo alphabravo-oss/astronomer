@@ -6,19 +6,21 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type authorizationSupport struct {
 	engine  *rbac.Engine
-	querier middleware.RBACQuerier
+	querier rbac.BindingQuerier
 	// namespaceScoped enables per-namespace result filtering on list handlers.
-	// Default false: authorizedNamespaces returns all=true immediately (no DB
+	// Unwired zero value is false; application configuration defaults ON.
+	// When explicitly disabled, authorizedNamespaces returns all=true (no DB
 	// call), so list responses are byte-identical to the pre-feature behavior.
 	namespaceScoped bool
 }
@@ -67,7 +69,7 @@ func RequireSuperuser(w http.ResponseWriter, r *http.Request, querier UserByIDQu
 }
 
 func authenticatedUserFromRequest(r *http.Request, querier userByIDQuerier) (sqlc.User, error) {
-	caller, ok := middleware.GetAuthenticatedUser(r.Context())
+	caller, ok := reqctx.AuthenticatedUser(r.Context())
 	if !ok || caller == nil {
 		return sqlc.User{}, errAuthenticatedUserMissing
 	}
@@ -137,13 +139,14 @@ func requireSuperuser(w http.ResponseWriter, r *http.Request, querier userByIDQu
 	return user, true
 }
 
-func (a *authorizationSupport) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
+func (a *authorizationSupport) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
 	a.engine = engine
 	a.querier = querier
 }
 
 // SetNamespaceScoped toggles per-namespace list filtering. Wired from the
-// namespace_scoped_rbac_enabled config flag. Off (default) = no filtering.
+// namespace_scoped_rbac_enabled config flag. Explicitly off = no filtering;
+// application configuration defaults this flag to on.
 func (a *authorizationSupport) SetNamespaceScoped(enabled bool) {
 	a.namespaceScoped = enabled
 }
@@ -303,12 +306,12 @@ func (a *authorizationSupport) resourceScopeFilter(w http.ResponseWriter, r *htt
 
 func (a *authorizationSupport) bindingsForContext(ctx context.Context) ([]rbac.RoleBinding, bool, error) {
 	if a == nil || a.engine == nil || a.querier == nil {
-		if _, ok := middleware.GetAuthenticatedUser(ctx); ok {
+		if _, ok := reqctx.AuthenticatedUser(ctx); ok {
 			return nil, true, errAuthorizationNotConfigured
 		}
 		return nil, false, nil
 	}
-	user, ok := middleware.GetAuthenticatedUser(ctx)
+	user, ok := reqctx.AuthenticatedUser(ctx)
 	if !ok || user == nil {
 		return nil, true, nil
 	}

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -38,9 +37,8 @@ func persistLoggingAttach(ctx context.Context, q loggingAttachWriter, token *sql
 // GetAstronomerAttachStatus handles GET /api/v1/clusters/{id}/logging/outputs/attach-astronomer/.
 // logging:read. Used by the cluster logging CTA; does not run the sizer.
 func (h *LoggingHandler) GetAstronomerAttachStatus(w http.ResponseWriter, r *http.Request) {
-	clusterID, err := clusterIDFromClusterRoute(r)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbRead) {
@@ -70,9 +68,8 @@ func (h *LoggingHandler) GetAstronomerAttachStatus(w http.ResponseWriter, r *htt
 // AttachAstronomerLogs handles POST /api/v1/clusters/{id}/logging/outputs/attach-astronomer/.
 // logging:create. Idempotent when already attached unless ?rotate=true.
 func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Request) {
-	clusterID, err := clusterIDFromClusterRoute(r)
-	if err != nil {
-		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
+	clusterID, ok := parseClusterIDParam(w, r, "id")
+	if !ok {
 		return
 	}
 	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceLogging, rbac.VerbCreate) {
@@ -162,15 +159,12 @@ func (h *LoggingHandler) AttachAstronomerLogs(w http.ResponseWriter, r *http.Req
 		auditAction = "logging.loki_token.rotate"
 	}
 	mutationContext := withOperationIdempotency(r, "logging")
-	result, err := executeLoggingMutation(r, h,
+	result, err := executeMutation(r, h.runTx,
 		func(q LoggingMutationTx) (loggingMutationResult[sqlc.LoggingOutput], error) {
 			return persistLoggingAttach(mutationContext, q, tokenParams, spec, currentUserUUID(r))
 		},
-		func() (loggingMutationResult[sqlc.LoggingOutput], error) {
-			return persistLoggingAttach(mutationContext, h.queries, tokenParams, spec, currentUserUUID(r))
-		},
-		func(result loggingMutationResult[sqlc.LoggingOutput]) clusterAuditEvent {
-			return clusterAuditEvent{action: auditAction, resourceType: "logging_output", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
+		func(result loggingMutationResult[sqlc.LoggingOutput]) mutationAuditEvent {
+			return mutationAuditEvent{action: auditAction, resourceType: "logging_output", resourceID: result.row.ID.String(), resourceName: result.row.Name, status: http.StatusAccepted, detail: map[string]any{
 				"cluster_id": clusterID.String(), "rotated": rotate, "minted": plaintext != "", "operation_id": operationIDOrEmpty(result.op),
 			}}
 		})
@@ -199,13 +193,6 @@ func (h *LoggingHandler) lokiTokenForCluster(ctx context.Context, clusterID uuid
 		return sqlc.LokiIngestToken{}, false
 	}
 	return tok, true
-}
-
-func clusterIDFromClusterRoute(r *http.Request) (uuid.UUID, error) {
-	if raw := chi.URLParam(r, "id"); raw != "" {
-		return uuid.Parse(raw)
-	}
-	return clusterIDFromRequest(r)
 }
 
 type loggingAttachResult struct {

@@ -91,7 +91,9 @@ type SyncResult struct {
 }
 
 // SyncUserGroups reconciles the user's group-sync bindings against
-// the supplied claim set.
+// the supplied claim set. q must be bound to the caller's transaction, which
+// must also persist mandatory audit evidence and roll back on any error.
+// Cache invalidation belongs to the caller after successful commit.
 //
 // claimsAvailable distinguishes "the IdP returned no groups" (empty
 // slice, claimsAvailable=true → revoke all group_sync bindings) from
@@ -302,7 +304,7 @@ func SyncUserGroups(
 		if !m.ClusterID.Valid {
 			// Defensive: the table CHECK guarantees this, but a
 			// hand-rolled SQL caller could in theory bypass it.
-			continue
+			return SyncResult{}, errors.New("group_sync: cluster mapping is missing cluster ID")
 		}
 		if _, already := seenCluster[key]; already {
 			continue
@@ -362,7 +364,7 @@ func SyncUserGroups(
 			continue
 		}
 		if !m.ProjectID.Valid {
-			continue
+			return SyncResult{}, errors.New("group_sync: project mapping is missing project ID")
 		}
 		if _, already := seenProject[key]; already {
 			continue

@@ -11,8 +11,32 @@ SELECT * FROM projects WHERE id = $1 FOR UPDATE;
 -- name: GetProjectByNameAndCluster :one
 SELECT * FROM projects WHERE name = $1 AND cluster_id = $2;
 
+-- name: GetProjectNamespaceByClusterAndNamespace :one
+-- Resolve optional project ownership from the Kubernetes deployment target.
+-- The partial unique index on (cluster_id, namespace) guarantees at most one
+-- owning project, so callers never need a user-selected project discriminator.
+SELECT * FROM project_namespaces
+WHERE cluster_id = $1 AND namespace = $2;
+
 -- name: ListProjects :many
-SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+SELECT * FROM projects
+WHERE (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+)
+ORDER BY created_at DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountProjectsFiltered :one
+SELECT count(*) FROM projects
+WHERE (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+);
 
 -- name: ListProjectsForScopes :many
 -- Scope-filtered ListProjects: the projects the caller is bound to directly,
@@ -21,8 +45,16 @@ SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 -- one namespace of that cluster does not — see rbac.NarrowedClustersExcluded).
 -- Same ordering as ListProjects.
 SELECT * FROM projects
-WHERE id = ANY(sqlc.arg(project_ids)::uuid[])
-   OR cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+WHERE (
+    id = ANY(sqlc.arg(project_ids)::uuid[])
+    OR cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+)
+AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+)
 ORDER BY created_at DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
@@ -30,11 +62,38 @@ LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 -- Total for a ListProjectsForScopes page; predicate MUST match it exactly (see
 -- CountClustersForScopes).
 SELECT count(*) FROM projects
-WHERE id = ANY(sqlc.arg(project_ids)::uuid[])
-   OR cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[]);
+WHERE (
+    id = ANY(sqlc.arg(project_ids)::uuid[])
+    OR cluster_id = ANY(sqlc.arg(cluster_ids)::uuid[])
+)
+AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+);
 
 -- name: ListProjectsByCluster :many
-SELECT * FROM projects WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
+SELECT * FROM projects
+WHERE cluster_id = sqlc.arg(cluster_id)
+  AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+  )
+ORDER BY created_at DESC
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
+
+-- name: CountProjectsByClusterFiltered :one
+SELECT count(*) FROM projects
+WHERE cluster_id = sqlc.arg(cluster_id)
+  AND (
+    sqlc.arg(filter_search)::text = ''
+    OR name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR display_name ILIKE '%' || sqlc.arg(filter_search) || '%'
+    OR description ILIKE '%' || sqlc.arg(filter_search) || '%'
+  );
 
 -- name: CreateProject :one
 INSERT INTO projects (
@@ -101,27 +160,55 @@ SELECT * FROM project_namespaces
 WHERE project_id = $1
 ORDER BY namespace ASC;
 
+-- name: UpsertProjectResourceQuotaAllocation :one
+INSERT INTO project_resource_quota_allocations (
+    project_id, cluster_id, namespace, cpu_limit, memory_limit, pod_count
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (project_id, cluster_id, namespace) DO UPDATE SET
+    cpu_limit = EXCLUDED.cpu_limit,
+    memory_limit = EXCLUDED.memory_limit,
+    pod_count = EXCLUDED.pod_count,
+    applied_at = now()
+RETURNING *;
+
+-- name: DeleteProjectResourceQuotaAllocation :exec
+DELETE FROM project_resource_quota_allocations
+WHERE project_id = $1 AND cluster_id = $2 AND namespace = $3;
+
+-- name: ListProjectResourceQuotaAllocations :many
+SELECT * FROM project_resource_quota_allocations
+WHERE project_id = $1
+ORDER BY cluster_id, namespace;
+
 -- name: ListAllProjectNamespaces :many
-SELECT * FROM project_namespaces
-ORDER BY project_id, cluster_id, namespace;
+SELECT pn.*
+FROM project_namespaces pn
+JOIN clusters c ON c.id = pn.cluster_id
+WHERE c.decommissioned_at IS NULL
+  AND c.status = 'active'
+ORDER BY pn.project_id, pn.cluster_id, pn.namespace;
 
 -- name: ClaimProjectNamespaceReconcile :one
 -- Atomically bump the lease so other workers SKIP this row for the given TTL.
 -- Returns the row only if we acquired the lease (locked_until expired or null).
 UPDATE project_namespaces
-SET    locked_until = $4
+SET    locked_until = sqlc.arg(locked_until),
+       reconcile_claim_token = sqlc.arg(claim_token)
 WHERE  project_id = $1
   AND  cluster_id = $2
   AND  namespace  = $3
   AND  (locked_until IS NULL OR locked_until < now())
 RETURNING *;
 
--- name: MarkProjectNamespaceReconciled :exec
+-- name: MarkProjectNamespaceReconciled :execrows
 UPDATE project_namespaces
 SET    last_reconciled_at   = now(),
        last_reconcile_error = $4,
        locked_until         = NULL,
+       reconcile_claim_token = NULL,
        updated_at           = now()
 WHERE  project_id = $1
   AND  cluster_id = $2
-  AND  namespace  = $3;
+  AND  namespace  = $3
+  AND  reconcile_claim_token = sqlc.arg(claim_token);

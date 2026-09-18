@@ -219,6 +219,7 @@ CREATE TABLE delivery_rollouts (
  strategy jsonb NOT NULL DEFAULT '{}', strategy_digest varchar(80) NOT NULL,
  approval_policy jsonb NOT NULL DEFAULT '{}', request_digest varchar(80) NOT NULL,
  plan_digest varchar(80) NOT NULL, frozen_plan jsonb NOT NULL, state varchar(24) NOT NULL,
+ runtime_generation bigint NOT NULL DEFAULT 1,
  fencing_generation bigint NOT NULL DEFAULT 1, lease_owner varchar(253) NOT NULL DEFAULT '',
  lease_expires_at timestamptz, last_decision_digest varchar(80) NOT NULL DEFAULT '',
  idempotency_key varchar(128) NOT NULL, total_clusters integer NOT NULL DEFAULT 0,

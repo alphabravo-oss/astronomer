@@ -1,7 +1,5 @@
-"use client";
-
 import { useId } from "react";
-import type { ReactNode } from "react";
+import type { FormEventHandler, ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OverlayShell } from "@/components/ui/overlay-shell";
@@ -20,6 +18,9 @@ interface ModalShellProps {
   bodyClassName?: string;
   footerClassName?: string;
   panelClassName?: string;
+  onSubmit?: FormEventHandler<HTMLFormElement>;
+  formId?: string;
+  formClassName?: string;
 }
 
 const sizeClass: Record<ModalSize, string> = {
@@ -41,8 +42,23 @@ export function ModalShell({
   bodyClassName,
   footerClassName,
   panelClassName,
+  onSubmit,
+  formId,
+  formClassName,
 }: ModalShellProps) {
   const titleId = useId();
+  const body = (
+    <>
+      <div className={cn("p-6 space-y-4", bodyClassName)}>{children}</div>
+      {footer && (
+        <div
+          className={cn("px-6 py-4 border-t border-border", footerClassName)}
+        >
+          {footer}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <OverlayShell onClose={onClose}>
@@ -78,19 +94,23 @@ export function ModalShell({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent"
+            className="p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className={cn("p-6 space-y-4", bodyClassName)}>{children}</div>
-        {footer && (
-          <div
-            className={cn("px-6 py-4 border-t border-border", footerClassName)}
+        {onSubmit ? (
+          <form
+            id={formId}
+            className={formClassName}
+            onSubmit={onSubmit}
+            noValidate
           >
-            {footer}
-          </div>
+            {body}
+          </form>
+        ) : (
+          body
         )}
       </div>
     </OverlayShell>

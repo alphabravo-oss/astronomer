@@ -36,13 +36,13 @@ class FakeEventSource {
 
 /**
  * Fresh module graph per test — the transport is a module-level singleton.
- * The '@/lib/api' mock instance is cached across resetModules, so clear its
+ * The auth API mock instance is cached across resetModules, so clear its
  * call log here (the ticket counter keeps incrementing, which is fine — the
  * tests only assert that tickets differ per (re)connect).
  */
 async function loadLive() {
   vi.resetModules();
-  const api = await import("@/lib/api");
+  const api = await import("@/lib/api/auth");
   const createStreamTicket = vi.mocked(api.createStreamTicket);
   createStreamTicket.mockClear();
   const stream = await import("@/lib/live/stream");

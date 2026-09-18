@@ -1,4 +1,3 @@
-"use client";
 
 // §Schema Tier-1 — form renderer. Renders a declarative FormSpec as first-party
 // inputs (closed type enum: text|number|select|toggle) and submits the collected
@@ -132,7 +131,7 @@ export function ExtForm({ extensionName, spec, context }: ExtFormProps) {
               type="checkbox"
               checked={Boolean(values[input.name])}
               onChange={(e) => set(input.name, e.target.checked)}
-              className="h-4 w-4 rounded border-border"
+              className="h-4 w-4 rounded-sm border-border"
             />
           ) : (
             <input

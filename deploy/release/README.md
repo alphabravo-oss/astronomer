@@ -13,7 +13,7 @@ maintained by hand and is not committed with build-specific digests.
   exact upstream Flux release, controller images, APIs, signatures, and source.
 - `deploy/bundles/catalog.json` binds every built-in chart, chart digest, image,
   target namespace, and required capability.
-- Release CI supplies the source commit; packaged chart; six image identities;
+- Release CI supplies the source commit; packaged chart; seven image identities;
   resolved runtime-image identities; Flux and bundle OCI subjects; and Charlie
   version, subject, capability disclosure digest, and signing identity.
 
@@ -27,7 +27,7 @@ The tag workflow in `.github/workflows/release.yaml`:
 
 1. verifies the public repository, exact `vX.Y.Z` tag, chart versions, source
    ancestry, Charlie qualification inputs, and disk headroom;
-2. builds the six multi-platform images once, records their manifest-list
+2. builds the seven multi-platform images once, records their manifest-list
    digests, signs them, and attaches SPDX and SLSA attestations;
 3. reproducibly builds and publishes the signed Flux distribution and built-in
    bundle OCI artifacts;
@@ -63,7 +63,9 @@ chart, Flux and built-in bundle archives, `astronomer-images.txt` (complete
 digest-pinned container list), and save/load helpers. The kit does **not**
 contain image blobs. Operators run `astronomer-save-images.sh` on a connected
 host (default `linux/amd64`) and `astronomer-load-images.sh` against the
-private registry.
+private registry. Loading requires the release Sigstore bundle and authenticates
+the manifest identity plus the complete archive member set before extraction or
+the first registry write.
 
 `scripts/mirror-release.py` remains the registry-to-registry path. `plan`
 emits a deterministic mapping and exact Helm JSON; `apply` copies all platforms

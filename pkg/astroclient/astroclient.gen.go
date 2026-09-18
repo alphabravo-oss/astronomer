@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	BearerAuthScopes          = "bearerAuth.Scopes"
-	BearerJWTScopes           = "bearerJWT.Scopes"
-	GitOpsWebhookSecretScopes = "gitOpsWebhookSecret.Scopes"
+	BearerAuthScopes             = "bearerAuth.Scopes"
+	BearerJWTScopes              = "bearerJWT.Scopes"
+	GitHubWebhookSignatureScopes = "gitHubWebhookSignature.Scopes"
 )
 
 // Defines values for AdminQueueOperationAction.
@@ -55,6 +55,16 @@ const (
 	AgentLifecycleOperationStatusSucceeded AgentLifecycleOperationStatus = "succeeded"
 )
 
+// Defines values for AgentNodeSelectorRequirementOperator.
+const (
+	AgentNodeSelectorRequirementOperatorDoesNotExist AgentNodeSelectorRequirementOperator = "DoesNotExist"
+	AgentNodeSelectorRequirementOperatorExists       AgentNodeSelectorRequirementOperator = "Exists"
+	AgentNodeSelectorRequirementOperatorGt           AgentNodeSelectorRequirementOperator = "Gt"
+	AgentNodeSelectorRequirementOperatorIn           AgentNodeSelectorRequirementOperator = "In"
+	AgentNodeSelectorRequirementOperatorLt           AgentNodeSelectorRequirementOperator = "Lt"
+	AgentNodeSelectorRequirementOperatorNotIn        AgentNodeSelectorRequirementOperator = "NotIn"
+)
+
 // Defines values for AgentSelfTestStatus.
 const (
 	AgentSelfTestStatusFailed  AgentSelfTestStatus = "failed"
@@ -67,6 +77,20 @@ const (
 	AgentSelfTestCheckStatusFailed  AgentSelfTestCheckStatus = "failed"
 	AgentSelfTestCheckStatusPassed  AgentSelfTestCheckStatus = "passed"
 	AgentSelfTestCheckStatusWarning AgentSelfTestCheckStatus = "warning"
+)
+
+// Defines values for AgentTolerationEffect.
+const (
+	AgentTolerationEffectEmpty            AgentTolerationEffect = ""
+	AgentTolerationEffectNoExecute        AgentTolerationEffect = "NoExecute"
+	AgentTolerationEffectNoSchedule       AgentTolerationEffect = "NoSchedule"
+	AgentTolerationEffectPreferNoSchedule AgentTolerationEffect = "PreferNoSchedule"
+)
+
+// Defines values for AgentTolerationOperator.
+const (
+	AgentTolerationOperatorEqual  AgentTolerationOperator = "Equal"
+	AgentTolerationOperatorExists AgentTolerationOperator = "Exists"
 )
 
 // Defines values for AlertEventSeverity.
@@ -132,6 +156,24 @@ const (
 	AllowlistUpdateRequestModeMonitor  AllowlistUpdateRequestMode = "monitor"
 )
 
+// Defines values for ApplicationCatalogSourceVerificationStatus.
+const (
+	ApplicationCatalogSourceVerificationStatusDigestVerified ApplicationCatalogSourceVerificationStatus = "digest-verified"
+	ApplicationCatalogSourceVerificationStatusFailed         ApplicationCatalogSourceVerificationStatus = "failed"
+	ApplicationCatalogSourceVerificationStatusRevoked        ApplicationCatalogSourceVerificationStatus = "revoked"
+	ApplicationCatalogSourceVerificationStatusUnsigned       ApplicationCatalogSourceVerificationStatus = "unsigned"
+	ApplicationCatalogSourceVerificationStatusVerified       ApplicationCatalogSourceVerificationStatus = "verified"
+)
+
+// Defines values for AuditExportOperationStatus.
+const (
+	AuditExportOperationStatusFailed    AuditExportOperationStatus = "failed"
+	AuditExportOperationStatusPending   AuditExportOperationStatus = "pending"
+	AuditExportOperationStatusRetrying  AuditExportOperationStatus = "retrying"
+	AuditExportOperationStatusRunning   AuditExportOperationStatus = "running"
+	AuditExportOperationStatusSucceeded AuditExportOperationStatus = "succeeded"
+)
+
 // Defines values for BackupControllerStatusHealth.
 const (
 	BackupControllerStatusHealthDegraded BackupControllerStatusHealth = "degraded"
@@ -177,6 +219,30 @@ const (
 	CISScanStatusFailed    CISScanStatus = "failed"
 	CISScanStatusPending   CISScanStatus = "pending"
 	CISScanStatusRunning   CISScanStatus = "running"
+)
+
+// Defines values for CatalogApplicationPresentationSupportTier.
+const (
+	CatalogApplicationPresentationSupportTierAstronomer   CatalogApplicationPresentationSupportTier = "astronomer"
+	CatalogApplicationPresentationSupportTierExperimental CatalogApplicationPresentationSupportTier = "experimental"
+	CatalogApplicationPresentationSupportTierUpstream     CatalogApplicationPresentationSupportTier = "upstream"
+)
+
+// Defines values for CatalogApplicationPresentationVerificationStatus.
+const (
+	CatalogApplicationPresentationVerificationStatusDigestVerified CatalogApplicationPresentationVerificationStatus = "digest-verified"
+	CatalogApplicationPresentationVerificationStatusFailed         CatalogApplicationPresentationVerificationStatus = "failed"
+	CatalogApplicationPresentationVerificationStatusRevoked        CatalogApplicationPresentationVerificationStatus = "revoked"
+	CatalogApplicationPresentationVerificationStatusUnsigned       CatalogApplicationPresentationVerificationStatus = "unsigned"
+	CatalogApplicationPresentationVerificationStatusVerified       CatalogApplicationPresentationVerificationStatus = "verified"
+)
+
+// Defines values for CatalogPrerequisiteCheckStatus.
+const (
+	CatalogPrerequisiteCheckStatusAdvisory CatalogPrerequisiteCheckStatus = "advisory"
+	CatalogPrerequisiteCheckStatusApproval CatalogPrerequisiteCheckStatus = "approval"
+	CatalogPrerequisiteCheckStatusBlocking CatalogPrerequisiteCheckStatus = "blocking"
+	CatalogPrerequisiteCheckStatusReady    CatalogPrerequisiteCheckStatus = "ready"
 )
 
 // Defines values for CatalogRepositorySyncReceiptStatus.
@@ -677,6 +743,17 @@ const (
 	ClusterAgentPrivilegeProfileViewer            ClusterAgentPrivilegeProfile = "viewer"
 )
 
+// Defines values for ClusterBadgeColor.
+const (
+	ClusterBadgeColorAmber  ClusterBadgeColor = "amber"
+	ClusterBadgeColorBlue   ClusterBadgeColor = "blue"
+	ClusterBadgeColorEmpty  ClusterBadgeColor = ""
+	ClusterBadgeColorGreen  ClusterBadgeColor = "green"
+	ClusterBadgeColorPurple ClusterBadgeColor = "purple"
+	ClusterBadgeColorRed    ClusterBadgeColor = "red"
+	ClusterBadgeColorSlate  ClusterBadgeColor = "slate"
+)
+
 // Defines values for ClusterDownstreamImpersonation.
 const (
 	ClusterDownstreamImpersonationAttribute ClusterDownstreamImpersonation = "attribute"
@@ -856,6 +933,17 @@ const (
 	ControlPlaneSummaryHealthHealthy  ControlPlaneSummaryHealth = "healthy"
 )
 
+// Defines values for CreateClusterRequestBadgeColor.
+const (
+	CreateClusterRequestBadgeColorAmber  CreateClusterRequestBadgeColor = "amber"
+	CreateClusterRequestBadgeColorBlue   CreateClusterRequestBadgeColor = "blue"
+	CreateClusterRequestBadgeColorEmpty  CreateClusterRequestBadgeColor = ""
+	CreateClusterRequestBadgeColorGreen  CreateClusterRequestBadgeColor = "green"
+	CreateClusterRequestBadgeColorPurple CreateClusterRequestBadgeColor = "purple"
+	CreateClusterRequestBadgeColorRed    CreateClusterRequestBadgeColor = "red"
+	CreateClusterRequestBadgeColorSlate  CreateClusterRequestBadgeColor = "slate"
+)
+
 // Defines values for CreateControlPlaneSnapshotRequestWireLocation.
 const (
 	CreateControlPlaneSnapshotRequestWireLocationLocal CreateControlPlaneSnapshotRequestWireLocation = "local"
@@ -958,6 +1046,18 @@ const (
 	DeliveryConditionTypeStalled     DeliveryConditionType = "Stalled"
 )
 
+// Defines values for DeliveryConfigurationTemplateRenderer.
+const (
+	DeliveryConfigurationTemplateRendererHelm      DeliveryConfigurationTemplateRenderer = "helm"
+	DeliveryConfigurationTemplateRendererKustomize DeliveryConfigurationTemplateRenderer = "kustomize"
+)
+
+// Defines values for DeliveryConfigurationTemplateWriteRenderer.
+const (
+	DeliveryConfigurationTemplateWriteRendererHelm      DeliveryConfigurationTemplateWriteRenderer = "helm"
+	DeliveryConfigurationTemplateWriteRendererKustomize DeliveryConfigurationTemplateWriteRenderer = "kustomize"
+)
+
 // Defines values for DeliveryControllerInventoryCompatibilityStatus.
 const (
 	DeliveryControllerInventoryCompatibilityStatusCompatible      DeliveryControllerInventoryCompatibilityStatus = "compatible"
@@ -966,10 +1066,10 @@ const (
 	DeliveryControllerInventoryCompatibilityStatusUpgradeRequired DeliveryControllerInventoryCompatibilityStatus = "upgrade_required"
 )
 
-// Defines values for DeliveryEstateAttentionSeverity.
+// Defines values for DeliveryFleetAttentionSeverity.
 const (
-	DeliveryEstateAttentionSeverityError   DeliveryEstateAttentionSeverity = "error"
-	DeliveryEstateAttentionSeverityWarning DeliveryEstateAttentionSeverity = "warning"
+	DeliveryFleetAttentionSeverityError   DeliveryFleetAttentionSeverity = "error"
+	DeliveryFleetAttentionSeverityWarning DeliveryFleetAttentionSeverity = "warning"
 )
 
 // Defines values for DeliveryImmutableRevisionKind.
@@ -985,6 +1085,26 @@ const (
 	DeliveryLabelExpressionOperatorExists       DeliveryLabelExpressionOperator = "Exists"
 	DeliveryLabelExpressionOperatorIn           DeliveryLabelExpressionOperator = "In"
 	DeliveryLabelExpressionOperatorNotIn        DeliveryLabelExpressionOperator = "NotIn"
+)
+
+// Defines values for DeliveryOverrideSetScope.
+const (
+	DeliveryOverrideSetScopeCluster      DeliveryOverrideSetScope = "cluster"
+	DeliveryOverrideSetScopeEnvironment  DeliveryOverrideSetScope = "environment"
+	DeliveryOverrideSetScopeGroup        DeliveryOverrideSetScope = "group"
+	DeliveryOverrideSetScopeOrganization DeliveryOverrideSetScope = "organization"
+	DeliveryOverrideSetScopeProject      DeliveryOverrideSetScope = "project"
+	DeliveryOverrideSetScopeRollout      DeliveryOverrideSetScope = "rollout"
+)
+
+// Defines values for DeliveryOverrideSetWriteScope.
+const (
+	DeliveryOverrideSetWriteScopeCluster      DeliveryOverrideSetWriteScope = "cluster"
+	DeliveryOverrideSetWriteScopeEnvironment  DeliveryOverrideSetWriteScope = "environment"
+	DeliveryOverrideSetWriteScopeGroup        DeliveryOverrideSetWriteScope = "group"
+	DeliveryOverrideSetWriteScopeOrganization DeliveryOverrideSetWriteScope = "organization"
+	DeliveryOverrideSetWriteScopeProject      DeliveryOverrideSetWriteScope = "project"
+	DeliveryOverrideSetWriteScopeRollout      DeliveryOverrideSetWriteScope = "rollout"
 )
 
 // Defines values for DeliveryPreviewDecisionMatchReasons.
@@ -1150,6 +1270,36 @@ const (
 	DeliverySourceWriteTypeOciArtifact DeliverySourceWriteType = "oci_artifact"
 )
 
+// Defines values for DeliverySystemComponentCompatibility.
+const (
+	DeliverySystemComponentCompatibilityCompatible   DeliverySystemComponentCompatibility = "compatible"
+	DeliverySystemComponentCompatibilityIncompatible DeliverySystemComponentCompatibility = "incompatible"
+	DeliverySystemComponentCompatibilityUnknown      DeliverySystemComponentCompatibility = "unknown"
+)
+
+// Defines values for DeliverySystemComponentHealth.
+const (
+	DeliverySystemComponentHealthDegraded    DeliverySystemComponentHealth = "degraded"
+	DeliverySystemComponentHealthHealthy     DeliverySystemComponentHealth = "healthy"
+	DeliverySystemComponentHealthUnavailable DeliverySystemComponentHealth = "unavailable"
+	DeliverySystemComponentHealthUnknown     DeliverySystemComponentHealth = "unknown"
+)
+
+// Defines values for DeliverySystemComponentOwner.
+const (
+	DeliverySystemComponentOwnerAstronomer DeliverySystemComponentOwner = "astronomer"
+	DeliverySystemComponentOwnerCluster    DeliverySystemComponentOwner = "cluster"
+	DeliverySystemComponentOwnerExternal   DeliverySystemComponentOwner = "external"
+	DeliverySystemComponentOwnerFlux       DeliverySystemComponentOwner = "flux"
+)
+
+// Defines values for DeliverySystemComponentUpdateState.
+const (
+	DeliverySystemComponentUpdateStateCurrent         DeliverySystemComponentUpdateState = "current"
+	DeliverySystemComponentUpdateStateUnknown         DeliverySystemComponentUpdateState = "unknown"
+	DeliverySystemComponentUpdateStateUpdateAvailable DeliverySystemComponentUpdateState = "update_available"
+)
+
 // Defines values for DeliveryTargetDeletionState.
 const (
 	DeliveryTargetDeletionStateActive   DeliveryTargetDeletionState = "active"
@@ -1285,6 +1435,12 @@ const (
 	GitOpsSourceSyncModeManual   GitOpsSourceSyncMode = "manual"
 )
 
+// Defines values for GitOpsSourceWebhookProvider.
+const (
+	GitOpsSourceWebhookProviderEmpty  GitOpsSourceWebhookProvider = ""
+	GitOpsSourceWebhookProviderGithub GitOpsSourceWebhookProvider = "github"
+)
+
 // Defines values for GitOpsSourceRequestAuthMode.
 const (
 	GitOpsSourceRequestAuthModeHttpsToken GitOpsSourceRequestAuthMode = "https_token"
@@ -1303,6 +1459,12 @@ const (
 const (
 	GitOpsSourceRequestSyncModeInterval GitOpsSourceRequestSyncMode = "interval"
 	GitOpsSourceRequestSyncModeManual   GitOpsSourceRequestSyncMode = "manual"
+)
+
+// Defines values for GitOpsSourceRequestWebhookProvider.
+const (
+	GitOpsSourceRequestWebhookProviderEmpty  GitOpsSourceRequestWebhookProvider = ""
+	GitOpsSourceRequestWebhookProviderGithub GitOpsSourceRequestWebhookProvider = "github"
 )
 
 // Defines values for GitOpsSyncReceiptStatus.
@@ -1406,6 +1568,18 @@ const (
 const (
 	LoggingSavedSearchDirectionBackward LoggingSavedSearchDirection = "backward"
 	LoggingSavedSearchDirectionForward  LoggingSavedSearchDirection = "forward"
+)
+
+// Defines values for MaintenanceWindowRequestMode.
+const (
+	MaintenanceWindowRequestModeBlackout  MaintenanceWindowRequestMode = "blackout"
+	MaintenanceWindowRequestModePermitted MaintenanceWindowRequestMode = "permitted"
+)
+
+// Defines values for MaintenanceWindowRequestOnBlock.
+const (
+	MaintenanceWindowRequestOnBlockDefer  MaintenanceWindowRequestOnBlock = "defer"
+	MaintenanceWindowRequestOnBlockRefuse MaintenanceWindowRequestOnBlock = "refuse"
 )
 
 // Defines values for ManagementBackupDeleteReceiptDesiredState.
@@ -1630,6 +1804,18 @@ const (
 	PodSecurityTemplateWriteRequestWarnLevelRestricted PodSecurityTemplateWriteRequestWarnLevel = "restricted"
 )
 
+// Defines values for PrincipalMaterializedKind.
+const (
+	PrincipalMaterializedKindPending PrincipalMaterializedKind = "pending"
+)
+
+// Defines values for PrincipalSearchItemKind.
+const (
+	PrincipalSearchItemKindExternal PrincipalSearchItemKind = "external"
+	PrincipalSearchItemKindLocal    PrincipalSearchItemKind = "local"
+	PrincipalSearchItemKindPending  PrincipalSearchItemKind = "pending"
+)
+
 // Defines values for ProjectNetworkPolicyMode.
 const (
 	ProjectNetworkPolicyModeAllowSameProject ProjectNetworkPolicyMode = "allow-same-project"
@@ -1702,6 +1888,14 @@ const (
 	RBACRoleRequestScopeCluster RBACRoleRequestScope = "cluster"
 	RBACRoleRequestScopeGlobal  RBACRoleRequestScope = "global"
 	RBACRoleRequestScopeProject RBACRoleRequestScope = "project"
+)
+
+// Defines values for RBACTemplateRiskLevel.
+const (
+	RBACTemplateRiskLevelCritical RBACTemplateRiskLevel = "critical"
+	RBACTemplateRiskLevelHigh     RBACTemplateRiskLevel = "high"
+	RBACTemplateRiskLevelLow      RBACTemplateRiskLevel = "low"
+	RBACTemplateRiskLevelMedium   RBACTemplateRiskLevel = "medium"
 )
 
 // Defines values for RBACTemplateScope.
@@ -1849,6 +2043,15 @@ const (
 	StreamTicketRequestStreamTypeShell        StreamTicketRequestStreamType = "shell"
 )
 
+// Defines values for SupportBundleOperationStatus.
+const (
+	SupportBundleOperationStatusFailed    SupportBundleOperationStatus = "failed"
+	SupportBundleOperationStatusPending   SupportBundleOperationStatus = "pending"
+	SupportBundleOperationStatusRetrying  SupportBundleOperationStatus = "retrying"
+	SupportBundleOperationStatusRunning   SupportBundleOperationStatus = "running"
+	SupportBundleOperationStatusSucceeded SupportBundleOperationStatus = "succeeded"
+)
+
 // Defines values for TaskOutboxEntryWireStatus.
 const (
 	TaskOutboxEntryWireStatusDead       TaskOutboxEntryWireStatus = "dead"
@@ -1871,6 +2074,7 @@ const (
 const (
 	ToolOperationOperationTypeAdopt     ToolOperationOperationType = "adopt"
 	ToolOperationOperationTypeInstall   ToolOperationOperationType = "install"
+	ToolOperationOperationTypeRollback  ToolOperationOperationType = "rollback"
 	ToolOperationOperationTypeUninstall ToolOperationOperationType = "uninstall"
 	ToolOperationOperationTypeUpgrade   ToolOperationOperationType = "upgrade"
 )
@@ -1891,6 +2095,17 @@ const (
 	ToolOperationEventLevelWarn  ToolOperationEventLevel = "warn"
 )
 
+// Defines values for UpdateClusterRequestBadgeColor.
+const (
+	UpdateClusterRequestBadgeColorAmber  UpdateClusterRequestBadgeColor = "amber"
+	UpdateClusterRequestBadgeColorBlue   UpdateClusterRequestBadgeColor = "blue"
+	UpdateClusterRequestBadgeColorEmpty  UpdateClusterRequestBadgeColor = ""
+	UpdateClusterRequestBadgeColorGreen  UpdateClusterRequestBadgeColor = "green"
+	UpdateClusterRequestBadgeColorPurple UpdateClusterRequestBadgeColor = "purple"
+	UpdateClusterRequestBadgeColorRed    UpdateClusterRequestBadgeColor = "red"
+	UpdateClusterRequestBadgeColorSlate  UpdateClusterRequestBadgeColor = "slate"
+)
+
 // Defines values for UpdateLoggingSavedSearchRequestDirection.
 const (
 	UpdateLoggingSavedSearchRequestDirectionBackward UpdateLoggingSavedSearchRequestDirection = "backward"
@@ -1902,6 +2117,56 @@ const (
 	UpdateProjectPolicyRequestNetworkPolicyModeAllowSameProject UpdateProjectPolicyRequestNetworkPolicyMode = "allow-same-project"
 	UpdateProjectPolicyRequestNetworkPolicyModeIsolated         UpdateProjectPolicyRequestNetworkPolicyMode = "isolated"
 	UpdateProjectPolicyRequestNetworkPolicyModeNone             UpdateProjectPolicyRequestNetworkPolicyMode = "none"
+)
+
+// Defines values for UserPreferencesFavorites.
+const (
+	UserPreferencesFavoritesDashboard           UserPreferencesFavorites = "/dashboard"
+	UserPreferencesFavoritesDashboardalerting   UserPreferencesFavorites = "/dashboard/alerting"
+	UserPreferencesFavoritesDashboardaudit      UserPreferencesFavorites = "/dashboard/audit"
+	UserPreferencesFavoritesDashboardclusters   UserPreferencesFavorites = "/dashboard/clusters"
+	UserPreferencesFavoritesDashboarddelivery   UserPreferencesFavorites = "/dashboard/delivery"
+	UserPreferencesFavoritesDashboardextensions UserPreferencesFavorites = "/dashboard/extensions"
+	UserPreferencesFavoritesDashboardlogging    UserPreferencesFavorites = "/dashboard/logging"
+	UserPreferencesFavoritesDashboardmonitoring UserPreferencesFavorites = "/dashboard/monitoring"
+	UserPreferencesFavoritesDashboardprojects   UserPreferencesFavorites = "/dashboard/projects"
+	UserPreferencesFavoritesDashboardrbac       UserPreferencesFavorites = "/dashboard/rbac"
+	UserPreferencesFavoritesDashboardsecurity   UserPreferencesFavorites = "/dashboard/security"
+	UserPreferencesFavoritesDashboardtools      UserPreferencesFavorites = "/dashboard/tools"
+	UserPreferencesFavoritesDashboardworkloads  UserPreferencesFavorites = "/dashboard/workloads"
+)
+
+// Defines values for UserPreferencesLandingRoute.
+const (
+	UserPreferencesLandingRouteDashboard           UserPreferencesLandingRoute = "/dashboard"
+	UserPreferencesLandingRouteDashboardalerting   UserPreferencesLandingRoute = "/dashboard/alerting"
+	UserPreferencesLandingRouteDashboardaudit      UserPreferencesLandingRoute = "/dashboard/audit"
+	UserPreferencesLandingRouteDashboardclusters   UserPreferencesLandingRoute = "/dashboard/clusters"
+	UserPreferencesLandingRouteDashboarddelivery   UserPreferencesLandingRoute = "/dashboard/delivery"
+	UserPreferencesLandingRouteDashboardmonitoring UserPreferencesLandingRoute = "/dashboard/monitoring"
+	UserPreferencesLandingRouteDashboardprojects   UserPreferencesLandingRoute = "/dashboard/projects"
+	UserPreferencesLandingRouteDashboardsecurity   UserPreferencesLandingRoute = "/dashboard/security"
+	UserPreferencesLandingRouteDashboardworkloads  UserPreferencesLandingRoute = "/dashboard/workloads"
+)
+
+// Defines values for UserPreferencesTableDensity.
+const (
+	UserPreferencesTableDensityComfortable UserPreferencesTableDensity = "comfortable"
+	UserPreferencesTableDensityCompact     UserPreferencesTableDensity = "compact"
+)
+
+// Defines values for UserPreferencesTheme.
+const (
+	UserPreferencesThemeDark   UserPreferencesTheme = "dark"
+	UserPreferencesThemeLight  UserPreferencesTheme = "light"
+	UserPreferencesThemeSystem UserPreferencesTheme = "system"
+)
+
+// Defines values for UserPreferencesTimeFormat.
+const (
+	UserPreferencesTimeFormatLocale UserPreferencesTimeFormat = "locale"
+	UserPreferencesTimeFormatN12h   UserPreferencesTimeFormat = "12h"
+	UserPreferencesTimeFormatN24h   UserPreferencesTimeFormat = "24h"
 )
 
 // Defines values for UserQuotaOffenderLimit.
@@ -2021,12 +2286,54 @@ const (
 	ExportAuditLogsParamsResultSuccess ExportAuditLogsParamsResult = "success"
 )
 
+// Defines values for CreateAuditExportParamsFormat.
+const (
+	CreateAuditExportParamsFormatCsv CreateAuditExportParamsFormat = "csv"
+)
+
+// Defines values for CreateAuditExportParamsAudience.
+const (
+	CreateAuditExportParamsAudienceAll    CreateAuditExportParamsAudience = "all"
+	CreateAuditExportParamsAudiencePeople CreateAuditExportParamsAudience = "people"
+	CreateAuditExportParamsAudienceSystem CreateAuditExportParamsAudience = "system"
+)
+
+// Defines values for CreateAuditExportParamsResult.
+const (
+	CreateAuditExportParamsResultError   CreateAuditExportParamsResult = "error"
+	CreateAuditExportParamsResultFailure CreateAuditExportParamsResult = "failure"
+	CreateAuditExportParamsResultSuccess CreateAuditExportParamsResult = "success"
+)
+
 // Defines values for ListCharlieFindingsParamsStatus.
 const (
 	ListCharlieFindingsParamsStatusAcknowledged ListCharlieFindingsParamsStatus = "acknowledged"
 	ListCharlieFindingsParamsStatusDismissed    ListCharlieFindingsParamsStatus = "dismissed"
 	ListCharlieFindingsParamsStatusOpen         ListCharlieFindingsParamsStatus = "open"
 	ListCharlieFindingsParamsStatusResolved     ListCharlieFindingsParamsStatus = "resolved"
+)
+
+// Defines values for GetClustersByClusterIdPodsParamsSort.
+const (
+	GetClustersByClusterIdPodsParamsSortAgeAsc        GetClustersByClusterIdPodsParamsSort = "age_asc"
+	GetClustersByClusterIdPodsParamsSortAgeDesc       GetClustersByClusterIdPodsParamsSort = "age_desc"
+	GetClustersByClusterIdPodsParamsSortNameAsc       GetClustersByClusterIdPodsParamsSort = "name_asc"
+	GetClustersByClusterIdPodsParamsSortNameDesc      GetClustersByClusterIdPodsParamsSort = "name_desc"
+	GetClustersByClusterIdPodsParamsSortNamespaceAsc  GetClustersByClusterIdPodsParamsSort = "namespace_asc"
+	GetClustersByClusterIdPodsParamsSortNamespaceDesc GetClustersByClusterIdPodsParamsSort = "namespace_desc"
+	GetClustersByClusterIdPodsParamsSortNodeAsc       GetClustersByClusterIdPodsParamsSort = "node_asc"
+	GetClustersByClusterIdPodsParamsSortNodeDesc      GetClustersByClusterIdPodsParamsSort = "node_desc"
+	GetClustersByClusterIdPodsParamsSortRestartsAsc   GetClustersByClusterIdPodsParamsSort = "restarts_asc"
+	GetClustersByClusterIdPodsParamsSortRestartsDesc  GetClustersByClusterIdPodsParamsSort = "restarts_desc"
+	GetClustersByClusterIdPodsParamsSortStatusAsc     GetClustersByClusterIdPodsParamsSort = "status_asc"
+	GetClustersByClusterIdPodsParamsSortStatusDesc    GetClustersByClusterIdPodsParamsSort = "status_desc"
+)
+
+// Defines values for GetClustersByClusterIdPodsParamsHealth.
+const (
+	GetClustersByClusterIdPodsParamsHealthAll       GetClustersByClusterIdPodsParamsHealth = "all"
+	GetClustersByClusterIdPodsParamsHealthAttention GetClustersByClusterIdPodsParamsHealth = "attention"
+	GetClustersByClusterIdPodsParamsHealthRestarted GetClustersByClusterIdPodsParamsHealth = "restarted"
 )
 
 // Defines values for GetClustersByClusterIdResourcesSchemaParamsResourceType.
@@ -2085,6 +2392,16 @@ const (
 	DeleteNamedClusterResourceParamsResourceTypeServices               DeleteNamedClusterResourceParamsResourceType = "services"
 )
 
+// Defines values for GetClustersByClusterIdWorkloadsParamsSort.
+const (
+	GetClustersByClusterIdWorkloadsParamsSortCreatedAsc    GetClustersByClusterIdWorkloadsParamsSort = "created_asc"
+	GetClustersByClusterIdWorkloadsParamsSortCreatedDesc   GetClustersByClusterIdWorkloadsParamsSort = "created_desc"
+	GetClustersByClusterIdWorkloadsParamsSortNameAsc       GetClustersByClusterIdWorkloadsParamsSort = "name_asc"
+	GetClustersByClusterIdWorkloadsParamsSortNameDesc      GetClustersByClusterIdWorkloadsParamsSort = "name_desc"
+	GetClustersByClusterIdWorkloadsParamsSortNamespaceAsc  GetClustersByClusterIdWorkloadsParamsSort = "namespace_asc"
+	GetClustersByClusterIdWorkloadsParamsSortNamespaceDesc GetClustersByClusterIdWorkloadsParamsSort = "namespace_desc"
+)
+
 // Defines values for GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRange.
 const (
 	GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRangeN1h  GetClustersByClusterIdWorkloadsByKindByNamespaceByNameMetricsParamsRange = "1h"
@@ -2107,6 +2424,11 @@ const (
 	GetDeliverySourcesParamsStatusPending  GetDeliverySourcesParamsStatus = "pending"
 	GetDeliverySourcesParamsStatusReady    GetDeliverySourcesParamsStatus = "ready"
 	GetDeliverySourcesParamsStatusRevoked  GetDeliverySourcesParamsStatus = "revoked"
+)
+
+// Defines values for PostGitopsSourcesByIdWebhookParamsXGitHubEvent.
+const (
+	PostGitopsSourcesByIdWebhookParamsXGitHubEventPush PostGitopsSourcesByIdWebhookParamsXGitHubEvent = "push"
 )
 
 // Defines values for GetLoggingOperationsParamsTargetType.
@@ -2204,6 +2526,11 @@ const (
 	InternalTunnelK8sJSONBodyCallerOriginUser    InternalTunnelK8sJSONBodyCallerOrigin = "user"
 )
 
+// Defines values for InternalTunnelK8sCapabilityParamsXAstronomerInternalSource.
+const (
+	InternalTunnelK8sCapabilityParamsXAstronomerInternalSourceSiblingServerPod InternalTunnelK8sCapabilityParamsXAstronomerInternalSource = "sibling-server-pod"
+)
+
 // AdminQueueDLQEntryWire defines model for AdminQueueDLQEntryWire.
 type AdminQueueDLQEntryWire struct {
 	Id           string    `json:"id"`
@@ -2259,6 +2586,11 @@ type AdminQueueSummaryWire struct {
 	Retry     int       `json:"retry"`
 	Scheduled int       `json:"scheduled"`
 	Size      int       `json:"size"`
+}
+
+// AgentAffinity defines model for AgentAffinity.
+type AgentAffinity struct {
+	Node *AgentNodeAffinity `json:"node,omitempty"`
 }
 
 // AgentClusterConditionDiagnostic defines model for AgentClusterConditionDiagnostic.
@@ -2335,9 +2667,8 @@ type AgentLifecycleOperationStatus string
 
 // AgentLifecycleOperationsResponse defines model for AgentLifecycleOperationsResponse.
 type AgentLifecycleOperationsResponse struct {
-	Items  []AgentLifecycleOperation `json:"items"`
-	Limit  int                       `json:"limit"`
-	Offset int                       `json:"offset"`
+	Data       []AgentLifecycleOperation `json:"data"`
+	Pagination PaginationMetadata        `json:"pagination"`
 }
 
 // AgentLiveDiagnostics defines model for AgentLiveDiagnostics.
@@ -2378,6 +2709,28 @@ type AgentLivePodDiagnostic struct {
 	RestartCount    int       `json:"restart_count"`
 }
 
+// AgentNodeAffinity defines model for AgentNodeAffinity.
+type AgentNodeAffinity struct {
+	Preferred *[]AgentPreferredNodeSelectorTerm `json:"preferred,omitempty"`
+	Required  *[]AgentNodeSelectorTerm          `json:"required,omitempty"`
+}
+
+// AgentNodeSelectorRequirement defines model for AgentNodeSelectorRequirement.
+type AgentNodeSelectorRequirement struct {
+	Key      string                               `json:"key"`
+	Operator AgentNodeSelectorRequirementOperator `json:"operator"`
+	Values   *[]string                            `json:"values,omitempty"`
+}
+
+// AgentNodeSelectorRequirementOperator defines model for AgentNodeSelectorRequirement.Operator.
+type AgentNodeSelectorRequirementOperator string
+
+// AgentNodeSelectorTerm defines model for AgentNodeSelectorTerm.
+type AgentNodeSelectorTerm struct {
+	MatchExpressions *[]AgentNodeSelectorRequirement `json:"match_expressions,omitempty"`
+	MatchFields      *[]AgentNodeSelectorRequirement `json:"match_fields,omitempty"`
+}
+
 // AgentOfflineBehavior defines model for AgentOfflineBehavior.
 type AgentOfflineBehavior struct {
 	BlockedOperations         []string   `json:"blocked_operations"`
@@ -2386,6 +2739,41 @@ type AgentOfflineBehavior struct {
 	PermittedQueuedOperations []string   `json:"permitted_queued_operations"`
 	Stale                     bool       `json:"stale"`
 	State                     string     `json:"state"`
+}
+
+// AgentOverrides Bounded per-cluster agent PodSpec customization. Platform-owned Linux placement and security settings remain immutable.
+type AgentOverrides struct {
+	Affinity *AgentAffinity `json:"affinity,omitempty"`
+
+	// Proxy Standard proxy variables. URLs cannot contain embedded credentials, queries, or fragments.
+	Proxy       *AgentProxy        `json:"proxy,omitempty"`
+	Resources   *AgentResources    `json:"resources,omitempty"`
+	Tolerations *[]AgentToleration `json:"tolerations,omitempty"`
+}
+
+// AgentPreferredNodeSelectorTerm defines model for AgentPreferredNodeSelectorTerm.
+type AgentPreferredNodeSelectorTerm struct {
+	Preference AgentNodeSelectorTerm `json:"preference"`
+	Weight     int32                 `json:"weight"`
+}
+
+// AgentProxy Standard proxy variables. URLs cannot contain embedded credentials, queries, or fragments.
+type AgentProxy struct {
+	HttpProxy  *string `json:"http_proxy,omitempty"`
+	HttpsProxy *string `json:"https_proxy,omitempty"`
+	NoProxy    *string `json:"no_proxy,omitempty"`
+}
+
+// AgentResourceValues defines model for AgentResourceValues.
+type AgentResourceValues struct {
+	Cpu    *string `json:"cpu,omitempty"`
+	Memory *string `json:"memory,omitempty"`
+}
+
+// AgentResources defines model for AgentResources.
+type AgentResources struct {
+	Limits   *AgentResourceValues `json:"limits,omitempty"`
+	Requests *AgentResourceValues `json:"requests,omitempty"`
 }
 
 // AgentSelfTest defines model for AgentSelfTest.
@@ -2411,6 +2799,21 @@ type AgentSelfTestCheck struct {
 // AgentSelfTestCheckStatus defines model for AgentSelfTestCheck.Status.
 type AgentSelfTestCheckStatus string
 
+// AgentToleration defines model for AgentToleration.
+type AgentToleration struct {
+	Effect            *AgentTolerationEffect   `json:"effect,omitempty"`
+	Key               string                   `json:"key"`
+	Operator          *AgentTolerationOperator `json:"operator,omitempty"`
+	TolerationSeconds *int64                   `json:"toleration_seconds,omitempty"`
+	Value             *string                  `json:"value,omitempty"`
+}
+
+// AgentTolerationEffect defines model for AgentToleration.Effect.
+type AgentTolerationEffect string
+
+// AgentTolerationOperator defines model for AgentToleration.Operator.
+type AgentTolerationOperator string
+
 // AgentUpgradeOperationResponse defines model for AgentUpgradeOperationResponse.
 type AgentUpgradeOperationResponse struct {
 	Operation AgentLifecycleOperation `json:"operation"`
@@ -2419,14 +2822,18 @@ type AgentUpgradeOperationResponse struct {
 
 // AgentUpgradePlan defines model for AgentUpgradePlan.
 type AgentUpgradePlan struct {
+	// AgentOverrides Bounded per-cluster agent PodSpec customization. Platform-owned Linux placement and security settings remain immutable.
+	AgentOverrides          AgentOverrides     `json:"agent_overrides"`
 	BatchSize               int                `json:"batch_size"`
 	Blockers                *[]string          `json:"blockers,omitempty"`
 	CanaryClusterIds        *[]string          `json:"canary_cluster_ids,omitempty"`
 	ClusterId               openapi_types.UUID `json:"cluster_id"`
 	ClusterName             string             `json:"cluster_name"`
+	ConfigurationDigest     string             `json:"configuration_digest"`
 	CurrentImage            *string            `json:"current_image,omitempty"`
 	CurrentVersion          *string            `json:"current_version,omitempty"`
 	MaxUnavailable          int                `json:"max_unavailable"`
+	PlanDigest              string             `json:"plan_digest"`
 	PostUpgradeHealthChecks []string           `json:"post_upgrade_health_checks"`
 	PreflightChecks         []string           `json:"preflight_checks"`
 	PrivilegeProfile        string             `json:"privilege_profile"`
@@ -2503,6 +2910,24 @@ type AlertEventEnvelope struct {
 type AlertEventPage struct {
 	Data       []AlertEvent       `json:"data"`
 	Pagination PaginationMetadata `json:"pagination"`
+}
+
+// AlertEventSummary defines model for AlertEventSummary.
+type AlertEventSummary struct {
+	Acknowledged   int64     `json:"acknowledged"`
+	AsOf           time.Time `json:"as_of"`
+	Firing         int64     `json:"firing"`
+	FiringCritical int64     `json:"firing_critical"`
+	FiringInfo     int64     `json:"firing_info"`
+	FiringWarning  int64     `json:"firing_warning"`
+	Resolved       int64     `json:"resolved"`
+	Silenced       int64     `json:"silenced"`
+	Total          int64     `json:"total"`
+}
+
+// AlertEventSummaryEnvelope defines model for AlertEventSummaryEnvelope.
+type AlertEventSummaryEnvelope struct {
+	Data AlertEventSummary `json:"data"`
 }
 
 // AlertRule defines model for AlertRule.
@@ -2727,6 +3152,29 @@ type ApiTokenListItem struct {
 	Scopes           *[]string           `json:"scopes,omitempty"`
 }
 
+// ApplicationCatalogSource defines model for ApplicationCatalogSource.
+type ApplicationCatalogSource struct {
+	Channel              string                                     `json:"channel"`
+	CreatedAt            time.Time                                  `json:"created_at"`
+	Description          string                                     `json:"description"`
+	DisplayName          string                                     `json:"display_name"`
+	Id                   openapi_types.UUID                         `json:"id"`
+	IndexDigest          string                                     `json:"index_digest"`
+	LastSyncAttemptedAt  time.Time                                  `json:"last_sync_attempted_at"`
+	LastSyncError        string                                     `json:"last_sync_error"`
+	LastSyncedAt         time.Time                                  `json:"last_synced_at"`
+	Name                 string                                     `json:"name"`
+	SourceRevision       string                                     `json:"source_revision"`
+	SourceUrl            string                                     `json:"source_url"`
+	TrustPolicy          map[string]interface{}                     `json:"trust_policy"`
+	UpdatedAt            time.Time                                  `json:"updated_at"`
+	VerificationIdentity string                                     `json:"verification_identity"`
+	VerificationStatus   ApplicationCatalogSourceVerificationStatus `json:"verification_status"`
+}
+
+// ApplicationCatalogSourceVerificationStatus defines model for ApplicationCatalogSource.VerificationStatus.
+type ApplicationCatalogSourceVerificationStatus string
+
 // ApplyClusterTemplateRequest defines model for ApplyClusterTemplateRequest.
 type ApplyClusterTemplateRequest struct {
 	TemplateId openapi_types.UUID `json:"template_id"`
@@ -2739,6 +3187,26 @@ type ApplyNetworkPolicyRequest struct {
 	TemplateId openapi_types.UUID `json:"template_id"`
 }
 
+// AuditExportOperation defines model for AuditExportOperation.
+type AuditExportOperation struct {
+	AttemptCount int32                      `json:"attempt_count"`
+	CompletedAt  *time.Time                 `json:"completed_at,omitempty"`
+	CreatedAt    time.Time                  `json:"created_at"`
+	DownloadUrl  *string                    `json:"download_url,omitempty"`
+	ErrorCode    *string                    `json:"error_code,omitempty"`
+	ExpiresAt    time.Time                  `json:"expires_at"`
+	Filename     *string                    `json:"filename,omitempty"`
+	Id           openapi_types.UUID         `json:"id"`
+	Sha256       *string                    `json:"sha256,omitempty"`
+	Size         int64                      `json:"size"`
+	Status       AuditExportOperationStatus `json:"status"`
+	StatusUrl    string                     `json:"status_url"`
+	UpdatedAt    time.Time                  `json:"updated_at"`
+}
+
+// AuditExportOperationStatus defines model for AuditExportOperation.Status.
+type AuditExportOperationStatus string
+
 // AuditLogEntry defines model for AuditLogEntry.
 type AuditLogEntry struct {
 	Action          *string    `json:"action,omitempty"`
@@ -2748,10 +3216,7 @@ type AuditLogEntry struct {
 	CreatedAt       *time.Time `json:"created_at,omitempty"`
 
 	// Detail Raw JSON detail payload.
-	Detail interface{} `json:"detail"`
-
-	// Details Duplicate of detail (back-compat alias).
-	Details      interface{}         `json:"details"`
+	Detail       interface{}         `json:"detail"`
 	DurationMs   *int64              `json:"duration_ms,omitempty"`
 	HttpMethod   *string             `json:"http_method,omitempty"`
 	Id           *openapi_types.UUID `json:"id,omitempty"`
@@ -3028,10 +3493,6 @@ type CISScanCreateRequest struct {
 
 	// Profile Installed ClusterScanProfile name; omitted to select the newest compatible distribution profile.
 	Profile *string `json:"profile,omitempty"`
-
-	// ScanType Compatibility alias for profile.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	ScanType *string `json:"scan_type,omitempty"`
 }
 
 // CISScanEnvelope defines model for CISScanEnvelope.
@@ -3041,16 +3502,44 @@ type CISScanEnvelope struct {
 
 // CISScanListEnvelope defines model for CISScanListEnvelope.
 type CISScanListEnvelope struct {
-	// Count Total number of items across all pages.
-	Count int64     `json:"count"`
-	Data  []CISScan `json:"data"`
-
-	// Next URL of the next page, or null on the last page.
-	Next *string `json:"next"`
-
-	// Previous URL of the previous page, or null on the first page.
-	Previous *string `json:"previous"`
+	Data       []CISScan          `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
+
+// CatalogApplicationPresentation defines model for CatalogApplicationPresentation.
+type CatalogApplicationPresentation struct {
+	Artifact             map[string]interface{}                           `json:"artifact"`
+	CatalogDigest        string                                           `json:"catalog_digest"`
+	Category             string                                           `json:"category"`
+	ChartName            string                                           `json:"chart_name"`
+	Compatibility        map[string]interface{}                           `json:"compatibility"`
+	DefaultEnabled       bool                                             `json:"default_enabled"`
+	Description          *string                                          `json:"description,omitempty"`
+	DisplayName          string                                           `json:"display_name"`
+	DocumentationUrl     *string                                          `json:"documentation_url,omitempty"`
+	Featured             bool                                             `json:"featured"`
+	IconUrl              *string                                          `json:"icon_url,omitempty"`
+	Id                   openapi_types.UUID                               `json:"id"`
+	Lifecycle            map[string]bool                                  `json:"lifecycle"`
+	Presentation         map[string]interface{}                           `json:"presentation"`
+	Privileged           bool                                             `json:"privileged"`
+	RepoName             string                                           `json:"repo_name"`
+	RepoUrl              string                                           `json:"repo_url"`
+	Resources            map[string]interface{}                           `json:"resources"`
+	Revoked              bool                                             `json:"revoked"`
+	Slug                 string                                           `json:"slug"`
+	Storage              map[string]interface{}                           `json:"storage"`
+	SupportTier          CatalogApplicationPresentationSupportTier        `json:"support_tier"`
+	UpdatedAt            time.Time                                        `json:"updated_at"`
+	VerificationIdentity string                                           `json:"verification_identity"`
+	VerificationStatus   CatalogApplicationPresentationVerificationStatus `json:"verification_status"`
+}
+
+// CatalogApplicationPresentationSupportTier defines model for CatalogApplicationPresentation.SupportTier.
+type CatalogApplicationPresentationSupportTier string
+
+// CatalogApplicationPresentationVerificationStatus defines model for CatalogApplicationPresentation.VerificationStatus.
+type CatalogApplicationPresentationVerificationStatus string
 
 // CatalogInstallationAcceptedEnvelope defines model for CatalogInstallationAcceptedEnvelope.
 type CatalogInstallationAcceptedEnvelope struct {
@@ -3058,6 +3547,16 @@ type CatalogInstallationAcceptedEnvelope struct {
 		Installation InstalledChart   `json:"installation"`
 		Operation    CatalogOperation `json:"operation"`
 	} `json:"data"`
+}
+
+// CatalogInstallationPreview defines model for CatalogInstallationPreview.
+type CatalogInstallationPreview struct {
+	Allowed        bool                       `json:"allowed"`
+	Application    string                     `json:"application"`
+	ArtifactDigest string                     `json:"artifact_digest"`
+	CatalogDigest  string                     `json:"catalog_digest"`
+	Checks         []CatalogPrerequisiteCheck `json:"checks"`
+	ValuesDigest   string                     `json:"values_digest"`
 }
 
 // CatalogOperation defines model for CatalogOperation.
@@ -3092,6 +3591,17 @@ type CatalogOperationEvent struct {
 	Stage     *string                 `json:"stage,omitempty"`
 }
 
+// CatalogPrerequisiteCheck defines model for CatalogPrerequisiteCheck.
+type CatalogPrerequisiteCheck struct {
+	Code        string                         `json:"code"`
+	Description string                         `json:"description"`
+	Status      CatalogPrerequisiteCheckStatus `json:"status"`
+	Title       string                         `json:"title"`
+}
+
+// CatalogPrerequisiteCheckStatus defines model for CatalogPrerequisiteCheck.Status.
+type CatalogPrerequisiteCheckStatus string
+
 // CatalogRepositorySyncReceipt defines model for CatalogRepositorySyncReceipt.
 type CatalogRepositorySyncReceipt struct {
 	RepositoryId openapi_types.UUID                 `json:"repository_id"`
@@ -3105,6 +3615,15 @@ type CatalogRepositorySyncReceiptStatus string
 // CatalogRepositorySyncReceiptEnvelope defines model for CatalogRepositorySyncReceiptEnvelope.
 type CatalogRepositorySyncReceiptEnvelope struct {
 	Data CatalogRepositorySyncReceipt `json:"data"`
+}
+
+// CatalogUserDiscovery defines model for CatalogUserDiscovery.
+type CatalogUserDiscovery struct {
+	ChartId      openapi_types.UUID `json:"chart_id"`
+	Favorite     bool               `json:"favorite"`
+	FavoriteAt   *time.Time         `json:"favorite_at"`
+	LastViewedAt *time.Time         `json:"last_viewed_at"`
+	ViewCount    int                `json:"view_count"`
 }
 
 // CharlieAbortRequest defines model for CharlieAbortRequest.
@@ -3437,27 +3956,23 @@ type CharlieAdminTriggerEventState string
 
 // CharlieAdminTriggerRule defines model for CharlieAdminTriggerRule.
 type CharlieAdminTriggerRule struct {
-	CooldownSeconds        int32  `json:"cooldown_seconds"`
-	DeadLetterEnabled      bool   `json:"dead_letter_enabled"`
-	Enabled                bool   `json:"enabled"`
-	EstateThresholdPercent *int32 `json:"estate_threshold_percent,omitempty"`
-	FlapCount              int32  `json:"flap_count"`
-	FlapWindowSeconds      int32  `json:"flap_window_seconds"`
-
-	// FleetThresholdPercent Deprecated compatibility alias for estate_threshold_percent.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	FleetThresholdPercent int32                               `json:"fleet_threshold_percent"`
-	GracePeriodSeconds    int32                               `json:"grace_period_seconds"`
-	Id                    *openapi_types.UUID                 `json:"id,omitempty"`
-	MaximumAttempts       int32                               `json:"maximum_attempts"`
-	MinimumAgentVersion   *string                             `json:"minimum_agent_version,omitempty"`
-	ModeCeiling           CharlieAdminTriggerRuleModeCeiling  `json:"mode_ceiling"`
-	Name                  string                              `json:"name"`
-	Scopes                []string                            `json:"scopes"`
-	ServiceIdentity       *string                             `json:"service_identity,omitempty"`
-	Severities            []CharlieAdminTriggerRuleSeverities `json:"severities"`
-	SourceType            string                              `json:"source_type"`
-	Suppressed            bool                                `json:"suppressed"`
+	CooldownSeconds        int32                               `json:"cooldown_seconds"`
+	DeadLetterEnabled      bool                                `json:"dead_letter_enabled"`
+	Enabled                bool                                `json:"enabled"`
+	EstateThresholdPercent int32                               `json:"estate_threshold_percent"`
+	FlapCount              int32                               `json:"flap_count"`
+	FlapWindowSeconds      int32                               `json:"flap_window_seconds"`
+	GracePeriodSeconds     int32                               `json:"grace_period_seconds"`
+	Id                     *openapi_types.UUID                 `json:"id,omitempty"`
+	MaximumAttempts        int32                               `json:"maximum_attempts"`
+	MinimumAgentVersion    *string                             `json:"minimum_agent_version,omitempty"`
+	ModeCeiling            CharlieAdminTriggerRuleModeCeiling  `json:"mode_ceiling"`
+	Name                   string                              `json:"name"`
+	Scopes                 []string                            `json:"scopes"`
+	ServiceIdentity        *string                             `json:"service_identity,omitempty"`
+	Severities             []CharlieAdminTriggerRuleSeverities `json:"severities"`
+	SourceType             string                              `json:"source_type"`
+	Suppressed             bool                                `json:"suppressed"`
 }
 
 // CharlieAdminTriggerRuleModeCeiling defines model for CharlieAdminTriggerRule.ModeCeiling.
@@ -3997,10 +4512,21 @@ type CloudProviderSpec map[string]interface{}
 
 // Cluster defines model for Cluster.
 type Cluster struct {
+	// AgentOverrides Bounded per-cluster agent PodSpec customization. Platform-owned Linux placement and security settings remain immutable.
+	AgentOverrides AgentOverrides `json:"agent_overrides"`
+
+	// AgentOverridesDigest Canonical digest included in generated manifests and agent upgrade plans.
+	AgentOverridesDigest  string                       `json:"agent_overrides_digest"`
 	AgentPrivilegeProfile ClusterAgentPrivilegeProfile `json:"agent_privilege_profile"`
 	AgentVersion          string                       `json:"agent_version"`
 	Annotations           map[string]string            `json:"annotations"`
 	ApiServerUrl          string                       `json:"api_server_url"`
+
+	// BadgeColor Validated semantic color token. Empty when badge_text is empty.
+	BadgeColor ClusterBadgeColor `json:"badge_color"`
+
+	// BadgeText Optional short environment or purpose marker displayed beside the cluster name.
+	BadgeText string `json:"badge_text"`
 
 	// CaCertificate Public CA bundle used to verify the Kubernetes API endpoint; never an authentication credential.
 	CaCertificate    string              `json:"ca_certificate"`
@@ -4054,6 +4580,9 @@ type Cluster struct {
 
 // ClusterAgentPrivilegeProfile defines model for Cluster.AgentPrivilegeProfile.
 type ClusterAgentPrivilegeProfile string
+
+// ClusterBadgeColor Validated semantic color token. Empty when badge_text is empty.
+type ClusterBadgeColor string
 
 // ClusterDownstreamImpersonation Tri-state downstream-impersonation mode for this cluster (docs/design/downstream-impersonation.md §5), stored in `annotations` under `astronomer.io/downstream-impersonation`. Writable by superusers only, and `enforce` additionally requires the agent to have advertised the impersonation capability. Absent, blank and unrecognized all read as `off`, which is the default and — in Phase 0 — the only mode any code path acts on.
 type ClusterDownstreamImpersonation string
@@ -4111,10 +4640,9 @@ type ClusterAgentItemPrivilegeProfile string
 
 // ClusterAgentResponse defines model for ClusterAgentResponse.
 type ClusterAgentResponse struct {
-	Items   []ClusterAgentItem `json:"items"`
-	Limit   int                `json:"limit"`
-	Offset  int                `json:"offset"`
-	Summary struct {
+	Data       []ClusterAgentItem `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
+	Summary    struct {
 		Compatibility                         map[string]int `json:"compatibility"`
 		Connected                             int            `json:"connected"`
 		Degraded                              int            `json:"degraded"`
@@ -4183,33 +4711,33 @@ type ClusterConditionResponseStatus string
 
 // ClusterDeployment defines model for ClusterDeployment.
 type ClusterDeployment struct {
-	Action                  ClusterDeploymentAction `json:"action"`
-	AgentSequence           int64                   `json:"agent_sequence"`
-	AgentSessionId          string                  `json:"agent_session_id"`
-	ClusterId               openapi_types.UUID      `json:"cluster_id"`
-	Conditions              []DeliveryCondition     `json:"conditions"`
-	CreatedAt               time.Time               `json:"created_at"`
-	CurrentRolloutId        *openapi_types.UUID     `json:"current_rollout_id"`
-	DesiredBundleVersionId  *openapi_types.UUID     `json:"desired_bundle_version_id"`
-	DesiredGeneration       int64                   `json:"desired_generation"`
-	DesiredRevision         string                  `json:"desired_revision"`
-	DesiredSpecDigest       string                  `json:"desired_spec_digest"`
-	Id                      openapi_types.UUID      `json:"id"`
-	Inventory               map[string]interface{}  `json:"inventory"`
-	LastErrorCode           string                  `json:"last_error_code"`
-	LastMessage             string                  `json:"last_message"`
-	LastObservedAt          *time.Time              `json:"last_observed_at"`
-	ObservedGeneration      int64                   `json:"observed_generation"`
-	ObservedRevision        string                  `json:"observed_revision"`
-	ObservedSpecDigest      string                  `json:"observed_spec_digest"`
-	Phase                   ClusterDeploymentPhase  `json:"phase"`
-	PreviousBundleVersionId *openapi_types.UUID     `json:"previous_bundle_version_id"`
-	ReconcilerKind          string                  `json:"reconciler_kind"`
-	ReconcilerName          string                  `json:"reconciler_name"`
-	SourceKind              string                  `json:"source_kind"`
-	SourceName              string                  `json:"source_name"`
-	TargetId                openapi_types.UUID      `json:"target_id"`
-	UpdatedAt               time.Time               `json:"updated_at"`
+	Action                  ClusterDeploymentAction   `json:"action"`
+	AgentSequence           int64                     `json:"agent_sequence"`
+	AgentSessionId          string                    `json:"agent_session_id"`
+	ClusterId               openapi_types.UUID        `json:"cluster_id"`
+	Conditions              []DeliveryCondition       `json:"conditions"`
+	CreatedAt               time.Time                 `json:"created_at"`
+	CurrentRolloutId        *openapi_types.UUID       `json:"current_rollout_id"`
+	DesiredBundleVersionId  *openapi_types.UUID       `json:"desired_bundle_version_id"`
+	DesiredGeneration       int64                     `json:"desired_generation"`
+	DesiredRevision         string                    `json:"desired_revision"`
+	DesiredSpecDigest       string                    `json:"desired_spec_digest"`
+	Id                      openapi_types.UUID        `json:"id"`
+	Inventory               DeliveryResourceInventory `json:"inventory"`
+	LastErrorCode           string                    `json:"last_error_code"`
+	LastMessage             string                    `json:"last_message"`
+	LastObservedAt          *time.Time                `json:"last_observed_at"`
+	ObservedGeneration      int64                     `json:"observed_generation"`
+	ObservedRevision        string                    `json:"observed_revision"`
+	ObservedSpecDigest      string                    `json:"observed_spec_digest"`
+	Phase                   ClusterDeploymentPhase    `json:"phase"`
+	PreviousBundleVersionId *openapi_types.UUID       `json:"previous_bundle_version_id"`
+	ReconcilerKind          string                    `json:"reconciler_kind"`
+	ReconcilerName          string                    `json:"reconciler_name"`
+	SourceKind              string                    `json:"source_kind"`
+	SourceName              string                    `json:"source_name"`
+	TargetId                openapi_types.UUID        `json:"target_id"`
+	UpdatedAt               time.Time                 `json:"updated_at"`
 }
 
 // ClusterDeploymentAction defines model for ClusterDeployment.Action.
@@ -4258,20 +4786,32 @@ type ClusterDeploymentEvent struct {
 
 // ClusterDeploymentEventPage defines model for ClusterDeploymentEventPage.
 type ClusterDeploymentEventPage struct {
-	Count      int64                    `json:"count"`
 	Data       []ClusterDeploymentEvent `json:"data"`
-	Next       *string                  `json:"next"`
-	Previous   *string                  `json:"previous"`
-	TotalKnown bool                     `json:"total_known"`
+	Pagination PaginationMetadata       `json:"pagination"`
 }
 
 // ClusterDeploymentPage defines model for ClusterDeploymentPage.
 type ClusterDeploymentPage struct {
-	Count      int64               `json:"count"`
 	Data       []ClusterDeployment `json:"data"`
-	Next       *string             `json:"next"`
-	Previous   *string             `json:"previous"`
-	TotalKnown bool                `json:"total_known"`
+	Pagination PaginationMetadata  `json:"pagination"`
+}
+
+// ClusterEstateSummary defines model for ClusterEstateSummary.
+type ClusterEstateSummary struct {
+	AsOf                 time.Time `json:"as_of"`
+	ClustersActive       int64     `json:"clusters_active"`
+	ClustersDisconnected int64     `json:"clusters_disconnected"`
+	ClustersTotal        int64     `json:"clusters_total"`
+
+	// ClustersWarning Visible clusters in the error state that need operator attention.
+	ClustersWarning int64 `json:"clusters_warning"`
+	NodesTotal      int64 `json:"nodes_total"`
+	PodsTotal       int64 `json:"pods_total"`
+}
+
+// ClusterEstateSummaryEnvelope defines model for ClusterEstateSummaryEnvelope.
+type ClusterEstateSummaryEnvelope struct {
+	Data ClusterEstateSummary `json:"data"`
 }
 
 // ClusterEvent defines model for ClusterEvent.
@@ -4469,10 +5009,8 @@ type ClusterTool struct {
 
 // ClusterToolPage defines model for ClusterToolPage.
 type ClusterToolPage struct {
-	Count    int64         `json:"count"`
-	Data     []ClusterTool `json:"data"`
-	Next     *string       `json:"next"`
-	Previous *string       `json:"previous"`
+	Data       []ClusterTool      `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // ClusterToolStatus defines model for ClusterToolStatus.
@@ -4837,10 +5375,14 @@ type CreateClusterGroupRequest struct {
 
 // CreateClusterRequest defines model for CreateClusterRequest.
 type CreateClusterRequest struct {
-	Annotations *map[string]string `json:"annotations,omitempty"`
+	// AgentOverrides Bounded per-cluster agent PodSpec customization. Platform-owned Linux placement and security settings remain immutable.
+	AgentOverrides *AgentOverrides    `json:"agent_overrides,omitempty"`
+	Annotations    *map[string]string `json:"annotations,omitempty"`
 
 	// ApiServerUrl Optional externally reachable HTTPS Kubernetes API origin; only ports 443 and 6443 are accepted.
-	ApiServerUrl *string `json:"api_server_url,omitempty"`
+	ApiServerUrl *string                         `json:"api_server_url,omitempty"`
+	BadgeColor   *CreateClusterRequestBadgeColor `json:"badge_color,omitempty"`
+	BadgeText    *string                         `json:"badge_text,omitempty"`
 
 	// CaCertificate Optional PEM CA bundle used to verify the direct Kubernetes API endpoint. Never a credential.
 	CaCertificate *string            `json:"ca_certificate,omitempty"`
@@ -4855,6 +5397,9 @@ type CreateClusterRequest struct {
 	Provider *string `json:"provider,omitempty"`
 	Region   *string `json:"region,omitempty"`
 }
+
+// CreateClusterRequestBadgeColor defines model for CreateClusterRequest.BadgeColor.
+type CreateClusterRequestBadgeColor string
 
 // CreateClusterTemplateRequest defines model for CreateClusterTemplateRequest.
 type CreateClusterTemplateRequest struct {
@@ -5048,11 +5593,8 @@ type DeliveryBundleEnvelope struct {
 
 // DeliveryBundlePage defines model for DeliveryBundlePage.
 type DeliveryBundlePage struct {
-	Count      int64            `json:"count"`
-	Data       []DeliveryBundle `json:"data"`
-	Next       *string          `json:"next"`
-	Previous   *string          `json:"previous"`
-	TotalKnown bool             `json:"total_known"`
+	Data       []DeliveryBundle   `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // DeliveryBundleVersion defines model for DeliveryBundleVersion.
@@ -5110,11 +5652,8 @@ type DeliveryBundleVersionEnvelope struct {
 
 // DeliveryBundleVersionPage defines model for DeliveryBundleVersionPage.
 type DeliveryBundleVersionPage struct {
-	Count      int64                   `json:"count"`
 	Data       []DeliveryBundleVersion `json:"data"`
-	Next       *string                 `json:"next"`
-	Previous   *string                 `json:"previous"`
-	TotalKnown bool                    `json:"total_known"`
+	Pagination PaginationMetadata      `json:"pagination"`
 }
 
 // DeliveryBundleVersionWrite defines model for DeliveryBundleVersionWrite.
@@ -5192,6 +5731,60 @@ type DeliveryConditionStatus string
 // DeliveryConditionType defines model for DeliveryCondition.Type.
 type DeliveryConditionType string
 
+// DeliveryConfigurationSecretRef defines model for DeliveryConfigurationSecretRef.
+type DeliveryConfigurationSecretRef struct {
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	ValuePath string `json:"value_path"`
+}
+
+// DeliveryConfigurationTemplate defines model for DeliveryConfigurationTemplate.
+type DeliveryConfigurationTemplate struct {
+	CreatedAt   time.Time                             `json:"created_at"`
+	Description string                                `json:"description"`
+	Generation  int64                                 `json:"generation"`
+	Id          openapi_types.UUID                    `json:"id"`
+	Name        string                                `json:"name"`
+	Patches     []string                              `json:"patches"`
+	ProjectId   openapi_types.UUID                    `json:"project_id"`
+	Renderer    DeliveryConfigurationTemplateRenderer `json:"renderer"`
+	SecretRefs  []DeliveryConfigurationSecretRef      `json:"secret_refs"`
+	UpdatedAt   time.Time                             `json:"updated_at"`
+	Values      map[string]interface{}                `json:"values"`
+}
+
+// DeliveryConfigurationTemplateRenderer defines model for DeliveryConfigurationTemplate.Renderer.
+type DeliveryConfigurationTemplateRenderer string
+
+// DeliveryConfigurationTemplateEnvelope defines model for DeliveryConfigurationTemplateEnvelope.
+type DeliveryConfigurationTemplateEnvelope struct {
+	Data DeliveryConfigurationTemplate `json:"data"`
+}
+
+// DeliveryConfigurationTemplatePage defines model for DeliveryConfigurationTemplatePage.
+type DeliveryConfigurationTemplatePage struct {
+	Count      int64                           `json:"count"`
+	Data       []DeliveryConfigurationTemplate `json:"data"`
+	Next       *string                         `json:"next"`
+	Previous   *string                         `json:"previous"`
+	TotalKnown bool                            `json:"total_known"`
+}
+
+// DeliveryConfigurationTemplateWrite defines model for DeliveryConfigurationTemplateWrite.
+type DeliveryConfigurationTemplateWrite struct {
+	Description *string                                    `json:"description,omitempty"`
+	Generation  *int64                                     `json:"generation,omitempty"`
+	Name        string                                     `json:"name"`
+	Patches     *[]string                                  `json:"patches,omitempty"`
+	ProjectId   *openapi_types.UUID                        `json:"project_id,omitempty"`
+	Renderer    DeliveryConfigurationTemplateWriteRenderer `json:"renderer"`
+	SecretRefs  *[]DeliveryConfigurationSecretRef          `json:"secret_refs,omitempty"`
+	Values      map[string]interface{}                     `json:"values"`
+}
+
+// DeliveryConfigurationTemplateWriteRenderer defines model for DeliveryConfigurationTemplateWrite.Renderer.
+type DeliveryConfigurationTemplateWriteRenderer string
+
 // DeliveryControllerInventory defines model for DeliveryControllerInventory.
 type DeliveryControllerInventory struct {
 	AgentVersion        string                                         `json:"agent_version"`
@@ -5205,34 +5798,55 @@ type DeliveryControllerInventory struct {
 	KubernetesVersion   string                                         `json:"kubernetes_version"`
 	ObservedAt          *time.Time                                     `json:"observed_at"`
 	Ready               bool                                           `json:"ready"`
+	SystemComponents    []DeliverySystemComponent                      `json:"system_components"`
 	UpdatedAt           time.Time                                      `json:"updated_at"`
 }
 
 // DeliveryControllerInventoryCompatibilityStatus defines model for DeliveryControllerInventory.CompatibilityStatus.
 type DeliveryControllerInventoryCompatibilityStatus string
 
-// DeliveryEstate defines model for DeliveryEstate.
-type DeliveryEstate struct {
-	Attention     []DeliveryEstateAttention   `json:"attention"`
-	Clusters      []DeliveryEstateCluster     `json:"clusters"`
-	Distributions DeliveryEstateDistributions `json:"distributions"`
-	Summary       DeliveryEstateSummary       `json:"summary"`
+// DeliveryEffectiveConfiguration defines model for DeliveryEffectiveConfiguration.
+type DeliveryEffectiveConfiguration struct {
+	AppliedLayers []openapi_types.UUID   `json:"applied_layers"`
+	Digest        string                 `json:"digest"`
+	Patches       []string               `json:"patches"`
+	Values        map[string]interface{} `json:"values"`
 }
 
-// DeliveryEstateAttention defines model for DeliveryEstateAttention.
-type DeliveryEstateAttention struct {
-	ClusterId   openapi_types.UUID              `json:"cluster_id"`
-	ClusterName string                          `json:"cluster_name"`
-	Detail      string                          `json:"detail"`
-	Reason      string                          `json:"reason"`
-	Severity    DeliveryEstateAttentionSeverity `json:"severity"`
+// DeliveryEffectiveConfigurationEnvelope defines model for DeliveryEffectiveConfigurationEnvelope.
+type DeliveryEffectiveConfigurationEnvelope struct {
+	Data DeliveryEffectiveConfiguration `json:"data"`
 }
 
-// DeliveryEstateAttentionSeverity defines model for DeliveryEstateAttention.Severity.
-type DeliveryEstateAttentionSeverity string
+// DeliveryEffectiveConfigurationRequest defines model for DeliveryEffectiveConfigurationRequest.
+type DeliveryEffectiveConfigurationRequest struct {
+	BaseValues  map[string]interface{} `json:"base_values"`
+	OverrideIds []openapi_types.UUID   `json:"override_ids"`
+	ProjectId   *openapi_types.UUID    `json:"project_id,omitempty"`
+}
 
-// DeliveryEstateCluster defines model for DeliveryEstateCluster.
-type DeliveryEstateCluster struct {
+// DeliveryFleet defines model for DeliveryFleet.
+type DeliveryFleet struct {
+	Attention     []DeliveryFleetAttention   `json:"attention"`
+	Clusters      []DeliveryFleetCluster     `json:"clusters"`
+	Distributions DeliveryFleetDistributions `json:"distributions"`
+	Summary       DeliveryFleetSummary       `json:"summary"`
+}
+
+// DeliveryFleetAttention defines model for DeliveryFleetAttention.
+type DeliveryFleetAttention struct {
+	ClusterId   openapi_types.UUID             `json:"cluster_id"`
+	ClusterName string                         `json:"cluster_name"`
+	Detail      string                         `json:"detail"`
+	Reason      string                         `json:"reason"`
+	Severity    DeliveryFleetAttentionSeverity `json:"severity"`
+}
+
+// DeliveryFleetAttentionSeverity defines model for DeliveryFleetAttention.Severity.
+type DeliveryFleetAttentionSeverity string
+
+// DeliveryFleetCluster defines model for DeliveryFleetCluster.
+type DeliveryFleetCluster struct {
 	AgentVersion        string             `json:"agent_version"`
 	AssignmentCount     int64              `json:"assignment_count"`
 	CompatibilityStatus string             `json:"compatibility_status"`
@@ -5240,6 +5854,7 @@ type DeliveryEstateCluster struct {
 	DegradedCount       int64              `json:"degraded_count"`
 	DisplayName         string             `json:"display_name"`
 	DriftedCount        int64              `json:"drifted_count"`
+	Environment         string             `json:"environment"`
 	FailedCount         int64              `json:"failed_count"`
 	FluxVersion         string             `json:"flux_version"`
 	Id                  openapi_types.UUID `json:"id"`
@@ -5256,28 +5871,27 @@ type DeliveryEstateCluster struct {
 	Stale               bool               `json:"stale"`
 }
 
-// DeliveryEstateCount defines model for DeliveryEstateCount.
-type DeliveryEstateCount struct {
+// DeliveryFleetCount defines model for DeliveryFleetCount.
+type DeliveryFleetCount struct {
 	Count int64  `json:"count"`
 	Key   string `json:"key"`
 }
 
-// DeliveryEstateDistributions defines model for DeliveryEstateDistributions.
-type DeliveryEstateDistributions struct {
-	AssignmentPhases []DeliveryEstateCount `json:"assignment_phases"`
-	Compatibility    []DeliveryEstateCount `json:"compatibility"`
-	Privilege        []DeliveryEstateCount `json:"privilege"`
+// DeliveryFleetDistributions defines model for DeliveryFleetDistributions.
+type DeliveryFleetDistributions struct {
+	AssignmentPhases []DeliveryFleetCount `json:"assignment_phases"`
+	Compatibility    []DeliveryFleetCount `json:"compatibility"`
+	Privilege        []DeliveryFleetCount `json:"privilege"`
 }
 
-// DeliveryEstateEnvelope defines model for DeliveryEstateEnvelope.
-type DeliveryEstateEnvelope struct {
-	Data DeliveryEstate `json:"data"`
+// DeliveryFleetEnvelope defines model for DeliveryFleetEnvelope.
+type DeliveryFleetEnvelope struct {
+	Data DeliveryFleet `json:"data"`
 }
 
-// DeliveryEstateSummary defines model for DeliveryEstateSummary.
-type DeliveryEstateSummary struct {
+// DeliveryFleetSummary defines model for DeliveryFleetSummary.
+type DeliveryFleetSummary struct {
 	ActiveRollouts  int64 `json:"active_rollouts"`
-	AdoptedClusters int64 `json:"adopted_clusters"`
 	Assignments     int64 `json:"assignments"`
 	Degraded        int64 `json:"degraded"`
 	Disconnected    int64 `json:"disconnected"`
@@ -5285,6 +5899,7 @@ type DeliveryEstateSummary struct {
 	Failed          int64 `json:"failed"`
 	FluxReady       int64 `json:"flux_ready"`
 	Incompatible    int64 `json:"incompatible"`
+	ManagedClusters int64 `json:"managed_clusters"`
 	Stale           int64 `json:"stale"`
 }
 
@@ -5352,6 +5967,56 @@ type DeliveryLabelExpression struct {
 
 // DeliveryLabelExpressionOperator defines model for DeliveryLabelExpression.Operator.
 type DeliveryLabelExpressionOperator string
+
+// DeliveryOverrideSet defines model for DeliveryOverrideSet.
+type DeliveryOverrideSet struct {
+	CreatedAt  time.Time                `json:"created_at"`
+	Enabled    bool                     `json:"enabled"`
+	Generation int64                    `json:"generation"`
+	Id         openapi_types.UUID       `json:"id"`
+	Name       string                   `json:"name"`
+	Patches    *[]string                `json:"patches,omitempty"`
+	Precedence int32                    `json:"precedence"`
+	ProjectId  openapi_types.UUID       `json:"project_id"`
+	Scope      DeliveryOverrideSetScope `json:"scope"`
+	ScopeId    *openapi_types.UUID      `json:"scope_id"`
+	TemplateId *openapi_types.UUID      `json:"template_id"`
+	UpdatedAt  time.Time                `json:"updated_at"`
+	Values     map[string]interface{}   `json:"values"`
+}
+
+// DeliveryOverrideSetScope defines model for DeliveryOverrideSet.Scope.
+type DeliveryOverrideSetScope string
+
+// DeliveryOverrideSetEnvelope defines model for DeliveryOverrideSetEnvelope.
+type DeliveryOverrideSetEnvelope struct {
+	Data DeliveryOverrideSet `json:"data"`
+}
+
+// DeliveryOverrideSetPage defines model for DeliveryOverrideSetPage.
+type DeliveryOverrideSetPage struct {
+	Count      int64                 `json:"count"`
+	Data       []DeliveryOverrideSet `json:"data"`
+	Next       *string               `json:"next"`
+	Previous   *string               `json:"previous"`
+	TotalKnown bool                  `json:"total_known"`
+}
+
+// DeliveryOverrideSetWrite defines model for DeliveryOverrideSetWrite.
+type DeliveryOverrideSetWrite struct {
+	Enabled    *bool                         `json:"enabled,omitempty"`
+	Name       string                        `json:"name"`
+	Patches    *[]string                     `json:"patches,omitempty"`
+	Precedence int32                         `json:"precedence"`
+	ProjectId  *openapi_types.UUID           `json:"project_id,omitempty"`
+	Scope      DeliveryOverrideSetWriteScope `json:"scope"`
+	ScopeId    *openapi_types.UUID           `json:"scope_id"`
+	TemplateId *openapi_types.UUID           `json:"template_id"`
+	Values     map[string]interface{}        `json:"values"`
+}
+
+// DeliveryOverrideSetWriteScope defines model for DeliveryOverrideSetWrite.Scope.
+type DeliveryOverrideSetWriteScope string
 
 // DeliveryPlacement defines model for DeliveryPlacement.
 type DeliveryPlacement struct {
@@ -5459,6 +6124,22 @@ type DeliveryResolvedSourceAuthMode string
 // DeliveryResolvedSourceType defines model for DeliveryResolvedSource.Type.
 type DeliveryResolvedSourceType string
 
+// DeliveryResourceIdentity Bounded, secret-free identity reported by Flux inventory.
+type DeliveryResourceIdentity struct {
+	ApiVersion string  `json:"api_version"`
+	Kind       string  `json:"kind"`
+	Name       string  `json:"name"`
+	Namespace  *string `json:"namespace,omitempty"`
+}
+
+// DeliveryResourceInventory defines model for DeliveryResourceInventory.
+type DeliveryResourceInventory struct {
+	Entries   int                         `json:"entries"`
+	Failed    int                         `json:"failed"`
+	Ready     int                         `json:"ready"`
+	Resources *[]DeliveryResourceIdentity `json:"resources,omitempty"`
+}
+
 // DeliveryRollout defines model for DeliveryRollout.
 type DeliveryRollout struct {
 	ApprovalPolicy      *map[string]interface{} `json:"approval_policy,omitempty"`
@@ -5552,11 +6233,8 @@ type DeliveryRolloutClusterAssignmentAction string
 
 // DeliveryRolloutClusterPage defines model for DeliveryRolloutClusterPage.
 type DeliveryRolloutClusterPage struct {
-	Count      int64                    `json:"count"`
 	Data       []DeliveryRolloutCluster `json:"data"`
-	Next       *string                  `json:"next"`
-	Previous   *string                  `json:"previous"`
-	TotalKnown bool                     `json:"total_known"`
+	Pagination PaginationMetadata       `json:"pagination"`
 }
 
 // DeliveryRolloutCohort defines model for DeliveryRolloutCohort.
@@ -5611,20 +6289,14 @@ type DeliveryRolloutEvent struct {
 
 // DeliveryRolloutEventPage defines model for DeliveryRolloutEventPage.
 type DeliveryRolloutEventPage struct {
-	Count      int64                  `json:"count"`
 	Data       []DeliveryRolloutEvent `json:"data"`
-	Next       *string                `json:"next"`
-	Previous   *string                `json:"previous"`
-	TotalKnown bool                   `json:"total_known"`
+	Pagination PaginationMetadata     `json:"pagination"`
 }
 
 // DeliveryRolloutPage defines model for DeliveryRolloutPage.
 type DeliveryRolloutPage struct {
-	Count      int64             `json:"count"`
-	Data       []DeliveryRollout `json:"data"`
-	Next       *string           `json:"next"`
-	Previous   *string           `json:"previous"`
-	TotalKnown bool              `json:"total_known"`
+	Data       []DeliveryRollout  `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // DeliveryRolloutPartition defines model for DeliveryRolloutPartition.
@@ -5756,11 +6428,8 @@ type DeliverySourceEnvelope struct {
 
 // DeliverySourcePage defines model for DeliverySourcePage.
 type DeliverySourcePage struct {
-	Count      int64            `json:"count"`
-	Data       []DeliverySource `json:"data"`
-	Next       *string          `json:"next"`
-	Previous   *string          `json:"previous"`
-	TotalKnown bool             `json:"total_known"`
+	Data       []DeliverySource   `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // DeliverySourcePatch defines model for DeliverySourcePatch.
@@ -5830,6 +6499,52 @@ type DeliverySystemCompatibilityEnvelope struct {
 	Data DeliverySystemCompatibility `json:"data"`
 }
 
+// DeliverySystemComponent defines model for DeliverySystemComponent.
+type DeliverySystemComponent struct {
+	Category                string                                `json:"category"`
+	Compatibility           *DeliverySystemComponentCompatibility `json:"compatibility,omitempty"`
+	CpuLimit                *string                               `json:"cpu_limit,omitempty"`
+	CpuRequest              *string                               `json:"cpu_request,omitempty"`
+	CreatedAt               *time.Time                            `json:"created_at,omitempty"`
+	DefaultStorage          *bool                                 `json:"default_storage,omitempty"`
+	DesiredReplicas         *int32                                `json:"desired_replicas,omitempty"`
+	Detail                  *string                               `json:"detail,omitempty"`
+	Health                  DeliverySystemComponentHealth         `json:"health"`
+	HighAvailability        bool                                  `json:"high_availability"`
+	Id                      string                                `json:"id"`
+	Images                  *[]string                             `json:"images,omitempty"`
+	Kind                    string                                `json:"kind"`
+	ManagementMethod        string                                `json:"management_method"`
+	MemoryLimit             *string                               `json:"memory_limit,omitempty"`
+	MemoryRequest           *string                               `json:"memory_request,omitempty"`
+	Name                    string                                `json:"name"`
+	Namespace               *string                               `json:"namespace,omitempty"`
+	Owner                   DeliverySystemComponentOwner          `json:"owner"`
+	ReadyReplicas           *int32                                `json:"ready_replicas,omitempty"`
+	Resources               *[]DeliverySystemResource             `json:"resources,omitempty"`
+	StorageClass            *string                               `json:"storage_class,omitempty"`
+	StorageDriver           *string                               `json:"storage_driver,omitempty"`
+	StorageProvisionedBytes *int64                                `json:"storage_provisioned_bytes,omitempty"`
+	StorageReplicaCount     *int32                                `json:"storage_replica_count,omitempty"`
+	StorageUsedBytes        *int64                                `json:"storage_used_bytes,omitempty"`
+	SupportedActions        *[]string                             `json:"supported_actions,omitempty"`
+	UpdateState             *DeliverySystemComponentUpdateState   `json:"update_state,omitempty"`
+	Version                 *string                               `json:"version,omitempty"`
+	Volumes                 *[]DeliverySystemVolume               `json:"volumes,omitempty"`
+}
+
+// DeliverySystemComponentCompatibility defines model for DeliverySystemComponent.Compatibility.
+type DeliverySystemComponentCompatibility string
+
+// DeliverySystemComponentHealth defines model for DeliverySystemComponent.Health.
+type DeliverySystemComponentHealth string
+
+// DeliverySystemComponentOwner defines model for DeliverySystemComponent.Owner.
+type DeliverySystemComponentOwner string
+
+// DeliverySystemComponentUpdateState defines model for DeliverySystemComponent.UpdateState.
+type DeliverySystemComponentUpdateState string
+
 // DeliverySystemRelease defines model for DeliverySystemRelease.
 type DeliverySystemRelease struct {
 	AgentImage             *string                 `json:"agent_image,omitempty"`
@@ -5857,6 +6572,18 @@ type DeliverySystemRelease struct {
 	Version                *string                 `json:"version,omitempty"`
 }
 
+// DeliverySystemResource defines model for DeliverySystemResource.
+type DeliverySystemResource struct {
+	Detail    *string `json:"detail,omitempty"`
+	Group     *string `json:"group,omitempty"`
+	Health    *string `json:"health,omitempty"`
+	Kind      string  `json:"kind"`
+	Name      string  `json:"name"`
+	Namespace *string `json:"namespace,omitempty"`
+	Plural    string  `json:"plural"`
+	Version   string  `json:"version"`
+}
+
 // DeliverySystemRollout defines model for DeliverySystemRollout.
 type DeliverySystemRollout struct {
 	CompletedAt       *time.Time              `json:"completed_at"`
@@ -5878,23 +6605,47 @@ type DeliverySystemRollout struct {
 	UpdatedAt         *time.Time              `json:"updated_at,omitempty"`
 }
 
+// DeliverySystemVolume defines model for DeliverySystemVolume.
+type DeliverySystemVolume struct {
+	AccessModes      *[]string  `json:"access_modes,omitempty"`
+	CapacityBytes    *int64     `json:"capacity_bytes,omitempty"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
+	ExpansionAllowed bool       `json:"expansion_allowed"`
+	Name             string     `json:"name"`
+	Namespace        string     `json:"namespace"`
+	Phase            string     `json:"phase"`
+	RequestedBytes   *int64     `json:"requested_bytes,omitempty"`
+	SnapshotCount    *int32     `json:"snapshot_count,omitempty"`
+	StorageClass     *string    `json:"storage_class,omitempty"`
+	StorageDriver    *string    `json:"storage_driver,omitempty"`
+	VolumeMode       *string    `json:"volume_mode,omitempty"`
+	VolumeName       *string    `json:"volume_name,omitempty"`
+}
+
 // DeliveryTarget defines model for DeliveryTarget.
 type DeliveryTarget struct {
-	BundleVersionId         openapi_types.UUID           `json:"bundle_version_id"`
-	CreatedAt               time.Time                    `json:"created_at"`
-	DeletionState           DeliveryTargetDeletionState  `json:"deletion_state"`
-	Description             *string                      `json:"description,omitempty"`
-	Generation              int64                        `json:"generation"`
-	Id                      openapi_types.UUID           `json:"id"`
-	MaintenanceWindowPolicy map[string]interface{}       `json:"maintenance_window_policy"`
-	Name                    string                       `json:"name"`
-	Placement               DeliveryPlacement            `json:"placement"`
-	ProjectId               openapi_types.UUID           `json:"project_id"`
-	ReconciliationPolicy    DeliveryReconciliationPolicy `json:"reconciliation_policy"`
-	ResourceVersion         int64                        `json:"resource_version"`
-	RolloutPolicy           DeliveryRolloutPolicy        `json:"rollout_policy"`
-	Suspended               bool                         `json:"suspended"`
-	UpdatedAt               time.Time                    `json:"updated_at"`
+	BundleVersionId         openapi_types.UUID          `json:"bundle_version_id"`
+	ConfigurationTemplateId *openapi_types.UUID         `json:"configuration_template_id"`
+	CreatedAt               time.Time                   `json:"created_at"`
+	DeletionState           DeliveryTargetDeletionState `json:"deletion_state"`
+	Description             *string                     `json:"description,omitempty"`
+	Generation              int64                       `json:"generation"`
+	Id                      openapi_types.UUID          `json:"id"`
+	LastActorId             *openapi_types.UUID         `json:"last_actor_id"`
+	MaintenanceWindowPolicy map[string]interface{}      `json:"maintenance_window_policy"`
+	Name                    string                      `json:"name"`
+	OverrideDigest          string                      `json:"override_digest"`
+	OverrideSetIds          []openapi_types.UUID        `json:"override_set_ids"`
+
+	// Overrides Bounded renderer-specific customization frozen into every rollout and assignment.
+	Overrides            DeliveryTargetOverrides      `json:"overrides"`
+	Placement            DeliveryPlacement            `json:"placement"`
+	ProjectId            openapi_types.UUID           `json:"project_id"`
+	ReconciliationPolicy DeliveryReconciliationPolicy `json:"reconciliation_policy"`
+	ResourceVersion      int64                        `json:"resource_version"`
+	RolloutPolicy        DeliveryRolloutPolicy        `json:"rollout_policy"`
+	Suspended            bool                         `json:"suspended"`
+	UpdatedAt            time.Time                    `json:"updated_at"`
 }
 
 // DeliveryTargetDeletionState defines model for DeliveryTarget.DeletionState.
@@ -5921,25 +6672,33 @@ type DeliveryTargetEnvelope struct {
 	Data DeliveryTarget `json:"data"`
 }
 
+// DeliveryTargetOverrides Bounded renderer-specific customization frozen into every rollout and assignment.
+type DeliveryTargetOverrides struct {
+	HelmValues *map[string]interface{} `json:"helm_values,omitempty"`
+	Patches    *[]string               `json:"patches,omitempty"`
+}
+
 // DeliveryTargetPage defines model for DeliveryTargetPage.
 type DeliveryTargetPage struct {
-	Count      int64            `json:"count"`
-	Data       []DeliveryTarget `json:"data"`
-	Next       *string          `json:"next"`
-	Previous   *string          `json:"previous"`
-	TotalKnown bool             `json:"total_known"`
+	Data       []DeliveryTarget   `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // DeliveryTargetPatch defines model for DeliveryTargetPatch.
 type DeliveryTargetPatch struct {
-	BundleVersionId         *openapi_types.UUID                `json:"bundle_version_id,omitempty"`
-	Description             *string                            `json:"description,omitempty"`
-	MaintenanceWindowPolicy *map[string]interface{}            `json:"maintenance_window_policy,omitempty"`
-	Placement               *DeliveryPlacementInput            `json:"placement,omitempty"`
-	ProjectId               *openapi_types.UUID                `json:"project_id,omitempty"`
-	ReconciliationPolicy    *DeliveryReconciliationPolicyInput `json:"reconciliation_policy,omitempty"`
-	RolloutPolicy           *DeliveryRolloutPolicyInput        `json:"rollout_policy,omitempty"`
-	Suspended               *bool                              `json:"suspended,omitempty"`
+	BundleVersionId         *openapi_types.UUID     `json:"bundle_version_id,omitempty"`
+	ConfigurationTemplateId *openapi_types.UUID     `json:"configuration_template_id"`
+	Description             *string                 `json:"description,omitempty"`
+	MaintenanceWindowPolicy *map[string]interface{} `json:"maintenance_window_policy,omitempty"`
+	OverrideSetIds          *[]openapi_types.UUID   `json:"override_set_ids,omitempty"`
+
+	// Overrides Bounded renderer-specific customization frozen into every rollout and assignment.
+	Overrides            *DeliveryTargetOverrides           `json:"overrides,omitempty"`
+	Placement            *DeliveryPlacementInput            `json:"placement,omitempty"`
+	ProjectId            *openapi_types.UUID                `json:"project_id,omitempty"`
+	ReconciliationPolicy *DeliveryReconciliationPolicyInput `json:"reconciliation_policy,omitempty"`
+	RolloutPolicy        *DeliveryRolloutPolicyInput        `json:"rollout_policy,omitempty"`
+	Suspended            *bool                              `json:"suspended,omitempty"`
 }
 
 // DeliveryTargetPreview defines model for DeliveryTargetPreview.
@@ -5969,15 +6728,20 @@ type DeliveryTargetPreviewEnvelope struct {
 
 // DeliveryTargetWrite defines model for DeliveryTargetWrite.
 type DeliveryTargetWrite struct {
-	BundleVersionId         openapi_types.UUID                `json:"bundle_version_id"`
-	Description             *string                           `json:"description,omitempty"`
-	MaintenanceWindowPolicy *map[string]interface{}           `json:"maintenance_window_policy,omitempty"`
-	Name                    string                            `json:"name"`
-	Placement               DeliveryPlacementInput            `json:"placement"`
-	ProjectId               *openapi_types.UUID               `json:"project_id,omitempty"`
-	ReconciliationPolicy    DeliveryReconciliationPolicyInput `json:"reconciliation_policy"`
-	RolloutPolicy           DeliveryRolloutPolicyInput        `json:"rollout_policy"`
-	Suspended               *bool                             `json:"suspended,omitempty"`
+	BundleVersionId         openapi_types.UUID      `json:"bundle_version_id"`
+	ConfigurationTemplateId *openapi_types.UUID     `json:"configuration_template_id"`
+	Description             *string                 `json:"description,omitempty"`
+	MaintenanceWindowPolicy *map[string]interface{} `json:"maintenance_window_policy,omitempty"`
+	Name                    string                  `json:"name"`
+	OverrideSetIds          *[]openapi_types.UUID   `json:"override_set_ids,omitempty"`
+
+	// Overrides Bounded renderer-specific customization frozen into every rollout and assignment.
+	Overrides            *DeliveryTargetOverrides          `json:"overrides,omitempty"`
+	Placement            DeliveryPlacementInput            `json:"placement"`
+	ProjectId            *openapi_types.UUID               `json:"project_id,omitempty"`
+	ReconciliationPolicy DeliveryReconciliationPolicyInput `json:"reconciliation_policy"`
+	RolloutPolicy        DeliveryRolloutPolicyInput        `json:"rollout_policy"`
+	Suspended            *bool                             `json:"suspended,omitempty"`
 }
 
 // DeliveryTrustPolicy defines model for DeliveryTrustPolicy.
@@ -5994,9 +6758,14 @@ type DeliveryTrustPolicyProvider string
 
 // DeliveryVersionIdentity defines model for DeliveryVersionIdentity.
 type DeliveryVersionIdentity struct {
-	BundleVersionId openapi_types.UUID     `json:"bundle_version_id"`
-	Source          DeliveryResolvedSource `json:"source"`
-	SpecDigest      string                 `json:"spec_digest"`
+	BundleVersionId     openapi_types.UUID `json:"bundle_version_id"`
+	ConfigurationDigest *string            `json:"configuration_digest,omitempty"`
+
+	// Overrides Bounded renderer-specific customization frozen into every rollout and assignment.
+	Overrides  DeliveryTargetOverrides `json:"overrides"`
+	Renderer   *DeliveryRendererSpec   `json:"renderer,omitempty"`
+	Source     DeliveryResolvedSource  `json:"source"`
+	SpecDigest string                  `json:"spec_digest"`
 }
 
 // DexConnector defines model for DexConnector.
@@ -6116,17 +6885,13 @@ type DexRegisterSSOResultRuntimeState string
 type DexSettings struct {
 	ChartReleaseName *string             `json:"chart_release_name,omitempty"`
 	ClusterId        *openapi_types.UUID `json:"cluster_id"`
-
-	// ConfigmapName Compatibility alias of runtime_secret_name; never identifies a credential-bearing ConfigMap.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	ConfigmapName  *string    `json:"configmap_name,omitempty"`
-	Configured     *bool      `json:"configured,omitempty"`
-	DeploymentName *string    `json:"deployment_name,omitempty"`
-	Expiry         *DexExpiry `json:"expiry,omitempty"`
-	Extra          *DexExtra  `json:"extra,omitempty"`
-	IssuerUrl      *string    `json:"issuer_url,omitempty"`
-	Namespace      *string    `json:"namespace,omitempty"`
-	PublicClients  *[]struct {
+	Configured       *bool               `json:"configured,omitempty"`
+	DeploymentName   *string             `json:"deployment_name,omitempty"`
+	Expiry           *DexExpiry          `json:"expiry,omitempty"`
+	Extra            *DexExtra           `json:"extra,omitempty"`
+	IssuerUrl        *string             `json:"issuer_url,omitempty"`
+	Namespace        *string             `json:"namespace,omitempty"`
+	PublicClients    *[]struct {
 		Id           *string   `json:"id,omitempty"`
 		Name         *string   `json:"name,omitempty"`
 		Public       *bool     `json:"public,omitempty"`
@@ -6155,14 +6920,12 @@ type DexSettingsRuntimePhase string
 type DexSettingsRequest struct {
 	ChartReleaseName *string             `json:"chart_release_name,omitempty"`
 	ClusterId        *openapi_types.UUID `json:"cluster_id,omitempty"`
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	ConfigmapName  *string    `json:"configmap_name,omitempty"`
-	DeploymentName *string    `json:"deployment_name,omitempty"`
-	Expiry         *DexExpiry `json:"expiry,omitempty"`
-	Extra          *DexExtra  `json:"extra,omitempty"`
-	IssuerUrl      string     `json:"issuer_url"`
-	Namespace      *string    `json:"namespace,omitempty"`
-	PublicClients  *[]struct {
+	DeploymentName   *string             `json:"deployment_name,omitempty"`
+	Expiry           *DexExpiry          `json:"expiry,omitempty"`
+	Extra            *DexExtra           `json:"extra,omitempty"`
+	IssuerUrl        string              `json:"issuer_url"`
+	Namespace        *string             `json:"namespace,omitempty"`
+	PublicClients    *[]struct {
 		Id           string    `json:"id"`
 		Name         *string   `json:"name,omitempty"`
 		Public       *bool     `json:"public,omitempty"`
@@ -6284,14 +7047,10 @@ type ExtensionValidationCompatibilityStatus string
 
 // FeatureFlags defines model for FeatureFlags.
 type FeatureFlags struct {
-	FeatureBackups    *bool `json:"feature.backups,omitempty"`
-	FeatureCatalog    *bool `json:"feature.catalog,omitempty"`
-	FeatureCharlie    *bool `json:"feature.charlie,omitempty"`
-	FeatureExtensions *bool `json:"feature.extensions,omitempty"`
-
-	// FeatureFleetGrafana Deprecated compatibility alias for feature.shared_grafana.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	FeatureFleetGrafana  *bool `json:"feature.fleet_grafana,omitempty"`
+	FeatureBackups       *bool `json:"feature.backups,omitempty"`
+	FeatureCatalog       *bool `json:"feature.catalog,omitempty"`
+	FeatureCharlie       *bool `json:"feature.charlie,omitempty"`
+	FeatureExtensions    *bool `json:"feature.extensions,omitempty"`
 	FeatureHostedLoki    *bool `json:"feature.hosted_loki,omitempty"`
 	FeatureMonitoring    *bool `json:"feature.monitoring,omitempty"`
 	FeatureProjects      *bool `json:"feature.projects,omitempty"`
@@ -6422,23 +7181,25 @@ type GitOpsSource struct {
 	AllowMassDecommission bool `json:"allow_mass_decommission"`
 
 	// Auth Empty or the literal redaction sentinel '<encrypted>'; secret material is never returned.
-	Auth                *string              `json:"auth,omitempty"`
-	AuthConfigured      bool                 `json:"auth_configured"`
-	AuthMode            GitOpsSourceAuthMode `json:"auth_mode"`
-	Branch              string               `json:"branch"`
-	CreatedAt           time.Time            `json:"created_at"`
-	Enabled             bool                 `json:"enabled"`
-	Id                  openapi_types.UUID   `json:"id"`
-	LastError           *string              `json:"last_error,omitempty"`
-	LastSyncedAt        *time.Time           `json:"last_synced_at,omitempty"`
-	LastSyncedSha       *string              `json:"last_synced_sha,omitempty"`
-	Name                string               `json:"name"`
-	OnDelete            GitOpsSourceOnDelete `json:"on_delete"`
-	PathPrefix          string               `json:"path_prefix"`
-	RepoUrl             string               `json:"repo_url"`
-	SyncIntervalSeconds int32                `json:"sync_interval_seconds"`
-	SyncMode            GitOpsSourceSyncMode `json:"sync_mode"`
-	UpdatedAt           time.Time            `json:"updated_at"`
+	Auth                *string                     `json:"auth,omitempty"`
+	AuthConfigured      bool                        `json:"auth_configured"`
+	AuthMode            GitOpsSourceAuthMode        `json:"auth_mode"`
+	Branch              string                      `json:"branch"`
+	CreatedAt           time.Time                   `json:"created_at"`
+	Enabled             bool                        `json:"enabled"`
+	Id                  openapi_types.UUID          `json:"id"`
+	LastError           *string                     `json:"last_error,omitempty"`
+	LastSyncedAt        *time.Time                  `json:"last_synced_at,omitempty"`
+	LastSyncedSha       *string                     `json:"last_synced_sha,omitempty"`
+	Name                string                      `json:"name"`
+	OnDelete            GitOpsSourceOnDelete        `json:"on_delete"`
+	PathPrefix          string                      `json:"path_prefix"`
+	RepoUrl             string                      `json:"repo_url"`
+	SyncIntervalSeconds int32                       `json:"sync_interval_seconds"`
+	SyncMode            GitOpsSourceSyncMode        `json:"sync_mode"`
+	UpdatedAt           time.Time                   `json:"updated_at"`
+	WebhookConfigured   bool                        `json:"webhook_configured"`
+	WebhookProvider     GitOpsSourceWebhookProvider `json:"webhook_provider"`
 }
 
 // GitOpsSourceAuthMode defines model for GitOpsSource.AuthMode.
@@ -6449,6 +7210,9 @@ type GitOpsSourceOnDelete string
 
 // GitOpsSourceSyncMode defines model for GitOpsSource.SyncMode.
 type GitOpsSourceSyncMode string
+
+// GitOpsSourceWebhookProvider defines model for GitOpsSource.WebhookProvider.
+type GitOpsSourceWebhookProvider string
 
 // GitOpsSourceEnvelope defines model for GitOpsSourceEnvelope.
 type GitOpsSourceEnvelope struct {
@@ -6474,6 +7238,10 @@ type GitOpsSourceRequest struct {
 	RepoUrl               *string                      `json:"repo_url,omitempty"`
 	SyncIntervalSeconds   *int32                       `json:"sync_interval_seconds,omitempty"`
 	SyncMode              *GitOpsSourceRequestSyncMode `json:"sync_mode,omitempty"`
+
+	// WebhookProvider Empty disables inbound webhooks; GitHub uses X-Hub-Signature-256.
+	WebhookProvider *GitOpsSourceRequestWebhookProvider `json:"webhook_provider,omitempty"`
+	WebhookSecret   *string                             `json:"webhook_secret,omitempty"`
 }
 
 // GitOpsSourceRequestAuthMode defines model for GitOpsSourceRequest.AuthMode.
@@ -6484,6 +7252,9 @@ type GitOpsSourceRequestOnDelete string
 
 // GitOpsSourceRequestSyncMode defines model for GitOpsSourceRequest.SyncMode.
 type GitOpsSourceRequestSyncMode string
+
+// GitOpsSourceRequestWebhookProvider Empty disables inbound webhooks; GitHub uses X-Hub-Signature-256.
+type GitOpsSourceRequestWebhookProvider string
 
 // GitOpsSyncReceipt defines model for GitOpsSyncReceipt.
 type GitOpsSyncReceipt struct {
@@ -6567,10 +7338,8 @@ type GroupMappingEnvelope struct {
 
 // GroupMappingListEnvelope defines model for GroupMappingListEnvelope.
 type GroupMappingListEnvelope struct {
-	Count    int64          `json:"count"`
-	Data     []GroupMapping `json:"data"`
-	Next     *string        `json:"next"`
-	Previous *string        `json:"previous"`
+	Data       []GroupMapping     `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // GroupMappingWriteRequest defines model for GroupMappingWriteRequest.
@@ -6754,12 +7523,12 @@ type ImageVulnerabilityReport struct {
 
 // ImageVulnerabilityReportDetail defines model for ImageVulnerabilityReportDetail.
 type ImageVulnerabilityReportDetail struct {
-	Limit              int                      `json:"limit"`
-	Offset             int                      `json:"offset"`
-	Report             ImageVulnerabilityReport `json:"report"`
-	SeverityFilter     string                   `json:"severity_filter"`
-	Vulnerabilities    []ImageVulnerability     `json:"vulnerabilities"`
-	VulnerabilityTotal int64                    `json:"vulnerability_total"`
+	Report          ImageVulnerabilityReport `json:"report"`
+	SeverityFilter  string                   `json:"severity_filter"`
+	Vulnerabilities struct {
+		Data       []ImageVulnerability `json:"data"`
+		Pagination PaginationMetadata   `json:"pagination"`
+	} `json:"vulnerabilities"`
 }
 
 // ImageVulnerabilityReportDetailEnvelope defines model for ImageVulnerabilityReportDetailEnvelope.
@@ -6853,6 +7622,7 @@ type InstalledChart struct {
 	Namespace      *string             `json:"namespace,omitempty"`
 	Notes          *string             `json:"notes,omitempty"`
 	PresetUsed     *string             `json:"preset_used"`
+	ProjectId      *openapi_types.UUID `json:"project_id"`
 	ReleaseName    *string             `json:"release_name,omitempty"`
 	RequestId      *openapi_types.UUID `json:"request_id"`
 	Revision       *int                `json:"revision,omitempty"`
@@ -6883,10 +7653,8 @@ type KubectlRecordedCommand struct {
 
 // KubectlRecordedCommandPage defines model for KubectlRecordedCommandPage.
 type KubectlRecordedCommandPage struct {
-	Count    int64                    `json:"count"`
-	Data     []KubectlRecordedCommand `json:"data"`
-	Next     *string                  `json:"next"`
-	Previous *string                  `json:"previous"`
+	Data       []KubectlRecordedCommand `json:"data"`
+	Pagination PaginationMetadata       `json:"pagination"`
 }
 
 // KubectlSession defines model for KubectlSession.
@@ -6938,12 +7706,6 @@ type LegacyMonitoringMetricsResult struct {
 
 // LegacyMonitoringMetricsResultStatus defines model for LegacyMonitoringMetricsResult.Status.
 type LegacyMonitoringMetricsResultStatus string
-
-// ListEnvelope Forward-looking list envelope with explicit pagination metadata.
-type ListEnvelope struct {
-	Data       []interface{}      `json:"data"`
-	Pagination PaginationMetadata `json:"pagination"`
-}
 
 // LoggingAttachMutationReceipt defines model for LoggingAttachMutationReceipt.
 type LoggingAttachMutationReceipt struct {
@@ -7115,15 +7877,8 @@ type LoggingOutputMutationReceiptEnvelope struct {
 
 // LoggingOutputPage defines model for LoggingOutputPage.
 type LoggingOutputPage struct {
-	// Count Total number of items across all pages.
-	Count int64           `json:"count"`
-	Data  []LoggingOutput `json:"data"`
-
-	// Next URL of the next page, or null on the last page.
-	Next *string `json:"next"`
-
-	// Previous URL of the previous page, or null on the first page.
-	Previous *string `json:"previous"`
+	Data       []LoggingOutput    `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // LoggingOutputWriteRequest defines model for LoggingOutputWriteRequest.
@@ -7174,15 +7929,8 @@ type LoggingPipelineMutationReceiptEnvelope struct {
 
 // LoggingPipelinePage defines model for LoggingPipelinePage.
 type LoggingPipelinePage struct {
-	// Count Total number of items across all pages.
-	Count int64             `json:"count"`
-	Data  []LoggingPipeline `json:"data"`
-
-	// Next URL of the next page, or null on the last page.
-	Next *string `json:"next"`
-
-	// Previous URL of the previous page, or null on the first page.
-	Previous *string `json:"previous"`
+	Data       []LoggingPipeline  `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // LoggingPipelineWriteRequest defines model for LoggingPipelineWriteRequest.
@@ -7295,12 +8043,7 @@ type LoginRequest struct {
 // LoginResponse defines model for LoginResponse.
 type LoginResponse struct {
 	Data *struct {
-		// Refresh Refresh JWT (~7d TTL)
-		Refresh *string `json:"refresh,omitempty"`
-
-		// Token Access JWT (~1h TTL)
-		Token *string `json:"token,omitempty"`
-		User  *User   `json:"user,omitempty"`
+		User User `json:"user"`
 	} `json:"data,omitempty"`
 }
 
@@ -7317,6 +8060,30 @@ type MTLSBreakdownResponse struct {
 	} `json:"rows"`
 	TotalCount int `json:"total_count"`
 }
+
+// MaintenanceWindowRequest defines model for MaintenanceWindowRequest.
+type MaintenanceWindowRequest struct {
+	ClusterSelector *map[string]string `json:"cluster_selector,omitempty"`
+
+	// CronOpen Five-field cron expression for the start of each window.
+	CronOpen        string                           `json:"cron_open"`
+	Description     *string                          `json:"description,omitempty"`
+	DurationMinutes *int                             `json:"duration_minutes,omitempty"`
+	Enabled         *bool                            `json:"enabled,omitempty"`
+	Mode            *MaintenanceWindowRequestMode    `json:"mode,omitempty"`
+	Name            string                           `json:"name"`
+	OnBlock         *MaintenanceWindowRequestOnBlock `json:"on_block,omitempty"`
+	OperationTypes  *[]string                        `json:"operation_types,omitempty"`
+
+	// Timezone IANA time-zone name.
+	Timezone *string `json:"timezone,omitempty"`
+}
+
+// MaintenanceWindowRequestMode defines model for MaintenanceWindowRequest.Mode.
+type MaintenanceWindowRequestMode string
+
+// MaintenanceWindowRequestOnBlock defines model for MaintenanceWindowRequest.OnBlock.
+type MaintenanceWindowRequestOnBlock string
 
 // ManagementBackupDeleteReceipt defines model for ManagementBackupDeleteReceipt.
 type ManagementBackupDeleteReceipt struct {
@@ -7467,10 +8234,8 @@ type MirroredGatewayClass struct {
 
 // MirroredGatewayClassPage defines model for MirroredGatewayClassPage.
 type MirroredGatewayClassPage struct {
-	Count    int64                  `json:"count"`
-	Data     []MirroredGatewayClass `json:"data"`
-	Next     *string                `json:"next"`
-	Previous *string                `json:"previous"`
+	Data       []MirroredGatewayClass `json:"data"`
+	Pagination PaginationMetadata     `json:"pagination"`
 }
 
 // MirroredIngressClass defines model for MirroredIngressClass.
@@ -7488,10 +8253,8 @@ type MirroredIngressClass struct {
 
 // MirroredIngressClassPage defines model for MirroredIngressClassPage.
 type MirroredIngressClassPage struct {
-	Count    int64                  `json:"count"`
-	Data     []MirroredIngressClass `json:"data"`
-	Next     *string                `json:"next"`
-	Previous *string                `json:"previous"`
+	Data       []MirroredIngressClass `json:"data"`
+	Pagination PaginationMetadata     `json:"pagination"`
 }
 
 // MirroredLimitRange defines model for MirroredLimitRange.
@@ -7508,10 +8271,8 @@ type MirroredLimitRange struct {
 
 // MirroredLimitRangePage defines model for MirroredLimitRangePage.
 type MirroredLimitRangePage struct {
-	Count    int64                `json:"count"`
-	Data     []MirroredLimitRange `json:"data"`
-	Next     *string              `json:"next"`
-	Previous *string              `json:"previous"`
+	Data       []MirroredLimitRange `json:"data"`
+	Pagination PaginationMetadata   `json:"pagination"`
 }
 
 // MirroredNetworkPolicy defines model for MirroredNetworkPolicy.
@@ -7532,10 +8293,8 @@ type MirroredNetworkPolicy struct {
 
 // MirroredNetworkPolicyPage defines model for MirroredNetworkPolicyPage.
 type MirroredNetworkPolicyPage struct {
-	Count    int64                   `json:"count"`
-	Data     []MirroredNetworkPolicy `json:"data"`
-	Next     *string                 `json:"next"`
-	Previous *string                 `json:"previous"`
+	Data       []MirroredNetworkPolicy `json:"data"`
+	Pagination PaginationMetadata      `json:"pagination"`
 }
 
 // MirroredResourceMetadata defines model for MirroredResourceMetadata.
@@ -7557,10 +8316,8 @@ type MirroredResourceQuota struct {
 
 // MirroredResourceQuotaPage defines model for MirroredResourceQuotaPage.
 type MirroredResourceQuotaPage struct {
-	Count    int64                   `json:"count"`
-	Data     []MirroredResourceQuota `json:"data"`
-	Next     *string                 `json:"next"`
-	Previous *string                 `json:"previous"`
+	Data       []MirroredResourceQuota `json:"data"`
+	Pagination PaginationMetadata      `json:"pagination"`
 }
 
 // MonitoringBackend defines model for MonitoringBackend.
@@ -7596,10 +8353,8 @@ type MonitoringBackendEnvelope_Data struct {
 
 // MonitoringBackendPage defines model for MonitoringBackendPage.
 type MonitoringBackendPage struct {
-	Count    int64               `json:"count"`
-	Data     []MonitoringBackend `json:"data"`
-	Next     *string             `json:"next"`
-	Previous *string             `json:"previous"`
+	Data       []MonitoringBackend `json:"data"`
+	Pagination PaginationMetadata  `json:"pagination"`
 }
 
 // MonitoringMetricsEnvelope defines model for MonitoringMetricsEnvelope.
@@ -7661,15 +8416,8 @@ type MonitoringOperationEvent struct {
 
 // MonitoringOperationPage defines model for MonitoringOperationPage.
 type MonitoringOperationPage struct {
-	// Count Total number of items across all pages.
-	Count int64                 `json:"count"`
-	Data  []MonitoringOperation `json:"data"`
-
-	// Next URL of the next page, or null on the last page.
-	Next *string `json:"next"`
-
-	// Previous URL of the previous page, or null on the first page.
-	Previous *string `json:"previous"`
+	Data       []MonitoringOperation `json:"data"`
+	Pagination PaginationMetadata    `json:"pagination"`
 }
 
 // MonitoringSizerEnvelope defines model for MonitoringSizerEnvelope.
@@ -7771,10 +8519,10 @@ type MonitoringStackStatus struct {
 	DesiredSpecHash         *string                    `json:"desiredSpecHash,omitempty"`
 	DriftReasons            *[]string                  `json:"driftReasons,omitempty"`
 	Drifted                 *bool                      `json:"drifted,omitempty"`
-	GrafanaHost             *string                    `json:"grafanaHost,omitempty"`
+	GrafanaAvailable        *bool                      `json:"grafanaAvailable,omitempty"`
+	GrafanaProxyPath        *string                    `json:"grafanaProxyPath,omitempty"`
 	IngestHostname          *string                    `json:"ingestHostname,omitempty"`
 	IngestPublic            *bool                      `json:"ingestPublic,omitempty"`
-	IngressHost             *string                    `json:"ingressHost,omitempty"`
 	LastDriftDetectedAt     *time.Time                 `json:"lastDriftDetectedAt"`
 	LastHealthyAt           *time.Time                 `json:"lastHealthyAt"`
 	LastObservedAt          *time.Time                 `json:"lastObservedAt"`
@@ -7790,6 +8538,7 @@ type MonitoringStackStatus struct {
 	ObservedRelease         *MonitoringObservedRelease `json:"observedRelease,omitempty"`
 	Operation               *MonitoringOperation       `json:"operation,omitempty"`
 	Pods                    *int                       `json:"pods,omitempty"`
+	ProxyPath               *string                    `json:"proxyPath,omitempty"`
 	QueryReplicas           *int32                     `json:"queryReplicas,omitempty"`
 	QueryUrl                *string                    `json:"queryUrl,omitempty"`
 	ReleaseName             *string                    `json:"releaseName,omitempty"`
@@ -7854,7 +8603,8 @@ type NativeRBACRuleEnvelope struct {
 
 // NativeRBACRuleListEnvelope defines model for NativeRBACRuleListEnvelope.
 type NativeRBACRuleListEnvelope struct {
-	Data []NativeRBACRule `json:"data"`
+	Data       []NativeRBACRule   `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // NativeRBACRuleRequest defines model for NativeRBACRuleRequest.
@@ -8162,34 +8912,32 @@ type OwnershipTransferResponse struct {
 // OwnershipTransferResponseManagedBy defines model for OwnershipTransferResponse.ManagedBy.
 type OwnershipTransferResponseManagedBy string
 
-// PaginatedClusters defines model for PaginatedClusters.
-type PaginatedClusters struct {
-	Count    int       `json:"count"`
-	Data     []Cluster `json:"data"`
-	Next     *string   `json:"next"`
-	Previous *string   `json:"previous"`
+// PageEnvelope Canonical collection page. Exact total is omitted when unknown.
+type PageEnvelope struct {
+	Data       []interface{}      `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
-// PaginatedEnvelope DRF-style paginated list envelope. `data` is the page of items.
-type PaginatedEnvelope struct {
-	// Count Total number of items across all pages.
-	Count int64         `json:"count"`
-	Data  []interface{} `json:"data"`
-
-	// Next URL of the next page, or null on the last page.
-	Next *string `json:"next"`
-
-	// Previous URL of the previous page, or null on the first page.
-	Previous *string `json:"previous"`
+// PaginatedClusters defines model for PaginatedClusters.
+type PaginatedClusters struct {
+	Data       []Cluster          `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // PaginationMetadata defines model for PaginationMetadata.
 type PaginationMetadata struct {
-	HasMore    bool   `json:"has_more"`
-	Limit      int    `json:"limit"`
-	NextOffset *int   `json:"next_offset"`
-	Offset     int    `json:"offset"`
-	Total      *int64 `json:"total,omitempty"`
+	HasMore    bool    `json:"has_more"`
+	Limit      int     `json:"limit"`
+	NextCursor *string `json:"next_cursor"`
+	NextOffset *int    `json:"next_offset"`
+	Offset     int     `json:"offset"`
+	Total      *int64  `json:"total,omitempty"`
+}
+
+// PlatformDefaultClusterTemplateRequest defines model for PlatformDefaultClusterTemplateRequest.
+type PlatformDefaultClusterTemplateRequest struct {
+	// TemplateId Template to make the platform default; null or omission clears the default.
+	TemplateId *openapi_types.UUID `json:"template_id"`
 }
 
 // PlatformSetting defines model for PlatformSetting.
@@ -8229,17 +8977,18 @@ type PlatformSettingsBatchUpdateRequest struct {
 
 // Pod defines model for Pod.
 type Pod struct {
-	Age        *string                   `json:"age,omitempty"`
-	ClusterId  *string                   `json:"clusterId,omitempty"`
-	Conditions *[]map[string]interface{} `json:"conditions,omitempty"`
-	Containers *[]map[string]interface{} `json:"containers,omitempty"`
-	CreatedAt  *time.Time                `json:"createdAt,omitempty"`
-	Images     *[]string                 `json:"images,omitempty"`
-	Ip         *string                   `json:"ip,omitempty"`
-	Name       *string                   `json:"name,omitempty"`
-	Namespace  *string                   `json:"namespace,omitempty"`
-	Node       *string                   `json:"node,omitempty"`
-	Phase      *string                   `json:"phase,omitempty"`
+	Age           *string                   `json:"age,omitempty"`
+	ClusterId     *string                   `json:"clusterId,omitempty"`
+	Conditions    *[]map[string]interface{} `json:"conditions,omitempty"`
+	Containers    *[]map[string]interface{} `json:"containers,omitempty"`
+	CreatedAt     *time.Time                `json:"createdAt,omitempty"`
+	Images        *[]string                 `json:"images,omitempty"`
+	Ip            *string                   `json:"ip,omitempty"`
+	LastRestartAt *time.Time                `json:"lastRestartAt"`
+	Name          *string                   `json:"name,omitempty"`
+	Namespace     *string                   `json:"namespace,omitempty"`
+	Node          *string                   `json:"node,omitempty"`
+	Phase         *string                   `json:"phase,omitempty"`
 
 	// Ready "n/m" ready ratio
 	Ready                *string                `json:"ready,omitempty"`
@@ -8309,6 +9058,58 @@ type PodSecurityTemplateWriteRequestEnforceLevel string
 
 // PodSecurityTemplateWriteRequestWarnLevel defines model for PodSecurityTemplateWriteRequest.WarnLevel.
 type PodSecurityTemplateWriteRequestWarnLevel string
+
+// PrincipalConnectorStatus defines model for PrincipalConnectorStatus.
+type PrincipalConnectorStatus struct {
+	ConnectorId   openapi_types.UUID `json:"connector_id"`
+	ConnectorName string             `json:"connector_name"`
+	ConnectorType string             `json:"connector_type"`
+	Error         *string            `json:"error,omitempty"`
+	Supported     bool               `json:"supported"`
+}
+
+// PrincipalMaterializeRequest defines model for PrincipalMaterializeRequest.
+type PrincipalMaterializeRequest struct {
+	ConnectorId openapi_types.UUID `json:"connector_id"`
+	Subject     string             `json:"subject"`
+}
+
+// PrincipalMaterialized defines model for PrincipalMaterialized.
+type PrincipalMaterialized struct {
+	ConnectorId openapi_types.UUID        `json:"connector_id"`
+	DisplayName string                    `json:"display_name"`
+	Email       openapi_types.Email       `json:"email"`
+	Id          openapi_types.UUID        `json:"id"`
+	Kind        PrincipalMaterializedKind `json:"kind"`
+	UserId      openapi_types.UUID        `json:"user_id"`
+	Username    string                    `json:"username"`
+}
+
+// PrincipalMaterializedKind defines model for PrincipalMaterialized.Kind.
+type PrincipalMaterializedKind string
+
+// PrincipalSearchItem defines model for PrincipalSearchItem.
+type PrincipalSearchItem struct {
+	ConnectorId   *openapi_types.UUID     `json:"connector_id,omitempty"`
+	ConnectorName *string                 `json:"connector_name,omitempty"`
+	ConnectorType *string                 `json:"connector_type,omitempty"`
+	DisplayName   string                  `json:"display_name"`
+	Email         openapi_types.Email     `json:"email"`
+	Kind          PrincipalSearchItemKind `json:"kind"`
+	PrincipalId   *openapi_types.UUID     `json:"principal_id,omitempty"`
+	Subject       *string                 `json:"subject,omitempty"`
+	UserId        *openapi_types.UUID     `json:"user_id,omitempty"`
+	Username      string                  `json:"username"`
+}
+
+// PrincipalSearchItemKind defines model for PrincipalSearchItem.Kind.
+type PrincipalSearchItemKind string
+
+// PrincipalSearchResponse defines model for PrincipalSearchResponse.
+type PrincipalSearchResponse struct {
+	Connectors []PrincipalConnectorStatus `json:"connectors"`
+	Principals []PrincipalSearchItem      `json:"principals"`
+}
 
 // Project Project row (cluster-scoped namespace policy container).
 type Project struct {
@@ -8560,6 +9361,15 @@ type QuotaUsageSnapshotEnvelope struct {
 	Data QuotaUsageSnapshot `json:"data"`
 }
 
+// RBACApplyProjectTemplateRequest defines model for RBACApplyProjectTemplateRequest.
+type RBACApplyProjectTemplateRequest struct {
+	// TemplateName Name of a project-scope template from the RBAC catalog.
+	TemplateName string `json:"template_name"`
+
+	// UserId Existing local user identity to bind. SSO users become available after first login.
+	UserId openapi_types.UUID `json:"user_id"`
+}
+
 // RBACBindingRequest defines model for RBACBindingRequest.
 type RBACBindingRequest struct {
 	Group  *string             `json:"group,omitempty"`
@@ -8729,14 +9539,20 @@ type RBACProjectRoleBinding struct {
 
 // RBACRole defines model for RBACRole.
 type RBACRole struct {
-	CreatedAt            *time.Time             `json:"created_at,omitempty"`
-	Description          *string                `json:"description,omitempty"`
-	DisplayName          *string                `json:"display_name,omitempty"`
-	Id                   *openapi_types.UUID    `json:"id,omitempty"`
-	IsBuiltin            *bool                  `json:"is_builtin,omitempty"`
-	Name                 *string                `json:"name,omitempty"`
-	Rules                *[]RBACRule            `json:"rules,omitempty"`
-	Scope                *RBACRoleScope         `json:"scope,omitempty"`
+	CreatedAt   *time.Time          `json:"created_at,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	DisplayName *string             `json:"display_name,omitempty"`
+	Id          *openapi_types.UUID `json:"id,omitempty"`
+	IsBuiltin   *bool               `json:"is_builtin,omitempty"`
+	Name        *string             `json:"name,omitempty"`
+	Rules       *[]RBACRule         `json:"rules,omitempty"`
+	Scope       *RBACRoleScope      `json:"scope,omitempty"`
+
+	// SourceDigest SHA-256 digest of the effective materialized rules.
+	SourceDigest *string `json:"source_digest"`
+
+	// SourceTemplate Catalog template backing an immutable materialized role.
+	SourceTemplate       *string                `json:"source_template"`
 	UpdatedAt            *time.Time             `json:"updated_at,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
@@ -8774,16 +9590,23 @@ type RBACRule struct {
 
 // RBACTemplate defines model for RBACTemplate.
 type RBACTemplate struct {
-	Description *string `json:"description,omitempty"`
-	DisplayName *string `json:"display_name,omitempty"`
-	Name        *string `json:"name,omitempty"`
+	Category    *string                `json:"category,omitempty"`
+	Description *string                `json:"description,omitempty"`
+	DisplayName *string                `json:"display_name,omitempty"`
+	Inherits    *[]string              `json:"inherits,omitempty"`
+	Name        *string                `json:"name,omitempty"`
+	RiskLevel   *RBACTemplateRiskLevel `json:"risk_level,omitempty"`
 	Rules       *[]struct {
 		Resource *string   `json:"resource,omitempty"`
 		Verbs    *[]string `json:"verbs,omitempty"`
 	} `json:"rules,omitempty"`
 	Scope                *RBACTemplateScope     `json:"scope,omitempty"`
+	SystemManaged        *bool                  `json:"system_managed,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
+
+// RBACTemplateRiskLevel defines model for RBACTemplate.RiskLevel.
+type RBACTemplateRiskLevel string
 
 // RBACTemplateScope defines model for RBACTemplate.Scope.
 type RBACTemplateScope string
@@ -8887,6 +9710,15 @@ type RenderedDashboardWidgetData struct {
 // RenderedDashboardWidgetListEnvelope defines model for RenderedDashboardWidgetListEnvelope.
 type RenderedDashboardWidgetListEnvelope struct {
 	Data []RenderedDashboardWidget `json:"data"`
+}
+
+// ResourceCounts defines model for ResourceCounts.
+type ResourceCounts struct {
+	// Counts Counts keyed by authorized Kubernetes resource type. Unauthorized types are omitted.
+	Counts map[string]int64 `json:"counts"`
+
+	// Unavailable Authorized resource types whose metadata-only Kubernetes list failed. Values are intentionally non-sensitive.
+	Unavailable *map[string]string `json:"unavailable,omitempty"`
 }
 
 // ResourceDiscoveryEntry defines model for ResourceDiscoveryEntry.
@@ -9048,6 +9880,11 @@ type RestoreOperationResponse struct {
 	VeleroRestoreName  *string             `json:"velero_restore_name,omitempty"`
 }
 
+// RouteMutationRequest Provisional typed boundary for a newly synchronized mutation route.
+// Domain-specific request fields replace this component before the route
+// contract is promoted out of provisional status.
+type RouteMutationRequest map[string]interface{}
+
 // RouteResponseEnvelope Forward-compatible JSON response envelope used by route-inventory
 // contracts. Domain operations may return either an enveloped payload or
 // a documented bare object while fields are promoted additively into a
@@ -9187,19 +10024,23 @@ type SCIMSupportedFeature struct {
 // SCIMToken defines model for SCIMToken.
 type SCIMToken struct {
 	CreatedAt  time.Time          `json:"created_at"`
+	ExpiresAt  time.Time          `json:"expires_at"`
 	Id         openapi_types.UUID `json:"id"`
 	LastUsedAt *time.Time         `json:"last_used_at"`
 	Name       string             `json:"name"`
 	Prefix     string             `json:"prefix"`
+	RevokedAt  *time.Time         `json:"revoked_at"`
 }
 
 // SCIMTokenCreated defines model for SCIMTokenCreated.
 type SCIMTokenCreated struct {
 	CreatedAt  time.Time          `json:"created_at"`
+	ExpiresAt  time.Time          `json:"expires_at"`
 	Id         openapi_types.UUID `json:"id"`
 	LastUsedAt *time.Time         `json:"last_used_at"`
 	Name       string             `json:"name"`
 	Prefix     string             `json:"prefix"`
+	RevokedAt  *time.Time         `json:"revoked_at"`
 
 	// Token Plaintext bearer token, returned only on create.
 	Token string `json:"token"`
@@ -9212,7 +10053,8 @@ type SCIMTokenCreatedEnvelope struct {
 
 // SCIMTokenList defines model for SCIMTokenList.
 type SCIMTokenList struct {
-	Tokens []SCIMToken `json:"tokens"`
+	Pagination PaginationMetadata `json:"pagination"`
+	Tokens     []SCIMToken        `json:"tokens"`
 }
 
 // SCIMTokenListEnvelope defines model for SCIMTokenListEnvelope.
@@ -9447,16 +10289,19 @@ type SharedAlertmanagerStackRequest struct {
 
 // SharedGrafanaStackRequest managementClusterId may be supplied as the clusterId query parameter instead.
 type SharedGrafanaStackRequest struct {
-	AutoRollbackOnFailure *bool               `json:"autoRollbackOnFailure,omitempty"`
-	ChartVersion          *string             `json:"chartVersion,omitempty"`
-	IngressHost           *string             `json:"ingressHost,omitempty"`
-	LogDatasourceUrl      *string             `json:"logDatasourceUrl,omitempty"`
-	ManagementClusterId   *openapi_types.UUID `json:"managementClusterId,omitempty"`
-	Namespace             *string             `json:"namespace,omitempty"`
-	ReleaseName           *string             `json:"releaseName,omitempty"`
-	Replicas              *int32              `json:"replicas,omitempty"`
-	StorageClass          *string             `json:"storageClass,omitempty"`
-	StorageSize           *string             `json:"storageSize,omitempty"`
+	AutoRollbackOnFailure *bool   `json:"autoRollbackOnFailure,omitempty"`
+	ChartVersion          *string `json:"chartVersion,omitempty"`
+
+	// IngressHost Ignored compatibility field; shared Grafana is exposed only through the authenticated same-origin proxy.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	IngressHost         *string             `json:"ingressHost,omitempty"`
+	LogDatasourceUrl    *string             `json:"logDatasourceUrl,omitempty"`
+	ManagementClusterId *openapi_types.UUID `json:"managementClusterId,omitempty"`
+	Namespace           *string             `json:"namespace,omitempty"`
+	ReleaseName         *string             `json:"releaseName,omitempty"`
+	Replicas            *int32              `json:"replicas,omitempty"`
+	StorageClass        *string             `json:"storageClass,omitempty"`
+	StorageSize         *string             `json:"storageSize,omitempty"`
 }
 
 // SharedLokiStackRequest managementClusterId may be supplied as the clusterId query parameter instead.
@@ -9675,6 +10520,26 @@ type StreamTicketResponse struct {
 	Ticket    string    `json:"ticket"`
 }
 
+// SupportBundleOperation defines model for SupportBundleOperation.
+type SupportBundleOperation struct {
+	AttemptCount int32                        `json:"attempt_count"`
+	CompletedAt  *time.Time                   `json:"completed_at,omitempty"`
+	CreatedAt    time.Time                    `json:"created_at"`
+	DownloadUrl  *string                      `json:"download_url,omitempty"`
+	ErrorCode    *string                      `json:"error_code,omitempty"`
+	ExpiresAt    time.Time                    `json:"expires_at"`
+	Filename     *string                      `json:"filename,omitempty"`
+	Id           openapi_types.UUID           `json:"id"`
+	Sha256       *string                      `json:"sha256,omitempty"`
+	Size         int64                        `json:"size"`
+	Status       SupportBundleOperationStatus `json:"status"`
+	StatusUrl    string                       `json:"status_url"`
+	UpdatedAt    time.Time                    `json:"updated_at"`
+}
+
+// SupportBundleOperationStatus defines model for SupportBundleOperation.Status.
+type SupportBundleOperationStatus string
+
 // TaskOutboxEntryEnvelope defines model for TaskOutboxEntryEnvelope.
 type TaskOutboxEntryEnvelope struct {
 	Data TaskOutboxEntryWire `json:"data"`
@@ -9714,10 +10579,13 @@ type ToolActionRequest struct {
 
 // ToolChart defines model for ToolChart.
 type ToolChart struct {
-	ChartName string `json:"chart_name"`
-	Namespace string `json:"namespace"`
-	Order     int    `json:"order"`
-	RepoUrl   string `json:"repo_url"`
+	ChartName   string  `json:"chart_name"`
+	Namespace   string  `json:"namespace"`
+	Order       int     `json:"order"`
+	ReleaseName *string `json:"release_name,omitempty"`
+	RepoUrl     string  `json:"repo_url"`
+	ValuesKey   *string `json:"values_key,omitempty"`
+	Version     *string `json:"version,omitempty"`
 }
 
 // ToolControllerStatus defines model for ToolControllerStatus.
@@ -9797,10 +10665,11 @@ type ToolOperationEventLevel string
 // ToolPreview defines model for ToolPreview.
 type ToolPreview struct {
 	Charts []struct {
-		ChartName    string `json:"chart_name"`
-		ChartVersion string `json:"chart_version"`
-		Namespace    string `json:"namespace"`
-		ValuesYaml   string `json:"values_yaml"`
+		ChartName    string  `json:"chart_name"`
+		ChartVersion string  `json:"chart_version"`
+		Namespace    string  `json:"namespace"`
+		ReleaseName  *string `json:"release_name,omitempty"`
+		ValuesYaml   string  `json:"values_yaml"`
 	} `json:"charts"`
 	Preset string `json:"preset"`
 }
@@ -9839,10 +10708,14 @@ type UpdateClusterMonitoringConfigRequest struct {
 
 // UpdateClusterRequest Partial cluster update. Omitted fields are preserved by an atomic row-locked merge; explicit empty strings or objects clear the corresponding field.
 type UpdateClusterRequest struct {
-	Annotations *map[string]string `json:"annotations,omitempty"`
+	// AgentOverrides Bounded per-cluster agent PodSpec customization. Platform-owned Linux placement and security settings remain immutable.
+	AgentOverrides *AgentOverrides    `json:"agent_overrides,omitempty"`
+	Annotations    *map[string]string `json:"annotations,omitempty"`
 
 	// ApiServerUrl HTTPS Kubernetes API origin. Send an empty string together with an empty ca_certificate to disable direct access; omission preserves the current value.
 	ApiServerUrl *UpdateClusterRequest_ApiServerUrl `json:"api_server_url,omitempty"`
+	BadgeColor   *UpdateClusterRequestBadgeColor    `json:"badge_color,omitempty"`
+	BadgeText    *string                            `json:"badge_text,omitempty"`
 
 	// CaCertificate Optional PEM CA identity pin. Send an empty string with an empty api_server_url to disable direct access; omission preserves the current value.
 	CaCertificate *string            `json:"ca_certificate,omitempty"`
@@ -9863,6 +10736,9 @@ type UpdateClusterRequestApiServerUrl1 = string
 type UpdateClusterRequest_ApiServerUrl struct {
 	union json.RawMessage
 }
+
+// UpdateClusterRequestBadgeColor defines model for UpdateClusterRequest.BadgeColor.
+type UpdateClusterRequestBadgeColor string
 
 // UpdateLoggingSavedSearchRequest defines model for UpdateLoggingSavedSearchRequest.
 type UpdateLoggingSavedSearchRequest struct {
@@ -9969,6 +10845,30 @@ type User struct {
 	Roles              *AuthUserRoles       `json:"roles,omitempty"`
 	Username           *string              `json:"username,omitempty"`
 }
+
+// UserPreferences defines model for UserPreferences.
+type UserPreferences struct {
+	Favorites    []UserPreferencesFavorites  `json:"favorites"`
+	LandingRoute UserPreferencesLandingRoute `json:"landing_route"`
+	TableDensity UserPreferencesTableDensity `json:"table_density"`
+	Theme        UserPreferencesTheme        `json:"theme"`
+	TimeFormat   UserPreferencesTimeFormat   `json:"time_format"`
+}
+
+// UserPreferencesFavorites defines model for UserPreferences.Favorites.
+type UserPreferencesFavorites string
+
+// UserPreferencesLandingRoute defines model for UserPreferences.LandingRoute.
+type UserPreferencesLandingRoute string
+
+// UserPreferencesTableDensity defines model for UserPreferences.TableDensity.
+type UserPreferencesTableDensity string
+
+// UserPreferencesTheme defines model for UserPreferences.Theme.
+type UserPreferencesTheme string
+
+// UserPreferencesTimeFormat defines model for UserPreferences.TimeFormat.
+type UserPreferencesTimeFormat string
 
 // UserQuotaDimensions defines model for UserQuotaDimensions.
 type UserQuotaDimensions struct {
@@ -10466,6 +11366,9 @@ type WorkloadOperationEvent struct {
 	AdditionalProperties map[string]interface{}  `json:"-"`
 }
 
+// DesiredGeneration defines model for DesiredGeneration.
+type DesiredGeneration = string
+
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = string
 
@@ -10478,14 +11381,23 @@ type MonitoringManagementClusterID = openapi_types.UUID
 // Offset defines model for Offset.
 type Offset = int
 
+// PositiveFencingGeneration defines model for PositiveFencingGeneration.
+type PositiveFencingGeneration = string
+
 // RequiredIdempotencyKey defines model for RequiredIdempotencyKey.
 type RequiredIdempotencyKey = string
+
+// AuditExportAccepted defines model for AuditExportAccepted.
+type AuditExportAccepted = AuditExportOperation
 
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
 
 // Conflict defines model for Conflict.
 type Conflict = Error
+
+// DeliveryActionAccepted defines model for DeliveryActionAccepted.
+type DeliveryActionAccepted = DeliveryAsyncOperationReceiptEnvelope
 
 // ErrorResponse Standard error envelope.
 type ErrorResponse = ErrorEnvelope
@@ -10501,6 +11413,9 @@ type ServiceUnavailable = Error
 
 // Unauthorized defines model for Unauthorized.
 type Unauthorized = Error
+
+// DeliveryAction defines model for DeliveryAction.
+type DeliveryAction = DeliveryRolloutAction
 
 // GetActivityParams defines parameters for GetActivity.
 type GetActivityParams struct {
@@ -10643,8 +11558,20 @@ type GetAdminQuotaPlansParams struct {
 	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetAdminScimTokensParams defines parameters for GetAdminScimTokens.
+type GetAdminScimTokensParams struct {
+	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Zero-based offset into the authorized, filtered result.
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // PostAdminScimTokensJSONBody defines parameters for PostAdminScimTokens.
 type PostAdminScimTokensJSONBody struct {
+	// ExpiresInDays Token lifetime in days.
+	ExpiresInDays *int `json:"expires_in_days,omitempty"`
+
 	// Name Operator-facing label for the token.
 	Name string `json:"name"`
 }
@@ -10699,6 +11626,15 @@ type PostAdminTaskOutboxByIdRetryParams struct {
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
+// AdminVaultConnectionsListParams defines parameters for AdminVaultConnectionsList.
+type AdminVaultConnectionsListParams struct {
+	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Zero-based offset into the authorized, filtered result.
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // AdminVaultConnectionTestJSONBody defines parameters for AdminVaultConnectionTest.
 type AdminVaultConnectionTestJSONBody struct {
 	// ProbePath Optional; defaults to `_health`.
@@ -10743,6 +11679,11 @@ type GetAlertingEventsParamsStatus string
 
 // GetAlertingEventsParamsSeverity defines parameters for GetAlertingEvents.
 type GetAlertingEventsParamsSeverity string
+
+// GetAlertingEventsSummaryParams defines parameters for GetAlertingEventsSummary.
+type GetAlertingEventsSummaryParams struct {
+	ClusterId *openapi_types.UUID `form:"clusterId,omitempty" json:"clusterId,omitempty"`
+}
 
 // GetAlertingRulesParams defines parameters for GetAlertingRules.
 type GetAlertingRulesParams struct {
@@ -10883,6 +11824,42 @@ type ExportAuditLogsParamsAudience string
 // ExportAuditLogsParamsResult defines parameters for ExportAuditLogs.
 type ExportAuditLogsParamsResult string
 
+// CreateAuditExportParams defines parameters for CreateAuditExport.
+type CreateAuditExportParams struct {
+	Format        *CreateAuditExportParamsFormat   `form:"format,omitempty" json:"format,omitempty"`
+	UserId        *openapi_types.UUID              `form:"user_id,omitempty" json:"user_id,omitempty"`
+	Actor         *string                          `form:"actor,omitempty" json:"actor,omitempty"`
+	Q             *string                          `form:"q,omitempty" json:"q,omitempty"`
+	Audience      *CreateAuditExportParamsAudience `form:"audience,omitempty" json:"audience,omitempty"`
+	ResourceType  *string                          `form:"resource_type,omitempty" json:"resource_type,omitempty"`
+	ResourceId    *string                          `form:"resource_id,omitempty" json:"resource_id,omitempty"`
+	ResourceName  *string                          `form:"resource_name,omitempty" json:"resource_name,omitempty"`
+	Target        *string                          `form:"target,omitempty" json:"target,omitempty"`
+	Action        *string                          `form:"action,omitempty" json:"action,omitempty"`
+	ActionClass   *string                          `form:"action_class,omitempty" json:"action_class,omitempty"`
+	Result        *CreateAuditExportParamsResult   `form:"result,omitempty" json:"result,omitempty"`
+	Source        *string                          `form:"source,omitempty" json:"source,omitempty"`
+	CorrelationId *string                          `form:"correlation_id,omitempty" json:"correlation_id,omitempty"`
+	RequestId     *string                          `form:"request_id,omitempty" json:"request_id,omitempty"`
+	ClusterId     *string                          `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
+	ProjectId     *string                          `form:"project_id,omitempty" json:"project_id,omitempty"`
+	StatusCode    *int                             `form:"status_code,omitempty" json:"status_code,omitempty"`
+	From          time.Time                        `form:"from" json:"from"`
+	To            time.Time                        `form:"to" json:"to"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CreateAuditExportParamsFormat defines parameters for CreateAuditExport.
+type CreateAuditExportParamsFormat string
+
+// CreateAuditExportParamsAudience defines parameters for CreateAuditExport.
+type CreateAuditExportParamsAudience string
+
+// CreateAuditExportParamsResult defines parameters for CreateAuditExport.
+type CreateAuditExportParamsResult string
+
 // PostAuthChangePasswordJSONBody defines parameters for PostAuthChangePassword.
 type PostAuthChangePasswordJSONBody struct {
 	CurrentPassword string `json:"current_password"`
@@ -10921,12 +11898,6 @@ type PostAuthPasswordResetCompleteJSONBody struct {
 // PostAuthPasswordResetRequestJSONBody defines parameters for PostAuthPasswordResetRequest.
 type PostAuthPasswordResetRequestJSONBody struct {
 	Email *openapi_types.Email `json:"email,omitempty"`
-}
-
-// PostAuthRefreshJSONBody defines parameters for PostAuthRefresh.
-type PostAuthRefreshJSONBody struct {
-	// Refresh Refresh JWT. Optional when the refresh cookie is present.
-	Refresh *string `json:"refresh,omitempty"`
 }
 
 // GetAuthTokensParams defines parameters for GetAuthTokens.
@@ -10994,12 +11965,6 @@ type GetBackupsRestoresParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
-// GetBackupsRunsParams defines parameters for GetBackupsRuns.
-type GetBackupsRunsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
 // GetBackupsSchedulesParams defines parameters for GetBackupsSchedules.
 type GetBackupsSchedulesParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -11012,10 +11977,12 @@ type GetBackupsStorageParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
-// GetBackupsStorageConfigsParams defines parameters for GetBackupsStorageConfigs.
-type GetBackupsStorageConfigsParams struct {
-	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+// PostCatalogApplicationsPreviewJSONBody defines parameters for PostCatalogApplicationsPreview.
+type PostCatalogApplicationsPreviewJSONBody struct {
+	ChartVersionId openapi_types.UUID `json:"chart_version_id"`
+	ClusterId      openapi_types.UUID `json:"cluster_id"`
+	Namespace      string             `json:"namespace"`
+	ValuesOverride *string            `json:"values_override,omitempty"`
 }
 
 // GetCatalogChartsParams defines parameters for GetCatalogCharts.
@@ -11028,18 +11995,34 @@ type GetCatalogChartsParams struct {
 
 	// ProjectId Select the project-scoped catalog union. Omit only for the globally managed catalog view.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+
+	// ClusterId Select the caller-visible catalog union for a cluster. Preferred by cluster Apps pages.
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 }
 
 // GetCatalogChartsByIdParams defines parameters for GetCatalogChartsById.
 type GetCatalogChartsByIdParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
+}
+
+// PutCatalogChartsByIdFavoriteJSONBody defines parameters for PutCatalogChartsByIdFavorite.
+type PutCatalogChartsByIdFavoriteJSONBody struct {
+	Favorite bool `json:"favorite"`
+}
+
+// PutCatalogChartsByIdFavoriteParams defines parameters for PutCatalogChartsByIdFavorite.
+type PutCatalogChartsByIdFavoriteParams struct {
+	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 }
 
 // GetCatalogChartsByIdReadmeParams defines parameters for GetCatalogChartsByIdReadme.
 type GetCatalogChartsByIdReadmeParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 
 	// Version Specific chart version; defaults to latest.
 	Version *string `form:"version,omitempty" json:"version,omitempty"`
@@ -11049,6 +12032,7 @@ type GetCatalogChartsByIdReadmeParams struct {
 type GetCatalogChartsByIdValuesParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 	Version   *string             `form:"version,omitempty" json:"version,omitempty"`
 }
 
@@ -11056,6 +12040,7 @@ type GetCatalogChartsByIdValuesParams struct {
 type GetCatalogChartsByIdVersionsParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 	Limit     *int                `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset    *int                `form:"offset,omitempty" json:"offset,omitempty"`
 }
@@ -11074,10 +12059,12 @@ type PostCatalogInstalledJSONBody struct {
 	Namespace      string             `json:"namespace"`
 	Notes          *string            `json:"notes,omitempty"`
 	PresetUsed     *string            `json:"preset_used,omitempty"`
-	ProjectId      openapi_types.UUID `json:"project_id"`
-	ReleaseName    string             `json:"release_name"`
-	ToolSlug       *string            `json:"tool_slug,omitempty"`
-	ValuesOverride *string            `json:"values_override,omitempty"`
+
+	// ProjectId Deprecated compatibility field. The server derives project ownership from cluster_id and namespace.
+	ProjectId      *openapi_types.UUID `json:"project_id,omitempty"`
+	ReleaseName    string              `json:"release_name"`
+	ToolSlug       *string             `json:"tool_slug,omitempty"`
+	ValuesOverride *string             `json:"values_override,omitempty"`
 }
 
 // PostCatalogInstalledParams defines parameters for PostCatalogInstalled.
@@ -11148,6 +12135,7 @@ type GetCatalogRepositoriesParams struct {
 	Offset              *int                `form:"offset,omitempty" json:"offset,omitempty"`
 	IncludeProjectOwned *bool               `form:"include_project_owned,omitempty" json:"include_project_owned,omitempty"`
 	ProjectId           *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId           *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 }
 
 // PostCatalogRepositoriesJSONBody defines parameters for PostCatalogRepositories.
@@ -11244,6 +12232,9 @@ type GetChartsByChartIdRatingsParams struct {
 type GetClusterAgentsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Cursor Opaque continuation bound to the stable sort contract.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // GetClusterAgentsByClusterIdOperationsParams defines parameters for GetClusterAgentsByClusterIdOperations.
@@ -11282,6 +12273,9 @@ type GetClustersParams struct {
 	Provider    *string `form:"provider,omitempty" json:"provider,omitempty"`
 	Limit       *int    `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset      *int    `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Cursor Opaque continuation bound to filters and caller authorization scope.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // PostClustersByClusterIdApiserverAllowlistReconcileParams defines parameters for PostClustersByClusterIdApiserverAllowlistReconcile.
@@ -11383,6 +12377,15 @@ type GetClustersByClusterIdLimitRangesParams struct {
 	Offset    *int    `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetClustersByClusterIdNamespacesParams defines parameters for GetClustersByClusterIdNamespaces.
+type GetClustersByClusterIdNamespacesParams struct {
+	// Limit Page size (defaults to 20, capped at 200).
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Row offset into the authorized namespace set.
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // GetClustersByClusterIdNetworkPoliciesParams defines parameters for GetClustersByClusterIdNetworkPolicies.
 type GetClustersByClusterIdNetworkPoliciesParams struct {
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
@@ -11412,7 +12415,28 @@ type GetClustersByClusterIdNodesParams struct {
 type GetClustersByClusterIdPodsParams struct {
 	// Namespace Restrict to a single namespace.
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// Limit Maximum pod summaries returned in this page (1-200).
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Zero-based offset into the authorized pod list.
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Search Case-insensitive search across pod identity, status, node, IP, and images.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// Sort Stable pod sort order.
+	Sort *GetClustersByClusterIdPodsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Health Operational pod filter.
+	Health *GetClustersByClusterIdPodsParamsHealth `form:"health,omitempty" json:"health,omitempty"`
 }
+
+// GetClustersByClusterIdPodsParamsSort defines parameters for GetClustersByClusterIdPods.
+type GetClustersByClusterIdPodsParamsSort string
+
+// GetClustersByClusterIdPodsParamsHealth defines parameters for GetClustersByClusterIdPods.
+type GetClustersByClusterIdPodsParamsHealth string
 
 // GetClustersByClusterIdPodsWatchParams defines parameters for GetClustersByClusterIdPodsWatch.
 type GetClustersByClusterIdPodsWatchParams struct {
@@ -11427,6 +12451,9 @@ type GetClustersByClusterIdPodsWatchParams struct {
 type GetClustersByClusterIdProjectsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Search Case-insensitive substring match across project name, display name, and description.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
 }
 
 // ServiceProxyDeleteJSONBody defines parameters for ServiceProxyDelete.
@@ -11486,6 +12513,15 @@ type ServiceProxySubPutJSONBody = interface{}
 // ServiceProxySubTraceJSONBody defines parameters for ServiceProxySubTrace.
 type ServiceProxySubTraceJSONBody = interface{}
 
+// CountClusterResourcesParams defines parameters for CountClusterResources.
+type CountClusterResourcesParams struct {
+	// Resources Comma-separated resource types; deduplicated and capped at 16.
+	Resources string `form:"resources" json:"resources"`
+
+	// Namespace Optional comma-separated namespace filter, intersected with the caller's authorized namespaces.
+	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+}
+
 // GetClustersByClusterIdResourceQuotasParams defines parameters for GetClustersByClusterIdResourceQuotas.
 type GetClustersByClusterIdResourceQuotasParams struct {
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
@@ -11497,6 +12533,17 @@ type GetClustersByClusterIdResourceQuotasParams struct {
 type ListGenericClusterResourcesParams struct {
 	// Namespace Restrict the listing to a single namespace (ignored for cluster-scoped types).
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// Namespaces Comma-separated UI namespace scope, intersected with the caller's authorized namespaces.
+	Namespaces *string `form:"namespaces,omitempty" json:"namespaces,omitempty"`
+	Limit      *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int    `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Search Case-insensitive search over the flattened resource row.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// Sort Stable column sort in field_direction form.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
 }
 
 // DeletePersistentVolumeParams defines parameters for DeletePersistentVolume.
@@ -11516,6 +12563,13 @@ type GetClustersByClusterIdResourcesSchemaParamsResourceType string
 type ListNamedClusterResourcesParams struct {
 	// Namespace Restrict the listing to a single namespace. Ignored for cluster-scoped types (persistentvolumes, storageclasses, gatewayclasses).
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// Namespaces Comma-separated UI namespace scope, intersected with the caller's authorized namespaces.
+	Namespaces *string `form:"namespaces,omitempty" json:"namespaces,omitempty"`
+	Limit      *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int    `form:"offset,omitempty" json:"offset,omitempty"`
+	Search     *string `form:"search,omitempty" json:"search,omitempty"`
+	Sort       *string `form:"sort,omitempty" json:"sort,omitempty"`
 }
 
 // ListNamedClusterResourcesParamsResourceType defines parameters for ListNamedClusterResources.
@@ -11651,7 +12705,13 @@ type GetClustersByClusterIdWorkloadsParams struct {
 
 	// Search Case-insensitive substring match on name or namespace.
 	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// Sort Stable server-side workload order applied before pagination.
+	Sort *GetClustersByClusterIdWorkloadsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
 }
+
+// GetClustersByClusterIdWorkloadsParamsSort defines parameters for GetClustersByClusterIdWorkloads.
+type GetClustersByClusterIdWorkloadsParamsSort string
 
 // DeleteClustersByClusterIdWorkloadsByKindByNamespaceByNameParams defines parameters for DeleteClustersByClusterIdWorkloadsByKindByNamespaceByName.
 type DeleteClustersByClusterIdWorkloadsByKindByNamespaceByNameParams struct {
@@ -11755,11 +12815,23 @@ type PutClustersByIdMonitoringStackUpgradeParams struct {
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
-// RemoteV2ListPodsParams defines parameters for RemoteV2ListPods.
-type RemoteV2ListPodsParams struct {
-	// Namespace Namespace to list pods in (defaults to "default").
-	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
-}
+// PatchClustersByIdObservabilityGrafanaJSONBody defines parameters for PatchClustersByIdObservabilityGrafana.
+type PatchClustersByIdObservabilityGrafanaJSONBody = interface{}
+
+// PostClustersByIdObservabilityGrafanaJSONBody defines parameters for PostClustersByIdObservabilityGrafana.
+type PostClustersByIdObservabilityGrafanaJSONBody = interface{}
+
+// PutClustersByIdObservabilityGrafanaJSONBody defines parameters for PutClustersByIdObservabilityGrafana.
+type PutClustersByIdObservabilityGrafanaJSONBody = interface{}
+
+// PatchClustersByIdObservabilityGrafanaProxyJSONBody defines parameters for PatchClustersByIdObservabilityGrafanaProxy.
+type PatchClustersByIdObservabilityGrafanaProxyJSONBody = interface{}
+
+// PostClustersByIdObservabilityGrafanaProxyJSONBody defines parameters for PostClustersByIdObservabilityGrafanaProxy.
+type PostClustersByIdObservabilityGrafanaProxyJSONBody = interface{}
+
+// PutClustersByIdObservabilityGrafanaProxyJSONBody defines parameters for PutClustersByIdObservabilityGrafanaProxy.
+type PutClustersByIdObservabilityGrafanaProxyJSONBody = interface{}
 
 // GetClustersByIdVulnerabilitiesImagesParams defines parameters for GetClustersByIdVulnerabilitiesImages.
 type GetClustersByIdVulnerabilitiesImagesParams struct {
@@ -11833,6 +12905,37 @@ type GetDeliveryClustersByClusterIdInventoryParams struct {
 	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
 }
 
+// GetDeliveryConfigurationTemplatesParams defines parameters for GetDeliveryConfigurationTemplates.
+type GetDeliveryConfigurationTemplatesParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// PostDeliveryConfigurationTemplatesParams defines parameters for PostDeliveryConfigurationTemplates.
+type PostDeliveryConfigurationTemplatesParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteDeliveryConfigurationTemplatesByIdParams defines parameters for DeleteDeliveryConfigurationTemplatesById.
+type DeleteDeliveryConfigurationTemplatesByIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// GetDeliveryConfigurationTemplatesByIdParams defines parameters for GetDeliveryConfigurationTemplatesById.
+type GetDeliveryConfigurationTemplatesByIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PutDeliveryConfigurationTemplatesByIdParams defines parameters for PutDeliveryConfigurationTemplatesById.
+type PutDeliveryConfigurationTemplatesByIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
 // GetDeliveryDeploymentsParams defines parameters for GetDeliveryDeployments.
 type GetDeliveryDeploymentsParams struct {
 	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
@@ -11841,6 +12944,7 @@ type GetDeliveryDeploymentsParams struct {
 	// Offset Zero-based offset into the authorized, filtered result.
 	Offset    *Offset             `form:"offset,omitempty" json:"offset,omitempty"`
 	ProjectId openapi_types.UUID  `form:"project_id" json:"project_id"`
+	TargetId  *openapi_types.UUID `form:"target_id,omitempty" json:"target_id,omitempty"`
 	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 	Phase     *string             `form:"phase,omitempty" json:"phase,omitempty"`
 }
@@ -11862,28 +12966,69 @@ type GetDeliveryDeploymentsByIdEventsParams struct {
 
 // PostDeliveryDeploymentsByIdReconcileParams defines parameters for PostDeliveryDeploymentsByIdReconcile.
 type PostDeliveryDeploymentsByIdReconcileParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current desired generation.
+	IfMatch DesiredGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
 // PostDeliveryDeploymentsByIdResumeParams defines parameters for PostDeliveryDeploymentsByIdResume.
 type PostDeliveryDeploymentsByIdResumeParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current desired generation.
+	IfMatch DesiredGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
 // PostDeliveryDeploymentsByIdSuspendParams defines parameters for PostDeliveryDeploymentsByIdSuspend.
 type PostDeliveryDeploymentsByIdSuspendParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current desired generation.
+	IfMatch DesiredGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
+}
+
+// GetDeliveryOverrideSetsParams defines parameters for GetDeliveryOverrideSets.
+type GetDeliveryOverrideSetsParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// PostDeliveryOverrideSetsParams defines parameters for PostDeliveryOverrideSets.
+type PostDeliveryOverrideSetsParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteDeliveryOverrideSetsByIdParams defines parameters for DeleteDeliveryOverrideSetsById.
+type DeleteDeliveryOverrideSetsByIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// GetDeliveryOverrideSetsByIdParams defines parameters for GetDeliveryOverrideSetsById.
+type GetDeliveryOverrideSetsByIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PutDeliveryOverrideSetsByIdParams defines parameters for PutDeliveryOverrideSetsById.
+type PutDeliveryOverrideSetsByIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
 }
 
 // GetDeliveryRolloutsParams defines parameters for GetDeliveryRollouts.
 type GetDeliveryRolloutsParams struct {
-	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
-	State     *string            `form:"state,omitempty" json:"state,omitempty"`
-	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+	ProjectId openapi_types.UUID  `form:"project_id" json:"project_id"`
+	TargetId  *openapi_types.UUID `form:"target_id,omitempty" json:"target_id,omitempty"`
+	State     *string             `form:"state,omitempty" json:"state,omitempty"`
+	Limit     *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int                `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // GetDeliveryRolloutsByIdParams defines parameters for GetDeliveryRolloutsById.
@@ -11893,14 +13038,20 @@ type GetDeliveryRolloutsByIdParams struct {
 
 // PostDeliveryRolloutsByIdAbortParams defines parameters for PostDeliveryRolloutsByIdAbort.
 type PostDeliveryRolloutsByIdAbortParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current positive fencing generation.
+	IfMatch PositiveFencingGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
 // PostDeliveryRolloutsByIdApproveParams defines parameters for PostDeliveryRolloutsByIdApprove.
 type PostDeliveryRolloutsByIdApproveParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current positive fencing generation.
+	IfMatch PositiveFencingGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
 // GetDeliveryRolloutsByIdClustersParams defines parameters for GetDeliveryRolloutsByIdClusters.
@@ -11925,26 +13076,38 @@ type GetDeliveryRolloutsByIdEventsParams struct {
 
 // PostDeliveryRolloutsByIdPauseParams defines parameters for PostDeliveryRolloutsByIdPause.
 type PostDeliveryRolloutsByIdPauseParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current positive fencing generation.
+	IfMatch PositiveFencingGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
 // PostDeliveryRolloutsByIdResumeParams defines parameters for PostDeliveryRolloutsByIdResume.
 type PostDeliveryRolloutsByIdResumeParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current positive fencing generation.
+	IfMatch PositiveFencingGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
 // PostDeliveryRolloutsByIdRetryParams defines parameters for PostDeliveryRolloutsByIdRetry.
 type PostDeliveryRolloutsByIdRetryParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current positive fencing generation.
+	IfMatch PositiveFencingGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
 // PostDeliveryRolloutsByIdRollbackParams defines parameters for PostDeliveryRolloutsByIdRollback.
 type PostDeliveryRolloutsByIdRollbackParams struct {
-	IfMatch        string `json:"If-Match"`
-	IdempotencyKey string `json:"Idempotency-Key"`
+	// IfMatch Strong entity tag containing the current positive fencing generation.
+	IfMatch PositiveFencingGeneration `json:"If-Match"`
+
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
 // GetDeliverySourcesParams defines parameters for GetDeliverySources.
@@ -12104,6 +13267,19 @@ type PostExtensionsByNameTokenJSONBody struct {
 	// DataSource A Tier-2 bundle dataSource id declared in the manifest.
 	DataSource string `json:"dataSource"`
 }
+
+// PostGitopsSourcesByIdWebhookJSONBody defines parameters for PostGitopsSourcesByIdWebhook.
+type PostGitopsSourcesByIdWebhookJSONBody map[string]interface{}
+
+// PostGitopsSourcesByIdWebhookParams defines parameters for PostGitopsSourcesByIdWebhook.
+type PostGitopsSourcesByIdWebhookParams struct {
+	XGitHubDelivery  string                                         `json:"X-GitHub-Delivery"`
+	XGitHubEvent     PostGitopsSourcesByIdWebhookParamsXGitHubEvent `json:"X-GitHub-Event"`
+	XHubSignature256 string                                         `json:"X-Hub-Signature-256"`
+}
+
+// PostGitopsSourcesByIdWebhookParamsXGitHubEvent defines parameters for PostGitopsSourcesByIdWebhook.
+type PostGitopsSourcesByIdWebhookParamsXGitHubEvent string
 
 // GetLoggingOperationsParams defines parameters for GetLoggingOperations.
 type GetLoggingOperationsParams struct {
@@ -12297,11 +13473,23 @@ type PostNodesByClusterIdByNodeNameUncordonParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
-// GetObservabilityGrafanaTicketParams defines parameters for GetObservabilityGrafanaTicket.
-type GetObservabilityGrafanaTicketParams struct {
-	// Return Allow-listed Grafana return URL. Defaults to the configured Grafana root.
-	Return *string `form:"return,omitempty" json:"return,omitempty"`
-}
+// PatchObservabilityGrafanaJSONBody defines parameters for PatchObservabilityGrafana.
+type PatchObservabilityGrafanaJSONBody = interface{}
+
+// PostObservabilityGrafanaJSONBody defines parameters for PostObservabilityGrafana.
+type PostObservabilityGrafanaJSONBody = interface{}
+
+// PutObservabilityGrafanaJSONBody defines parameters for PutObservabilityGrafana.
+type PutObservabilityGrafanaJSONBody = interface{}
+
+// PatchObservabilityGrafanaProxyJSONBody defines parameters for PatchObservabilityGrafanaProxy.
+type PatchObservabilityGrafanaProxyJSONBody = interface{}
+
+// PostObservabilityGrafanaProxyJSONBody defines parameters for PostObservabilityGrafanaProxy.
+type PostObservabilityGrafanaProxyJSONBody = interface{}
+
+// PutObservabilityGrafanaProxyJSONBody defines parameters for PutObservabilityGrafanaProxy.
+type PutObservabilityGrafanaProxyJSONBody = interface{}
 
 // GetProjectsParams defines parameters for GetProjects.
 type GetProjectsParams struct {
@@ -12310,6 +13498,9 @@ type GetProjectsParams struct {
 
 	// Offset Row offset into the result set.
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Search Case-insensitive substring match across project name, display name, and description.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
 }
 
 // PutProjectsByIdDefaultVaultConnectionJSONBody defines parameters for PutProjectsByIdDefaultVaultConnection.
@@ -12384,6 +13575,11 @@ type GetRbacMyRolesCheckParams struct {
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
 }
 
+// GetRbacPrincipalsParams defines parameters for GetRbacPrincipals.
+type GetRbacPrincipalsParams struct {
+	Q string `form:"q" json:"q"`
+}
+
 // GetRbacProjectBindingsParams defines parameters for GetRbacProjectBindings.
 type GetRbacProjectBindingsParams struct {
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
@@ -12430,7 +13626,7 @@ type SearchResourcesAcrossClustersParams struct {
 	// Name Case-insensitive substring filter applied to item names after merge.
 	Name *string `form:"name,omitempty" json:"name,omitempty"`
 
-	// Limit Max items returned across all clusters after merge. Default 100, values above 1000 are clamped to 1000, non-positive values reset to 100.
+	// Limit Max items returned across all clusters after merge and the list limit pushed into every cluster request. Default 100, values above 1000 are clamped to 1000, non-positive values reset to 100.
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
@@ -12499,14 +13695,11 @@ type GetSettingsAuditLogsParams struct {
 
 // PutSettingsGeneralJSONBody defines parameters for PutSettingsGeneral.
 type PutSettingsGeneralJSONBody struct {
-	AgentHeartbeatInterval *int    `json:"agentHeartbeatInterval"`
-	DefaultSessionTimeout  *int    `json:"defaultSessionTimeout"`
-	EnableAuditLogging     *bool   `json:"enableAuditLogging"`
-	MetricsCollection      *bool   `json:"metricsCollection"`
-	PlatformName           *string `json:"platformName"`
-
-	// PlatformNameSnake Snake-case alias for platformName.
-	PlatformNameSnake *string `json:"platform_name"`
+	AgentHeartbeatInterval *int    `json:"agentHeartbeatInterval,omitempty"`
+	DefaultSessionTimeout  *int    `json:"defaultSessionTimeout,omitempty"`
+	EnableAuditLogging     *bool   `json:"enableAuditLogging,omitempty"`
+	MetricsCollection      *bool   `json:"metricsCollection,omitempty"`
+	PlatformName           *string `json:"platformName,omitempty"`
 }
 
 // PostSettingsMonitoringAlertmanagerInstallParams defines parameters for PostSettingsMonitoringAlertmanagerInstall.
@@ -12739,6 +13932,12 @@ type PostSettingsTokensJSONBody struct {
 	Scopes        *[]string `json:"scopes,omitempty"`
 }
 
+// CreateSupportBundleParams defines parameters for CreateSupportBundle.
+type CreateSupportBundleParams struct {
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
+}
+
 // GetToolsParams defines parameters for GetTools.
 type GetToolsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -12772,6 +13971,12 @@ type PostToolsBySlugInstallParams struct {
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
+// PostToolsBySlugRollbackParams defines parameters for PostToolsBySlugRollback.
+type PostToolsBySlugRollbackParams struct {
+	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
+	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
+}
+
 // DeleteToolsBySlugUninstallParams defines parameters for DeleteToolsBySlugUninstall.
 type DeleteToolsBySlugUninstallParams struct {
 	// IdempotencyKey Required stable caller key used to replay a committed durable mutation without duplicating intent.
@@ -12788,6 +13993,9 @@ type PutToolsBySlugUpgradeParams struct {
 type GetUsersParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Search Case-insensitive substring match over username, email, and display name.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
 }
 
 // PostUsersJSONBody defines parameters for PostUsers.
@@ -12843,6 +14051,9 @@ type GetWorkloadsPodsByClusterIdByNamespaceByPodLogsParams struct {
 	// SinceSeconds Return logs newer than N seconds (alias since_seconds accepted).
 	SinceSeconds *int    `form:"sinceSeconds,omitempty" json:"sinceSeconds,omitempty"`
 	Follow       *string `form:"follow,omitempty" json:"follow,omitempty"`
+
+	// Previous Return logs from the previously terminated container instance.
+	Previous *bool `form:"previous,omitempty" json:"previous,omitempty"`
 }
 
 // KubectlShellWebSocketParams defines parameters for KubectlShellWebSocket.
@@ -12921,10 +14132,16 @@ type InternalTunnelK8sJSONBody struct {
 	CallerRequestId *string `json:"caller_request_id,omitempty"`
 
 	// CallerUser Canonical user or machine subject stamped by the originating server.
-	CallerUser *string            `json:"caller_user,omitempty"`
-	Headers    *map[string]string `json:"headers,omitempty"`
-	Method     string             `json:"method"`
-	Path       string             `json:"path"`
+	CallerUser *string `json:"caller_user,omitempty"`
+
+	// GrafanaAuth Server-minted Grafana proxy credentials; never accepted from browser-supplied headers.
+	GrafanaAuth *struct {
+		Cookie *string `json:"cookie,omitempty"`
+		Ticket *string `json:"ticket,omitempty"`
+	} `json:"grafana_auth,omitempty"`
+	Headers *map[string]string `json:"headers,omitempty"`
+	Method  string             `json:"method"`
+	Path    string             `json:"path"`
 }
 
 // InternalTunnelK8sParams defines parameters for InternalTunnelK8s.
@@ -12942,6 +14159,17 @@ type InternalTunnelK8sParamsXAstronomerInternalSource string
 
 // InternalTunnelK8sJSONBodyCallerOrigin defines parameters for InternalTunnelK8s.
 type InternalTunnelK8sJSONBodyCallerOrigin string
+
+// InternalTunnelK8sCapabilityParams defines parameters for InternalTunnelK8sCapability.
+type InternalTunnelK8sCapabilityParams struct {
+	XAstronomerInternalSource    InternalTunnelK8sCapabilityParamsXAstronomerInternalSource `json:"X-Astronomer-Internal-Source"`
+	XAstronomerInternalTimestamp string                                                     `json:"X-Astronomer-Internal-Timestamp"`
+	XAstronomerInternalNonce     string                                                     `json:"X-Astronomer-Internal-Nonce"`
+	XAstronomerInternalSignature string                                                     `json:"X-Astronomer-Internal-Signature"`
+}
+
+// InternalTunnelK8sCapabilityParamsXAstronomerInternalSource defines parameters for InternalTunnelK8sCapability.
+type InternalTunnelK8sCapabilityParamsXAstronomerInternalSource string
 
 // PatchScimUsersByIdApplicationScimPlusJSONBody defines parameters for PatchScimUsersById.
 type PatchScimUsersByIdApplicationScimPlusJSONBody struct {
@@ -13016,6 +14244,12 @@ type PutAdminGitopsSourcesByIdJSONRequestBody = GitOpsSourceRequest
 // PostAdminGroupMappingsJSONRequestBody defines body for PostAdminGroupMappings for application/json ContentType.
 type PostAdminGroupMappingsJSONRequestBody = GroupMappingWriteRequest
 
+// PostAdminMaintenanceWindowsJSONRequestBody defines body for PostAdminMaintenanceWindows for application/json ContentType.
+type PostAdminMaintenanceWindowsJSONRequestBody = MaintenanceWindowRequest
+
+// PutAdminMaintenanceWindowsByIdJSONRequestBody defines body for PutAdminMaintenanceWindowsById for application/json ContentType.
+type PutAdminMaintenanceWindowsByIdJSONRequestBody = MaintenanceWindowRequest
+
 // PostAdminManagementBackupDestinationsJSONRequestBody defines body for PostAdminManagementBackupDestinations for application/json ContentType.
 type PostAdminManagementBackupDestinationsJSONRequestBody = ManagementBackupDestinationWriteRequest
 
@@ -13033,6 +14267,9 @@ type AdminNotificationTemplateUpdateJSONRequestBody = NotificationTemplateUpsert
 
 // AdminNotificationTemplatePreviewJSONRequestBody defines body for AdminNotificationTemplatePreview for application/json ContentType.
 type AdminNotificationTemplatePreviewJSONRequestBody = NotificationTemplatePreviewRequest
+
+// PutAdminPlatformSettingsDefaultClusterTemplateJSONRequestBody defines body for PutAdminPlatformSettingsDefaultClusterTemplate for application/json ContentType.
+type PutAdminPlatformSettingsDefaultClusterTemplateJSONRequestBody = PlatformDefaultClusterTemplateRequest
 
 // PostAdminPrometheusDatasourcesJSONRequestBody defines body for PostAdminPrometheusDatasources for application/json ContentType.
 type PostAdminPrometheusDatasourcesJSONRequestBody = PrometheusDatasourceRequest
@@ -13121,14 +14358,14 @@ type PutAuthDexSettingsJSONRequestBody = DexSettingsRequest
 // PostAuthLoginJSONRequestBody defines body for PostAuthLogin for application/json ContentType.
 type PostAuthLoginJSONRequestBody = LoginRequest
 
+// PutAuthMePreferencesJSONRequestBody defines body for PutAuthMePreferences for application/json ContentType.
+type PutAuthMePreferencesJSONRequestBody = UserPreferences
+
 // PostAuthPasswordResetCompleteJSONRequestBody defines body for PostAuthPasswordResetComplete for application/json ContentType.
 type PostAuthPasswordResetCompleteJSONRequestBody PostAuthPasswordResetCompleteJSONBody
 
 // PostAuthPasswordResetRequestJSONRequestBody defines body for PostAuthPasswordResetRequest for application/json ContentType.
 type PostAuthPasswordResetRequestJSONRequestBody PostAuthPasswordResetRequestJSONBody
-
-// PostAuthRefreshJSONRequestBody defines body for PostAuthRefresh for application/json ContentType.
-type PostAuthRefreshJSONRequestBody PostAuthRefreshJSONBody
 
 // PostAuthTokensJSONRequestBody defines body for PostAuthTokens for application/json ContentType.
 type PostAuthTokensJSONRequestBody PostAuthTokensJSONBody
@@ -13157,17 +14394,17 @@ type PutBackupsSchedulesByIdJSONRequestBody = BackupScheduleRequest
 // PostBackupsStorageJSONRequestBody defines body for PostBackupsStorage for application/json ContentType.
 type PostBackupsStorageJSONRequestBody = BackupStorageConfigRequest
 
-// PostBackupsStorageConfigsJSONRequestBody defines body for PostBackupsStorageConfigs for application/json ContentType.
-type PostBackupsStorageConfigsJSONRequestBody = BackupStorageConfigRequest
-
-// PutBackupsStorageConfigsByIdJSONRequestBody defines body for PutBackupsStorageConfigsById for application/json ContentType.
-type PutBackupsStorageConfigsByIdJSONRequestBody = BackupStorageConfigRequest
-
 // PutBackupsStorageByIdJSONRequestBody defines body for PutBackupsStorageById for application/json ContentType.
 type PutBackupsStorageByIdJSONRequestBody = BackupStorageConfigRequest
 
 // PostBackupsByIdRestoreJSONRequestBody defines body for PostBackupsByIdRestore for application/json ContentType.
 type PostBackupsByIdRestoreJSONRequestBody = BackupRestoreRequest
+
+// PostCatalogApplicationsPreviewJSONRequestBody defines body for PostCatalogApplicationsPreview for application/json ContentType.
+type PostCatalogApplicationsPreviewJSONRequestBody PostCatalogApplicationsPreviewJSONBody
+
+// PutCatalogChartsByIdFavoriteJSONRequestBody defines body for PutCatalogChartsByIdFavorite for application/json ContentType.
+type PutCatalogChartsByIdFavoriteJSONRequestBody PutCatalogChartsByIdFavoriteJSONBody
 
 // PostCatalogInstalledJSONRequestBody defines body for PostCatalogInstalled for application/json ContentType.
 type PostCatalogInstalledJSONRequestBody PostCatalogInstalledJSONBody
@@ -13409,6 +14646,24 @@ type PostClustersByIdMonitoringStackReplaceJSONRequestBody = MonitoringStackRequ
 // PutClustersByIdMonitoringStackUpgradeJSONRequestBody defines body for PutClustersByIdMonitoringStackUpgrade for application/json ContentType.
 type PutClustersByIdMonitoringStackUpgradeJSONRequestBody = MonitoringStackRequest
 
+// PatchClustersByIdObservabilityGrafanaJSONRequestBody defines body for PatchClustersByIdObservabilityGrafana for application/json ContentType.
+type PatchClustersByIdObservabilityGrafanaJSONRequestBody = PatchClustersByIdObservabilityGrafanaJSONBody
+
+// PostClustersByIdObservabilityGrafanaJSONRequestBody defines body for PostClustersByIdObservabilityGrafana for application/json ContentType.
+type PostClustersByIdObservabilityGrafanaJSONRequestBody = PostClustersByIdObservabilityGrafanaJSONBody
+
+// PutClustersByIdObservabilityGrafanaJSONRequestBody defines body for PutClustersByIdObservabilityGrafana for application/json ContentType.
+type PutClustersByIdObservabilityGrafanaJSONRequestBody = PutClustersByIdObservabilityGrafanaJSONBody
+
+// PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody defines body for PatchClustersByIdObservabilityGrafanaProxy for application/json ContentType.
+type PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody = PatchClustersByIdObservabilityGrafanaProxyJSONBody
+
+// PostClustersByIdObservabilityGrafanaProxyJSONRequestBody defines body for PostClustersByIdObservabilityGrafanaProxy for application/json ContentType.
+type PostClustersByIdObservabilityGrafanaProxyJSONRequestBody = PostClustersByIdObservabilityGrafanaProxyJSONBody
+
+// PutClustersByIdObservabilityGrafanaProxyJSONRequestBody defines body for PutClustersByIdObservabilityGrafanaProxy for application/json ContentType.
+type PutClustersByIdObservabilityGrafanaProxyJSONRequestBody = PutClustersByIdObservabilityGrafanaProxyJSONBody
+
 // PutClustersByIdRegistrationOptionsJSONRequestBody defines body for PutClustersByIdRegistrationOptions for application/json ContentType.
 type PutClustersByIdRegistrationOptionsJSONRequestBody = SetOptionsRequest
 
@@ -13430,6 +14685,12 @@ type PatchDeliveryBundlesByIdJSONRequestBody = DeliveryBundleWrite
 // PostDeliveryBundlesByIdVersionsJSONRequestBody defines body for PostDeliveryBundlesByIdVersions for application/json ContentType.
 type PostDeliveryBundlesByIdVersionsJSONRequestBody = DeliveryBundleVersionWrite
 
+// PostDeliveryConfigurationTemplatesJSONRequestBody defines body for PostDeliveryConfigurationTemplates for application/json ContentType.
+type PostDeliveryConfigurationTemplatesJSONRequestBody = DeliveryConfigurationTemplateWrite
+
+// PutDeliveryConfigurationTemplatesByIdJSONRequestBody defines body for PutDeliveryConfigurationTemplatesById for application/json ContentType.
+type PutDeliveryConfigurationTemplatesByIdJSONRequestBody = DeliveryConfigurationTemplateWrite
+
 // PostDeliveryDeploymentsByIdReconcileJSONRequestBody defines body for PostDeliveryDeploymentsByIdReconcile for application/json ContentType.
 type PostDeliveryDeploymentsByIdReconcileJSONRequestBody = DeliveryRolloutAction
 
@@ -13438,6 +14699,15 @@ type PostDeliveryDeploymentsByIdResumeJSONRequestBody = DeliveryRolloutAction
 
 // PostDeliveryDeploymentsByIdSuspendJSONRequestBody defines body for PostDeliveryDeploymentsByIdSuspend for application/json ContentType.
 type PostDeliveryDeploymentsByIdSuspendJSONRequestBody = DeliveryRolloutAction
+
+// PostDeliveryOverrideSetsJSONRequestBody defines body for PostDeliveryOverrideSets for application/json ContentType.
+type PostDeliveryOverrideSetsJSONRequestBody = DeliveryOverrideSetWrite
+
+// PostDeliveryOverrideSetsEffectiveJSONRequestBody defines body for PostDeliveryOverrideSetsEffective for application/json ContentType.
+type PostDeliveryOverrideSetsEffectiveJSONRequestBody = DeliveryEffectiveConfigurationRequest
+
+// PutDeliveryOverrideSetsByIdJSONRequestBody defines body for PutDeliveryOverrideSetsById for application/json ContentType.
+type PutDeliveryOverrideSetsByIdJSONRequestBody = DeliveryOverrideSetWrite
 
 // PostDeliveryRolloutsByIdAbortJSONRequestBody defines body for PostDeliveryRolloutsByIdAbort for application/json ContentType.
 type PostDeliveryRolloutsByIdAbortJSONRequestBody = DeliveryRolloutAction
@@ -13493,6 +14763,9 @@ type PostExtensionsByNameDataByDataSourceIdJSONRequestBody PostExtensionsByNameD
 // PostExtensionsByNameTokenJSONRequestBody defines body for PostExtensionsByNameToken for application/json ContentType.
 type PostExtensionsByNameTokenJSONRequestBody PostExtensionsByNameTokenJSONBody
 
+// PostGitopsSourcesByIdWebhookJSONRequestBody defines body for PostGitopsSourcesByIdWebhook for application/json ContentType.
+type PostGitopsSourcesByIdWebhookJSONRequestBody PostGitopsSourcesByIdWebhookJSONBody
+
 // PostLoggingOutputsJSONRequestBody defines body for PostLoggingOutputs for application/json ContentType.
 type PostLoggingOutputsJSONRequestBody = LoggingOutputWriteRequest
 
@@ -13544,8 +14817,26 @@ type PostNodesByClusterIdByNodeNameTaintsJSONRequestBody = NodeTaintRequest
 // PostNodesByClusterIdByNodeNameTaintsRemoveJSONRequestBody defines body for PostNodesByClusterIdByNodeNameTaintsRemove for application/json ContentType.
 type PostNodesByClusterIdByNodeNameTaintsRemoveJSONRequestBody = NodeTaintRemoveRequest
 
+// PatchObservabilityGrafanaJSONRequestBody defines body for PatchObservabilityGrafana for application/json ContentType.
+type PatchObservabilityGrafanaJSONRequestBody = PatchObservabilityGrafanaJSONBody
+
+// PostObservabilityGrafanaJSONRequestBody defines body for PostObservabilityGrafana for application/json ContentType.
+type PostObservabilityGrafanaJSONRequestBody = PostObservabilityGrafanaJSONBody
+
+// PutObservabilityGrafanaJSONRequestBody defines body for PutObservabilityGrafana for application/json ContentType.
+type PutObservabilityGrafanaJSONRequestBody = PutObservabilityGrafanaJSONBody
+
 // PostObservabilityGrafanaTicketRedeemJSONRequestBody defines body for PostObservabilityGrafanaTicketRedeem for application/json ContentType.
 type PostObservabilityGrafanaTicketRedeemJSONRequestBody = GrafanaTicketRedeemRequest
+
+// PatchObservabilityGrafanaProxyJSONRequestBody defines body for PatchObservabilityGrafanaProxy for application/json ContentType.
+type PatchObservabilityGrafanaProxyJSONRequestBody = PatchObservabilityGrafanaProxyJSONBody
+
+// PostObservabilityGrafanaProxyJSONRequestBody defines body for PostObservabilityGrafanaProxy for application/json ContentType.
+type PostObservabilityGrafanaProxyJSONRequestBody = PostObservabilityGrafanaProxyJSONBody
+
+// PutObservabilityGrafanaProxyJSONRequestBody defines body for PutObservabilityGrafanaProxy for application/json ContentType.
+type PutObservabilityGrafanaProxyJSONRequestBody = PutObservabilityGrafanaProxyJSONBody
 
 // PostProjectsJSONRequestBody defines body for PostProjects for application/json ContentType.
 type PostProjectsJSONRequestBody = CreateProjectRequest
@@ -13558,6 +14849,9 @@ type PutProjectsByIdJSONRequestBody = UpdateProjectRequest
 
 // PostProjectsByIdAddNamespaceJSONRequestBody defines body for PostProjectsByIdAddNamespace for application/json ContentType.
 type PostProjectsByIdAddNamespaceJSONRequestBody = ProjectNamespaceRequest
+
+// PostProjectsByIdApplyRbacTemplateJSONRequestBody defines body for PostProjectsByIdApplyRbacTemplate for application/json ContentType.
+type PostProjectsByIdApplyRbacTemplateJSONRequestBody = RBACApplyProjectTemplateRequest
 
 // PutProjectsByIdDefaultVaultConnectionJSONRequestBody defines body for PutProjectsByIdDefaultVaultConnection for application/json ContentType.
 type PutProjectsByIdDefaultVaultConnectionJSONRequestBody PutProjectsByIdDefaultVaultConnectionJSONBody
@@ -13606,6 +14900,9 @@ type PutRbacGlobalRolesByIdJSONRequestBody = RBACRoleRequest
 
 // PostRbacPermissionPreviewJSONRequestBody defines body for PostRbacPermissionPreview for application/json ContentType.
 type PostRbacPermissionPreviewJSONRequestBody = RBACPermissionPreviewRequest
+
+// PostRbacPrincipalsMaterializeJSONRequestBody defines body for PostRbacPrincipalsMaterialize for application/json ContentType.
+type PostRbacPrincipalsMaterializeJSONRequestBody = PrincipalMaterializeRequest
 
 // PostRbacProjectBindingsJSONRequestBody defines body for PostRbacProjectBindings for application/json ContentType.
 type PostRbacProjectBindingsJSONRequestBody = RBACProjectBindingRequest
@@ -13705,6 +15002,9 @@ type PostToolsBySlugInstallJSONRequestBody = ToolActionRequest
 
 // PostToolsBySlugPreviewJSONRequestBody defines body for PostToolsBySlugPreview for application/json ContentType.
 type PostToolsBySlugPreviewJSONRequestBody = ToolActionRequest
+
+// PostToolsBySlugRollbackJSONRequestBody defines body for PostToolsBySlugRollback for application/json ContentType.
+type PostToolsBySlugRollbackJSONRequestBody = ToolUninstallRequest
 
 // DeleteToolsBySlugUninstallJSONRequestBody defines body for DeleteToolsBySlugUninstall for application/json ContentType.
 type DeleteToolsBySlugUninstallJSONRequestBody = ToolUninstallRequest
@@ -14806,14 +16106,6 @@ func (a *DexSettings) UnmarshalJSON(b []byte) error {
 		delete(object, "cluster_id")
 	}
 
-	if raw, found := object["configmap_name"]; found {
-		err = json.Unmarshal(raw, &a.ConfigmapName)
-		if err != nil {
-			return fmt.Errorf("error reading 'configmap_name': %w", err)
-		}
-		delete(object, "configmap_name")
-	}
-
 	if raw, found := object["configured"]; found {
 		err = json.Unmarshal(raw, &a.Configured)
 		if err != nil {
@@ -14964,13 +16256,6 @@ func (a DexSettings) MarshalJSON() ([]byte, error) {
 		object["cluster_id"], err = json.Marshal(a.ClusterId)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'cluster_id': %w", err)
-		}
-	}
-
-	if a.ConfigmapName != nil {
-		object["configmap_name"], err = json.Marshal(a.ConfigmapName)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'configmap_name': %w", err)
 		}
 	}
 
@@ -16238,6 +17523,14 @@ func (a *Pod) UnmarshalJSON(b []byte) error {
 		delete(object, "ip")
 	}
 
+	if raw, found := object["lastRestartAt"]; found {
+		err = json.Unmarshal(raw, &a.LastRestartAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'lastRestartAt': %w", err)
+		}
+		delete(object, "lastRestartAt")
+	}
+
 	if raw, found := object["name"]; found {
 		err = json.Unmarshal(raw, &a.Name)
 		if err != nil {
@@ -16359,6 +17652,13 @@ func (a Pod) MarshalJSON() ([]byte, error) {
 		object["ip"], err = json.Marshal(a.Ip)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'ip': %w", err)
+		}
+	}
+
+	if a.LastRestartAt != nil {
+		object["lastRestartAt"], err = json.Marshal(a.LastRestartAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'lastRestartAt': %w", err)
 		}
 	}
 
@@ -17051,6 +18351,22 @@ func (a *RBACRole) UnmarshalJSON(b []byte) error {
 		delete(object, "scope")
 	}
 
+	if raw, found := object["source_digest"]; found {
+		err = json.Unmarshal(raw, &a.SourceDigest)
+		if err != nil {
+			return fmt.Errorf("error reading 'source_digest': %w", err)
+		}
+		delete(object, "source_digest")
+	}
+
+	if raw, found := object["source_template"]; found {
+		err = json.Unmarshal(raw, &a.SourceTemplate)
+		if err != nil {
+			return fmt.Errorf("error reading 'source_template': %w", err)
+		}
+		delete(object, "source_template")
+	}
+
 	if raw, found := object["updated_at"]; found {
 		err = json.Unmarshal(raw, &a.UpdatedAt)
 		if err != nil {
@@ -17134,6 +18450,20 @@ func (a RBACRole) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.SourceDigest != nil {
+		object["source_digest"], err = json.Marshal(a.SourceDigest)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'source_digest': %w", err)
+		}
+	}
+
+	if a.SourceTemplate != nil {
+		object["source_template"], err = json.Marshal(a.SourceTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'source_template': %w", err)
+		}
+	}
+
 	if a.UpdatedAt != nil {
 		object["updated_at"], err = json.Marshal(a.UpdatedAt)
 		if err != nil {
@@ -17175,6 +18505,14 @@ func (a *RBACTemplate) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["category"]; found {
+		err = json.Unmarshal(raw, &a.Category)
+		if err != nil {
+			return fmt.Errorf("error reading 'category': %w", err)
+		}
+		delete(object, "category")
+	}
+
 	if raw, found := object["description"]; found {
 		err = json.Unmarshal(raw, &a.Description)
 		if err != nil {
@@ -17191,12 +18529,28 @@ func (a *RBACTemplate) UnmarshalJSON(b []byte) error {
 		delete(object, "display_name")
 	}
 
+	if raw, found := object["inherits"]; found {
+		err = json.Unmarshal(raw, &a.Inherits)
+		if err != nil {
+			return fmt.Errorf("error reading 'inherits': %w", err)
+		}
+		delete(object, "inherits")
+	}
+
 	if raw, found := object["name"]; found {
 		err = json.Unmarshal(raw, &a.Name)
 		if err != nil {
 			return fmt.Errorf("error reading 'name': %w", err)
 		}
 		delete(object, "name")
+	}
+
+	if raw, found := object["risk_level"]; found {
+		err = json.Unmarshal(raw, &a.RiskLevel)
+		if err != nil {
+			return fmt.Errorf("error reading 'risk_level': %w", err)
+		}
+		delete(object, "risk_level")
 	}
 
 	if raw, found := object["rules"]; found {
@@ -17213,6 +18567,14 @@ func (a *RBACTemplate) UnmarshalJSON(b []byte) error {
 			return fmt.Errorf("error reading 'scope': %w", err)
 		}
 		delete(object, "scope")
+	}
+
+	if raw, found := object["system_managed"]; found {
+		err = json.Unmarshal(raw, &a.SystemManaged)
+		if err != nil {
+			return fmt.Errorf("error reading 'system_managed': %w", err)
+		}
+		delete(object, "system_managed")
 	}
 
 	if len(object) != 0 {
@@ -17234,6 +18596,13 @@ func (a RBACTemplate) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
+	if a.Category != nil {
+		object["category"], err = json.Marshal(a.Category)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'category': %w", err)
+		}
+	}
+
 	if a.Description != nil {
 		object["description"], err = json.Marshal(a.Description)
 		if err != nil {
@@ -17248,10 +18617,24 @@ func (a RBACTemplate) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if a.Inherits != nil {
+		object["inherits"], err = json.Marshal(a.Inherits)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'inherits': %w", err)
+		}
+	}
+
 	if a.Name != nil {
 		object["name"], err = json.Marshal(a.Name)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'name': %w", err)
+		}
+	}
+
+	if a.RiskLevel != nil {
+		object["risk_level"], err = json.Marshal(a.RiskLevel)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'risk_level': %w", err)
 		}
 	}
 
@@ -17266,6 +18649,13 @@ func (a RBACTemplate) MarshalJSON() ([]byte, error) {
 		object["scope"], err = json.Marshal(a.Scope)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'scope': %w", err)
+		}
+	}
+
+	if a.SystemManaged != nil {
+		object["system_managed"], err = json.Marshal(a.SystemManaged)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'system_managed': %w", err)
 		}
 	}
 
@@ -18750,9 +20140,6 @@ type ClientInterface interface {
 	// GetActivity request
 	GetActivity(ctx context.Context, params *GetActivityParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetActivityFeedLegacy request
-	GetActivityFeedLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// AdminAgentsClusterAdminPosture request
 	AdminAgentsClusterAdminPosture(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -18921,6 +20308,12 @@ type ClientInterface interface {
 
 	PutAdminDashboardWidgetsById(ctx context.Context, id string, body PutAdminDashboardWidgetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAdminDeferredOperations request
+	GetAdminDeferredOperations(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAdminDeferredOperationsByIdCancel request
+	PostAdminDeferredOperationsByIdCancel(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// AdminEmailsList request
 	AdminEmailsList(ctx context.Context, params *AdminEmailsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -18968,6 +20361,28 @@ type ClientInterface interface {
 
 	// AdminKeyStatus request
 	AdminKeyStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAdminMaintenanceWindows request
+	GetAdminMaintenanceWindows(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAdminMaintenanceWindowsWithBody request with any body
+	PostAdminMaintenanceWindowsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostAdminMaintenanceWindows(ctx context.Context, body PostAdminMaintenanceWindowsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAdminMaintenanceWindowsActive request
+	GetAdminMaintenanceWindowsActive(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteAdminMaintenanceWindowsById request
+	DeleteAdminMaintenanceWindowsById(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAdminMaintenanceWindowsById request
+	GetAdminMaintenanceWindowsById(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutAdminMaintenanceWindowsByIdWithBody request with any body
+	PutAdminMaintenanceWindowsByIdWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutAdminMaintenanceWindowsById(ctx context.Context, id string, body PutAdminMaintenanceWindowsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAdminManagementBackup request
 	GetAdminManagementBackup(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19037,6 +20452,20 @@ type ClientInterface interface {
 
 	// AdminNotificationTemplateVariables request
 	AdminNotificationTemplateVariables(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAdminPlatformSettingsDefaultClusterTemplate request
+	GetAdminPlatformSettingsDefaultClusterTemplate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutAdminPlatformSettingsDefaultClusterTemplateWithBody request with any body
+	PutAdminPlatformSettingsDefaultClusterTemplateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutAdminPlatformSettingsDefaultClusterTemplate(ctx context.Context, body PutAdminPlatformSettingsDefaultClusterTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAdminPlatformSettingsDefaultClusterTemplateCoverage request
+	GetAdminPlatformSettingsDefaultClusterTemplateCoverage(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId request
+	PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAdminPrometheusDatasources request
 	GetAdminPrometheusDatasources(ctx context.Context, params *GetAdminPrometheusDatasourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19114,7 +20543,7 @@ type ClientInterface interface {
 	AdminReadAuditPolicyUpdate(ctx context.Context, id openapi_types.UUID, body AdminReadAuditPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAdminScimTokens request
-	GetAdminScimTokens(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetAdminScimTokens(ctx context.Context, params *GetAdminScimTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostAdminScimTokensWithBody request with any body
 	PostAdminScimTokensWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19215,7 +20644,7 @@ type ClientInterface interface {
 	PostAdminUsersByIdUnlock(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AdminVaultConnectionsList request
-	AdminVaultConnectionsList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	AdminVaultConnectionsList(ctx context.Context, params *AdminVaultConnectionsListParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// AdminVaultConnectionsCreateWithBody request with any body
 	AdminVaultConnectionsCreateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19297,6 +20726,9 @@ type ClientInterface interface {
 	// GetAlertingEvents request
 	GetAlertingEvents(ctx context.Context, params *GetAlertingEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAlertingEventsSummary request
+	GetAlertingEventsSummary(ctx context.Context, params *GetAlertingEventsSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAlertingEventsById request
 	GetAlertingEventsById(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19345,15 +20777,6 @@ type ClientInterface interface {
 	// PostAlertingSilencesByIdExpire request
 	PostAlertingSilencesByIdExpire(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostAlertsRulesByIdDisable request
-	PostAlertsRulesByIdDisable(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostAlertsRulesByIdEnable request
-	PostAlertsRulesByIdEnable(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostAlertsSilencesByIdExpire request
-	PostAlertsSilencesByIdExpire(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetAnomalyBaselines request
 	GetAnomalyBaselines(ctx context.Context, params *GetAnomalyBaselinesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19366,8 +20789,20 @@ type ClientInterface interface {
 	// ExportAuditLogs request
 	ExportAuditLogs(ctx context.Context, params *ExportAuditLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CreateAuditExport request
+	CreateAuditExport(ctx context.Context, params *CreateAuditExportParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAuditExportsById request
+	GetAuditExportsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAuditExportsByIdDownload request
+	GetAuditExportsByIdDownload(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAuditLog request
 	GetAuditLog(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAuthCallbackByProvider request
+	GetAuthCallbackByProvider(ctx context.Context, provider string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostAuthChangePasswordWithBody request with any body
 	PostAuthChangePasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19420,6 +20855,9 @@ type ClientInterface interface {
 
 	PostAuthLogin(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAuthLoginByProvider request
+	GetAuthLoginByProvider(ctx context.Context, provider string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAuthLogoutDone request
 	GetAuthLogoutDone(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19428,6 +20866,14 @@ type ClientInterface interface {
 
 	// GetAuthMe request
 	GetAuthMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAuthMePreferences request
+	GetAuthMePreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutAuthMePreferencesWithBody request with any body
+	PutAuthMePreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutAuthMePreferences(ctx context.Context, body PutAuthMePreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAuthMeQuota request
 	GetAuthMeQuota(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19442,10 +20888,8 @@ type ClientInterface interface {
 
 	PostAuthPasswordResetRequest(ctx context.Context, body PostAuthPasswordResetRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostAuthRefreshWithBody request with any body
-	PostAuthRefreshWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostAuthRefresh(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// PostAuthRefresh request
+	PostAuthRefresh(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetAuthTokens request
 	GetAuthTokens(ctx context.Context, params *GetAuthTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19501,9 +20945,6 @@ type ClientInterface interface {
 	// GetBackupsRestoresById request
 	GetBackupsRestoresById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetBackupsRuns request
-	GetBackupsRuns(ctx context.Context, params *GetBackupsRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetBackupsSchedules request
 	GetBackupsSchedules(ctx context.Context, params *GetBackupsSchedulesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19534,28 +20975,6 @@ type ClientInterface interface {
 
 	PostBackupsStorage(ctx context.Context, body PostBackupsStorageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetBackupsStorageConfigs request
-	GetBackupsStorageConfigs(ctx context.Context, params *GetBackupsStorageConfigsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostBackupsStorageConfigsWithBody request with any body
-	PostBackupsStorageConfigsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PostBackupsStorageConfigs(ctx context.Context, body PostBackupsStorageConfigsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DeleteBackupsStorageConfigsById request
-	DeleteBackupsStorageConfigsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetBackupsStorageConfigsById request
-	GetBackupsStorageConfigsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PutBackupsStorageConfigsByIdWithBody request with any body
-	PutBackupsStorageConfigsByIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	PutBackupsStorageConfigsById(ctx context.Context, id openapi_types.UUID, body PutBackupsStorageConfigsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostBackupsStorageConfigsByIdTestConnection request
-	PostBackupsStorageConfigsByIdTestConnection(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// DeleteBackupsStorageById request
 	DeleteBackupsStorageById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -19566,9 +20985,6 @@ type ClientInterface interface {
 	PutBackupsStorageByIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PutBackupsStorageById(ctx context.Context, id openapi_types.UUID, body PutBackupsStorageByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PostBackupsStorageByIdTest request
-	PostBackupsStorageByIdTest(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostBackupsStorageByIdTestConnection request
 	PostBackupsStorageByIdTestConnection(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19584,11 +21000,27 @@ type ClientInterface interface {
 
 	PostBackupsByIdRestore(ctx context.Context, id openapi_types.UUID, body PostBackupsByIdRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCatalogApplicationSources request
+	GetCatalogApplicationSources(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCatalogApplications request
+	GetCatalogApplications(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostCatalogApplicationsPreviewWithBody request with any body
+	PostCatalogApplicationsPreviewWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostCatalogApplicationsPreview(ctx context.Context, body PostCatalogApplicationsPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetCatalogCharts request
 	GetCatalogCharts(ctx context.Context, params *GetCatalogChartsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCatalogChartsById request
 	GetCatalogChartsById(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutCatalogChartsByIdFavoriteWithBody request with any body
+	PutCatalogChartsByIdFavoriteWithBody(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutCatalogChartsByIdFavorite(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCatalogChartsByIdReadme request
 	GetCatalogChartsByIdReadme(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdReadmeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19601,6 +21033,9 @@ type ClientInterface interface {
 
 	// GetCatalogControllerStatus request
 	GetCatalogControllerStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCatalogDiscovery request
+	GetCatalogDiscovery(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCatalogInstalled request
 	GetCatalogInstalled(ctx context.Context, params *GetCatalogInstalledParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19620,6 +21055,9 @@ type ClientInterface interface {
 	PostCatalogInstalledByIdRollbackWithBody(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostCatalogInstalledByIdRollback(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, body PostCatalogInstalledByIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCatalogInstalledByIdUpgradeVersions request
+	GetCatalogInstalledByIdUpgradeVersions(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutCatalogInstalledByIdUpgradeWithBody request with any body
 	PutCatalogInstalledByIdUpgradeWithBody(ctx context.Context, id openapi_types.UUID, params *PutCatalogInstalledByIdUpgradeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19884,6 +21322,9 @@ type ClientInterface interface {
 
 	PostClusters(ctx context.Context, body PostClustersJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetClustersSummary request
+	GetClustersSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetClustersByClusterIdApiserverAllowlist request
 	GetClustersByClusterIdApiserverAllowlist(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -20012,7 +21453,7 @@ type ClientInterface interface {
 	GetClustersByClusterIdLimitRanges(ctx context.Context, clusterId string, params *GetClustersByClusterIdLimitRangesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdNamespaces request
-	GetClustersByClusterIdNamespaces(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetClustersByClusterIdNamespaces(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdNamespacesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdNetworkPolicies request
 	GetClustersByClusterIdNetworkPolicies(ctx context.Context, clusterId string, params *GetClustersByClusterIdNetworkPoliciesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -20177,6 +21618,9 @@ type ClientInterface interface {
 
 	// PostClustersByClusterIdRegistriesByIdTest request
 	PostClustersByClusterIdRegistriesByIdTest(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CountClusterResources request
+	CountClusterResources(ctx context.Context, clusterId openapi_types.UUID, params *CountClusterResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdResourceQuotas request
 	GetClustersByClusterIdResourceQuotas(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourceQuotasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -20397,14 +21841,8 @@ type ClientInterface interface {
 	// PostClustersByIdGenerateKubeconfig request
 	PostClustersByIdGenerateKubeconfig(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GenerateClusterKubeconfigUnderscore request
-	GenerateClusterKubeconfigUnderscore(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetClustersByIdHealth request
 	GetClustersByIdHealth(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetClustersByIdKubeconfigLegacy request
-	GetClustersByIdKubeconfigLegacy(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByIdKubeconfigPreview request
 	GetClustersByIdKubeconfigPreview(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -20464,6 +21902,60 @@ type ClientInterface interface {
 
 	PutClustersByIdMonitoringStackUpgrade(ctx context.Context, id string, params *PutClustersByIdMonitoringStackUpgradeParams, body PutClustersByIdMonitoringStackUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteClustersByIdObservabilityGrafana request
+	DeleteClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetClustersByIdObservabilityGrafana request
+	GetClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadClustersByIdObservabilityGrafana request
+	HeadClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OptionsClustersByIdObservabilityGrafana request
+	OptionsClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchClustersByIdObservabilityGrafanaWithBody request with any body
+	PatchClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchClustersByIdObservabilityGrafana(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostClustersByIdObservabilityGrafanaWithBody request with any body
+	PostClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostClustersByIdObservabilityGrafana(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutClustersByIdObservabilityGrafanaWithBody request with any body
+	PutClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutClustersByIdObservabilityGrafana(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteClustersByIdObservabilityGrafanaProxy request
+	DeleteClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetClustersByIdObservabilityGrafanaProxy request
+	GetClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadClustersByIdObservabilityGrafanaProxy request
+	HeadClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OptionsClustersByIdObservabilityGrafanaProxy request
+	OptionsClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchClustersByIdObservabilityGrafanaProxyWithBody request with any body
+	PatchClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostClustersByIdObservabilityGrafanaProxyWithBody request with any body
+	PostClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutClustersByIdObservabilityGrafanaProxyWithBody request with any body
+	PutClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostClustersByIdOwnershipTakeover request
 	PostClustersByIdOwnershipTakeover(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -20507,9 +21999,6 @@ type ClientInterface interface {
 	// PostClustersByIdShellSessionsBySessionIdClose request
 	PostClustersByIdShellSessionsBySessionIdClose(ctx context.Context, id openapi_types.UUID, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// RemoteV2ListPods request
-	RemoteV2ListPods(ctx context.Context, id openapi_types.UUID, params *RemoteV2ListPodsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetClustersByIdVulnerabilitiesImages request
 	GetClustersByIdVulnerabilitiesImages(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdVulnerabilitiesImagesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -20518,30 +22007,6 @@ type ClientInterface interface {
 
 	// GetCompliancePosture request
 	GetCompliancePosture(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TunnelConnectDelete request
-	TunnelConnectDelete(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TunnelConnectGet request
-	TunnelConnectGet(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TunnelConnectHead request
-	TunnelConnectHead(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TunnelConnectOptions request
-	TunnelConnectOptions(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TunnelConnectPatch request
-	TunnelConnectPatch(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TunnelConnectPost request
-	TunnelConnectPost(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TunnelConnectPut request
-	TunnelConnectPut(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// TunnelConnectTrace request
-	TunnelConnectTrace(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetControllersAlerts request
 	GetControllersAlerts(ctx context.Context, params *GetControllersAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -20613,6 +22078,25 @@ type ClientInterface interface {
 	// GetDeliveryClustersByClusterIdInventory request
 	GetDeliveryClustersByClusterIdInventory(ctx context.Context, clusterId openapi_types.UUID, params *GetDeliveryClustersByClusterIdInventoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetDeliveryConfigurationTemplates request
+	GetDeliveryConfigurationTemplates(ctx context.Context, params *GetDeliveryConfigurationTemplatesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDeliveryConfigurationTemplatesWithBody request with any body
+	PostDeliveryConfigurationTemplatesWithBody(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostDeliveryConfigurationTemplates(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteDeliveryConfigurationTemplatesById request
+	DeleteDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDeliveryConfigurationTemplatesById request
+	GetDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutDeliveryConfigurationTemplatesByIdWithBody request with any body
+	PutDeliveryConfigurationTemplatesByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetDeliveryDeployments request
 	GetDeliveryDeployments(ctx context.Context, params *GetDeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -20637,11 +22121,32 @@ type ClientInterface interface {
 
 	PostDeliveryDeploymentsByIdSuspend(ctx context.Context, id openapi_types.UUID, params *PostDeliveryDeploymentsByIdSuspendParams, body PostDeliveryDeploymentsByIdSuspendJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetDeliveryEstate request
-	GetDeliveryEstate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetDeliveryFleet request
+	GetDeliveryFleet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetDeliveryFleetLegacy request
-	GetDeliveryFleetLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetDeliveryOverrideSets request
+	GetDeliveryOverrideSets(ctx context.Context, params *GetDeliveryOverrideSetsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDeliveryOverrideSetsWithBody request with any body
+	PostDeliveryOverrideSetsWithBody(ctx context.Context, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostDeliveryOverrideSets(ctx context.Context, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDeliveryOverrideSetsEffectiveWithBody request with any body
+	PostDeliveryOverrideSetsEffectiveWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostDeliveryOverrideSetsEffective(ctx context.Context, body PostDeliveryOverrideSetsEffectiveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteDeliveryOverrideSetsById request
+	DeleteDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDeliveryOverrideSetsById request
+	GetDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutDeliveryOverrideSetsByIdWithBody request with any body
+	PutDeliveryOverrideSetsByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetDeliveryRollouts request
 	GetDeliveryRollouts(ctx context.Context, params *GetDeliveryRolloutsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -20747,6 +22252,9 @@ type ClientInterface interface {
 
 	PostDeliveryTargetsByIdRollouts(ctx context.Context, id openapi_types.UUID, params *PostDeliveryTargetsByIdRolloutsParams, body PostDeliveryTargetsByIdRolloutsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetEventsStream request
+	GetEventsStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetExtensions request
 	GetExtensions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -20787,8 +22295,13 @@ type ClientInterface interface {
 
 	PostExtensionsByNameToken(ctx context.Context, name string, body PostExtensionsByNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostGitopsSourcesByIdWebhook request
-	PostGitopsSourcesByIdWebhook(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// PostGitopsSourcesByIdWebhookWithBody request with any body
+	PostGitopsSourcesByIdWebhookWithBody(ctx context.Context, id string, params *PostGitopsSourcesByIdWebhookParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostGitopsSourcesByIdWebhook(ctx context.Context, id string, params *PostGitopsSourcesByIdWebhookParams, body PostGitopsSourcesByIdWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLicense request
+	GetLicense(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLoggingControllerStatus request
 	GetLoggingControllerStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -20962,13 +22475,67 @@ type ClientInterface interface {
 	// PostNodesByClusterIdByNodeNameUncordon request
 	PostNodesByClusterIdByNodeNameUncordon(ctx context.Context, clusterId openapi_types.UUID, nodeName string, params *PostNodesByClusterIdByNodeNameUncordonParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetObservabilityGrafanaTicket request
-	GetObservabilityGrafanaTicket(ctx context.Context, params *GetObservabilityGrafanaTicketParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DeleteObservabilityGrafana request
+	DeleteObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetObservabilityGrafana request
+	GetObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadObservabilityGrafana request
+	HeadObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OptionsObservabilityGrafana request
+	OptionsObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchObservabilityGrafanaWithBody request with any body
+	PatchObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchObservabilityGrafana(ctx context.Context, body PatchObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostObservabilityGrafanaWithBody request with any body
+	PostObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostObservabilityGrafana(ctx context.Context, body PostObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutObservabilityGrafanaWithBody request with any body
+	PutObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutObservabilityGrafana(ctx context.Context, body PutObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostObservabilityGrafanaTicketRedeemWithBody request with any body
 	PostObservabilityGrafanaTicketRedeemWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostObservabilityGrafanaTicketRedeem(ctx context.Context, body PostObservabilityGrafanaTicketRedeemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteObservabilityGrafanaProxy request
+	DeleteObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetObservabilityGrafanaProxy request
+	GetObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadObservabilityGrafanaProxy request
+	HeadObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OptionsObservabilityGrafanaProxy request
+	OptionsObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchObservabilityGrafanaProxyWithBody request with any body
+	PatchObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchObservabilityGrafanaProxy(ctx context.Context, body PatchObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostObservabilityGrafanaProxyWithBody request with any body
+	PostObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostObservabilityGrafanaProxy(ctx context.Context, body PostObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutObservabilityGrafanaProxyWithBody request with any body
+	PutObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutObservabilityGrafanaProxy(ctx context.Context, body PutObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPlatformHealthSummary request
+	GetPlatformHealthSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetProjects request
 	GetProjects(ctx context.Context, params *GetProjectsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -20998,6 +22565,11 @@ type ClientInterface interface {
 	PostProjectsByIdAddNamespaceWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostProjectsByIdAddNamespace(ctx context.Context, id openapi_types.UUID, body PostProjectsByIdAddNamespaceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostProjectsByIdApplyRbacTemplateWithBody request with any body
+	PostProjectsByIdApplyRbacTemplateWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostProjectsByIdApplyRbacTemplate(ctx context.Context, id openapi_types.UUID, body PostProjectsByIdApplyRbacTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetProjectsByIdClusters request
 	GetProjectsByIdClusters(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21174,6 +22746,14 @@ type ClientInterface interface {
 	PostRbacPermissionPreviewWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostRbacPermissionPreview(ctx context.Context, body PostRbacPermissionPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetRbacPrincipals request
+	GetRbacPrincipals(ctx context.Context, params *GetRbacPrincipalsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostRbacPrincipalsMaterializeWithBody request with any body
+	PostRbacPrincipalsMaterializeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostRbacPrincipalsMaterialize(ctx context.Context, body PostRbacPrincipalsMaterializeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetRbacProjectBindings request
 	GetRbacProjectBindings(ctx context.Context, params *GetRbacProjectBindingsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21484,8 +23064,14 @@ type ClientInterface interface {
 
 	PostStreamsTickets(ctx context.Context, body PostStreamsTicketsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetSupportBundle request
-	GetSupportBundle(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// CreateSupportBundle request
+	CreateSupportBundle(ctx context.Context, params *CreateSupportBundleParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSupportBundleOperation request
+	GetSupportBundleOperation(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DownloadSupportBundle request
+	DownloadSupportBundle(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetTools request
 	GetTools(ctx context.Context, params *GetToolsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21522,6 +23108,11 @@ type ClientInterface interface {
 	PostToolsBySlugPreviewWithBody(ctx context.Context, slug string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostToolsBySlugPreview(ctx context.Context, slug string, body PostToolsBySlugPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostToolsBySlugRollbackWithBody request with any body
+	PostToolsBySlugRollbackWithBody(ctx context.Context, slug string, params *PostToolsBySlugRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostToolsBySlugRollback(ctx context.Context, slug string, params *PostToolsBySlugRollbackParams, body PostToolsBySlugRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteToolsBySlugUninstallWithBody request with any body
 	DeleteToolsBySlugUninstallWithBody(ctx context.Context, slug string, params *DeleteToolsBySlugUninstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21602,6 +23193,9 @@ type ClientInterface interface {
 
 	InternalTunnelK8s(ctx context.Context, clusterId openapi_types.UUID, params *InternalTunnelK8sParams, body InternalTunnelK8sJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// InternalTunnelK8sCapability request
+	InternalTunnelK8sCapability(ctx context.Context, clusterId openapi_types.UUID, capability string, params *InternalTunnelK8sCapabilityParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetScimGroups request
 	GetScimGroups(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -21653,18 +23247,6 @@ type ClientInterface interface {
 
 func (c *Client) GetActivity(ctx context.Context, params *GetActivityParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetActivityRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetActivityFeedLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetActivityFeedLegacyRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -22419,6 +24001,30 @@ func (c *Client) PutAdminDashboardWidgetsById(ctx context.Context, id string, bo
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetAdminDeferredOperations(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminDeferredOperationsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminDeferredOperationsByIdCancel(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminDeferredOperationsByIdCancelRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) AdminEmailsList(ctx context.Context, params *AdminEmailsListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminEmailsListRequest(c.Server, params)
 	if err != nil {
@@ -22613,6 +24219,102 @@ func (c *Client) GetAdminGroupMappingsById(ctx context.Context, id openapi_types
 
 func (c *Client) AdminKeyStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminKeyStatusRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAdminMaintenanceWindows(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminMaintenanceWindowsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminMaintenanceWindowsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminMaintenanceWindowsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminMaintenanceWindows(ctx context.Context, body PostAdminMaintenanceWindowsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminMaintenanceWindowsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAdminMaintenanceWindowsActive(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminMaintenanceWindowsActiveRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteAdminMaintenanceWindowsById(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteAdminMaintenanceWindowsByIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAdminMaintenanceWindowsById(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminMaintenanceWindowsByIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAdminMaintenanceWindowsByIdWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAdminMaintenanceWindowsByIdRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAdminMaintenanceWindowsById(ctx context.Context, id string, body PutAdminMaintenanceWindowsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAdminMaintenanceWindowsByIdRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -22913,6 +24615,66 @@ func (c *Client) AdminNotificationTemplatePreview(ctx context.Context, key strin
 
 func (c *Client) AdminNotificationTemplateVariables(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAdminNotificationTemplateVariablesRequest(c.Server, key)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAdminPlatformSettingsDefaultClusterTemplate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminPlatformSettingsDefaultClusterTemplateRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAdminPlatformSettingsDefaultClusterTemplateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAdminPlatformSettingsDefaultClusterTemplateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAdminPlatformSettingsDefaultClusterTemplate(ctx context.Context, body PutAdminPlatformSettingsDefaultClusterTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAdminPlatformSettingsDefaultClusterTemplateRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAdminPlatformSettingsDefaultClusterTemplateCoverage(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminPlatformSettingsDefaultClusterTemplateCoverageRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdRequest(c.Server, clusterId)
 	if err != nil {
 		return nil, err
 	}
@@ -23247,8 +25009,8 @@ func (c *Client) AdminReadAuditPolicyUpdate(ctx context.Context, id openapi_type
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetAdminScimTokens(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetAdminScimTokensRequest(c.Server)
+func (c *Client) GetAdminScimTokens(ctx context.Context, params *GetAdminScimTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAdminScimTokensRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -23679,8 +25441,8 @@ func (c *Client) PostAdminUsersByIdUnlock(ctx context.Context, id openapi_types.
 	return c.Client.Do(req)
 }
 
-func (c *Client) AdminVaultConnectionsList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewAdminVaultConnectionsListRequest(c.Server)
+func (c *Client) AdminVaultConnectionsList(ctx context.Context, params *AdminVaultConnectionsListParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAdminVaultConnectionsListRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -24039,6 +25801,18 @@ func (c *Client) GetAlertingEvents(ctx context.Context, params *GetAlertingEvent
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetAlertingEventsSummary(ctx context.Context, params *GetAlertingEventsSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertingEventsSummaryRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetAlertingEventsById(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAlertingEventsByIdRequest(c.Server, id)
 	if err != nil {
@@ -24243,42 +26017,6 @@ func (c *Client) PostAlertingSilencesByIdExpire(ctx context.Context, id string, 
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostAlertsRulesByIdDisable(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAlertsRulesByIdDisableRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAlertsRulesByIdEnable(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAlertsRulesByIdEnableRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAlertsSilencesByIdExpire(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAlertsSilencesByIdExpireRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) GetAnomalyBaselines(ctx context.Context, params *GetAnomalyBaselinesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAnomalyBaselinesRequest(c.Server, params)
 	if err != nil {
@@ -24327,8 +26065,56 @@ func (c *Client) ExportAuditLogs(ctx context.Context, params *ExportAuditLogsPar
 	return c.Client.Do(req)
 }
 
+func (c *Client) CreateAuditExport(ctx context.Context, params *CreateAuditExportParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAuditExportRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAuditExportsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAuditExportsByIdRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAuditExportsByIdDownload(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAuditExportsByIdDownloadRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetAuditLog(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAuditLogRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAuthCallbackByProvider(ctx context.Context, provider string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAuthCallbackByProviderRequest(c.Server, provider)
 	if err != nil {
 		return nil, err
 	}
@@ -24567,6 +26353,18 @@ func (c *Client) PostAuthLogin(ctx context.Context, body PostAuthLoginJSONReques
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetAuthLoginByProvider(ctx context.Context, provider string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAuthLoginByProviderRequest(c.Server, provider)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetAuthLogoutDone(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAuthLogoutDoneRequest(c.Server)
 	if err != nil {
@@ -24593,6 +26391,42 @@ func (c *Client) PostAuthLogout(ctx context.Context, reqEditors ...RequestEditor
 
 func (c *Client) GetAuthMe(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAuthMeRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAuthMePreferences(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAuthMePreferencesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAuthMePreferencesWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAuthMePreferencesRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAuthMePreferences(ctx context.Context, body PutAuthMePreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAuthMePreferencesRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -24663,20 +26497,8 @@ func (c *Client) PostAuthPasswordResetRequest(ctx context.Context, body PostAuth
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostAuthRefreshWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthRefreshRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostAuthRefresh(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostAuthRefreshRequest(c.Server, body)
+func (c *Client) PostAuthRefresh(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostAuthRefreshRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -24927,18 +26749,6 @@ func (c *Client) GetBackupsRestoresById(ctx context.Context, id openapi_types.UU
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetBackupsRuns(ctx context.Context, params *GetBackupsRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetBackupsRunsRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) GetBackupsSchedules(ctx context.Context, params *GetBackupsSchedulesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetBackupsSchedulesRequest(c.Server, params)
 	if err != nil {
@@ -25071,102 +26881,6 @@ func (c *Client) PostBackupsStorage(ctx context.Context, body PostBackupsStorage
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetBackupsStorageConfigs(ctx context.Context, params *GetBackupsStorageConfigsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetBackupsStorageConfigsRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostBackupsStorageConfigsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostBackupsStorageConfigsRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostBackupsStorageConfigs(ctx context.Context, body PostBackupsStorageConfigsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostBackupsStorageConfigsRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) DeleteBackupsStorageConfigsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteBackupsStorageConfigsByIdRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetBackupsStorageConfigsById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetBackupsStorageConfigsByIdRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PutBackupsStorageConfigsByIdWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutBackupsStorageConfigsByIdRequestWithBody(c.Server, id, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PutBackupsStorageConfigsById(ctx context.Context, id openapi_types.UUID, body PutBackupsStorageConfigsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutBackupsStorageConfigsByIdRequest(c.Server, id, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostBackupsStorageConfigsByIdTestConnection(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostBackupsStorageConfigsByIdTestConnectionRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) DeleteBackupsStorageById(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteBackupsStorageByIdRequest(c.Server, id)
 	if err != nil {
@@ -25205,18 +26919,6 @@ func (c *Client) PutBackupsStorageByIdWithBody(ctx context.Context, id openapi_t
 
 func (c *Client) PutBackupsStorageById(ctx context.Context, id openapi_types.UUID, body PutBackupsStorageByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutBackupsStorageByIdRequest(c.Server, id, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PostBackupsStorageByIdTest(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostBackupsStorageByIdTestRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -25287,6 +26989,54 @@ func (c *Client) PostBackupsByIdRestore(ctx context.Context, id openapi_types.UU
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetCatalogApplicationSources(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogApplicationSourcesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCatalogApplications(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogApplicationsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostCatalogApplicationsPreviewWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostCatalogApplicationsPreviewRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostCatalogApplicationsPreview(ctx context.Context, body PostCatalogApplicationsPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostCatalogApplicationsPreviewRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetCatalogCharts(ctx context.Context, params *GetCatalogChartsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCatalogChartsRequest(c.Server, params)
 	if err != nil {
@@ -25301,6 +27051,30 @@ func (c *Client) GetCatalogCharts(ctx context.Context, params *GetCatalogChartsP
 
 func (c *Client) GetCatalogChartsById(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCatalogChartsByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutCatalogChartsByIdFavoriteWithBody(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutCatalogChartsByIdFavoriteRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutCatalogChartsByIdFavorite(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutCatalogChartsByIdFavoriteRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -25349,6 +27123,18 @@ func (c *Client) GetCatalogChartsByIdVersions(ctx context.Context, id openapi_ty
 
 func (c *Client) GetCatalogControllerStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCatalogControllerStatusRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCatalogDiscovery(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogDiscoveryRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -25433,6 +27219,18 @@ func (c *Client) PostCatalogInstalledByIdRollbackWithBody(ctx context.Context, i
 
 func (c *Client) PostCatalogInstalledByIdRollback(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, body PostCatalogInstalledByIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostCatalogInstalledByIdRollbackRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCatalogInstalledByIdUpgradeVersions(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogInstalledByIdUpgradeVersionsRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -26595,6 +28393,18 @@ func (c *Client) PostClusters(ctx context.Context, body PostClustersJSONRequestB
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetClustersSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersSummaryRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetClustersByClusterIdApiserverAllowlist(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetClustersByClusterIdApiserverAllowlistRequest(c.Server, clusterId)
 	if err != nil {
@@ -27159,8 +28969,8 @@ func (c *Client) GetClustersByClusterIdLimitRanges(ctx context.Context, clusterI
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetClustersByClusterIdNamespaces(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetClustersByClusterIdNamespacesRequest(c.Server, clusterId)
+func (c *Client) GetClustersByClusterIdNamespaces(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdNamespacesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdNamespacesRequest(c.Server, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -27905,6 +29715,18 @@ func (c *Client) PutClustersByClusterIdRegistriesById(ctx context.Context, clust
 
 func (c *Client) PostClustersByClusterIdRegistriesByIdTest(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostClustersByClusterIdRegistriesByIdTestRequest(c.Server, clusterId, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CountClusterResources(ctx context.Context, clusterId openapi_types.UUID, params *CountClusterResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCountClusterResourcesRequest(c.Server, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -28839,32 +30661,8 @@ func (c *Client) PostClustersByIdGenerateKubeconfig(ctx context.Context, id open
 	return c.Client.Do(req)
 }
 
-func (c *Client) GenerateClusterKubeconfigUnderscore(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGenerateClusterKubeconfigUnderscoreRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) GetClustersByIdHealth(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetClustersByIdHealthRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetClustersByIdKubeconfigLegacy(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetClustersByIdKubeconfigLegacyRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -29127,6 +30925,246 @@ func (c *Client) PutClustersByIdMonitoringStackUpgrade(ctx context.Context, id s
 	return c.Client.Do(req)
 }
 
+func (c *Client) DeleteClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteClustersByIdObservabilityGrafanaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByIdObservabilityGrafanaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadClustersByIdObservabilityGrafanaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) OptionsClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOptionsClustersByIdObservabilityGrafanaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchClustersByIdObservabilityGrafanaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchClustersByIdObservabilityGrafana(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchClustersByIdObservabilityGrafanaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostClustersByIdObservabilityGrafanaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostClustersByIdObservabilityGrafana(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostClustersByIdObservabilityGrafanaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutClustersByIdObservabilityGrafanaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutClustersByIdObservabilityGrafana(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutClustersByIdObservabilityGrafanaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteClustersByIdObservabilityGrafanaProxyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByIdObservabilityGrafanaProxyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadClustersByIdObservabilityGrafanaProxyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) OptionsClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOptionsClustersByIdObservabilityGrafanaProxyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchClustersByIdObservabilityGrafanaProxyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchClustersByIdObservabilityGrafanaProxyRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostClustersByIdObservabilityGrafanaProxyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostClustersByIdObservabilityGrafanaProxyRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutClustersByIdObservabilityGrafanaProxyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutClustersByIdObservabilityGrafanaProxyRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PostClustersByIdOwnershipTakeover(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostClustersByIdOwnershipTakeoverRequest(c.Server, id)
 	if err != nil {
@@ -29307,18 +31345,6 @@ func (c *Client) PostClustersByIdShellSessionsBySessionIdClose(ctx context.Conte
 	return c.Client.Do(req)
 }
 
-func (c *Client) RemoteV2ListPods(ctx context.Context, id openapi_types.UUID, params *RemoteV2ListPodsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewRemoteV2ListPodsRequest(c.Server, id, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *Client) GetClustersByIdVulnerabilitiesImages(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdVulnerabilitiesImagesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetClustersByIdVulnerabilitiesImagesRequest(c.Server, id, params)
 	if err != nil {
@@ -29345,102 +31371,6 @@ func (c *Client) GetClustersByIdVulnerabilitiesSummary(ctx context.Context, id o
 
 func (c *Client) GetCompliancePosture(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCompliancePostureRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) TunnelConnectDelete(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTunnelConnectDeleteRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) TunnelConnectGet(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTunnelConnectGetRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) TunnelConnectHead(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTunnelConnectHeadRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) TunnelConnectOptions(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTunnelConnectOptionsRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) TunnelConnectPatch(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTunnelConnectPatchRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) TunnelConnectPost(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTunnelConnectPostRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) TunnelConnectPut(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTunnelConnectPutRequest(c.Server, clusterId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) TunnelConnectTrace(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTunnelConnectTraceRequest(c.Server, clusterId)
 	if err != nil {
 		return nil, err
 	}
@@ -29751,6 +31681,90 @@ func (c *Client) GetDeliveryClustersByClusterIdInventory(ctx context.Context, cl
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetDeliveryConfigurationTemplates(ctx context.Context, params *GetDeliveryConfigurationTemplatesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryConfigurationTemplatesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryConfigurationTemplatesWithBody(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryConfigurationTemplatesRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryConfigurationTemplates(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryConfigurationTemplatesRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteDeliveryConfigurationTemplatesByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryConfigurationTemplatesByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutDeliveryConfigurationTemplatesByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDeliveryConfigurationTemplatesByIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDeliveryConfigurationTemplatesByIdRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetDeliveryDeployments(ctx context.Context, params *GetDeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetDeliveryDeploymentsRequest(c.Server, params)
 	if err != nil {
@@ -29859,8 +31873,8 @@ func (c *Client) PostDeliveryDeploymentsByIdSuspend(ctx context.Context, id open
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetDeliveryEstate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetDeliveryEstateRequest(c.Server)
+func (c *Client) GetDeliveryFleet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryFleetRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -29871,8 +31885,104 @@ func (c *Client) GetDeliveryEstate(ctx context.Context, reqEditors ...RequestEdi
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetDeliveryFleetLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetDeliveryFleetLegacyRequest(c.Server)
+func (c *Client) GetDeliveryOverrideSets(ctx context.Context, params *GetDeliveryOverrideSetsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryOverrideSetsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryOverrideSetsWithBody(ctx context.Context, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryOverrideSetsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryOverrideSets(ctx context.Context, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryOverrideSetsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryOverrideSetsEffectiveWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryOverrideSetsEffectiveRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryOverrideSetsEffective(ctx context.Context, body PostDeliveryOverrideSetsEffectiveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryOverrideSetsEffectiveRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteDeliveryOverrideSetsByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryOverrideSetsByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutDeliveryOverrideSetsByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDeliveryOverrideSetsByIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDeliveryOverrideSetsByIdRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -30351,6 +32461,18 @@ func (c *Client) PostDeliveryTargetsByIdRollouts(ctx context.Context, id openapi
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetEventsStream(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetEventsStreamRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetExtensions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetExtensionsRequest(c.Server)
 	if err != nil {
@@ -30531,8 +32653,32 @@ func (c *Client) PostExtensionsByNameToken(ctx context.Context, name string, bod
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostGitopsSourcesByIdWebhook(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostGitopsSourcesByIdWebhookRequest(c.Server, id)
+func (c *Client) PostGitopsSourcesByIdWebhookWithBody(ctx context.Context, id string, params *PostGitopsSourcesByIdWebhookParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostGitopsSourcesByIdWebhookRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostGitopsSourcesByIdWebhook(ctx context.Context, id string, params *PostGitopsSourcesByIdWebhookParams, body PostGitopsSourcesByIdWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostGitopsSourcesByIdWebhookRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLicense(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLicenseRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -31299,8 +33445,116 @@ func (c *Client) PostNodesByClusterIdByNodeNameUncordon(ctx context.Context, clu
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetObservabilityGrafanaTicket(ctx context.Context, params *GetObservabilityGrafanaTicketParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetObservabilityGrafanaTicketRequest(c.Server, params)
+func (c *Client) DeleteObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteObservabilityGrafanaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetObservabilityGrafanaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadObservabilityGrafanaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) OptionsObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOptionsObservabilityGrafanaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchObservabilityGrafanaRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchObservabilityGrafana(ctx context.Context, body PatchObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchObservabilityGrafanaRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObservabilityGrafanaRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObservabilityGrafana(ctx context.Context, body PostObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObservabilityGrafanaRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutObservabilityGrafanaRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutObservabilityGrafana(ctx context.Context, body PutObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutObservabilityGrafanaRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -31325,6 +33579,138 @@ func (c *Client) PostObservabilityGrafanaTicketRedeemWithBody(ctx context.Contex
 
 func (c *Client) PostObservabilityGrafanaTicketRedeem(ctx context.Context, body PostObservabilityGrafanaTicketRedeemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostObservabilityGrafanaTicketRedeemRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteObservabilityGrafanaProxyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetObservabilityGrafanaProxyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadObservabilityGrafanaProxyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) OptionsObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOptionsObservabilityGrafanaProxyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchObservabilityGrafanaProxyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchObservabilityGrafanaProxy(ctx context.Context, body PatchObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchObservabilityGrafanaProxyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObservabilityGrafanaProxyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObservabilityGrafanaProxy(ctx context.Context, body PostObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObservabilityGrafanaProxyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutObservabilityGrafanaProxyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutObservabilityGrafanaProxy(ctx context.Context, body PutObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutObservabilityGrafanaProxyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPlatformHealthSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPlatformHealthSummaryRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -31457,6 +33843,30 @@ func (c *Client) PostProjectsByIdAddNamespaceWithBody(ctx context.Context, id op
 
 func (c *Client) PostProjectsByIdAddNamespace(ctx context.Context, id openapi_types.UUID, body PostProjectsByIdAddNamespaceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostProjectsByIdAddNamespaceRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostProjectsByIdApplyRbacTemplateWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostProjectsByIdApplyRbacTemplateRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostProjectsByIdApplyRbacTemplate(ctx context.Context, id openapi_types.UUID, body PostProjectsByIdApplyRbacTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostProjectsByIdApplyRbacTemplateRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -32225,6 +34635,42 @@ func (c *Client) PostRbacPermissionPreviewWithBody(ctx context.Context, contentT
 
 func (c *Client) PostRbacPermissionPreview(ctx context.Context, body PostRbacPermissionPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostRbacPermissionPreviewRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetRbacPrincipals(ctx context.Context, params *GetRbacPrincipalsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetRbacPrincipalsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostRbacPrincipalsMaterializeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostRbacPrincipalsMaterializeRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostRbacPrincipalsMaterialize(ctx context.Context, body PostRbacPrincipalsMaterializeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostRbacPrincipalsMaterializeRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -33591,8 +36037,32 @@ func (c *Client) PostStreamsTickets(ctx context.Context, body PostStreamsTickets
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetSupportBundle(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetSupportBundleRequest(c.Server)
+func (c *Client) CreateSupportBundle(ctx context.Context, params *CreateSupportBundleParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateSupportBundleRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetSupportBundleOperation(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSupportBundleOperationRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DownloadSupportBundle(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDownloadSupportBundleRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -33749,6 +36219,30 @@ func (c *Client) PostToolsBySlugPreviewWithBody(ctx context.Context, slug string
 
 func (c *Client) PostToolsBySlugPreview(ctx context.Context, slug string, body PostToolsBySlugPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostToolsBySlugPreviewRequest(c.Server, slug, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostToolsBySlugRollbackWithBody(ctx context.Context, slug string, params *PostToolsBySlugRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostToolsBySlugRollbackRequestWithBody(c.Server, slug, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostToolsBySlugRollback(ctx context.Context, slug string, params *PostToolsBySlugRollbackParams, body PostToolsBySlugRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostToolsBySlugRollbackRequest(c.Server, slug, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -34107,6 +36601,18 @@ func (c *Client) InternalTunnelK8s(ctx context.Context, clusterId openapi_types.
 	return c.Client.Do(req)
 }
 
+func (c *Client) InternalTunnelK8sCapability(ctx context.Context, clusterId openapi_types.UUID, capability string, params *InternalTunnelK8sCapabilityParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInternalTunnelK8sCapabilityRequest(c.Server, clusterId, capability, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetScimGroups(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetScimGroupsRequest(c.Server)
 	if err != nil {
@@ -34350,33 +36856,6 @@ func NewGetActivityRequest(server string, params *GetActivityParams) (*http.Requ
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetActivityFeedLegacyRequest generates requests for GetActivityFeedLegacy
-func NewGetActivityFeedLegacyRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/activity/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -36150,6 +38629,67 @@ func NewPutAdminDashboardWidgetsByIdRequestWithBody(server string, id string, co
 	return req, nil
 }
 
+// NewGetAdminDeferredOperationsRequest generates requests for GetAdminDeferredOperations
+func NewGetAdminDeferredOperationsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/deferred-operations")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAdminDeferredOperationsByIdCancelRequest generates requests for PostAdminDeferredOperationsByIdCancel
+func NewPostAdminDeferredOperationsByIdCancelRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/deferred-operations/%s/cancel", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewAdminEmailsListRequest generates requests for AdminEmailsList
 func NewAdminEmailsListRequest(server string, params *AdminEmailsListParams) (*http.Request, error) {
 	var err error
@@ -36784,6 +39324,215 @@ func NewAdminKeyStatusRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetAdminMaintenanceWindowsRequest generates requests for GetAdminMaintenanceWindows
+func NewGetAdminMaintenanceWindowsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/maintenance-windows")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAdminMaintenanceWindowsRequest calls the generic PostAdminMaintenanceWindows builder with application/json body
+func NewPostAdminMaintenanceWindowsRequest(server string, body PostAdminMaintenanceWindowsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostAdminMaintenanceWindowsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostAdminMaintenanceWindowsRequestWithBody generates requests for PostAdminMaintenanceWindows with any type of body
+func NewPostAdminMaintenanceWindowsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/maintenance-windows")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetAdminMaintenanceWindowsActiveRequest generates requests for GetAdminMaintenanceWindowsActive
+func NewGetAdminMaintenanceWindowsActiveRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/maintenance-windows/active")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDeleteAdminMaintenanceWindowsByIdRequest generates requests for DeleteAdminMaintenanceWindowsById
+func NewDeleteAdminMaintenanceWindowsByIdRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/maintenance-windows/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAdminMaintenanceWindowsByIdRequest generates requests for GetAdminMaintenanceWindowsById
+func NewGetAdminMaintenanceWindowsByIdRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/maintenance-windows/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutAdminMaintenanceWindowsByIdRequest calls the generic PutAdminMaintenanceWindowsById builder with application/json body
+func NewPutAdminMaintenanceWindowsByIdRequest(server string, id string, body PutAdminMaintenanceWindowsByIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutAdminMaintenanceWindowsByIdRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPutAdminMaintenanceWindowsByIdRequestWithBody generates requests for PutAdminMaintenanceWindowsById with any type of body
+func NewPutAdminMaintenanceWindowsByIdRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/maintenance-windows/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -37547,6 +40296,134 @@ func NewAdminNotificationTemplateVariablesRequest(server string, key string) (*h
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAdminPlatformSettingsDefaultClusterTemplateRequest generates requests for GetAdminPlatformSettingsDefaultClusterTemplate
+func NewGetAdminPlatformSettingsDefaultClusterTemplateRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/platform-settings/default-cluster-template")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutAdminPlatformSettingsDefaultClusterTemplateRequest calls the generic PutAdminPlatformSettingsDefaultClusterTemplate builder with application/json body
+func NewPutAdminPlatformSettingsDefaultClusterTemplateRequest(server string, body PutAdminPlatformSettingsDefaultClusterTemplateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutAdminPlatformSettingsDefaultClusterTemplateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutAdminPlatformSettingsDefaultClusterTemplateRequestWithBody generates requests for PutAdminPlatformSettingsDefaultClusterTemplate with any type of body
+func NewPutAdminPlatformSettingsDefaultClusterTemplateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/platform-settings/default-cluster-template")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetAdminPlatformSettingsDefaultClusterTemplateCoverageRequest generates requests for GetAdminPlatformSettingsDefaultClusterTemplateCoverage
+func NewGetAdminPlatformSettingsDefaultClusterTemplateCoverageRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/platform-settings/default-cluster-template/coverage")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdRequest generates requests for PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId
+func NewPostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdRequest(server string, clusterId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/admin/platform-settings/default-cluster-template/reapply/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -38407,7 +41284,7 @@ func NewAdminReadAuditPolicyUpdateRequestWithBody(server string, id openapi_type
 }
 
 // NewGetAdminScimTokensRequest generates requests for GetAdminScimTokens
-func NewGetAdminScimTokensRequest(server string) (*http.Request, error) {
+func NewGetAdminScimTokensRequest(server string, params *GetAdminScimTokensParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -38423,6 +41300,44 @@ func NewGetAdminScimTokensRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -39487,7 +42402,7 @@ func NewPostAdminUsersByIdUnlockRequest(server string, id openapi_types.UUID) (*
 }
 
 // NewAdminVaultConnectionsListRequest generates requests for AdminVaultConnectionsList
-func NewAdminVaultConnectionsListRequest(server string) (*http.Request, error) {
+func NewAdminVaultConnectionsListRequest(server string, params *AdminVaultConnectionsListParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -39503,6 +42418,44 @@ func NewAdminVaultConnectionsListRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -40512,6 +43465,55 @@ func NewGetAlertingEventsRequest(server string, params *GetAlertingEventsParams)
 	return req, nil
 }
 
+// NewGetAlertingEventsSummaryRequest generates requests for GetAlertingEventsSummary
+func NewGetAlertingEventsSummaryRequest(server string, params *GetAlertingEventsSummaryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerting/events/summary/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "clusterId", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetAlertingEventsByIdRequest generates requests for GetAlertingEventsById
 func NewGetAlertingEventsByIdRequest(server string, id string) (*http.Request, error) {
 	var err error
@@ -41074,108 +44076,6 @@ func NewPostAlertingSilencesByIdExpireRequest(server string, id string) (*http.R
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/alerting/silences/%s/expire", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostAlertsRulesByIdDisableRequest generates requests for PostAlertsRulesByIdDisable
-func NewPostAlertsRulesByIdDisableRequest(server string, id string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/alerts/rules/%s/disable", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostAlertsRulesByIdEnableRequest generates requests for PostAlertsRulesByIdEnable
-func NewPostAlertsRulesByIdEnableRequest(server string, id string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/alerts/rules/%s/enable", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostAlertsSilencesByIdExpireRequest generates requests for PostAlertsSilencesByIdExpire
-func NewPostAlertsSilencesByIdExpireRequest(server string, id string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/alerts/silences/%s/expire", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -42046,6 +44946,432 @@ func NewExportAuditLogsRequest(server string, params *ExportAuditLogsParams) (*h
 	return req, nil
 }
 
+// NewCreateAuditExportRequest generates requests for CreateAuditExport
+func NewCreateAuditExportRequest(server string, params *CreateAuditExportParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/audit/exports/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Format != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "format", runtime.ParamLocationQuery, *params.Format); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.UserId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "user_id", runtime.ParamLocationQuery, *params.UserId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Actor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "actor", runtime.ParamLocationQuery, *params.Actor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "q", runtime.ParamLocationQuery, *params.Q); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Audience != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "audience", runtime.ParamLocationQuery, *params.Audience); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ResourceType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "resource_type", runtime.ParamLocationQuery, *params.ResourceType); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ResourceId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "resource_id", runtime.ParamLocationQuery, *params.ResourceId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ResourceName != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "resource_name", runtime.ParamLocationQuery, *params.ResourceName); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Target != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "target", runtime.ParamLocationQuery, *params.Target); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Action != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "action", runtime.ParamLocationQuery, *params.Action); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ActionClass != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "action_class", runtime.ParamLocationQuery, *params.ActionClass); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Result != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "result", runtime.ParamLocationQuery, *params.Result); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Source != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "source", runtime.ParamLocationQuery, *params.Source); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.CorrelationId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "correlation_id", runtime.ParamLocationQuery, *params.CorrelationId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.RequestId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "request_id", runtime.ParamLocationQuery, *params.RequestId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.StatusCode != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status_code", runtime.ParamLocationQuery, *params.StatusCode); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetAuditExportsByIdRequest generates requests for GetAuditExportsById
+func NewGetAuditExportsByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/audit/exports/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAuditExportsByIdDownloadRequest generates requests for GetAuditExportsByIdDownload
+func NewGetAuditExportsByIdDownloadRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/audit/exports/%s/download", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetAuditLogRequest generates requests for GetAuditLog
 func NewGetAuditLogRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -42063,6 +45389,40 @@ func NewGetAuditLogRequest(server string, id openapi_types.UUID) (*http.Request,
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/audit/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAuthCallbackByProviderRequest generates requests for GetAuthCallbackByProvider
+func NewGetAuthCallbackByProviderRequest(server string, provider string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "provider", runtime.ParamLocationPath, provider)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/callback/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -42563,6 +45923,40 @@ func NewPostAuthLoginRequestWithBody(server string, contentType string, body io.
 	return req, nil
 }
 
+// NewGetAuthLoginByProviderRequest generates requests for GetAuthLoginByProvider
+func NewGetAuthLoginByProviderRequest(server string, provider string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "provider", runtime.ParamLocationPath, provider)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/login/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetAuthLogoutDoneRequest generates requests for GetAuthLogoutDone
 func NewGetAuthLogoutDoneRequest(server string) (*http.Request, error) {
 	var err error
@@ -42640,6 +46034,73 @@ func NewGetAuthMeRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewGetAuthMePreferencesRequest generates requests for GetAuthMePreferences
+func NewGetAuthMePreferencesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/me/preferences/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutAuthMePreferencesRequest calls the generic PutAuthMePreferences builder with application/json body
+func NewPutAuthMePreferencesRequest(server string, body PutAuthMePreferencesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutAuthMePreferencesRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutAuthMePreferencesRequestWithBody generates requests for PutAuthMePreferences with any type of body
+func NewPutAuthMePreferencesRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/auth/me/preferences/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -42751,19 +46212,8 @@ func NewPostAuthPasswordResetRequestRequestWithBody(server string, contentType s
 	return req, nil
 }
 
-// NewPostAuthRefreshRequest calls the generic PostAuthRefresh builder with application/json body
-func NewPostAuthRefreshRequest(server string, body PostAuthRefreshJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostAuthRefreshRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewPostAuthRefreshRequestWithBody generates requests for PostAuthRefresh with any type of body
-func NewPostAuthRefreshRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+// NewPostAuthRefreshRequest generates requests for PostAuthRefresh
+func NewPostAuthRefreshRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -42781,12 +46231,10 @@ func NewPostAuthRefreshRequestWithBody(server string, contentType string, body i
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), body)
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -43375,71 +46823,6 @@ func NewGetBackupsRestoresByIdRequest(server string, id openapi_types.UUID) (*ht
 	return req, nil
 }
 
-// NewGetBackupsRunsRequest generates requests for GetBackupsRuns
-func NewGetBackupsRunsRequest(server string, params *GetBackupsRunsParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/backups/runs")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetBackupsSchedulesRequest generates requests for GetBackupsSchedules
 func NewGetBackupsSchedulesRequest(server string, params *GetBackupsSchedulesParams) (*http.Request, error) {
 	var err error
@@ -43799,260 +47182,6 @@ func NewPostBackupsStorageRequestWithBody(server string, contentType string, bod
 	return req, nil
 }
 
-// NewGetBackupsStorageConfigsRequest generates requests for GetBackupsStorageConfigs
-func NewGetBackupsStorageConfigsRequest(server string, params *GetBackupsStorageConfigsParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/backups/storage-configs")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPostBackupsStorageConfigsRequest calls the generic PostBackupsStorageConfigs builder with application/json body
-func NewPostBackupsStorageConfigsRequest(server string, body PostBackupsStorageConfigsJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPostBackupsStorageConfigsRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewPostBackupsStorageConfigsRequestWithBody generates requests for PostBackupsStorageConfigs with any type of body
-func NewPostBackupsStorageConfigsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/backups/storage-configs")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewDeleteBackupsStorageConfigsByIdRequest generates requests for DeleteBackupsStorageConfigsById
-func NewDeleteBackupsStorageConfigsByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/backups/storage-configs/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetBackupsStorageConfigsByIdRequest generates requests for GetBackupsStorageConfigsById
-func NewGetBackupsStorageConfigsByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/backups/storage-configs/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewPutBackupsStorageConfigsByIdRequest calls the generic PutBackupsStorageConfigsById builder with application/json body
-func NewPutBackupsStorageConfigsByIdRequest(server string, id openapi_types.UUID, body PutBackupsStorageConfigsByIdJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewPutBackupsStorageConfigsByIdRequestWithBody(server, id, "application/json", bodyReader)
-}
-
-// NewPutBackupsStorageConfigsByIdRequestWithBody generates requests for PutBackupsStorageConfigsById with any type of body
-func NewPutBackupsStorageConfigsByIdRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/backups/storage-configs/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PUT", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewPostBackupsStorageConfigsByIdTestConnectionRequest generates requests for PostBackupsStorageConfigsByIdTestConnection
-func NewPostBackupsStorageConfigsByIdTestConnectionRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/backups/storage-configs/%s/test-connection", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewDeleteBackupsStorageByIdRequest generates requests for DeleteBackupsStorageById
 func NewDeleteBackupsStorageByIdRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -44164,40 +47293,6 @@ func NewPutBackupsStorageByIdRequestWithBody(server string, id openapi_types.UUI
 	}
 
 	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewPostBackupsStorageByIdTestRequest generates requests for PostBackupsStorageByIdTest
-func NewPostBackupsStorageByIdTestRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/backups/storage/%s/test", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
 
 	return req, nil
 }
@@ -44351,6 +47446,100 @@ func NewPostBackupsByIdRestoreRequestWithBody(server string, id openapi_types.UU
 	return req, nil
 }
 
+// NewGetCatalogApplicationSourcesRequest generates requests for GetCatalogApplicationSources
+func NewGetCatalogApplicationSourcesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/application-sources/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCatalogApplicationsRequest generates requests for GetCatalogApplications
+func NewGetCatalogApplicationsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/applications/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostCatalogApplicationsPreviewRequest calls the generic PostCatalogApplicationsPreview builder with application/json body
+func NewPostCatalogApplicationsPreviewRequest(server string, body PostCatalogApplicationsPreviewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostCatalogApplicationsPreviewRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostCatalogApplicationsPreviewRequestWithBody generates requests for PostCatalogApplicationsPreview with any type of body
+func NewPostCatalogApplicationsPreviewRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/applications/preview/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetCatalogChartsRequest generates requests for GetCatalogCharts
 func NewGetCatalogChartsRequest(server string, params *GetCatalogChartsParams) (*http.Request, error) {
 	var err error
@@ -44437,6 +47626,22 @@ func NewGetCatalogChartsRequest(server string, params *GetCatalogChartsParams) (
 
 		}
 
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -44493,6 +47698,22 @@ func NewGetCatalogChartsByIdRequest(server string, id openapi_types.UUID, params
 
 		}
 
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -44500,6 +47721,91 @@ func NewGetCatalogChartsByIdRequest(server string, id openapi_types.UUID, params
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPutCatalogChartsByIdFavoriteRequest calls the generic PutCatalogChartsByIdFavorite builder with application/json body
+func NewPutCatalogChartsByIdFavoriteRequest(server string, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutCatalogChartsByIdFavoriteRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPutCatalogChartsByIdFavoriteRequestWithBody generates requests for PutCatalogChartsByIdFavorite with any type of body
+func NewPutCatalogChartsByIdFavoriteRequestWithBody(server string, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/charts/%s/favorite/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -44536,6 +47842,22 @@ func NewGetCatalogChartsByIdReadmeRequest(server string, id openapi_types.UUID, 
 		if params.ProjectId != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -44621,6 +47943,22 @@ func NewGetCatalogChartsByIdValuesRequest(server string, id openapi_types.UUID, 
 
 		}
 
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Version != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "version", runtime.ParamLocationQuery, *params.Version); err != nil {
@@ -44693,6 +48031,22 @@ func NewGetCatalogChartsByIdVersionsRequest(server string, id openapi_types.UUID
 
 		}
 
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Limit != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
@@ -44746,6 +48100,33 @@ func NewGetCatalogControllerStatusRequest(server string) (*http.Request, error) 
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/catalog/controller/status/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCatalogDiscoveryRequest generates requests for GetCatalogDiscovery
+func NewGetCatalogDiscoveryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/discovery/")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -45033,6 +48414,40 @@ func NewPostCatalogInstalledByIdRollbackRequestWithBody(server string, id openap
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewGetCatalogInstalledByIdUpgradeVersionsRequest generates requests for GetCatalogInstalledByIdUpgradeVersions
+func NewGetCatalogInstalledByIdUpgradeVersionsRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/installed/%s/upgrade-versions/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -45536,6 +48951,22 @@ func NewGetCatalogRepositoriesRequest(server string, params *GetCatalogRepositor
 		if params.ProjectId != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -47226,6 +50657,22 @@ func NewGetClusterAgentsRequest(server string, params *GetClusterAgentsParams) (
 
 		}
 
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -48319,6 +51766,22 @@ func NewGetClustersRequest(server string, params *GetClustersParams) (*http.Requ
 
 		}
 
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cursor", runtime.ParamLocationQuery, *params.Cursor); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -48366,6 +51829,33 @@ func NewPostClustersRequestWithBody(server string, contentType string, body io.R
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetClustersSummaryRequest generates requests for GetClustersSummary
+func NewGetClustersSummaryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/summary/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -50075,7 +53565,7 @@ func NewGetClustersByClusterIdLimitRangesRequest(server string, clusterId string
 }
 
 // NewGetClustersByClusterIdNamespacesRequest generates requests for GetClustersByClusterIdNamespaces
-func NewGetClustersByClusterIdNamespacesRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
+func NewGetClustersByClusterIdNamespacesRequest(server string, clusterId openapi_types.UUID, params *GetClustersByClusterIdNamespacesParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -50098,6 +53588,44 @@ func NewGetClustersByClusterIdNamespacesRequest(server string, clusterId openapi
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -50543,6 +54071,86 @@ func NewGetClustersByClusterIdPodsRequest(server string, clusterId openapi_types
 
 		}
 
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Health != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "health", runtime.ParamLocationQuery, *params.Health); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -50674,6 +54282,22 @@ func NewGetClustersByClusterIdProjectsRequest(server string, clusterId openapi_t
 		if params.Offset != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -52411,6 +56035,74 @@ func NewPostClustersByClusterIdRegistriesByIdTestRequest(server string, clusterI
 	return req, nil
 }
 
+// NewCountClusterResourcesRequest generates requests for CountClusterResources
+func NewCountClusterResourcesRequest(server string, clusterId openapi_types.UUID, params *CountClusterResourcesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/resource-counts", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "resources", runtime.ParamLocationQuery, params.Resources); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Namespace != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespace", runtime.ParamLocationQuery, *params.Namespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetClustersByClusterIdResourceQuotasRequest generates requests for GetClustersByClusterIdResourceQuotas
 func NewGetClustersByClusterIdResourceQuotasRequest(server string, clusterId string, params *GetClustersByClusterIdResourceQuotasParams) (*http.Request, error) {
 	var err error
@@ -52572,6 +56264,86 @@ func NewListGenericClusterResourcesRequest(server string, clusterId string, reso
 		if params.Namespace != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespace", runtime.ParamLocationQuery, *params.Namespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Namespaces != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespaces", runtime.ParamLocationQuery, *params.Namespaces); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -52782,6 +56554,86 @@ func NewListNamedClusterResourcesRequest(server string, clusterId string, resour
 		if params.Namespace != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespace", runtime.ParamLocationQuery, *params.Namespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Namespaces != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespaces", runtime.ParamLocationQuery, *params.Namespaces); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -54645,6 +58497,22 @@ func NewGetClustersByClusterIdWorkloadsRequest(server string, clusterId openapi_
 
 		}
 
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -55690,40 +59558,6 @@ func NewPostClustersByIdGenerateKubeconfigRequest(server string, id openapi_type
 	return req, nil
 }
 
-// NewGenerateClusterKubeconfigUnderscoreRequest generates requests for GenerateClusterKubeconfigUnderscore
-func NewGenerateClusterKubeconfigUnderscoreRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/clusters/%s/generate_kubeconfig", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetClustersByIdHealthRequest generates requests for GetClustersByIdHealth
 func NewGetClustersByIdHealthRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -55741,40 +59575,6 @@ func NewGetClustersByIdHealthRequest(server string, id openapi_types.UUID) (*htt
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/clusters/%s/health", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetClustersByIdKubeconfigLegacyRequest generates requests for GetClustersByIdKubeconfigLegacy
-func NewGetClustersByIdKubeconfigLegacyRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/clusters/%s/kubeconfig", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -56530,6 +60330,560 @@ func NewPutClustersByIdMonitoringStackUpgradeRequestWithBody(server string, id s
 	return req, nil
 }
 
+// NewDeleteClustersByIdObservabilityGrafanaRequest generates requests for DeleteClustersByIdObservabilityGrafana
+func NewDeleteClustersByIdObservabilityGrafanaRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetClustersByIdObservabilityGrafanaRequest generates requests for GetClustersByIdObservabilityGrafana
+func NewGetClustersByIdObservabilityGrafanaRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHeadClustersByIdObservabilityGrafanaRequest generates requests for HeadClustersByIdObservabilityGrafana
+func NewHeadClustersByIdObservabilityGrafanaRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOptionsClustersByIdObservabilityGrafanaRequest generates requests for OptionsClustersByIdObservabilityGrafana
+func NewOptionsClustersByIdObservabilityGrafanaRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchClustersByIdObservabilityGrafanaRequest calls the generic PatchClustersByIdObservabilityGrafana builder with application/json body
+func NewPatchClustersByIdObservabilityGrafanaRequest(server string, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchClustersByIdObservabilityGrafanaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPatchClustersByIdObservabilityGrafanaRequestWithBody generates requests for PatchClustersByIdObservabilityGrafana with any type of body
+func NewPatchClustersByIdObservabilityGrafanaRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostClustersByIdObservabilityGrafanaRequest calls the generic PostClustersByIdObservabilityGrafana builder with application/json body
+func NewPostClustersByIdObservabilityGrafanaRequest(server string, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostClustersByIdObservabilityGrafanaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostClustersByIdObservabilityGrafanaRequestWithBody generates requests for PostClustersByIdObservabilityGrafana with any type of body
+func NewPostClustersByIdObservabilityGrafanaRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutClustersByIdObservabilityGrafanaRequest calls the generic PutClustersByIdObservabilityGrafana builder with application/json body
+func NewPutClustersByIdObservabilityGrafanaRequest(server string, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutClustersByIdObservabilityGrafanaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPutClustersByIdObservabilityGrafanaRequestWithBody generates requests for PutClustersByIdObservabilityGrafana with any type of body
+func NewPutClustersByIdObservabilityGrafanaRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteClustersByIdObservabilityGrafanaProxyRequest generates requests for DeleteClustersByIdObservabilityGrafanaProxy
+func NewDeleteClustersByIdObservabilityGrafanaProxyRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetClustersByIdObservabilityGrafanaProxyRequest generates requests for GetClustersByIdObservabilityGrafanaProxy
+func NewGetClustersByIdObservabilityGrafanaProxyRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHeadClustersByIdObservabilityGrafanaProxyRequest generates requests for HeadClustersByIdObservabilityGrafanaProxy
+func NewHeadClustersByIdObservabilityGrafanaProxyRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOptionsClustersByIdObservabilityGrafanaProxyRequest generates requests for OptionsClustersByIdObservabilityGrafanaProxy
+func NewOptionsClustersByIdObservabilityGrafanaProxyRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchClustersByIdObservabilityGrafanaProxyRequest calls the generic PatchClustersByIdObservabilityGrafanaProxy builder with application/json body
+func NewPatchClustersByIdObservabilityGrafanaProxyRequest(server string, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchClustersByIdObservabilityGrafanaProxyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPatchClustersByIdObservabilityGrafanaProxyRequestWithBody generates requests for PatchClustersByIdObservabilityGrafanaProxy with any type of body
+func NewPatchClustersByIdObservabilityGrafanaProxyRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostClustersByIdObservabilityGrafanaProxyRequest calls the generic PostClustersByIdObservabilityGrafanaProxy builder with application/json body
+func NewPostClustersByIdObservabilityGrafanaProxyRequest(server string, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostClustersByIdObservabilityGrafanaProxyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostClustersByIdObservabilityGrafanaProxyRequestWithBody generates requests for PostClustersByIdObservabilityGrafanaProxy with any type of body
+func NewPostClustersByIdObservabilityGrafanaProxyRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutClustersByIdObservabilityGrafanaProxyRequest calls the generic PutClustersByIdObservabilityGrafanaProxy builder with application/json body
+func NewPutClustersByIdObservabilityGrafanaProxyRequest(server string, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutClustersByIdObservabilityGrafanaProxyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPutClustersByIdObservabilityGrafanaProxyRequestWithBody generates requests for PutClustersByIdObservabilityGrafanaProxy with any type of body
+func NewPutClustersByIdObservabilityGrafanaProxyRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewPostClustersByIdOwnershipTakeoverRequest generates requests for PostClustersByIdOwnershipTakeover
 func NewPostClustersByIdOwnershipTakeoverRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -57012,62 +61366,6 @@ func NewPostClustersByIdShellSessionsBySessionIdCloseRequest(server string, id o
 	return req, nil
 }
 
-// NewRemoteV2ListPodsRequest generates requests for RemoteV2ListPods
-func NewRemoteV2ListPodsRequest(server string, id openapi_types.UUID, params *RemoteV2ListPodsParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/clusters/%s/v2/pods", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.Namespace != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespace", runtime.ParamLocationQuery, *params.Namespace); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetClustersByIdVulnerabilitiesImagesRequest generates requests for GetClustersByIdVulnerabilitiesImages
 func NewGetClustersByIdVulnerabilitiesImagesRequest(server string, id openapi_types.UUID, params *GetClustersByIdVulnerabilitiesImagesParams) (*http.Request, error) {
 	var err error
@@ -57210,278 +61508,6 @@ func NewGetCompliancePostureRequest(server string) (*http.Request, error) {
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTunnelConnectDeleteRequest generates requests for TunnelConnectDelete
-func NewTunnelConnectDeleteRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connect/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTunnelConnectGetRequest generates requests for TunnelConnectGet
-func NewTunnelConnectGetRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connect/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTunnelConnectHeadRequest generates requests for TunnelConnectHead
-func NewTunnelConnectHeadRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connect/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTunnelConnectOptionsRequest generates requests for TunnelConnectOptions
-func NewTunnelConnectOptionsRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connect/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTunnelConnectPatchRequest generates requests for TunnelConnectPatch
-func NewTunnelConnectPatchRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connect/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PATCH", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTunnelConnectPostRequest generates requests for TunnelConnectPost
-func NewTunnelConnectPostRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connect/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTunnelConnectPutRequest generates requests for TunnelConnectPut
-func NewTunnelConnectPutRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connect/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PUT", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewTunnelConnectTraceRequest generates requests for TunnelConnectTrace
-func NewTunnelConnectTraceRequest(server string, clusterId openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/connect/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("TRACE", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -58539,6 +62565,355 @@ func NewGetDeliveryClustersByClusterIdInventoryRequest(server string, clusterId 
 	return req, nil
 }
 
+// NewGetDeliveryConfigurationTemplatesRequest generates requests for GetDeliveryConfigurationTemplates
+func NewGetDeliveryConfigurationTemplatesRequest(server string, params *GetDeliveryConfigurationTemplatesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostDeliveryConfigurationTemplatesRequest calls the generic PostDeliveryConfigurationTemplates builder with application/json body
+func NewPostDeliveryConfigurationTemplatesRequest(server string, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDeliveryConfigurationTemplatesRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostDeliveryConfigurationTemplatesRequestWithBody generates requests for PostDeliveryConfigurationTemplates with any type of body
+func NewPostDeliveryConfigurationTemplatesRequestWithBody(server string, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteDeliveryConfigurationTemplatesByIdRequest generates requests for DeleteDeliveryConfigurationTemplatesById
+func NewDeleteDeliveryConfigurationTemplatesByIdRequest(server string, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetDeliveryConfigurationTemplatesByIdRequest generates requests for GetDeliveryConfigurationTemplatesById
+func NewGetDeliveryConfigurationTemplatesByIdRequest(server string, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutDeliveryConfigurationTemplatesByIdRequest calls the generic PutDeliveryConfigurationTemplatesById builder with application/json body
+func NewPutDeliveryConfigurationTemplatesByIdRequest(server string, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutDeliveryConfigurationTemplatesByIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPutDeliveryConfigurationTemplatesByIdRequestWithBody generates requests for PutDeliveryConfigurationTemplatesById with any type of body
+func NewPutDeliveryConfigurationTemplatesByIdRequestWithBody(server string, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewGetDeliveryDeploymentsRequest generates requests for GetDeliveryDeployments
 func NewGetDeliveryDeploymentsRequest(server string, params *GetDeliveryDeploymentsParams) (*http.Request, error) {
 	var err error
@@ -58603,6 +62978,22 @@ func NewGetDeliveryDeploymentsRequest(server string, params *GetDeliveryDeployme
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		if params.TargetId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "target_id", runtime.ParamLocationQuery, *params.TargetId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		if params.ClusterId != nil {
@@ -58991,8 +63382,8 @@ func NewPostDeliveryDeploymentsByIdSuspendRequestWithBody(server string, id open
 	return req, nil
 }
 
-// NewGetDeliveryEstateRequest generates requests for GetDeliveryEstate
-func NewGetDeliveryEstateRequest(server string) (*http.Request, error) {
+// NewGetDeliveryFleetRequest generates requests for GetDeliveryFleet
+func NewGetDeliveryFleetRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -59018,8 +63409,8 @@ func NewGetDeliveryEstateRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
-// NewGetDeliveryFleetLegacyRequest generates requests for GetDeliveryFleetLegacy
-func NewGetDeliveryFleetLegacyRequest(server string) (*http.Request, error) {
+// NewGetDeliveryOverrideSetsRequest generates requests for GetDeliveryOverrideSets
+func NewGetDeliveryOverrideSetsRequest(server string, params *GetDeliveryOverrideSetsParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -59027,7 +63418,7 @@ func NewGetDeliveryFleetLegacyRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/delivery/fleet/")
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -59037,9 +63428,371 @@ func NewGetDeliveryFleetLegacyRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostDeliveryOverrideSetsRequest calls the generic PostDeliveryOverrideSets builder with application/json body
+func NewPostDeliveryOverrideSetsRequest(server string, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDeliveryOverrideSetsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostDeliveryOverrideSetsRequestWithBody generates requests for PostDeliveryOverrideSets with any type of body
+func NewPostDeliveryOverrideSetsRequestWithBody(server string, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostDeliveryOverrideSetsEffectiveRequest calls the generic PostDeliveryOverrideSetsEffective builder with application/json body
+func NewPostDeliveryOverrideSetsEffectiveRequest(server string, body PostDeliveryOverrideSetsEffectiveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDeliveryOverrideSetsEffectiveRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostDeliveryOverrideSetsEffectiveRequestWithBody generates requests for PostDeliveryOverrideSetsEffective with any type of body
+func NewPostDeliveryOverrideSetsEffectiveRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/effective/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteDeliveryOverrideSetsByIdRequest generates requests for DeleteDeliveryOverrideSetsById
+func NewDeleteDeliveryOverrideSetsByIdRequest(server string, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetDeliveryOverrideSetsByIdRequest generates requests for GetDeliveryOverrideSetsById
+func NewGetDeliveryOverrideSetsByIdRequest(server string, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutDeliveryOverrideSetsByIdRequest calls the generic PutDeliveryOverrideSetsById builder with application/json body
+func NewPutDeliveryOverrideSetsByIdRequest(server string, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutDeliveryOverrideSetsByIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPutDeliveryOverrideSetsByIdRequestWithBody generates requests for PutDeliveryOverrideSetsById with any type of body
+func NewPutDeliveryOverrideSetsByIdRequestWithBody(server string, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
 	}
 
 	return req, nil
@@ -59077,6 +63830,22 @@ func NewGetDeliveryRolloutsRequest(server string, params *GetDeliveryRolloutsPar
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		if params.TargetId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "target_id", runtime.ParamLocationQuery, *params.TargetId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		if params.State != nil {
@@ -60845,6 +65614,33 @@ func NewPostDeliveryTargetsByIdRolloutsRequestWithBody(server string, id openapi
 	return req, nil
 }
 
+// NewGetEventsStreamRequest generates requests for GetEventsStream
+func NewGetEventsStreamRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/events/stream")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetExtensionsRequest generates requests for GetExtensions
 func NewGetExtensionsRequest(server string) (*http.Request, error) {
 	var err error
@@ -61230,8 +66026,19 @@ func NewPostExtensionsByNameTokenRequestWithBody(server string, name string, con
 	return req, nil
 }
 
-// NewPostGitopsSourcesByIdWebhookRequest generates requests for PostGitopsSourcesByIdWebhook
-func NewPostGitopsSourcesByIdWebhookRequest(server string, id string) (*http.Request, error) {
+// NewPostGitopsSourcesByIdWebhookRequest calls the generic PostGitopsSourcesByIdWebhook builder with application/json body
+func NewPostGitopsSourcesByIdWebhookRequest(server string, id string, params *PostGitopsSourcesByIdWebhookParams, body PostGitopsSourcesByIdWebhookJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostGitopsSourcesByIdWebhookRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPostGitopsSourcesByIdWebhookRequestWithBody generates requests for PostGitopsSourcesByIdWebhook with any type of body
+func NewPostGitopsSourcesByIdWebhookRequestWithBody(server string, id string, params *PostGitopsSourcesByIdWebhookParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -61256,7 +66063,67 @@ func NewPostGitopsSourcesByIdWebhookRequest(server string, id string) (*http.Req
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-GitHub-Delivery", runtime.ParamLocationHeader, params.XGitHubDelivery)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GitHub-Delivery", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithLocation("simple", false, "X-GitHub-Event", runtime.ParamLocationHeader, params.XGitHubEvent)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-GitHub-Event", headerParam1)
+
+		var headerParam2 string
+
+		headerParam2, err = runtime.StyleParamWithLocation("simple", false, "X-Hub-Signature-256", runtime.ParamLocationHeader, params.XHubSignature256)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Hub-Signature-256", headerParam2)
+
+	}
+
+	return req, nil
+}
+
+// NewGetLicenseRequest generates requests for GetLicense
+func NewGetLicenseRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/license")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -63719,8 +68586,8 @@ func NewPostNodesByClusterIdByNodeNameUncordonRequest(server string, clusterId o
 	return req, nil
 }
 
-// NewGetObservabilityGrafanaTicketRequest generates requests for GetObservabilityGrafanaTicket
-func NewGetObservabilityGrafanaTicketRequest(server string, params *GetObservabilityGrafanaTicketParams) (*http.Request, error) {
+// NewDeleteObservabilityGrafanaRequest generates requests for DeleteObservabilityGrafana
+func NewDeleteObservabilityGrafanaRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -63728,7 +68595,7 @@ func NewGetObservabilityGrafanaTicketRequest(server string, params *GetObservabi
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/observability/grafana-ticket")
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -63738,32 +68605,211 @@ func NewGetObservabilityGrafanaTicketRequest(server string, params *GetObservabi
 		return nil, err
 	}
 
-	if params != nil {
-		queryValues := queryURL.Query()
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
-		if params.Return != nil {
+	return req, nil
+}
 
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "return", runtime.ParamLocationQuery, *params.Return); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
+// NewGetObservabilityGrafanaRequest generates requests for GetObservabilityGrafana
+func NewGetObservabilityGrafanaRequest(server string) (*http.Request, error) {
+	var err error
 
-		}
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
 
-		queryURL.RawQuery = queryValues.Encode()
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewHeadObservabilityGrafanaRequest generates requests for HeadObservabilityGrafana
+func NewHeadObservabilityGrafanaRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOptionsObservabilityGrafanaRequest generates requests for OptionsObservabilityGrafana
+func NewOptionsObservabilityGrafanaRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchObservabilityGrafanaRequest calls the generic PatchObservabilityGrafana builder with application/json body
+func NewPatchObservabilityGrafanaRequest(server string, body PatchObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchObservabilityGrafanaRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPatchObservabilityGrafanaRequestWithBody generates requests for PatchObservabilityGrafana with any type of body
+func NewPatchObservabilityGrafanaRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostObservabilityGrafanaRequest calls the generic PostObservabilityGrafana builder with application/json body
+func NewPostObservabilityGrafanaRequest(server string, body PostObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostObservabilityGrafanaRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostObservabilityGrafanaRequestWithBody generates requests for PostObservabilityGrafana with any type of body
+func NewPostObservabilityGrafanaRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutObservabilityGrafanaRequest calls the generic PutObservabilityGrafana builder with application/json body
+func NewPutObservabilityGrafanaRequest(server string, body PutObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutObservabilityGrafanaRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutObservabilityGrafanaRequestWithBody generates requests for PutObservabilityGrafana with any type of body
+func NewPutObservabilityGrafanaRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -63804,6 +68850,261 @@ func NewPostObservabilityGrafanaTicketRedeemRequestWithBody(server string, conte
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteObservabilityGrafanaProxyRequest generates requests for DeleteObservabilityGrafanaProxy
+func NewDeleteObservabilityGrafanaProxyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetObservabilityGrafanaProxyRequest generates requests for GetObservabilityGrafanaProxy
+func NewGetObservabilityGrafanaProxyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHeadObservabilityGrafanaProxyRequest generates requests for HeadObservabilityGrafanaProxy
+func NewHeadObservabilityGrafanaProxyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOptionsObservabilityGrafanaProxyRequest generates requests for OptionsObservabilityGrafanaProxy
+func NewOptionsObservabilityGrafanaProxyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchObservabilityGrafanaProxyRequest calls the generic PatchObservabilityGrafanaProxy builder with application/json body
+func NewPatchObservabilityGrafanaProxyRequest(server string, body PatchObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchObservabilityGrafanaProxyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPatchObservabilityGrafanaProxyRequestWithBody generates requests for PatchObservabilityGrafanaProxy with any type of body
+func NewPatchObservabilityGrafanaProxyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostObservabilityGrafanaProxyRequest calls the generic PostObservabilityGrafanaProxy builder with application/json body
+func NewPostObservabilityGrafanaProxyRequest(server string, body PostObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostObservabilityGrafanaProxyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostObservabilityGrafanaProxyRequestWithBody generates requests for PostObservabilityGrafanaProxy with any type of body
+func NewPostObservabilityGrafanaProxyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutObservabilityGrafanaProxyRequest calls the generic PutObservabilityGrafanaProxy builder with application/json body
+func NewPutObservabilityGrafanaProxyRequest(server string, body PutObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutObservabilityGrafanaProxyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutObservabilityGrafanaProxyRequestWithBody generates requests for PutObservabilityGrafanaProxy with any type of body
+func NewPutObservabilityGrafanaProxyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetPlatformHealthSummaryRequest generates requests for GetPlatformHealthSummary
+func NewGetPlatformHealthSummaryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/platform/health-summary")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -63849,6 +69150,22 @@ func NewGetProjectsRequest(server string, params *GetProjectsParams) (*http.Requ
 		if params.Offset != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -64103,6 +69420,53 @@ func NewPostProjectsByIdAddNamespaceRequestWithBody(server string, id openapi_ty
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/projects/%s/add-namespace/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostProjectsByIdApplyRbacTemplateRequest calls the generic PostProjectsByIdApplyRbacTemplate builder with application/json body
+func NewPostProjectsByIdApplyRbacTemplateRequest(server string, id openapi_types.UUID, body PostProjectsByIdApplyRbacTemplateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostProjectsByIdApplyRbacTemplateRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostProjectsByIdApplyRbacTemplateRequestWithBody generates requests for PostProjectsByIdApplyRbacTemplate with any type of body
+func NewPostProjectsByIdApplyRbacTemplateRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/projects/%s/apply-rbac-template", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -66355,6 +71719,91 @@ func NewPostRbacPermissionPreviewRequestWithBody(server string, contentType stri
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/rbac/permission-preview")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetRbacPrincipalsRequest generates requests for GetRbacPrincipals
+func NewGetRbacPrincipalsRequest(server string, params *GetRbacPrincipalsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/rbac/principals")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "q", runtime.ParamLocationQuery, params.Q); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostRbacPrincipalsMaterializeRequest calls the generic PostRbacPrincipalsMaterialize builder with application/json body
+func NewPostRbacPrincipalsMaterializeRequest(server string, body PostRbacPrincipalsMaterializeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostRbacPrincipalsMaterializeRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostRbacPrincipalsMaterializeRequestWithBody generates requests for PostRbacPrincipalsMaterialize with any type of body
+func NewPostRbacPrincipalsMaterializeRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/rbac/principals/materialize")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -70537,8 +75986,8 @@ func NewPostStreamsTicketsRequestWithBody(server string, contentType string, bod
 	return req, nil
 }
 
-// NewGetSupportBundleRequest generates requests for GetSupportBundle
-func NewGetSupportBundleRequest(server string) (*http.Request, error) {
+// NewCreateSupportBundleRequest generates requests for CreateSupportBundle
+func NewCreateSupportBundleRequest(server string, params *CreateSupportBundleParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -70546,7 +75995,88 @@ func NewGetSupportBundleRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/v1/support-bundle")
+	operationPath := fmt.Sprintf("/api/v1/support-bundles")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetSupportBundleOperationRequest generates requests for GetSupportBundleOperation
+func NewGetSupportBundleOperationRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/support-bundles/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewDownloadSupportBundleRequest generates requests for DownloadSupportBundle
+func NewDownloadSupportBundleRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/support-bundles/%s/download", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -71085,6 +76615,66 @@ func NewPostToolsBySlugPreviewRequestWithBody(server string, slug string, conten
 	return req, nil
 }
 
+// NewPostToolsBySlugRollbackRequest calls the generic PostToolsBySlugRollback builder with application/json body
+func NewPostToolsBySlugRollbackRequest(server string, slug string, params *PostToolsBySlugRollbackParams, body PostToolsBySlugRollbackJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostToolsBySlugRollbackRequestWithBody(server, slug, params, "application/json", bodyReader)
+}
+
+// NewPostToolsBySlugRollbackRequestWithBody generates requests for PostToolsBySlugRollback with any type of body
+func NewPostToolsBySlugRollbackRequestWithBody(server string, slug string, params *PostToolsBySlugRollbackParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "slug", runtime.ParamLocationPath, slug)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/tools/%s/rollback", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, params.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
 // NewDeleteToolsBySlugUninstallRequest calls the generic DeleteToolsBySlugUninstall builder with application/json body
 func NewDeleteToolsBySlugUninstallRequest(server string, slug string, params *DeleteToolsBySlugUninstallParams, body DeleteToolsBySlugUninstallJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -71246,6 +76836,22 @@ func NewGetUsersRequest(server string, params *GetUsersParams) (*http.Request, e
 		if params.Offset != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -71908,6 +77514,22 @@ func NewGetWorkloadsPodsByClusterIdByNamespaceByPodLogsRequest(server string, cl
 
 		}
 
+		if params.Previous != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "previous", runtime.ParamLocationQuery, *params.Previous); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -72365,6 +77987,87 @@ func NewInternalTunnelK8sRequestWithBody(server string, clusterId openapi_types.
 
 			req.Header.Set("X-Astronomer-Forwarded-User", headerParam2)
 		}
+
+	}
+
+	return req, nil
+}
+
+// NewInternalTunnelK8sCapabilityRequest generates requests for InternalTunnelK8sCapability
+func NewInternalTunnelK8sCapabilityRequest(server string, clusterId openapi_types.UUID, capability string, params *InternalTunnelK8sCapabilityParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "cluster_id", runtime.ParamLocationPath, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "capability", runtime.ParamLocationPath, capability)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/internal/tunnel/k8s/%s/capabilities/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "X-Astronomer-Internal-Source", runtime.ParamLocationHeader, params.XAstronomerInternalSource)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Astronomer-Internal-Source", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithLocation("simple", false, "X-Astronomer-Internal-Timestamp", runtime.ParamLocationHeader, params.XAstronomerInternalTimestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Astronomer-Internal-Timestamp", headerParam1)
+
+		var headerParam2 string
+
+		headerParam2, err = runtime.StyleParamWithLocation("simple", false, "X-Astronomer-Internal-Nonce", runtime.ParamLocationHeader, params.XAstronomerInternalNonce)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Astronomer-Internal-Nonce", headerParam2)
+
+		var headerParam3 string
+
+		headerParam3, err = runtime.StyleParamWithLocation("simple", false, "X-Astronomer-Internal-Signature", runtime.ParamLocationHeader, params.XAstronomerInternalSignature)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-Astronomer-Internal-Signature", headerParam3)
 
 	}
 
@@ -72883,9 +78586,6 @@ type ClientWithResponsesInterface interface {
 	// GetActivityWithResponse request
 	GetActivityWithResponse(ctx context.Context, params *GetActivityParams, reqEditors ...RequestEditorFn) (*GetActivityResponse, error)
 
-	// GetActivityFeedLegacyWithResponse request
-	GetActivityFeedLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetActivityFeedLegacyResponse, error)
-
 	// AdminAgentsClusterAdminPostureWithResponse request
 	AdminAgentsClusterAdminPostureWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminAgentsClusterAdminPostureResponse, error)
 
@@ -73054,6 +78754,12 @@ type ClientWithResponsesInterface interface {
 
 	PutAdminDashboardWidgetsByIdWithResponse(ctx context.Context, id string, body PutAdminDashboardWidgetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminDashboardWidgetsByIdResponse, error)
 
+	// GetAdminDeferredOperationsWithResponse request
+	GetAdminDeferredOperationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminDeferredOperationsResponse, error)
+
+	// PostAdminDeferredOperationsByIdCancelWithResponse request
+	PostAdminDeferredOperationsByIdCancelWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAdminDeferredOperationsByIdCancelResponse, error)
+
 	// AdminEmailsListWithResponse request
 	AdminEmailsListWithResponse(ctx context.Context, params *AdminEmailsListParams, reqEditors ...RequestEditorFn) (*AdminEmailsListResponse, error)
 
@@ -73101,6 +78807,28 @@ type ClientWithResponsesInterface interface {
 
 	// AdminKeyStatusWithResponse request
 	AdminKeyStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminKeyStatusResponse, error)
+
+	// GetAdminMaintenanceWindowsWithResponse request
+	GetAdminMaintenanceWindowsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminMaintenanceWindowsResponse, error)
+
+	// PostAdminMaintenanceWindowsWithBodyWithResponse request with any body
+	PostAdminMaintenanceWindowsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminMaintenanceWindowsResponse, error)
+
+	PostAdminMaintenanceWindowsWithResponse(ctx context.Context, body PostAdminMaintenanceWindowsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAdminMaintenanceWindowsResponse, error)
+
+	// GetAdminMaintenanceWindowsActiveWithResponse request
+	GetAdminMaintenanceWindowsActiveWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminMaintenanceWindowsActiveResponse, error)
+
+	// DeleteAdminMaintenanceWindowsByIdWithResponse request
+	DeleteAdminMaintenanceWindowsByIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteAdminMaintenanceWindowsByIdResponse, error)
+
+	// GetAdminMaintenanceWindowsByIdWithResponse request
+	GetAdminMaintenanceWindowsByIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetAdminMaintenanceWindowsByIdResponse, error)
+
+	// PutAdminMaintenanceWindowsByIdWithBodyWithResponse request with any body
+	PutAdminMaintenanceWindowsByIdWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAdminMaintenanceWindowsByIdResponse, error)
+
+	PutAdminMaintenanceWindowsByIdWithResponse(ctx context.Context, id string, body PutAdminMaintenanceWindowsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminMaintenanceWindowsByIdResponse, error)
 
 	// GetAdminManagementBackupWithResponse request
 	GetAdminManagementBackupWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminManagementBackupResponse, error)
@@ -73170,6 +78898,20 @@ type ClientWithResponsesInterface interface {
 
 	// AdminNotificationTemplateVariablesWithResponse request
 	AdminNotificationTemplateVariablesWithResponse(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*AdminNotificationTemplateVariablesResponse, error)
+
+	// GetAdminPlatformSettingsDefaultClusterTemplateWithResponse request
+	GetAdminPlatformSettingsDefaultClusterTemplateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminPlatformSettingsDefaultClusterTemplateResponse, error)
+
+	// PutAdminPlatformSettingsDefaultClusterTemplateWithBodyWithResponse request with any body
+	PutAdminPlatformSettingsDefaultClusterTemplateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAdminPlatformSettingsDefaultClusterTemplateResponse, error)
+
+	PutAdminPlatformSettingsDefaultClusterTemplateWithResponse(ctx context.Context, body PutAdminPlatformSettingsDefaultClusterTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminPlatformSettingsDefaultClusterTemplateResponse, error)
+
+	// GetAdminPlatformSettingsDefaultClusterTemplateCoverageWithResponse request
+	GetAdminPlatformSettingsDefaultClusterTemplateCoverageWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse, error)
+
+	// PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdWithResponse request
+	PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse, error)
 
 	// GetAdminPrometheusDatasourcesWithResponse request
 	GetAdminPrometheusDatasourcesWithResponse(ctx context.Context, params *GetAdminPrometheusDatasourcesParams, reqEditors ...RequestEditorFn) (*GetAdminPrometheusDatasourcesResponse, error)
@@ -73247,7 +78989,7 @@ type ClientWithResponsesInterface interface {
 	AdminReadAuditPolicyUpdateWithResponse(ctx context.Context, id openapi_types.UUID, body AdminReadAuditPolicyUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*AdminReadAuditPolicyUpdateResponse, error)
 
 	// GetAdminScimTokensWithResponse request
-	GetAdminScimTokensWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminScimTokensResponse, error)
+	GetAdminScimTokensWithResponse(ctx context.Context, params *GetAdminScimTokensParams, reqEditors ...RequestEditorFn) (*GetAdminScimTokensResponse, error)
 
 	// PostAdminScimTokensWithBodyWithResponse request with any body
 	PostAdminScimTokensWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminScimTokensResponse, error)
@@ -73348,7 +79090,7 @@ type ClientWithResponsesInterface interface {
 	PostAdminUsersByIdUnlockWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostAdminUsersByIdUnlockResponse, error)
 
 	// AdminVaultConnectionsListWithResponse request
-	AdminVaultConnectionsListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsListResponse, error)
+	AdminVaultConnectionsListWithResponse(ctx context.Context, params *AdminVaultConnectionsListParams, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsListResponse, error)
 
 	// AdminVaultConnectionsCreateWithBodyWithResponse request with any body
 	AdminVaultConnectionsCreateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsCreateResponse, error)
@@ -73430,6 +79172,9 @@ type ClientWithResponsesInterface interface {
 	// GetAlertingEventsWithResponse request
 	GetAlertingEventsWithResponse(ctx context.Context, params *GetAlertingEventsParams, reqEditors ...RequestEditorFn) (*GetAlertingEventsResponse, error)
 
+	// GetAlertingEventsSummaryWithResponse request
+	GetAlertingEventsSummaryWithResponse(ctx context.Context, params *GetAlertingEventsSummaryParams, reqEditors ...RequestEditorFn) (*GetAlertingEventsSummaryResponse, error)
+
 	// GetAlertingEventsByIdWithResponse request
 	GetAlertingEventsByIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetAlertingEventsByIdResponse, error)
 
@@ -73478,15 +79223,6 @@ type ClientWithResponsesInterface interface {
 	// PostAlertingSilencesByIdExpireWithResponse request
 	PostAlertingSilencesByIdExpireWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAlertingSilencesByIdExpireResponse, error)
 
-	// PostAlertsRulesByIdDisableWithResponse request
-	PostAlertsRulesByIdDisableWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAlertsRulesByIdDisableResponse, error)
-
-	// PostAlertsRulesByIdEnableWithResponse request
-	PostAlertsRulesByIdEnableWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAlertsRulesByIdEnableResponse, error)
-
-	// PostAlertsSilencesByIdExpireWithResponse request
-	PostAlertsSilencesByIdExpireWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAlertsSilencesByIdExpireResponse, error)
-
 	// GetAnomalyBaselinesWithResponse request
 	GetAnomalyBaselinesWithResponse(ctx context.Context, params *GetAnomalyBaselinesParams, reqEditors ...RequestEditorFn) (*GetAnomalyBaselinesResponse, error)
 
@@ -73499,8 +79235,20 @@ type ClientWithResponsesInterface interface {
 	// ExportAuditLogsWithResponse request
 	ExportAuditLogsWithResponse(ctx context.Context, params *ExportAuditLogsParams, reqEditors ...RequestEditorFn) (*ExportAuditLogsResponse, error)
 
+	// CreateAuditExportWithResponse request
+	CreateAuditExportWithResponse(ctx context.Context, params *CreateAuditExportParams, reqEditors ...RequestEditorFn) (*CreateAuditExportResponse, error)
+
+	// GetAuditExportsByIdWithResponse request
+	GetAuditExportsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuditExportsByIdResponse, error)
+
+	// GetAuditExportsByIdDownloadWithResponse request
+	GetAuditExportsByIdDownloadWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuditExportsByIdDownloadResponse, error)
+
 	// GetAuditLogWithResponse request
 	GetAuditLogWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuditLogResponse, error)
+
+	// GetAuthCallbackByProviderWithResponse request
+	GetAuthCallbackByProviderWithResponse(ctx context.Context, provider string, reqEditors ...RequestEditorFn) (*GetAuthCallbackByProviderResponse, error)
 
 	// PostAuthChangePasswordWithBodyWithResponse request with any body
 	PostAuthChangePasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthChangePasswordResponse, error)
@@ -73553,6 +79301,9 @@ type ClientWithResponsesInterface interface {
 
 	PostAuthLoginWithResponse(ctx context.Context, body PostAuthLoginJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthLoginResponse, error)
 
+	// GetAuthLoginByProviderWithResponse request
+	GetAuthLoginByProviderWithResponse(ctx context.Context, provider string, reqEditors ...RequestEditorFn) (*GetAuthLoginByProviderResponse, error)
+
 	// GetAuthLogoutDoneWithResponse request
 	GetAuthLogoutDoneWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthLogoutDoneResponse, error)
 
@@ -73561,6 +79312,14 @@ type ClientWithResponsesInterface interface {
 
 	// GetAuthMeWithResponse request
 	GetAuthMeWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthMeResponse, error)
+
+	// GetAuthMePreferencesWithResponse request
+	GetAuthMePreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthMePreferencesResponse, error)
+
+	// PutAuthMePreferencesWithBodyWithResponse request with any body
+	PutAuthMePreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAuthMePreferencesResponse, error)
+
+	PutAuthMePreferencesWithResponse(ctx context.Context, body PutAuthMePreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAuthMePreferencesResponse, error)
 
 	// GetAuthMeQuotaWithResponse request
 	GetAuthMeQuotaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthMeQuotaResponse, error)
@@ -73575,10 +79334,8 @@ type ClientWithResponsesInterface interface {
 
 	PostAuthPasswordResetRequestWithResponse(ctx context.Context, body PostAuthPasswordResetRequestJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthPasswordResetRequestResponse, error)
 
-	// PostAuthRefreshWithBodyWithResponse request with any body
-	PostAuthRefreshWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
-
-	PostAuthRefreshWithResponse(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
+	// PostAuthRefreshWithResponse request
+	PostAuthRefreshWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error)
 
 	// GetAuthTokensWithResponse request
 	GetAuthTokensWithResponse(ctx context.Context, params *GetAuthTokensParams, reqEditors ...RequestEditorFn) (*GetAuthTokensResponse, error)
@@ -73634,9 +79391,6 @@ type ClientWithResponsesInterface interface {
 	// GetBackupsRestoresByIdWithResponse request
 	GetBackupsRestoresByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetBackupsRestoresByIdResponse, error)
 
-	// GetBackupsRunsWithResponse request
-	GetBackupsRunsWithResponse(ctx context.Context, params *GetBackupsRunsParams, reqEditors ...RequestEditorFn) (*GetBackupsRunsResponse, error)
-
 	// GetBackupsSchedulesWithResponse request
 	GetBackupsSchedulesWithResponse(ctx context.Context, params *GetBackupsSchedulesParams, reqEditors ...RequestEditorFn) (*GetBackupsSchedulesResponse, error)
 
@@ -73667,28 +79421,6 @@ type ClientWithResponsesInterface interface {
 
 	PostBackupsStorageWithResponse(ctx context.Context, body PostBackupsStorageJSONRequestBody, reqEditors ...RequestEditorFn) (*PostBackupsStorageResponse, error)
 
-	// GetBackupsStorageConfigsWithResponse request
-	GetBackupsStorageConfigsWithResponse(ctx context.Context, params *GetBackupsStorageConfigsParams, reqEditors ...RequestEditorFn) (*GetBackupsStorageConfigsResponse, error)
-
-	// PostBackupsStorageConfigsWithBodyWithResponse request with any body
-	PostBackupsStorageConfigsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostBackupsStorageConfigsResponse, error)
-
-	PostBackupsStorageConfigsWithResponse(ctx context.Context, body PostBackupsStorageConfigsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostBackupsStorageConfigsResponse, error)
-
-	// DeleteBackupsStorageConfigsByIdWithResponse request
-	DeleteBackupsStorageConfigsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteBackupsStorageConfigsByIdResponse, error)
-
-	// GetBackupsStorageConfigsByIdWithResponse request
-	GetBackupsStorageConfigsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetBackupsStorageConfigsByIdResponse, error)
-
-	// PutBackupsStorageConfigsByIdWithBodyWithResponse request with any body
-	PutBackupsStorageConfigsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutBackupsStorageConfigsByIdResponse, error)
-
-	PutBackupsStorageConfigsByIdWithResponse(ctx context.Context, id openapi_types.UUID, body PutBackupsStorageConfigsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutBackupsStorageConfigsByIdResponse, error)
-
-	// PostBackupsStorageConfigsByIdTestConnectionWithResponse request
-	PostBackupsStorageConfigsByIdTestConnectionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostBackupsStorageConfigsByIdTestConnectionResponse, error)
-
 	// DeleteBackupsStorageByIdWithResponse request
 	DeleteBackupsStorageByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteBackupsStorageByIdResponse, error)
 
@@ -73699,9 +79431,6 @@ type ClientWithResponsesInterface interface {
 	PutBackupsStorageByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutBackupsStorageByIdResponse, error)
 
 	PutBackupsStorageByIdWithResponse(ctx context.Context, id openapi_types.UUID, body PutBackupsStorageByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutBackupsStorageByIdResponse, error)
-
-	// PostBackupsStorageByIdTestWithResponse request
-	PostBackupsStorageByIdTestWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostBackupsStorageByIdTestResponse, error)
 
 	// PostBackupsStorageByIdTestConnectionWithResponse request
 	PostBackupsStorageByIdTestConnectionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostBackupsStorageByIdTestConnectionResponse, error)
@@ -73717,11 +79446,27 @@ type ClientWithResponsesInterface interface {
 
 	PostBackupsByIdRestoreWithResponse(ctx context.Context, id openapi_types.UUID, body PostBackupsByIdRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*PostBackupsByIdRestoreResponse, error)
 
+	// GetCatalogApplicationSourcesWithResponse request
+	GetCatalogApplicationSourcesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogApplicationSourcesResponse, error)
+
+	// GetCatalogApplicationsWithResponse request
+	GetCatalogApplicationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogApplicationsResponse, error)
+
+	// PostCatalogApplicationsPreviewWithBodyWithResponse request with any body
+	PostCatalogApplicationsPreviewWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostCatalogApplicationsPreviewResponse, error)
+
+	PostCatalogApplicationsPreviewWithResponse(ctx context.Context, body PostCatalogApplicationsPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostCatalogApplicationsPreviewResponse, error)
+
 	// GetCatalogChartsWithResponse request
 	GetCatalogChartsWithResponse(ctx context.Context, params *GetCatalogChartsParams, reqEditors ...RequestEditorFn) (*GetCatalogChartsResponse, error)
 
 	// GetCatalogChartsByIdWithResponse request
 	GetCatalogChartsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdParams, reqEditors ...RequestEditorFn) (*GetCatalogChartsByIdResponse, error)
+
+	// PutCatalogChartsByIdFavoriteWithBodyWithResponse request with any body
+	PutCatalogChartsByIdFavoriteWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCatalogChartsByIdFavoriteResponse, error)
+
+	PutCatalogChartsByIdFavoriteWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCatalogChartsByIdFavoriteResponse, error)
 
 	// GetCatalogChartsByIdReadmeWithResponse request
 	GetCatalogChartsByIdReadmeWithResponse(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdReadmeParams, reqEditors ...RequestEditorFn) (*GetCatalogChartsByIdReadmeResponse, error)
@@ -73734,6 +79479,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetCatalogControllerStatusWithResponse request
 	GetCatalogControllerStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogControllerStatusResponse, error)
+
+	// GetCatalogDiscoveryWithResponse request
+	GetCatalogDiscoveryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogDiscoveryResponse, error)
 
 	// GetCatalogInstalledWithResponse request
 	GetCatalogInstalledWithResponse(ctx context.Context, params *GetCatalogInstalledParams, reqEditors ...RequestEditorFn) (*GetCatalogInstalledResponse, error)
@@ -73753,6 +79501,9 @@ type ClientWithResponsesInterface interface {
 	PostCatalogInstalledByIdRollbackWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostCatalogInstalledByIdRollbackResponse, error)
 
 	PostCatalogInstalledByIdRollbackWithResponse(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, body PostCatalogInstalledByIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostCatalogInstalledByIdRollbackResponse, error)
+
+	// GetCatalogInstalledByIdUpgradeVersionsWithResponse request
+	GetCatalogInstalledByIdUpgradeVersionsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdUpgradeVersionsResponse, error)
 
 	// PutCatalogInstalledByIdUpgradeWithBodyWithResponse request with any body
 	PutCatalogInstalledByIdUpgradeWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogInstalledByIdUpgradeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCatalogInstalledByIdUpgradeResponse, error)
@@ -74017,6 +79768,9 @@ type ClientWithResponsesInterface interface {
 
 	PostClustersWithResponse(ctx context.Context, body PostClustersJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersResponse, error)
 
+	// GetClustersSummaryWithResponse request
+	GetClustersSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClustersSummaryResponse, error)
+
 	// GetClustersByClusterIdApiserverAllowlistWithResponse request
 	GetClustersByClusterIdApiserverAllowlistWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdApiserverAllowlistResponse, error)
 
@@ -74145,7 +79899,7 @@ type ClientWithResponsesInterface interface {
 	GetClustersByClusterIdLimitRangesWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdLimitRangesParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdLimitRangesResponse, error)
 
 	// GetClustersByClusterIdNamespacesWithResponse request
-	GetClustersByClusterIdNamespacesWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdNamespacesResponse, error)
+	GetClustersByClusterIdNamespacesWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdNamespacesParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdNamespacesResponse, error)
 
 	// GetClustersByClusterIdNetworkPoliciesWithResponse request
 	GetClustersByClusterIdNetworkPoliciesWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdNetworkPoliciesParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdNetworkPoliciesResponse, error)
@@ -74310,6 +80064,9 @@ type ClientWithResponsesInterface interface {
 
 	// PostClustersByClusterIdRegistriesByIdTestWithResponse request
 	PostClustersByClusterIdRegistriesByIdTestWithResponse(ctx context.Context, clusterId openapi_types.UUID, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostClustersByClusterIdRegistriesByIdTestResponse, error)
+
+	// CountClusterResourcesWithResponse request
+	CountClusterResourcesWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *CountClusterResourcesParams, reqEditors ...RequestEditorFn) (*CountClusterResourcesResponse, error)
 
 	// GetClustersByClusterIdResourceQuotasWithResponse request
 	GetClustersByClusterIdResourceQuotasWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourceQuotasParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourceQuotasResponse, error)
@@ -74530,14 +80287,8 @@ type ClientWithResponsesInterface interface {
 	// PostClustersByIdGenerateKubeconfigWithResponse request
 	PostClustersByIdGenerateKubeconfigWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostClustersByIdGenerateKubeconfigResponse, error)
 
-	// GenerateClusterKubeconfigUnderscoreWithResponse request
-	GenerateClusterKubeconfigUnderscoreWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GenerateClusterKubeconfigUnderscoreResponse, error)
-
 	// GetClustersByIdHealthWithResponse request
 	GetClustersByIdHealthWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdHealthResponse, error)
-
-	// GetClustersByIdKubeconfigLegacyWithResponse request
-	GetClustersByIdKubeconfigLegacyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdKubeconfigLegacyResponse, error)
 
 	// GetClustersByIdKubeconfigPreviewWithResponse request
 	GetClustersByIdKubeconfigPreviewWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdKubeconfigPreviewResponse, error)
@@ -74597,6 +80348,60 @@ type ClientWithResponsesInterface interface {
 
 	PutClustersByIdMonitoringStackUpgradeWithResponse(ctx context.Context, id string, params *PutClustersByIdMonitoringStackUpgradeParams, body PutClustersByIdMonitoringStackUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdMonitoringStackUpgradeResponse, error)
 
+	// DeleteClustersByIdObservabilityGrafanaWithResponse request
+	DeleteClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteClustersByIdObservabilityGrafanaResponse, error)
+
+	// GetClustersByIdObservabilityGrafanaWithResponse request
+	GetClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetClustersByIdObservabilityGrafanaResponse, error)
+
+	// HeadClustersByIdObservabilityGrafanaWithResponse request
+	HeadClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*HeadClustersByIdObservabilityGrafanaResponse, error)
+
+	// OptionsClustersByIdObservabilityGrafanaWithResponse request
+	OptionsClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*OptionsClustersByIdObservabilityGrafanaResponse, error)
+
+	// PatchClustersByIdObservabilityGrafanaWithBodyWithResponse request with any body
+	PatchClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaResponse, error)
+
+	PatchClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaResponse, error)
+
+	// PostClustersByIdObservabilityGrafanaWithBodyWithResponse request with any body
+	PostClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaResponse, error)
+
+	PostClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaResponse, error)
+
+	// PutClustersByIdObservabilityGrafanaWithBodyWithResponse request with any body
+	PutClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaResponse, error)
+
+	PutClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaResponse, error)
+
+	// DeleteClustersByIdObservabilityGrafanaProxyWithResponse request
+	DeleteClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// GetClustersByIdObservabilityGrafanaProxyWithResponse request
+	GetClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// HeadClustersByIdObservabilityGrafanaProxyWithResponse request
+	HeadClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*HeadClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// OptionsClustersByIdObservabilityGrafanaProxyWithResponse request
+	OptionsClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*OptionsClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// PatchClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PatchClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	PatchClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// PostClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PostClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	PostClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// PutClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PutClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	PutClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaProxyResponse, error)
+
 	// PostClustersByIdOwnershipTakeoverWithResponse request
 	PostClustersByIdOwnershipTakeoverWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostClustersByIdOwnershipTakeoverResponse, error)
 
@@ -74640,9 +80445,6 @@ type ClientWithResponsesInterface interface {
 	// PostClustersByIdShellSessionsBySessionIdCloseWithResponse request
 	PostClustersByIdShellSessionsBySessionIdCloseWithResponse(ctx context.Context, id openapi_types.UUID, sessionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostClustersByIdShellSessionsBySessionIdCloseResponse, error)
 
-	// RemoteV2ListPodsWithResponse request
-	RemoteV2ListPodsWithResponse(ctx context.Context, id openapi_types.UUID, params *RemoteV2ListPodsParams, reqEditors ...RequestEditorFn) (*RemoteV2ListPodsResponse, error)
-
 	// GetClustersByIdVulnerabilitiesImagesWithResponse request
 	GetClustersByIdVulnerabilitiesImagesWithResponse(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdVulnerabilitiesImagesParams, reqEditors ...RequestEditorFn) (*GetClustersByIdVulnerabilitiesImagesResponse, error)
 
@@ -74651,30 +80453,6 @@ type ClientWithResponsesInterface interface {
 
 	// GetCompliancePostureWithResponse request
 	GetCompliancePostureWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCompliancePostureResponse, error)
-
-	// TunnelConnectDeleteWithResponse request
-	TunnelConnectDeleteWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectDeleteResponse, error)
-
-	// TunnelConnectGetWithResponse request
-	TunnelConnectGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectGetResponse, error)
-
-	// TunnelConnectHeadWithResponse request
-	TunnelConnectHeadWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectHeadResponse, error)
-
-	// TunnelConnectOptionsWithResponse request
-	TunnelConnectOptionsWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectOptionsResponse, error)
-
-	// TunnelConnectPatchWithResponse request
-	TunnelConnectPatchWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectPatchResponse, error)
-
-	// TunnelConnectPostWithResponse request
-	TunnelConnectPostWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectPostResponse, error)
-
-	// TunnelConnectPutWithResponse request
-	TunnelConnectPutWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectPutResponse, error)
-
-	// TunnelConnectTraceWithResponse request
-	TunnelConnectTraceWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectTraceResponse, error)
 
 	// GetControllersAlertsWithResponse request
 	GetControllersAlertsWithResponse(ctx context.Context, params *GetControllersAlertsParams, reqEditors ...RequestEditorFn) (*GetControllersAlertsResponse, error)
@@ -74746,6 +80524,25 @@ type ClientWithResponsesInterface interface {
 	// GetDeliveryClustersByClusterIdInventoryWithResponse request
 	GetDeliveryClustersByClusterIdInventoryWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetDeliveryClustersByClusterIdInventoryParams, reqEditors ...RequestEditorFn) (*GetDeliveryClustersByClusterIdInventoryResponse, error)
 
+	// GetDeliveryConfigurationTemplatesWithResponse request
+	GetDeliveryConfigurationTemplatesWithResponse(ctx context.Context, params *GetDeliveryConfigurationTemplatesParams, reqEditors ...RequestEditorFn) (*GetDeliveryConfigurationTemplatesResponse, error)
+
+	// PostDeliveryConfigurationTemplatesWithBodyWithResponse request with any body
+	PostDeliveryConfigurationTemplatesWithBodyWithResponse(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryConfigurationTemplatesResponse, error)
+
+	PostDeliveryConfigurationTemplatesWithResponse(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryConfigurationTemplatesResponse, error)
+
+	// DeleteDeliveryConfigurationTemplatesByIdWithResponse request
+	DeleteDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*DeleteDeliveryConfigurationTemplatesByIdResponse, error)
+
+	// GetDeliveryConfigurationTemplatesByIdWithResponse request
+	GetDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*GetDeliveryConfigurationTemplatesByIdResponse, error)
+
+	// PutDeliveryConfigurationTemplatesByIdWithBodyWithResponse request with any body
+	PutDeliveryConfigurationTemplatesByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDeliveryConfigurationTemplatesByIdResponse, error)
+
+	PutDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDeliveryConfigurationTemplatesByIdResponse, error)
+
 	// GetDeliveryDeploymentsWithResponse request
 	GetDeliveryDeploymentsWithResponse(ctx context.Context, params *GetDeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*GetDeliveryDeploymentsResponse, error)
 
@@ -74770,11 +80567,32 @@ type ClientWithResponsesInterface interface {
 
 	PostDeliveryDeploymentsByIdSuspendWithResponse(ctx context.Context, id openapi_types.UUID, params *PostDeliveryDeploymentsByIdSuspendParams, body PostDeliveryDeploymentsByIdSuspendJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryDeploymentsByIdSuspendResponse, error)
 
-	// GetDeliveryEstateWithResponse request
-	GetDeliveryEstateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryEstateResponse, error)
+	// GetDeliveryFleetWithResponse request
+	GetDeliveryFleetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryFleetResponse, error)
 
-	// GetDeliveryFleetLegacyWithResponse request
-	GetDeliveryFleetLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryFleetLegacyResponse, error)
+	// GetDeliveryOverrideSetsWithResponse request
+	GetDeliveryOverrideSetsWithResponse(ctx context.Context, params *GetDeliveryOverrideSetsParams, reqEditors ...RequestEditorFn) (*GetDeliveryOverrideSetsResponse, error)
+
+	// PostDeliveryOverrideSetsWithBodyWithResponse request with any body
+	PostDeliveryOverrideSetsWithBodyWithResponse(ctx context.Context, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsResponse, error)
+
+	PostDeliveryOverrideSetsWithResponse(ctx context.Context, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsResponse, error)
+
+	// PostDeliveryOverrideSetsEffectiveWithBodyWithResponse request with any body
+	PostDeliveryOverrideSetsEffectiveWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsEffectiveResponse, error)
+
+	PostDeliveryOverrideSetsEffectiveWithResponse(ctx context.Context, body PostDeliveryOverrideSetsEffectiveJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsEffectiveResponse, error)
+
+	// DeleteDeliveryOverrideSetsByIdWithResponse request
+	DeleteDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*DeleteDeliveryOverrideSetsByIdResponse, error)
+
+	// GetDeliveryOverrideSetsByIdWithResponse request
+	GetDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*GetDeliveryOverrideSetsByIdResponse, error)
+
+	// PutDeliveryOverrideSetsByIdWithBodyWithResponse request with any body
+	PutDeliveryOverrideSetsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDeliveryOverrideSetsByIdResponse, error)
+
+	PutDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDeliveryOverrideSetsByIdResponse, error)
 
 	// GetDeliveryRolloutsWithResponse request
 	GetDeliveryRolloutsWithResponse(ctx context.Context, params *GetDeliveryRolloutsParams, reqEditors ...RequestEditorFn) (*GetDeliveryRolloutsResponse, error)
@@ -74880,6 +80698,9 @@ type ClientWithResponsesInterface interface {
 
 	PostDeliveryTargetsByIdRolloutsWithResponse(ctx context.Context, id openapi_types.UUID, params *PostDeliveryTargetsByIdRolloutsParams, body PostDeliveryTargetsByIdRolloutsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryTargetsByIdRolloutsResponse, error)
 
+	// GetEventsStreamWithResponse request
+	GetEventsStreamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetEventsStreamResponse, error)
+
 	// GetExtensionsWithResponse request
 	GetExtensionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetExtensionsResponse, error)
 
@@ -74920,8 +80741,13 @@ type ClientWithResponsesInterface interface {
 
 	PostExtensionsByNameTokenWithResponse(ctx context.Context, name string, body PostExtensionsByNameTokenJSONRequestBody, reqEditors ...RequestEditorFn) (*PostExtensionsByNameTokenResponse, error)
 
-	// PostGitopsSourcesByIdWebhookWithResponse request
-	PostGitopsSourcesByIdWebhookWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostGitopsSourcesByIdWebhookResponse, error)
+	// PostGitopsSourcesByIdWebhookWithBodyWithResponse request with any body
+	PostGitopsSourcesByIdWebhookWithBodyWithResponse(ctx context.Context, id string, params *PostGitopsSourcesByIdWebhookParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostGitopsSourcesByIdWebhookResponse, error)
+
+	PostGitopsSourcesByIdWebhookWithResponse(ctx context.Context, id string, params *PostGitopsSourcesByIdWebhookParams, body PostGitopsSourcesByIdWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*PostGitopsSourcesByIdWebhookResponse, error)
+
+	// GetLicenseWithResponse request
+	GetLicenseWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetLicenseResponse, error)
 
 	// GetLoggingControllerStatusWithResponse request
 	GetLoggingControllerStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetLoggingControllerStatusResponse, error)
@@ -75095,13 +80921,67 @@ type ClientWithResponsesInterface interface {
 	// PostNodesByClusterIdByNodeNameUncordonWithResponse request
 	PostNodesByClusterIdByNodeNameUncordonWithResponse(ctx context.Context, clusterId openapi_types.UUID, nodeName string, params *PostNodesByClusterIdByNodeNameUncordonParams, reqEditors ...RequestEditorFn) (*PostNodesByClusterIdByNodeNameUncordonResponse, error)
 
-	// GetObservabilityGrafanaTicketWithResponse request
-	GetObservabilityGrafanaTicketWithResponse(ctx context.Context, params *GetObservabilityGrafanaTicketParams, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaTicketResponse, error)
+	// DeleteObservabilityGrafanaWithResponse request
+	DeleteObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteObservabilityGrafanaResponse, error)
+
+	// GetObservabilityGrafanaWithResponse request
+	GetObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaResponse, error)
+
+	// HeadObservabilityGrafanaWithResponse request
+	HeadObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HeadObservabilityGrafanaResponse, error)
+
+	// OptionsObservabilityGrafanaWithResponse request
+	OptionsObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsObservabilityGrafanaResponse, error)
+
+	// PatchObservabilityGrafanaWithBodyWithResponse request with any body
+	PatchObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaResponse, error)
+
+	PatchObservabilityGrafanaWithResponse(ctx context.Context, body PatchObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaResponse, error)
+
+	// PostObservabilityGrafanaWithBodyWithResponse request with any body
+	PostObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaResponse, error)
+
+	PostObservabilityGrafanaWithResponse(ctx context.Context, body PostObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaResponse, error)
+
+	// PutObservabilityGrafanaWithBodyWithResponse request with any body
+	PutObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaResponse, error)
+
+	PutObservabilityGrafanaWithResponse(ctx context.Context, body PutObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaResponse, error)
 
 	// PostObservabilityGrafanaTicketRedeemWithBodyWithResponse request with any body
 	PostObservabilityGrafanaTicketRedeemWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaTicketRedeemResponse, error)
 
 	PostObservabilityGrafanaTicketRedeemWithResponse(ctx context.Context, body PostObservabilityGrafanaTicketRedeemJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaTicketRedeemResponse, error)
+
+	// DeleteObservabilityGrafanaProxyWithResponse request
+	DeleteObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteObservabilityGrafanaProxyResponse, error)
+
+	// GetObservabilityGrafanaProxyWithResponse request
+	GetObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaProxyResponse, error)
+
+	// HeadObservabilityGrafanaProxyWithResponse request
+	HeadObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HeadObservabilityGrafanaProxyResponse, error)
+
+	// OptionsObservabilityGrafanaProxyWithResponse request
+	OptionsObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsObservabilityGrafanaProxyResponse, error)
+
+	// PatchObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PatchObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaProxyResponse, error)
+
+	PatchObservabilityGrafanaProxyWithResponse(ctx context.Context, body PatchObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaProxyResponse, error)
+
+	// PostObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PostObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaProxyResponse, error)
+
+	PostObservabilityGrafanaProxyWithResponse(ctx context.Context, body PostObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaProxyResponse, error)
+
+	// PutObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PutObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaProxyResponse, error)
+
+	PutObservabilityGrafanaProxyWithResponse(ctx context.Context, body PutObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaProxyResponse, error)
+
+	// GetPlatformHealthSummaryWithResponse request
+	GetPlatformHealthSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformHealthSummaryResponse, error)
 
 	// GetProjectsWithResponse request
 	GetProjectsWithResponse(ctx context.Context, params *GetProjectsParams, reqEditors ...RequestEditorFn) (*GetProjectsResponse, error)
@@ -75131,6 +81011,11 @@ type ClientWithResponsesInterface interface {
 	PostProjectsByIdAddNamespaceWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostProjectsByIdAddNamespaceResponse, error)
 
 	PostProjectsByIdAddNamespaceWithResponse(ctx context.Context, id openapi_types.UUID, body PostProjectsByIdAddNamespaceJSONRequestBody, reqEditors ...RequestEditorFn) (*PostProjectsByIdAddNamespaceResponse, error)
+
+	// PostProjectsByIdApplyRbacTemplateWithBodyWithResponse request with any body
+	PostProjectsByIdApplyRbacTemplateWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostProjectsByIdApplyRbacTemplateResponse, error)
+
+	PostProjectsByIdApplyRbacTemplateWithResponse(ctx context.Context, id openapi_types.UUID, body PostProjectsByIdApplyRbacTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostProjectsByIdApplyRbacTemplateResponse, error)
 
 	// GetProjectsByIdClustersWithResponse request
 	GetProjectsByIdClustersWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetProjectsByIdClustersResponse, error)
@@ -75307,6 +81192,14 @@ type ClientWithResponsesInterface interface {
 	PostRbacPermissionPreviewWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostRbacPermissionPreviewResponse, error)
 
 	PostRbacPermissionPreviewWithResponse(ctx context.Context, body PostRbacPermissionPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostRbacPermissionPreviewResponse, error)
+
+	// GetRbacPrincipalsWithResponse request
+	GetRbacPrincipalsWithResponse(ctx context.Context, params *GetRbacPrincipalsParams, reqEditors ...RequestEditorFn) (*GetRbacPrincipalsResponse, error)
+
+	// PostRbacPrincipalsMaterializeWithBodyWithResponse request with any body
+	PostRbacPrincipalsMaterializeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostRbacPrincipalsMaterializeResponse, error)
+
+	PostRbacPrincipalsMaterializeWithResponse(ctx context.Context, body PostRbacPrincipalsMaterializeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostRbacPrincipalsMaterializeResponse, error)
 
 	// GetRbacProjectBindingsWithResponse request
 	GetRbacProjectBindingsWithResponse(ctx context.Context, params *GetRbacProjectBindingsParams, reqEditors ...RequestEditorFn) (*GetRbacProjectBindingsResponse, error)
@@ -75617,8 +81510,14 @@ type ClientWithResponsesInterface interface {
 
 	PostStreamsTicketsWithResponse(ctx context.Context, body PostStreamsTicketsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostStreamsTicketsResponse, error)
 
-	// GetSupportBundleWithResponse request
-	GetSupportBundleWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSupportBundleResponse, error)
+	// CreateSupportBundleWithResponse request
+	CreateSupportBundleWithResponse(ctx context.Context, params *CreateSupportBundleParams, reqEditors ...RequestEditorFn) (*CreateSupportBundleResponse, error)
+
+	// GetSupportBundleOperationWithResponse request
+	GetSupportBundleOperationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSupportBundleOperationResponse, error)
+
+	// DownloadSupportBundleWithResponse request
+	DownloadSupportBundleWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DownloadSupportBundleResponse, error)
 
 	// GetToolsWithResponse request
 	GetToolsWithResponse(ctx context.Context, params *GetToolsParams, reqEditors ...RequestEditorFn) (*GetToolsResponse, error)
@@ -75655,6 +81554,11 @@ type ClientWithResponsesInterface interface {
 	PostToolsBySlugPreviewWithBodyWithResponse(ctx context.Context, slug string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostToolsBySlugPreviewResponse, error)
 
 	PostToolsBySlugPreviewWithResponse(ctx context.Context, slug string, body PostToolsBySlugPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostToolsBySlugPreviewResponse, error)
+
+	// PostToolsBySlugRollbackWithBodyWithResponse request with any body
+	PostToolsBySlugRollbackWithBodyWithResponse(ctx context.Context, slug string, params *PostToolsBySlugRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostToolsBySlugRollbackResponse, error)
+
+	PostToolsBySlugRollbackWithResponse(ctx context.Context, slug string, params *PostToolsBySlugRollbackParams, body PostToolsBySlugRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostToolsBySlugRollbackResponse, error)
 
 	// DeleteToolsBySlugUninstallWithBodyWithResponse request with any body
 	DeleteToolsBySlugUninstallWithBodyWithResponse(ctx context.Context, slug string, params *DeleteToolsBySlugUninstallParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DeleteToolsBySlugUninstallResponse, error)
@@ -75735,6 +81639,9 @@ type ClientWithResponsesInterface interface {
 
 	InternalTunnelK8sWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *InternalTunnelK8sParams, body InternalTunnelK8sJSONRequestBody, reqEditors ...RequestEditorFn) (*InternalTunnelK8sResponse, error)
 
+	// InternalTunnelK8sCapabilityWithResponse request
+	InternalTunnelK8sCapabilityWithResponse(ctx context.Context, clusterId openapi_types.UUID, capability string, params *InternalTunnelK8sCapabilityParams, reqEditors ...RequestEditorFn) (*InternalTunnelK8sCapabilityResponse, error)
+
 	// GetScimGroupsWithResponse request
 	GetScimGroupsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimGroupsResponse, error)
 
@@ -75807,28 +81714,6 @@ func (r GetActivityResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetActivityResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetActivityFeedLegacyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
-}
-
-// Status returns HTTPResponse.Status
-func (r GetActivityFeedLegacyResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetActivityFeedLegacyResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -76011,15 +81896,8 @@ type GetAdminBackupDrillHistoryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64               `json:"count"`
-		Data  []BackupDrillResult `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []BackupDrillResult `json:"data"`
+		Pagination PaginationMetadata  `json:"pagination"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -77002,27 +82880,77 @@ func (r PutAdminDashboardWidgetsByIdResponse) StatusCode() int {
 	return 0
 }
 
+type GetAdminDeferredOperationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminDeferredOperationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminDeferredOperationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAdminDeferredOperationsByIdCancelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAdminDeferredOperationsByIdCancelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAdminDeferredOperationsByIdCancelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type AdminEmailsListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data struct {
-			Items *[]struct {
-				Attempts  *int                `json:"attempts,omitempty"`
-				CreatedAt *time.Time          `json:"created_at,omitempty"`
-				Id        *openapi_types.UUID `json:"id,omitempty"`
-				LastError *string             `json:"last_error,omitempty"`
-				SentAt    *time.Time          `json:"sent_at"`
-				Status    *string             `json:"status,omitempty"`
-				Subject   *string             `json:"subject,omitempty"`
-				Template  *string             `json:"template,omitempty"`
-				ToAddress *string             `json:"to_address,omitempty"`
-				UserId    *openapi_types.UUID `json:"user_id"`
-			} `json:"items,omitempty"`
-			Limit  *int   `json:"limit,omitempty"`
-			Offset *int   `json:"offset,omitempty"`
-			Total  *int64 `json:"total,omitempty"`
+		Data []struct {
+			Attempts  *int                `json:"attempts,omitempty"`
+			CreatedAt *time.Time          `json:"created_at,omitempty"`
+			Id        *openapi_types.UUID `json:"id,omitempty"`
+			LastError *string             `json:"last_error,omitempty"`
+			SentAt    *time.Time          `json:"sent_at"`
+			Status    *string             `json:"status,omitempty"`
+			Subject   *string             `json:"subject,omitempty"`
+			Template  *string             `json:"template,omitempty"`
+			ToAddress *string             `json:"to_address,omitempty"`
+			UserId    *openapi_types.UUID `json:"user_id"`
 		} `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -77371,10 +83299,14 @@ type AdminKeyStatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		AsOf            time.Time `json:"as_of"`
-		EncryptionKeys  int       `json:"encryption_keys"`
-		InsecureDevKeys []string  `json:"insecure_dev_keys"`
-		JwtKeys         int       `json:"jwt_keys"`
+		AsOf                   time.Time `json:"as_of"`
+		EncryptionKeyInventory []struct {
+			Id      string `json:"id"`
+			Primary bool   `json:"primary"`
+		} `json:"encryption_key_inventory"`
+		EncryptionKeys  int      `json:"encryption_keys"`
+		InsecureDevKeys []string `json:"insecure_dev_keys"`
+		JwtKeys         int      `json:"jwt_keys"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -77390,6 +83322,167 @@ func (r AdminKeyStatusResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AdminKeyStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAdminMaintenanceWindowsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminMaintenanceWindowsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminMaintenanceWindowsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAdminMaintenanceWindowsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAdminMaintenanceWindowsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAdminMaintenanceWindowsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAdminMaintenanceWindowsActiveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminMaintenanceWindowsActiveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminMaintenanceWindowsActiveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteAdminMaintenanceWindowsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteAdminMaintenanceWindowsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteAdminMaintenanceWindowsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAdminMaintenanceWindowsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminMaintenanceWindowsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminMaintenanceWindowsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutAdminMaintenanceWindowsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutAdminMaintenanceWindowsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutAdminMaintenanceWindowsByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -77611,15 +83704,8 @@ type GetAdminNetworkPolicyTemplatesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                           `json:"count"`
-		Data  []NetworkPolicyTemplateResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []NetworkPolicyTemplateResponse `json:"data"`
+		Pagination PaginationMetadata              `json:"pagination"`
 	}
 }
 
@@ -77900,6 +83986,114 @@ func (r AdminNotificationTemplateVariablesResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r AdminNotificationTemplateVariablesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAdminPlatformSettingsDefaultClusterTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminPlatformSettingsDefaultClusterTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminPlatformSettingsDefaultClusterTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutAdminPlatformSettingsDefaultClusterTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutAdminPlatformSettingsDefaultClusterTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutAdminPlatformSettingsDefaultClusterTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -78718,18 +84912,11 @@ type AdminShellSessionCommandsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64 `json:"count"`
-		Data  []struct {
+		Data []struct {
 			CommandAt   *time.Time `json:"command_at,omitempty"`
 			CommandLine *string    `json:"command_line,omitempty"`
 		} `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *Unauthorized
@@ -79064,15 +85251,8 @@ type GetAdminTaskOutboxResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                 `json:"count"`
-		Data  []TaskOutboxEntryWire `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []TaskOutboxEntryWire `json:"data"`
+		Pagination PaginationMetadata    `json:"pagination"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -79303,7 +85483,8 @@ type AdminVaultConnectionsListResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *struct {
 		Data struct {
-			Items *[]VaultConnection `json:"items,omitempty"`
+			Items      []VaultConnection  `json:"items"`
+			Pagination PaginationMetadata `json:"pagination"`
 		} `json:"data"`
 	}
 	JSON401 *Unauthorized
@@ -79644,12 +85825,8 @@ type AdminWebhookDeliveriesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data struct {
-			Items  *[]WebhookDelivery `json:"items,omitempty"`
-			Limit  *int               `json:"limit,omitempty"`
-			Offset *int               `json:"offset,omitempty"`
-			Total  *int64             `json:"total,omitempty"`
-		} `json:"data"`
+		Data       []WebhookDelivery  `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *Unauthorized
@@ -79931,6 +86108,32 @@ func (r GetAlertingEventsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetAlertingEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAlertingEventsSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertEventSummaryEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertingEventsSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertingEventsSummaryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -80313,87 +86516,6 @@ func (r PostAlertingSilencesByIdExpireResponse) StatusCode() int {
 	return 0
 }
 
-type PostAlertsRulesByIdDisableResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AlertRuleEnvelope
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON503      *ServiceUnavailable
-}
-
-// Status returns HTTPResponse.Status
-func (r PostAlertsRulesByIdDisableResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostAlertsRulesByIdDisableResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostAlertsRulesByIdEnableResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AlertRuleEnvelope
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON503      *ServiceUnavailable
-}
-
-// Status returns HTTPResponse.Status
-func (r PostAlertsRulesByIdEnableResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostAlertsRulesByIdEnableResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostAlertsSilencesByIdExpireResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AlertSilenceEnvelope
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON503      *ServiceUnavailable
-}
-
-// Status returns HTTPResponse.Status
-func (r PostAlertsSilencesByIdExpireResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostAlertsSilencesByIdExpireResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetAnomalyBaselinesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -80452,15 +86574,8 @@ type ListAuditLogsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64           `json:"count"`
-		Data  []AuditLogEntry `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []AuditLogEntry    `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -80490,6 +86605,8 @@ type ExportAuditLogsResponse struct {
 	JSON400      *ErrorEnvelope
 	JSON401      *ErrorEnvelope
 	JSON403      *ErrorEnvelope
+	JSON413      *ErrorEnvelope
+	JSON503      *ErrorEnvelope
 }
 
 // Status returns HTTPResponse.Status
@@ -80502,6 +86619,86 @@ func (r ExportAuditLogsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ExportAuditLogsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateAuditExportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *AuditExportAccepted
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *Conflict
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateAuditExportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateAuditExportResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAuditExportsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AuditExportOperation
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAuditExportsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAuditExportsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAuditExportsByIdDownloadResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAuditExportsByIdDownloadResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAuditExportsByIdDownloadResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -80530,6 +86727,33 @@ func (r GetAuditLogResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetAuditLogResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAuthCallbackByProviderResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAuthCallbackByProviderResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAuthCallbackByProviderResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -80880,6 +87104,33 @@ func (r PostAuthLoginResponse) StatusCode() int {
 	return 0
 }
 
+type GetAuthLoginByProviderResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAuthLoginByProviderResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAuthLoginByProviderResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetAuthLogoutDoneResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -80942,6 +87193,59 @@ func (r GetAuthMeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetAuthMeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAuthMePreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data UserPreferences `json:"data"`
+	}
+	JSON401 *Unauthorized
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAuthMePreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAuthMePreferencesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutAuthMePreferencesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data UserPreferences `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutAuthMePreferencesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutAuthMePreferencesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -81028,11 +87332,9 @@ type PostAuthRefreshResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Refresh New refresh JWT
-		Refresh *string `json:"refresh,omitempty"`
-
-		// Token New access JWT
-		Token *string `json:"token,omitempty"`
+		Data struct {
+			Detail string `json:"detail"`
+		} `json:"data"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
@@ -81058,15 +87360,8 @@ type GetAuthTokensResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64              `json:"count"`
-		Data  []ApiTokenListItem `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []ApiTokenListItem `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
@@ -81318,15 +87613,8 @@ type GetBackupsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64            `json:"count"`
-		Data  []BackupResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []BackupResponse   `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON500 *ErrorResponse
 }
@@ -81403,15 +87691,8 @@ type GetBackupsRestoresResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                      `json:"count"`
-		Data  []RestoreOperationResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []RestoreOperationResponse `json:"data"`
+		Pagination PaginationMetadata         `json:"pagination"`
 	}
 	JSON500 *ErrorResponse
 }
@@ -81461,52 +87742,12 @@ func (r GetBackupsRestoresByIdResponse) StatusCode() int {
 	return 0
 }
 
-type GetBackupsRunsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64            `json:"count"`
-		Data  []BackupResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
-	}
-	JSON500 *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r GetBackupsRunsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetBackupsRunsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetBackupsSchedulesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                    `json:"count"`
-		Data  []BackupScheduleResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []BackupScheduleResponse `json:"data"`
+		Pagination PaginationMetadata       `json:"pagination"`
 	}
 	JSON500 *ErrorResponse
 }
@@ -81661,15 +87902,8 @@ type GetBackupsStorageResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                         `json:"count"`
-		Data  []BackupStorageConfigResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []BackupStorageConfigResponse `json:"data"`
+		Pagination PaginationMetadata            `json:"pagination"`
 	}
 	JSON500 *ErrorResponse
 }
@@ -81711,170 +87945,6 @@ func (r PostBackupsStorageResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostBackupsStorageResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetBackupsStorageConfigsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                         `json:"count"`
-		Data  []BackupStorageConfigResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
-	}
-	JSON500 *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r GetBackupsStorageConfigsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetBackupsStorageConfigsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostBackupsStorageConfigsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *struct {
-		// Data Credentials are never returned; only has_credentials boolean.
-		Data BackupStorageConfigResponse `json:"data"`
-	}
-	JSON400 *ErrorResponse
-	JSON500 *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r PostBackupsStorageConfigsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostBackupsStorageConfigsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type DeleteBackupsStorageConfigsByIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON400      *ErrorResponse
-	JSON500      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteBackupsStorageConfigsByIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteBackupsStorageConfigsByIdResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetBackupsStorageConfigsByIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		// Data Credentials are never returned; only has_credentials boolean.
-		Data BackupStorageConfigResponse `json:"data"`
-	}
-	JSON400 *ErrorResponse
-	JSON404 *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r GetBackupsStorageConfigsByIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetBackupsStorageConfigsByIdResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PutBackupsStorageConfigsByIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		// Data Credentials are never returned; only has_credentials boolean.
-		Data BackupStorageConfigResponse `json:"data"`
-	}
-	JSON400 *ErrorResponse
-	JSON500 *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r PutBackupsStorageConfigsByIdResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PutBackupsStorageConfigsByIdResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostBackupsStorageConfigsByIdTestConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data StorageTestResult `json:"data"`
-	}
-	JSON400 *ErrorResponse
-	JSON404 *ErrorResponse
-	JSON500 *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r PostBackupsStorageConfigsByIdTestConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostBackupsStorageConfigsByIdTestConnectionResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -81952,33 +88022,6 @@ func (r PutBackupsStorageByIdResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PutBackupsStorageByIdResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type PostBackupsStorageByIdTestResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data StorageTestResult `json:"data"`
-	}
-	JSON400 *ErrorResponse
-	JSON404 *ErrorResponse
-	JSON500 *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r PostBackupsStorageByIdTestResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostBackupsStorageByIdTestResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -82088,19 +88131,90 @@ func (r PostBackupsByIdRestoreResponse) StatusCode() int {
 	return 0
 }
 
+type GetCatalogApplicationSourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Count int                        `json:"count"`
+		Data  []ApplicationCatalogSource `json:"data"`
+	}
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogApplicationSourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogApplicationSourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCatalogApplicationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Count int                              `json:"count"`
+		Data  []CatalogApplicationPresentation `json:"data"`
+	}
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogApplicationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogApplicationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostCatalogApplicationsPreviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CatalogInstallationPreview
+	JSON400      *ErrorResponse
+	JSON403      *ErrorResponse
+	JSON404      *ErrorResponse
+	JSON409      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostCatalogApplicationsPreviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostCatalogApplicationsPreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetCatalogChartsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64       `json:"count"`
-		Data  []HelmChart `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []HelmChart        `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
@@ -82142,6 +88256,32 @@ func (r GetCatalogChartsByIdResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetCatalogChartsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutCatalogChartsByIdFavoriteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data CatalogUserDiscovery `json:"data"`
+	}
+	JSON400 *ErrorResponse
+	JSON404 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PutCatalogChartsByIdFavoriteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutCatalogChartsByIdFavoriteResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -82266,19 +88406,38 @@ func (r GetCatalogControllerStatusResponse) StatusCode() int {
 	return 0
 }
 
+type GetCatalogDiscoveryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Count int                    `json:"count"`
+		Data  []CatalogUserDiscovery `json:"data"`
+	}
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogDiscoveryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogDiscoveryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetCatalogInstalledResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64            `json:"count"`
-		Data  []InstalledChart `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []InstalledChart   `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON500 *ErrorEnvelope
 }
@@ -82400,6 +88559,35 @@ func (r PostCatalogInstalledByIdRollbackResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostCatalogInstalledByIdRollbackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCatalogInstalledByIdUpgradeVersionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Count int                `json:"count"`
+		Data  []HelmChartVersion `json:"data"`
+	}
+	JSON400 *ErrorResponse
+	JSON403 *ErrorResponse
+	JSON404 *ErrorResponse
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogInstalledByIdUpgradeVersionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogInstalledByIdUpgradeVersionsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -82558,15 +88746,8 @@ type GetCatalogRecommendationsPopularResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                 `json:"count"`
-		Data  []ChartRecommendation `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []ChartRecommendation `json:"data"`
+		Pagination PaginationMetadata    `json:"pagination"`
 	}
 	JSON400 *BadRequest
 	JSON403 *Forbidden
@@ -82592,15 +88773,8 @@ type GetCatalogRecommendationsSimilarByChartIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                 `json:"count"`
-		Data  []ChartRecommendation `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []ChartRecommendation `json:"data"`
+		Pagination PaginationMetadata    `json:"pagination"`
 	}
 	JSON400 *BadRequest
 	JSON403 *Forbidden
@@ -82633,15 +88807,8 @@ type GetCatalogRepositoriesResponse struct {
 	JSON500 *ErrorEnvelope
 }
 type GetCatalogRepositories2000 struct {
-	// Count Total number of items across all pages.
-	Count int64            `json:"count"`
-	Data  []HelmRepository `json:"data"`
-
-	// Next URL of the next page, or null on the last page.
-	Next *string `json:"next"`
-
-	// Previous URL of the previous page, or null on the first page.
-	Previous *string `json:"previous"`
+	Data       []HelmRepository   `json:"data"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 type GetCatalogRepositories2001 = []HelmRepository
 
@@ -83484,15 +89651,8 @@ type GetChartsByChartIdRatingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64         `json:"count"`
-		Data  []ChartRating `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []ChartRating      `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -83693,9 +89853,7 @@ func (r GetCloudCredentialsProvidersResponse) StatusCode() int {
 type GetClusterAgentsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data *ClusterAgentResponse `json:"data,omitempty"`
-	}
+	JSON200      *ClusterAgentResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -83790,9 +89948,7 @@ func (r GetClusterAgentsByClusterIdDiagnosticsBundleResponse) StatusCode() int {
 type GetClusterAgentsByClusterIdOperationsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data *AgentLifecycleOperationsResponse `json:"data,omitempty"`
-	}
+	JSON200      *AgentLifecycleOperationsResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -84094,15 +90250,8 @@ type GetClusterTemplatesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                     `json:"count"`
-		Data  []ClusterTemplateResponse `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []ClusterTemplateResponse `json:"data"`
+		Pagination PaginationMetadata        `json:"pagination"`
 	}
 }
 
@@ -84333,6 +90482,31 @@ func (r PostClustersResponse) StatusCode() int {
 	return 0
 }
 
+type GetClustersSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ClusterEstateSummaryEnvelope
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersSummaryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetClustersByClusterIdApiserverAllowlistResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -84435,9 +90609,8 @@ type GetClustersByClusterIdApiserverAllowlistSnapshotsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data struct {
-			Items *[]AllowlistSnapshotResponse `json:"items,omitempty"`
-		} `json:"data"`
+		Data       []AllowlistSnapshotResponse `json:"data"`
+		Pagination PaginationMetadata          `json:"pagination"`
 	}
 }
 
@@ -84511,15 +90684,8 @@ type GetClustersByClusterIdAppsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                  `json:"count"`
-		Data  []InstalledAppEnriched `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []InstalledAppEnriched `json:"data"`
+		Pagination PaginationMetadata     `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
@@ -84572,12 +90738,8 @@ type ListControlPlaneSnapshotsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data struct {
-			Items  []ControlPlaneSnapshotWire `json:"items"`
-			Limit  int                        `json:"limit"`
-			Offset int                        `json:"offset"`
-			Total  int64                      `json:"total"`
-		} `json:"data"`
+		Data       []ControlPlaneSnapshotWire `json:"data"`
+		Pagination PaginationMetadata         `json:"pagination"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -84605,7 +90767,8 @@ type CreateControlPlaneSnapshotResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON202      *struct {
-		Data ControlPlaneSnapshotWire `json:"data"`
+		Data       ControlPlaneSnapshotWire `json:"data"`
+		Pagination PaginationMetadata       `json:"pagination"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -85237,7 +91400,8 @@ type GetClustersByClusterIdNamespacesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []Namespace `json:"data"`
+		Data       []Namespace        `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -85440,7 +91604,8 @@ type GetClustersByClusterIdPodsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []Pod `json:"data"`
+		Data       []Pod              `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -85492,15 +91657,8 @@ type GetClustersByClusterIdProjectsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64     `json:"count"`
-		Data  []Project `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []Project          `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
@@ -86295,6 +92453,33 @@ func (r PostClustersByClusterIdRegistriesByIdTestResponse) StatusCode() int {
 	return 0
 }
 
+type CountClusterResourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data ResourceCounts `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r CountClusterResourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CountClusterResourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetClustersByClusterIdResourceQuotasResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -86353,7 +92538,8 @@ type ListGenericClusterResourcesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []ResourceRow `json:"data"`
+		Data       []ResourceRow      `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -86461,7 +92647,8 @@ type ListNamedClusterResourcesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []ResourceRow `json:"data"`
+		Data       []ResourceRow      `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -87440,15 +93627,8 @@ type GetClustersByClusterIdWorkloadsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64      `json:"count"`
-		Data  []Workload `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []Workload         `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -87996,30 +94176,6 @@ func (r PostClustersByIdGenerateKubeconfigResponse) StatusCode() int {
 	return 0
 }
 
-type GenerateClusterKubeconfigUnderscoreResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	YAML200      *string
-	JSON404      *ErrorEnvelope
-	JSON503      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r GenerateClusterKubeconfigUnderscoreResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GenerateClusterKubeconfigUnderscoreResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetClustersByIdHealthResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -88039,31 +94195,6 @@ func (r GetClustersByIdHealthResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetClustersByIdHealthResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetClustersByIdKubeconfigLegacyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		Data map[string]interface{} `json:"data"`
-	}
-	JSON404 *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r GetClustersByIdKubeconfigLegacyResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetClustersByIdKubeconfigLegacyResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -88494,6 +94625,382 @@ func (r PutClustersByIdMonitoringStackUpgradeResponse) StatusCode() int {
 	return 0
 }
 
+type DeleteClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type OptionsClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r OptionsClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OptionsClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type OptionsClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r OptionsClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OptionsClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostClustersByIdOwnershipTakeoverResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -88815,52 +95322,12 @@ func (r PostClustersByIdShellSessionsBySessionIdCloseResponse) StatusCode() int 
 	return 0
 }
 
-type RemoteV2ListPodsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *struct {
-		ClusterId string `json:"cluster_id"`
-		Count     int    `json:"count"`
-		Namespace string `json:"namespace"`
-		Pods      []struct {
-			Name      *string `json:"name,omitempty"`
-			Namespace *string `json:"namespace,omitempty"`
-			Node      *string `json:"node,omitempty"`
-			Phase     *string `json:"phase,omitempty"`
-		} `json:"pods"`
-	}
-	JSON401 *Unauthorized
-	JSON403 *Forbidden
-	JSON502 *struct {
-		Error *string `json:"error,omitempty"`
-	}
-	JSON503 *struct {
-		Error *string `json:"error,omitempty"`
-	}
-}
-
-// Status returns HTTPResponse.Status
-func (r RemoteV2ListPodsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r RemoteV2ListPodsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetClustersByIdVulnerabilitiesImagesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Count *int         `json:"count,omitempty"`
-		Data  *[]VulnImage `json:"data,omitempty"`
+		Data       []VulnImage        `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 }
 
@@ -88925,182 +95392,6 @@ func (r GetCompliancePostureResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetCompliancePostureResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type TunnelConnectDeleteResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r TunnelConnectDeleteResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TunnelConnectDeleteResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type TunnelConnectGetResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r TunnelConnectGetResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TunnelConnectGetResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type TunnelConnectHeadResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r TunnelConnectHeadResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TunnelConnectHeadResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type TunnelConnectOptionsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r TunnelConnectOptionsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TunnelConnectOptionsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type TunnelConnectPatchResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r TunnelConnectPatchResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TunnelConnectPatchResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type TunnelConnectPostResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r TunnelConnectPostResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TunnelConnectPostResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type TunnelConnectPutResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r TunnelConnectPutResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TunnelConnectPutResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type TunnelConnectTraceResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorEnvelope
-}
-
-// Status returns HTTPResponse.Status
-func (r TunnelConnectTraceResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r TunnelConnectTraceResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -89604,6 +95895,115 @@ func (r GetDeliveryClustersByClusterIdInventoryResponse) StatusCode() int {
 	return 0
 }
 
+type GetDeliveryConfigurationTemplatesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryConfigurationTemplatePage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeliveryConfigurationTemplatesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeliveryConfigurationTemplatesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostDeliveryConfigurationTemplatesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *DeliveryConfigurationTemplateEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDeliveryConfigurationTemplatesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDeliveryConfigurationTemplatesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteDeliveryConfigurationTemplatesByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteDeliveryConfigurationTemplatesByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteDeliveryConfigurationTemplatesByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetDeliveryConfigurationTemplatesByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryConfigurationTemplateEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeliveryConfigurationTemplatesByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeliveryConfigurationTemplatesByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutDeliveryConfigurationTemplatesByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryConfigurationTemplateEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PutDeliveryConfigurationTemplatesByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutDeliveryConfigurationTemplatesByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetDeliveryDeploymentsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -89673,7 +96073,7 @@ func (r GetDeliveryDeploymentsByIdEventsResponse) StatusCode() int {
 type PostDeliveryDeploymentsByIdReconcileResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -89695,7 +96095,7 @@ func (r PostDeliveryDeploymentsByIdReconcileResponse) StatusCode() int {
 type PostDeliveryDeploymentsByIdResumeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -89717,7 +96117,7 @@ func (r PostDeliveryDeploymentsByIdResumeResponse) StatusCode() int {
 type PostDeliveryDeploymentsByIdSuspendResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -89736,17 +96136,17 @@ func (r PostDeliveryDeploymentsByIdSuspendResponse) StatusCode() int {
 	return 0
 }
 
-type GetDeliveryEstateResponse struct {
+type GetDeliveryFleetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *DeliveryEstateEnvelope
+	JSON200      *DeliveryFleetEnvelope
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
 	JSON503      *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
-func (r GetDeliveryEstateResponse) Status() string {
+func (r GetDeliveryFleetResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -89754,24 +96154,21 @@ func (r GetDeliveryEstateResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetDeliveryEstateResponse) StatusCode() int {
+func (r GetDeliveryFleetResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type GetDeliveryFleetLegacyResponse struct {
+type GetDeliveryOverrideSetsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *DeliveryEstateEnvelope
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *DeliveryOverrideSetPage
 }
 
 // Status returns HTTPResponse.Status
-func (r GetDeliveryFleetLegacyResponse) Status() string {
+func (r GetDeliveryOverrideSetsResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -89779,7 +96176,116 @@ func (r GetDeliveryFleetLegacyResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetDeliveryFleetLegacyResponse) StatusCode() int {
+func (r GetDeliveryOverrideSetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostDeliveryOverrideSetsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *DeliveryOverrideSetEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDeliveryOverrideSetsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDeliveryOverrideSetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostDeliveryOverrideSetsEffectiveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryEffectiveConfigurationEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDeliveryOverrideSetsEffectiveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDeliveryOverrideSetsEffectiveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteDeliveryOverrideSetsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteDeliveryOverrideSetsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteDeliveryOverrideSetsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetDeliveryOverrideSetsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryOverrideSetEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeliveryOverrideSetsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeliveryOverrideSetsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutDeliveryOverrideSetsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryOverrideSetEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PutDeliveryOverrideSetsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutDeliveryOverrideSetsByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -89834,7 +96340,7 @@ func (r GetDeliveryRolloutsByIdResponse) StatusCode() int {
 type PostDeliveryRolloutsByIdAbortResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -89856,7 +96362,7 @@ func (r PostDeliveryRolloutsByIdAbortResponse) StatusCode() int {
 type PostDeliveryRolloutsByIdApproveResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -89922,7 +96428,7 @@ func (r GetDeliveryRolloutsByIdEventsResponse) StatusCode() int {
 type PostDeliveryRolloutsByIdPauseResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -89944,7 +96450,7 @@ func (r PostDeliveryRolloutsByIdPauseResponse) StatusCode() int {
 type PostDeliveryRolloutsByIdResumeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -89966,7 +96472,7 @@ func (r PostDeliveryRolloutsByIdResumeResponse) StatusCode() int {
 type PostDeliveryRolloutsByIdRetryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -89988,7 +96494,7 @@ func (r PostDeliveryRolloutsByIdRetryResponse) StatusCode() int {
 type PostDeliveryRolloutsByIdRollbackResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON202      *DeliveryAsyncOperationReceiptEnvelope
+	JSON202      *DeliveryActionAccepted
 }
 
 // Status returns HTTPResponse.Status
@@ -90375,6 +96881,33 @@ func (r PostDeliveryTargetsByIdRolloutsResponse) StatusCode() int {
 	return 0
 }
 
+type GetEventsStreamResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetEventsStreamResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetEventsStreamResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetExtensionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -90644,6 +97177,7 @@ type PostGitopsSourcesByIdWebhookResponse struct {
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
 	JSON404      *NotFound
+	JSON409      *Conflict
 	JSON503      *ServiceUnavailable
 }
 
@@ -90657,6 +97191,33 @@ func (r PostGitopsSourcesByIdWebhookResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostGitopsSourcesByIdWebhookResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLicenseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLicenseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLicenseResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -91868,7 +98429,7 @@ func (r PostNodesByClusterIdByNodeNameUncordonResponse) StatusCode() int {
 	return 0
 }
 
-type GetObservabilityGrafanaTicketResponse struct {
+type DeleteObservabilityGrafanaResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON400      *BadRequest
@@ -91879,7 +98440,7 @@ type GetObservabilityGrafanaTicketResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r GetObservabilityGrafanaTicketResponse) Status() string {
+func (r DeleteObservabilityGrafanaResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -91887,7 +98448,169 @@ func (r GetObservabilityGrafanaTicketResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetObservabilityGrafanaTicketResponse) StatusCode() int {
+func (r DeleteObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type OptionsObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r OptionsObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OptionsObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutObservabilityGrafanaResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -91921,19 +98644,227 @@ func (r PostObservabilityGrafanaTicketRedeemResponse) StatusCode() int {
 	return 0
 }
 
+type DeleteObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type OptionsObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r OptionsObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OptionsObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetPlatformHealthSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPlatformHealthSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPlatformHealthSummaryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetProjectsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64     `json:"count"`
-		Data  []Project `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []Project          `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON500 *ErrorEnvelope
@@ -92120,6 +99051,36 @@ func (r PostProjectsByIdAddNamespaceResponse) StatusCode() int {
 	return 0
 }
 
+type PostProjectsByIdApplyRbacTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data RBACProjectRoleBinding `json:"data"`
+	}
+	JSON400 *ErrorEnvelope
+	JSON401 *ErrorEnvelope
+	JSON403 *ErrorEnvelope
+	JSON404 *ErrorEnvelope
+	JSON409 *ErrorEnvelope
+	JSON503 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostProjectsByIdApplyRbacTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostProjectsByIdApplyRbacTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetProjectsByIdClustersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -92300,23 +99261,53 @@ type GetProjectsByIdQuotaUsageResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *struct {
 		Data struct {
-			Errors *[]struct {
-				ClusterId   *openapi_types.UUID `json:"cluster_id,omitempty"`
-				ClusterName *string             `json:"cluster_name,omitempty"`
-				Error       *string             `json:"error,omitempty"`
-				Namespace   *string             `json:"namespace,omitempty"`
-			} `json:"errors,omitempty"`
-			Results *[]struct {
-				ClusterId   *openapi_types.UUID `json:"cluster_id,omitempty"`
-				ClusterName *string             `json:"cluster_name,omitempty"`
+			Errors []struct {
+				ClusterId   openapi_types.UUID `json:"cluster_id"`
+				ClusterName string             `json:"cluster_name"`
+				Error       string             `json:"error"`
+				Namespace   string             `json:"namespace"`
+			} `json:"errors"`
+
+			// ProjectCap Project cap totals and deterministic namespace allocation state. Remaining is unallocated capacity, not live usage.
+			ProjectCap struct {
+				Allocated struct {
+					Cpu    string `json:"cpu"`
+					Memory string `json:"memory"`
+					Pods   int32  `json:"pods"`
+				} `json:"allocated"`
+				Remaining struct {
+					Cpu    string `json:"cpu"`
+					Memory string `json:"memory"`
+					Pods   int32  `json:"pods"`
+				} `json:"remaining"`
+				Total struct {
+					Cpu    string `json:"cpu"`
+					Memory string `json:"memory"`
+					Pods   int32  `json:"pods"`
+				} `json:"total"`
+			} `json:"project_cap"`
+			Results []struct {
+				// Allocation Deterministic share of the project-wide cap applied to this namespace.
+				Allocation struct {
+					// Cpu Kubernetes CPU quantity; empty means unbounded.
+					Cpu string `json:"cpu"`
+
+					// Memory Kubernetes memory quantity; empty means unbounded.
+					Memory string `json:"memory"`
+
+					// Pods Pod count; zero means unbounded.
+					Pods int32 `json:"pods"`
+				} `json:"allocation"`
+				ClusterId   openapi_types.UUID `json:"cluster_id"`
+				ClusterName string             `json:"cluster_name"`
 
 				// Hard ResourceQuota status.hard (falls back to spec.hard) key/value pairs.
-				Hard      *map[string]interface{} `json:"hard,omitempty"`
-				Namespace *string                 `json:"namespace,omitempty"`
+				Hard      map[string]interface{} `json:"hard"`
+				Namespace string                 `json:"namespace"`
 
 				// Used ResourceQuota status.used key/value pairs (e.g. cpu, memory, pods).
-				Used *map[string]interface{} `json:"used,omitempty"`
-			} `json:"results,omitempty"`
+				Used map[string]interface{} `json:"used"`
+			} `json:"results"`
 		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
@@ -92919,15 +99910,8 @@ type GetRbacClusterRolesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64      `json:"count"`
-		Data  []RBACRole `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []RBACRole         `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON403 *ErrorEnvelope
@@ -93250,15 +100234,8 @@ type GetRbacGlobalRolesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64      `json:"count"`
-		Data  []RBACRole `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []RBACRole         `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON403 *ErrorEnvelope
@@ -93512,6 +100489,65 @@ func (r PostRbacPermissionPreviewResponse) StatusCode() int {
 	return 0
 }
 
+type GetRbacPrincipalsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data PrincipalSearchResponse `json:"data"`
+	}
+	JSON400 *ErrorEnvelope
+	JSON401 *ErrorEnvelope
+	JSON403 *ErrorEnvelope
+	JSON429 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetRbacPrincipalsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetRbacPrincipalsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostRbacPrincipalsMaterializeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *struct {
+		Data PrincipalMaterialized `json:"data"`
+	}
+	JSON400 *ErrorEnvelope
+	JSON401 *ErrorEnvelope
+	JSON403 *ErrorEnvelope
+	JSON404 *ErrorEnvelope
+	JSON422 *ErrorEnvelope
+	JSON429 *ErrorEnvelope
+	JSON502 *ErrorEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostRbacPrincipalsMaterializeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostRbacPrincipalsMaterializeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetRbacProjectBindingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -93680,15 +100716,8 @@ type GetRbacProjectRolesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64      `json:"count"`
-		Data  []RBACRole `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []RBACRole         `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *ErrorEnvelope
 	JSON403 *ErrorEnvelope
@@ -94091,15 +101120,8 @@ type GetSecurityPoliciesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                   `json:"count"`
-		Data  []ClusterSecurityPolicy `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []ClusterSecurityPolicy `json:"data"`
+		Pagination PaginationMetadata      `json:"pagination"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -94348,15 +101370,8 @@ type GetSecurityTemplatesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                 `json:"count"`
-		Data  []PodSecurityTemplate `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []PodSecurityTemplate `json:"data"`
+		Pagination PaginationMetadata    `json:"pagination"`
 	}
 	JSON400 *BadRequest
 	JSON401 *Unauthorized
@@ -94576,15 +101591,8 @@ type GetSettingsAuditLogsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                        `json:"count"`
-		Data  []UsersSettingsAuditLogEntry `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []UsersSettingsAuditLogEntry `json:"data"`
+		Pagination PaginationMetadata           `json:"pagination"`
 	}
 }
 
@@ -95670,15 +102678,8 @@ type GetSettingsTokensResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                        `json:"count"`
-		Data  []UsersSettingsTokenListItem `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []UsersSettingsTokenListItem `json:"data"`
+		Pagination PaginationMetadata           `json:"pagination"`
 	}
 }
 
@@ -95778,18 +102779,21 @@ func (r PostStreamsTicketsResponse) StatusCode() int {
 	return 0
 }
 
-type GetSupportBundleResponse struct {
+type CreateSupportBundleResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON503      *ServiceUnavailable
+	JSON202      *struct {
+		Data SupportBundleOperation `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON409 *Conflict
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
-func (r GetSupportBundleResponse) Status() string {
+func (r CreateSupportBundleResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -95797,7 +102801,62 @@ func (r GetSupportBundleResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetSupportBundleResponse) StatusCode() int {
+func (r CreateSupportBundleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetSupportBundleOperationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data SupportBundleOperation `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSupportBundleOperationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSupportBundleOperationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DownloadSupportBundleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON409      *Conflict
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DownloadSupportBundleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DownloadSupportBundleResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -96086,6 +103145,36 @@ func (r PostToolsBySlugPreviewResponse) StatusCode() int {
 	return 0
 }
 
+type PostToolsBySlugRollbackResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *struct {
+		Data ToolOperation `json:"data"`
+	}
+	JSON400 *BadRequest
+	JSON401 *Unauthorized
+	JSON403 *Forbidden
+	JSON404 *NotFound
+	JSON409 *Conflict
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostToolsBySlugRollbackResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostToolsBySlugRollbackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type DeleteToolsBySlugUninstallResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -96148,15 +103237,8 @@ type GetUsersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		// Count Total number of items across all pages.
-		Count int64                       `json:"count"`
-		Data  []UsersSettingsUserListItem `json:"data"`
-
-		// Next URL of the next page, or null on the last page.
-		Next *string `json:"next"`
-
-		// Previous URL of the previous page, or null on the first page.
-		Previous *string `json:"previous"`
+		Data       []UsersSettingsUserListItem `json:"data"`
+		Pagination PaginationMetadata          `json:"pagination"`
 	}
 }
 
@@ -96686,6 +103768,33 @@ func (r InternalTunnelK8sResponse) StatusCode() int {
 	return 0
 }
 
+type InternalTunnelK8sCapabilityResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Supported bool `json:"supported"`
+	}
+	JSON400 *BadRequest
+	JSON403 *Forbidden
+	JSON503 *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r InternalTunnelK8sCapabilityResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r InternalTunnelK8sCapabilityResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetScimGroupsResponse struct {
 	Body                   []byte
 	HTTPResponse           *http.Response
@@ -97015,15 +104124,6 @@ func (c *ClientWithResponses) GetActivityWithResponse(ctx context.Context, param
 		return nil, err
 	}
 	return ParseGetActivityResponse(rsp)
-}
-
-// GetActivityFeedLegacyWithResponse request returning *GetActivityFeedLegacyResponse
-func (c *ClientWithResponses) GetActivityFeedLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetActivityFeedLegacyResponse, error) {
-	rsp, err := c.GetActivityFeedLegacy(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetActivityFeedLegacyResponse(rsp)
 }
 
 // AdminAgentsClusterAdminPostureWithResponse request returning *AdminAgentsClusterAdminPostureResponse
@@ -97566,6 +104666,24 @@ func (c *ClientWithResponses) PutAdminDashboardWidgetsByIdWithResponse(ctx conte
 	return ParsePutAdminDashboardWidgetsByIdResponse(rsp)
 }
 
+// GetAdminDeferredOperationsWithResponse request returning *GetAdminDeferredOperationsResponse
+func (c *ClientWithResponses) GetAdminDeferredOperationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminDeferredOperationsResponse, error) {
+	rsp, err := c.GetAdminDeferredOperations(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminDeferredOperationsResponse(rsp)
+}
+
+// PostAdminDeferredOperationsByIdCancelWithResponse request returning *PostAdminDeferredOperationsByIdCancelResponse
+func (c *ClientWithResponses) PostAdminDeferredOperationsByIdCancelWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAdminDeferredOperationsByIdCancelResponse, error) {
+	rsp, err := c.PostAdminDeferredOperationsByIdCancel(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminDeferredOperationsByIdCancelResponse(rsp)
+}
+
 // AdminEmailsListWithResponse request returning *AdminEmailsListResponse
 func (c *ClientWithResponses) AdminEmailsListWithResponse(ctx context.Context, params *AdminEmailsListParams, reqEditors ...RequestEditorFn) (*AdminEmailsListResponse, error) {
 	rsp, err := c.AdminEmailsList(ctx, params, reqEditors...)
@@ -97714,6 +104832,76 @@ func (c *ClientWithResponses) AdminKeyStatusWithResponse(ctx context.Context, re
 		return nil, err
 	}
 	return ParseAdminKeyStatusResponse(rsp)
+}
+
+// GetAdminMaintenanceWindowsWithResponse request returning *GetAdminMaintenanceWindowsResponse
+func (c *ClientWithResponses) GetAdminMaintenanceWindowsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminMaintenanceWindowsResponse, error) {
+	rsp, err := c.GetAdminMaintenanceWindows(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminMaintenanceWindowsResponse(rsp)
+}
+
+// PostAdminMaintenanceWindowsWithBodyWithResponse request with arbitrary body returning *PostAdminMaintenanceWindowsResponse
+func (c *ClientWithResponses) PostAdminMaintenanceWindowsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAdminMaintenanceWindowsResponse, error) {
+	rsp, err := c.PostAdminMaintenanceWindowsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminMaintenanceWindowsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostAdminMaintenanceWindowsWithResponse(ctx context.Context, body PostAdminMaintenanceWindowsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAdminMaintenanceWindowsResponse, error) {
+	rsp, err := c.PostAdminMaintenanceWindows(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminMaintenanceWindowsResponse(rsp)
+}
+
+// GetAdminMaintenanceWindowsActiveWithResponse request returning *GetAdminMaintenanceWindowsActiveResponse
+func (c *ClientWithResponses) GetAdminMaintenanceWindowsActiveWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminMaintenanceWindowsActiveResponse, error) {
+	rsp, err := c.GetAdminMaintenanceWindowsActive(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminMaintenanceWindowsActiveResponse(rsp)
+}
+
+// DeleteAdminMaintenanceWindowsByIdWithResponse request returning *DeleteAdminMaintenanceWindowsByIdResponse
+func (c *ClientWithResponses) DeleteAdminMaintenanceWindowsByIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteAdminMaintenanceWindowsByIdResponse, error) {
+	rsp, err := c.DeleteAdminMaintenanceWindowsById(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteAdminMaintenanceWindowsByIdResponse(rsp)
+}
+
+// GetAdminMaintenanceWindowsByIdWithResponse request returning *GetAdminMaintenanceWindowsByIdResponse
+func (c *ClientWithResponses) GetAdminMaintenanceWindowsByIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetAdminMaintenanceWindowsByIdResponse, error) {
+	rsp, err := c.GetAdminMaintenanceWindowsById(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminMaintenanceWindowsByIdResponse(rsp)
+}
+
+// PutAdminMaintenanceWindowsByIdWithBodyWithResponse request with arbitrary body returning *PutAdminMaintenanceWindowsByIdResponse
+func (c *ClientWithResponses) PutAdminMaintenanceWindowsByIdWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAdminMaintenanceWindowsByIdResponse, error) {
+	rsp, err := c.PutAdminMaintenanceWindowsByIdWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAdminMaintenanceWindowsByIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutAdminMaintenanceWindowsByIdWithResponse(ctx context.Context, id string, body PutAdminMaintenanceWindowsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminMaintenanceWindowsByIdResponse, error) {
+	rsp, err := c.PutAdminMaintenanceWindowsById(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAdminMaintenanceWindowsByIdResponse(rsp)
 }
 
 // GetAdminManagementBackupWithResponse request returning *GetAdminManagementBackupResponse
@@ -97933,6 +105121,50 @@ func (c *ClientWithResponses) AdminNotificationTemplateVariablesWithResponse(ctx
 		return nil, err
 	}
 	return ParseAdminNotificationTemplateVariablesResponse(rsp)
+}
+
+// GetAdminPlatformSettingsDefaultClusterTemplateWithResponse request returning *GetAdminPlatformSettingsDefaultClusterTemplateResponse
+func (c *ClientWithResponses) GetAdminPlatformSettingsDefaultClusterTemplateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminPlatformSettingsDefaultClusterTemplateResponse, error) {
+	rsp, err := c.GetAdminPlatformSettingsDefaultClusterTemplate(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminPlatformSettingsDefaultClusterTemplateResponse(rsp)
+}
+
+// PutAdminPlatformSettingsDefaultClusterTemplateWithBodyWithResponse request with arbitrary body returning *PutAdminPlatformSettingsDefaultClusterTemplateResponse
+func (c *ClientWithResponses) PutAdminPlatformSettingsDefaultClusterTemplateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAdminPlatformSettingsDefaultClusterTemplateResponse, error) {
+	rsp, err := c.PutAdminPlatformSettingsDefaultClusterTemplateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAdminPlatformSettingsDefaultClusterTemplateResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutAdminPlatformSettingsDefaultClusterTemplateWithResponse(ctx context.Context, body PutAdminPlatformSettingsDefaultClusterTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAdminPlatformSettingsDefaultClusterTemplateResponse, error) {
+	rsp, err := c.PutAdminPlatformSettingsDefaultClusterTemplate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAdminPlatformSettingsDefaultClusterTemplateResponse(rsp)
+}
+
+// GetAdminPlatformSettingsDefaultClusterTemplateCoverageWithResponse request returning *GetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse
+func (c *ClientWithResponses) GetAdminPlatformSettingsDefaultClusterTemplateCoverageWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse, error) {
+	rsp, err := c.GetAdminPlatformSettingsDefaultClusterTemplateCoverage(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse(rsp)
+}
+
+// PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdWithResponse request returning *PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse
+func (c *ClientWithResponses) PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse, error) {
+	rsp, err := c.PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterId(ctx, clusterId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse(rsp)
 }
 
 // GetAdminPrometheusDatasourcesWithResponse request returning *GetAdminPrometheusDatasourcesResponse
@@ -98173,8 +105405,8 @@ func (c *ClientWithResponses) AdminReadAuditPolicyUpdateWithResponse(ctx context
 }
 
 // GetAdminScimTokensWithResponse request returning *GetAdminScimTokensResponse
-func (c *ClientWithResponses) GetAdminScimTokensWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAdminScimTokensResponse, error) {
-	rsp, err := c.GetAdminScimTokens(ctx, reqEditors...)
+func (c *ClientWithResponses) GetAdminScimTokensWithResponse(ctx context.Context, params *GetAdminScimTokensParams, reqEditors ...RequestEditorFn) (*GetAdminScimTokensResponse, error) {
+	rsp, err := c.GetAdminScimTokens(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -98490,8 +105722,8 @@ func (c *ClientWithResponses) PostAdminUsersByIdUnlockWithResponse(ctx context.C
 }
 
 // AdminVaultConnectionsListWithResponse request returning *AdminVaultConnectionsListResponse
-func (c *ClientWithResponses) AdminVaultConnectionsListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsListResponse, error) {
-	rsp, err := c.AdminVaultConnectionsList(ctx, reqEditors...)
+func (c *ClientWithResponses) AdminVaultConnectionsListWithResponse(ctx context.Context, params *AdminVaultConnectionsListParams, reqEditors ...RequestEditorFn) (*AdminVaultConnectionsListResponse, error) {
+	rsp, err := c.AdminVaultConnectionsList(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -98752,6 +105984,15 @@ func (c *ClientWithResponses) GetAlertingEventsWithResponse(ctx context.Context,
 	return ParseGetAlertingEventsResponse(rsp)
 }
 
+// GetAlertingEventsSummaryWithResponse request returning *GetAlertingEventsSummaryResponse
+func (c *ClientWithResponses) GetAlertingEventsSummaryWithResponse(ctx context.Context, params *GetAlertingEventsSummaryParams, reqEditors ...RequestEditorFn) (*GetAlertingEventsSummaryResponse, error) {
+	rsp, err := c.GetAlertingEventsSummary(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertingEventsSummaryResponse(rsp)
+}
+
 // GetAlertingEventsByIdWithResponse request returning *GetAlertingEventsByIdResponse
 func (c *ClientWithResponses) GetAlertingEventsByIdWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetAlertingEventsByIdResponse, error) {
 	rsp, err := c.GetAlertingEventsById(ctx, id, reqEditors...)
@@ -98902,33 +106143,6 @@ func (c *ClientWithResponses) PostAlertingSilencesByIdExpireWithResponse(ctx con
 	return ParsePostAlertingSilencesByIdExpireResponse(rsp)
 }
 
-// PostAlertsRulesByIdDisableWithResponse request returning *PostAlertsRulesByIdDisableResponse
-func (c *ClientWithResponses) PostAlertsRulesByIdDisableWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAlertsRulesByIdDisableResponse, error) {
-	rsp, err := c.PostAlertsRulesByIdDisable(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAlertsRulesByIdDisableResponse(rsp)
-}
-
-// PostAlertsRulesByIdEnableWithResponse request returning *PostAlertsRulesByIdEnableResponse
-func (c *ClientWithResponses) PostAlertsRulesByIdEnableWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAlertsRulesByIdEnableResponse, error) {
-	rsp, err := c.PostAlertsRulesByIdEnable(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAlertsRulesByIdEnableResponse(rsp)
-}
-
-// PostAlertsSilencesByIdExpireWithResponse request returning *PostAlertsSilencesByIdExpireResponse
-func (c *ClientWithResponses) PostAlertsSilencesByIdExpireWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostAlertsSilencesByIdExpireResponse, error) {
-	rsp, err := c.PostAlertsSilencesByIdExpire(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAlertsSilencesByIdExpireResponse(rsp)
-}
-
 // GetAnomalyBaselinesWithResponse request returning *GetAnomalyBaselinesResponse
 func (c *ClientWithResponses) GetAnomalyBaselinesWithResponse(ctx context.Context, params *GetAnomalyBaselinesParams, reqEditors ...RequestEditorFn) (*GetAnomalyBaselinesResponse, error) {
 	rsp, err := c.GetAnomalyBaselines(ctx, params, reqEditors...)
@@ -98965,6 +106179,33 @@ func (c *ClientWithResponses) ExportAuditLogsWithResponse(ctx context.Context, p
 	return ParseExportAuditLogsResponse(rsp)
 }
 
+// CreateAuditExportWithResponse request returning *CreateAuditExportResponse
+func (c *ClientWithResponses) CreateAuditExportWithResponse(ctx context.Context, params *CreateAuditExportParams, reqEditors ...RequestEditorFn) (*CreateAuditExportResponse, error) {
+	rsp, err := c.CreateAuditExport(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAuditExportResponse(rsp)
+}
+
+// GetAuditExportsByIdWithResponse request returning *GetAuditExportsByIdResponse
+func (c *ClientWithResponses) GetAuditExportsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuditExportsByIdResponse, error) {
+	rsp, err := c.GetAuditExportsById(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAuditExportsByIdResponse(rsp)
+}
+
+// GetAuditExportsByIdDownloadWithResponse request returning *GetAuditExportsByIdDownloadResponse
+func (c *ClientWithResponses) GetAuditExportsByIdDownloadWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuditExportsByIdDownloadResponse, error) {
+	rsp, err := c.GetAuditExportsByIdDownload(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAuditExportsByIdDownloadResponse(rsp)
+}
+
 // GetAuditLogWithResponse request returning *GetAuditLogResponse
 func (c *ClientWithResponses) GetAuditLogWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAuditLogResponse, error) {
 	rsp, err := c.GetAuditLog(ctx, id, reqEditors...)
@@ -98972,6 +106213,15 @@ func (c *ClientWithResponses) GetAuditLogWithResponse(ctx context.Context, id op
 		return nil, err
 	}
 	return ParseGetAuditLogResponse(rsp)
+}
+
+// GetAuthCallbackByProviderWithResponse request returning *GetAuthCallbackByProviderResponse
+func (c *ClientWithResponses) GetAuthCallbackByProviderWithResponse(ctx context.Context, provider string, reqEditors ...RequestEditorFn) (*GetAuthCallbackByProviderResponse, error) {
+	rsp, err := c.GetAuthCallbackByProvider(ctx, provider, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAuthCallbackByProviderResponse(rsp)
 }
 
 // PostAuthChangePasswordWithBodyWithResponse request with arbitrary body returning *PostAuthChangePasswordResponse
@@ -99139,6 +106389,15 @@ func (c *ClientWithResponses) PostAuthLoginWithResponse(ctx context.Context, bod
 	return ParsePostAuthLoginResponse(rsp)
 }
 
+// GetAuthLoginByProviderWithResponse request returning *GetAuthLoginByProviderResponse
+func (c *ClientWithResponses) GetAuthLoginByProviderWithResponse(ctx context.Context, provider string, reqEditors ...RequestEditorFn) (*GetAuthLoginByProviderResponse, error) {
+	rsp, err := c.GetAuthLoginByProvider(ctx, provider, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAuthLoginByProviderResponse(rsp)
+}
+
 // GetAuthLogoutDoneWithResponse request returning *GetAuthLogoutDoneResponse
 func (c *ClientWithResponses) GetAuthLogoutDoneWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthLogoutDoneResponse, error) {
 	rsp, err := c.GetAuthLogoutDone(ctx, reqEditors...)
@@ -99164,6 +106423,32 @@ func (c *ClientWithResponses) GetAuthMeWithResponse(ctx context.Context, reqEdit
 		return nil, err
 	}
 	return ParseGetAuthMeResponse(rsp)
+}
+
+// GetAuthMePreferencesWithResponse request returning *GetAuthMePreferencesResponse
+func (c *ClientWithResponses) GetAuthMePreferencesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthMePreferencesResponse, error) {
+	rsp, err := c.GetAuthMePreferences(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAuthMePreferencesResponse(rsp)
+}
+
+// PutAuthMePreferencesWithBodyWithResponse request with arbitrary body returning *PutAuthMePreferencesResponse
+func (c *ClientWithResponses) PutAuthMePreferencesWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAuthMePreferencesResponse, error) {
+	rsp, err := c.PutAuthMePreferencesWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAuthMePreferencesResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutAuthMePreferencesWithResponse(ctx context.Context, body PutAuthMePreferencesJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAuthMePreferencesResponse, error) {
+	rsp, err := c.PutAuthMePreferences(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAuthMePreferencesResponse(rsp)
 }
 
 // GetAuthMeQuotaWithResponse request returning *GetAuthMeQuotaResponse
@@ -99209,17 +106494,9 @@ func (c *ClientWithResponses) PostAuthPasswordResetRequestWithResponse(ctx conte
 	return ParsePostAuthPasswordResetRequestResponse(rsp)
 }
 
-// PostAuthRefreshWithBodyWithResponse request with arbitrary body returning *PostAuthRefreshResponse
-func (c *ClientWithResponses) PostAuthRefreshWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
-	rsp, err := c.PostAuthRefreshWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostAuthRefreshResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostAuthRefreshWithResponse(ctx context.Context, body PostAuthRefreshJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
-	rsp, err := c.PostAuthRefresh(ctx, body, reqEditors...)
+// PostAuthRefreshWithResponse request returning *PostAuthRefreshResponse
+func (c *ClientWithResponses) PostAuthRefreshWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostAuthRefreshResponse, error) {
+	rsp, err := c.PostAuthRefresh(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -99400,15 +106677,6 @@ func (c *ClientWithResponses) GetBackupsRestoresByIdWithResponse(ctx context.Con
 	return ParseGetBackupsRestoresByIdResponse(rsp)
 }
 
-// GetBackupsRunsWithResponse request returning *GetBackupsRunsResponse
-func (c *ClientWithResponses) GetBackupsRunsWithResponse(ctx context.Context, params *GetBackupsRunsParams, reqEditors ...RequestEditorFn) (*GetBackupsRunsResponse, error) {
-	rsp, err := c.GetBackupsRuns(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetBackupsRunsResponse(rsp)
-}
-
 // GetBackupsSchedulesWithResponse request returning *GetBackupsSchedulesResponse
 func (c *ClientWithResponses) GetBackupsSchedulesWithResponse(ctx context.Context, params *GetBackupsSchedulesParams, reqEditors ...RequestEditorFn) (*GetBackupsSchedulesResponse, error) {
 	rsp, err := c.GetBackupsSchedules(ctx, params, reqEditors...)
@@ -99505,76 +106773,6 @@ func (c *ClientWithResponses) PostBackupsStorageWithResponse(ctx context.Context
 	return ParsePostBackupsStorageResponse(rsp)
 }
 
-// GetBackupsStorageConfigsWithResponse request returning *GetBackupsStorageConfigsResponse
-func (c *ClientWithResponses) GetBackupsStorageConfigsWithResponse(ctx context.Context, params *GetBackupsStorageConfigsParams, reqEditors ...RequestEditorFn) (*GetBackupsStorageConfigsResponse, error) {
-	rsp, err := c.GetBackupsStorageConfigs(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetBackupsStorageConfigsResponse(rsp)
-}
-
-// PostBackupsStorageConfigsWithBodyWithResponse request with arbitrary body returning *PostBackupsStorageConfigsResponse
-func (c *ClientWithResponses) PostBackupsStorageConfigsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostBackupsStorageConfigsResponse, error) {
-	rsp, err := c.PostBackupsStorageConfigsWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostBackupsStorageConfigsResponse(rsp)
-}
-
-func (c *ClientWithResponses) PostBackupsStorageConfigsWithResponse(ctx context.Context, body PostBackupsStorageConfigsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostBackupsStorageConfigsResponse, error) {
-	rsp, err := c.PostBackupsStorageConfigs(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostBackupsStorageConfigsResponse(rsp)
-}
-
-// DeleteBackupsStorageConfigsByIdWithResponse request returning *DeleteBackupsStorageConfigsByIdResponse
-func (c *ClientWithResponses) DeleteBackupsStorageConfigsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteBackupsStorageConfigsByIdResponse, error) {
-	rsp, err := c.DeleteBackupsStorageConfigsById(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeleteBackupsStorageConfigsByIdResponse(rsp)
-}
-
-// GetBackupsStorageConfigsByIdWithResponse request returning *GetBackupsStorageConfigsByIdResponse
-func (c *ClientWithResponses) GetBackupsStorageConfigsByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetBackupsStorageConfigsByIdResponse, error) {
-	rsp, err := c.GetBackupsStorageConfigsById(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetBackupsStorageConfigsByIdResponse(rsp)
-}
-
-// PutBackupsStorageConfigsByIdWithBodyWithResponse request with arbitrary body returning *PutBackupsStorageConfigsByIdResponse
-func (c *ClientWithResponses) PutBackupsStorageConfigsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutBackupsStorageConfigsByIdResponse, error) {
-	rsp, err := c.PutBackupsStorageConfigsByIdWithBody(ctx, id, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePutBackupsStorageConfigsByIdResponse(rsp)
-}
-
-func (c *ClientWithResponses) PutBackupsStorageConfigsByIdWithResponse(ctx context.Context, id openapi_types.UUID, body PutBackupsStorageConfigsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutBackupsStorageConfigsByIdResponse, error) {
-	rsp, err := c.PutBackupsStorageConfigsById(ctx, id, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePutBackupsStorageConfigsByIdResponse(rsp)
-}
-
-// PostBackupsStorageConfigsByIdTestConnectionWithResponse request returning *PostBackupsStorageConfigsByIdTestConnectionResponse
-func (c *ClientWithResponses) PostBackupsStorageConfigsByIdTestConnectionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostBackupsStorageConfigsByIdTestConnectionResponse, error) {
-	rsp, err := c.PostBackupsStorageConfigsByIdTestConnection(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostBackupsStorageConfigsByIdTestConnectionResponse(rsp)
-}
-
 // DeleteBackupsStorageByIdWithResponse request returning *DeleteBackupsStorageByIdResponse
 func (c *ClientWithResponses) DeleteBackupsStorageByIdWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteBackupsStorageByIdResponse, error) {
 	rsp, err := c.DeleteBackupsStorageById(ctx, id, reqEditors...)
@@ -99608,15 +106806,6 @@ func (c *ClientWithResponses) PutBackupsStorageByIdWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParsePutBackupsStorageByIdResponse(rsp)
-}
-
-// PostBackupsStorageByIdTestWithResponse request returning *PostBackupsStorageByIdTestResponse
-func (c *ClientWithResponses) PostBackupsStorageByIdTestWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostBackupsStorageByIdTestResponse, error) {
-	rsp, err := c.PostBackupsStorageByIdTest(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostBackupsStorageByIdTestResponse(rsp)
 }
 
 // PostBackupsStorageByIdTestConnectionWithResponse request returning *PostBackupsStorageByIdTestConnectionResponse
@@ -99663,6 +106852,41 @@ func (c *ClientWithResponses) PostBackupsByIdRestoreWithResponse(ctx context.Con
 	return ParsePostBackupsByIdRestoreResponse(rsp)
 }
 
+// GetCatalogApplicationSourcesWithResponse request returning *GetCatalogApplicationSourcesResponse
+func (c *ClientWithResponses) GetCatalogApplicationSourcesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogApplicationSourcesResponse, error) {
+	rsp, err := c.GetCatalogApplicationSources(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogApplicationSourcesResponse(rsp)
+}
+
+// GetCatalogApplicationsWithResponse request returning *GetCatalogApplicationsResponse
+func (c *ClientWithResponses) GetCatalogApplicationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogApplicationsResponse, error) {
+	rsp, err := c.GetCatalogApplications(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogApplicationsResponse(rsp)
+}
+
+// PostCatalogApplicationsPreviewWithBodyWithResponse request with arbitrary body returning *PostCatalogApplicationsPreviewResponse
+func (c *ClientWithResponses) PostCatalogApplicationsPreviewWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostCatalogApplicationsPreviewResponse, error) {
+	rsp, err := c.PostCatalogApplicationsPreviewWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostCatalogApplicationsPreviewResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostCatalogApplicationsPreviewWithResponse(ctx context.Context, body PostCatalogApplicationsPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostCatalogApplicationsPreviewResponse, error) {
+	rsp, err := c.PostCatalogApplicationsPreview(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostCatalogApplicationsPreviewResponse(rsp)
+}
+
 // GetCatalogChartsWithResponse request returning *GetCatalogChartsResponse
 func (c *ClientWithResponses) GetCatalogChartsWithResponse(ctx context.Context, params *GetCatalogChartsParams, reqEditors ...RequestEditorFn) (*GetCatalogChartsResponse, error) {
 	rsp, err := c.GetCatalogCharts(ctx, params, reqEditors...)
@@ -99679,6 +106903,23 @@ func (c *ClientWithResponses) GetCatalogChartsByIdWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseGetCatalogChartsByIdResponse(rsp)
+}
+
+// PutCatalogChartsByIdFavoriteWithBodyWithResponse request with arbitrary body returning *PutCatalogChartsByIdFavoriteResponse
+func (c *ClientWithResponses) PutCatalogChartsByIdFavoriteWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCatalogChartsByIdFavoriteResponse, error) {
+	rsp, err := c.PutCatalogChartsByIdFavoriteWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutCatalogChartsByIdFavoriteResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutCatalogChartsByIdFavoriteWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCatalogChartsByIdFavoriteResponse, error) {
+	rsp, err := c.PutCatalogChartsByIdFavorite(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutCatalogChartsByIdFavoriteResponse(rsp)
 }
 
 // GetCatalogChartsByIdReadmeWithResponse request returning *GetCatalogChartsByIdReadmeResponse
@@ -99715,6 +106956,15 @@ func (c *ClientWithResponses) GetCatalogControllerStatusWithResponse(ctx context
 		return nil, err
 	}
 	return ParseGetCatalogControllerStatusResponse(rsp)
+}
+
+// GetCatalogDiscoveryWithResponse request returning *GetCatalogDiscoveryResponse
+func (c *ClientWithResponses) GetCatalogDiscoveryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogDiscoveryResponse, error) {
+	rsp, err := c.GetCatalogDiscovery(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogDiscoveryResponse(rsp)
 }
 
 // GetCatalogInstalledWithResponse request returning *GetCatalogInstalledResponse
@@ -99776,6 +107026,15 @@ func (c *ClientWithResponses) PostCatalogInstalledByIdRollbackWithResponse(ctx c
 		return nil, err
 	}
 	return ParsePostCatalogInstalledByIdRollbackResponse(rsp)
+}
+
+// GetCatalogInstalledByIdUpgradeVersionsWithResponse request returning *GetCatalogInstalledByIdUpgradeVersionsResponse
+func (c *ClientWithResponses) GetCatalogInstalledByIdUpgradeVersionsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdUpgradeVersionsResponse, error) {
+	rsp, err := c.GetCatalogInstalledByIdUpgradeVersions(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogInstalledByIdUpgradeVersionsResponse(rsp)
 }
 
 // PutCatalogInstalledByIdUpgradeWithBodyWithResponse request with arbitrary body returning *PutCatalogInstalledByIdUpgradeResponse
@@ -100617,6 +107876,15 @@ func (c *ClientWithResponses) PostClustersWithResponse(ctx context.Context, body
 	return ParsePostClustersResponse(rsp)
 }
 
+// GetClustersSummaryWithResponse request returning *GetClustersSummaryResponse
+func (c *ClientWithResponses) GetClustersSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClustersSummaryResponse, error) {
+	rsp, err := c.GetClustersSummary(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersSummaryResponse(rsp)
+}
+
 // GetClustersByClusterIdApiserverAllowlistWithResponse request returning *GetClustersByClusterIdApiserverAllowlistResponse
 func (c *ClientWithResponses) GetClustersByClusterIdApiserverAllowlistWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdApiserverAllowlistResponse, error) {
 	rsp, err := c.GetClustersByClusterIdApiserverAllowlist(ctx, clusterId, reqEditors...)
@@ -101027,8 +108295,8 @@ func (c *ClientWithResponses) GetClustersByClusterIdLimitRangesWithResponse(ctx 
 }
 
 // GetClustersByClusterIdNamespacesWithResponse request returning *GetClustersByClusterIdNamespacesResponse
-func (c *ClientWithResponses) GetClustersByClusterIdNamespacesWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdNamespacesResponse, error) {
-	rsp, err := c.GetClustersByClusterIdNamespaces(ctx, clusterId, reqEditors...)
+func (c *ClientWithResponses) GetClustersByClusterIdNamespacesWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetClustersByClusterIdNamespacesParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdNamespacesResponse, error) {
+	rsp, err := c.GetClustersByClusterIdNamespaces(ctx, clusterId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -101569,6 +108837,15 @@ func (c *ClientWithResponses) PostClustersByClusterIdRegistriesByIdTestWithRespo
 		return nil, err
 	}
 	return ParsePostClustersByClusterIdRegistriesByIdTestResponse(rsp)
+}
+
+// CountClusterResourcesWithResponse request returning *CountClusterResourcesResponse
+func (c *ClientWithResponses) CountClusterResourcesWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *CountClusterResourcesParams, reqEditors ...RequestEditorFn) (*CountClusterResourcesResponse, error) {
+	rsp, err := c.CountClusterResources(ctx, clusterId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCountClusterResourcesResponse(rsp)
 }
 
 // GetClustersByClusterIdResourceQuotasWithResponse request returning *GetClustersByClusterIdResourceQuotasResponse
@@ -102252,15 +109529,6 @@ func (c *ClientWithResponses) PostClustersByIdGenerateKubeconfigWithResponse(ctx
 	return ParsePostClustersByIdGenerateKubeconfigResponse(rsp)
 }
 
-// GenerateClusterKubeconfigUnderscoreWithResponse request returning *GenerateClusterKubeconfigUnderscoreResponse
-func (c *ClientWithResponses) GenerateClusterKubeconfigUnderscoreWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GenerateClusterKubeconfigUnderscoreResponse, error) {
-	rsp, err := c.GenerateClusterKubeconfigUnderscore(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGenerateClusterKubeconfigUnderscoreResponse(rsp)
-}
-
 // GetClustersByIdHealthWithResponse request returning *GetClustersByIdHealthResponse
 func (c *ClientWithResponses) GetClustersByIdHealthWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdHealthResponse, error) {
 	rsp, err := c.GetClustersByIdHealth(ctx, id, reqEditors...)
@@ -102268,15 +109536,6 @@ func (c *ClientWithResponses) GetClustersByIdHealthWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseGetClustersByIdHealthResponse(rsp)
-}
-
-// GetClustersByIdKubeconfigLegacyWithResponse request returning *GetClustersByIdKubeconfigLegacyResponse
-func (c *ClientWithResponses) GetClustersByIdKubeconfigLegacyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetClustersByIdKubeconfigLegacyResponse, error) {
-	rsp, err := c.GetClustersByIdKubeconfigLegacy(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetClustersByIdKubeconfigLegacyResponse(rsp)
 }
 
 // GetClustersByIdKubeconfigPreviewWithResponse request returning *GetClustersByIdKubeconfigPreviewResponse
@@ -102463,6 +109722,180 @@ func (c *ClientWithResponses) PutClustersByIdMonitoringStackUpgradeWithResponse(
 	return ParsePutClustersByIdMonitoringStackUpgradeResponse(rsp)
 }
 
+// DeleteClustersByIdObservabilityGrafanaWithResponse request returning *DeleteClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) DeleteClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.DeleteClustersByIdObservabilityGrafana(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// GetClustersByIdObservabilityGrafanaWithResponse request returning *GetClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) GetClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.GetClustersByIdObservabilityGrafana(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// HeadClustersByIdObservabilityGrafanaWithResponse request returning *HeadClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) HeadClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*HeadClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.HeadClustersByIdObservabilityGrafana(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// OptionsClustersByIdObservabilityGrafanaWithResponse request returning *OptionsClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) OptionsClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*OptionsClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.OptionsClustersByIdObservabilityGrafana(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOptionsClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// PatchClustersByIdObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PatchClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) PatchClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PatchClustersByIdObservabilityGrafanaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PatchClustersByIdObservabilityGrafana(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// PostClustersByIdObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PostClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) PostClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PostClustersByIdObservabilityGrafanaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PostClustersByIdObservabilityGrafana(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// PutClustersByIdObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PutClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) PutClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PutClustersByIdObservabilityGrafanaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PutClustersByIdObservabilityGrafana(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// DeleteClustersByIdObservabilityGrafanaProxyWithResponse request returning *DeleteClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) DeleteClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.DeleteClustersByIdObservabilityGrafanaProxy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// GetClustersByIdObservabilityGrafanaProxyWithResponse request returning *GetClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) GetClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.GetClustersByIdObservabilityGrafanaProxy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// HeadClustersByIdObservabilityGrafanaProxyWithResponse request returning *HeadClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) HeadClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*HeadClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.HeadClustersByIdObservabilityGrafanaProxy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// OptionsClustersByIdObservabilityGrafanaProxyWithResponse request returning *OptionsClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) OptionsClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*OptionsClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.OptionsClustersByIdObservabilityGrafanaProxy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOptionsClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PatchClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PatchClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PatchClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PatchClustersByIdObservabilityGrafanaProxyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PatchClustersByIdObservabilityGrafanaProxy(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PostClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PostClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PostClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PostClustersByIdObservabilityGrafanaProxyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PostClustersByIdObservabilityGrafanaProxy(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PutClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PutClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PutClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PutClustersByIdObservabilityGrafanaProxyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PutClustersByIdObservabilityGrafanaProxy(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
 // PostClustersByIdOwnershipTakeoverWithResponse request returning *PostClustersByIdOwnershipTakeoverResponse
 func (c *ClientWithResponses) PostClustersByIdOwnershipTakeoverWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostClustersByIdOwnershipTakeoverResponse, error) {
 	rsp, err := c.PostClustersByIdOwnershipTakeover(ctx, id, reqEditors...)
@@ -102596,15 +110029,6 @@ func (c *ClientWithResponses) PostClustersByIdShellSessionsBySessionIdCloseWithR
 	return ParsePostClustersByIdShellSessionsBySessionIdCloseResponse(rsp)
 }
 
-// RemoteV2ListPodsWithResponse request returning *RemoteV2ListPodsResponse
-func (c *ClientWithResponses) RemoteV2ListPodsWithResponse(ctx context.Context, id openapi_types.UUID, params *RemoteV2ListPodsParams, reqEditors ...RequestEditorFn) (*RemoteV2ListPodsResponse, error) {
-	rsp, err := c.RemoteV2ListPods(ctx, id, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseRemoteV2ListPodsResponse(rsp)
-}
-
 // GetClustersByIdVulnerabilitiesImagesWithResponse request returning *GetClustersByIdVulnerabilitiesImagesResponse
 func (c *ClientWithResponses) GetClustersByIdVulnerabilitiesImagesWithResponse(ctx context.Context, id openapi_types.UUID, params *GetClustersByIdVulnerabilitiesImagesParams, reqEditors ...RequestEditorFn) (*GetClustersByIdVulnerabilitiesImagesResponse, error) {
 	rsp, err := c.GetClustersByIdVulnerabilitiesImages(ctx, id, params, reqEditors...)
@@ -102630,78 +110054,6 @@ func (c *ClientWithResponses) GetCompliancePostureWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseGetCompliancePostureResponse(rsp)
-}
-
-// TunnelConnectDeleteWithResponse request returning *TunnelConnectDeleteResponse
-func (c *ClientWithResponses) TunnelConnectDeleteWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectDeleteResponse, error) {
-	rsp, err := c.TunnelConnectDelete(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTunnelConnectDeleteResponse(rsp)
-}
-
-// TunnelConnectGetWithResponse request returning *TunnelConnectGetResponse
-func (c *ClientWithResponses) TunnelConnectGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectGetResponse, error) {
-	rsp, err := c.TunnelConnectGet(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTunnelConnectGetResponse(rsp)
-}
-
-// TunnelConnectHeadWithResponse request returning *TunnelConnectHeadResponse
-func (c *ClientWithResponses) TunnelConnectHeadWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectHeadResponse, error) {
-	rsp, err := c.TunnelConnectHead(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTunnelConnectHeadResponse(rsp)
-}
-
-// TunnelConnectOptionsWithResponse request returning *TunnelConnectOptionsResponse
-func (c *ClientWithResponses) TunnelConnectOptionsWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectOptionsResponse, error) {
-	rsp, err := c.TunnelConnectOptions(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTunnelConnectOptionsResponse(rsp)
-}
-
-// TunnelConnectPatchWithResponse request returning *TunnelConnectPatchResponse
-func (c *ClientWithResponses) TunnelConnectPatchWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectPatchResponse, error) {
-	rsp, err := c.TunnelConnectPatch(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTunnelConnectPatchResponse(rsp)
-}
-
-// TunnelConnectPostWithResponse request returning *TunnelConnectPostResponse
-func (c *ClientWithResponses) TunnelConnectPostWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectPostResponse, error) {
-	rsp, err := c.TunnelConnectPost(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTunnelConnectPostResponse(rsp)
-}
-
-// TunnelConnectPutWithResponse request returning *TunnelConnectPutResponse
-func (c *ClientWithResponses) TunnelConnectPutWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectPutResponse, error) {
-	rsp, err := c.TunnelConnectPut(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTunnelConnectPutResponse(rsp)
-}
-
-// TunnelConnectTraceWithResponse request returning *TunnelConnectTraceResponse
-func (c *ClientWithResponses) TunnelConnectTraceWithResponse(ctx context.Context, clusterId openapi_types.UUID, reqEditors ...RequestEditorFn) (*TunnelConnectTraceResponse, error) {
-	rsp, err := c.TunnelConnectTrace(ctx, clusterId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseTunnelConnectTraceResponse(rsp)
 }
 
 // GetControllersAlertsWithResponse request returning *GetControllersAlertsResponse
@@ -102924,6 +110276,67 @@ func (c *ClientWithResponses) GetDeliveryClustersByClusterIdInventoryWithRespons
 	return ParseGetDeliveryClustersByClusterIdInventoryResponse(rsp)
 }
 
+// GetDeliveryConfigurationTemplatesWithResponse request returning *GetDeliveryConfigurationTemplatesResponse
+func (c *ClientWithResponses) GetDeliveryConfigurationTemplatesWithResponse(ctx context.Context, params *GetDeliveryConfigurationTemplatesParams, reqEditors ...RequestEditorFn) (*GetDeliveryConfigurationTemplatesResponse, error) {
+	rsp, err := c.GetDeliveryConfigurationTemplates(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeliveryConfigurationTemplatesResponse(rsp)
+}
+
+// PostDeliveryConfigurationTemplatesWithBodyWithResponse request with arbitrary body returning *PostDeliveryConfigurationTemplatesResponse
+func (c *ClientWithResponses) PostDeliveryConfigurationTemplatesWithBodyWithResponse(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryConfigurationTemplatesResponse, error) {
+	rsp, err := c.PostDeliveryConfigurationTemplatesWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryConfigurationTemplatesResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostDeliveryConfigurationTemplatesWithResponse(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryConfigurationTemplatesResponse, error) {
+	rsp, err := c.PostDeliveryConfigurationTemplates(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryConfigurationTemplatesResponse(rsp)
+}
+
+// DeleteDeliveryConfigurationTemplatesByIdWithResponse request returning *DeleteDeliveryConfigurationTemplatesByIdResponse
+func (c *ClientWithResponses) DeleteDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*DeleteDeliveryConfigurationTemplatesByIdResponse, error) {
+	rsp, err := c.DeleteDeliveryConfigurationTemplatesById(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteDeliveryConfigurationTemplatesByIdResponse(rsp)
+}
+
+// GetDeliveryConfigurationTemplatesByIdWithResponse request returning *GetDeliveryConfigurationTemplatesByIdResponse
+func (c *ClientWithResponses) GetDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*GetDeliveryConfigurationTemplatesByIdResponse, error) {
+	rsp, err := c.GetDeliveryConfigurationTemplatesById(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeliveryConfigurationTemplatesByIdResponse(rsp)
+}
+
+// PutDeliveryConfigurationTemplatesByIdWithBodyWithResponse request with arbitrary body returning *PutDeliveryConfigurationTemplatesByIdResponse
+func (c *ClientWithResponses) PutDeliveryConfigurationTemplatesByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDeliveryConfigurationTemplatesByIdResponse, error) {
+	rsp, err := c.PutDeliveryConfigurationTemplatesByIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDeliveryConfigurationTemplatesByIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDeliveryConfigurationTemplatesByIdResponse, error) {
+	rsp, err := c.PutDeliveryConfigurationTemplatesById(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDeliveryConfigurationTemplatesByIdResponse(rsp)
+}
+
 // GetDeliveryDeploymentsWithResponse request returning *GetDeliveryDeploymentsResponse
 func (c *ClientWithResponses) GetDeliveryDeploymentsWithResponse(ctx context.Context, params *GetDeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*GetDeliveryDeploymentsResponse, error) {
 	rsp, err := c.GetDeliveryDeployments(ctx, params, reqEditors...)
@@ -103002,22 +110415,91 @@ func (c *ClientWithResponses) PostDeliveryDeploymentsByIdSuspendWithResponse(ctx
 	return ParsePostDeliveryDeploymentsByIdSuspendResponse(rsp)
 }
 
-// GetDeliveryEstateWithResponse request returning *GetDeliveryEstateResponse
-func (c *ClientWithResponses) GetDeliveryEstateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryEstateResponse, error) {
-	rsp, err := c.GetDeliveryEstate(ctx, reqEditors...)
+// GetDeliveryFleetWithResponse request returning *GetDeliveryFleetResponse
+func (c *ClientWithResponses) GetDeliveryFleetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryFleetResponse, error) {
+	rsp, err := c.GetDeliveryFleet(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetDeliveryEstateResponse(rsp)
+	return ParseGetDeliveryFleetResponse(rsp)
 }
 
-// GetDeliveryFleetLegacyWithResponse request returning *GetDeliveryFleetLegacyResponse
-func (c *ClientWithResponses) GetDeliveryFleetLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryFleetLegacyResponse, error) {
-	rsp, err := c.GetDeliveryFleetLegacy(ctx, reqEditors...)
+// GetDeliveryOverrideSetsWithResponse request returning *GetDeliveryOverrideSetsResponse
+func (c *ClientWithResponses) GetDeliveryOverrideSetsWithResponse(ctx context.Context, params *GetDeliveryOverrideSetsParams, reqEditors ...RequestEditorFn) (*GetDeliveryOverrideSetsResponse, error) {
+	rsp, err := c.GetDeliveryOverrideSets(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetDeliveryFleetLegacyResponse(rsp)
+	return ParseGetDeliveryOverrideSetsResponse(rsp)
+}
+
+// PostDeliveryOverrideSetsWithBodyWithResponse request with arbitrary body returning *PostDeliveryOverrideSetsResponse
+func (c *ClientWithResponses) PostDeliveryOverrideSetsWithBodyWithResponse(ctx context.Context, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsResponse, error) {
+	rsp, err := c.PostDeliveryOverrideSetsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryOverrideSetsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostDeliveryOverrideSetsWithResponse(ctx context.Context, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsResponse, error) {
+	rsp, err := c.PostDeliveryOverrideSets(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryOverrideSetsResponse(rsp)
+}
+
+// PostDeliveryOverrideSetsEffectiveWithBodyWithResponse request with arbitrary body returning *PostDeliveryOverrideSetsEffectiveResponse
+func (c *ClientWithResponses) PostDeliveryOverrideSetsEffectiveWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsEffectiveResponse, error) {
+	rsp, err := c.PostDeliveryOverrideSetsEffectiveWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryOverrideSetsEffectiveResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostDeliveryOverrideSetsEffectiveWithResponse(ctx context.Context, body PostDeliveryOverrideSetsEffectiveJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsEffectiveResponse, error) {
+	rsp, err := c.PostDeliveryOverrideSetsEffective(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryOverrideSetsEffectiveResponse(rsp)
+}
+
+// DeleteDeliveryOverrideSetsByIdWithResponse request returning *DeleteDeliveryOverrideSetsByIdResponse
+func (c *ClientWithResponses) DeleteDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*DeleteDeliveryOverrideSetsByIdResponse, error) {
+	rsp, err := c.DeleteDeliveryOverrideSetsById(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteDeliveryOverrideSetsByIdResponse(rsp)
+}
+
+// GetDeliveryOverrideSetsByIdWithResponse request returning *GetDeliveryOverrideSetsByIdResponse
+func (c *ClientWithResponses) GetDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*GetDeliveryOverrideSetsByIdResponse, error) {
+	rsp, err := c.GetDeliveryOverrideSetsById(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeliveryOverrideSetsByIdResponse(rsp)
+}
+
+// PutDeliveryOverrideSetsByIdWithBodyWithResponse request with arbitrary body returning *PutDeliveryOverrideSetsByIdResponse
+func (c *ClientWithResponses) PutDeliveryOverrideSetsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDeliveryOverrideSetsByIdResponse, error) {
+	rsp, err := c.PutDeliveryOverrideSetsByIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDeliveryOverrideSetsByIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDeliveryOverrideSetsByIdResponse, error) {
+	rsp, err := c.PutDeliveryOverrideSetsById(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDeliveryOverrideSetsByIdResponse(rsp)
 }
 
 // GetDeliveryRolloutsWithResponse request returning *GetDeliveryRolloutsResponse
@@ -103358,6 +110840,15 @@ func (c *ClientWithResponses) PostDeliveryTargetsByIdRolloutsWithResponse(ctx co
 	return ParsePostDeliveryTargetsByIdRolloutsResponse(rsp)
 }
 
+// GetEventsStreamWithResponse request returning *GetEventsStreamResponse
+func (c *ClientWithResponses) GetEventsStreamWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetEventsStreamResponse, error) {
+	rsp, err := c.GetEventsStream(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetEventsStreamResponse(rsp)
+}
+
 // GetExtensionsWithResponse request returning *GetExtensionsResponse
 func (c *ClientWithResponses) GetExtensionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetExtensionsResponse, error) {
 	rsp, err := c.GetExtensions(ctx, reqEditors...)
@@ -103488,13 +110979,30 @@ func (c *ClientWithResponses) PostExtensionsByNameTokenWithResponse(ctx context.
 	return ParsePostExtensionsByNameTokenResponse(rsp)
 }
 
-// PostGitopsSourcesByIdWebhookWithResponse request returning *PostGitopsSourcesByIdWebhookResponse
-func (c *ClientWithResponses) PostGitopsSourcesByIdWebhookWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*PostGitopsSourcesByIdWebhookResponse, error) {
-	rsp, err := c.PostGitopsSourcesByIdWebhook(ctx, id, reqEditors...)
+// PostGitopsSourcesByIdWebhookWithBodyWithResponse request with arbitrary body returning *PostGitopsSourcesByIdWebhookResponse
+func (c *ClientWithResponses) PostGitopsSourcesByIdWebhookWithBodyWithResponse(ctx context.Context, id string, params *PostGitopsSourcesByIdWebhookParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostGitopsSourcesByIdWebhookResponse, error) {
+	rsp, err := c.PostGitopsSourcesByIdWebhookWithBody(ctx, id, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParsePostGitopsSourcesByIdWebhookResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostGitopsSourcesByIdWebhookWithResponse(ctx context.Context, id string, params *PostGitopsSourcesByIdWebhookParams, body PostGitopsSourcesByIdWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*PostGitopsSourcesByIdWebhookResponse, error) {
+	rsp, err := c.PostGitopsSourcesByIdWebhook(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostGitopsSourcesByIdWebhookResponse(rsp)
+}
+
+// GetLicenseWithResponse request returning *GetLicenseResponse
+func (c *ClientWithResponses) GetLicenseWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetLicenseResponse, error) {
+	rsp, err := c.GetLicense(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLicenseResponse(rsp)
 }
 
 // GetLoggingControllerStatusWithResponse request returning *GetLoggingControllerStatusResponse
@@ -104047,13 +111555,91 @@ func (c *ClientWithResponses) PostNodesByClusterIdByNodeNameUncordonWithResponse
 	return ParsePostNodesByClusterIdByNodeNameUncordonResponse(rsp)
 }
 
-// GetObservabilityGrafanaTicketWithResponse request returning *GetObservabilityGrafanaTicketResponse
-func (c *ClientWithResponses) GetObservabilityGrafanaTicketWithResponse(ctx context.Context, params *GetObservabilityGrafanaTicketParams, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaTicketResponse, error) {
-	rsp, err := c.GetObservabilityGrafanaTicket(ctx, params, reqEditors...)
+// DeleteObservabilityGrafanaWithResponse request returning *DeleteObservabilityGrafanaResponse
+func (c *ClientWithResponses) DeleteObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteObservabilityGrafanaResponse, error) {
+	rsp, err := c.DeleteObservabilityGrafana(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetObservabilityGrafanaTicketResponse(rsp)
+	return ParseDeleteObservabilityGrafanaResponse(rsp)
+}
+
+// GetObservabilityGrafanaWithResponse request returning *GetObservabilityGrafanaResponse
+func (c *ClientWithResponses) GetObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaResponse, error) {
+	rsp, err := c.GetObservabilityGrafana(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetObservabilityGrafanaResponse(rsp)
+}
+
+// HeadObservabilityGrafanaWithResponse request returning *HeadObservabilityGrafanaResponse
+func (c *ClientWithResponses) HeadObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HeadObservabilityGrafanaResponse, error) {
+	rsp, err := c.HeadObservabilityGrafana(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadObservabilityGrafanaResponse(rsp)
+}
+
+// OptionsObservabilityGrafanaWithResponse request returning *OptionsObservabilityGrafanaResponse
+func (c *ClientWithResponses) OptionsObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsObservabilityGrafanaResponse, error) {
+	rsp, err := c.OptionsObservabilityGrafana(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOptionsObservabilityGrafanaResponse(rsp)
+}
+
+// PatchObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PatchObservabilityGrafanaResponse
+func (c *ClientWithResponses) PatchObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaResponse, error) {
+	rsp, err := c.PatchObservabilityGrafanaWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchObservabilityGrafanaWithResponse(ctx context.Context, body PatchObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaResponse, error) {
+	rsp, err := c.PatchObservabilityGrafana(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchObservabilityGrafanaResponse(rsp)
+}
+
+// PostObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PostObservabilityGrafanaResponse
+func (c *ClientWithResponses) PostObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaResponse, error) {
+	rsp, err := c.PostObservabilityGrafanaWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostObservabilityGrafanaWithResponse(ctx context.Context, body PostObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaResponse, error) {
+	rsp, err := c.PostObservabilityGrafana(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObservabilityGrafanaResponse(rsp)
+}
+
+// PutObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PutObservabilityGrafanaResponse
+func (c *ClientWithResponses) PutObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaResponse, error) {
+	rsp, err := c.PutObservabilityGrafanaWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutObservabilityGrafanaWithResponse(ctx context.Context, body PutObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaResponse, error) {
+	rsp, err := c.PutObservabilityGrafana(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutObservabilityGrafanaResponse(rsp)
 }
 
 // PostObservabilityGrafanaTicketRedeemWithBodyWithResponse request with arbitrary body returning *PostObservabilityGrafanaTicketRedeemResponse
@@ -104071,6 +111657,102 @@ func (c *ClientWithResponses) PostObservabilityGrafanaTicketRedeemWithResponse(c
 		return nil, err
 	}
 	return ParsePostObservabilityGrafanaTicketRedeemResponse(rsp)
+}
+
+// DeleteObservabilityGrafanaProxyWithResponse request returning *DeleteObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) DeleteObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.DeleteObservabilityGrafanaProxy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteObservabilityGrafanaProxyResponse(rsp)
+}
+
+// GetObservabilityGrafanaProxyWithResponse request returning *GetObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) GetObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.GetObservabilityGrafanaProxy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetObservabilityGrafanaProxyResponse(rsp)
+}
+
+// HeadObservabilityGrafanaProxyWithResponse request returning *HeadObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) HeadObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HeadObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.HeadObservabilityGrafanaProxy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadObservabilityGrafanaProxyResponse(rsp)
+}
+
+// OptionsObservabilityGrafanaProxyWithResponse request returning *OptionsObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) OptionsObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.OptionsObservabilityGrafanaProxy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOptionsObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PatchObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PatchObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PatchObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PatchObservabilityGrafanaProxyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchObservabilityGrafanaProxyWithResponse(ctx context.Context, body PatchObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PatchObservabilityGrafanaProxy(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PostObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PostObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PostObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PostObservabilityGrafanaProxyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostObservabilityGrafanaProxyWithResponse(ctx context.Context, body PostObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PostObservabilityGrafanaProxy(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PutObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PutObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PutObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PutObservabilityGrafanaProxyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutObservabilityGrafanaProxyWithResponse(ctx context.Context, body PutObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PutObservabilityGrafanaProxy(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutObservabilityGrafanaProxyResponse(rsp)
+}
+
+// GetPlatformHealthSummaryWithResponse request returning *GetPlatformHealthSummaryResponse
+func (c *ClientWithResponses) GetPlatformHealthSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformHealthSummaryResponse, error) {
+	rsp, err := c.GetPlatformHealthSummary(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPlatformHealthSummaryResponse(rsp)
 }
 
 // GetProjectsWithResponse request returning *GetProjectsResponse
@@ -104166,6 +111848,23 @@ func (c *ClientWithResponses) PostProjectsByIdAddNamespaceWithResponse(ctx conte
 		return nil, err
 	}
 	return ParsePostProjectsByIdAddNamespaceResponse(rsp)
+}
+
+// PostProjectsByIdApplyRbacTemplateWithBodyWithResponse request with arbitrary body returning *PostProjectsByIdApplyRbacTemplateResponse
+func (c *ClientWithResponses) PostProjectsByIdApplyRbacTemplateWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostProjectsByIdApplyRbacTemplateResponse, error) {
+	rsp, err := c.PostProjectsByIdApplyRbacTemplateWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostProjectsByIdApplyRbacTemplateResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostProjectsByIdApplyRbacTemplateWithResponse(ctx context.Context, id openapi_types.UUID, body PostProjectsByIdApplyRbacTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*PostProjectsByIdApplyRbacTemplateResponse, error) {
+	rsp, err := c.PostProjectsByIdApplyRbacTemplate(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostProjectsByIdApplyRbacTemplateResponse(rsp)
 }
 
 // GetProjectsByIdClustersWithResponse request returning *GetProjectsByIdClustersResponse
@@ -104726,6 +112425,32 @@ func (c *ClientWithResponses) PostRbacPermissionPreviewWithResponse(ctx context.
 		return nil, err
 	}
 	return ParsePostRbacPermissionPreviewResponse(rsp)
+}
+
+// GetRbacPrincipalsWithResponse request returning *GetRbacPrincipalsResponse
+func (c *ClientWithResponses) GetRbacPrincipalsWithResponse(ctx context.Context, params *GetRbacPrincipalsParams, reqEditors ...RequestEditorFn) (*GetRbacPrincipalsResponse, error) {
+	rsp, err := c.GetRbacPrincipals(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetRbacPrincipalsResponse(rsp)
+}
+
+// PostRbacPrincipalsMaterializeWithBodyWithResponse request with arbitrary body returning *PostRbacPrincipalsMaterializeResponse
+func (c *ClientWithResponses) PostRbacPrincipalsMaterializeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostRbacPrincipalsMaterializeResponse, error) {
+	rsp, err := c.PostRbacPrincipalsMaterializeWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostRbacPrincipalsMaterializeResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostRbacPrincipalsMaterializeWithResponse(ctx context.Context, body PostRbacPrincipalsMaterializeJSONRequestBody, reqEditors ...RequestEditorFn) (*PostRbacPrincipalsMaterializeResponse, error) {
+	rsp, err := c.PostRbacPrincipalsMaterialize(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostRbacPrincipalsMaterializeResponse(rsp)
 }
 
 // GetRbacProjectBindingsWithResponse request returning *GetRbacProjectBindingsResponse
@@ -105715,13 +113440,31 @@ func (c *ClientWithResponses) PostStreamsTicketsWithResponse(ctx context.Context
 	return ParsePostStreamsTicketsResponse(rsp)
 }
 
-// GetSupportBundleWithResponse request returning *GetSupportBundleResponse
-func (c *ClientWithResponses) GetSupportBundleWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSupportBundleResponse, error) {
-	rsp, err := c.GetSupportBundle(ctx, reqEditors...)
+// CreateSupportBundleWithResponse request returning *CreateSupportBundleResponse
+func (c *ClientWithResponses) CreateSupportBundleWithResponse(ctx context.Context, params *CreateSupportBundleParams, reqEditors ...RequestEditorFn) (*CreateSupportBundleResponse, error) {
+	rsp, err := c.CreateSupportBundle(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetSupportBundleResponse(rsp)
+	return ParseCreateSupportBundleResponse(rsp)
+}
+
+// GetSupportBundleOperationWithResponse request returning *GetSupportBundleOperationResponse
+func (c *ClientWithResponses) GetSupportBundleOperationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSupportBundleOperationResponse, error) {
+	rsp, err := c.GetSupportBundleOperation(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSupportBundleOperationResponse(rsp)
+}
+
+// DownloadSupportBundleWithResponse request returning *DownloadSupportBundleResponse
+func (c *ClientWithResponses) DownloadSupportBundleWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DownloadSupportBundleResponse, error) {
+	rsp, err := c.DownloadSupportBundle(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDownloadSupportBundleResponse(rsp)
 }
 
 // GetToolsWithResponse request returning *GetToolsResponse
@@ -105836,6 +113579,23 @@ func (c *ClientWithResponses) PostToolsBySlugPreviewWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParsePostToolsBySlugPreviewResponse(rsp)
+}
+
+// PostToolsBySlugRollbackWithBodyWithResponse request with arbitrary body returning *PostToolsBySlugRollbackResponse
+func (c *ClientWithResponses) PostToolsBySlugRollbackWithBodyWithResponse(ctx context.Context, slug string, params *PostToolsBySlugRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostToolsBySlugRollbackResponse, error) {
+	rsp, err := c.PostToolsBySlugRollbackWithBody(ctx, slug, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostToolsBySlugRollbackResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostToolsBySlugRollbackWithResponse(ctx context.Context, slug string, params *PostToolsBySlugRollbackParams, body PostToolsBySlugRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostToolsBySlugRollbackResponse, error) {
+	rsp, err := c.PostToolsBySlugRollback(ctx, slug, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostToolsBySlugRollbackResponse(rsp)
 }
 
 // DeleteToolsBySlugUninstallWithBodyWithResponse request with arbitrary body returning *DeleteToolsBySlugUninstallResponse
@@ -106091,6 +113851,15 @@ func (c *ClientWithResponses) InternalTunnelK8sWithResponse(ctx context.Context,
 	return ParseInternalTunnelK8sResponse(rsp)
 }
 
+// InternalTunnelK8sCapabilityWithResponse request returning *InternalTunnelK8sCapabilityResponse
+func (c *ClientWithResponses) InternalTunnelK8sCapabilityWithResponse(ctx context.Context, clusterId openapi_types.UUID, capability string, params *InternalTunnelK8sCapabilityParams, reqEditors ...RequestEditorFn) (*InternalTunnelK8sCapabilityResponse, error) {
+	rsp, err := c.InternalTunnelK8sCapability(ctx, clusterId, capability, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseInternalTunnelK8sCapabilityResponse(rsp)
+}
+
 // GetScimGroupsWithResponse request returning *GetScimGroupsResponse
 func (c *ClientWithResponses) GetScimGroupsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetScimGroupsResponse, error) {
 	rsp, err := c.GetScimGroups(ctx, reqEditors...)
@@ -106264,32 +114033,6 @@ func ParseGetActivityResponse(rsp *http.Response) (*GetActivityResponse, error) 
 			Timestamp *time.Time          `json:"timestamp,omitempty"`
 			Type      *string             `json:"type,omitempty"`
 		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetActivityFeedLegacyResponse parses an HTTP response from a GetActivityFeedLegacyWithResponse call
-func ParseGetActivityFeedLegacyResponse(rsp *http.Response) (*GetActivityFeedLegacyResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetActivityFeedLegacyResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest map[string]interface{}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -106537,15 +114280,8 @@ func ParseGetAdminBackupDrillHistoryResponse(rsp *http.Response) (*GetAdminBacku
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64               `json:"count"`
-			Data  []BackupDrillResult `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []BackupDrillResult `json:"data"`
+			Pagination PaginationMetadata  `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -108552,6 +116288,128 @@ func ParsePutAdminDashboardWidgetsByIdResponse(rsp *http.Response) (*PutAdminDas
 	return response, nil
 }
 
+// ParseGetAdminDeferredOperationsResponse parses an HTTP response from a GetAdminDeferredOperationsWithResponse call
+func ParseGetAdminDeferredOperationsResponse(rsp *http.Response) (*GetAdminDeferredOperationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminDeferredOperationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAdminDeferredOperationsByIdCancelResponse parses an HTTP response from a PostAdminDeferredOperationsByIdCancelWithResponse call
+func ParsePostAdminDeferredOperationsByIdCancelResponse(rsp *http.Response) (*PostAdminDeferredOperationsByIdCancelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAdminDeferredOperationsByIdCancelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseAdminEmailsListResponse parses an HTTP response from a AdminEmailsListWithResponse call
 func ParseAdminEmailsListResponse(rsp *http.Response) (*AdminEmailsListResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -108568,23 +116426,19 @@ func ParseAdminEmailsListResponse(rsp *http.Response) (*AdminEmailsListResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data struct {
-				Items *[]struct {
-					Attempts  *int                `json:"attempts,omitempty"`
-					CreatedAt *time.Time          `json:"created_at,omitempty"`
-					Id        *openapi_types.UUID `json:"id,omitempty"`
-					LastError *string             `json:"last_error,omitempty"`
-					SentAt    *time.Time          `json:"sent_at"`
-					Status    *string             `json:"status,omitempty"`
-					Subject   *string             `json:"subject,omitempty"`
-					Template  *string             `json:"template,omitempty"`
-					ToAddress *string             `json:"to_address,omitempty"`
-					UserId    *openapi_types.UUID `json:"user_id"`
-				} `json:"items,omitempty"`
-				Limit  *int   `json:"limit,omitempty"`
-				Offset *int   `json:"offset,omitempty"`
-				Total  *int64 `json:"total,omitempty"`
+			Data []struct {
+				Attempts  *int                `json:"attempts,omitempty"`
+				CreatedAt *time.Time          `json:"created_at,omitempty"`
+				Id        *openapi_types.UUID `json:"id,omitempty"`
+				LastError *string             `json:"last_error,omitempty"`
+				SentAt    *time.Time          `json:"sent_at"`
+				Status    *string             `json:"status,omitempty"`
+				Subject   *string             `json:"subject,omitempty"`
+				Template  *string             `json:"template,omitempty"`
+				ToAddress *string             `json:"to_address,omitempty"`
+				UserId    *openapi_types.UUID `json:"user_id"`
 			} `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -109351,10 +117205,14 @@ func ParseAdminKeyStatusResponse(rsp *http.Response) (*AdminKeyStatusResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			AsOf            time.Time `json:"as_of"`
-			EncryptionKeys  int       `json:"encryption_keys"`
-			InsecureDevKeys []string  `json:"insecure_dev_keys"`
-			JwtKeys         int       `json:"jwt_keys"`
+			AsOf                   time.Time `json:"as_of"`
+			EncryptionKeyInventory []struct {
+				Id      string `json:"id"`
+				Primary bool   `json:"primary"`
+			} `json:"encryption_key_inventory"`
+			EncryptionKeys  int      `json:"encryption_keys"`
+			InsecureDevKeys []string `json:"insecure_dev_keys"`
+			JwtKeys         int      `json:"jwt_keys"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -109374,6 +117232,365 @@ func ParseAdminKeyStatusResponse(rsp *http.Response) (*AdminKeyStatusResponse, e
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminMaintenanceWindowsResponse parses an HTTP response from a GetAdminMaintenanceWindowsWithResponse call
+func ParseGetAdminMaintenanceWindowsResponse(rsp *http.Response) (*GetAdminMaintenanceWindowsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminMaintenanceWindowsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAdminMaintenanceWindowsResponse parses an HTTP response from a PostAdminMaintenanceWindowsWithResponse call
+func ParsePostAdminMaintenanceWindowsResponse(rsp *http.Response) (*PostAdminMaintenanceWindowsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAdminMaintenanceWindowsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminMaintenanceWindowsActiveResponse parses an HTTP response from a GetAdminMaintenanceWindowsActiveWithResponse call
+func ParseGetAdminMaintenanceWindowsActiveResponse(rsp *http.Response) (*GetAdminMaintenanceWindowsActiveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminMaintenanceWindowsActiveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteAdminMaintenanceWindowsByIdResponse parses an HTTP response from a DeleteAdminMaintenanceWindowsByIdWithResponse call
+func ParseDeleteAdminMaintenanceWindowsByIdResponse(rsp *http.Response) (*DeleteAdminMaintenanceWindowsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteAdminMaintenanceWindowsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminMaintenanceWindowsByIdResponse parses an HTTP response from a GetAdminMaintenanceWindowsByIdWithResponse call
+func ParseGetAdminMaintenanceWindowsByIdResponse(rsp *http.Response) (*GetAdminMaintenanceWindowsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminMaintenanceWindowsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutAdminMaintenanceWindowsByIdResponse parses an HTTP response from a PutAdminMaintenanceWindowsByIdWithResponse call
+func ParsePutAdminMaintenanceWindowsByIdResponse(rsp *http.Response) (*PutAdminMaintenanceWindowsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutAdminMaintenanceWindowsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -109777,15 +117994,8 @@ func ParseGetAdminNetworkPolicyTemplatesResponse(rsp *http.Response) (*GetAdminN
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                           `json:"count"`
-			Data  []NetworkPolicyTemplateResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []NetworkPolicyTemplateResponse `json:"data"`
+			Pagination PaginationMetadata              `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -110230,6 +118440,250 @@ func ParseAdminNotificationTemplateVariablesResponse(rsp *http.Response) (*Admin
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminPlatformSettingsDefaultClusterTemplateResponse parses an HTTP response from a GetAdminPlatformSettingsDefaultClusterTemplateWithResponse call
+func ParseGetAdminPlatformSettingsDefaultClusterTemplateResponse(rsp *http.Response) (*GetAdminPlatformSettingsDefaultClusterTemplateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminPlatformSettingsDefaultClusterTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutAdminPlatformSettingsDefaultClusterTemplateResponse parses an HTTP response from a PutAdminPlatformSettingsDefaultClusterTemplateWithResponse call
+func ParsePutAdminPlatformSettingsDefaultClusterTemplateResponse(rsp *http.Response) (*PutAdminPlatformSettingsDefaultClusterTemplateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutAdminPlatformSettingsDefaultClusterTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse parses an HTTP response from a GetAdminPlatformSettingsDefaultClusterTemplateCoverageWithResponse call
+func ParseGetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse(rsp *http.Response) (*GetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAdminPlatformSettingsDefaultClusterTemplateCoverageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse parses an HTTP response from a PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdWithResponse call
+func ParsePostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse(rsp *http.Response) (*PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostAdminPlatformSettingsDefaultClusterTemplateReapplyByClusterIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -111984,18 +120438,11 @@ func ParseAdminShellSessionCommandsResponse(rsp *http.Response) (*AdminShellSess
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64 `json:"count"`
-			Data  []struct {
+			Data []struct {
 				CommandAt   *time.Time `json:"command_at,omitempty"`
 				CommandLine *string    `json:"command_line,omitempty"`
 			} `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -112678,15 +121125,8 @@ func ParseGetAdminTaskOutboxResponse(rsp *http.Response) (*GetAdminTaskOutboxRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                 `json:"count"`
-			Data  []TaskOutboxEntryWire `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []TaskOutboxEntryWire `json:"data"`
+			Pagination PaginationMetadata    `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -113153,7 +121593,8 @@ func ParseAdminVaultConnectionsListResponse(rsp *http.Response) (*AdminVaultConn
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
 			Data struct {
-				Items *[]VaultConnection `json:"items,omitempty"`
+				Items      []VaultConnection  `json:"items"`
+				Pagination PaginationMetadata `json:"pagination"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -113836,12 +122277,8 @@ func ParseAdminWebhookDeliveriesResponse(rsp *http.Response) (*AdminWebhookDeliv
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data struct {
-				Items  *[]WebhookDelivery `json:"items,omitempty"`
-				Limit  *int               `json:"limit,omitempty"`
-				Offset *int               `json:"offset,omitempty"`
-				Total  *int64             `json:"total,omitempty"`
-			} `json:"data"`
+			Data       []WebhookDelivery  `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -114375,6 +122812,60 @@ func ParseGetAlertingEventsResponse(rsp *http.Response) (*GetAlertingEventsRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest AlertEventPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertingEventsSummaryResponse parses an HTTP response from a GetAlertingEventsSummaryWithResponse call
+func ParseGetAlertingEventsSummaryResponse(rsp *http.Response) (*GetAlertingEventsSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertingEventsSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertEventSummaryEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -115253,189 +123744,6 @@ func ParsePostAlertingSilencesByIdExpireResponse(rsp *http.Response) (*PostAlert
 	return response, nil
 }
 
-// ParsePostAlertsRulesByIdDisableResponse parses an HTTP response from a PostAlertsRulesByIdDisableWithResponse call
-func ParsePostAlertsRulesByIdDisableResponse(rsp *http.Response) (*PostAlertsRulesByIdDisableResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostAlertsRulesByIdDisableResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AlertRuleEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ServiceUnavailable
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostAlertsRulesByIdEnableResponse parses an HTTP response from a PostAlertsRulesByIdEnableWithResponse call
-func ParsePostAlertsRulesByIdEnableResponse(rsp *http.Response) (*PostAlertsRulesByIdEnableResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostAlertsRulesByIdEnableResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AlertRuleEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ServiceUnavailable
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostAlertsSilencesByIdExpireResponse parses an HTTP response from a PostAlertsSilencesByIdExpireWithResponse call
-func ParsePostAlertsSilencesByIdExpireResponse(rsp *http.Response) (*PostAlertsSilencesByIdExpireResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostAlertsSilencesByIdExpireResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest AlertSilenceEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ServiceUnavailable
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetAnomalyBaselinesResponse parses an HTTP response from a GetAnomalyBaselinesWithResponse call
 func ParseGetAnomalyBaselinesResponse(rsp *http.Response) (*GetAnomalyBaselinesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -115574,15 +123882,8 @@ func ParseListAuditLogsResponse(rsp *http.Response) (*ListAuditLogsResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64           `json:"count"`
-			Data  []AuditLogEntry `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []AuditLogEntry    `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -115657,6 +123958,196 @@ func ParseExportAuditLogsResponse(rsp *http.Response) (*ExportAuditLogsResponse,
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateAuditExportResponse parses an HTTP response from a CreateAuditExportWithResponse call
+func ParseCreateAuditExportResponse(rsp *http.Response) (*CreateAuditExportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateAuditExportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest AuditExportAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAuditExportsByIdResponse parses an HTTP response from a GetAuditExportsByIdWithResponse call
+func ParseGetAuditExportsByIdResponse(rsp *http.Response) (*GetAuditExportsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAuditExportsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AuditExportOperation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAuditExportsByIdDownloadResponse parses an HTTP response from a GetAuditExportsByIdDownloadWithResponse call
+func ParseGetAuditExportsByIdDownloadResponse(rsp *http.Response) (*GetAuditExportsByIdDownloadResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAuditExportsByIdDownloadResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	return response, nil
@@ -115712,6 +124203,67 @@ func ParseGetAuditLogResponse(rsp *http.Response) (*GetAuditLogResponse, error) 
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAuthCallbackByProviderResponse parses an HTTP response from a GetAuthCallbackByProviderWithResponse call
+func ParseGetAuthCallbackByProviderResponse(rsp *http.Response) (*GetAuthCallbackByProviderResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAuthCallbackByProviderResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -116275,6 +124827,67 @@ func ParsePostAuthLoginResponse(rsp *http.Response) (*PostAuthLoginResponse, err
 	return response, nil
 }
 
+// ParseGetAuthLoginByProviderResponse parses an HTTP response from a GetAuthLoginByProviderWithResponse call
+func ParseGetAuthLoginByProviderResponse(rsp *http.Response) (*GetAuthLoginByProviderResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAuthLoginByProviderResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetAuthLogoutDoneResponse parses an HTTP response from a GetAuthLogoutDoneWithResponse call
 func ParseGetAuthLogoutDoneResponse(rsp *http.Response) (*GetAuthLogoutDoneResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -116346,6 +124959,97 @@ func ParseGetAuthMeResponse(rsp *http.Response) (*GetAuthMeResponse, error) {
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAuthMePreferencesResponse parses an HTTP response from a GetAuthMePreferencesWithResponse call
+func ParseGetAuthMePreferencesResponse(rsp *http.Response) (*GetAuthMePreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAuthMePreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data UserPreferences `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutAuthMePreferencesResponse parses an HTTP response from a PutAuthMePreferencesWithResponse call
+func ParsePutAuthMePreferencesResponse(rsp *http.Response) (*PutAuthMePreferencesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutAuthMePreferencesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data UserPreferences `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -116495,11 +125199,9 @@ func ParsePostAuthRefreshResponse(rsp *http.Response) (*PostAuthRefreshResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Refresh New refresh JWT
-			Refresh *string `json:"refresh,omitempty"`
-
-			// Token New access JWT
-			Token *string `json:"token,omitempty"`
+			Data struct {
+				Detail string `json:"detail"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -116541,15 +125243,8 @@ func ParseGetAuthTokensResponse(rsp *http.Response) (*GetAuthTokensResponse, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64              `json:"count"`
-			Data  []ApiTokenListItem `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []ApiTokenListItem `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -117005,15 +125700,8 @@ func ParseGetBackupsResponse(rsp *http.Response) (*GetBackupsResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64            `json:"count"`
-			Data  []BackupResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []BackupResponse   `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -117132,15 +125820,8 @@ func ParseGetBackupsRestoresResponse(rsp *http.Response) (*GetBackupsRestoresRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                      `json:"count"`
-			Data  []RestoreOperationResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []RestoreOperationResponse `json:"data"`
+			Pagination PaginationMetadata         `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -117222,49 +125903,6 @@ func ParseGetBackupsRestoresByIdResponse(rsp *http.Response) (*GetBackupsRestore
 	return response, nil
 }
 
-// ParseGetBackupsRunsResponse parses an HTTP response from a GetBackupsRunsWithResponse call
-func ParseGetBackupsRunsResponse(rsp *http.Response) (*GetBackupsRunsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetBackupsRunsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64            `json:"count"`
-			Data  []BackupResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetBackupsSchedulesResponse parses an HTTP response from a GetBackupsSchedulesWithResponse call
 func ParseGetBackupsSchedulesResponse(rsp *http.Response) (*GetBackupsSchedulesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -117281,15 +125919,8 @@ func ParseGetBackupsSchedulesResponse(rsp *http.Response) (*GetBackupsSchedulesR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                    `json:"count"`
-			Data  []BackupScheduleResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []BackupScheduleResponse `json:"data"`
+			Pagination PaginationMetadata       `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -117546,15 +126177,8 @@ func ParseGetBackupsStorageResponse(rsp *http.Response) (*GetBackupsStorageRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                         `json:"count"`
-			Data  []BackupStorageConfigResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []BackupStorageConfigResponse `json:"data"`
+			Pagination PaginationMetadata            `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -117603,260 +126227,6 @@ func ParsePostBackupsStorageResponse(rsp *http.Response) (*PostBackupsStorageRes
 			return nil, err
 		}
 		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetBackupsStorageConfigsResponse parses an HTTP response from a GetBackupsStorageConfigsWithResponse call
-func ParseGetBackupsStorageConfigsResponse(rsp *http.Response) (*GetBackupsStorageConfigsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetBackupsStorageConfigsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                         `json:"count"`
-			Data  []BackupStorageConfigResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostBackupsStorageConfigsResponse parses an HTTP response from a PostBackupsStorageConfigsWithResponse call
-func ParsePostBackupsStorageConfigsResponse(rsp *http.Response) (*PostBackupsStorageConfigsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostBackupsStorageConfigsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest struct {
-			// Data Credentials are never returned; only has_credentials boolean.
-			Data BackupStorageConfigResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDeleteBackupsStorageConfigsByIdResponse parses an HTTP response from a DeleteBackupsStorageConfigsByIdWithResponse call
-func ParseDeleteBackupsStorageConfigsByIdResponse(rsp *http.Response) (*DeleteBackupsStorageConfigsByIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeleteBackupsStorageConfigsByIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetBackupsStorageConfigsByIdResponse parses an HTTP response from a GetBackupsStorageConfigsByIdWithResponse call
-func ParseGetBackupsStorageConfigsByIdResponse(rsp *http.Response) (*GetBackupsStorageConfigsByIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetBackupsStorageConfigsByIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			// Data Credentials are never returned; only has_credentials boolean.
-			Data BackupStorageConfigResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePutBackupsStorageConfigsByIdResponse parses an HTTP response from a PutBackupsStorageConfigsByIdWithResponse call
-func ParsePutBackupsStorageConfigsByIdResponse(rsp *http.Response) (*PutBackupsStorageConfigsByIdResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PutBackupsStorageConfigsByIdResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			// Data Credentials are never returned; only has_credentials boolean.
-			Data BackupStorageConfigResponse `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostBackupsStorageConfigsByIdTestConnectionResponse parses an HTTP response from a PostBackupsStorageConfigsByIdTestConnectionWithResponse call
-func ParsePostBackupsStorageConfigsByIdTestConnectionResponse(rsp *http.Response) (*PostBackupsStorageConfigsByIdTestConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostBackupsStorageConfigsByIdTestConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data StorageTestResult `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ErrorResponse
@@ -117976,55 +126346,6 @@ func ParsePutBackupsStorageByIdResponse(rsp *http.Response) (*PutBackupsStorageB
 			return nil, err
 		}
 		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParsePostBackupsStorageByIdTestResponse parses an HTTP response from a PostBackupsStorageByIdTestWithResponse call
-func ParsePostBackupsStorageByIdTestResponse(rsp *http.Response) (*PostBackupsStorageByIdTestResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostBackupsStorageByIdTestResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data StorageTestResult `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ErrorResponse
@@ -118211,6 +126532,132 @@ func ParsePostBackupsByIdRestoreResponse(rsp *http.Response) (*PostBackupsByIdRe
 	return response, nil
 }
 
+// ParseGetCatalogApplicationSourcesResponse parses an HTTP response from a GetCatalogApplicationSourcesWithResponse call
+func ParseGetCatalogApplicationSourcesResponse(rsp *http.Response) (*GetCatalogApplicationSourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogApplicationSourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Count int                        `json:"count"`
+			Data  []ApplicationCatalogSource `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCatalogApplicationsResponse parses an HTTP response from a GetCatalogApplicationsWithResponse call
+func ParseGetCatalogApplicationsResponse(rsp *http.Response) (*GetCatalogApplicationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogApplicationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Count int                              `json:"count"`
+			Data  []CatalogApplicationPresentation `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostCatalogApplicationsPreviewResponse parses an HTTP response from a PostCatalogApplicationsPreviewWithResponse call
+func ParsePostCatalogApplicationsPreviewResponse(rsp *http.Response) (*PostCatalogApplicationsPreviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostCatalogApplicationsPreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CatalogInstallationPreview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetCatalogChartsResponse parses an HTTP response from a GetCatalogChartsWithResponse call
 func ParseGetCatalogChartsResponse(rsp *http.Response) (*GetCatalogChartsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -118227,15 +126674,8 @@ func ParseGetCatalogChartsResponse(rsp *http.Response) (*GetCatalogChartsRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64       `json:"count"`
-			Data  []HelmChart `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []HelmChart        `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -118293,6 +126733,48 @@ func ParseGetCatalogChartsByIdResponse(rsp *http.Response) (*GetCatalogChartsByI
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutCatalogChartsByIdFavoriteResponse parses an HTTP response from a PutCatalogChartsByIdFavoriteWithResponse call
+func ParsePutCatalogChartsByIdFavoriteResponse(rsp *http.Response) (*PutCatalogChartsByIdFavoriteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutCatalogChartsByIdFavoriteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data CatalogUserDiscovery `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -118479,6 +126961,42 @@ func ParseGetCatalogControllerStatusResponse(rsp *http.Response) (*GetCatalogCon
 	return response, nil
 }
 
+// ParseGetCatalogDiscoveryResponse parses an HTTP response from a GetCatalogDiscoveryWithResponse call
+func ParseGetCatalogDiscoveryResponse(rsp *http.Response) (*GetCatalogDiscoveryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogDiscoveryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Count int                    `json:"count"`
+			Data  []CatalogUserDiscovery `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetCatalogInstalledResponse parses an HTTP response from a GetCatalogInstalledWithResponse call
 func ParseGetCatalogInstalledResponse(rsp *http.Response) (*GetCatalogInstalledResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -118495,15 +127013,8 @@ func ParseGetCatalogInstalledResponse(rsp *http.Response) (*GetCatalogInstalledR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64            `json:"count"`
-			Data  []InstalledChart `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []InstalledChart   `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -118749,6 +127260,63 @@ func ParsePostCatalogInstalledByIdRollbackResponse(rsp *http.Response) (*PostCat
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCatalogInstalledByIdUpgradeVersionsResponse parses an HTTP response from a GetCatalogInstalledByIdUpgradeVersionsWithResponse call
+func ParseGetCatalogInstalledByIdUpgradeVersionsResponse(rsp *http.Response) (*GetCatalogInstalledByIdUpgradeVersionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogInstalledByIdUpgradeVersionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Count int                `json:"count"`
+			Data  []HelmChartVersion `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -119039,15 +127607,8 @@ func ParseGetCatalogRecommendationsPopularResponse(rsp *http.Response) (*GetCata
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                 `json:"count"`
-			Data  []ChartRecommendation `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []ChartRecommendation `json:"data"`
+			Pagination PaginationMetadata    `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -119089,15 +127650,8 @@ func ParseGetCatalogRecommendationsSimilarByChartIdResponse(rsp *http.Response) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                 `json:"count"`
-			Data  []ChartRecommendation `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []ChartRecommendation `json:"data"`
+			Pagination PaginationMetadata    `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -120664,15 +129218,8 @@ func ParseGetChartsByChartIdRatingsResponse(rsp *http.Response) (*GetChartsByCha
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64         `json:"count"`
-			Data  []ChartRating `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []ChartRating      `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -121093,9 +129640,7 @@ func ParseGetClusterAgentsResponse(rsp *http.Response) (*GetClusterAgentsRespons
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data *ClusterAgentResponse `json:"data,omitempty"`
-		}
+		var dest ClusterAgentResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -121224,9 +129769,7 @@ func ParseGetClusterAgentsByClusterIdOperationsResponse(rsp *http.Response) (*Ge
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data *AgentLifecycleOperationsResponse `json:"data,omitempty"`
-		}
+		var dest AgentLifecycleOperationsResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -121636,15 +130179,8 @@ func ParseGetClusterTemplatesResponse(rsp *http.Response) (*GetClusterTemplatesR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                     `json:"count"`
-			Data  []ClusterTemplateResponse `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []ClusterTemplateResponse `json:"data"`
+			Pagination PaginationMetadata        `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -121970,6 +130506,53 @@ func ParsePostClustersResponse(rsp *http.Response) (*PostClustersResponse, error
 	return response, nil
 }
 
+// ParseGetClustersSummaryResponse parses an HTTP response from a GetClustersSummaryWithResponse call
+func ParseGetClustersSummaryResponse(rsp *http.Response) (*GetClustersSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ClusterEstateSummaryEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetClustersByClusterIdApiserverAllowlistResponse parses an HTTP response from a GetClustersByClusterIdApiserverAllowlistWithResponse call
 func ParseGetClustersByClusterIdApiserverAllowlistResponse(rsp *http.Response) (*GetClustersByClusterIdApiserverAllowlistResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -122112,9 +130695,8 @@ func ParseGetClustersByClusterIdApiserverAllowlistSnapshotsResponse(rsp *http.Re
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data struct {
-				Items *[]AllowlistSnapshotResponse `json:"items,omitempty"`
-			} `json:"data"`
+			Data       []AllowlistSnapshotResponse `json:"data"`
+			Pagination PaginationMetadata          `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -122200,15 +130782,8 @@ func ParseGetClustersByClusterIdAppsResponse(rsp *http.Response) (*GetClustersBy
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                  `json:"count"`
-			Data  []InstalledAppEnriched `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []InstalledAppEnriched `json:"data"`
+			Pagination PaginationMetadata     `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -122299,12 +130874,8 @@ func ParseListControlPlaneSnapshotsResponse(rsp *http.Response) (*ListControlPla
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data struct {
-				Items  []ControlPlaneSnapshotWire `json:"items"`
-				Limit  int                        `json:"limit"`
-				Offset int                        `json:"offset"`
-				Total  int64                      `json:"total"`
-			} `json:"data"`
+			Data       []ControlPlaneSnapshotWire `json:"data"`
+			Pagination PaginationMetadata         `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -122360,7 +130931,8 @@ func ParseCreateControlPlaneSnapshotResponse(rsp *http.Response) (*CreateControl
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
 		var dest struct {
-			Data ControlPlaneSnapshotWire `json:"data"`
+			Data       ControlPlaneSnapshotWire `json:"data"`
+			Pagination PaginationMetadata       `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -123816,7 +132388,8 @@ func ParseGetClustersByClusterIdNamespacesResponse(rsp *http.Response) (*GetClus
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []Namespace `json:"data"`
+			Data       []Namespace        `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -124147,7 +132720,8 @@ func ParseGetClustersByClusterIdPodsResponse(rsp *http.Response) (*GetClustersBy
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []Pod `json:"data"`
+			Data       []Pod              `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -124243,15 +132817,8 @@ func ParseGetClustersByClusterIdProjectsResponse(rsp *http.Response) (*GetCluste
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64     `json:"count"`
-			Data  []Project `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []Project          `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -125824,6 +134391,55 @@ func ParsePostClustersByClusterIdRegistriesByIdTestResponse(rsp *http.Response) 
 	return response, nil
 }
 
+// ParseCountClusterResourcesResponse parses an HTTP response from a CountClusterResourcesWithResponse call
+func ParseCountClusterResourcesResponse(rsp *http.Response) (*CountClusterResourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CountClusterResourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data ResourceCounts `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetClustersByClusterIdResourceQuotasResponse parses an HTTP response from a GetClustersByClusterIdResourceQuotasWithResponse call
 func ParseGetClustersByClusterIdResourceQuotasResponse(rsp *http.Response) (*GetClustersByClusterIdResourceQuotasResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -125962,7 +134578,8 @@ func ParseListGenericClusterResourcesResponse(rsp *http.Response) (*ListGenericC
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []ResourceRow `json:"data"`
+			Data       []ResourceRow      `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -126194,7 +134811,8 @@ func ParseListNamedClusterResourcesResponse(rsp *http.Response) (*ListNamedClust
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []ResourceRow `json:"data"`
+			Data       []ResourceRow      `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -128053,15 +136671,8 @@ func ParseGetClustersByClusterIdWorkloadsResponse(rsp *http.Response) (*GetClust
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64      `json:"count"`
-			Data  []Workload `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []Workload         `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -128955,46 +137566,6 @@ func ParsePostClustersByIdGenerateKubeconfigResponse(rsp *http.Response) (*PostC
 	return response, nil
 }
 
-// ParseGenerateClusterKubeconfigUnderscoreResponse parses an HTTP response from a GenerateClusterKubeconfigUnderscoreWithResponse call
-func ParseGenerateClusterKubeconfigUnderscoreResponse(rsp *http.Response) (*GenerateClusterKubeconfigUnderscoreResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GenerateClusterKubeconfigUnderscoreResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "yaml") && rsp.StatusCode == 200:
-		var dest string
-		if err := yaml.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.YAML200 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetClustersByIdHealthResponse parses an HTTP response from a GetClustersByIdHealthWithResponse call
 func ParseGetClustersByIdHealthResponse(rsp *http.Response) (*GetClustersByIdHealthResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -129004,41 +137575,6 @@ func ParseGetClustersByIdHealthResponse(rsp *http.Response) (*GetClustersByIdHea
 	}
 
 	response := &GetClustersByIdHealthResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			Data map[string]interface{} `json:"data"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetClustersByIdKubeconfigLegacyResponse parses an HTTP response from a GetClustersByIdKubeconfigLegacyWithResponse call
-func ParseGetClustersByIdKubeconfigLegacyResponse(rsp *http.Response) (*GetClustersByIdKubeconfigLegacyResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetClustersByIdKubeconfigLegacyResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -129949,6 +138485,846 @@ func ParsePutClustersByIdMonitoringStackUpgradeResponse(rsp *http.Response) (*Pu
 	return response, nil
 }
 
+// ParseDeleteClustersByIdObservabilityGrafanaResponse parses an HTTP response from a DeleteClustersByIdObservabilityGrafanaWithResponse call
+func ParseDeleteClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*DeleteClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersByIdObservabilityGrafanaResponse parses an HTTP response from a GetClustersByIdObservabilityGrafanaWithResponse call
+func ParseGetClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*GetClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadClustersByIdObservabilityGrafanaResponse parses an HTTP response from a HeadClustersByIdObservabilityGrafanaWithResponse call
+func ParseHeadClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*HeadClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseOptionsClustersByIdObservabilityGrafanaResponse parses an HTTP response from a OptionsClustersByIdObservabilityGrafanaWithResponse call
+func ParseOptionsClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*OptionsClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OptionsClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchClustersByIdObservabilityGrafanaResponse parses an HTTP response from a PatchClustersByIdObservabilityGrafanaWithResponse call
+func ParsePatchClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*PatchClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostClustersByIdObservabilityGrafanaResponse parses an HTTP response from a PostClustersByIdObservabilityGrafanaWithResponse call
+func ParsePostClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*PostClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutClustersByIdObservabilityGrafanaResponse parses an HTTP response from a PutClustersByIdObservabilityGrafanaWithResponse call
+func ParsePutClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*PutClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a DeleteClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParseDeleteClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*DeleteClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a GetClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParseGetClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*GetClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a HeadClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParseHeadClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*HeadClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseOptionsClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a OptionsClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParseOptionsClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*OptionsClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OptionsClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a PatchClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParsePatchClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a PostClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParsePostClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*PostClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a PutClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParsePutClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*PutClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePostClustersByIdOwnershipTakeoverResponse parses an HTTP response from a PostClustersByIdOwnershipTakeoverWithResponse call
 func ParsePostClustersByIdOwnershipTakeoverResponse(rsp *http.Response) (*PostClustersByIdOwnershipTakeoverResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -130370,74 +139746,6 @@ func ParsePostClustersByIdShellSessionsBySessionIdCloseResponse(rsp *http.Respon
 	return response, nil
 }
 
-// ParseRemoteV2ListPodsResponse parses an HTTP response from a RemoteV2ListPodsWithResponse call
-func ParseRemoteV2ListPodsResponse(rsp *http.Response) (*RemoteV2ListPodsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &RemoteV2ListPodsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest struct {
-			ClusterId string `json:"cluster_id"`
-			Count     int    `json:"count"`
-			Namespace string `json:"namespace"`
-			Pods      []struct {
-				Name      *string `json:"name,omitempty"`
-				Namespace *string `json:"namespace,omitempty"`
-				Node      *string `json:"node,omitempty"`
-				Phase     *string `json:"phase,omitempty"`
-			} `json:"pods"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
-		var dest struct {
-			Error *string `json:"error,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON502 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest struct {
-			Error *string `json:"error,omitempty"`
-		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseGetClustersByIdVulnerabilitiesImagesResponse parses an HTTP response from a GetClustersByIdVulnerabilitiesImagesWithResponse call
 func ParseGetClustersByIdVulnerabilitiesImagesResponse(rsp *http.Response) (*GetClustersByIdVulnerabilitiesImagesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -130454,8 +139762,8 @@ func ParseGetClustersByIdVulnerabilitiesImagesResponse(rsp *http.Response) (*Get
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Count *int         `json:"count,omitempty"`
-			Data  *[]VulnImage `json:"data,omitempty"`
+			Data       []VulnImage        `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -130550,214 +139858,6 @@ func ParseGetCompliancePostureResponse(rsp *http.Response) (*GetCompliancePostur
 			return nil, err
 		}
 		response.JSON503 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTunnelConnectDeleteResponse parses an HTTP response from a TunnelConnectDeleteWithResponse call
-func ParseTunnelConnectDeleteResponse(rsp *http.Response) (*TunnelConnectDeleteResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TunnelConnectDeleteResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTunnelConnectGetResponse parses an HTTP response from a TunnelConnectGetWithResponse call
-func ParseTunnelConnectGetResponse(rsp *http.Response) (*TunnelConnectGetResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TunnelConnectGetResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTunnelConnectHeadResponse parses an HTTP response from a TunnelConnectHeadWithResponse call
-func ParseTunnelConnectHeadResponse(rsp *http.Response) (*TunnelConnectHeadResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TunnelConnectHeadResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTunnelConnectOptionsResponse parses an HTTP response from a TunnelConnectOptionsWithResponse call
-func ParseTunnelConnectOptionsResponse(rsp *http.Response) (*TunnelConnectOptionsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TunnelConnectOptionsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTunnelConnectPatchResponse parses an HTTP response from a TunnelConnectPatchWithResponse call
-func ParseTunnelConnectPatchResponse(rsp *http.Response) (*TunnelConnectPatchResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TunnelConnectPatchResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTunnelConnectPostResponse parses an HTTP response from a TunnelConnectPostWithResponse call
-func ParseTunnelConnectPostResponse(rsp *http.Response) (*TunnelConnectPostResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TunnelConnectPostResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTunnelConnectPutResponse parses an HTTP response from a TunnelConnectPutWithResponse call
-func ParseTunnelConnectPutResponse(rsp *http.Response) (*TunnelConnectPutResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TunnelConnectPutResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseTunnelConnectTraceResponse parses an HTTP response from a TunnelConnectTraceWithResponse call
-func ParseTunnelConnectTraceResponse(rsp *http.Response) (*TunnelConnectTraceResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &TunnelConnectTraceResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorEnvelope
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
 
 	}
 
@@ -131680,6 +140780,126 @@ func ParseGetDeliveryClustersByClusterIdInventoryResponse(rsp *http.Response) (*
 	return response, nil
 }
 
+// ParseGetDeliveryConfigurationTemplatesResponse parses an HTTP response from a GetDeliveryConfigurationTemplatesWithResponse call
+func ParseGetDeliveryConfigurationTemplatesResponse(rsp *http.Response) (*GetDeliveryConfigurationTemplatesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeliveryConfigurationTemplatesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryConfigurationTemplatePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostDeliveryConfigurationTemplatesResponse parses an HTTP response from a PostDeliveryConfigurationTemplatesWithResponse call
+func ParsePostDeliveryConfigurationTemplatesResponse(rsp *http.Response) (*PostDeliveryConfigurationTemplatesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDeliveryConfigurationTemplatesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DeliveryConfigurationTemplateEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteDeliveryConfigurationTemplatesByIdResponse parses an HTTP response from a DeleteDeliveryConfigurationTemplatesByIdWithResponse call
+func ParseDeleteDeliveryConfigurationTemplatesByIdResponse(rsp *http.Response) (*DeleteDeliveryConfigurationTemplatesByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteDeliveryConfigurationTemplatesByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetDeliveryConfigurationTemplatesByIdResponse parses an HTTP response from a GetDeliveryConfigurationTemplatesByIdWithResponse call
+func ParseGetDeliveryConfigurationTemplatesByIdResponse(rsp *http.Response) (*GetDeliveryConfigurationTemplatesByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeliveryConfigurationTemplatesByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryConfigurationTemplateEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutDeliveryConfigurationTemplatesByIdResponse parses an HTTP response from a PutDeliveryConfigurationTemplatesByIdWithResponse call
+func ParsePutDeliveryConfigurationTemplatesByIdResponse(rsp *http.Response) (*PutDeliveryConfigurationTemplatesByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutDeliveryConfigurationTemplatesByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryConfigurationTemplateEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetDeliveryDeploymentsResponse parses an HTTP response from a GetDeliveryDeploymentsWithResponse call
 func ParseGetDeliveryDeploymentsResponse(rsp *http.Response) (*GetDeliveryDeploymentsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -131773,7 +140993,7 @@ func ParsePostDeliveryDeploymentsByIdReconcileResponse(rsp *http.Response) (*Pos
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -131799,7 +141019,7 @@ func ParsePostDeliveryDeploymentsByIdResumeResponse(rsp *http.Response) (*PostDe
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -131825,7 +141045,7 @@ func ParsePostDeliveryDeploymentsByIdSuspendResponse(rsp *http.Response) (*PostD
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -131836,22 +141056,22 @@ func ParsePostDeliveryDeploymentsByIdSuspendResponse(rsp *http.Response) (*PostD
 	return response, nil
 }
 
-// ParseGetDeliveryEstateResponse parses an HTTP response from a GetDeliveryEstateWithResponse call
-func ParseGetDeliveryEstateResponse(rsp *http.Response) (*GetDeliveryEstateResponse, error) {
+// ParseGetDeliveryFleetResponse parses an HTTP response from a GetDeliveryFleetWithResponse call
+func ParseGetDeliveryFleetResponse(rsp *http.Response) (*GetDeliveryFleetResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetDeliveryEstateResponse{
+	response := &GetDeliveryFleetResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest DeliveryEstateEnvelope
+		var dest DeliveryFleetEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -131883,47 +141103,146 @@ func ParseGetDeliveryEstateResponse(rsp *http.Response) (*GetDeliveryEstateRespo
 	return response, nil
 }
 
-// ParseGetDeliveryFleetLegacyResponse parses an HTTP response from a GetDeliveryFleetLegacyWithResponse call
-func ParseGetDeliveryFleetLegacyResponse(rsp *http.Response) (*GetDeliveryFleetLegacyResponse, error) {
+// ParseGetDeliveryOverrideSetsResponse parses an HTTP response from a GetDeliveryOverrideSetsWithResponse call
+func ParseGetDeliveryOverrideSetsResponse(rsp *http.Response) (*GetDeliveryOverrideSetsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetDeliveryFleetLegacyResponse{
+	response := &GetDeliveryOverrideSetsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest DeliveryEstateEnvelope
+		var dest DeliveryOverrideSetPage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+	}
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+	return response, nil
+}
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ServiceUnavailable
+// ParsePostDeliveryOverrideSetsResponse parses an HTTP response from a PostDeliveryOverrideSetsWithResponse call
+func ParsePostDeliveryOverrideSetsResponse(rsp *http.Response) (*PostDeliveryOverrideSetsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDeliveryOverrideSetsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DeliveryOverrideSetEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON503 = &dest
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostDeliveryOverrideSetsEffectiveResponse parses an HTTP response from a PostDeliveryOverrideSetsEffectiveWithResponse call
+func ParsePostDeliveryOverrideSetsEffectiveResponse(rsp *http.Response) (*PostDeliveryOverrideSetsEffectiveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDeliveryOverrideSetsEffectiveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryEffectiveConfigurationEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteDeliveryOverrideSetsByIdResponse parses an HTTP response from a DeleteDeliveryOverrideSetsByIdWithResponse call
+func ParseDeleteDeliveryOverrideSetsByIdResponse(rsp *http.Response) (*DeleteDeliveryOverrideSetsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteDeliveryOverrideSetsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetDeliveryOverrideSetsByIdResponse parses an HTTP response from a GetDeliveryOverrideSetsByIdWithResponse call
+func ParseGetDeliveryOverrideSetsByIdResponse(rsp *http.Response) (*GetDeliveryOverrideSetsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeliveryOverrideSetsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryOverrideSetEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutDeliveryOverrideSetsByIdResponse parses an HTTP response from a PutDeliveryOverrideSetsByIdWithResponse call
+func ParsePutDeliveryOverrideSetsByIdResponse(rsp *http.Response) (*PutDeliveryOverrideSetsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutDeliveryOverrideSetsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryOverrideSetEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 
@@ -132004,7 +141323,7 @@ func ParsePostDeliveryRolloutsByIdAbortResponse(rsp *http.Response) (*PostDelive
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -132030,7 +141349,7 @@ func ParsePostDeliveryRolloutsByIdApproveResponse(rsp *http.Response) (*PostDeli
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -132108,7 +141427,7 @@ func ParsePostDeliveryRolloutsByIdPauseResponse(rsp *http.Response) (*PostDelive
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -132134,7 +141453,7 @@ func ParsePostDeliveryRolloutsByIdResumeResponse(rsp *http.Response) (*PostDeliv
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -132160,7 +141479,7 @@ func ParsePostDeliveryRolloutsByIdRetryResponse(rsp *http.Response) (*PostDelive
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -132186,7 +141505,7 @@ func ParsePostDeliveryRolloutsByIdRollbackResponse(rsp *http.Response) (*PostDel
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
-		var dest DeliveryAsyncOperationReceiptEnvelope
+		var dest DeliveryActionAccepted
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -132722,6 +142041,67 @@ func ParsePostDeliveryTargetsByIdRolloutsResponse(rsp *http.Response) (*PostDeli
 	return response, nil
 }
 
+// ParseGetEventsStreamResponse parses an HTTP response from a GetEventsStreamWithResponse call
+func ParseGetEventsStreamResponse(rsp *http.Response) (*GetEventsStreamResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetEventsStreamResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetExtensionsResponse parses an HTTP response from a GetExtensionsWithResponse call
 func ParseGetExtensionsResponse(rsp *http.Response) (*GetExtensionsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -133042,6 +142422,74 @@ func ParsePostGitopsSourcesByIdWebhookResponse(rsp *http.Response) (*PostGitopsS
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLicenseResponse parses an HTTP response from a GetLicenseWithResponse call
+func ParseGetLicenseResponse(rsp *http.Response) (*GetLicenseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLicenseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
@@ -135618,20 +145066,386 @@ func ParsePostNodesByClusterIdByNodeNameUncordonResponse(rsp *http.Response) (*P
 	return response, nil
 }
 
-// ParseGetObservabilityGrafanaTicketResponse parses an HTTP response from a GetObservabilityGrafanaTicketWithResponse call
-func ParseGetObservabilityGrafanaTicketResponse(rsp *http.Response) (*GetObservabilityGrafanaTicketResponse, error) {
+// ParseDeleteObservabilityGrafanaResponse parses an HTTP response from a DeleteObservabilityGrafanaWithResponse call
+func ParseDeleteObservabilityGrafanaResponse(rsp *http.Response) (*DeleteObservabilityGrafanaResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetObservabilityGrafanaTicketResponse{
+	response := &DeleteObservabilityGrafanaResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetObservabilityGrafanaResponse parses an HTTP response from a GetObservabilityGrafanaWithResponse call
+func ParseGetObservabilityGrafanaResponse(rsp *http.Response) (*GetObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadObservabilityGrafanaResponse parses an HTTP response from a HeadObservabilityGrafanaWithResponse call
+func ParseHeadObservabilityGrafanaResponse(rsp *http.Response) (*HeadObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseOptionsObservabilityGrafanaResponse parses an HTTP response from a OptionsObservabilityGrafanaWithResponse call
+func ParseOptionsObservabilityGrafanaResponse(rsp *http.Response) (*OptionsObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OptionsObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchObservabilityGrafanaResponse parses an HTTP response from a PatchObservabilityGrafanaWithResponse call
+func ParsePatchObservabilityGrafanaResponse(rsp *http.Response) (*PatchObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostObservabilityGrafanaResponse parses an HTTP response from a PostObservabilityGrafanaWithResponse call
+func ParsePostObservabilityGrafanaResponse(rsp *http.Response) (*PostObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutObservabilityGrafanaResponse parses an HTTP response from a PutObservabilityGrafanaWithResponse call
+func ParsePutObservabilityGrafanaResponse(rsp *http.Response) (*PutObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -135733,6 +145547,487 @@ func ParsePostObservabilityGrafanaTicketRedeemResponse(rsp *http.Response) (*Pos
 	return response, nil
 }
 
+// ParseDeleteObservabilityGrafanaProxyResponse parses an HTTP response from a DeleteObservabilityGrafanaProxyWithResponse call
+func ParseDeleteObservabilityGrafanaProxyResponse(rsp *http.Response) (*DeleteObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetObservabilityGrafanaProxyResponse parses an HTTP response from a GetObservabilityGrafanaProxyWithResponse call
+func ParseGetObservabilityGrafanaProxyResponse(rsp *http.Response) (*GetObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadObservabilityGrafanaProxyResponse parses an HTTP response from a HeadObservabilityGrafanaProxyWithResponse call
+func ParseHeadObservabilityGrafanaProxyResponse(rsp *http.Response) (*HeadObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseOptionsObservabilityGrafanaProxyResponse parses an HTTP response from a OptionsObservabilityGrafanaProxyWithResponse call
+func ParseOptionsObservabilityGrafanaProxyResponse(rsp *http.Response) (*OptionsObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OptionsObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchObservabilityGrafanaProxyResponse parses an HTTP response from a PatchObservabilityGrafanaProxyWithResponse call
+func ParsePatchObservabilityGrafanaProxyResponse(rsp *http.Response) (*PatchObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostObservabilityGrafanaProxyResponse parses an HTTP response from a PostObservabilityGrafanaProxyWithResponse call
+func ParsePostObservabilityGrafanaProxyResponse(rsp *http.Response) (*PostObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutObservabilityGrafanaProxyResponse parses an HTTP response from a PutObservabilityGrafanaProxyWithResponse call
+func ParsePutObservabilityGrafanaProxyResponse(rsp *http.Response) (*PutObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPlatformHealthSummaryResponse parses an HTTP response from a GetPlatformHealthSummaryWithResponse call
+func ParseGetPlatformHealthSummaryResponse(rsp *http.Response) (*GetPlatformHealthSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPlatformHealthSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetProjectsResponse parses an HTTP response from a GetProjectsWithResponse call
 func ParseGetProjectsResponse(rsp *http.Response) (*GetProjectsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -135749,15 +146044,8 @@ func ParseGetProjectsResponse(rsp *http.Response) (*GetProjectsResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64     `json:"count"`
-			Data  []Project `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []Project          `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -136074,6 +146362,76 @@ func ParsePostProjectsByIdAddNamespaceResponse(rsp *http.Response) (*PostProject
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostProjectsByIdApplyRbacTemplateResponse parses an HTTP response from a PostProjectsByIdApplyRbacTemplateWithResponse call
+func ParsePostProjectsByIdApplyRbacTemplateResponse(rsp *http.Response) (*PostProjectsByIdApplyRbacTemplateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostProjectsByIdApplyRbacTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data RBACProjectRoleBinding `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -136410,23 +146768,53 @@ func ParseGetProjectsByIdQuotaUsageResponse(rsp *http.Response) (*GetProjectsByI
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
 			Data struct {
-				Errors *[]struct {
-					ClusterId   *openapi_types.UUID `json:"cluster_id,omitempty"`
-					ClusterName *string             `json:"cluster_name,omitempty"`
-					Error       *string             `json:"error,omitempty"`
-					Namespace   *string             `json:"namespace,omitempty"`
-				} `json:"errors,omitempty"`
-				Results *[]struct {
-					ClusterId   *openapi_types.UUID `json:"cluster_id,omitempty"`
-					ClusterName *string             `json:"cluster_name,omitempty"`
+				Errors []struct {
+					ClusterId   openapi_types.UUID `json:"cluster_id"`
+					ClusterName string             `json:"cluster_name"`
+					Error       string             `json:"error"`
+					Namespace   string             `json:"namespace"`
+				} `json:"errors"`
+
+				// ProjectCap Project cap totals and deterministic namespace allocation state. Remaining is unallocated capacity, not live usage.
+				ProjectCap struct {
+					Allocated struct {
+						Cpu    string `json:"cpu"`
+						Memory string `json:"memory"`
+						Pods   int32  `json:"pods"`
+					} `json:"allocated"`
+					Remaining struct {
+						Cpu    string `json:"cpu"`
+						Memory string `json:"memory"`
+						Pods   int32  `json:"pods"`
+					} `json:"remaining"`
+					Total struct {
+						Cpu    string `json:"cpu"`
+						Memory string `json:"memory"`
+						Pods   int32  `json:"pods"`
+					} `json:"total"`
+				} `json:"project_cap"`
+				Results []struct {
+					// Allocation Deterministic share of the project-wide cap applied to this namespace.
+					Allocation struct {
+						// Cpu Kubernetes CPU quantity; empty means unbounded.
+						Cpu string `json:"cpu"`
+
+						// Memory Kubernetes memory quantity; empty means unbounded.
+						Memory string `json:"memory"`
+
+						// Pods Pod count; zero means unbounded.
+						Pods int32 `json:"pods"`
+					} `json:"allocation"`
+					ClusterId   openapi_types.UUID `json:"cluster_id"`
+					ClusterName string             `json:"cluster_name"`
 
 					// Hard ResourceQuota status.hard (falls back to spec.hard) key/value pairs.
-					Hard      *map[string]interface{} `json:"hard,omitempty"`
-					Namespace *string                 `json:"namespace,omitempty"`
+					Hard      map[string]interface{} `json:"hard"`
+					Namespace string                 `json:"namespace"`
 
 					// Used ResourceQuota status.used key/value pairs (e.g. cpu, memory, pods).
-					Used *map[string]interface{} `json:"used,omitempty"`
-				} `json:"results,omitempty"`
+					Used map[string]interface{} `json:"used"`
+				} `json:"results"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -137544,15 +147932,8 @@ func ParseGetRbacClusterRolesResponse(rsp *http.Response) (*GetRbacClusterRolesR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64      `json:"count"`
-			Data  []RBACRole `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []RBACRole         `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -138181,15 +148562,8 @@ func ParseGetRbacGlobalRolesResponse(rsp *http.Response) (*GetRbacGlobalRolesRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64      `json:"count"`
-			Data  []RBACRole `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []RBACRole         `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -138647,6 +149021,139 @@ func ParsePostRbacPermissionPreviewResponse(rsp *http.Response) (*PostRbacPermis
 	return response, nil
 }
 
+// ParseGetRbacPrincipalsResponse parses an HTTP response from a GetRbacPrincipalsWithResponse call
+func ParseGetRbacPrincipalsResponse(rsp *http.Response) (*GetRbacPrincipalsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetRbacPrincipalsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data PrincipalSearchResponse `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostRbacPrincipalsMaterializeResponse parses an HTTP response from a PostRbacPrincipalsMaterializeWithResponse call
+func ParsePostRbacPrincipalsMaterializeResponse(rsp *http.Response) (*PostRbacPrincipalsMaterializeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostRbacPrincipalsMaterializeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest struct {
+			Data PrincipalMaterialized `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON429 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetRbacProjectBindingsResponse parses an HTTP response from a GetRbacProjectBindingsWithResponse call
 func ParseGetRbacProjectBindingsResponse(rsp *http.Response) (*GetRbacProjectBindingsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -138995,15 +149502,8 @@ func ParseGetRbacProjectRolesResponse(rsp *http.Response) (*GetRbacProjectRolesR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64      `json:"count"`
-			Data  []RBACRole `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []RBACRole         `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -139796,15 +150296,8 @@ func ParseGetSecurityPoliciesResponse(rsp *http.Response) (*GetSecurityPoliciesR
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                   `json:"count"`
-			Data  []ClusterSecurityPolicy `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []ClusterSecurityPolicy `json:"data"`
+			Pagination PaginationMetadata      `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -140347,15 +150840,8 @@ func ParseGetSecurityTemplatesResponse(rsp *http.Response) (*GetSecurityTemplate
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                 `json:"count"`
-			Data  []PodSecurityTemplate `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []PodSecurityTemplate `json:"data"`
+			Pagination PaginationMetadata    `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -140811,15 +151297,8 @@ func ParseGetSettingsAuditLogsResponse(rsp *http.Response) (*GetSettingsAuditLog
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                        `json:"count"`
-			Data  []UsersSettingsAuditLogEntry `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []UsersSettingsAuditLogEntry `json:"data"`
+			Pagination PaginationMetadata           `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -143113,15 +153592,8 @@ func ParseGetSettingsTokensResponse(rsp *http.Response) (*GetSettingsTokensRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                        `json:"count"`
-			Data  []UsersSettingsTokenListItem `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []UsersSettingsTokenListItem `json:"data"`
+			Pagination PaginationMetadata           `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -143273,20 +153745,92 @@ func ParsePostStreamsTicketsResponse(rsp *http.Response) (*PostStreamsTicketsRes
 	return response, nil
 }
 
-// ParseGetSupportBundleResponse parses an HTTP response from a GetSupportBundleWithResponse call
-func ParseGetSupportBundleResponse(rsp *http.Response) (*GetSupportBundleResponse, error) {
+// ParseCreateSupportBundleResponse parses an HTTP response from a CreateSupportBundleWithResponse call
+func ParseCreateSupportBundleResponse(rsp *http.Response) (*CreateSupportBundleResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetSupportBundleResponse{
+	response := &CreateSupportBundleResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Data SupportBundleOperation `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSupportBundleOperationResponse parses an HTTP response from a GetSupportBundleOperationWithResponse call
+func ParseGetSupportBundleOperationResponse(rsp *http.Response) (*GetSupportBundleOperationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSupportBundleOperationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data SupportBundleOperation `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -143314,6 +153858,60 @@ func ParseGetSupportBundleResponse(rsp *http.Response) (*GetSupportBundleRespons
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDownloadSupportBundleResponse parses an HTTP response from a DownloadSupportBundleWithResponse call
+func ParseDownloadSupportBundleResponse(rsp *http.Response) (*DownloadSupportBundleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DownloadSupportBundleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest ServiceUnavailable
@@ -143919,6 +154517,76 @@ func ParsePostToolsBySlugPreviewResponse(rsp *http.Response) (*PostToolsBySlugPr
 	return response, nil
 }
 
+// ParsePostToolsBySlugRollbackResponse parses an HTTP response from a PostToolsBySlugRollbackWithResponse call
+func ParsePostToolsBySlugRollbackResponse(rsp *http.Response) (*PostToolsBySlugRollbackResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostToolsBySlugRollbackResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Data ToolOperation `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Conflict
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseDeleteToolsBySlugUninstallResponse parses an HTTP response from a DeleteToolsBySlugUninstallWithResponse call
 func ParseDeleteToolsBySlugUninstallResponse(rsp *http.Response) (*DeleteToolsBySlugUninstallResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -144061,15 +154729,8 @@ func ParseGetUsersResponse(rsp *http.Response) (*GetUsersResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			// Count Total number of items across all pages.
-			Count int64                       `json:"count"`
-			Data  []UsersSettingsUserListItem `json:"data"`
-
-			// Next URL of the next page, or null on the last page.
-			Next *string `json:"next"`
-
-			// Previous URL of the previous page, or null on the first page.
-			Previous *string `json:"previous"`
+			Data       []UsersSettingsUserListItem `json:"data"`
+			Pagination PaginationMetadata          `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -144922,6 +155583,55 @@ func ParseInternalTunnelK8sResponse(rsp *http.Response) (*InternalTunnelK8sRespo
 			return nil, err
 		}
 		response.JSON504 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseInternalTunnelK8sCapabilityResponse parses an HTTP response from a InternalTunnelK8sCapabilityWithResponse call
+func ParseInternalTunnelK8sCapabilityResponse(rsp *http.Response) (*InternalTunnelK8sCapabilityResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &InternalTunnelK8sCapabilityResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Supported bool `json:"supported"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

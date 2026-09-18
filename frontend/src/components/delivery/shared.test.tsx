@@ -12,23 +12,31 @@ import {
 
 const nav = vi.hoisted(() => ({
   search: "",
-  replace: vi.fn(),
+  navigate: vi.fn(),
 }));
 
-vi.mock("@/lib/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: nav.replace, back: vi.fn() }),
-  usePathname: () => "/dashboard/delivery/rollouts/rollout-1",
-  useSearchParams: () => new URLSearchParams(nav.search),
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => nav.navigate,
+  useLocation: <T,>({
+    select,
+  }: {
+    select: (location: { pathname: string; searchStr: string }) => T;
+  }) =>
+    select({
+      pathname: "/dashboard/delivery/rollouts/rollout-1",
+      searchStr: nav.search,
+    }),
 }));
 
-vi.mock("@/lib/hooks", () => ({
+vi.mock("@/lib/hooks/projects", () => ({
   useProjects: vi.fn(),
 }));
 
 describe("useDeliveryPageIndex", () => {
   beforeEach(() => {
     nav.search = "";
-    nav.replace.mockClear();
+    nav.navigate.mockClear();
   });
 
   it.each(["page=-1", "page=1.5", "page=invalid"])(
@@ -47,9 +55,10 @@ describe("useDeliveryPageIndex", () => {
     expect(result.current[0]).toBe(2);
     act(() => result.current[1](3));
 
-    expect(nav.replace).toHaveBeenCalledWith(
-      "/dashboard/delivery/rollouts/rollout-1?project=project-1&state=progressing&cluster_page=3",
-    );
+    expect(nav.navigate).toHaveBeenCalledWith({
+      to: "/dashboard/delivery/rollouts/rollout-1?project=project-1&state=progressing&cluster_page=3",
+      replace: true,
+    });
   });
 
   it("removes the page parameter when returning to the first page", () => {
@@ -58,33 +67,27 @@ describe("useDeliveryPageIndex", () => {
 
     act(() => result.current[1](0));
 
-    expect(nav.replace).toHaveBeenCalledWith(
-      "/dashboard/delivery/rollouts/rollout-1?project=project-1",
-    );
+    expect(nav.navigate).toHaveBeenCalledWith({
+      to: "/dashboard/delivery/rollouts/rollout-1?project=project-1",
+      replace: true,
+    });
   });
 });
 
 describe("deliveryProjectLabel", () => {
-  it("uses the cluster name when the project is bound to a known cluster", () => {
+  it("uses the project display name", () => {
     expect(
-      deliveryProjectLabel(
-        {
-          name: "astronomer-system",
-          displayName: "Astronomer System",
-          clusterId: "cluster-a",
-        },
-        new Map([["cluster-a", "fleet-a"]]),
-      ),
-    ).toBe("fleet-a");
+      deliveryProjectLabel({
+        name: "astronomer-system",
+        displayName: "Astronomer System",
+      }),
+    ).toBe("Astronomer System");
   });
 
-  it("falls back to the project display name when the cluster is unknown", () => {
-    expect(
-      deliveryProjectLabel(
-        { name: "platform", displayName: "Platform", clusterId: "missing" },
-        new Map(),
-      ),
-    ).toBe("Platform");
+  it("falls back to the project name", () => {
+    expect(deliveryProjectLabel({ name: "platform", displayName: "" })).toBe(
+      "platform",
+    );
   });
 });
 
@@ -121,41 +124,44 @@ describe("cluster delivery paths", () => {
 describe("deliveryPageRowCount", () => {
   it("uses an authoritative total when the server knows it", () => {
     expect(
-      deliveryPageRowCount(
-        { data: [{ id: 1 }], count: 87, next: "/next", totalKnown: true },
-        0,
-        25,
-      ),
+      deliveryPageRowCount({
+        data: [{ id: 1 }],
+        pagination: {
+          total: 87,
+          limit: 25,
+          offset: 0,
+          has_more: true,
+          next_offset: 25,
+        },
+      }),
     ).toBe(87);
   });
 
   it("enables exactly one next fetch for an unknown total", () => {
     expect(
-      deliveryPageRowCount(
-        {
-          data: Array.from({ length: 25 }),
-          count: 25,
-          next: "/next",
-          totalKnown: false,
+      deliveryPageRowCount({
+        data: Array.from({ length: 25 }),
+        pagination: {
+          limit: 25,
+          offset: 50,
+          has_more: true,
+          next_offset: 75,
         },
-        2,
-        25,
-      ),
+      }),
     ).toBe(76);
   });
 
   it("stops at the observed end of an unknown total", () => {
     expect(
-      deliveryPageRowCount(
-        {
-          data: Array.from({ length: 7 }),
-          count: 7,
-          next: null,
-          totalKnown: false,
+      deliveryPageRowCount({
+        data: Array.from({ length: 7 }),
+        pagination: {
+          limit: 25,
+          offset: 75,
+          has_more: false,
+          next_offset: null,
         },
-        3,
-        25,
-      ),
+      }),
     ).toBe(82);
   });
 });

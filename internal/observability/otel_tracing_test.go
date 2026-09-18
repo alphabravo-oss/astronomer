@@ -2,10 +2,12 @@ package observability
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // When the OTLP endpoint is unset, InitTracing
@@ -15,15 +17,7 @@ import (
 func TestInitTracing_DisabledByDefault(t *testing.T) {
 	t.Parallel()
 
-	// Cache + clear the env so a host that has the var set doesn't
-	// accidentally turn this into the enabled-path test.
-	prev := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-	t.Cleanup(func() {
-		_ = os.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", prev)
-	})
-
-	cfg := TracingFromEnv()
+	cfg := TracingConfig{}
 	if cfg.Endpoint != "" {
 		t.Fatalf("expected empty Endpoint when env unset, got %q", cfg.Endpoint)
 	}
@@ -64,7 +58,7 @@ func TestParseOTLPHeaders(t *testing.T) {
 		{"malformed_skipped", "good=1,broken,also=2", map[string]string{"good": "1", "also": "2"}, 2},
 	}
 	for _, c := range cases {
-		got := parseOTLPHeaders(c.in)
+		got := ParseOTLPHeaders(c.in)
 		if len(got) != c.count {
 			t.Errorf("%s: count=%d, want %d (got %v)", c.name, len(got), c.count, got)
 			continue
@@ -77,21 +71,44 @@ func TestParseOTLPHeaders(t *testing.T) {
 	}
 }
 
-// Sampler ratio clamping: values outside [0,1] are clamped, zero
-// resolves to the default 0.05. We exercise the same logic via the
-// config struct so the public surface is what we assert.
-func TestTracingConfig_SamplerRatioClamping(t *testing.T) {
-	t.Parallel()
-	cases := []float64{-1.0, 0.0, 0.5, 1.0, 2.0}
-	for _, in := range cases {
-		// We don't actually init the SDK in this test — the disabled
-		// path is the one that's safe to exercise. This is purely a
-		// regression guard that the field is taken in unchanged so a
-		// future refactor doesn't drop the operator's input on the
-		// floor before clamping.
-		cfg := TracingConfig{Endpoint: "", SamplerRatio: in}
-		if cfg.SamplerRatio != in {
-			t.Errorf("ratio %v: field round-trips as %v", in, cfg.SamplerRatio)
+func TestTracingSamplerHonorsExplicitZero(t *testing.T) {
+	parent := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2},
+		TraceFlags: trace.FlagsSampled, Remote: true,
+	})
+	params := sdktrace.SamplingParameters{
+		ParentContext: trace.ContextWithRemoteSpanContext(context.Background(), parent),
+		TraceID:       parent.TraceID(),
+		Name:          "agent.operation",
+	}
+	if got := samplerForRatio(normalizedSamplerRatio(0)).ShouldSample(params).Decision; got != sdktrace.Drop {
+		t.Fatalf("explicit zero decision = %v, want Drop even for sampled remote parent", got)
+	}
+	if got := normalizedSamplerRatio(-1); got != 0 {
+		t.Fatalf("normalized -1 = %v, want 0", got)
+	}
+	if got := normalizedSamplerRatio(2); got != 1 {
+		t.Fatalf("normalized 2 = %v, want 1", got)
+	}
+}
+
+func TestTracingResourceCarriesDeploymentIdentity(t *testing.T) {
+	res, err := tracingResource(TracingConfig{
+		ServiceVersion: "1.2.3", Environment: "staging",
+		ServiceNamespace: "astronomer", ServiceInstanceID: "pod-1",
+	}, "astronomer-worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[attribute.Key]string{
+		"service.name": "astronomer-worker", "service.version": "1.2.3",
+		"deployment.environment": "staging", "service.namespace": "astronomer",
+		"service.instance.id": "pod-1",
+	}
+	for key, value := range want {
+		got, ok := res.Set().Value(key)
+		if !ok || got.AsString() != value {
+			t.Errorf("resource %s = %q, %t; want %q", key, got.AsString(), ok, value)
 		}
 	}
 }

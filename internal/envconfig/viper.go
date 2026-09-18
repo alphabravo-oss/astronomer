@@ -30,3 +30,14 @@ func SetDefaults(v *viper.Viper, defaults ...Default) {
 		v.SetDefault(item.Key, item.Value)
 	}
 }
+
+// Lookup resolves an explicitly named environment value through the shared
+// configuration adapter. It is used for connection-URI secret indirection,
+// where the URI carries the variable name but must not carry the secret.
+func Lookup(key string) (string, bool) {
+	v := NewViper("")
+	if err := v.BindEnv(key); err != nil || !v.IsSet(key) {
+		return "", false
+	}
+	return v.GetString(key), true
+}

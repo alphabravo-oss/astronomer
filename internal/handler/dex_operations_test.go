@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
 
 type dexOperationTxFake struct {
@@ -66,7 +67,7 @@ func (tx *dexOperationTxFake) UpsertAuditOutbox(_ context.Context, arg sqlc.Upse
 func dexOperationRequest(actor uuid.UUID, key string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/dex/apply/", nil)
 	req.Header.Set("Idempotency-Key", key)
-	return req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{ID: actor.String(), AuthMethod: "jwt"}))
+	return req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{ID: actor.String(), AuthMethod: "jwt"}))
 }
 
 func TestDexApplyQueuesDurablyWithoutKubernetesAndReplaysExactlyOnce(t *testing.T) {

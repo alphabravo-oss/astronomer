@@ -69,7 +69,7 @@ func TestHealthCheckKeepsClusterActiveOnRecentBeat(t *testing.T) {
 	q := &hcLivenessQuerier{}
 	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
-	cluster := sqlc.Cluster{
+	cluster := healthCheckTarget{
 		ID: uuid.New(),
 		// A degraded beat 30s ago keeps last_heartbeat fresh (inside the 2m window).
 		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-30 * time.Second), Valid: true},
@@ -92,7 +92,7 @@ func TestHealthCheckFlipsGenuinelyStaleCluster(t *testing.T) {
 	q := &hcLivenessQuerier{}
 	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
-	cluster := sqlc.Cluster{
+	cluster := healthCheckTarget{
 		ID: uuid.New(),
 		// 3m old, outside the 2m window: a genuine disconnect.
 		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true},
@@ -117,7 +117,7 @@ func TestHealthCheckToleratesGuardSkip(t *testing.T) {
 	q := &hcLivenessQuerier{simulateGuardSkip: true}
 	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
-	cluster := sqlc.Cluster{
+	cluster := healthCheckTarget{
 		ID:            uuid.New(),
 		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true},
 	}
@@ -151,7 +151,7 @@ func runMetricsConditionCase(t *testing.T, lastMetricsAt pgtype.Timestamptz) *hc
 	q := &hcLivenessQuerier{health: sqlc.ClusterHealthStatus{LastMetricsAt: lastMetricsAt}}
 	ctx := testRuntimeContext(RuntimeDependencies{Queries: q})
 
-	cluster := sqlc.Cluster{
+	cluster := healthCheckTarget{
 		ID:            uuid.New(),
 		LastHeartbeat: pgtype.Timestamptz{Time: time.Now().Add(-30 * time.Second), Valid: true},
 	}

@@ -114,3 +114,12 @@ func TestSecurityPolicyCreateRollsBackWhenAuditIntentFails(t *testing.T) {
 		t.Fatalf("rollback failed: policy=%#v audit=%#v", harness.committed, harness.committedAudit)
 	}
 }
+
+func TestSecurityPolicyCreateFailsClosedWithoutTransactionRunner(t *testing.T) {
+	h := NewSecurityHandler(sqlc.New(nil))
+	rec := httptest.NewRecorder()
+	h.CreatePolicy(rec, securityPolicyCreateRequest(t))
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"code":"runner_unwired"`) {
+		t.Fatalf("status=%d body=%s, want 503 runner_unwired", rec.Code, rec.Body.String())
+	}
+}

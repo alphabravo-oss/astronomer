@@ -16,7 +16,6 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/callerid"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -31,63 +30,37 @@ import (
 //
 //	?ticket=<short-lived-ticket>               (browser path)
 //
-// Without `SetAuth`, the handler accepts unauthenticated connections
-// (dev/test mode).
+// Without SetAuth, the handler rejects the connection. Authentication is a
+// required dependency in every environment.
 type LogsConsumer struct {
 	hub         *Hub
 	log         *slog.Logger
 	jwt         *auth.JWTManager
-	queries     middleware.TokenUserQuerier
+	queries     auth.TokenUserQuerier
 	tickets     *auth.StreamTicketStore
 	auditWriter any
 	rbacEngine  *rbac.Engine
-	rbacQuerier middleware.RBACQuerier
+	rbacQuerier rbac.BindingQuerier
 }
 
-// NewLogsConsumer creates a new LogsConsumer.
-func NewLogsConsumer(hub *Hub, log *slog.Logger) *LogsConsumer {
+// NewLogsConsumer creates a fully secured LogsConsumer.
+func NewLogsConsumer(hub *Hub, log *slog.Logger, deps StreamConsumerDependencies) (*LogsConsumer, error) {
+	if err := deps.validate(); err != nil {
+		return nil, err
+	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &LogsConsumer{hub: hub, log: log}
-}
-
-// SetAuth wires the JWT manager + token querier so HandleLogs can authenticate
-// connections before performing the WebSocket upgrade. Both arguments are
-// optional; when nil the handler accepts unauthenticated connections.
-func (lc *LogsConsumer) SetAuth(jwt *auth.JWTManager, queries middleware.TokenUserQuerier) {
-	if lc == nil {
-		return
-	}
-	lc.jwt = jwt
-	lc.queries = queries
-}
-
-func (lc *LogsConsumer) SetStreamTickets(tickets *auth.StreamTicketStore) {
-	if lc == nil {
-		return
-	}
-	lc.tickets = tickets
-}
-
-func (lc *LogsConsumer) SetAuditWriter(auditWriter any) {
-	if lc == nil {
-		return
-	}
-	lc.auditWriter = auditWriter
-}
-
-// SetAuthorization wires the RBAC engine + binding querier so HandleLogs can
-// enforce per-cluster permissions on the Authorization-header path (the
-// browser ?ticket= path is already RBAC-gated at ticket issuance). Both
-// arguments are optional; when nil the per-cluster check is skipped, matching
-// the optional-auth contract of SetAuth (dev/test runs without RBAC wired).
-func (lc *LogsConsumer) SetAuthorization(engine *rbac.Engine, querier middleware.RBACQuerier) {
-	if lc == nil {
-		return
-	}
-	lc.rbacEngine = engine
-	lc.rbacQuerier = querier
+	return &LogsConsumer{
+		hub:         hub,
+		log:         log,
+		jwt:         deps.JWT,
+		queries:     deps.Queries,
+		tickets:     deps.Tickets,
+		auditWriter: deps.AuditWriter,
+		rbacEngine:  deps.RBACEngine,
+		rbacQuerier: deps.RBACQuerier,
+	}, nil
 }
 
 // authorizeCluster reports whether userID holds pods:logs on clusterID within
@@ -102,16 +75,22 @@ func (lc *LogsConsumer) SetAuthorization(engine *rbac.Engine, querier middleware
 // minted stays redeemable. The concrete namespace is threaded through so a
 // namespace-scoped binding grants access in the pod's namespace; cluster-wide
 // bindings still pass for any namespace. When the RBAC engine/querier are not
-// wired the check is skipped.
+// wired the check is denied.
 func (lc *LogsConsumer) authorizeCluster(ctx context.Context, userID, clusterID uuid.UUID, namespace string) bool {
 	if lc.rbacEngine == nil || lc.rbacQuerier == nil {
-		return true
+		return false
 	}
 	bindings, err := lc.rbacQuerier.GetUserBindings(ctx, userID.String())
 	if err != nil {
 		return false
 	}
 	return lc.rbacEngine.CheckPermission(bindings, rbac.ResourcePods, rbac.VerbLogs, clusterID, uuid.Nil, namespace)
+}
+
+// SecurityWiringValid reports whether every dependency needed to authenticate
+// and authorize a logs stream is present.
+func (lc *LogsConsumer) SecurityWiringValid() bool {
+	return lc != nil && lc.jwt != nil && lc.queries != nil && lc.tickets != nil && lc.auditWriter != nil && lc.rbacEngine != nil && lc.rbacQuerier != nil
 }
 
 // HandleLogs upgrades to WebSocket and relays log data from the cluster agent
@@ -207,7 +186,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 			ClusterID: clusterID,
 			Timestamp: time.Now().UTC(),
 		}
-		_ = lc.hub.SendToAgent(clusterID, stopMsg)
+		_ = lc.hub.SendToAgentContext(r.Context(), clusterID, stopMsg)
 	}()
 
 	// Parse query parameters for log options.
@@ -263,7 +242,7 @@ func (lc *LogsConsumer) HandleLogs(w http.ResponseWriter, r *http.Request) {
 		Payload:   startPayload,
 	}
 
-	if err := lc.hub.SendToAgent(clusterID, startMsg); err != nil {
+	if err := lc.hub.SendToAgentContext(r.Context(), clusterID, startMsg); err != nil {
 		lc.log.Error("failed to send LOG_START",
 			slog.String("cluster_id", clusterID),
 			slog.String("error", err.Error()),

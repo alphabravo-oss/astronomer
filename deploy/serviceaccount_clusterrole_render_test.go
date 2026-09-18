@@ -84,7 +84,7 @@ func TestAgentClusterRoleGrantsExpectedCoreAccess(t *testing.T) {
 	// Sanity: the allowlist still actually grants the irreducible core the
 	// platform needs, so a future over-tightening that breaks install is
 	// caught here rather than in production.
-	wantResources := []string{"pods/exec", "secrets", "customresourcedefinitions"}
+	wantResources := []string{"pods/exec", "secrets", "customresourcedefinitions", "grpcroutes", "udproutes", "vulnerabilityreports", "virtualservices", "peerauthentications", "serviceprofiles", "servers"}
 	found := map[string]bool{}
 	for _, raw := range rules {
 		rule, _ := raw.(map[string]any)

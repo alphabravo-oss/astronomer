@@ -18,9 +18,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -28,7 +31,6 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
-	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 )
 
@@ -67,12 +69,34 @@ func (f *fakeVaultQuerier) GetProjectByID(_ context.Context, id uuid.UUID) (sqlc
 	}
 	return p, nil
 }
-func (f *fakeVaultQuerier) ListVaultConnections(_ context.Context) ([]sqlc.VaultConnection, error) {
-	out := make([]sqlc.VaultConnection, 0, len(f.conns))
+func (f *fakeVaultQuerier) ListVaultConnectionsPage(_ context.Context, arg sqlc.ListVaultConnectionsPageParams) ([]sqlc.ListVaultConnectionsPageRow, error) {
+	all := make([]sqlc.VaultConnection, 0, len(f.conns))
 	for _, c := range f.conns {
-		out = append(out, c)
+		all = append(all, c)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].Name == all[j].Name {
+			return all[i].ID.String() < all[j].ID.String()
+		}
+		return all[i].Name < all[j].Name
+	})
+	start := min(int(arg.QueryOffset), len(all))
+	end := min(start+int(arg.QueryLimit), len(all))
+	out := make([]sqlc.ListVaultConnectionsPageRow, 0, end-start)
+	for _, c := range all[start:end] {
+		out = append(out, sqlc.ListVaultConnectionsPageRow{
+			ID: c.ID, Name: c.Name, Description: c.Description, Addr: c.Addr,
+			AuthMethod: c.AuthMethod, AuthConfigured: c.AuthEncrypted != "", Namespace: c.Namespace,
+			TlsSkipVerify: c.TlsSkipVerify, CaCertPem: c.CaCertPem, DefaultMount: c.DefaultMount,
+			Enabled: c.Enabled, CachedTokenExpiresAt: c.CachedTokenExpiresAt,
+			LastHealthAt: c.LastHealthAt, LastHealthOk: c.LastHealthOk, LastError: c.LastError,
+			CreatedBy: c.CreatedBy, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+		})
 	}
 	return out, nil
+}
+func (f *fakeVaultQuerier) CountVaultConnections(context.Context) (int64, error) {
+	return int64(len(f.conns)), nil
 }
 func (f *fakeVaultQuerier) GetVaultConnectionByID(_ context.Context, id uuid.UUID) (sqlc.VaultConnection, error) {
 	c, ok := f.conns[id]
@@ -217,7 +241,7 @@ func makeVaultRequest(t *testing.T, method, path string, callerID uuid.UUID, bod
 		_ = json.NewEncoder(&buf).Encode(body)
 	}
 	req := httptest.NewRequest(method, path, &buf)
-	req = req.WithContext(middleware.SetAuthenticatedUserForTest(req.Context(), &middleware.AuthenticatedUser{
+	req = req.WithContext(reqctx.WithUser(req.Context(), &reqctx.User{
 		ID: callerID.String(),
 	}))
 	return req
@@ -240,7 +264,7 @@ func TestVaultHandler_RequiresSuperuser(t *testing.T) {
 	nonSuper := uuid.New()
 	fq.users[nonSuper] = sqlc.User{ID: nonSuper, IsSuperuser: false}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	h.SetEncryptor(newVaultTestEncryptor(t))
 
 	// Build a chi router so URL params resolve correctly.
@@ -285,12 +309,56 @@ func TestVaultHandler_RequiresSuperuser(t *testing.T) {
 	}
 }
 
+func TestVaultHandler_ListIsBoundedAndCredentialFree(t *testing.T) {
+	fq := newFakeVaultQuerier()
+	caller := uuid.New()
+	fq.users[caller] = sqlc.User{ID: caller, IsSuperuser: true}
+	now := time.Now().UTC()
+	for _, name := range []string{"alpha", "bravo", "charlie"} {
+		id := uuid.New()
+		fq.conns[id] = sqlc.VaultConnection{
+			ID: id, Name: name, Addr: "https://vault.example.test", AuthMethod: "token",
+			AuthEncrypted: "must-never-reach-list-response", Enabled: true,
+			CreatedAt: now, UpdatedAt: now,
+		}
+	}
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
+	w := httptest.NewRecorder()
+	h.List(w, makeVaultRequest(t, http.MethodGet, "/api/v1/admin/vault-connections/?limit=1&offset=1", caller, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("list status = %d; body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "must-never-reach-list-response") {
+		t.Fatalf("list leaked stored credential: %s", w.Body.String())
+	}
+	var response struct {
+		Data struct {
+			Items      []VaultConnectionResponse `json:"items"`
+			Pagination struct {
+				Total  *int64 `json:"total"`
+				Limit  int    `json:"limit"`
+				Offset int    `json:"offset"`
+			} `json:"pagination"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(response.Data.Items) != 1 || response.Data.Items[0].Name != "bravo" {
+		t.Fatalf("unexpected list page: %+v", response.Data.Items)
+	}
+	page := response.Data.Pagination
+	if page.Total == nil || *page.Total != 3 || page.Limit != 1 || page.Offset != 1 {
+		t.Fatalf("unexpected pagination: %+v", page)
+	}
+}
+
 func TestVaultHandler_CreateGetUpdate(t *testing.T) {
 	fq := newFakeVaultQuerier()
 	caller := uuid.New()
 	fq.users[caller] = sqlc.User{ID: caller, IsSuperuser: true}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	h.SetEncryptor(newVaultTestEncryptor(t))
 
 	r := chi.NewRouter()
@@ -393,7 +461,7 @@ func TestVaultHandler_DeleteAuditsConnection(t *testing.T) {
 	}
 	fq.byName["prod"] = connID
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	r := chi.NewRouter()
 	r.Delete("/api/v1/admin/vault-connections/{id}/", h.Delete)
 
@@ -433,7 +501,7 @@ func TestVaultHandler_TestEndpointAuditsProbeResult(t *testing.T) {
 		Enabled:       true,
 	}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	h.SetEncryptor(enc)
 	h.SetProbe(fakeVaultProbe{result: TestResult{
 		OK:        true,
@@ -468,7 +536,7 @@ func TestVaultHandler_ProjectDefaultVaultAssignmentIsAudited(t *testing.T) {
 	fq.projects[projectID] = sqlc.Project{ID: projectID, Name: "team-a"}
 	fq.conns[connID] = sqlc.VaultConnection{ID: connID, Name: "prod", Addr: "https://vault.example.com", AuthMethod: "token"}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	r := chi.NewRouter()
 	r.Put("/api/v1/projects/{id}/default-vault-connection/", h.PutProjectDefault)
 
@@ -496,7 +564,7 @@ func TestVaultHandler_RejectsInsecureAddr(t *testing.T) {
 	caller := uuid.New()
 	fq.users[caller] = sqlc.User{ID: caller, IsSuperuser: true}
 
-	h := NewVaultHandler(fq)
+	h := wireVaultMutationFixture(NewVaultHandler(fq), fq)
 	h.SetEncryptor(newVaultTestEncryptor(t))
 
 	r := chi.NewRouter()

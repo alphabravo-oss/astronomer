@@ -171,8 +171,7 @@ export function mapCharlieTriggerRule(
     gracePeriodSeconds: wire.grace_period_seconds,
     flapWindowSeconds: wire.flap_window_seconds,
     flapCount: wire.flap_count,
-    estateThresholdPercent:
-      wire.estate_threshold_percent ?? wire.fleet_threshold_percent,
+	    estateThresholdPercent: wire.estate_threshold_percent,
     minimumAgentVersion: wire.minimum_agent_version,
     suppressed: wire.suppressed,
     maximumAttempts: wire.maximum_attempts,

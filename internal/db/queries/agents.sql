@@ -1,8 +1,18 @@
 -- name: ListConnectionsByCluster :many
 SELECT * FROM agent_connections WHERE cluster_id = $1 ORDER BY connected_at DESC LIMIT $2 OFFSET $3;
 
+-- name: PruneAgentConnectionHistoryBefore :execrows
+-- Retain live sessions regardless of age. Terminal connection rows are useful
+-- operational history, but must not grow forever on reconnect-heavy estates.
+DELETE FROM agent_connections
+WHERE status <> 'connected'
+  AND disconnected_at < sqlc.arg(cutoff)::timestamptz;
+
 -- name: ListActiveConnections :many
-SELECT * FROM agent_connections WHERE status = 'connected' ORDER BY connected_at DESC;
+SELECT * FROM agent_connections
+WHERE status = 'connected'
+ORDER BY connected_at DESC
+LIMIT $1;
 
 -- name: ListLatestConnectionsByClusters :many
 SELECT DISTINCT ON (cluster_id) *
@@ -34,11 +44,29 @@ LEFT JOIN LATERAL (
     ORDER BY ac.connected_at DESC
     LIMIT 1
 ) lc ON true
-WHERE c.decommissioned_at IS NULL;
+WHERE c.decommissioned_at IS NULL
+ORDER BY c.id
+LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 
 -- name: CreateAgentConnection :one
 INSERT INTO agent_connections (cluster_id, agent_id, session_id, status, channel_name, pod_name, node_name, agent_version)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: ReplaceActiveAgentConnection :one
+-- Supersede the prior live session and insert its replacement in one statement,
+-- preventing cross-replica interleaving from disconnecting the new row.
+WITH disconnected AS (
+    UPDATE agent_connections
+    SET status = 'disconnected', disconnected_at = now()
+    WHERE cluster_id = sqlc.arg(cluster_id) AND status = 'connected'
+    RETURNING id
+)
+INSERT INTO agent_connections (cluster_id, agent_id, session_id, status, channel_name, pod_name, node_name, agent_version)
+SELECT
+    sqlc.arg(cluster_id), sqlc.arg(agent_id), sqlc.arg(session_id), 'connected',
+    sqlc.arg(channel_name), sqlc.arg(pod_name), sqlc.arg(node_name), sqlc.arg(agent_version)
+FROM (SELECT count(*) FROM disconnected) AS disconnect_barrier
 RETURNING *;
 
 -- name: UpdateAgentConnectionStatus :exec

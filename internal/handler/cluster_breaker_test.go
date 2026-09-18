@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -48,6 +49,44 @@ func TestClusterBreaker_PerClusterIsolation(t *testing.T) {
 	proceed, _ := b.allow("b")
 	if !proceed {
 		t.Error("b should still be allowed")
+	}
+}
+
+func TestClusterBreaker_CallerCancellationIsNeutral(t *testing.T) {
+	b := newClusterBreaker(2, time.Second)
+
+	_, finalize := b.allow("c")
+	finalize(errors.New("transport failure"))
+	_, finalize = b.allow("c")
+	finalize(context.Canceled)
+
+	if got := b.state("c"); got != breakerClosed {
+		t.Fatalf("state after caller cancellation = %v, want closed", got)
+	}
+	if got := b.entry("c").consecutiveErrs; got != 1 {
+		t.Fatalf("failures after caller cancellation = %d, want 1", got)
+	}
+
+	_, finalize = b.allow("c")
+	finalize(errors.New("second transport failure"))
+	if got := b.state("c"); got != breakerOpen {
+		t.Fatalf("state after second transport failure = %v, want open", got)
+	}
+}
+
+func TestClusterBreaker_CanceledHalfOpenProbeReturnsToOpen(t *testing.T) {
+	b := newClusterBreaker(1, time.Millisecond)
+	_, finalize := b.allow("c")
+	finalize(errors.New("transport failure"))
+	time.Sleep(2 * time.Millisecond)
+
+	proceed, finalize := b.allow("c")
+	if !proceed || b.state("c") != breakerHalfOpen {
+		t.Fatal("expected a half-open probe")
+	}
+	finalize(context.Canceled)
+	if got := b.state("c"); got != breakerOpen {
+		t.Fatalf("state after canceled probe = %v, want open", got)
 	}
 }
 

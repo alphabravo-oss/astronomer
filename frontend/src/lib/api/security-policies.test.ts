@@ -54,9 +54,13 @@ describe("security policy generated API boundary", () => {
   it("maps PSA templates from raw wire casing", async () => {
     vi.mocked(generated.getSecurityTemplates).mockResolvedValueOnce({
       data: [templateWire],
-      count: 1,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 1,
+        limit: 100,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
 
     await expect(getPodSecurityTemplates()).resolves.toEqual([
@@ -103,9 +107,13 @@ describe("security policy generated API boundary", () => {
   it("keeps policy identity honest instead of inventing joined names and levels", async () => {
     vi.mocked(generated.getSecurityPolicies).mockResolvedValueOnce({
       data: [policyWire],
-      count: 1,
-      next: null,
-      previous: null,
+      pagination: {
+        total: 1,
+        limit: 100,
+        offset: 0,
+        has_more: false,
+        next_offset: null,
+      },
     });
 
     const [policy] = await getClusterSecurityPolicies();

@@ -23,11 +23,10 @@
 //     endpointPublicAccess=true,publicAccessCidrs=...
 //   - GKE  : gcloud container clusters update --master-authorized-networks
 //   - AKS  : az aks update --api-server-authorized-ip-ranges ...
-//     (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
 //   - DOKS : doctl k8s cluster update via firewall API
-//     (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
 //   - SelfManaged : SSA patch on a NetworkPolicy as fallback
-//     (scaffolded; v1 ships as a TODO — see SCAFFOLDS below)
+//     (monitor/enforce is intentionally unavailable until a portable
+//     control-plane firewall contract exists)
 //
 // Each provider uses the existing cloud-credentials materialization
 // (sprint 053) to get its API client. NO new cloud-credential storage —
@@ -168,7 +167,7 @@ func DeclaredCapability(cluster Cluster) Capability {
 	case ProviderDOKS:
 		return Capability{Provider: id, CanMonitor: true, CanEnforce: true, RequiredMetadata: []string{"provider_cluster_id", "cloud credential"}}
 	case ProviderSelfManaged, "":
-		return Capability{Provider: ProviderSelfManaged, CanMonitor: true, Reason: "self-managed API-server firewalls are operator-owned"}
+		return Capability{Provider: ProviderSelfManaged, Reason: "self-managed API-server firewalls are operator-owned and cannot be observed by the controller"}
 	default:
 		return Capability{Provider: ProviderUnknown, Reason: "provider is not supported by the allow-list controller"}
 	}

@@ -63,7 +63,7 @@ func TestDeleteMonitoringEndpoint(t *testing.T) {
 				backend: sqlc.MonitoringBackend{ID: tc.backendID, BackendType: "thanos"},
 				getErr:  tc.getErr, deleteErr: tc.deleteErr,
 			}
-			h := NewMonitoringHandlerWithQueries(q, nil)
+			h := newMonitoringHandlerWithQueriesForTest(q, nil)
 			recorder := httptest.NewRecorder()
 			h.DeleteEndpoint(recorder, monitoringEndpointDeleteRequest(tc.pathID))
 			if recorder.Code != tc.want {
@@ -87,7 +87,7 @@ func (q *monitoringEndpointReadOnlyQuerier) GetDefaultMonitoringBackend(context.
 
 func TestDeleteMonitoringEndpointFailsClosedWithoutDeleteQuery(t *testing.T) {
 	id := uuid.New()
-	h := NewMonitoringHandlerWithQueries(&monitoringEndpointReadOnlyQuerier{
+	h := newMonitoringHandlerWithQueriesForTest(&monitoringEndpointReadOnlyQuerier{
 		backend: sqlc.MonitoringBackend{ID: id, BackendType: "thanos"},
 	}, nil)
 	recorder := httptest.NewRecorder()

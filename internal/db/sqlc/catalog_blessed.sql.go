@@ -7,6 +7,10 @@ package sqlc
 
 import (
 	"context"
+	"encoding/json"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 const createBlessedChart = `-- name: CreateBlessedChart :exec
@@ -48,6 +52,341 @@ DELETE FROM catalog_blessed_charts WHERE source = $1
 
 func (q *Queries) DeleteBlessedChartsBySource(ctx context.Context, source string) error {
 	_, err := q.db.Exec(ctx, deleteBlessedChartsBySource, source)
+	return err
+}
+
+const getApplicationCatalogPresentationByChartVersion = `-- name: GetApplicationCatalogPresentationByChartVersion :one
+SELECT b.id, b.repo_url, b.chart_name, b.display_name, b.description, b.category, b.icon_url, b.mgmt_safe, b.version_policy, b.source, b.created_at, b.updated_at, b.slug, b.repo_name, b.support_tier, b.featured, b.privileged, b.default_enabled, b.documentation_url, b.presentation, b.artifact, b.compatibility, b.resources, b.storage, b.lifecycle, b.raw_entry, b.catalog_digest, b.verification_status, b.verification_identity, b.revoked
+FROM helm_chart_versions v
+JOIN helm_charts c ON c.id=v.chart_id
+JOIN helm_repositories r ON r.id=c.repository_id
+JOIN catalog_blessed_charts b
+  ON b.repo_url=r.url AND b.chart_name=c.name AND b.source='catalog-v1'
+WHERE v.id=$1
+`
+
+func (q *Queries) GetApplicationCatalogPresentationByChartVersion(ctx context.Context, id uuid.UUID) (CatalogBlessedChart, error) {
+	row := q.db.QueryRow(ctx, getApplicationCatalogPresentationByChartVersion, id)
+	var i CatalogBlessedChart
+	err := row.Scan(
+		&i.ID,
+		&i.RepoUrl,
+		&i.ChartName,
+		&i.DisplayName,
+		&i.Description,
+		&i.Category,
+		&i.IconUrl,
+		&i.MgmtSafe,
+		&i.VersionPolicy,
+		&i.Source,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Slug,
+		&i.RepoName,
+		&i.SupportTier,
+		&i.Featured,
+		&i.Privileged,
+		&i.DefaultEnabled,
+		&i.DocumentationUrl,
+		&i.Presentation,
+		&i.Artifact,
+		&i.Compatibility,
+		&i.Resources,
+		&i.Storage,
+		&i.Lifecycle,
+		&i.RawEntry,
+		&i.CatalogDigest,
+		&i.VerificationStatus,
+		&i.VerificationIdentity,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const listApplicationCatalogPresentations = `-- name: ListApplicationCatalogPresentations :many
+SELECT id, slug, repo_name, repo_url, chart_name, display_name, description,
+       category, icon_url, support_tier, featured, privileged, default_enabled,
+       documentation_url, presentation, artifact, compatibility, resources,
+       storage, lifecycle, catalog_digest, verification_status,
+       verification_identity, revoked, updated_at
+FROM catalog_blessed_charts
+WHERE source='catalog-v1'
+ORDER BY featured DESC, display_name ASC
+`
+
+type ListApplicationCatalogPresentationsRow struct {
+	ID                   uuid.UUID       `json:"id"`
+	Slug                 string          `json:"slug"`
+	RepoName             string          `json:"repo_name"`
+	RepoUrl              string          `json:"repo_url"`
+	ChartName            string          `json:"chart_name"`
+	DisplayName          string          `json:"display_name"`
+	Description          string          `json:"description"`
+	Category             string          `json:"category"`
+	IconUrl              string          `json:"icon_url"`
+	SupportTier          string          `json:"support_tier"`
+	Featured             bool            `json:"featured"`
+	Privileged           bool            `json:"privileged"`
+	DefaultEnabled       bool            `json:"default_enabled"`
+	DocumentationUrl     string          `json:"documentation_url"`
+	Presentation         json.RawMessage `json:"presentation"`
+	Artifact             json.RawMessage `json:"artifact"`
+	Compatibility        json.RawMessage `json:"compatibility"`
+	Resources            json.RawMessage `json:"resources"`
+	Storage              json.RawMessage `json:"storage"`
+	Lifecycle            json.RawMessage `json:"lifecycle"`
+	CatalogDigest        string          `json:"catalog_digest"`
+	VerificationStatus   string          `json:"verification_status"`
+	VerificationIdentity string          `json:"verification_identity"`
+	Revoked              bool            `json:"revoked"`
+	UpdatedAt            time.Time       `json:"updated_at"`
+}
+
+func (q *Queries) ListApplicationCatalogPresentations(ctx context.Context) ([]ListApplicationCatalogPresentationsRow, error) {
+	rows, err := q.db.Query(ctx, listApplicationCatalogPresentations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListApplicationCatalogPresentationsRow{}
+	for rows.Next() {
+		var i ListApplicationCatalogPresentationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.RepoName,
+			&i.RepoUrl,
+			&i.ChartName,
+			&i.DisplayName,
+			&i.Description,
+			&i.Category,
+			&i.IconUrl,
+			&i.SupportTier,
+			&i.Featured,
+			&i.Privileged,
+			&i.DefaultEnabled,
+			&i.DocumentationUrl,
+			&i.Presentation,
+			&i.Artifact,
+			&i.Compatibility,
+			&i.Resources,
+			&i.Storage,
+			&i.Lifecycle,
+			&i.CatalogDigest,
+			&i.VerificationStatus,
+			&i.VerificationIdentity,
+			&i.Revoked,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listApplicationCatalogSources = `-- name: ListApplicationCatalogSources :many
+SELECT id, name, display_name, description, channel, source_url,
+       source_revision, index_digest, verification_status,
+       verification_identity, trust_policy, last_sync_attempted_at,
+       last_synced_at, last_sync_error, created_at, updated_at
+FROM delivery_catalogs
+ORDER BY display_name ASC, name ASC
+`
+
+func (q *Queries) ListApplicationCatalogSources(ctx context.Context) ([]DeliveryCatalog, error) {
+	rows, err := q.db.Query(ctx, listApplicationCatalogSources)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DeliveryCatalog{}
+	for rows.Next() {
+		var i DeliveryCatalog
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.DisplayName,
+			&i.Description,
+			&i.Channel,
+			&i.SourceUrl,
+			&i.SourceRevision,
+			&i.IndexDigest,
+			&i.VerificationStatus,
+			&i.VerificationIdentity,
+			&i.TrustPolicy,
+			&i.LastSyncAttemptedAt,
+			&i.LastSyncedAt,
+			&i.LastSyncError,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reconcileApplicationCatalogV1 = `-- name: ReconcileApplicationCatalogV1 :one
+WITH input AS (
+    SELECT $1::jsonb AS doc,
+           $2::text AS source_url,
+           $3::text AS source_revision,
+           $4::text AS index_digest,
+           $5::text AS verification_status,
+           $6::text AS verification_identity
+), catalog_upsert AS (
+    INSERT INTO delivery_catalogs (
+        name, display_name, description, channel, source_url, source_revision,
+        index_digest, verification_status, verification_identity, trust_policy,
+        last_sync_attempted_at, last_synced_at, last_sync_error
+    )
+    SELECT doc->'metadata'->>'name',
+           COALESCE(doc->'metadata'->>'displayName', doc->'metadata'->>'name'),
+           COALESCE(doc->'metadata'->>'description', ''),
+           COALESCE(doc->'metadata'->>'channel', 'stable'), source_url,
+           source_revision, index_digest, verification_status,
+           verification_identity,
+           jsonb_build_object('immutableSource', source_revision <> '', 'transport', 'https'),
+           now(), now(), ''
+    FROM input
+    ON CONFLICT (name) DO UPDATE SET
+        display_name=EXCLUDED.display_name, description=EXCLUDED.description,
+        channel=EXCLUDED.channel, source_url=EXCLUDED.source_url,
+        source_revision=EXCLUDED.source_revision,
+        index_digest=EXCLUDED.index_digest,
+        verification_status=EXCLUDED.verification_status,
+        verification_identity=EXCLUDED.verification_identity,
+        trust_policy=EXCLUDED.trust_policy,
+        last_sync_attempted_at=now(), last_synced_at=now(),
+        last_sync_error='', updated_at=now()
+    RETURNING name
+), repo_rows AS (
+    SELECT repository FROM input,
+         LATERAL jsonb_array_elements(doc->'repositories') AS repository
+), repo_upsert AS (
+    INSERT INTO helm_repositories (name,url,repo_type,description,is_default,enabled)
+    SELECT repository->>'name', repository->>'url',
+           COALESCE(repository->>'type','helm'),
+           'Curated by the Astronomer application catalog.', true, true
+    FROM repo_rows
+    ON CONFLICT (name) DO UPDATE SET
+        url=EXCLUDED.url, repo_type=EXCLUDED.repo_type,
+        description=EXCLUDED.description, is_default=true, updated_at=now()
+    RETURNING name
+), app_rows AS (
+    SELECT application,
+           repository->>'url' AS repo_url,
+           repository->>'name' AS repo_name,
+           input.index_digest,
+           input.verification_status,
+           input.verification_identity
+    FROM input
+    CROSS JOIN LATERAL jsonb_array_elements(doc->'applications') AS application
+    JOIN LATERAL jsonb_array_elements(doc->'repositories') AS repository
+      ON repository->>'name'=application->'artifact'->>'repository'
+), entry_upsert AS (
+    INSERT INTO catalog_blessed_charts (
+        repo_url, chart_name, display_name, description, category, icon_url,
+        mgmt_safe, version_policy, source, slug, repo_name, support_tier,
+        featured, privileged, default_enabled, documentation_url, presentation,
+        artifact, compatibility, resources, storage, lifecycle, raw_entry,
+        catalog_digest, verification_status, verification_identity, revoked
+    )
+    SELECT repo_url, application->'artifact'->>'chart', application->>'name',
+           COALESCE(application->>'description', application->>'summary', ''),
+           COALESCE(application->>'category','other'), COALESCE(application->>'icon',''),
+           NOT COALESCE((application->>'privileged')::boolean,false),
+           CASE WHEN application->'artifact'->>'version' IS NULL THEN ''
+                ELSE 'pinned:' || (application->'artifact'->>'version') END,
+           'catalog-v1', application->>'slug', repo_name,
+           COALESCE(application->>'supportTier','upstream'),
+           COALESCE((application->'ui'->>'featured')::boolean,false),
+           COALESCE((application->>'privileged')::boolean,false),
+           COALESCE((application->>'defaultEnabled')::boolean,false),
+           COALESCE(application->>'documentation',''),
+           COALESCE(application->'ui','{}'::jsonb),
+           COALESCE(application->'artifact','{}'::jsonb),
+           COALESCE(application->'compatibility','{}'::jsonb),
+           COALESCE(application->'resources','{}'::jsonb),
+           COALESCE(application->'storage','{}'::jsonb),
+           COALESCE(application->'lifecycle','{}'::jsonb), application,
+           index_digest, verification_status, verification_identity, false
+    FROM app_rows
+    ON CONFLICT (repo_url,chart_name) DO UPDATE SET
+        display_name=EXCLUDED.display_name, description=EXCLUDED.description,
+        category=EXCLUDED.category, icon_url=EXCLUDED.icon_url,
+        mgmt_safe=EXCLUDED.mgmt_safe, version_policy=EXCLUDED.version_policy,
+        source=EXCLUDED.source, slug=EXCLUDED.slug, repo_name=EXCLUDED.repo_name,
+        support_tier=EXCLUDED.support_tier, featured=EXCLUDED.featured,
+        privileged=EXCLUDED.privileged, default_enabled=EXCLUDED.default_enabled,
+        documentation_url=EXCLUDED.documentation_url,
+        presentation=EXCLUDED.presentation, artifact=EXCLUDED.artifact,
+        compatibility=EXCLUDED.compatibility, resources=EXCLUDED.resources,
+        storage=EXCLUDED.storage, lifecycle=EXCLUDED.lifecycle,
+        raw_entry=EXCLUDED.raw_entry, catalog_digest=EXCLUDED.catalog_digest,
+        verification_status=EXCLUDED.verification_status,
+        verification_identity=EXCLUDED.verification_identity,
+        revoked=false, updated_at=now()
+    RETURNING slug
+), stale_delete AS (
+    DELETE FROM catalog_blessed_charts existing
+    WHERE existing.source='catalog-v1'
+      AND NOT EXISTS (SELECT 1 FROM app_rows WHERE application->>'slug'=existing.slug)
+    RETURNING id
+)
+SELECT count(*)::bigint AS entry_count FROM entry_upsert
+`
+
+type ReconcileApplicationCatalogV1Params struct {
+	Document             json.RawMessage `json:"document"`
+	SourceUrl            string          `json:"source_url"`
+	SourceRevision       string          `json:"source_revision"`
+	IndexDigest          string          `json:"index_digest"`
+	VerificationStatus   string          `json:"verification_status"`
+	VerificationIdentity string          `json:"verification_identity"`
+}
+
+// A single statement owns the complete catalog snapshot: malformed input is
+// rejected in Go before this runs, and any SQL failure rolls back catalog,
+// repository, entry upserts, and stale-entry deletion together. This gives us
+// last-known-good behavior without an application-managed transaction.
+func (q *Queries) ReconcileApplicationCatalogV1(ctx context.Context, arg ReconcileApplicationCatalogV1Params) (int64, error) {
+	row := q.db.QueryRow(ctx, reconcileApplicationCatalogV1,
+		arg.Document,
+		arg.SourceUrl,
+		arg.SourceRevision,
+		arg.IndexDigest,
+		arg.VerificationStatus,
+		arg.VerificationIdentity,
+	)
+	var entry_count int64
+	err := row.Scan(&entry_count)
+	return entry_count, err
+}
+
+const recordApplicationCatalogSyncFailure = `-- name: RecordApplicationCatalogSyncFailure :exec
+UPDATE delivery_catalogs
+SET last_sync_attempted_at=now(),
+    last_sync_error=left($1::text, 2000),
+    updated_at=now()
+WHERE source_url=$2
+`
+
+type RecordApplicationCatalogSyncFailureParams struct {
+	SyncError string `json:"sync_error"`
+	SourceUrl string `json:"source_url"`
+}
+
+func (q *Queries) RecordApplicationCatalogSyncFailure(ctx context.Context, arg RecordApplicationCatalogSyncFailureParams) error {
+	_, err := q.db.Exec(ctx, recordApplicationCatalogSyncFailure, arg.SyncError, arg.SourceUrl)
 	return err
 }
 

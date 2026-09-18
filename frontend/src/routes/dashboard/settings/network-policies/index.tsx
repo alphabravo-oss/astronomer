@@ -1,3 +1,4 @@
+import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Table,
@@ -6,7 +7,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 /**
  * /dashboard/settings/network-policies — admin CRUD for network policy
  * templates (migration 068).
@@ -20,8 +21,10 @@ import {
  * behind the same useIsSuperuser hook as the rest of the settings hub.
  */
 
-import { useEffect, useState } from "react";
-import { Link } from "@/lib/link";
+import { useState } from "react";
+import { useNetworkPolicyTemplates } from "@/lib/hooks/policy-queries";
+import { QueryStates } from "@/components/ui/query-states";
+import { Link as RouterLink } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Plus,
@@ -33,10 +36,11 @@ import {
 } from "lucide-react";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
+import { Textarea } from "@/components/ui/textarea";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
-  listNetworkPolicyTemplates,
   createNetworkPolicyTemplate,
   updateNetworkPolicyTemplate,
   deleteNetworkPolicyTemplate,
@@ -47,11 +51,11 @@ import {
 function KindBadge({ kind }: { kind: "builtin" | "custom" }) {
   const palette =
     kind === "builtin"
-      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+      ? "bg-status-info/10 text-status-info border-status-info/30"
       : "bg-status-success/10 text-status-success border-status-success/30";
   return (
     <span
-      className={`text-xs px-2 py-0.5 rounded border font-medium uppercase ${palette}`}
+      className={`text-xs px-2 py-0.5 rounded-sm border font-medium uppercase ${palette}`}
     >
       {kind}
     </span>
@@ -85,7 +89,7 @@ function TemplateRow({
       </TableCell>
       <TableCell className="px-3 py-3 align-top">
         <span
-          className={`text-xs px-2 py-0.5 rounded border font-medium ${
+          className={`text-xs px-2 py-0.5 rounded-sm border font-medium ${
             tmpl.enabled
               ? "bg-status-success/10 text-status-success border-status-success/30"
               : "bg-muted text-muted-foreground border-border"
@@ -98,7 +102,7 @@ function TemplateRow({
         <div className="flex items-center justify-end gap-1">
           <button
             type="button"
-            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-muted"
+            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted"
             onClick={onClone}
             title="Create an editable copy"
           >
@@ -108,14 +112,14 @@ function TemplateRow({
             <>
               <button
                 type="button"
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-muted"
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-border hover:bg-muted"
                 onClick={onEdit}
               >
                 Edit
               </button>
               <button
                 type="button"
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-status-error/30 text-status-error hover:bg-status-error/10"
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-status-error/30 text-status-error hover:bg-status-error/10"
                 onClick={onDelete}
               >
                 <Trash2 className="h-3 w-3" />
@@ -133,9 +137,13 @@ interface DraftForm extends NetworkPolicyTemplateWriteRequest {
 }
 
 function NetworkPoliciesPanel() {
-  const [templates, setTemplates] = useState<NetworkPolicyTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
+  const templatesQuery = useNetworkPolicyTemplates();
+  const templates = templatesQuery.data ?? [];
+  const loading = templatesQuery.isLoading;
   const [draft, setDraft] = useState<DraftForm | null>(null);
+  const [deleteTarget, setDeleteTarget] =
+    useState<NetworkPolicyTemplate | null>(null);
+  const [deleting, setDeleting] = useState(false);
   // Remount key for the draft editor: each Clone/Edit/New replaces the whole
   // draft, so the form below re-seeds from scratch exactly like the old
   // setDraft(...) did.
@@ -147,20 +155,8 @@ function NetworkPoliciesPanel() {
   };
 
   const refresh = async () => {
-    setLoading(true);
-    try {
-      const items = await listNetworkPolicyTemplates();
-      setTemplates(items);
-    } catch (err: unknown) {
-      toastApiError("Failed to load templates", err);
-    } finally {
-      setLoading(false);
-    }
+    await templatesQuery.refetch();
   };
-
-  useEffect(() => {
-    void refresh();
-  }, []);
 
   const handleClone = (tmpl: NetworkPolicyTemplate) => {
     openDraft({
@@ -184,25 +180,32 @@ function NetworkPoliciesPanel() {
     });
   };
 
-  const handleDelete = async (tmpl: NetworkPolicyTemplate) => {
-    if (!confirm(`Delete custom template "${tmpl.name}"?`)) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await deleteNetworkPolicyTemplate(tmpl.id);
+      await deleteNetworkPolicyTemplate(deleteTarget.id);
       toastSuccess("Template deleted");
+      setDeleteTarget(null);
       await refresh();
     } catch (err: unknown) {
       toastApiError("Delete failed", err);
+    } finally {
+      setDeleting(false);
     }
   };
 
+  if (templatesQuery.isError)
+    return <QueryStates query={templatesQuery}>{null}</QueryStates>;
+
   return (
     <PageShell className="space-y-4">
-      <Link
-        href="/dashboard/settings"
+      <RouterLink
+        to="/dashboard/settings"
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4 mr-1" /> Back to settings
-      </Link>
+      </RouterLink>
       <PageHeader
         title={
           <span className="flex items-center gap-2">
@@ -223,7 +226,7 @@ function NetworkPoliciesPanel() {
                 enabled: true,
               })
             }
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-border bg-card hover:bg-muted"
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-card hover:bg-muted"
           >
             <Plus className="h-4 w-4" /> New custom template
           </button>
@@ -262,7 +265,7 @@ function NetworkPoliciesPanel() {
                   tmpl={t}
                   onClone={() => handleClone(t)}
                   onEdit={() => handleEdit(t)}
-                  onDelete={() => handleDelete(t)}
+                  onDelete={() => setDeleteTarget(t)}
                 />
               ))}
               {templates.length === 0 && (
@@ -291,6 +294,29 @@ function NetworkPoliciesPanel() {
           }}
         />
       )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => void handleDelete()}
+        title="Delete network policy template"
+        description="This permanently removes the custom template from the catalog."
+        confirmValue={deleteTarget?.name}
+        variant="destructive"
+        loading={deleting}
+        impact={
+          deleteTarget
+            ? {
+                scope: deleteTarget.name,
+                consequences: [
+                  "The template can no longer be applied to namespaces.",
+                  "Existing applications are not automatically revoked.",
+                ],
+                recovery:
+                  "Recreate the custom template from its YAML definition.",
+              }
+            : undefined
+        }
+      />
     </PageShell>
   );
 }
@@ -360,9 +386,9 @@ function TemplateDraftForm({
           <span className="text-muted-foreground">Slug</span>
           <form.Field name="slug">
             {(field) => (
-              <input
+              <Input
                 type="text"
-                className="w-full px-2 py-1 rounded border border-border bg-background font-mono text-sm"
+                className="w-full px-2 py-1 rounded-sm border border-border bg-background font-mono text-sm"
                 value={field.state.value}
                 disabled={!!draft.id}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -376,9 +402,9 @@ function TemplateDraftForm({
           <span className="text-muted-foreground">Name</span>
           <form.Field name="name">
             {(field) => (
-              <input
+              <Input
                 type="text"
-                className="w-full px-2 py-1 rounded border border-border bg-background text-sm"
+                className="w-full px-2 py-1 rounded-sm border border-border bg-background text-sm"
                 value={field.state.value}
                 onChange={(e) => field.handleChange(e.target.value)}
                 onBlur={field.handleBlur}
@@ -391,8 +417,8 @@ function TemplateDraftForm({
         <span className="text-muted-foreground">Description</span>
         <form.Field name="description">
           {(field) => (
-            <textarea
-              className="w-full px-2 py-1 rounded border border-border bg-background text-sm"
+            <Textarea
+              className="w-full px-2 py-1 rounded-sm border border-border bg-background text-sm"
               rows={2}
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -407,8 +433,8 @@ function TemplateDraftForm({
         </span>
         <form.Field name="spec_template">
           {(field) => (
-            <textarea
-              className="w-full px-2 py-1 rounded border border-border bg-background text-xs font-mono"
+            <Textarea
+              className="w-full px-2 py-1 rounded-sm border border-border bg-background text-xs font-mono"
               rows={14}
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
@@ -425,7 +451,7 @@ function TemplateDraftForm({
       <label className="inline-flex items-center gap-2 text-sm">
         <form.Field name="enabled">
           {(field) => (
-            <input
+            <Input
               type="checkbox"
               checked={field.state.value}
               onChange={(e) => field.handleChange(e.target.checked)}
@@ -440,7 +466,7 @@ function TemplateDraftForm({
           type="button"
           onClick={() => void form.handleSubmit()}
           disabled={saving}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-foreground text-background hover:opacity-90 disabled:opacity-50"
         >
           {saving ? (
             <Loader2 className="h-4 w-4 animate-spin" />

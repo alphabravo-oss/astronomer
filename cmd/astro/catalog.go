@@ -550,14 +550,8 @@ func newCatalogReposDeleteCmd() *cobra.Command {
 				return err
 			}
 			if !yes {
-				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "About to delete repository %s. Proceed? [y/N] ", args[0]); err != nil {
+				if err := confirmAction(cmd, fmt.Sprintf("About to delete repository %s. Proceed?", args[0])); err != nil {
 					return err
-				}
-				var resp string
-				_, _ = fmt.Scanln(&resp)
-				resp = strings.ToLower(strings.TrimSpace(resp))
-				if resp != "y" && resp != "yes" {
-					return fmt.Errorf("aborted")
 				}
 			}
 			resp, err := client.DeleteCatalogRepositoriesByIdWithResponse(cmd.Context(), id)
@@ -767,7 +761,7 @@ func newCatalogInstallCmd() *cobra.Command {
 				return fmt.Errorf("invalid --chart-version: %w", err)
 			}
 			body := astroclient.PostCatalogInstalledJSONRequestBody{
-				ProjectId:      pid,
+				ProjectId:      &pid,
 				ClusterId:      cid,
 				ChartVersionId: cvid,
 				Namespace:      namespace,
@@ -879,14 +873,8 @@ func newCatalogUninstallCmd() *cobra.Command {
 				return err
 			}
 			if !yes {
-				if _, err := fmt.Fprintf(cmd.OutOrStdout(), "About to uninstall %s. Proceed? [y/N] ", args[0]); err != nil {
+				if err := confirmAction(cmd, fmt.Sprintf("About to uninstall %s. Proceed?", args[0])); err != nil {
 					return err
-				}
-				var resp string
-				_, _ = fmt.Scanln(&resp)
-				resp = strings.ToLower(strings.TrimSpace(resp))
-				if resp != "y" && resp != "yes" {
-					return fmt.Errorf("aborted")
 				}
 			}
 			params := &astroclient.DeleteCatalogInstalledByIdParams{IdempotencyKey: uuid.NewString()}

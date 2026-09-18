@@ -14,7 +14,7 @@ import (
 
 // TokenQuerier is the minimal database surface AuthorizeStreamRequest needs to
 // resolve an API token (the `astro_*` prefix) back to an active user. It is
-// satisfied by *sqlc.Queries and by middleware.TokenUserQuerier so existing
+// satisfied by *sqlc.Queries and by auth.TokenUserQuerier so existing
 // call sites can pass whichever they already hold.
 type TokenQuerier interface {
 	GetTokenByHash(ctx context.Context, tokenHash string) (sqlc.ApiToken, error)
@@ -47,10 +47,9 @@ func BearerFromHeader(headerVal string) string {
 //   - A JWT, validated against the JWTManager's key set.
 //
 // On any failure (missing/expired/revoked/inactive-user/bad-signature) returns
-// (uuid.Nil, false) so callers can write a uniform 401. When the JWTManager
-// is nil the request is allowed through with uuid.Nil so dev/test callers
-// that haven't wired auth continue to work; this mirrors the pre-existing
-// per-handler `if jwt == nil { return true }` short-circuit.
+// (uuid.Nil, false) so callers can write a uniform 401. A missing JWT manager
+// is a server wiring failure and is denied; stream auth must never disappear
+// because a dependency was omitted.
 func AuthorizeStreamRequest(r *http.Request, q TokenQuerier, j *JWTManager) (uuid.UUID, bool) {
 	return AuthorizeStreamRequestWithTickets(r, q, j, nil, "", uuid.Nil)
 }
@@ -66,9 +65,7 @@ func AuthorizeStreamRequestWithTickets(r *http.Request, q TokenQuerier, j *JWTMa
 		}
 	}
 	if j == nil {
-		// No JWT manager wired → dev/test mode. Preserve the legacy behavior
-		// of admitting the request rather than 401-ing every stream.
-		return uuid.Nil, true
+		return uuid.Nil, false
 	}
 
 	token := BearerFromHeader(r.Header.Get("Authorization"))

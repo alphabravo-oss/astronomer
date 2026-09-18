@@ -7,16 +7,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // fakeDashboardQuerier is the in-memory DashboardQuerier the handler
@@ -44,14 +45,28 @@ func (f *fakeDashboardQuerier) GetUserByID(_ context.Context, _ uuid.UUID) (sqlc
 	return f.user, nil
 }
 
-func (f *fakeDashboardQuerier) ListDashboardWidgets(_ context.Context) ([]sqlc.DashboardWidget, error) {
+func (f *fakeDashboardQuerier) ListDashboardWidgetsPage(_ context.Context, arg sqlc.ListDashboardWidgetsPageParams) ([]sqlc.DashboardWidget, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make([]sqlc.DashboardWidget, 0, len(f.widgets))
 	for _, w := range f.widgets {
 		out = append(out, w)
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name == out[j].Name {
+			return out[i].ID.String() < out[j].ID.String()
+		}
+		return out[i].Name < out[j].Name
+	})
+	start := min(int(arg.QueryOffset), len(out))
+	end := min(start+int(arg.QueryLimit), len(out))
+	return out[start:end], nil
+}
+
+func (f *fakeDashboardQuerier) CountDashboardWidgets(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return int64(len(f.widgets)), nil
 }
 
 func (f *fakeDashboardQuerier) GetDashboardWidgetByID(_ context.Context, id uuid.UUID) (sqlc.DashboardWidget, error) {
@@ -148,14 +163,36 @@ func (f *fakeDashboardQuerier) ListWidgetsForScope(_ context.Context, arg sqlc.L
 	return out, nil
 }
 
-func (f *fakeDashboardQuerier) ListPrometheusDatasources(_ context.Context) ([]sqlc.PrometheusDatasource, error) {
+func (f *fakeDashboardQuerier) ListPrometheusDatasourcesPage(_ context.Context, arg sqlc.ListPrometheusDatasourcesPageParams) ([]sqlc.ListPrometheusDatasourcesPageRow, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	out := make([]sqlc.PrometheusDatasource, 0, len(f.datasources))
+	all := make([]sqlc.PrometheusDatasource, 0, len(f.datasources))
 	for _, d := range f.datasources {
-		out = append(out, d)
+		all = append(all, d)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].Name == all[j].Name {
+			return all[i].ID.String() < all[j].ID.String()
+		}
+		return all[i].Name < all[j].Name
+	})
+	start := min(int(arg.QueryOffset), len(all))
+	end := min(start+int(arg.QueryLimit), len(all))
+	out := make([]sqlc.ListPrometheusDatasourcesPageRow, 0, end-start)
+	for _, d := range all[start:end] {
+		out = append(out, sqlc.ListPrometheusDatasourcesPageRow{
+			ID: d.ID, Name: d.Name, Url: d.Url, HasAuth: d.AuthEncrypted != "",
+			TlsSkipVerify: d.TlsSkipVerify, Enabled: d.Enabled,
+			CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt,
+		})
 	}
 	return out, nil
+}
+
+func (f *fakeDashboardQuerier) CountPrometheusDatasources(context.Context) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return int64(len(f.datasources)), nil
 }
 
 func (f *fakeDashboardQuerier) ListEnabledPrometheusDatasources(_ context.Context) ([]sqlc.PrometheusDatasource, error) {
@@ -280,7 +317,7 @@ func dashboardCallerIDSuperuser() (uuid.UUID, sqlc.User) {
 func TestWidget_CRUD(t *testing.T) {
 	cid, user := dashboardCallerIDSuperuser()
 	q := newFakeDashboardQuerier(user)
-	h := NewDashboardHandler(q)
+	h := wireDashboardMutationFixture(NewDashboardHandler(q), q)
 	h.SetAuditor(q)
 
 	body := []byte(`{
@@ -360,7 +397,7 @@ func TestWidget_CRUD(t *testing.T) {
 func TestDashboardAdminListsHonorPaginationContract(t *testing.T) {
 	cid, user := dashboardCallerIDSuperuser()
 	q := newFakeDashboardQuerier(user)
-	h := NewDashboardHandler(q)
+	h := wireDashboardMutationFixture(NewDashboardHandler(q), q)
 	for i := 0; i < 3; i++ {
 		id := uuid.New()
 		q.widgets[id] = sqlc.DashboardWidget{
@@ -378,7 +415,7 @@ func TestDashboardAdminListsHonorPaginationContract(t *testing.T) {
 	}
 	var page struct {
 		Data       []WidgetResponse `json:"data"`
-		Pagination Pagination       `json:"pagination"`
+		Pagination paging.Metadata  `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
 		t.Fatalf("decode widget page: %v", err)
@@ -391,7 +428,7 @@ func TestDashboardAdminListsHonorPaginationContract(t *testing.T) {
 	h.AdminListDatasources(empty, authedRequest(http.MethodGet, "/api/v1/admin/prometheus-datasources/", cid, nil))
 	var emptyPage struct {
 		Data       []DatasourceResponse `json:"data"`
-		Pagination Pagination           `json:"pagination"`
+		Pagination paging.Metadata      `json:"pagination"`
 	}
 	if err := json.Unmarshal(empty.Body.Bytes(), &emptyPage); err != nil {
 		t.Fatalf("decode datasource page: %v", err)
@@ -520,7 +557,7 @@ func TestRender_GrafanaPanel_NoServerFetch(t *testing.T) {
 		ScopeIds:   []uuid.UUID{},
 		Enabled:    true,
 	}
-	h := NewDashboardHandler(q)
+	h := wireDashboardMutationFixture(NewDashboardHandler(q), q)
 	cache := NewSettingsCache(&stubSettingsReader{value: "grafana.example.com"}, 5*time.Second)
 	h.SetSettingsCache(cache)
 
@@ -548,13 +585,28 @@ func TestRender_GrafanaPanel_NoServerFetch(t *testing.T) {
 	}
 }
 
+func TestIframeHostRequiresCredentialFreeHTTPS(t *testing.T) {
+	for _, raw := range []string{
+		"http://grafana.example.com/panel",
+		"http://javascript:alert(1)",
+		"https://user:password@grafana.example.com/panel",
+	} {
+		if _, err := hostOf(raw); err == nil {
+			t.Fatalf("hostOf(%q) succeeded, want rejection", raw)
+		}
+	}
+	if got, err := hostOf("https://grafana.example.com/panel"); err != nil || got != "grafana.example.com" {
+		t.Fatalf("hostOf(https) = %q, %v", got, err)
+	}
+}
+
 // TestRender_AllowedIframeHostsEnforced verifies grafana_panel +
 // url_iframe widgets get rejected on write AND silently dropped on
 // render when the host isn't allow-listed.
 func TestRender_AllowedIframeHostsEnforced(t *testing.T) {
 	cid, user := dashboardCallerIDSuperuser()
 	q := newFakeDashboardQuerier(user)
-	h := NewDashboardHandler(q)
+	h := wireDashboardMutationFixture(NewDashboardHandler(q), q)
 	h.SetAuditor(q)
 	// Empty allow-list → every iframe widget is rejected.
 	cache := NewSettingsCache(&stubSettingsReader{value: ""}, 5*time.Second)
@@ -604,7 +656,7 @@ func TestRender_PromSparkline_RoundTrip(t *testing.T) {
 		ScopeIds:   []uuid.UUID{},
 		Enabled:    true,
 	}
-	h := NewDashboardHandler(q)
+	h := wireDashboardMutationFixture(NewDashboardHandler(q), q)
 
 	w := httptest.NewRecorder()
 	h.RenderGlobal(w, authedRequest(http.MethodGet, "/api/v1/dashboards/global/", cid, nil))
@@ -652,7 +704,7 @@ func TestRender_PromStat_RoundTrip(t *testing.T) {
 		ScopeIds:   []uuid.UUID{},
 		Enabled:    true,
 	}
-	h := NewDashboardHandler(q)
+	h := wireDashboardMutationFixture(NewDashboardHandler(q), q)
 	w := httptest.NewRecorder()
 	h.RenderGlobal(w, authedRequest(http.MethodGet, "/api/v1/dashboards/global/", cid, nil))
 	if w.Code != http.StatusOK {
@@ -684,7 +736,7 @@ func TestDatasource_CRUD_And_Test(t *testing.T) {
 
 	cid, user := dashboardCallerIDSuperuser()
 	q := newFakeDashboardQuerier(user)
-	h := NewDashboardHandler(q)
+	h := wireDashboardMutationFixture(NewDashboardHandler(q), q)
 	h.SetAuditor(q)
 	h.SetEncryptor(testEncryptor(t))
 	body := []byte(`{"name":"default","url":"` + srv.URL + `","bearer_token":"secret-token","enabled":true}`)
@@ -752,7 +804,7 @@ func TestPublicRender_RequiresClusterRead(t *testing.T) {
 	user.IsSuperuser = false
 	q := newFakeDashboardQuerier(user)
 	q.widgets[uuid.New()] = sqlc.DashboardWidget{ID: uuid.New(), Name: "g", WidgetType: "prom_sparkline", Spec: json.RawMessage(`{"datasource":"missing","query":"up"}`), Scope: "global", ScopeIds: []uuid.UUID{}, Enabled: true}
-	h := NewDashboardHandler(q)
+	h := wireDashboardMutationFixture(NewDashboardHandler(q), q)
 	cid := uuid.New()
 	w := httptest.NewRecorder()
 	h.RenderGlobal(w, authedRequest(http.MethodGet, "/api/v1/dashboards/global/", cid, nil))

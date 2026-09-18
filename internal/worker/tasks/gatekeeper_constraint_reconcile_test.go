@@ -66,9 +66,18 @@ type gatekeeperConstraintK8sCall struct {
 }
 
 type gatekeeperConstraintK8s struct {
-	response *protocol.K8sResponsePayload
-	err      error
-	calls    []gatekeeperConstraintK8sCall
+	response          *protocol.K8sResponsePayload
+	err               error
+	mutationSupported bool
+	capabilityErr     error
+	calls             []gatekeeperConstraintK8sCall
+}
+
+func (k *gatekeeperConstraintK8s) SupportsCapability(_ context.Context, _, capability string) (bool, error) {
+	if capability != protocol.AgentCapabilityMutate {
+		return false, errors.New("unexpected capability")
+	}
+	return k.mutationSupported, k.capabilityErr
 }
 
 func (k *gatekeeperConstraintK8s) Do(_ context.Context, clusterID, method, path string, body []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
@@ -89,9 +98,25 @@ spec:
 		DesiredState: desired, SyncStatus: "pending", Generation: 3,
 	}
 	q := &gatekeeperConstraintTaskQ{rows: map[string]sqlc.AuthoredConstraint{gatekeeperConstraintKey(row.ClusterID, row.Name): row}}
-	k8s := &gatekeeperConstraintK8s{response: &protocol.K8sResponsePayload{StatusCode: http.StatusOK}}
+	k8s := &gatekeeperConstraintK8s{response: &protocol.K8sResponsePayload{StatusCode: http.StatusOK}, mutationSupported: true}
 	ctx := testRuntimeContext(RuntimeDependencies{Queries: q, K8s: k8s})
 	return q, k8s, row, ctx
+}
+
+func TestGatekeeperConstraintReconcileSkipsReadOnlyAgent(t *testing.T) {
+	q, k8s, row, ctx := gatekeeperConstraintTaskFixture("present")
+	k8s.mutationSupported = false
+	task, _ := NewGatekeeperConstraintReconcileTask(row.ClusterID, row.Name, row.Generation)
+	if err := HandleGatekeeperConstraintReconcile(ctx, task); err != nil {
+		t.Fatalf("reconcile read-only: %v", err)
+	}
+	if len(k8s.calls) != 0 {
+		t.Fatalf("read-only agent received %d mutation requests, want 0", len(k8s.calls))
+	}
+	got := q.rows[gatekeeperConstraintKey(row.ClusterID, row.Name)]
+	if got.SyncStatus != "failed" || got.LastError != "agent does not advertise mutation capability" {
+		t.Fatalf("row=%+v", got)
+	}
 }
 
 func TestGatekeeperConstraintReconcileAppliesPersistedDesiredState(t *testing.T) {

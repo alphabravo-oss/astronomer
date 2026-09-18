@@ -1,4 +1,3 @@
-"use client";
 
 /**
  * Schema-driven cloud-credential form (TanStack Form). Mirrors the Dex

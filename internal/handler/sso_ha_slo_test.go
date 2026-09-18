@@ -71,16 +71,15 @@ func TestPersistSSOSessionExpiresAtTracksRefreshToken(t *testing.T) {
 	}
 	writer := &fakeSSOSessionWriter{}
 	h.encryptor = enc
-	h.sessionWriter = writer
 
 	uid := uuid.New()
-	access, err := h.jwt.GenerateAccessToken(uid)
+	pair, err := h.jwt.PrepareTokenPairContext(context.Background())
 	if err != nil {
-		t.Fatalf("access token: %v", err)
+		t.Fatal(err)
 	}
-	refresh, err := h.jwt.GenerateRefreshToken(uid)
+	access, refresh, err := h.jwt.SignPreparedTokenPair(uid, pair)
 	if err != nil {
-		t.Fatalf("refresh token: %v", err)
+		t.Fatal(err)
 	}
 
 	info := &auth.SSOUserInfo{
@@ -91,7 +90,9 @@ func TestPersistSSOSessionExpiresAtTracksRefreshToken(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback/okta/", nil)
 
-	h.persistSSOSession(req, uid, "okta", access, info, refresh)
+	if err := h.persistSSOSession(req.Context(), writer, uid, "okta", pair, info); err != nil {
+		t.Fatal(err)
+	}
 
 	if !writer.called {
 		t.Fatal("expected an sso_sessions row to be written")

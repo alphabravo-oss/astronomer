@@ -18,13 +18,57 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
 
-// TEST-06: EventStreamHandler.Stream with no JWT wired accepts (dev mode)
-// and writes SSE headers + connected comment.
-func TestEventStream_UnauthedWhenNoJWT(t *testing.T) {
+func authenticatedEventStream(t *testing.T, bus *events.Bus) (*EventStreamHandler, string) {
+	t.Helper()
+	h := newTestEventStreamHandler(bus)
+	jwt := auth.MustNewJWTManager("test-secret-key-for-event-stream", 15)
+	token, err := jwt.GenerateAccessToken(uuid.New())
+	if err != nil {
+		t.Fatalf("generate access token: %v", err)
+	}
+	h.SetAuth(jwt, nil)
+	return h, token
+}
+
+// Test-only assembly helpers keep focused failure-path tests able to construct
+// deliberately incomplete handlers without reopening partial production
+// construction.
+func newTestEventStreamHandler(bus *events.Bus) *EventStreamHandler {
+	return &EventStreamHandler{bus: bus}
+}
+
+func TestEventStreamConstructorRejectsPartialSecurityWiring(t *testing.T) {
+	if handler, err := NewEventStreamHandler(events.NewBus(), nil, nil, nil, nil, nil, nil); err == nil || handler != nil {
+		t.Fatalf("partial event stream handler constructed: handler=%v err=%v", handler, err)
+	}
+}
+
+func (h *EventStreamHandler) SetAuth(jwt *auth.JWTManager, queries auth.TokenUserQuerier) {
+	h.jwt = jwt
+	h.queries = queries
+}
+
+func (h *EventStreamHandler) SetAuthorization(engine *rbac.Engine, querier rbac.BindingQuerier) {
+	h.authz.SetAuthorization(engine, querier)
+}
+
+func (h *EventStreamHandler) SetCharlieFindingAuthorization(authorizer CharlieFindingEventAuthorizer) {
+	h.charlie = authorizer
+}
+
+func withStreamBearer(token string) func(*http.Request) {
+	return func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+}
+
+// Authenticated event streams write SSE headers and a connected comment.
+func TestEventStream_AuthenticatedConnection(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
+	h, token := authenticatedEventStream(t, bus)
 	// Cancel client quickly so Stream exits.
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/stream/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	req = req.WithContext(ctx)
@@ -65,8 +109,9 @@ func (r *publishOnFirstFlushRecorder) Flush() {
 // that exact boundary must not fall into a subscribe-after-acknowledge gap.
 func TestEventStream_SubscribesBeforeAcknowledgingConnection(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
+	h, token := authenticatedEventStream(t, bus)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/stream/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	req = req.WithContext(ctx)
@@ -96,7 +141,7 @@ func TestEventStream_SubscribesBeforeAcknowledgingConnection(t *testing.T) {
 // TEST-06: when JWT is wired without credentials, stream rejects.
 func TestEventStream_RequiresAuthWhenJWTWired(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
+	h := newTestEventStreamHandler(bus)
 	jwt := auth.MustNewJWTManager("test-secret-key-for-stream", 15)
 	h.SetAuth(jwt, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/events/stream/", nil)
@@ -148,8 +193,8 @@ func runStream(t *testing.T, h *EventStreamHandler, timeout time.Duration, decor
 // no `event:` line (the JSON envelope carries `type`).
 func TestEventStream_DefaultMessageFraming(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
-	rec, wait := runStream(t, h, 300*time.Millisecond, nil)
+	h, token := authenticatedEventStream(t, bus)
+	rec, wait := runStream(t, h, 300*time.Millisecond, withStreamBearer(token))
 	time.Sleep(50 * time.Millisecond) // let Stream subscribe
 	bus.Publish(events.TypeClusterConnected, map[string]any{"cluster_id": uuid.New().String()})
 	wait()
@@ -169,9 +214,9 @@ func TestEventStream_DefaultMessageFraming(t *testing.T) {
 // P4.1: the keepalive is a real sys.ping data frame, not an SSE comment.
 func TestEventStream_HeartbeatPingFrame(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
+	h, token := authenticatedEventStream(t, bus)
 	h.keepaliveInterval = 20 * time.Millisecond
-	rec, wait := runStream(t, h, 150*time.Millisecond, nil)
+	rec, wait := runStream(t, h, 150*time.Millisecond, withStreamBearer(token))
 	wait()
 
 	body := rec.Body.String()
@@ -215,7 +260,7 @@ func (s stubStreamTokenUserQuerier) UpdateAPITokenLastUsed(context.Context, uuid
 func TestEventStreamBindingSnapshotHonorsSuperuserAndFailsClosed(t *testing.T) {
 	userID := uuid.New()
 	newHandler := func(user sqlc.User, userErr, bindingErr error) *EventStreamHandler {
-		h := NewEventStreamHandler(events.NewBus())
+		h := newTestEventStreamHandler(events.NewBus())
 		h.queries = stubStreamTokenUserQuerier{user: user, err: userErr}
 		h.SetAuthorization(rbac.NewEngine(), stubStreamRBACQuerier{err: bindingErr})
 		return h
@@ -244,7 +289,7 @@ func TestEventStreamBindingSnapshotHonorsSuperuserAndFailsClosed(t *testing.T) {
 // from the SEC-R07 drop) while unscoped domain events are still dropped.
 func TestEventStream_RestrictedUserGetsPingNotUnscopedEvents(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
+	h := newTestEventStreamHandler(bus)
 	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-stream", 15)
 	h.SetAuth(jwtMgr, nil)
 	userID := uuid.New()
@@ -317,7 +362,7 @@ func (a *mutableCharlieFindingEventAuthorizer) set(actorID, findingID uuid.UUID,
 
 func TestEventStream_CharlieFindingDeliveryUsesLiveFindingAuthorization(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
+	h := newTestEventStreamHandler(bus)
 	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-charlie-stream", 15)
 	h.SetAuth(jwtMgr, nil)
 	actorID, allowedFinding, deniedFinding := uuid.New(), uuid.New(), uuid.New()
@@ -362,8 +407,8 @@ func TestEventStream_CharlieFindingDeliveryUsesLiveFindingAuthorization(t *testi
 
 func TestEventStream_CharlieFindingFailsClosedWithoutAuthorizer(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
-	rec, wait := runStream(t, h, 200*time.Millisecond, nil)
+	h, token := authenticatedEventStream(t, bus)
+	rec, wait := runStream(t, h, 200*time.Millisecond, withStreamBearer(token))
 	time.Sleep(50 * time.Millisecond)
 	events.PublishChanged(bus, "charlie_finding", "", uuid.NewString(), map[string]any{"delivery": "must-drop"})
 	wait()
@@ -389,7 +434,7 @@ func (s *mutableStreamRBACQuerier) set(b []rbac.RoleBinding) {
 // refresh interval.
 func TestEventStream_BindingRefreshPicksUpRevocation(t *testing.T) {
 	bus := events.NewBus()
-	h := NewEventStreamHandler(bus)
+	h := newTestEventStreamHandler(bus)
 	jwtMgr := auth.MustNewJWTManager("test-secret-key-for-stream", 15)
 	h.SetAuth(jwtMgr, nil)
 	userID := uuid.New()

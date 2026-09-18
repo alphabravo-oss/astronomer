@@ -19,7 +19,7 @@ func registerDexRoutes(r chi.Router, deps RouterDependencies) {
 	// click ergonomic helper that creates a `dex` row in sso_configurations
 	// pointing at the configured issuer URL — A1's generic OIDC path then
 	// takes over.
-	if deps.DexConfig != nil {
+	if deps.AdminPlatform.DexConfig != nil {
 		r.Route("/auth/dex", func(r chi.Router) {
 			// SECURITY: the Dex connector/settings/apply rows become the
 			// identity-provider config the whole platform trusts, so the entire
@@ -30,18 +30,18 @@ func registerDexRoutes(r chi.Router, deps RouterDependencies) {
 			// malicious IdP or DoS auth. requireScope only bites API tokens (JWT
 			// sessions fall through to the RBAC permission check, the real gate).
 			r.Use(requireScope(iauth.ScopeAdmin))
-			r.Use(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceSSO, rbac.VerbUpdate))
-			r.Get("/connector-types/", deps.DexConfig.ListConnectorTypes)
-			r.Get("/connectors/", deps.DexConfig.ListConnectors)
-			r.Post("/connectors/", deps.DexConfig.CreateConnector)
-			r.Get("/connectors/{id}/", deps.DexConfig.GetConnector)
-			r.Patch("/connectors/{id}/", deps.DexConfig.UpdateConnector)
-			r.Delete("/connectors/{id}/", deps.DexConfig.DeleteConnector)
-			r.Get("/settings/", deps.DexConfig.GetSettings)
-			r.Put("/settings/", deps.DexConfig.UpdateSettings)
-			r.Post("/apply/", deps.DexConfig.Apply)
-			r.Post("/register-as-sso/", deps.DexConfig.RegisterAsSSO)
-			r.Get("/operations/{operation_id}/", deps.DexConfig.GetOperation)
+			r.Use(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceSSO, rbac.VerbUpdate))
+			r.Get("/connector-types/", deps.AdminPlatform.DexConfig.ListConnectorTypes)
+			r.Get("/connectors/", deps.AdminPlatform.DexConfig.ListConnectors)
+			r.Post("/connectors/", deps.AdminPlatform.DexConfig.CreateConnector)
+			r.Get("/connectors/{id}/", deps.AdminPlatform.DexConfig.GetConnector)
+			r.Patch("/connectors/{id}/", deps.AdminPlatform.DexConfig.UpdateConnector)
+			r.Delete("/connectors/{id}/", deps.AdminPlatform.DexConfig.DeleteConnector)
+			r.Get("/settings/", deps.AdminPlatform.DexConfig.GetSettings)
+			r.Put("/settings/", deps.AdminPlatform.DexConfig.UpdateSettings)
+			r.Post("/apply/", deps.AdminPlatform.DexConfig.Apply)
+			r.Post("/register-as-sso/", deps.AdminPlatform.DexConfig.RegisterAsSSO)
+			r.Get("/operations/{operation_id}/", deps.AdminPlatform.DexConfig.GetOperation)
 		})
 	}
 

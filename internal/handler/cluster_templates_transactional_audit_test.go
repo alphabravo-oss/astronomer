@@ -3,12 +3,8 @@ package handler
 import (
 	"context"
 	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -71,16 +67,12 @@ func TestClusterTemplateApplicationTaskAndAuditCommitTogether(t *testing.T) {
 				ClusterID: uuid.New(), TemplateID: uuid.New(), SpecSnapshot: []byte(`{"environment":"production"}`),
 			}
 
-			_, err := executeClusterTemplateMutation(r, h,
+			_, err := executeMutation(r, h.runTx,
 				func(q ClusterTemplateMutationTx) (sqlc.ClusterTemplateApplication, error) {
 					return upsertClusterTemplateApplicationAndTask(r, q, params)
 				},
-				func() (sqlc.ClusterTemplateApplication, error) {
-					t.Fatal("production transaction unexpectedly used fallback")
-					return sqlc.ClusterTemplateApplication{}, nil
-				},
-				func(row sqlc.ClusterTemplateApplication) clusterAuditEvent {
-					return clusterAuditEvent{action: "cluster.template_applied", resourceType: "cluster", resourceID: row.ClusterID.String(), status: http.StatusAccepted}
+				func(row sqlc.ClusterTemplateApplication) mutationAuditEvent {
+					return mutationAuditEvent{action: "cluster.template_applied", resourceType: "cluster", resourceID: row.ClusterID.String(), status: http.StatusAccepted}
 				})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("error = %v, wantErr=%v", err, tc.wantErr)
@@ -93,40 +85,7 @@ func TestClusterTemplateApplicationTaskAndAuditCommitTogether(t *testing.T) {
 }
 
 func TestEveryClusterTemplateMutationUsesTransactionalExecutor(t *testing.T) {
-	path, err := filepath.Abs("cluster_templates.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]bool{
-		"Create": false, "Update": false, "Delete": false,
-		"Apply": false, "Reapply": false, "Detach": false,
-	}
-	for _, decl := range file.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
-			continue
-		}
-		if _, tracked := want[fn.Name.Name]; !tracked {
-			continue
-		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "executeClusterTemplateMutation" {
-				want[fn.Name.Name] = true
-			}
-			return true
-		})
-	}
-	for name, found := range want {
-		if !found {
-			t.Errorf("%s does not use executeClusterTemplateMutation", name)
-		}
-	}
+	assertHandlerMutationsUseExecutor(t, "ClusterTemplateHandler", []string{
+		"Create", "Update", "Delete", "Apply", "Reapply", "Detach",
+	})
 }
