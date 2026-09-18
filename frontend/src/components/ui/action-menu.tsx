@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect, useId } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ActionMenuItem {
@@ -105,7 +105,7 @@ export function ActionMenu({
         className="inline-flex items-center justify-center h-7 w-7 rounded-sm
           text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
       >
-        <MoreHorizontal className="h-4 w-4" />
+        <MoreVertical className="h-4 w-4" />
       </button>
 
       {open &&
@@ -150,9 +150,7 @@ export function ActionMenu({
                       : "text-popover-foreground hover:bg-accent",
                   )}
                 >
-                  {item.icon && (
-                    <span className="shrink-0">{item.icon}</span>
-                  )}
+                  {item.icon && <span className="shrink-0">{item.icon}</span>}
                   {item.label}
                 </button>
               </div>

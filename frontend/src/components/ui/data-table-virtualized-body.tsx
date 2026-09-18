@@ -302,7 +302,7 @@ export function VirtualizedGrid<T extends RowData>({
                       onRowClick?.(row.original);
                   }}
                   className={cn(
-                    "absolute left-0 top-0 flex w-full border-b border-border transition-colors",
+                    "absolute left-0 top-0 flex w-full whitespace-nowrap border-b border-border transition-colors",
                     "focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-ring",
                     onRowClick && "cursor-pointer hover:bg-muted/50",
                     isSelected && "bg-muted/30",
@@ -330,7 +330,7 @@ export function VirtualizedGrid<T extends RowData>({
                       key={col.key}
                       role="gridcell"
                       className={cn(
-                        "flex items-center",
+                        "flex min-w-0 items-center overflow-hidden whitespace-nowrap",
                         cellPadding,
                         alignClass(col),
                       )}

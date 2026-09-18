@@ -263,7 +263,7 @@ export function SemanticDataTable<T extends RowData>({
                   <TableRow
                     key={key}
                     className={cn(
-                      "border-b border-border last:border-0 transition-colors",
+                      "border-b border-border last:border-0 whitespace-nowrap transition-colors",
                       onRowClick && "cursor-pointer hover:bg-muted/50",
                       isSelected && "bg-muted/30",
                     )}
@@ -298,6 +298,7 @@ export function SemanticDataTable<T extends RowData>({
                         key={col.key}
                         className={cn(
                           cellPadding,
+                          "whitespace-nowrap",
                           col.align === "center" && "text-center",
                           col.align === "right" && "text-right",
                         )}
