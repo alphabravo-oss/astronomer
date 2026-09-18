@@ -3,6 +3,7 @@ package handler
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -27,6 +28,42 @@ func (h *SupportBundleHandler) writeSchemaMigrations(ctx context.Context, zw *zi
 	}
 	payload := map[string]any{"version": version, "dirty": dirty}
 	log.section("schema-migrations.json", writeBundleJSON(zw, "schema-migrations.json", payload))
+}
+
+// writeDeliveryDiagnostics emits bounded, secret-free delivery and catalog
+// state. It intentionally excludes source URLs, credentials, values,
+// manifests, condition messages, and Kubernetes Secret-shaped objects.
+func (h *SupportBundleHandler) writeDeliveryDiagnostics(ctx context.Context, zw *zip.Writer, log *sectionLog) {
+	if h.db == nil {
+		log.skipped("delivery-diagnostics.json", "db pool not wired")
+		return
+	}
+	lctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	const query = `
+SELECT jsonb_build_object(
+  'catalog', jsonb_build_object(
+    'catalogs', (SELECT count(*) FROM delivery_catalogs),
+    'entries', (SELECT count(*) FROM catalog_blessed_charts WHERE slug <> ''),
+    'last_success_at', (SELECT max(last_synced_at) FROM delivery_catalogs),
+    'last_attempt_at', (SELECT max(last_sync_attempted_at) FROM delivery_catalogs),
+    'degraded', (SELECT count(*) FROM delivery_catalogs WHERE last_sync_error <> '' OR verification_status IN ('failed','revoked'))
+  ),
+  'delivery', jsonb_build_object(
+    'sources', (SELECT count(*) FROM delivery_sources),
+    'targets', (SELECT count(*) FROM delivery_targets WHERE deletion_state <> 'deleted'),
+    'rollouts', (SELECT COALESCE(jsonb_object_agg(state, count), '{}'::jsonb) FROM (SELECT state, count(*) AS count FROM delivery_rollouts GROUP BY state) s),
+    'deployments', (SELECT COALESCE(jsonb_object_agg(phase, count), '{}'::jsonb) FROM (SELECT phase, count(*) AS count FROM cluster_deployments GROUP BY phase) d),
+    'stale_deployments', (SELECT count(*) FROM cluster_deployments WHERE phase NOT IN ('pending','removed') AND (last_observed_at IS NULL OR last_observed_at < clock_timestamp() - interval '5 minutes')),
+    'flux_not_ready', (SELECT count(*) FROM delivery_controller_inventory WHERE NOT ready)
+  )
+)`
+	var payload []byte
+	if err := h.db.QueryRow(lctx, query).Scan(&payload); err != nil {
+		log.section("delivery-diagnostics.json", err)
+		return
+	}
+	log.section("delivery-diagnostics.json", writeBundleJSON(zw, "delivery-diagnostics.json", json.RawMessage(payload)))
 }
 
 // writeAsynqQueues captures live queue depth + the last batch of dead-

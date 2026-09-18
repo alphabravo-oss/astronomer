@@ -175,15 +175,31 @@ jobs:
             ;;
           esac
           identity="https://github.com/${{ github.repository }}/.github/workflows/release.yaml@refs/tags/${IMAGE_TAG}"
-          # Reuse only a tag that is already signed for this release identity.
-          # Unsigned leftovers from a failed scan-after-push must be rebuilt.
+          # An exact release tag is immutable. Reuse it only when both its
+          # signature and signed SLSA provenance bind it to this exact commit.
+          # Never overwrite an unsigned/stale tag; resume the original run or
+          # choose a new version instead.
           if ! cosign verify \
             --certificate-identity "$identity" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "${image}@${digest}" >/dev/null 2>&1; then
-            echo "existing tag ${image} is unsigned or has the wrong identity; rebuilding"
-            echo "exists=false" >>"$GITHUB_OUTPUT"
-            exit 0
+            echo "refusing to overwrite existing exact tag ${image}: signature identity is invalid" >&2
+            exit 1
+          fi
+          source_uri="https://github.com/${{ github.repository }}@${{ github.sha }}"
+          if ! cosign verify-attestation \
+            --type slsaprovenance \
+            --certificate-identity "$identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${image}@${digest}" > existing-provenance.json; then
+            echo "refusing to reuse ${image}@${digest}: signed provenance is missing" >&2
+            exit 1
+          fi
+          if ! jq -s -e --arg source "$source_uri" \
+            'any(.[]; ((.payload | @base64d | fromjson).predicate.invocation.configSource.uri // "") == $source)' \
+            existing-provenance.json >/dev/null; then
+            echo "refusing to reuse ${image}@${digest}: provenance does not bind source ${source_uri}" >&2
+            exit 1
           fi
           echo "reusing already-published immutable image ${image}@${digest}"
           echo "exists=true" >>"$GITHUB_OUTPUT"
@@ -499,6 +515,14 @@ jobs:
           chart_digest=""
           if helm show chart "oci://ghcr.io/alphabravo-oss/charts/astronomer" --version "$CHART_VERSION" >/dev/null 2>&1; then
             chart_digest="$(oras resolve "ghcr.io/alphabravo-oss/charts/astronomer:${CHART_VERSION}")"
+            mkdir -p existing-chart packaged-chart published-chart
+            helm pull "oci://ghcr.io/alphabravo-oss/charts/astronomer" --version "$CHART_VERSION" --destination existing-chart
+            tar -xzf "astronomer-${CHART_VERSION}.tgz" -C packaged-chart
+            tar -xzf "existing-chart/astronomer-${CHART_VERSION}.tgz" -C published-chart
+            diff --no-dereference --recursive --brief packaged-chart published-chart || {
+              echo "refusing to reuse astronomer:${CHART_VERSION}: published chart contents differ from this commit" >&2
+              exit 1
+            }
             echo "reusing already-published immutable chart astronomer:${CHART_VERSION}@${chart_digest}"
           else
             helm push "astronomer-${CHART_VERSION}.tgz" "oci://ghcr.io/alphabravo-oss/charts" 2>&1 | tee chart-push.log
@@ -885,6 +909,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           TAG: ${{ needs.preflight.outputs.image-tag }}
         run: |
+          awk '/^## Unreleased/{emit=1; next} /^## /{if (emit) exit} emit' CHANGELOG.md > RELEASE_NOTES.md
+          test -s RELEASE_NOTES.md
           sort --unique ./*.digest > RELEASE_SUBJECTS
           cp RELEASE_SUBJECTS RELEASE_IMAGES
           find . -maxdepth 1 -type f \( \
@@ -893,16 +919,17 @@ jobs:
               -name 'release-manifest.json' -o -name 'release-manifest.sigstore.json' -o \
               -name 'runtime-image-evidence.json' -o -name 'runtime-image-evidence.sigstore.json' -o \
               -name 'values-production.yaml' -o \
+              -name 'RELEASE_NOTES.md' -o \
               -name 'astronomer-images.txt' -o \
               -name 'RELEASE_IMAGES' -o -name 'RELEASE_SUBJECTS' \
             \) -printf '%f\n' | sort | xargs sha256sum > SHA256SUMS
           gh release create "$TAG" \
             --repo "$REPOSITORY" \
             --verify-tag \
-            --generate-notes \
+            --notes-file RELEASE_NOTES.md \
             --title "Astronomer ${TAG}" \
             astronomer-*.tgz *.tar.gz sbom-*.spdx.json provenance-*.slsa.json \
             release-manifest.json release-manifest.sigstore.json \
             runtime-image-evidence.json runtime-image-evidence.sigstore.json \
-            values-production.yaml astronomer-images.txt \
+            values-production.yaml astronomer-images.txt RELEASE_NOTES.md \
             RELEASE_IMAGES RELEASE_SUBJECTS SHA256SUMS

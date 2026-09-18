@@ -481,6 +481,7 @@ verify_helm() {
 
   step "Development Helm render"
   render_helm helm-development helm template astronomer deploy/chart \
+    --kube-version 1.35.0 \
     "${render_keys[@]}" \
     --set frontend.enabled=true \
     --set dex.enabled=true \
@@ -488,6 +489,7 @@ verify_helm() {
 
   step "Fully wired production Helm render"
   render_helm helm-production helm template astronomer deploy/chart \
+    --kube-version 1.35.0 \
     -f deploy/chart/values-production.yaml \
     --set config.serverURL=https://astronomer.example.com \
     --set 'gateway.hosts={astronomer.example.com}' \
@@ -509,6 +511,7 @@ verify_helm() {
     --set image.migrate.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
     --set utilities.busybox.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
     --set postgres.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --set redis.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
     --set preflight.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
     --set frontend.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
     --set dex.image.digest=sha256:1111111111111111111111111111111111111111111111111111111111111111 \

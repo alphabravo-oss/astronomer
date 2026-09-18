@@ -171,6 +171,14 @@ Restore `secrets.encryptionKey` (and `secrets.secretKey` from
 `keys/SECRET_KEY`) into the new install **before** you restore the database, so
 the decrypted columns line up with the key.
 
+When `catalog.ca.existingSecret` was configured, the wrapped bundle also
+contains `keys/catalog-ca/`. When catalog publisher signatures were enabled it
+contains `keys/catalog-signature-trust/` as well. Recreate both Secrets from
+their recovered files before starting Astronomer and retain the same Helm
+references. This restores the transport CA and offline publisher trust material
+alongside the database-held catalog state; no private catalog URL, proxy
+credential, or source credential is printed by the backup job.
+
 ---
 
 ## Preconditions

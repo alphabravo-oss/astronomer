@@ -241,7 +241,7 @@ export function EditUserModal({
     >
       <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border">
         <div className="w-10 h-10 rounded-full bg-linear-to-br from-zinc-600 to-zinc-800 flex items-center justify-center shrink-0">
-          <span className="text-sm font-medium text-zinc-300">
+          <span className="text-sm font-medium text-primary-foreground">
             {(user.displayName || user.username).charAt(0).toUpperCase()}
           </span>
         </div>

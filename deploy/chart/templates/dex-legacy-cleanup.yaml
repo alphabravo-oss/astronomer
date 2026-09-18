@@ -170,4 +170,6 @@ spec:
               fi
               kubectl delete configmap "${legacy}" -n "${namespace}" --ignore-not-found=true
               kubectl delete configmap "${retained}" -n "${namespace}" --ignore-not-found=true
+          resources:
+            {{- toYaml .Values.preflight.resources | nindent 12 }}
 {{- end }}

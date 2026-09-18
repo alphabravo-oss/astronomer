@@ -1,0 +1,4 @@
+ALTER TABLE public.cluster_deployments DROP CONSTRAINT cluster_deployments_configuration_digest;
+ALTER TABLE public.cluster_deployments DROP COLUMN desired_renderer_spec, DROP COLUMN desired_configuration_digest;
+ALTER TABLE public.delivery_targets DROP CONSTRAINT delivery_targets_override_set_limit;
+ALTER TABLE public.delivery_targets DROP COLUMN override_set_ids, DROP COLUMN configuration_template_id;

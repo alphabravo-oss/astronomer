@@ -76,6 +76,8 @@ function classify(routePath) {
 
 function isPassthroughRoute(routePath) {
   return (routePath.startsWith('/api/v1/clusters/') && routePath.includes('/k8s/')) ||
+    routePath === '/api/v1/observability/grafana' ||
+    routePath.startsWith('/api/v1/observability/grafana/') ||
     routePath.includes('/proxy/service/') ||
     routePath === '/api/v1/clusters/{cluster_id}/resources/{resource_type}' ||
     routePath === '/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}';

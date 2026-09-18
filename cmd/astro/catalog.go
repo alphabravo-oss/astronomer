@@ -761,7 +761,7 @@ func newCatalogInstallCmd() *cobra.Command {
 				return fmt.Errorf("invalid --chart-version: %w", err)
 			}
 			body := astroclient.PostCatalogInstalledJSONRequestBody{
-				ProjectId:      pid,
+				ProjectId:      &pid,
 				ClusterId:      cid,
 				ChartVersionId: cvid,
 				Namespace:      namespace,

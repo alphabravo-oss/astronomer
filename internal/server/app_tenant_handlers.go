@@ -8,6 +8,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/cacheinvalidate"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
@@ -30,9 +31,9 @@ func (c *productionComposition) initializeTenantHandlers(ctx context.Context, cf
 	// a production footgun. Returning an error
 	// surfaces the misconfig at process start instead of letting every
 	// asynq enqueue silently fail downstream.
-	redisOpt, redisErr := asynq.ParseRedisURI(cfg.RedisURL)
+	redisOpt, redisErr := redisconn.Parse(cfg.RedisURL)
 	if redisErr != nil {
-		return fmt.Errorf("parse REDIS_URL %q: %w", cfg.RedisURL, redisErr)
+		return fmt.Errorf("parse REDIS_URL: %w", redisErr)
 	}
 	queue := asynq.NewClient(redisOpt)
 	taskLeader, leaderErr := leader.NewDedicated(ctx, database.Pool(), logger)

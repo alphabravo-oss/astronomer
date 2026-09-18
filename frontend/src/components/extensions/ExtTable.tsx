@@ -1,16 +1,8 @@
-
 // §Schema Tier-1 — table renderer. First-party, TEXT-ONLY: every cell value is
 // run through a closed-enum formatter and placed in a text node, never
 // dangerouslySetInnerHTML. Runs no third-party JS — it paints the proxied rows.
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   getByPath,
@@ -30,13 +22,9 @@ function Cell({ row, field }: { row: ProxyRow; field: FieldBinding }) {
   const raw = getByPath(row, field.path);
   const text = formatValue(raw, field.format);
   if (field.format === "badge") {
-    return (
-      <TableCell className="px-3 py-2">
-        <StatusBadge status={text} size="sm" />
-      </TableCell>
-    );
+    return <StatusBadge status={text} size="sm" />;
   }
-  return <TableCell className="px-3 py-2 text-foreground">{text}</TableCell>;
+  return <span className="text-foreground">{text}</span>;
 }
 
 export function ExtTable({ rows, fields, emptyText }: ExtTableProps) {
@@ -50,31 +38,20 @@ export function ExtTable({ rows, fields, emptyText }: ExtTableProps) {
     );
   }
 
+  const tableDefs: Column<ProxyRow>[] = columns.map((field) => ({
+    key: field.path,
+    header: field.label,
+    accessor: (row) => <Cell row={row} field={field} />,
+    sortAccessor: (row) =>
+      formatValue(getByPath(row, field.path), field.format),
+  }));
+
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-b border-border text-left text-xs text-muted-foreground">
-            {columns.map((col) => (
-              <TableHead key={col.path} className="px-3 py-2 font-medium">
-                {col.label}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row, i) => (
-            <TableRow
-              key={i}
-              className="border-b border-border/50 last:border-0"
-            >
-              {columns.map((col) => (
-                <Cell key={col.path} row={row} field={col} />
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <DataTable
+      data={rows}
+      columns={tableDefs}
+      keyExtractor={(row) => String(row.id ?? row.name ?? rows.indexOf(row))}
+      searchable={false}
+    />
   );
 }

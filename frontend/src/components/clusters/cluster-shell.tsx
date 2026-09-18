@@ -418,7 +418,7 @@ export function ClusterShell({
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 bg-black text-white min-h-0 relative">
           {status === "opening" && (
-            <div className="absolute top-0 left-0 right-0 flex items-center gap-2 p-4 text-sm text-zinc-300 bg-black/70 z-10">
+            <div className="absolute top-0 left-0 right-0 flex items-center gap-2 p-4 text-sm text-primary-foreground bg-black/70 z-10">
               <Loader2 className="h-4 w-4 animate-spin" />
               Preparing ephemeral debug pod...
             </div>
@@ -426,14 +426,14 @@ export function ClusterShell({
           {status === "idle" && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center max-w-sm pointer-events-auto">
-                <TerminalIcon className="h-8 w-8 mx-auto text-zinc-400 mb-3" />
+                <TerminalIcon className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
                 <p className="text-sm font-medium text-white">
                   No active session
                 </p>
-                <p className="text-xs text-zinc-300 mt-1.5 mb-4">
+                <p className="text-xs text-muted-foreground mt-1.5 mb-4">
                   Clicking <strong>Connect</strong> spins up an ephemeral
                   kubectl pod in
-                  <code className="mx-1 px-1 rounded-sm bg-zinc-800 text-white font-mono">
+                  <code className="mx-1 px-1 rounded-sm bg-muted text-foreground font-mono">
                     kube-system
                   </code>
                   , opens a shell into it, and records every command line you

@@ -368,6 +368,7 @@ func runConnect(logger *slog.Logger) error {
 		if err != nil {
 			return fmt.Errorf("initialize delivery capability probe: %w", err)
 		}
+		deliveryProbe.WithDynamicClient(deliveryDynamic)
 		deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
 			ClusterID:        cfg.ClusterID,
 			AgentVersion:     version.Version,

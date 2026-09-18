@@ -59,3 +59,16 @@ func TestEnsureBootstrapAdminUsesConfiguredIdentity(t *testing.T) {
 		t.Fatalf("Email = %q, want admin@alphabravo.io", q.params.Email)
 	}
 }
+
+func TestEnsureBootstrapAdminCanRequirePasswordChange(t *testing.T) {
+	q := &ensureAdminFakeQuerier{}
+
+	if err := EnsureBootstrapAdmin(context.Background(), q, BootstrapAdminConfig{
+		Password: "test-password", ForcePasswordChange: true,
+	}, slog.Default()); err != nil {
+		t.Fatalf("EnsureBootstrapAdmin returned error: %v", err)
+	}
+	if !q.params.MustChangePassword {
+		t.Fatal("bootstrap admin was not marked for password change")
+	}
+}

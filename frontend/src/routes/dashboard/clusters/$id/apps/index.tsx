@@ -109,7 +109,7 @@ function statusTone(status: string): string {
     s === "pending_install" ||
     s === "pending_upgrade"
   ) {
-    return "bg-sky-500/10 text-sky-600 border-sky-500/30";
+    return "bg-status-info/10 text-status-info border-status-info/30";
   }
   if (s.startsWith("uninstalling") || s === "pending_uninstall") {
     return "bg-status-warning/10 text-status-warning border-status-warning/30";

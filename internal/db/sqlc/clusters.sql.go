@@ -367,7 +367,24 @@ func (q *Queries) DeleteExpiredRegistrationTokens(ctx context.Context) (int64, e
 }
 
 const ensureLocalCluster = `-- name: EnsureLocalCluster :one
-WITH inserted AS (
+WITH upgraded AS (
+    -- Flux-native delivery is the default for the management cluster. Older
+    -- installs created the singleton before that contract existed and left
+    -- install_baseline NULL/ready, which permanently skipped provisioning.
+    -- Preserve an explicit operator choice, but enroll legacy local rows.
+    UPDATE clusters
+    SET install_baseline = true,
+        registration_phase = CASE
+            WHEN registration_phase = 'ready' THEN 'connected'
+            ELSE registration_phase
+        END,
+        registration_completed_at = CASE
+            WHEN registration_phase = 'ready' THEN NULL
+            ELSE registration_completed_at
+        END
+    WHERE is_local = true AND install_baseline IS NULL
+    RETURNING id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides
+), inserted AS (
     INSERT INTO clusters (
         name,
         display_name,
@@ -378,6 +395,7 @@ WITH inserted AS (
         kubernetes_version,
         node_count,
         is_local,
+        install_baseline,
         environment,
         provider
     )
@@ -391,6 +409,7 @@ WITH inserted AS (
         $7::varchar,
         $8::integer,
         true,
+        true,
         'production',
         'other'
     WHERE NOT EXISTS (SELECT 1 FROM clusters WHERE is_local = true)
@@ -399,7 +418,12 @@ WITH inserted AS (
 )
 SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM inserted
 UNION ALL
-SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters WHERE is_local = true AND NOT EXISTS (SELECT 1 FROM inserted)
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM upgraded WHERE NOT EXISTS (SELECT 1 FROM inserted)
+UNION ALL
+SELECT id, name, display_name, description, status, api_server_url, ca_certificate, environment, region, provider, labels, annotations, distribution, agent_version, kubernetes_version, node_count, created_by_id, created_at, updated_at, is_local, decommissioned_at, cluster_uid, group_id, registration_phase, registration_started_at, registration_completed_at, install_baseline, managed_by, external_ref_api_version, external_ref_kind, external_ref_namespace, external_ref_name, observed_generation, badge_text, badge_color, agent_overrides FROM clusters
+WHERE is_local = true
+  AND NOT EXISTS (SELECT 1 FROM inserted)
+  AND NOT EXISTS (SELECT 1 FROM upgraded)
 LIMIT 1
 `
 

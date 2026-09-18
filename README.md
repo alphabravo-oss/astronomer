@@ -156,14 +156,18 @@ Production-oriented chart capabilities include:
 - NetworkPolicy with explicit ingress and egress boundaries.
 - Ingress/Gateway and TLS integration.
 - cert-manager and Let's Encrypt compatibility.
-- External Postgres and Redis support for production.
+- External data services or managed CloudNativePG and Sentinel-backed Valkey
+  for production.
 - Bootstrap admin credential generation or operator-provided password.
 - Non-root security contexts, dropped capabilities, seccomp, and read-only-root-filesystem posture where practical.
 - Migration, preflight, backup, and restore-drill jobs.
 - Management-plane backup to S3-compatible storage.
 - Production value validation and chart render tests.
 
-The bundled Postgres and Redis profiles are for development, CI, and small smoke environments. Real production installs should use managed or HA Postgres, TLS, backups, restore drills, and separate protection for encryption and signing keys.
+The bundled Postgres and Valkey profiles are for development, CI, and small
+smoke environments. Production can use external services or the chart's
+three-node CloudNativePG and Sentinel profiles, plus TLS, off-cluster backups,
+restore drills, and separate protection for encryption and signing keys.
 
 ## What Astronomer Is Not
 
@@ -236,22 +240,24 @@ helm upgrade --install ngf \
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.1.0 \
+  --version 1.2.0 \
   --namespace astronomer \
   --create-namespace \
   --set-file secrets.secretKey=./jwt-key \
   --set-file secrets.encryptionKey=./fernet-key
 ```
 
-For production, layer the production values file and provide external Postgres, external Redis, TLS, bootstrap credentials, encryption keys, and backup settings:
+For production, layer the production values file and provide the CloudNativePG
+operator (or select external data services), TLS, bootstrap credentials,
+encryption keys, a Valkey password Secret, and backup settings:
 
 ```bash
-git clone --branch v1.1.0 --depth 1 \
+git clone --branch v1.2.0 --depth 1 \
   https://github.com/alphabravo-oss/astronomer.git astronomer-release
 
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.1.0 \
+  --version 1.2.0 \
   --namespace astronomer \
   --create-namespace \
   -f astronomer-release/deploy/chart/values-production.yaml \

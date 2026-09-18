@@ -53,6 +53,8 @@ spec:
               echo "waiting for postgres..."
               until nc -z {{ include "astronomer.fullname" . }}-postgres 5432; do sleep 1; done
               echo "postgres up"
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
         {{- end }}
         - name: migrate
           {{- with .Values.server.securityContext }}
@@ -68,12 +70,12 @@ spec:
             - "/migrations"
             - "up"
           env:
-            {{- if .Values.postgres.external.dsnSecretRef.name }}
+            {{- if include "astronomer.databaseSecretName" . }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                  key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                  name: {{ include "astronomer.databaseSecretName" . | quote }}
+                  key: {{ include "astronomer.databaseSecretKey" . | quote }}
             {{- else }}
             - name: DATABASE_URL
               valueFrom:
@@ -81,6 +83,8 @@ spec:
                   name: {{ include "astronomer.fullname" . }}-config
                   key: DATABASE_URL
             {{- end }}
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
       containers:
         - name: server
           {{- with .Values.server.securityContext }}
@@ -125,6 +129,17 @@ spec:
                   name: {{ include "astronomer.secretsSecretName" . }}
                   key: {{ .Values.secrets.internalPSKPreviousKey | quote }}
                   optional: true
+            {{- if .Values.catalog.proxy.enabled }}
+            - name: ASTRONOMER_CATALOG_PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.catalog.proxy.urlSecretRef.name | quote }}
+                  key: {{ .Values.catalog.proxy.urlSecretRef.key | quote }}
+            {{- end }}
+            {{- if .Values.catalog.ca.existingSecret }}
+            - name: ASTRONOMER_CATALOG_CA_FILE
+              value: /var/run/secrets/astronomer/catalog-ca/ca.pem
+            {{- end }}
             # Pod IP is the address sibling replicas use to reverse-proxy
             # tunnel-bound requests (kubectl shell, k8s passthrough, image
             # scans) to whichever pod holds the agent's WebSocket. Without
@@ -174,19 +189,21 @@ spec:
               value: {{ .Values.bootstrap.username | quote }}
             - name: ASTRONOMER_BOOTSTRAP_EMAIL
               value: {{ .Values.bootstrap.email | quote }}
-            {{- if .Values.postgres.external.dsnSecretRef.name }}
+            - name: ASTRONOMER_BOOTSTRAP_FORCE_PASSWORD_CHANGE
+              value: {{ .Values.bootstrap.forcePasswordChange | quote }}
+            {{- if include "astronomer.databaseSecretName" . }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                  key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                  name: {{ include "astronomer.databaseSecretName" . | quote }}
+                  key: {{ include "astronomer.databaseSecretKey" . | quote }}
             {{- end }}
-            {{- if .Values.redis.external.passwordSecretRef.name }}
+            {{- if include "astronomer.redisPasswordSecretName" . }}
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.redis.external.passwordSecretRef.name | quote }}
-                  key: {{ .Values.redis.external.passwordSecretRef.key | quote }}
+                  name: {{ include "astronomer.redisPasswordSecretName" . | quote }}
+                  key: {{ include "astronomer.redisPasswordSecretKey" . | quote }}
             {{- end }}
             {{- if .Values.redis.external.urlSecretRef.name }}
             - name: REDIS_URL
@@ -194,7 +211,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.redis.external.urlSecretRef.name | quote }}
                   key: {{ .Values.redis.external.urlSecretRef.key | quote }}
-            {{- else if .Values.redis.external.address }}
+            {{- else if or .Values.redis.external.address (eq (include "astronomer.redisMode" .) "sentinel") }}
             - name: REDIS_URL
               value: {{ include "astronomer.redisURL" . | quote }}
             {{- end }}
@@ -241,6 +258,16 @@ spec:
             - name: charlie-bridge-tls
               mountPath: /var/run/secrets/astronomer/charlie-bridge
               readOnly: true
+            {{- if .Values.catalog.ca.existingSecret }}
+            - name: catalog-ca
+              mountPath: /var/run/secrets/astronomer/catalog-ca
+              readOnly: true
+            {{- end }}
+            {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+            - name: catalog-trust
+              mountPath: /etc/astronomer/catalog-trust
+              readOnly: true
+            {{- end }}
             {{- if .Values.release.manifest }}
             - name: release-manifest
               mountPath: /etc/astronomer/release
@@ -297,6 +324,19 @@ spec:
           secret:
             secretName: astronomer-charlie-bridge-client-tls
             optional: true
+        {{- if .Values.catalog.ca.existingSecret }}
+        - name: catalog-ca
+          secret:
+            secretName: {{ .Values.catalog.ca.existingSecret | quote }}
+            items:
+              - key: {{ .Values.catalog.ca.key | quote }}
+                path: ca.pem
+        {{- end }}
+        {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+        - name: catalog-trust
+          secret:
+            secretName: {{ .Values.catalog.signature.trustKeys.existingSecret | quote }}
+        {{- end }}
         {{- if .Values.release.manifest }}
         - name: release-manifest
           configMap:

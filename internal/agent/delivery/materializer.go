@@ -298,6 +298,18 @@ func reconcilerObject(assignment protocol.DeliveryAssignmentV2, names ObjectName
 		}
 		spec["values"] = values
 	}
+	if len(config.ValueSecretRefs) != 0 {
+		valuesFrom := make([]any, 0, len(config.ValueSecretRefs))
+		for _, ref := range config.ValueSecretRefs {
+			valuesFrom = append(valuesFrom, map[string]any{
+				"kind":       "Secret",
+				"name":       ref.Name,
+				"valuesKey":  ref.Key,
+				"targetPath": ref.TargetPath,
+			})
+		}
+		spec["valuesFrom"] = valuesFrom
+	}
 	addDependencies(spec, config.DependencyNames)
 	return managedObject(assignment, helmReleaseGVK, names.ControlNamespace, names.Base, map[string]any{"spec": spec}), nil
 }
@@ -341,6 +353,9 @@ func managedObject(assignment protocol.DeliveryAssignmentV2, gvk schema.GroupVer
 	annotations := map[string]any{
 		SpecDigestAnnotation: assignment.SpecDigest,
 		GenerationAnnotation: strconv.FormatInt(assignment.Generation, 10),
+	}
+	if assignment.ConfigurationDigest != "" {
+		annotations[ConfigurationDigestAnnotation] = assignment.ConfigurationDigest
 	}
 	return object(gvk, namespace, name, labels, annotations, body)
 }

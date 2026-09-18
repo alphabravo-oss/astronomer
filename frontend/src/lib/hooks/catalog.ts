@@ -2,12 +2,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createHelmRepository,
   deleteHelmRepository,
+  getApplicationCatalogSources,
+  getCatalogApplicationPresentations,
+  getCatalogUserDiscovery,
   getHelmCharts,
   getHelmChartVersions,
   getHelmRepositories,
+  getInstalledChartUpgradeVersions,
   getInstalledCharts,
   installHelmChart,
+  previewCatalogInstallation,
   rollbackChart,
+  setCatalogChartFavorite,
   syncHelmRepository,
   uninstallChart,
   upgradeInstalledChart,
@@ -18,10 +24,60 @@ import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import type { HelmRepoType } from "@/types";
 
-export function useHelmRepositories() {
+export function useHelmRepositories(clusterId?: string) {
   return useQuery({
-    queryKey: queryKeys.catalog.repositories,
-    queryFn: ({ signal }) => getHelmRepositories(signal),
+    queryKey: queryKeys.catalog.repositoriesFor(clusterId),
+    queryFn: ({ signal }) => getHelmRepositories(clusterId, signal),
+  });
+}
+
+export function useCatalogApplications() {
+  return useQuery({
+    queryKey: queryKeys.catalog.applications,
+    queryFn: ({ signal }) => getCatalogApplicationPresentations(signal),
+  });
+}
+
+export function useApplicationCatalogSources() {
+  return useQuery({
+    queryKey: queryKeys.catalog.applicationSources,
+    queryFn: ({ signal }) => getApplicationCatalogSources(signal),
+  });
+}
+
+export function useCatalogUserDiscovery() {
+  return useQuery({
+    queryKey: queryKeys.catalog.discovery,
+    queryFn: ({ signal }) => getCatalogUserDiscovery(signal),
+  });
+}
+
+export function useSetCatalogChartFavorite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      chartId,
+      favorite,
+      clusterId,
+      projectId,
+    }: {
+      chartId: string;
+      favorite: boolean;
+      clusterId?: string;
+      projectId?: string;
+    }) => setCatalogChartFavorite(chartId, favorite, { clusterId, projectId }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.catalog.discovery }),
+    onError: (error: Error) =>
+      toastApiError("Failed to update favorite", error),
+  });
+}
+
+export function usePreviewCatalogInstallation() {
+  return useMutation({
+    mutationFn: previewCatalogInstallation,
+    onError: (error: Error) =>
+      toastApiError("Failed to preview installation", error),
   });
 }
 
@@ -71,7 +127,8 @@ export function useDeleteHelmRepository() {
 }
 
 export type HelmChartQuery = Record<string, unknown> & {
-  projectId: string;
+  clusterId?: string;
+  projectId?: string;
   repository?: string;
   category?: string;
   search?: string;
@@ -81,15 +138,29 @@ export function useHelmCharts(params: HelmChartQuery) {
   return useQuery({
     queryKey: queryKeys.catalog.charts(params),
     queryFn: ({ signal }) => getHelmCharts(params, signal),
-    enabled: !!params.projectId,
+    enabled: !!params.clusterId || !!params.projectId,
   });
 }
 
-export function useHelmChartVersions(projectId: string, chartId: string) {
+export function useHelmChartVersions(
+  scopeId: string,
+  chartId: string,
+  scope: "cluster" | "project" = "project",
+) {
   return useQuery({
-    queryKey: queryKeys.catalog.chartVersions(projectId, chartId),
-    queryFn: ({ signal }) => getHelmChartVersions(projectId, chartId, signal),
-    enabled: !!projectId && !!chartId,
+    queryKey: queryKeys.catalog.chartVersions(scopeId, chartId, scope),
+    queryFn: ({ signal }) =>
+      getHelmChartVersions(scopeId, chartId, scope, signal),
+    enabled: !!scopeId && !!chartId,
+  });
+}
+
+export function useInstalledChartUpgradeVersions(installationId: string) {
+  return useQuery({
+    queryKey: queryKeys.catalog.upgradeVersions(installationId),
+    queryFn: ({ signal }) =>
+      getInstalledChartUpgradeVersions(installationId, signal),
+    enabled: Boolean(installationId),
   });
 }
 

@@ -20,9 +20,10 @@ import (
 // BootstrapAdminConfig is the typed, startup-resolved identity used only when
 // the database contains no users. Environment resolution belongs to config.Load.
 type BootstrapAdminConfig struct {
-	Password string
-	Username string
-	Email    string
+	Password            string
+	Username            string
+	Email               string
+	ForcePasswordChange bool
 }
 
 // EnsurePlatformConfigQuerier is the slice of sqlc Queries that the
@@ -95,10 +96,10 @@ type EnsureAdminQuerier interface {
 }
 
 // EnsureBootstrapAdmin creates an admin user the first time the server boots
-// against an empty users table. The password comes from
-// ASTRONOMER_BOOTSTRAP_PASSWORD when set, otherwise a random 24-character
-// URL-safe value is generated. Chart installs persist that password in the
-// bootstrap Secret so operators can retrieve it with kubectl.
+// against an empty users table. The startup-resolved password is used when
+// set; otherwise a random 24-character URL-safe value is generated. Chart
+// installs persist that password in the bootstrap Secret so operators can
+// retrieve it with kubectl.
 //
 // On subsequent boots (when users already exist) this is a no-op.
 func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, cfg BootstrapAdminConfig, logger *slog.Logger) error {
@@ -133,11 +134,12 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, cfg Bootstr
 	}
 
 	user, err := q.CreateBootstrapAdmin(ctx, sqlc.CreateBootstrapAdminParams{
-		Email:     email,
-		Username:  username,
-		FirstName: "Admin",
-		LastName:  "",
-		Password:  string(hashed),
+		Email:              email,
+		Username:           username,
+		FirstName:          "Admin",
+		LastName:           "",
+		Password:           string(hashed),
+		MustChangePassword: cfg.ForcePasswordChange,
 	})
 	if err != nil {
 		return fmt.Errorf("create bootstrap admin: %w", err)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	deliveryconfig "github.com/alphabravocompany/astronomer-go/internal/delivery/configuration"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -135,15 +136,19 @@ func (tx *postgresPlanningTransaction) LoadSnapshotForUpdate(ctx context.Context
 	if err != nil {
 		return PlanningSnapshot{}, &Error{Code: CodeInvariant, Field: "bundle.spec_digest", Cause: err}
 	}
-	var overrides model.TargetOverrides
-	if err := decodeStrict(row.Overrides, &overrides); err != nil {
+	var targetOverrides model.TargetOverrides
+	if err := decodeStrict(row.Overrides, &targetOverrides); err != nil {
 		return PlanningSnapshot{}, fail(CodeInvariant, "target.overrides", "stored overrides are invalid")
 	}
-	effectiveDigest, err := effectiveTargetSpecDigest(bundleSpecDigest, overrides)
+	template, configurationOverrides, err := tx.loadConfigurationRows(ctx, row)
 	if err != nil {
-		return PlanningSnapshot{}, &Error{Code: CodeInvariant, Field: "target.overrides", Cause: err}
+		return PlanningSnapshot{}, err
 	}
-	desired := VersionIdentity{BundleVersionID: row.BundleVersionID, SpecDigest: effectiveDigest, Source: source, Overrides: overrides}
+	renderer, configurationDigest, effectiveSpecDigest, err := resolveEffectiveRenderer(row, bundleSpecDigest, targetOverrides, template, configurationOverrides, nil)
+	if err != nil {
+		return PlanningSnapshot{}, err
+	}
+	desired := VersionIdentity{BundleVersionID: row.BundleVersionID, SpecDigest: effectiveSpecDigest, Source: source, Overrides: targetOverrides, Renderer: &renderer, ConfigurationDigest: configurationDigest}
 	if err := desired.Validate(); err != nil {
 		return PlanningSnapshot{}, &Error{Code: CodeInvariant, Field: "bundle", Cause: err}
 	}
@@ -167,6 +172,7 @@ func (tx *postgresPlanningTransaction) LoadSnapshotForUpdate(ctx context.Context
 	}
 	candidates := make([]placement.Candidate, 0, len(candidateRows))
 	previous := make(map[uuid.UUID]PreviousDeployment)
+	desiredByCluster := make(map[uuid.UUID]VersionIdentity, len(candidateRows))
 	for _, candidateRow := range candidateRows {
 		labels := make(map[string]string)
 		if err := json.Unmarshal(candidateRow.Labels, &labels); err != nil {
@@ -189,6 +195,14 @@ func (tx *postgresPlanningTransaction) LoadSnapshotForUpdate(ctx context.Context
 			Capabilities:        capabilities,
 		}
 		candidates = append(candidates, candidate)
+		clusterRenderer, clusterConfigurationDigest, clusterSpecDigest, resolveErr := resolveEffectiveRenderer(row, bundleSpecDigest, targetOverrides, template, configurationOverrides, &candidate)
+		if resolveErr != nil {
+			return PlanningSnapshot{}, resolveErr
+		}
+		desiredByCluster[candidate.ID] = VersionIdentity{
+			BundleVersionID: row.BundleVersionID, SpecDigest: clusterSpecDigest, Source: source,
+			Overrides: targetOverrides, Renderer: &clusterRenderer, ConfigurationDigest: clusterConfigurationDigest,
+		}
 		if candidateRow.PreviousBundleVersionID.Valid && candidateRow.PreviousGeneration.Valid &&
 			candidateRow.PreviousSpecDigest.Valid && len(candidateRow.PreviousSourceSpec) != 0 {
 			previousDigest, digestErr := model.ParseDigest(candidateRow.PreviousSpecDigest.String)
@@ -205,11 +219,41 @@ func (tx *postgresPlanningTransaction) LoadSnapshotForUpdate(ctx context.Context
 					return PlanningSnapshot{}, fail(CodeInvariant, "previous.overrides", "stored overrides are invalid")
 				}
 			}
+			previousVersion := VersionIdentity{BundleVersionID: candidateRow.PreviousBundleVersionID.Bytes, SpecDigest: previousDigest, Source: previousSource, Overrides: previousOverrides}
+			if len(candidateRow.PreviousRendererSpec) != 0 && candidateRow.PreviousConfigurationDigest.Valid {
+				var previousRenderer model.RendererSpec
+				if decodeErr := decodeStrict(candidateRow.PreviousRendererSpec, &previousRenderer); decodeErr != nil {
+					return PlanningSnapshot{}, fail(CodeInvariant, "previous.renderer", "stored renderer snapshot is invalid")
+				}
+				previousConfigurationDigest, digestErr := model.ParseDigest(candidateRow.PreviousConfigurationDigest.String)
+				if digestErr != nil {
+					return PlanningSnapshot{}, fail(CodeInvariant, "previous.configuration_digest", "stored digest is invalid")
+				}
+				previousVersion.Renderer = &previousRenderer
+				previousVersion.ConfigurationDigest = previousConfigurationDigest
+			}
 			previous[candidateRow.ClusterID] = PreviousDeployment{
-				Version:    VersionIdentity{BundleVersionID: candidateRow.PreviousBundleVersionID.Bytes, SpecDigest: previousDigest, Source: previousSource, Overrides: previousOverrides},
+				Version:    previousVersion,
 				Generation: candidateRow.PreviousGeneration.Int64,
 			}
 		}
+	}
+	type clusterConfigurationIdentity struct {
+		ClusterID  uuid.UUID    `json:"cluster_id"`
+		SpecDigest model.Digest `json:"spec_digest"`
+	}
+	configurationIdentities := make([]clusterConfigurationIdentity, 0, len(candidates))
+	for _, candidate := range candidates {
+		configurationIdentities = append(configurationIdentities, clusterConfigurationIdentity{
+			ClusterID: candidate.ID, SpecDigest: desiredByCluster[candidate.ID].SpecDigest,
+		})
+	}
+	placementConfigurationDigest, err := model.CanonicalDigest(struct {
+		Base     model.Digest                   `json:"base"`
+		Clusters []clusterConfigurationIdentity `json:"clusters"`
+	}{desired.SpecDigest, configurationIdentities})
+	if err != nil {
+		return PlanningSnapshot{}, fail(CodeInvariant, "configuration_digest", "cannot bind cluster configurations")
 	}
 	var policy struct {
 		ApprovalRequired bool `json:"approval_required"`
@@ -221,16 +265,141 @@ func (tx *postgresPlanningTransaction) LoadSnapshotForUpdate(ctx context.Context
 	}
 	return PlanningSnapshot{
 		TargetID: row.TargetID, ProjectID: row.ProjectID, TargetGeneration: uint64(row.Generation), Desired: desired,
+		DesiredByCluster: desiredByCluster, ConfigurationSetDigest: placementConfigurationDigest,
 		PlacementRequest: placement.Request{
 			Placement: selector, AllowedProjectIDs: allowedProjects, Candidates: candidates,
 			RequiredCapabilities: requirements,
 			Identity: placement.SnapshotIdentity{
 				TargetGeneration: uint64(row.Generation), BundleVersionID: desired.BundleVersionID,
-				BundleSpecDigest: desired.SpecDigest, ResolvedRevision: desired.Source.Revision,
+				BundleSpecDigest: placementConfigurationDigest, ResolvedRevision: desired.Source.Revision,
 			},
 		},
 		InitialApproval: policy.ApprovalRequired, PreviousByCluster: previous,
 	}, nil
+}
+
+func (tx *postgresPlanningTransaction) loadConfigurationRows(ctx context.Context, row sqlc.GetDeliveryPlanningSnapshotRow) (*sqlc.DeliveryConfigurationTemplate, []sqlc.DeliveryOverrideSet, error) {
+	var template *sqlc.DeliveryConfigurationTemplate
+	if row.ConfigurationTemplateID.Valid {
+		value, err := tx.queries.GetDeliveryConfigurationTemplate(ctx, sqlc.GetDeliveryConfigurationTemplateParams{ProjectID: row.ProjectID, ID: row.ConfigurationTemplateID.Bytes})
+		if err != nil {
+			return nil, nil, fail(CodeInvalidInput, "configuration_template_id", "template is unavailable")
+		}
+		template = &value
+	}
+	var overrides []sqlc.DeliveryOverrideSet
+	if len(row.OverrideSetIds) != 0 {
+		var err error
+		overrides, err = tx.queries.ListDeliveryOverrideSetsByIDs(ctx, sqlc.ListDeliveryOverrideSetsByIDsParams{ProjectID: row.ProjectID, Column2: row.OverrideSetIds})
+		if err != nil || len(overrides) != len(row.OverrideSetIds) {
+			return nil, nil, fail(CodeInvalidInput, "override_set_ids", "an override is missing, disabled, or outside the project")
+		}
+	}
+	return template, overrides, nil
+}
+
+func resolveEffectiveRenderer(row sqlc.GetDeliveryPlanningSnapshotRow, bundleDigest model.Digest, targetOverrides model.TargetOverrides, template *sqlc.DeliveryConfigurationTemplate, overrides []sqlc.DeliveryOverrideSet, candidate *placement.Candidate) (model.RendererSpec, model.Digest, model.Digest, error) {
+	var renderer model.RendererSpec
+	if err := decodeStrict(row.RendererSpec, &renderer); err != nil || renderer.Validate() != nil {
+		return renderer, "", "", fail(CodeInvariant, "bundle.renderer_spec", "stored renderer is invalid")
+	}
+	baseValues := json.RawMessage(`{}`)
+	basePatches := []string(nil)
+	valueSecretRefs := []model.HelmValueSecretRef(nil)
+	if renderer.Kind == model.RendererHelm {
+		baseValues = renderer.Helm.Values
+	} else {
+		basePatches = append(basePatches, renderer.Kustomize.Patches...)
+	}
+	layers := make([]deliveryconfig.Layer, 0, len(row.OverrideSetIds)+1)
+	if template != nil {
+		if template.Renderer != string(renderer.Kind) {
+			return renderer, "", "", fail(CodeInvalidInput, "configuration_template_id", "renderer does not match the bundle")
+		}
+		var patches []string
+		if json.Unmarshal(template.Patches, &patches) != nil {
+			return renderer, "", "", fail(CodeInvariant, "configuration_template", "stored patches are invalid")
+		}
+		var secretRefs []struct {
+			Name      string `json:"name"`
+			Key       string `json:"key"`
+			ValuePath string `json:"value_path"`
+		}
+		if json.Unmarshal(template.SecretRefs, &secretRefs) != nil {
+			return renderer, "", "", fail(CodeInvariant, "configuration_template", "stored Secret references are invalid")
+		}
+		if renderer.Kind != model.RendererHelm && len(secretRefs) != 0 {
+			return renderer, "", "", fail(CodeInvalidInput, "configuration_template_id", "Kustomize templates cannot use Helm value Secret references")
+		}
+		for _, ref := range secretRefs {
+			valueSecretRefs = append(valueSecretRefs, model.HelmValueSecretRef{Name: ref.Name, Key: ref.Key, TargetPath: ref.ValuePath})
+		}
+		layers = append(layers, deliveryconfig.Layer{ID: template.ID, Name: template.Name, Scope: deliveryconfig.ScopeProject, Precedence: -1 << 30, Values: template.ValuesDocument, Patches: patches})
+	}
+	for _, override := range overrides {
+		if overrideApplies(row.TargetID, override, candidate) {
+			if override.TemplateID.Valid && (template == nil || override.TemplateID.Bytes != template.ID) {
+				return renderer, "", "", fail(CodeInvalidInput, "override_set_ids", "an override is bound to a different configuration template")
+			}
+			var patches []string
+			if json.Unmarshal(override.Patches, &patches) != nil {
+				return renderer, "", "", fail(CodeInvariant, "override_set", "stored patches are invalid")
+			}
+			layers = append(layers, deliveryconfig.Layer{ID: override.ID, Name: override.Name, Scope: deliveryconfig.Scope(override.ScopeType), Precedence: int(override.Precedence), Values: override.ValuesDocument, Patches: patches})
+		}
+	}
+	result, err := deliveryconfig.Merge(baseValues, layers)
+	if err != nil {
+		return renderer, "", "", &Error{Code: CodeInvalidInput, Field: "override_set_ids", Cause: err}
+	}
+	configurationDigest, err := model.CanonicalDigest(struct {
+		Values          json.RawMessage            `json:"values"`
+		Patches         []string                   `json:"patches"`
+		ValueSecretRefs []model.HelmValueSecretRef `json:"value_secret_refs,omitempty"`
+	}{result.Values, result.Patches, valueSecretRefs})
+	if err != nil {
+		return renderer, "", "", &Error{Code: CodeInvariant, Field: "configuration_digest", Cause: err}
+	}
+	if renderer.Kind == model.RendererHelm {
+		if len(result.Patches) != 0 {
+			return renderer, "", "", fail(CodeInvalidInput, "override_set_ids", "Helm configuration cannot contain Kustomize patches")
+		}
+		renderer.Helm.Values = result.Values
+		renderer.Helm.ValueSecretRefs = append([]model.HelmValueSecretRef(nil), valueSecretRefs...)
+	} else {
+		renderer.Kustomize.Patches = append(basePatches, result.Patches...)
+	}
+	effectiveDigest, err := model.CanonicalDigest(struct {
+		Bundle        model.Digest          `json:"bundle"`
+		Configuration model.Digest          `json:"configuration"`
+		Renderer      model.RendererSpec    `json:"renderer"`
+		Overrides     model.TargetOverrides `json:"overrides"`
+	}{bundleDigest, configurationDigest, renderer, targetOverrides})
+	if err != nil {
+		return renderer, "", "", &Error{Code: CodeInvariant, Field: "effective_spec", Cause: err}
+	}
+	return renderer, configurationDigest, effectiveDigest, nil
+}
+
+func overrideApplies(targetID uuid.UUID, override sqlc.DeliveryOverrideSet, candidate *placement.Candidate) bool {
+	switch deliveryconfig.Scope(override.ScopeType) {
+	case deliveryconfig.ScopeOrganization, deliveryconfig.ScopeProject:
+		return true
+	case deliveryconfig.ScopeRollout:
+		return override.ScopeID.Valid && override.ScopeID.Bytes == targetID
+	case deliveryconfig.ScopeCluster:
+		return candidate != nil && override.ScopeID.Valid && override.ScopeID.Bytes == candidate.ID
+	case deliveryconfig.ScopeEnvironment, deliveryconfig.ScopeGroup:
+		if candidate == nil || !override.ScopeID.Valid {
+			return false
+		}
+		for _, groupID := range candidate.GroupIDs {
+			if groupID == override.ScopeID.Bytes {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (tx *postgresPlanningTransaction) InsertRollout(ctx context.Context, plan FrozenRollout) error {
@@ -268,14 +437,18 @@ func (tx *postgresPlanningTransaction) InsertRollout(ctx context.Context, plan F
 		return fmt.Errorf("insert frozen delivery rollout: %w", err)
 	}
 	for _, cluster := range plan.Clusters {
+		desired := plan.Desired
+		if cluster.Desired != nil {
+			desired = *cluster.Desired
+		}
 		previousVersion := pgtype.UUID{}
 		if cluster.Previous != nil {
 			previousVersion = pgtype.UUID{Bytes: cluster.Previous.Version.BundleVersionID, Valid: true}
 		}
 		if _, err := tx.queries.CreateDeliveryRolloutCluster(ctx, sqlc.CreateDeliveryRolloutClusterParams{
 			RolloutID: plan.ID, ClusterID: cluster.ClusterID, Cohort: int32(cluster.Cohort), ReleaseOrder: int32(cluster.Order),
-			PreviousBundleVersionID: previousVersion, DesiredBundleVersionID: plan.Desired.BundleVersionID,
-			DesiredSpecDigest: plan.Desired.SpecDigest.String(), Deadline: timestamptz(plan.Deadline),
+			PreviousBundleVersionID: previousVersion, DesiredBundleVersionID: desired.BundleVersionID,
+			DesiredSpecDigest: desired.SpecDigest.String(), Deadline: timestamptz(plan.Deadline),
 		}); err != nil {
 			return fmt.Errorf("insert rollout cluster %s: %w", cluster.ClusterID, err)
 		}

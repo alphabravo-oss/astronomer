@@ -74,7 +74,13 @@ function renderTable() {
 }
 
 function rowFor(name: string): HTMLElement {
-  const row = screen.getByText(name).closest("tr");
+  const row = screen
+    .getAllByText(name)
+    .map((element) => element.closest("tr"))
+    .find(
+      (element): element is HTMLTableRowElement =>
+        element instanceof HTMLTableRowElement,
+    );
   if (!row) throw new Error(`no table row for repository ${name}`);
   return row;
 }
@@ -117,16 +123,10 @@ describe("catalog Repositories table", () => {
   it("requires the exact repository name before destructive deletion", () => {
     const onDelete = vi.fn();
     render(
-      <RepositoriesTable
-        repos={repos}
-        onSync={vi.fn()}
-        onDelete={onDelete}
-      />,
+      <RepositoriesTable repos={repos} onSync={vi.fn()} onDelete={onDelete} />,
     );
 
-    fireEvent.click(
-      within(rowFor("bitnami")).getByTitle("Delete repository"),
-    );
+    fireEvent.click(within(rowFor("bitnami")).getByTitle("Delete repository"));
 
     const dialog = screen.getByRole("dialog", { name: "Delete repository" });
     expect(dialog).toHaveTextContent(

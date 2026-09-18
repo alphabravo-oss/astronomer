@@ -13,9 +13,9 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler"
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/siem"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
-	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -172,7 +172,7 @@ func (c *productionComposition) initializeIntegrations(ctx context.Context, cfg 
 	}
 	// CORR-R02: cross-pod event fan-out for SSE (webhook/SIEM taps skip Remote).
 	if cfg.RedisURL != "" {
-		if opt, rerr := asynq.ParseRedisURI(cfg.RedisURL); rerr == nil {
+		if opt, rerr := redisconn.Parse(cfg.RedisURL); rerr == nil {
 			if client, ok := opt.MakeRedisClient().(*redis.Client); ok && client != nil {
 				bus.AttachRedis(client, events.DefaultRedisChannel, logger,
 					events.WithRedisRelayQueueCapacity(cfg.EventRelayQueueCapacity))

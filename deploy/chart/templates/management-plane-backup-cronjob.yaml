@@ -124,6 +124,16 @@ spec:
                   cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.secretKeyKey }}" /var/run/astronomer-keys/SECRET_KEY
                   cp -L "/var/run/astronomer-keys-source/{{ .Values.secrets.encryptionKeyKey }}" /var/run/astronomer-keys/ASTRONOMER_ENCRYPTION_KEY
                   {{- end }}
+                  {{- if .Values.catalog.ca.existingSecret }}
+                  # Preserve the private catalog trust roots alongside the
+                  # database policy that references them.
+                  mkdir -p /var/run/astronomer-keys/catalog-ca
+                  cp -aL /var/run/catalog-ca/. /var/run/astronomer-keys/catalog-ca/
+                  {{- end }}
+                  {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+                  mkdir -p /var/run/astronomer-keys/catalog-signature-trust
+                  cp -aL /var/run/catalog-signature-trust/. /var/run/astronomer-keys/catalog-signature-trust/
+                  {{- end }}
                   dr-crypto key-bundle-create --source /var/run/astronomer-keys --output "${KEY_BUNDLE}"
                   dr-crypto encrypt --input "${KEY_BUNDLE}" --output "${KEY_ENVELOPE}" \
                     --passphrase-file /var/run/astronomer-wrap/passphrase \
@@ -183,12 +193,12 @@ spec:
                 - name: MANAGEMENT_BACKUP_ENDPOINT
                   value: {{ . | quote }}
                 {{- end }}
-                {{- if .Values.postgres.external.dsnSecretRef.name }}
+                {{- if include "astronomer.databaseSecretName" . }}
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:
-                      name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                      key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                      name: {{ include "astronomer.databaseSecretName" . | quote }}
+                      key: {{ include "astronomer.databaseSecretKey" . | quote }}
                 {{- else }}
                 - name: DATABASE_URL
                   valueFrom:
@@ -210,6 +220,16 @@ spec:
                 - name: wrapping-passphrase
                   mountPath: /var/run/astronomer-wrap
                   readOnly: true
+                {{- if .Values.catalog.ca.existingSecret }}
+                - name: catalog-ca
+                  mountPath: /var/run/catalog-ca
+                  readOnly: true
+                {{- end }}
+                {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+                - name: catalog-signature-trust
+                  mountPath: /var/run/catalog-signature-trust
+                  readOnly: true
+                {{- end }}
               resources:
                 {{- toYaml .Values.managementBackup.resources | nindent 16 }}
           volumes:
@@ -234,4 +254,14 @@ spec:
                 items:
                   - key: {{ .Values.managementBackup.encryption.wrappingSecretRef.key | default "passphrase" | quote }}
                     path: passphrase
+            {{- if .Values.catalog.ca.existingSecret }}
+            - name: catalog-ca
+              secret:
+                secretName: {{ .Values.catalog.ca.existingSecret | quote }}
+            {{- end }}
+            {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+            - name: catalog-signature-trust
+              secret:
+                secretName: {{ .Values.catalog.signature.trustKeys.existingSecret | quote }}
+            {{- end }}
 {{- end }}

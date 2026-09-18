@@ -34,7 +34,7 @@ function AlertingPage() {
     <PageShell>
       <PageHeader
         title="Alerting"
-        description="Estate inbox and routing. Alert rules are defined on each cluster."
+        description="Fleet inbox and routing. Alert rules are defined on each cluster."
         actions={
           <>
             <RouterLink

@@ -9,11 +9,13 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	avault "github.com/alphabravocompany/astronomer-go/internal/vault"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -130,14 +132,24 @@ type catalogMutationResult[T any] struct {
 	op  sqlc.CatalogOperation
 }
 
+// CatalogApplicationDelivery is the Flux-native application lifecycle seam.
+type CatalogApplicationDelivery interface {
+	Install(context.Context, catalogapp.InstallRequest) (catalogapp.InstallResult, error)
+	Upgrade(context.Context, catalogapp.InstallRequest) (catalogapp.InstallResult, error)
+	Uninstall(context.Context, uuid.UUID, pgtype.UUID) error
+	Rollback(context.Context, uuid.UUID, pgtype.UUID, string) (catalogapp.InstallResult, error)
+	Status(context.Context, uuid.UUID) (catalogapp.Status, error)
+}
+
 // CatalogHandler handles catalog endpoints (helm repositories, charts, installations).
 type CatalogHandler struct {
-	queries CatalogQuerier
-	helm    HelmRequester
-	log     *slog.Logger
-	authz   authorizationSupport
-	mu      sync.Mutex
-	trigger chan struct{}
+	queries  CatalogQuerier
+	helm     HelmRequester
+	delivery CatalogApplicationDelivery
+	log      *slog.Logger
+	authz    authorizationSupport
+	mu       sync.Mutex
+	trigger  chan struct{}
 	// helmConcurrency caps the number of executeOperation goroutines
 	// dispatched per reconciler tick. Zero falls back to the package
 	// default (see effectiveHelmConcurrency).
@@ -162,6 +174,12 @@ type CatalogHandler struct {
 	// group only prevents an in-flight download stampede.
 	chartHydration        singleflight.Group
 	chartHydrationTimeout time.Duration
+}
+
+func (h *CatalogHandler) SetApplicationDelivery(delivery CatalogApplicationDelivery) {
+	if h != nil {
+		h.delivery = delivery
+	}
 }
 
 // SetRunTx wires the production transaction boundary used for catalog state,

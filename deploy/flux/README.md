@@ -97,7 +97,10 @@ The overlay:
 - watches only Flux objects labeled `app.kubernetes.io/managed-by=astronomer-agent`,
   removes built-in role aggregation that would let namespace editors create
   Flux resources, and removes RBAC subjects/rules for excluded components;
-- adds topology spread, a dedicated priority class, and PodDisruptionBudgets;
+- adds two-replica leader-elected controllers, strict node topology spread, a
+  dedicated priority class, and PodDisruptionBudgets. Source-controller keeps
+  its non-leader NotReady so the artifact Service routes only to the active
+  replica; that warm standby becomes active after lease failover;
 - replaces permissive upstream policies with default-deny, DNS, Kubernetes API,
   source-fetch, source-artifact, and opt-in monitoring paths; and
 - exposes metrics only through a ClusterIP Service. A monitoring namespace must

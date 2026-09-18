@@ -41,6 +41,7 @@ func (h *SupportBundleHandler) Generate(ctx context.Context, output io.Writer) e
 	h.writeNetworkPolicies(ctx, zw, collected)
 	h.writeIngressCertificates(ctx, zw, collected)
 	h.writeSchemaMigrations(ctx, zw, collected)
+	h.writeDeliveryDiagnostics(ctx, zw, collected)
 	h.writeAsynqQueues(ctx, zw, collected)
 	h.writeAgentConnections(ctx, zw, collected)
 	h.writeCharlieStatus(ctx, zw, collected)

@@ -8,6 +8,18 @@
 {{- $_ := include "astronomer.validateImageSkew" . -}}
 {{- $_ := include "astronomer.requireSecretMaterial" . -}}
 {{- $_ := include "astronomer.requireProductionInputs" . -}}
+{{- if and .Values.catalog.signature.required (not (hasPrefix "oci://" .Values.catalog.sourceURL)) }}
+{{- fail "catalog.signature.required requires catalog.sourceURL to be a digest-pinned OCI reference" }}
+{{- end }}
+{{- if and .Values.catalog.signature.required (not .Values.catalog.signature.trustKeys.existingSecret) }}
+{{- fail "catalog.signature.required requires catalog.signature.trustKeys.existingSecret" }}
+{{- end }}
+{{- if and .Values.catalog.signature.required (eq .Values.catalog.signature.provider "cosign_keyless") (or (not .Values.catalog.signature.identity) (not .Values.catalog.signature.issuer)) }}
+{{- fail "keyless catalog signatures require identity and issuer" }}
+{{- end }}
+{{- if and .Values.catalog.signature.required (eq .Values.catalog.signature.provider "cosign_key") (not .Values.catalog.signature.keyRef) }}
+{{- fail "key-based catalog signatures require keyRef" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -36,9 +48,20 @@ data:
   # Running server image — grafana-proxy extraObjects must use this, not a
   # hardcoded v1.0.0 tag. Honour registry + digest the same as the server pod.
   ASTRONOMER_SERVER_IMAGE: {{ include "astronomer.image" (dict "context" . "component" "server") | quote }}
+  ASTRONOMER_CATALOG_URL: {{ ternary .Values.catalog.sourceURL "" .Values.catalog.enabled | quote }}
+  ASTRONOMER_CATALOG_DIGEST: {{ .Values.catalog.digest | quote }}
+  ASTRONOMER_CATALOG_MIRRORS: {{ toJson .Values.catalog.mirrors | quote }}
+  ASTRONOMER_CATALOG_ALLOW_PRIVATE_MIRRORS: {{ .Values.catalog.allowPrivateMirrors | quote }}
+  ASTRONOMER_CATALOG_SIGNATURE_REQUIRED: {{ .Values.catalog.signature.required | quote }}
+  ASTRONOMER_CATALOG_SIGNATURE_PROVIDER: {{ .Values.catalog.signature.provider | quote }}
+  ASTRONOMER_CATALOG_SIGNATURE_IDENTITY: {{ .Values.catalog.signature.identity | quote }}
+  ASTRONOMER_CATALOG_SIGNATURE_ISSUER: {{ .Values.catalog.signature.issuer | quote }}
+  ASTRONOMER_CATALOG_SIGNATURE_KEY_REF: {{ .Values.catalog.signature.keyRef | quote }}
+  ASTRONOMER_CATALOG_TRUST_DIRECTORY: "/etc/astronomer/catalog-trust"
   {{- if .Values.gateway.enabled }}
   ASTRONOMER_GATEWAY_CLASS: {{ .Values.gateway.className | quote }}
-  ASTRONOMER_GATEWAY_NAME: {{ include "astronomer.fullname" . | quote }}
+  ASTRONOMER_GATEWAY_NAME: {{ include "astronomer.gateway.parentName" . | quote }}
+  ASTRONOMER_GATEWAY_NAMESPACE: {{ default .Release.Namespace .Values.gateway.namespace | quote }}
   {{- end }}
   {{- if .Values.ingress.enabled }}
   ASTRONOMER_INGRESS_CLASS: {{ .Values.ingress.className | quote }}
@@ -56,6 +79,7 @@ data:
   # Flux-native delivery v2 is unconditional in v1. These are bounded runtime
   # controls and immutable artifact references, never inline credentials.
   DELIVERY_ENABLED: {{ .Values.delivery.enabled | quote }}
+  DELIVERY_LOCAL_FLUX_BOOTSTRAP: {{ .Values.delivery.localFluxBootstrap | quote }}
   DELIVERY_KUBERNETES_MIN_MINOR: {{ .Values.delivery.compatibility.kubernetes.minimumMinor | quote }}
   DELIVERY_KUBERNETES_MAX_MINOR: {{ .Values.delivery.compatibility.kubernetes.maximumMinor | quote }}
   DELIVERY_AGENT_PROTOCOL_MIN: {{ .Values.delivery.compatibility.agentProtocol.minimum | quote }}

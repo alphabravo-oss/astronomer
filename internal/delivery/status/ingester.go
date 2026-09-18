@@ -139,12 +139,13 @@ func (i *Ingester) Ingest(ctx context.Context, authenticatedCluster, connectionI
 		}
 
 		components, _ := json.Marshal(payload.ControllerInventory.Components)
+		systemComponents, _ := json.Marshal(payload.ControllerInventory.SystemComponents)
 		apiVersions, _ := json.Marshal(payload.ControllerInventory.APIVersions)
 		compatibilityResult := compatibility.Evaluate(payload.ControllerInventory)
 		accepted, err := tx.AcceptDeliveryStatusInventory(ctx, sqlc.AcceptDeliveryStatusInventoryParams{
 			ClusterID: authenticatedCluster, AgentVersion: payload.ControllerInventory.AgentVersion,
 			FluxVersion: payload.ControllerInventory.FluxVersion,
-			Components:  components, ApiVersions: apiVersions,
+			Components:  components, SystemComponents: systemComponents, ApiVersions: apiVersions,
 			DistributionDigest: payload.ControllerInventory.DistributionDigest,
 			KubernetesVersion:  payload.ControllerInventory.KubernetesVersion,
 			Ready:              payload.ControllerInventory.Ready, CompatibilityStatus: string(compatibilityResult.Status),

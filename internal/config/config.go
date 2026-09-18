@@ -50,9 +50,10 @@ type Config struct {
 	TunnelEgressCIDRs      string `mapstructure:"astronomer_tunnel_egress_cidrs"`
 	RCAllowPrivateWebhooks bool   `mapstructure:"astronomer_rc_allow_private_webhooks"`
 
-	BootstrapAdminPassword string `mapstructure:"astronomer_bootstrap_password"`
-	BootstrapAdminUsername string `mapstructure:"astronomer_bootstrap_username"`
-	BootstrapAdminEmail    string `mapstructure:"astronomer_bootstrap_email"`
+	BootstrapAdminPassword            string `mapstructure:"astronomer_bootstrap_password"`
+	BootstrapAdminUsername            string `mapstructure:"astronomer_bootstrap_username"`
+	BootstrapAdminEmail               string `mapstructure:"astronomer_bootstrap_email"`
+	BootstrapAdminForcePasswordChange bool   `mapstructure:"astronomer_bootstrap_force_password_change"`
 
 	CORSAllowedOrigins string `mapstructure:"cors_allowed_origins"`
 	// TrustedProxyCIDRs is the explicit set of reverse-proxy networks allowed
@@ -111,6 +112,7 @@ type Config struct {
 	// point the repositories at their verified internal mirror while preserving
 	// the release digests and signing policy.
 	DeliveryEnabled                             bool   `mapstructure:"delivery_enabled"`
+	DeliveryLocalFluxBootstrap                  bool   `mapstructure:"delivery_local_flux_bootstrap"`
 	DeliveryKubernetesMinMinor                  string `mapstructure:"delivery_kubernetes_min_minor"`
 	DeliveryKubernetesMaxMinor                  string `mapstructure:"delivery_kubernetes_max_minor"`
 	DeliveryFluxVersion                         string `mapstructure:"delivery_flux_version"`
@@ -273,6 +275,17 @@ type Config struct {
 	CatalogURL                 string  `mapstructure:"astronomer_catalog_url"`
 	ChartRatingBayesianAverage float64 `mapstructure:"chart_rating_bayesian_avg"`
 	ChartRatingBayesianWeight  float64 `mapstructure:"chart_rating_bayesian_weight"`
+	CatalogDigest              string  `mapstructure:"astronomer_catalog_digest"`
+	CatalogMirrors             string  `mapstructure:"astronomer_catalog_mirrors"`
+	CatalogProxyURL            string  `mapstructure:"astronomer_catalog_proxy_url"`
+	CatalogCAFile              string  `mapstructure:"astronomer_catalog_ca_file"`
+	CatalogAllowPrivateMirrors bool    `mapstructure:"astronomer_catalog_allow_private_mirrors"`
+	CatalogSignatureRequired   bool    `mapstructure:"astronomer_catalog_signature_required"`
+	CatalogSignatureProvider   string  `mapstructure:"astronomer_catalog_signature_provider"`
+	CatalogSignatureIdentity   string  `mapstructure:"astronomer_catalog_signature_identity"`
+	CatalogSignatureIssuer     string  `mapstructure:"astronomer_catalog_signature_issuer"`
+	CatalogSignatureKeyRef     string  `mapstructure:"astronomer_catalog_signature_key_ref"`
+	CatalogTrustDirectory      string  `mapstructure:"astronomer_catalog_trust_directory"`
 
 	// A4 — tunnel connect rate-limit + replay defense. The connect limiter is a
 	// FAILURE-keyed fixed-window counter (per source IP): an IP is throttled only
@@ -339,6 +352,7 @@ func Load() (*Config, error) {
 		"release_manifest_path",
 		"release_mirror_mapping_path",
 		"delivery_enabled",
+		"delivery_local_flux_bootstrap",
 		"delivery_kubernetes_min_minor",
 		"delivery_kubernetes_max_minor",
 		"delivery_flux_version",
@@ -381,6 +395,7 @@ func Load() (*Config, error) {
 		"astronomer_bootstrap_password",
 		"astronomer_bootstrap_username",
 		"astronomer_bootstrap_email",
+		"astronomer_bootstrap_force_password_change",
 		"trusted_proxy_cidrs",
 		"server_url",
 		"audit_log_retention_months",
@@ -447,6 +462,17 @@ func Load() (*Config, error) {
 		"astronomer_catalog_url",
 		"chart_rating_bayesian_avg",
 		"chart_rating_bayesian_weight",
+		"astronomer_catalog_digest",
+		"astronomer_catalog_mirrors",
+		"astronomer_catalog_proxy_url",
+		"astronomer_catalog_ca_file",
+		"astronomer_catalog_allow_private_mirrors",
+		"astronomer_catalog_signature_required",
+		"astronomer_catalog_signature_provider",
+		"astronomer_catalog_signature_identity",
+		"astronomer_catalog_signature_issuer",
+		"astronomer_catalog_signature_key_ref",
+		"astronomer_catalog_trust_directory",
 		"tunnel_connect_auth_failure_limit",
 		"tunnel_connect_auth_failure_window_minutes",
 		"tunnel_connect_clock_skew_minutes",
@@ -473,6 +499,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "helm_plugins", Value: "/tmp/helm/data/plugins"},
 		envconfig.Default{Key: "astronomer_bootstrap_username", Value: "admin"},
 		envconfig.Default{Key: "astronomer_bootstrap_email", Value: "admin@astronomer.local"},
+		envconfig.Default{Key: "astronomer_bootstrap_force_password_change", Value: false},
 		envconfig.Default{Key: "cors_allowed_origins", Value: "http://localhost:3000"},
 		envconfig.Default{Key: "trusted_proxy_cidrs", Value: ""},
 		envconfig.Default{Key: "session_timeout_minutes", Value: sessionpolicy.DefaultMinutes},
@@ -480,6 +507,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "jwt_audience", Value: "astronomer-browser"},
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "delivery_enabled", Value: true},
+		envconfig.Default{Key: "delivery_local_flux_bootstrap", Value: true},
 		envconfig.Default{Key: "delivery_kubernetes_min_minor", Value: "1.33"},
 		envconfig.Default{Key: "delivery_kubernetes_max_minor", Value: "1.35"},
 		envconfig.Default{Key: "delivery_flux_version", Value: "v2.9.3"},
@@ -523,6 +551,8 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "chart_rating_bayesian_avg", Value: 4.0},
 		envconfig.Default{Key: "chart_rating_bayesian_weight", Value: 10.0},
 		envconfig.Default{Key: "crd_watch_namespace", Value: "astronomer-mgmt"},
+		envconfig.Default{Key: "astronomer_catalog_mirrors", Value: "{}"},
+		envconfig.Default{Key: "astronomer_catalog_allow_private_mirrors", Value: false},
 		// A4 — generous tunnel-connect failure limiter + lenient replay window.
 		envconfig.Default{Key: "tunnel_connect_auth_failure_limit", Value: 50},
 		envconfig.Default{Key: "tunnel_connect_auth_failure_window_minutes", Value: 5},

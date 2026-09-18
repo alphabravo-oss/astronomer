@@ -365,6 +365,28 @@
       "reason": "Per-chart ratings are user-owned content: create binds the row to the authenticated caller, and update/delete refuse unless the caller owns the rating or is a superuser. Blast radius is one review row, not platform state."
     },
     {
+      "id": "catalog-preview-read-shaped-post",
+      "methods": [
+        "POST"
+      ],
+      "patterns": [
+        "/api/v1/catalog/applications/preview"
+      ],
+      "classification": "covered-rbac-cluster-scoped-read",
+      "reason": "Application preview is POST-shaped only because rendered values and target selection are supplied in the request body. It performs no mutation and requires authenticated catalog browse permission; the handler independently authorizes the selected cluster and target namespace before returning a render plan."
+    },
+    {
+      "id": "catalog-favorite-owner-scoped",
+      "methods": [
+        "PUT"
+      ],
+      "patterns": [
+        "/api/v1/catalog/charts/{id}/favorite"
+      ],
+      "classification": "covered-owner-scoped",
+      "reason": "Favorite state is private user-owned discovery metadata. The authenticated user identity is taken from request context rather than the payload, catalog browse permission is required, and the upsert can only change that user's row for the named chart."
+    },
+    {
       "id": "image-vuln-rescan-cluster-scoped",
       "methods": [
         "POST"
@@ -418,6 +440,7 @@
       "id": "flux-native-delivery-project-mutations",
       "methods": [
         "POST",
+        "PUT",
         "PATCH",
         "DELETE"
       ],
@@ -429,6 +452,10 @@
         "/api/v1/delivery/bundles",
         "/api/v1/delivery/bundles/{id}",
         "/api/v1/delivery/bundles/{id}/versions",
+        "/api/v1/delivery/configuration-templates",
+        "/api/v1/delivery/configuration-templates/{id}",
+        "/api/v1/delivery/override-sets",
+        "/api/v1/delivery/override-sets/{id}",
         "/api/v1/delivery/targets",
         "/api/v1/delivery/targets/{id}",
         "/api/v1/delivery/targets/{id}/preview",
@@ -443,6 +470,13 @@
       ],
       "classification": "covered-rbac-project-scoped",
       "reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+    },
+    {
+      "id": "delivery-effective-configuration-read-shaped-post",
+      "methods": ["POST"],
+      "patterns": ["/api/v1/delivery/override-sets/effective"],
+      "classification": "covered-rbac-project-scoped-read",
+      "reason": "Effective configuration resolution is POST-shaped because bounded base values and override identities are supplied in the body. It performs no mutation, resolves every enabled override inside one normalized project, returns no Secret values, and requires delivery_configuration_templates:read."
     },
     {
       "id": "flux-native-delivery-critical-decisions",

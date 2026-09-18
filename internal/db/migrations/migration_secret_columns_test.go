@@ -26,6 +26,7 @@ var classifiedSecretColumns = map[string]string{
 	"046_tool_drift_leases.up.sql:drift_claim_token":                  "non-secret ephemeral ownership-fencing nonce",
 	"046_tool_drift_leases.up.sql:reconcile_claim_token":              "non-secret ephemeral ownership-fencing nonce",
 	"017_durable_audit_siem_fanout.up.sql:token":                      "PL/pgSQL local containing one glob-pattern character; not a table column",
+	"059_delivery_configuration_templates.up.sql:secret_refs":         "Kubernetes Secret name, key, and Helm target-path references only; never secret values",
 	"001_initial.up.sql:object_storage_secret_name":                   "Kubernetes Secret name reference",
 	"001_initial.up.sql:password":                                     "hashed bcrypt user password",
 	"001_initial.up.sql:password_encrypted":                           "encrypted SMTP password",

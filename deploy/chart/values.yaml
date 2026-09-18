@@ -25,6 +25,43 @@ release:
   # the exact release manifest whose digest it binds.
   mirrorMapping: ""
 
+# Immutable application-store index synchronized by every clean install. A
+# release bumps this commit deliberately; mutable branches are rejected by the
+# server so catalog metadata cannot change without a chart/release change.
+catalog:
+  # Set false to disable curated application synchronization while retaining
+  # management of already-installed releases and operator-added repositories.
+  # The UI degrades to an explicit unavailable/empty catalog state.
+  enabled: true
+  sourceURL: "https://raw.githubusercontent.com/alphabravo-oss/astronomer-catalog/e9adffbdd888dd3f9e7ea0dbe516a0bbd42f6d9e/catalog.json"
+  # SHA-256 of the catalog document. HTTPS sources are rejected when their
+  # bytes do not match; OCI sources additionally require an @sha256 digest.
+  digest: "sha256:747042ed13cfac1f111aa29a919a65f8cb1ad1aab3eb8942d1ed0dedd54eeaab"
+  # Longest-prefix rewrites. Both source and target must use HTTPS or OCI.
+  # Example: {"oci://ghcr.io/alphabravo-oss/astronomer-catalog":"oci://registry.internal/catalog"}
+  mirrors: {}
+  allowPrivateMirrors: false
+  proxy:
+    enabled: false
+    urlSecretRef:
+      name: ""
+      key: url
+  ca:
+    existingSecret: ""
+    key: ca.crt
+  signature:
+    # Signed catalogs must use a digest-pinned OCI source. Verification is
+    # performed in-process and offline; it never shells out to cosign.
+    required: false
+    provider: cosign_keyless
+    identity: ""
+    issuer: "https://token.actions.githubusercontent.com"
+    keyRef: ""
+    trustKeys:
+      # Keys are <keyRef>.pub for key verification; keyless verification uses
+      # trusted_root.json containing the pinned Fulcio/Rekor trusted root.
+      existingSecret: ""
+
 # =============================================================================
 # Container images
 # =============================================================================
@@ -51,23 +88,23 @@ image:
   server:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-server
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""             # Published upgrades set the exact sha256 digest.
   worker:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-worker
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
   agent:
     # Used by the server when rendering install.yaml.template for new clusters.
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-agent
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
   migrate:
     registry: ghcr.io/alphabravo-oss
     repository: astronomer-go-migrate
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
 
 # =============================================================================
@@ -106,7 +143,7 @@ frontend:
     whenUnsatisfiable: ScheduleAnyway
   image:
     repository: astronomer-frontend
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   hostAliases: []
@@ -248,12 +285,66 @@ worker:
 # Database / Cache
 # =============================================================================
 postgres:
+  # Empty preserves the legacy bundled.enabled switch. Explicit modes are:
+  # bundled (single-node development), cloudNativePG (chart-managed Cluster),
+  # or external (operator-provided DSN).
+  mode: ""
   bundled:
     enabled: true
     # Development/qualification-only capacity for the bundled database. Keep
     # this above the combined server + worker pool maxima when exercising a
     # scaled local topology. Production forbids the bundled database.
     maxConnections: 100
+  cloudNativePG:
+    clusterName: ""          # Empty derives <release>-postgres.
+    instances: 1             # Set 3 for HA production.
+    imageName: ghcr.io/cloudnative-pg/postgresql:17.6
+    storage:
+      # Longhorn is thin-provisioned, so this is a logical ceiling rather than
+      # eager disk consumption. 50Gi leaves practical room for WAL, indexes,
+      # upgrades, and retention on a durable management-plane database.
+      size: 50Gi
+      storageClassName: ""
+    walStorage:
+      enabled: false
+      size: 4Gi
+      storageClassName: ""
+    synchronousReplication:
+      enabled: false
+      number: 1
+    monitoring:
+      enablePodMonitor: false
+    # Optional continuous backup/PITR through the upstream CNPG-I Barman Cloud
+    # plugin. The plugin and referenced ObjectStore CR must be installed and
+    # managed separately; this chart never creates storage credentials.
+    barmanCloud:
+      enabled: false
+      pluginName: barman-cloud.cloudnative-pg.io
+      objectStoreName: ""
+      scheduledBackup:
+        enabled: false
+        # CloudNativePG uses a six-field cron expression (seconds first).
+        schedule: "0 0 2 * * *"
+        backupOwnerReference: self
+      recovery:
+        # Recovery bootstraps a new CNPG cluster; do not enable it on an
+        # initialized cluster. Leave targetTime empty for latest recovery.
+        enabled: false
+        sourceName: origin
+        objectStoreName: ""
+        serverName: ""
+        targetTime: ""
+    # PostgreSQL GUCs managed declaratively by CloudNativePG. Values must be
+    # strings. This leaves failover headroom above the application pools.
+    parameters:
+      max_connections: "200"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "4"
+        memory: 4Gi
   image:
     repository: postgres
     tag: 16-alpine
@@ -271,6 +362,13 @@ postgres:
   storage:
     size: 8Gi
     storageClassName: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 999
@@ -327,8 +425,37 @@ postgres:
   pool: {}
 
 redis:
+  # Empty preserves bundled.enabled. Explicit modes are standalone,
+  # sentinel, or external. The engine is Valkey in both managed modes.
+  mode: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
   bundled:
     enabled: true
+  sentinel:
+    replicas: 3
+    sentinels: 3
+    masterName: astronomer
+    quorum: 2
+    downAfterMilliseconds: 5000
+    failoverTimeoutMilliseconds: 60000
+    parallelSyncs: 1
+    passwordSecretRef:
+      # Empty name = chart generates and manages <release>-valkey-auth.
+      # Set a name to use an externally managed Secret instead.
+      name: ""
+      key: password
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 2
+    topologySpread:
+      maxSkew: 1
+      whenUnsatisfiable: DoNotSchedule
   # Engine is Valkey (the BSD-licensed drop-in fork of Redis). Wire-compatible,
   # so the go-redis client and redis:// URLs are unchanged; the resource/service
   # stay named "redis" to avoid PVC and NetworkPolicy churn.
@@ -339,7 +466,9 @@ redis:
     registry: ""    # T23 air-gapped override; falls back to image.registry
   port: 6379
   storage:
-    size: 2Gi
+    # AOF persistence needs room for rewrites and temporary growth. Longhorn
+    # allocates this thinly, so a 5Gi claim does not consume 5Gi up front.
+    size: 5Gi
     storageClassName: ""
   podSecurityContext:
     runAsNonRoot: true
@@ -403,7 +532,7 @@ preflight:
     # Same image runs the in-browser kubectl shell pods, so air-gapped
     # operators only need to mirror one image for both surfaces.
     repository: astronomer-shell
-    tag: "v1.1.0"
+    tag: "v1.2.0"
     digest: ""
     registry: ""    # T23 air-gapped override; falls back to image.registry
   # Read-only upgrade admission for external databases. Empty databases are
@@ -412,7 +541,7 @@ preflight:
   # pre-support, multi-row, and legacy-provider schemas fail before mutation.
   databaseSchema:
     minimumUpgradeVersion: 1
-    targetVersion: 52
+    targetVersion: 60
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -496,11 +625,12 @@ config:
 # Flux-native continuous delivery
 # =============================================================================
 # Delivery protocol v2 is the only supported delivery engine in v1. It is not
-# a selector and there is no compatibility mode. Flux itself runs only inside
-# managed clusters from the signed distribution supplied during enrollment;
-# this management-plane chart never installs Flux controllers.
+# a selector and there is no compatibility mode. Flux runs inside every
+# delivery target. This chart bootstraps the pinned embedded distribution on
+# the local cluster; enrolled agents install it on downstream clusters.
 delivery:
   enabled: true
+  localFluxBootstrap: true
   compatibility:
     # These bounds mirror deploy/release/compatibility.yaml. Release automation
     # must keep the generated compatibility manifest authoritative and verify
@@ -600,6 +730,15 @@ delivery:
 dex:
   enabled: false
   replicaCount: 1
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+  affinity:
+    enabled: true
+  topologySpread:
+    enabled: true
+    maxSkew: 1
+    whenUnsatisfiable: ScheduleAnyway
   image:
     repository: dexidp/dex
     tag: v2.41.1
@@ -709,6 +848,8 @@ bootstrap:
   username: admin
   email: admin@astronomer.local
   password: ""
+  # Require the generated bootstrap credential to be changed after login.
+  forcePasswordChange: false
   # Offline-render-safe escape hatch (F8 / C-04). Point this at a pre-created Secret
   # (in the release namespace) with a `password` key and the chart will NOT
   # manage a bootstrap Secret of its own — the server reads the password
@@ -817,7 +958,16 @@ affinity: {}
 # =============================================================================
 gateway:
   enabled: true
+  # When true, this chart owns a Gateway. Set false to attach the rendered
+  # HTTPRoutes to a platform-managed Gateway (for example a shared public LB).
+  create: true
   className: nginx
+  # Required when create=false. Namespace defaults to the Helm release
+  # namespace when empty. sectionName is optional; omitting it lets Gateway API
+  # hostname matching attach the route to every compatible listener.
+  name: ""
+  namespace: ""
+  sectionName: ""
   annotations: {}
   hosts:
     - astronomer.localtest.me
@@ -1116,6 +1266,22 @@ managementRestoreDrill:
     - clusters
     - projects
     - audit_log
+  # Delivery/catalog tables may legitimately be empty on a fresh install, but
+  # must still exist after restore. The drill checks these separately from the
+  # non-empty baseline above so DR coverage follows every schema addition.
+  requiredTables:
+    - delivery_catalogs
+    - catalog_blessed_charts
+    - delivery_application_versions
+    - delivery_sources
+    - component_bundles
+    - component_bundle_versions
+    - delivery_targets
+    - delivery_rollouts
+    - cluster_deployments
+    - delivery_controller_inventory
+    - delivery_configuration_templates
+    - delivery_override_sets
   # ---------------------------------------------------------------------------
   # F4 (b): prove the backed-up encryption key actually DECRYPTS the restored
   # data. Without this the drill can stay green while real DR is broken (the key

@@ -1,16 +1,12 @@
 import { cn } from "@/lib/utils";
 
 const badgeColors: Record<string, string> = {
-  slate:
-    "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
-  blue: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  green:
-    "border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300",
-  amber:
-    "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300",
-  red: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
-  purple:
-    "border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300",
+  slate: "border-border bg-muted text-muted-foreground",
+  blue: "border-status-info/30 bg-status-info/10 text-status-info",
+  green: "border-status-success/30 bg-status-success/10 text-status-success",
+  amber: "border-status-warning/30 bg-status-warning/10 text-status-warning",
+  red: "border-status-error/30 bg-status-error/10 text-status-error",
+  purple: "border-primary/30 bg-primary/10 text-primary",
 };
 
 export const CLUSTER_BADGE_COLORS = [

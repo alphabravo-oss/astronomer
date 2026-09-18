@@ -30,9 +30,9 @@ has been released to that cluster.
 
 Rancher Fleet is not installed, imported, vendored, called, wrapped, or exposed.
 In particular, no `fleet.cattle.io` API, Rancher Fleet controller, or Rancher
-Fleet compatibility surface is permitted. The unqualified word “fleet” is not
-a new product or code name; new code uses `delivery`, `deployment`, `rollout`, or
-`cluster agents`.
+Fleet compatibility surface is permitted. **Delivery Fleet** is Astronomer's
+first-party cross-cluster operating view; it is product terminology, not a
+Rancher API or compatibility claim.
 
 Argo CD is not a provider behind a new abstraction. The v1 runtime has one
 delivery path and no dual-engine mode. The existing Argo chart, proxy, API,
@@ -139,10 +139,13 @@ non-mutating preflight with export/reset/reinstall guidance. There is no Argo,
 `fleet_operations`, or other legacy data importer, no automatic database reset,
 and no compatibility schema retained after the migration squash.
 
-Management-plane upgrades remain explicit, tagged Helm upgrades. Downstream
-Flux does not manage the Astronomer management-plane release. Agent and Flux
-system upgrades use signed, digest-pinned system assignments, compatibility
-preflight, canary cohorts, failure budgets, and a tested previous distribution.
+The initial management-plane install and its upgrades remain explicit, tagged
+Helm operations. By default the chart idempotently bootstraps the same pinned
+Flux distribution on the local management cluster, making local a first-class
+Delivery Fleet target. Flux does not manage the Astronomer release that
+bootstrapped it. Downstream agent and Flux system upgrades use signed,
+digest-pinned system assignments, compatibility preflight, canary cohorts,
+failure budgets, and a tested previous distribution.
 
 ## Rejected alternatives
 

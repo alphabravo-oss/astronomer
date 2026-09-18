@@ -32,18 +32,18 @@
   "postgresql": {
     "migration_mode": "versioned_incremental",
     "minimum_upgrade_schema": 1,
-    "reversible_through_schema": 52,
+    "reversible_through_schema": 60,
     "supported_majors": [
       16,
       17
     ],
     "supported_upgrade_release_lines": [
-      "1.0.x",
-      "1.1.x"
+      "1.1.x",
+      "1.2.x"
     ],
-    "target_schema": 52,
+    "target_schema": 60,
     "tls_required_in_production": true
   },
-  "release_line": "1.1.x",
+  "release_line": "1.2.x",
   "schema_version": 1
 }

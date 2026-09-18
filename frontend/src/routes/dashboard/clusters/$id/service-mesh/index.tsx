@@ -81,7 +81,7 @@ function meshAccent(kind: ServiceMeshKind): string {
     case "linkerd":
       return "text-status-success";
     case "kuma":
-      return "text-purple-500";
+      return "text-primary";
     case "cilium":
       return "text-status-warning";
     case "none":

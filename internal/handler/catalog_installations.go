@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -56,6 +58,9 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count installations")
 		return
 	}
+	for index := range installations {
+		installations[index] = h.refreshInstalledChartStatus(r.Context(), installations[index])
+	}
 
 	paging.Write(w, installations, paging.Exact(total, queryLimit(r, 20), queryOffset(r), len(installations)))
 }
@@ -63,7 +68,7 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 // CreateInstallationRequest represents the request body for creating an installation.
 type CreateInstallationRequest struct {
 	ChartVersionID string `json:"chart_version_id" validate:"required,uuid"`
-	ProjectID      string `json:"project_id" validate:"required,uuid"`
+	ProjectID      string `json:"project_id,omitempty"`
 	ReleaseName    string `json:"release_name" validate:"required"`
 	Namespace      string `json:"namespace" validate:"required"`
 	ValuesOverride string `json:"values_override"`
@@ -78,10 +83,6 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbCreate) {
-		return
-	}
-
 	// Migration 057: maintenance window gate.
 	if blocked := h.checkCatalogMaintenanceWindow(w, r, clusterID, "helm.install"); blocked {
 		return
@@ -106,19 +107,57 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	var version sqlc.HelmChartVersion
 	var chart sqlc.HelmChart
 	var repo sqlc.HelmRepository
+	var targetProjectID uuid.UUID
+	var targetHasProject bool
+	var err error
 	if req.ChartVersionID != "" {
-		projectID, parseErr := uuid.Parse(req.ProjectID)
-		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid project_id is required for catalog installation")
+		targetProjectID, targetHasProject, err = h.resolveCatalogTargetProject(r.Context(), clusterID, req.Namespace)
+		resolverUnavailable := errors.Is(err, errCatalogProjectResolverUnavailable)
+		if (resolverUnavailable || (!targetHasProject && err == nil)) && req.ProjectID != "" {
+			legacyProjectID, parseErr := uuid.Parse(req.ProjectID)
+			if parseErr == nil {
+				project, projectErr := h.queries.GetProjectByID(r.Context(), legacyProjectID)
+				if projectErr == nil && project.ClusterID == clusterID {
+					namespaceOwned := resolverUnavailable
+					if lister, ok := h.queries.(catalogProjectNamespaceLister); ok {
+						rows, listErr := lister.ListProjectNamespaces(r.Context(), legacyProjectID)
+						if listErr == nil {
+							for _, row := range rows {
+								if row.ClusterID == clusterID && row.Namespace == req.Namespace {
+									namespaceOwned = true
+									break
+								}
+							}
+						}
+					}
+					if namespaceOwned {
+						targetProjectID, targetHasProject, err = legacyProjectID, true, nil
+					}
+				}
+			}
+		}
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to resolve namespace ownership")
 			return
 		}
-		project, projectErr := h.queries.GetProjectByID(r.Context(), projectID)
-		if projectErr != nil || project.ClusterID != clusterID {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Project is not assigned to the target cluster")
+		if req.ProjectID != "" {
+			legacyProjectID, parseErr := uuid.Parse(req.ProjectID)
+			if parseErr != nil || !targetHasProject || legacyProjectID != targetProjectID {
+				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "project_id does not match the target namespace")
+				return
+			}
+		}
+		allowedTarget, authErr := h.catalogCallerAllowsTarget(r.Context(), clusterID, targetProjectID, req.Namespace, rbac.VerbCreate)
+		if authErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 			return
 		}
-		if !h.authz.authorizeProjectAction(w, r, projectID, rbac.ResourceCatalog, rbac.VerbCreate) {
+		if !allowedTarget {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to install applications in this namespace")
 			return
+		}
+		if targetHasProject {
+			params.ProjectID = pgtype.UUID{Bytes: targetProjectID, Valid: true}
 		}
 		cvID, err := uuid.Parse(req.ChartVersionID)
 		if err != nil {
@@ -141,9 +180,27 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
 			return
 		}
-		if !catalogVisibleToProject(r.Context(), h.queries, projectID, repo.ID) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Chart repository is not visible to this project")
+		if repo.OwnerProjectID.Valid && (!targetHasProject || !catalogVisibleToProject(r.Context(), h.queries, targetProjectID, repo.ID)) {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Chart repository is not visible from the target namespace")
 			return
+		}
+		if catalogStore, ok := h.queries.(applicationCatalogQuerier); ok {
+			presentation, presentationErr := catalogStore.GetApplicationCatalogPresentationByChartVersion(r.Context(), cvID)
+			if presentationErr == nil {
+				cluster, clusterErr := h.queries.GetClusterByID(r.Context(), clusterID)
+				if clusterErr != nil {
+					RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+					return
+				}
+				checks, allowed := catalogInstallChecks(cluster, version, presentation, req.ValuesOverride)
+				if !allowed {
+					RespondJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{"code": apierror.Conflict, "message": "Catalog installation prerequisites failed", "checks": checks}})
+					return
+				}
+			} else if !errors.Is(presentationErr, pgx.ErrNoRows) {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to verify catalog application trust")
+				return
+			}
 		}
 	}
 
@@ -152,6 +209,10 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	}
 	if req.PresetUsed != "" {
 		params.PresetUsed = pgtype.Text{String: req.PresetUsed, Valid: true}
+	}
+	resolvedProjectID := ""
+	if targetHasProject {
+		resolvedProjectID = targetProjectID.String()
 	}
 
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
@@ -176,8 +237,8 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 			}
 			op, mutationErr := createCatalogOperation(opCtx, q, "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
 				InstalledChartID: installation.ID.String(), ClusterID: clusterID.String(), ReleaseName: installation.ReleaseName,
-				Namespace: installation.Namespace, ChartVersionID: req.ChartVersionID, ChartName: chart.Name, RepoURL: repo.Url,
-				Version: version.Version, ValuesOverride: installation.ValuesOverride, Notes: installation.Notes,
+				ProjectID: resolvedProjectID, Namespace: installation.Namespace, ChartVersionID: req.ChartVersionID, ChartName: chart.Name, RepoURL: repo.Url,
+				Version: version.Version, ChartDigest: version.Digest, ValuesOverride: installation.ValuesOverride, Notes: installation.Notes,
 			}, currentUserUUID(r))
 			return catalogMutationResult[sqlc.InstalledChart]{row: installation, op: op}, mutationErr
 		},
@@ -298,9 +359,62 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 	}
 	items := make([]map[string]any, 0, len(rows))
 	for _, ic := range rows {
+		ic = h.refreshInstalledChartStatus(r.Context(), ic)
 		items = append(items, installedChartListItem(ic))
 	}
 	paging.Write(w, items, paging.Exact(total, limit, offset, len(rows)))
+}
+
+// refreshInstalledChartStatus projects the authoritative Flux deployment
+// phase onto the compatibility record consumed by the Apps UI. The durable
+// Delivery records remain the source of truth.
+func (h *CatalogHandler) refreshInstalledChartStatus(ctx context.Context, installed sqlc.InstalledChart) sqlc.InstalledChart {
+	if h == nil || h.delivery == nil || !installed.RequestID.Valid {
+		return installed
+	}
+	status, err := h.delivery.Status(ctx, uuid.UUID(installed.RequestID.Bytes))
+	if err != nil {
+		return installed
+	}
+	next := installed.Status
+	switch status.Phase {
+	case "pending", "blocked", "applying":
+		switch installed.Status {
+		case "rolling_back", "pending_rollback":
+			next = "rolling_back"
+		case "upgrading", "pending_upgrade":
+			next = "upgrading"
+		default:
+			next = "installing"
+		}
+	case "ready":
+		next = "installed"
+	case "degraded":
+		next = "degraded"
+	case "failed", "timed_out", "rollback_failed":
+		next = "failed_install"
+	case "suspended":
+		next = "suspended"
+	case "deleting":
+		next = "uninstalling"
+	case "removed":
+		next = "uninstalled"
+	}
+	if next == installed.Status {
+		return installed
+	}
+	if next == "uninstalled" {
+		if err := h.queries.DeleteInstalledChart(ctx, installed.ID); err == nil {
+			installed.Status = next
+		}
+		return installed
+	}
+	if err := h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{
+		ID: installed.ID, Status: next, Revision: installed.Revision,
+	}); err == nil {
+		installed.Status = next
+	}
+	return installed
 }
 
 // CreateInstalledChart handles POST /api/v1/catalog/installed/.
@@ -416,6 +530,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		ChartName:        chart.Name,
 		RepoURL:          repo.Url,
 		Version:          version.Version,
+		ChartDigest:      version.Digest,
 		ValuesOverride:   valuesOverride,
 		Notes:            installed.Notes,
 	}

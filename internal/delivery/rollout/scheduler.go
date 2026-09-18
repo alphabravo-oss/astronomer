@@ -290,7 +290,11 @@ func evaluateProgressing(input EvaluateInput, clusters []ClusterRuntime, decisio
 		if cluster.State != model.RolloutClusterPending || !cluster.Connected {
 			continue
 		}
-		release, releaseErr := newRelease(plan, planned, cluster, AssignmentApply, plan.Desired, now)
+		desired := plan.Desired
+		if planned.Desired != nil {
+			desired = *planned.Desired
+		}
+		release, releaseErr := newRelease(plan, planned, cluster, AssignmentApply, desired, now)
 		if releaseErr != nil {
 			return releaseErr
 		}

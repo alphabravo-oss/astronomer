@@ -23,6 +23,10 @@ const (
 	defaultSweepLimit     = 16
 )
 
+func nullableDigest(value string) pgtype.Text {
+	return pgtype.Text{String: value, Valid: value != ""}
+}
+
 // Reconciler claims rollout rows with a monotonically increasing database
 // fence, evaluates the pure scheduler, then commits desired deployments,
 // rollout state, counters, events, and the next durable wake-up atomically.
@@ -342,12 +346,21 @@ func (r *Reconciler) applyDecision(ctx context.Context, claimed sqlc.DeliveryRol
 		if err != nil {
 			return fmt.Errorf("marshal desired overrides for cluster %s: %w", release.ClusterID, err)
 		}
+		rendererSpec := []byte(nil)
+		if release.Version.Renderer != nil {
+			rendererSpec, err = json.Marshal(release.Version.Renderer)
+			if err != nil {
+				return fail(CodeInvariant, "renderer", "frozen renderer cannot be encoded")
+			}
+		}
 		deployment, err := queries.UpsertClusterDeploymentDesired(ctx, sqlc.UpsertClusterDeploymentDesiredParams{
 			TargetID: plan.TargetID, ClusterID: release.ClusterID,
 			CurrentRolloutID: pgtype.UUID{Bytes: plan.ID, Valid: true}, DesiredBundleVersionID: pgtype.UUID{Bytes: release.Version.BundleVersionID, Valid: true},
 			PreviousBundleVersionID: previousVersion, DesiredGeneration: release.Generation,
 			DesiredSpecDigest: release.Version.SpecDigest.String(), DesiredOverrides: desiredOverrides, DesiredRevision: release.Version.Source.Revision.Value,
-			Action: string(model.ActionApply), Phase: string(model.DeploymentPending),
+			DesiredRendererSpec:        rendererSpec,
+			DesiredConfigurationDigest: nullableDigest(release.Version.ConfigurationDigest.String()),
+			Action:                     string(model.ActionApply), Phase: string(model.DeploymentPending),
 		})
 		if err != nil {
 			return fmt.Errorf("persist desired deployment for cluster %s: %w", release.ClusterID, err)

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
-ARG VERSION=1.1.0
+ARG VERSION=1.2.0
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 

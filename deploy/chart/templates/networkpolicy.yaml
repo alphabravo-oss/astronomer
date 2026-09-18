@@ -106,16 +106,20 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.server.service.port }}
-    {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+    {{- if ne (include "astronomer.postgresMode" .) "external" }}
     - to:
         - podSelector:
             matchLabels:
+              {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+              cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
+              {{- else }}
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
+              {{- end }}
       ports:
         - protocol: TCP
           port: {{ $.Values.postgres.port }}
     {{- end }}
-    {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
+    {{- if ne (include "astronomer.redisMode" .) "external" }}
     - to:
         - podSelector:
             matchLabels:
@@ -123,6 +127,15 @@ spec:
       ports:
         - protocol: TCP
           port: {{ $.Values.redis.port }}
+    {{- end }}
+    {{- if eq (include "astronomer.redisMode" .) "sentinel" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 26379
     {{- end }}
     {{- if .Values.dex.enabled }}
     - to:
@@ -211,16 +224,20 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+    {{- if ne (include "astronomer.postgresMode" .) "external" }}
     - to:
         - podSelector:
             matchLabels:
+              {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+              cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
+              {{- else }}
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
+              {{- end }}
       ports:
         - protocol: TCP
           port: {{ $.Values.postgres.port }}
     {{- end }}
-    {{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
+    {{- if ne (include "astronomer.redisMode" .) "external" }}
     - to:
         - podSelector:
             matchLabels:
@@ -228,6 +245,15 @@ spec:
       ports:
         - protocol: TCP
           port: {{ $.Values.redis.port }}
+    {{- end }}
+    {{- if eq (include "astronomer.redisMode" .) "sentinel" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 26379
     {{- end }}
     {{- range $cidr := .Values.delivery.sourceResolution.egressCIDRs }}
     # Source resolution stays behind application-layer SSRF, redirect, and DNS
@@ -367,8 +393,22 @@ spec:
         - protocol: TCP
           port: 443
     {{- end }}
+    # Dex's Kubernetes storage backend reads/writes dex.coreos.com CRDs.
+    # Keep this explicit: broad connector egress is not portable for Service
+    # ClusterIP traffic because CNIs may enforce NetworkPolicy before or after
+    # kube-proxy DNAT.
+    {{- range $cidr := $kubernetesAPIEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    {{- end }}
 {{- end }}
-{{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+{{- if ne (include "astronomer.postgresMode" .) "external" }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -379,7 +419,11 @@ metadata:
 spec:
   podSelector:
     matchLabels:
+      {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+      cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
+      {{- else }}
       {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 6 }}
+      {{- end }}
   policyTypes:
     - Ingress
     - Egress
@@ -407,12 +451,59 @@ spec:
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "restore-drill") | nindent 14 }}
         {{- end }}
         {{- end }}
+        {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.postgres.port }}
+    {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+    # The CNPG controller reconciles instance state through the instance
+    # manager HTTPS endpoint. Blocking 8000 leaves failover stuck with
+    # "Instance Status Extraction Error" even though PostgreSQL replication
+    # itself remains healthy.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg
+      ports:
+        - protocol: TCP
+          port: 8000
+    {{- end }}
+  {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.postgres.port }}
+    {{- range $cidr := $kubernetesAPIEgressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    {{- end }}
+  {{- else }}
   egress: []
+  {{- end }}
 {{- end }}
-{{- if eq (include "astronomer.redisBundledEnabled" .) "true" }}
+{{- if ne (include "astronomer.redisMode" .) "external" }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -435,10 +526,80 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "worker") | nindent 14 }}
+        {{- if eq (include "astronomer.redisMode" .) "sentinel" }}
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 14 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.redis.port }}
+  {{- if eq (include "astronomer.redisMode" .) "sentinel" }}
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.redis.port }}
+  {{- else }}
   egress: []
+  {{- end }}
+{{- end }}
+{{- if eq (include "astronomer.redisMode" .) "sentinel" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "astronomer.fullname" . }}-redis-sentinel
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "server") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "worker") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 26379
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.redis.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 26379
 {{- end }}
 {{- if .Values.migrate.enabled }}
 ---
@@ -463,11 +624,15 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    {{- if eq (include "astronomer.postgresBundledEnabled" .) "true" }}
+    {{- if ne (include "astronomer.postgresMode" .) "external" }}
     - to:
         - podSelector:
             matchLabels:
+              {{- if eq (include "astronomer.postgresMode" .) "cloudNativePG" }}
+              cnpg.io/cluster: {{ include "astronomer.cnpgClusterName" . | quote }}
+              {{- else }}
               {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "postgres") | nindent 14 }}
+              {{- end }}
       ports:
         - protocol: TCP
           port: {{ $.Values.postgres.port }}

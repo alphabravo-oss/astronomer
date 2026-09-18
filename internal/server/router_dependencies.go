@@ -89,14 +89,16 @@ type ClusterResourceDependencies struct {
 
 // DeliveryDependencies owns the Flux-native desired-state and rollout API.
 type DeliveryDependencies struct {
-	Sources     *deliveryhandler.SourceHandler
-	Bundles     *deliveryhandler.BundleHandler
-	Targets     *deliveryhandler.TargetHandler
-	Rollouts    *deliveryhandler.RolloutHandler
-	Deployments *deliveryhandler.DeploymentHandler
-	Inventory   *deliveryhandler.InventoryHandler
-	System      *deliveryhandler.SystemRolloutHandler
-	GitOps      *handler.GitOpsHandler
+	Sources                *deliveryhandler.SourceHandler
+	Bundles                *deliveryhandler.BundleHandler
+	Targets                *deliveryhandler.TargetHandler
+	Rollouts               *deliveryhandler.RolloutHandler
+	Deployments            *deliveryhandler.DeploymentHandler
+	Inventory              *deliveryhandler.InventoryHandler
+	System                 *deliveryhandler.SystemRolloutHandler
+	ConfigurationTemplates *deliveryhandler.ConfigurationTemplateHandler
+	OverrideSets           *deliveryhandler.OverrideSetHandler
+	GitOps                 *handler.GitOpsHandler
 }
 
 // AdminPlatformDependencies owns management-plane and platform-wide product

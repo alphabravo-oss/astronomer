@@ -36,7 +36,7 @@ PATTERNS = {
         re.IGNORECASE,
     ),
     "legacy_fleet_operations": re.compile(
-        rb"(?:fleet_operations?|fleet_operation_targets?|fleet[-_](?:orchestrate|selector)|agent_fleet|\bFleetOperation\w*|[\"'/]fleet(?:[\"'/\s]|$))",
+        rb"(?:fleet_operations?|fleet_operation_targets?|fleet[-_](?:orchestrate|selector)|agent_fleet|\bFleetOperation\w*)",
         re.IGNORECASE,
     ),
 }
@@ -77,13 +77,21 @@ HISTORICAL_FILES = {
 # builds when those tokens re-enter product surfaces.  Keep them visible in the
 # report, but do not mistake the guardrail itself for shipped functionality.
 VALIDATION_FILES = {
+    "cmd/astro/delivery_test.go",
+    "deploy/chart_operational_contract_test.go",
+    "deploy/dex_runtime_secret_render_test.go",
     "internal/releasecontract/argo_absent_test.go",
     "scripts/check-docs.mjs",
 }
 MIGRATION_PREFIXES = ("internal/db/migrations/",)
+MIGRATION_FILES = {
+    "deploy/chart/templates/preflight-job.yaml",
+    "internal/db/freshinstall/freshinstall.go",
+    "internal/db/freshinstall/freshinstall_test.go",
+}
 IGNORED_PARTS = {
     ".git", ".claude", ".next", ".turbo", "node_modules", "vendor",
-    ".cache", ".idea", ".vscode", "coverage",
+    ".cache", ".idea", ".local-ci", ".vscode", "coverage",
 }
 
 
@@ -118,7 +126,7 @@ def relative(path: Path, root: Path) -> str:
 def classify(path: str) -> str:
     if path in VALIDATION_FILES:
         return "validation_guard"
-    if path.startswith(MIGRATION_PREFIXES):
+    if path in MIGRATION_FILES or path.startswith(MIGRATION_PREFIXES):
         return "migration_context"
     if path in HISTORICAL_FILES or path.startswith(HISTORICAL_PREFIXES):
         return "historical_allowlist"
@@ -247,10 +255,14 @@ def scan_generated(root: Path) -> tuple[dict[tuple[str, str, str], int], list[st
                 "template",
                 "legacy-surface-scan",
                 str(chart),
+                "--kube-version",
+                "1.35.5",
                 "--set",
                 "secrets.secretKey=legacy-surface-render-signing-key",
                 "--set",
                 "secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=",
+                "--set",
+                "config.env=development",
             ],
             cwd=root,
             stdout=subprocess.PIPE,

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/tasks"
 	"github.com/hibiken/asynq"
 )
@@ -441,9 +442,9 @@ func NewWorker(redisURL string, concurrency int, log *slog.Logger, runtime Stand
 	if err != nil {
 		return nil, fmt.Errorf("compose standalone worker handlers: %w", err)
 	}
-	redisOpt, err := asynq.ParseRedisURI(redisURL)
+	redisOpt, err := redisconn.Parse(redisURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
+		return nil, fmt.Errorf("parse REDIS_URL: %w", err)
 	}
 
 	config := asynq.Config{
@@ -489,9 +490,9 @@ const defaultTunnelWorkerConcurrency = 8
 // short tunnel RPC across the platform. A non-positive value falls back to
 // defaultTunnelWorkerConcurrency.
 func NewTunnelWorker(redisURL string, concurrency int, log *slog.Logger, runtime TunnelRuntime, errorHandlers ...asynq.ErrorHandler) (*Worker, error) {
-	redisOpt, err := asynq.ParseRedisURI(redisURL)
+	redisOpt, err := redisconn.Parse(redisURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
+		return nil, fmt.Errorf("parse REDIS_URL: %w", err)
 	}
 	if concurrency <= 0 {
 		concurrency = defaultTunnelWorkerConcurrency

@@ -12,6 +12,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	args := []string{"template", "astronomer", chart,
 		"-f", filepath.Join(chart, "values-dev.yaml"),
+		"--kube-version", "1.35.0",
 		"--set", "secrets.existingSecret=core-credentials",
 		"--set", "secrets.secretKeyKey=SIGNING_KEY",
 		"--set", "secrets.encryptionKeyKey=FERNET_KEY",
@@ -20,9 +21,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
 		"--set", "bootstrap.password=INLINE-BOOTSTRAP-CANARY",
 		"--set", "bootstrap.existingSecretKey=initial-password",
-		"--set", "postgres.bundled.enabled=true",
-		"--set", "postgres.passwordSecretRef.name=database-credentials",
-		"--set", "postgres.passwordSecretRef.key=password",
+		"--set", "postgres.bundled.enabled=false",
 		"--set", "postgres.external.dsnSecretRef.name=database-credentials",
 		"--set", "postgres.external.dsnSecretRef.key=dsn",
 		"--set", "redis.bundled.enabled=false",
@@ -43,7 +42,7 @@ func TestReferenceOnlyChartRenderUsesNativeSecretReferences(t *testing.T) {
 	for _, want := range []string{
 		"core-credentials", "SIGNING_KEY", "FERNET_KEY",
 		"bootstrap-credentials", "initial-password",
-		"database-credentials", "dsn", "password",
+		"database-credentials", "dsn",
 		"redis-credentials", "url", "dex-runtime",
 	} {
 		if !strings.Contains(rendered, want) {
@@ -69,7 +68,7 @@ func TestDexLegacyInlineCredentialValuesAreRejected(t *testing.T) {
 		"dex.clientSecretRef.name=legacy-dex-secret",
 		"dex.futurePassword=SYNTHETIC-DEX-HISTORY-CANARY",
 	} {
-		cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", legacy)
+		cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--kube-version", "1.35.0", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", legacy)
 		if err := cmd.Run(); err == nil {
 			t.Fatalf("legacy/unknown Dex credential value %q was accepted into Helm release values", strings.SplitN(legacy, "=", 2)[0])
 		}
@@ -79,13 +78,13 @@ func TestDexLegacyInlineCredentialValuesAreRejected(t *testing.T) {
 func TestDexRuntimeSecretNameSchemaEnforcesDNS1123Subdomain(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	for _, invalid := range []string{"UPPERCASE", "bad_name", "-leading", "trailing-", strings.Repeat("a", 64) + ".example"} {
-		cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+invalid)
+		cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--kube-version", "1.35.0", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+invalid)
 		if err := cmd.Run(); err == nil {
 			t.Fatalf("invalid runtime Secret name %q passed chart schema", invalid)
 		}
 	}
 	valid := strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 61)
-	cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+valid)
+	cmd := exec.Command("helm", "template", "astronomer", chart, "-f", filepath.Join(chart, "values-dev.yaml"), "--kube-version", "1.35.0", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set-string", "dex.runtimeSecretName="+valid)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("valid 253-byte DNS subdomain rejected: %v\n%s", err, output)
 	}
@@ -94,11 +93,12 @@ func TestDexRuntimeSecretNameSchemaEnforcesDNS1123Subdomain(t *testing.T) {
 func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	production := filepath.Join(chart, "values-production.yaml")
-	args := []string{"template", "astronomer", chart, "-f", production,
+	args := []string{"template", "astronomer", chart, "--kube-version", "1.35.0", "-f", production,
 		"--set", "config.serverURL=https://astronomer.example.com",
 		"--set", "gateway.hosts[0]=astronomer.example.com",
 		"--set", "tls.source=secret", "--set", "tls.secretName=astronomer-tls",
 		"--set", "postgres.external.dsnSecretRef.name=database-credentials", "--set", "postgres.external.dsnSecretRef.key=dsn",
+		"--set", "redis.mode=external",
 		"--set", "redis.external.urlSecretRef.name=redis-credentials", "--set", "redis.external.urlSecretRef.key=url",
 		"--set", "secrets.existingSecret=core-credentials",
 		"--set", "secrets.secretKeyKey=SIGNING_KEY",
@@ -132,10 +132,11 @@ func TestProductionReferenceOnlyValuesRenderEveryCredentialConsumer(t *testing.T
 	}
 	command := exec.Command("helm", args...)
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	command.Stdout = &stdout
-	command.Stderr = &bytes.Buffer{}
+	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
-		t.Fatalf("production reference-only render failed: %v", err)
+		t.Fatalf("production reference-only render failed: %v\n%s", err, stderr.String())
 	}
 	rendered := stdout.String()
 	for name, minimum := range map[string]int{

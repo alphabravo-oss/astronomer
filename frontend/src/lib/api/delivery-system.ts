@@ -28,27 +28,37 @@ export type DeliverySystemCompatibility = CamelizeKeys<
 >;
 
 export type DeliveryEstateCount = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateCount"]
+  OpenAPIComponents["schemas"]["DeliveryFleetCount"]
 >;
 
 export type DeliveryEstateSummary = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateSummary"]
+  OpenAPIComponents["schemas"]["DeliveryFleetSummary"]
 >;
 
 export type DeliveryEstateCluster = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateCluster"]
+  OpenAPIComponents["schemas"]["DeliveryFleetCluster"]
 >;
 
 export type DeliveryEstateAttention = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateAttention"]
+  OpenAPIComponents["schemas"]["DeliveryFleetAttention"]
 >;
 
 export type DeliveryEstateDistributions = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateDistributions"]
+  OpenAPIComponents["schemas"]["DeliveryFleetDistributions"]
 >;
 
 export type DeliveryEstate = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstate"]
+  OpenAPIComponents["schemas"]["DeliveryFleet"]
+>;
+
+export type DeliverySystemComponent = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliverySystemComponent"]
+>;
+export type DeliverySystemVolume = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliverySystemVolume"]
+>;
+export type DeliverySystemResource = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliverySystemResource"]
 >;
 
 function mapInventory(
@@ -64,7 +74,7 @@ function mapCompatibility(
 ): DeliverySystemCompatibility {
   return camelizeKeys(wire) as unknown as DeliverySystemCompatibility;
 }
-function mapEstate(wire: DeliveryContracts["DeliveryEstate"]): DeliveryEstate {
+function mapEstate(wire: DeliveryContracts["DeliveryFleet"]): DeliveryEstate {
   return camelizeKeys(wire) as unknown as DeliveryEstate;
 }
 
@@ -87,7 +97,7 @@ export async function getDeliverySystemCompatibility(signal?: AbortSignal) {
 }
 
 export async function getDeliveryEstate(signal?: AbortSignal) {
-  const wire = await generated.getDeliveryEstate({ signal });
+  const wire = await generated.getDeliveryFleet({ signal });
   return mapEstate(requireEnvelopeData(wire, "delivery response"));
 }
 
@@ -103,14 +113,14 @@ const systemCompatibilityMatchesWire: AssertNoPhantomWireKeys<
   DeliverySystemCompatibility,
   DeliveryContracts["DeliverySystemCompatibility"]
 > = true;
-const deliveryFleetMatchesWire: AssertNoPhantomWireKeys<
+const deliveryEstateMatchesWire: AssertNoPhantomWireKeys<
   DeliveryEstate,
-  DeliveryContracts["DeliveryEstate"]
+  DeliveryContracts["DeliveryFleet"]
 > = true;
 
 void [
   controllerInventoryMatchesWire,
   clusterInventoryMatchesWire,
   systemCompatibilityMatchesWire,
-  deliveryFleetMatchesWire,
+  deliveryEstateMatchesWire,
 ];

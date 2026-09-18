@@ -10,13 +10,13 @@ package catalog
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
 	"sigs.k8s.io/yaml"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -28,6 +28,8 @@ const BlessedSource = "catalog.yaml"
 
 const catalogAPIVersion = "catalog.astronomer.io/v1"
 const catalogKind = "Catalog"
+const applicationCatalogAPIVersion = "catalog.astronomer.dev/v1alpha1"
+const applicationCatalogKind = "ApplicationCatalog"
 
 var validCategories = map[string]bool{
 	"security": true, "storage": true, "observability": true, "networking": true,
@@ -36,6 +38,7 @@ var validCategories = map[string]bool{
 
 var repoNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 var versionPolicyRe = regexp.MustCompile(`^last:[0-9]+$`)
+var immutableGitRevisionRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // CatalogDoc mirrors catalog.yaml. sigs.k8s.io/yaml routes through JSON, so the
 // struct tags are json tags.
@@ -61,6 +64,57 @@ type CatalogEntry struct {
 	Icon        string `json:"icon"`
 	MgmtSafe    *bool  `json:"mgmtSafe"` // pointer: absent => true
 	Versions    string `json:"versions"`
+}
+
+// ApplicationCatalogDoc is the v1 application-store index. The complete
+// application object is persisted as JSON by ReconcileApplicationCatalogV1;
+// these typed fields are the minimum trust and lifecycle contract validated
+// before any database mutation occurs.
+type ApplicationCatalogDoc struct {
+	APIVersion   string                    `json:"apiVersion"`
+	Kind         string                    `json:"kind"`
+	Metadata     ApplicationCatalogMeta    `json:"metadata"`
+	Repositories []ApplicationCatalogRepo  `json:"repositories"`
+	Applications []ApplicationCatalogEntry `json:"applications"`
+}
+
+type ApplicationCatalogMeta struct {
+	SchemaVersion        int    `json:"schemaVersion"`
+	MinimumReaderVersion int    `json:"minimumReaderVersion"`
+	Name                 string `json:"name"`
+	DisplayName          string `json:"displayName"`
+	Description          string `json:"description"`
+	Channel              string `json:"channel"`
+}
+
+type ApplicationCatalogRepo struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	URL  string `json:"url"`
+}
+
+type ApplicationCatalogEntry struct {
+	Slug        string                 `json:"slug"`
+	Name        string                 `json:"name"`
+	Category    string                 `json:"category"`
+	SupportTier string                 `json:"supportTier"`
+	Artifact    ApplicationCatalogHelm `json:"artifact"`
+	Lifecycle   map[string]bool        `json:"lifecycle"`
+}
+
+type ApplicationCatalogHelm struct {
+	Type       string `json:"type"`
+	Repository string `json:"repository"`
+	Chart      string `json:"chart"`
+	Version    string `json:"version"`
+}
+
+type ApplicationCatalogStore interface {
+	ReconcileApplicationCatalogV1(context.Context, sqlc.ReconcileApplicationCatalogV1Params) (int64, error)
+}
+
+type applicationCatalogFailureStore interface {
+	RecordApplicationCatalogSyncFailure(context.Context, sqlc.RecordApplicationCatalogSyncFailureParams) error
 }
 
 // IsMgmtSafe defaults to true when the field is omitted.
@@ -123,6 +177,64 @@ func ParseCatalog(data []byte) (*CatalogDoc, error) {
 	return &doc, nil
 }
 
+func ParseApplicationCatalog(data []byte) (*ApplicationCatalogDoc, error) {
+	var doc ApplicationCatalogDoc
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parse application catalog: %w", err)
+	}
+	if doc.APIVersion != applicationCatalogAPIVersion || doc.Kind != applicationCatalogKind {
+		return nil, fmt.Errorf("unsupported application catalog %q/%q", doc.APIVersion, doc.Kind)
+	}
+	if strings.TrimSpace(doc.Metadata.Name) == "" {
+		return nil, fmt.Errorf("application catalog metadata.name is required")
+	}
+	if doc.Metadata.SchemaVersion != 1 {
+		return nil, fmt.Errorf("unsupported application catalog schema version %d", doc.Metadata.SchemaVersion)
+	}
+	if doc.Metadata.MinimumReaderVersion > 1 {
+		return nil, fmt.Errorf("application catalog requires reader version %d", doc.Metadata.MinimumReaderVersion)
+	}
+	if len(doc.Repositories) == 0 || len(doc.Applications) == 0 {
+		return nil, fmt.Errorf("application catalog requires repositories and applications")
+	}
+	repositories := make(map[string]ApplicationCatalogRepo, len(doc.Repositories))
+	for index, repository := range doc.Repositories {
+		if !repoNameRe.MatchString(repository.Name) {
+			return nil, fmt.Errorf("repository %d has invalid name %q", index, repository.Name)
+		}
+		if repository.Type != "helm" {
+			return nil, fmt.Errorf("repository %q has unsupported type %q", repository.Name, repository.Type)
+		}
+		if !strings.HasPrefix(repository.URL, "https://") {
+			return nil, fmt.Errorf("repository %q must use HTTPS", repository.Name)
+		}
+		if _, exists := repositories[repository.Name]; exists {
+			return nil, fmt.Errorf("duplicate repository %q", repository.Name)
+		}
+		repositories[repository.Name] = repository
+	}
+	seen := make(map[string]struct{}, len(doc.Applications))
+	for index, application := range doc.Applications {
+		if !repoNameRe.MatchString(application.Slug) || application.Name == "" || application.Category == "" {
+			return nil, fmt.Errorf("application %d has invalid identity or category", index)
+		}
+		if _, exists := seen[application.Slug]; exists {
+			return nil, fmt.Errorf("duplicate application slug %q", application.Slug)
+		}
+		seen[application.Slug] = struct{}{}
+		if application.Artifact.Type != "helm" || application.Artifact.Chart == "" || application.Artifact.Version == "" {
+			return nil, fmt.Errorf("application %q must pin a Helm chart version", application.Slug)
+		}
+		if _, exists := repositories[application.Artifact.Repository]; !exists {
+			return nil, fmt.Errorf("application %q references unknown repository %q", application.Slug, application.Artifact.Repository)
+		}
+		if !application.Lifecycle["install"] || !application.Lifecycle["uninstall"] {
+			return nil, fmt.Errorf("application %q must declare install and uninstall lifecycle support", application.Slug)
+		}
+	}
+	return &doc, nil
+}
+
 // Reconcile upserts the default repos and replaces this source's blessed-chart
 // rows with the catalog's. Not transactional: a crash mid-reconcile is healed
 // by the next boot, which re-applies the same desired state.
@@ -167,30 +279,71 @@ func Reconcile(ctx context.Context, store BlessedStore, doc *CatalogDoc) error {
 // Load fetches catalog.yaml from url, validates and reconciles it. A blank url
 // is a no-op (returns 0). Any fetch/parse error is returned so the caller can
 // log and keep the previously-reconciled rows.
-func Load(ctx context.Context, store BlessedStore, client *http.Client, url string) (int, error) {
-	if strings.TrimSpace(url) == "" {
+func Load(ctx context.Context, store BlessedStore, client *http.Client, url string) (count int, err error) {
+	return LoadSource(ctx, store, SourceOptions{URL: url, Clients: SourceClients{Public: client, Mirror: client}})
+}
+
+// LoadSource retrieves a catalog from immutable HTTPS or OCI storage, applies
+// an optional verified mirror rewrite, and only then reconciles the document.
+func LoadSource(ctx context.Context, store BlessedStore, options SourceOptions) (count int, err error) {
+	if strings.TrimSpace(options.URL) == "" {
 		return 0, nil
 	}
-	// SSRF guard: the blessed-catalog URL is operator-supplied and fetched
-	// server-side; refuse loopback/internal/metadata targets before dialing.
-	if err := httpclient.GuardPublicHost(url); err != nil {
-		return 0, fmt.Errorf("blessed catalog host is not a permitted public address")
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	startedAt := time.Now()
+	defer func() {
+		observeCatalogSync(options.URL, count, err, time.Since(startedAt))
+		if err == nil {
+			return
+		}
+		if recorder, ok := store.(applicationCatalogFailureStore); ok {
+			// Failure recording is deliberately best effort: a remote outage must
+			// never replace the useful fetch/validation error or stop startup.
+			_ = recorder.RecordApplicationCatalogSyncFailure(ctx, sqlc.RecordApplicationCatalogSyncFailureParams{
+				SourceUrl: options.URL,
+				SyncError: err.Error(),
+			})
+		}
+	}()
+	body, revision, identity, verificationStatus, err := fetchCatalogSource(ctx, options)
 	if err != nil {
 		return 0, err
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("fetch catalog %s: %w", url, err)
+	var header struct {
+		APIVersion string `json:"apiVersion"`
+		Kind       string `json:"kind"`
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("fetch catalog %s: HTTP %d", url, resp.StatusCode)
+	if err := yaml.Unmarshal(body, &header); err != nil {
+		return 0, fmt.Errorf("parse catalog header: %w", err)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4MiB ceiling
-	if err != nil {
-		return 0, err
+	if header.APIVersion == applicationCatalogAPIVersion && header.Kind == applicationCatalogKind {
+		if _, err := ParseApplicationCatalog(body); err != nil {
+			return 0, err
+		}
+		applicationStore, ok := store.(ApplicationCatalogStore)
+		if !ok {
+			return 0, fmt.Errorf("application catalog persistence is not configured")
+		}
+		if revision == "" || identity == "" {
+			return 0, fmt.Errorf("application catalog source must have an immutable Git, document, or OCI digest identity")
+		}
+		// Persist the complete validated document, not the deliberately narrow
+		// validation struct above. Re-marshalling doc drops presentation fields
+		// (icons, summaries, keywords, UI hints, maintainers, and links) that are
+		// intentionally not needed by ParseApplicationCatalog's trust checks.
+		document, err := yaml.YAMLToJSON(body)
+		if err != nil {
+			return 0, fmt.Errorf("preserve application catalog document: %w", err)
+		}
+		digest := fmt.Sprintf("sha256:%x", sha256.Sum256(body))
+		count, err := applicationStore.ReconcileApplicationCatalogV1(ctx, sqlc.ReconcileApplicationCatalogV1Params{
+			Document:             document,
+			SourceUrl:            options.URL,
+			SourceRevision:       revision,
+			IndexDigest:          digest,
+			VerificationStatus:   verificationStatus,
+			VerificationIdentity: identity,
+		})
+		return int(count), err
 	}
 	doc, err := ParseCatalog(body)
 	if err != nil {
@@ -200,4 +353,19 @@ func Load(ctx context.Context, store BlessedStore, client *http.Client, url stri
 		return 0, err
 	}
 	return len(doc.Entries), nil
+}
+
+func immutableCatalogIdentity(sourceURL string) (string, string) {
+	parts := strings.Split(strings.Trim(sourceURL, "/"), "/")
+	for index, part := range parts {
+		if !immutableGitRevisionRe.MatchString(part) {
+			continue
+		}
+		identity := "git:" + part
+		if index >= 2 {
+			identity = fmt.Sprintf("github:%s/%s@%s", parts[index-2], parts[index-1], part)
+		}
+		return part, identity
+	}
+	return "", ""
 }

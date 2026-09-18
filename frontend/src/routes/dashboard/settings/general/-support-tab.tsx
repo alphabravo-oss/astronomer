@@ -140,7 +140,7 @@ export function SupportTab() {
             aria-live="polite"
           >
             {operation.status === "succeeded" ? (
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              <CheckCircle2 className="h-4 w-4 text-status-success" />
             ) : collecting ? (
               <LoaderCircle className="h-4 w-4 animate-spin" />
             ) : null}

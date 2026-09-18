@@ -279,6 +279,19 @@ spec:
                   done
                   unset IFS
 
+                  # Delivery/catalog tables may legitimately be empty. Verify
+                  # their schema exists separately from the populated baseline.
+                  IFS=','
+                  for TBL in ${REQUIRED_TABLES}; do
+                    EXISTS="$(psql "${SIDECAR_URL}" -v ON_ERROR_STOP=1 -At -c \
+                      "SELECT to_regclass('public.${TBL}') IS NOT NULL;" 2>/dev/null || echo 'f')"
+                    if [ "${EXISTS}" != "t" ]; then
+                      fail_and_exit "required table ${TBL} missing from restored DB"
+                    fi
+                    echo "  ${TBL}: schema present"
+                  done
+                  unset IFS
+
                   # The exact key bundle referenced by the authenticated
                   # manifest was AEAD-verified and safely extracted before the
                   # database restore. Prove it matches application ciphertext.
@@ -345,6 +358,8 @@ spec:
                   value: {{ .Values.managementRestoreDrill.expectedMinSchemaVersion | quote }}
                 - name: EXPECTED_TABLES
                   value: {{ join "," .Values.managementRestoreDrill.expectedTables | quote }}
+                - name: REQUIRED_TABLES
+                  value: {{ join "," .Values.managementRestoreDrill.requiredTables | quote }}
                 {{- if .Values.managementRestoreDrill.decryptCheck.enabled }}
                 - name: DECRYPT_CHECK_ENABLED
                   value: "1"
@@ -359,12 +374,12 @@ spec:
                 # write at the end. Pulled from the same secret /
                 # configmap the rest of the chart uses so air-gapped
                 # installs don't need a separate wire-up.
-                {{- if .Values.postgres.external.dsnSecretRef.name }}
+                {{- if include "astronomer.databaseSecretName" . }}
                 - name: PROD_DATABASE_URL
                   valueFrom:
                     secretKeyRef:
-                      name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                      key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                      name: {{ include "astronomer.databaseSecretName" . | quote }}
+                      key: {{ include "astronomer.databaseSecretKey" . | quote }}
                 {{- else }}
                 - name: PROD_DATABASE_URL
                   valueFrom:

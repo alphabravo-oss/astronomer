@@ -10,6 +10,9 @@ import {
   Layers,
   Radio,
   Route as RouteIcon,
+  ServerCog,
+  SlidersHorizontal,
+  SlidersVertical,
 } from "lucide-react";
 import { useCluster } from "@/lib/hooks/clusters";
 import { cn } from "@/lib/utils";
@@ -27,6 +30,24 @@ const tabs = [
   { key: "sources", label: "Sources", icon: GitBranch, segment: "/sources" },
   { key: "bundles", label: "Bundles", icon: Boxes, segment: "/bundles" },
   { key: "targets", label: "Targets", icon: Crosshair, segment: "/targets" },
+  {
+    key: "configuration-templates",
+    label: "Templates",
+    icon: SlidersHorizontal,
+    segment: "/configuration-templates",
+  },
+  {
+    key: "override-sets",
+    label: "Overrides",
+    icon: SlidersVertical,
+    segment: "/override-sets",
+  },
+  {
+    key: "system-components",
+    label: "System Components",
+    icon: ServerCog,
+    segment: "/system-components",
+  },
 ] as const;
 
 function ClusterDeliveryLayout() {
@@ -61,7 +82,7 @@ function ClusterDeliveryLayout() {
         className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Back to delivery fleet
+        Back to delivery estate
       </RouterLink>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">

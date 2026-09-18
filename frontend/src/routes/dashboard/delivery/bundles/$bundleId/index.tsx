@@ -97,7 +97,15 @@ export function BundleDetailPage() {
       header: "Version",
       accessor: (row) => (
         <div>
-          <p className="font-medium">{row.version}</p>
+          <RouterLink
+            to={withProjectQuery(
+              `/dashboard/delivery/bundles/${bundleId}/versions/${row.id}`,
+              projectId,
+            )}
+            className="font-medium text-link hover:underline"
+          >
+            {row.version}
+          </RouterLink>
           <p className="font-mono text-xs text-muted-foreground">{row.id}</p>
         </div>
       ),

@@ -33,7 +33,7 @@ export function NameLink({
     <RouterLink
       to={detailHref(clusterId, resourceType, namespace, name)}
       onClick={(event) => event.stopPropagation()}
-      className="font-medium text-foreground font-mono text-xs hover:underline"
+      className="app-table-entity-link app-table-primary"
     >
       {name}
     </RouterLink>
@@ -76,6 +76,8 @@ export function makeRowClick<T extends { name: string; namespace?: string }>(
       toastPermissionDenied(read);
       return;
     }
-    void navigate({ to: detailHref(clusterId, resourceType, row.namespace, row.name) });
+    void navigate({
+      to: detailHref(clusterId, resourceType, row.namespace, row.name),
+    });
   };
 }

@@ -32,6 +32,8 @@ func TestDeliveryControlRoutesRequireAuthentication(t *testing.T) {
 		{http.MethodPost, "/api/v1/delivery/deployments/" + resourceID.String() + "/resume/?project_id=" + projectID.String()},
 		{http.MethodGet, "/api/v1/delivery/clusters/" + resourceID.String() + "/inventory/?project_id=" + projectID.String()},
 		{http.MethodGet, "/api/v1/delivery/estate/"},
+		{http.MethodGet, "/api/v1/delivery/configuration-templates/?project_id=" + projectID.String()},
+		{http.MethodGet, "/api/v1/delivery/override-sets/?project_id=" + projectID.String()},
 		{http.MethodGet, "/api/v1/delivery/system/compatibility/"},
 	}
 	for _, test := range paths {

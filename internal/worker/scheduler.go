@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/hibiken/asynq"
 )
 
@@ -21,9 +22,9 @@ type SchedulerFeatures struct {
 }
 
 func NewScheduler(redisURL string, log *slog.Logger, configured ...SchedulerFeatures) (*Scheduler, error) {
-	redisOpt, err := asynq.ParseRedisURI(redisURL)
+	redisOpt, err := redisconn.Parse(redisURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse REDIS_URL %q: %w", redisURL, err)
+		return nil, fmt.Errorf("parse REDIS_URL: %w", err)
 	}
 	features := SchedulerFeatures{}
 	if len(configured) > 0 {

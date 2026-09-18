@@ -40,12 +40,15 @@ interface Props {
    *  redirect.
    */
   onReady?: () => void;
+  /** Limit the embedded view without creating a second adoption navigator. */
+  view?: "all" | "readiness" | "plan";
 }
 
 export function RegistrationTimeline({
   clusterId,
   embedded = false,
   onReady,
+  view = "all",
 }: Props) {
   const queryClient = useQueryClient();
   const streamStatus = useLiveStatus();
@@ -116,7 +119,17 @@ export function RegistrationTimeline({
     );
   }
 
-  const steps = (status?.steps ?? []).map((step) => ({
+  const visibleSteps = (status?.steps ?? []).filter((step) => {
+    const readiness = [
+      "cluster_created",
+      "manifest_generated",
+      "agent_connected",
+    ].includes(step.stepName);
+    if (view === "readiness") return readiness;
+    if (view === "plan") return !readiness;
+    return true;
+  });
+  const steps = visibleSteps.map((step) => ({
     id: step.id,
     label: step.label,
     status: timelineStatus(step.status),

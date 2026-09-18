@@ -144,7 +144,12 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			// handler can bind ?project_id to the exact tenant before returning.
 			catalogBrowse := requireCollectionPermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
 			r.With(catalogBrowse).Get("/charts/", deps.AdminPlatform.Catalog.ListCharts)
+			r.With(catalogBrowse).Get("/discovery/", deps.AdminPlatform.Catalog.ListCatalogUserDiscovery)
+			r.With(catalogBrowse).Get("/applications/", deps.AdminPlatform.Catalog.ListCatalogApplications)
+			r.With(catalogRead).Get("/application-sources/", deps.AdminPlatform.Catalog.ListApplicationCatalogSources)
+			r.With(catalogBrowse).Post("/applications/preview/", deps.AdminPlatform.Catalog.PreviewCatalogInstallation)
 			r.With(catalogBrowse).Get("/charts/{id}/", deps.AdminPlatform.Catalog.GetChart)
+			r.With(catalogBrowse, mutationWriteScope).Put("/charts/{id}/favorite/", deps.AdminPlatform.Catalog.SetCatalogChartFavorite)
 			r.With(catalogBrowse).Get("/charts/{id}/versions/", deps.AdminPlatform.Catalog.ListChartVersions)
 			r.With(catalogBrowse).Get("/charts/{id}/readme/", deps.AdminPlatform.Catalog.GetChartReadme)
 			r.With(catalogBrowse).Get("/charts/{id}/values/", deps.AdminPlatform.Catalog.GetChartValues)
@@ -158,6 +163,7 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			// empty-scope tokens pass through; RBAC stays primary underneath).
 			r.With(mutationWriteScope).Post("/installed/", deps.AdminPlatform.Catalog.CreateInstalledChart)
 			r.With(mutationWriteScope).Put("/installed/{id}/upgrade/", deps.AdminPlatform.Catalog.UpgradeInstalledChart)
+			r.Get("/installed/{id}/upgrade-versions/", deps.AdminPlatform.Catalog.ListInstalledChartUpgradeVersions)
 			r.With(mutationWriteScope).Post("/installed/{id}/rollback/", deps.AdminPlatform.Catalog.RollbackInstalledChart)
 			r.With(mutationWriteScope).Delete("/installed/{id}/", deps.AdminPlatform.Catalog.DeleteInstalledChart)
 			r.Get("/installed/{id}/values/", deps.AdminPlatform.Catalog.GetInstalledChartValues)

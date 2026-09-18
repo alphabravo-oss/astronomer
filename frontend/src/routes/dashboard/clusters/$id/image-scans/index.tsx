@@ -83,7 +83,7 @@ const SEVERITIES: {
   {
     key: "low",
     label: "Low",
-    tone: "bg-sky-500/10 text-sky-800 border-sky-500/30 dark:text-sky-300",
+    tone: "bg-status-info/10 text-status-info border-status-info/30",
   },
 ];
 
@@ -96,7 +96,7 @@ function cveToneFor(severity: CVESeverity): string {
     case "MEDIUM":
       return "bg-status-warning/10 text-status-warning border-status-warning/30";
     case "LOW":
-      return "bg-sky-500/10 text-sky-800 border-sky-500/30 dark:text-sky-300";
+      return "bg-status-info/10 text-status-info border-status-info/30";
     default:
       return "bg-muted text-muted-foreground border-border";
   }
@@ -468,7 +468,7 @@ function ClusterImageScansPage() {
                       <span className="text-status-warning tabular-nums">
                         {p.medium}
                       </span>
-                      <span className="text-sky-500 tabular-nums">{p.low}</span>
+                      <span className="text-status-info tabular-nums">{p.low}</span>
                     </span>
                   </div>
                 ))}
@@ -703,7 +703,7 @@ function ClusterImageScansPage() {
                               {p.medium}
                             </span>
                             <span
-                              className="text-sky-500 tabular-nums"
+                              className="text-status-info tabular-nums"
                               title="Low"
                             >
                               {p.low}
@@ -891,8 +891,8 @@ function ScanProgressBanner({
   // user knows their action was received.
   if (dispatchedRecently && !progress.scanning) {
     return (
-      <div className="rounded-lg border border-sky-500/40 bg-sky-500/5 px-4 py-3 text-sm flex items-center gap-3">
-        <Loader2 className="h-4 w-4 animate-spin text-sky-500 shrink-0" />
+      <div className="rounded-lg border border-status-info/40 bg-status-info/5 px-4 py-3 text-sm flex items-center gap-3">
+        <Loader2 className="h-4 w-4 animate-spin text-status-info shrink-0" />
         <span className="text-foreground">
           Rescan dispatched — waiting for trivy-operator to spawn new scan jobs…
         </span>
@@ -904,8 +904,8 @@ function ScanProgressBanner({
     // a different scanner like NeuVector, or none). Make this a calm, clearly
     // actionable notice rather than an error — and point straight to Tools.
     return (
-      <div className="rounded-lg border border-sky-500/40 bg-sky-500/5 px-4 py-3 text-sm flex items-start gap-3">
-        <ShieldAlert className="h-4 w-4 text-sky-500 shrink-0 mt-0.5" />
+      <div className="rounded-lg border border-status-info/40 bg-status-info/5 px-4 py-3 text-sm flex items-start gap-3">
+        <ShieldAlert className="h-4 w-4 text-status-info shrink-0 mt-0.5" />
         <div className="flex-1">
           <div className="font-medium text-foreground">
             Image scanning isn&apos;t enabled on this cluster
@@ -933,10 +933,10 @@ function ScanProgressBanner({
     const done = progress.completedJobs + progress.failedJobs;
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
     return (
-      <div className="rounded-lg border border-sky-500/40 bg-sky-500/5 px-4 py-3 text-sm space-y-2">
+      <div className="rounded-lg border border-status-info/40 bg-status-info/5 px-4 py-3 text-sm space-y-2">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-foreground">
-            <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
+            <Loader2 className="h-4 w-4 animate-spin text-status-info" />
             <span className="font-medium">
               Scanning {progress.activeJobs} workload
               {progress.activeJobs === 1 ? "" : "s"}…
@@ -951,9 +951,9 @@ function ScanProgressBanner({
             {pct}%
           </span>
         </div>
-        <div className="h-1.5 w-full rounded-full bg-sky-500/15 overflow-hidden">
+        <div className="h-1.5 w-full rounded-full bg-status-info/15 overflow-hidden">
           <div
-            className="h-full bg-sky-500 transition-all duration-500"
+            className="h-full bg-status-info transition-all duration-500"
             style={{ width: total > 0 ? `${Math.max(5, pct)}%` : "50%" }}
           />
         </div>

@@ -23,7 +23,8 @@ const deliveryRouteMaxBodyBytes = 1 << 20
 // dedicated resource permission at that exact project.
 func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 	if deps.Delivery.Sources == nil && deps.Delivery.Bundles == nil && deps.Delivery.Targets == nil &&
-		deps.Delivery.Rollouts == nil && deps.Delivery.Deployments == nil && deps.Delivery.Inventory == nil && deps.Delivery.System == nil {
+		deps.Delivery.Rollouts == nil && deps.Delivery.Deployments == nil && deps.Delivery.Inventory == nil &&
+		deps.Delivery.System == nil && deps.Delivery.ConfigurationTemplates == nil && deps.Delivery.OverrideSets == nil {
 		return
 	}
 
@@ -35,7 +36,7 @@ func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 	r.Route("/delivery", func(r chi.Router) {
 		if deps.Delivery.Inventory != nil {
 			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryInventory, rbac.VerbRead)).
-				Get("/estate/", deps.Delivery.Inventory.Estate)
+				Get("/estate/", deps.Delivery.Inventory.Fleet)
 			r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryPlatform, rbac.VerbRead)).
 				Get("/system/compatibility/", deps.Delivery.Inventory.SystemCompatibility)
 		}
@@ -63,6 +64,27 @@ func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 
 		r.Group(func(r chi.Router) {
 			r.Use(deliveryProjectScope)
+
+			if deps.Delivery.OverrideSets != nil {
+				r.Route("/override-sets", func(r chi.Router) {
+					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbList)).Get("/", deps.Delivery.OverrideSets.List)
+					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbCreate), idempotency).Post("/", deps.Delivery.OverrideSets.Create)
+					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Get("/{id}/", deps.Delivery.OverrideSets.Get)
+					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbUpdate), idempotency).Put("/{id}/", deps.Delivery.OverrideSets.Update)
+					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbDelete), idempotency).Delete("/{id}/", deps.Delivery.OverrideSets.Delete)
+					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Post("/effective/", deps.Delivery.OverrideSets.Effective)
+				})
+			}
+
+			if deps.Delivery.ConfigurationTemplates != nil {
+				r.Route("/configuration-templates", func(r chi.Router) {
+					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbList)).Get("/", deps.Delivery.ConfigurationTemplates.List)
+					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbCreate), idempotency).Post("/", deps.Delivery.ConfigurationTemplates.Create)
+					r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Get("/{id}/", deps.Delivery.ConfigurationTemplates.Get)
+					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbUpdate), idempotency).Put("/{id}/", deps.Delivery.ConfigurationTemplates.Update)
+					r.With(writeProjects, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbDelete), idempotency).Delete("/{id}/", deps.Delivery.ConfigurationTemplates.Delete)
+				})
+			}
 
 			if deps.Delivery.Sources != nil {
 				r.Route("/sources", func(r chi.Router) {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -102,7 +103,54 @@ func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	if events, err := h.queries.ListCatalogOperationEvents(r.Context(), op.ID); err == nil {
 		resp["events"] = catalogOperationEventsResponse(events)
 	}
+	h.enrichCatalogOperationDeliveryStatus(r.Context(), op, resp)
 	RespondJSON(w, http.StatusOK, resp)
+}
+
+// enrichCatalogOperationDeliveryStatus projects the asynchronous Flux
+// workload outcome without holding a catalog worker claim for the rollout's
+// full convergence deadline.
+func (h *CatalogHandler) enrichCatalogOperationDeliveryStatus(ctx context.Context, op sqlc.CatalogOperation, resp map[string]any) {
+	if h.delivery == nil || op.TargetType != "installed_chart" {
+		return
+	}
+	installationID, err := uuid.Parse(op.TargetKey)
+	if err != nil {
+		return
+	}
+	installation, err := h.queries.GetInstalledChartByID(ctx, installationID)
+	if err != nil || !installation.RequestID.Valid {
+		return
+	}
+	status, err := h.delivery.Status(ctx, uuid.UUID(installation.RequestID.Bytes))
+	if err != nil {
+		return
+	}
+	phase := strings.TrimSpace(status.Phase)
+	if phase == "" {
+		phase = "pending"
+	}
+	resp["deliveryPhase"] = phase
+	events, _ := resp["events"].([]map[string]any)
+	level, message, terminal := "info", "Flux is reconciling the application", false
+	switch phase {
+	case "ready":
+		resp["status"], message, terminal = "completed", "Flux reports the application workloads ready", true
+	case "removed":
+		resp["status"], message, terminal = "completed", "Flux reports the application removed", true
+	case "failed", "timed_out", "rollback_failed":
+		resp["status"], level, message, terminal = "failed", "error", "Flux could not converge the application", true
+	case "degraded":
+		resp["status"], level, message = "running", "warn", "Flux reports degraded workloads and is continuing remediation"
+	default:
+		resp["status"] = "running"
+	}
+	events = append(events, map[string]any{
+		"id": "delivery-" + phase, "level": level, "stage": "workloads", "message": message,
+		"detail":    map[string]any{"phase": phase, "errorCode": status.LastErrorCode, "terminal": terminal},
+		"createdAt": time.Now().UTC().Format(time.RFC3339),
+	})
+	resp["events"] = events
 }
 
 func (h *CatalogHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
@@ -401,8 +449,8 @@ func (h *CatalogHandler) claimPendingCatalogOperations(ctx context.Context) []cl
 }
 
 func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOperation) error {
-	if h.helm == nil {
-		return errors.New("helm requester not configured")
+	if h.delivery == nil {
+		return errors.New("Flux catalog application delivery is not configured")
 	}
 	var env catalogOperationEnvelope
 	if err := json.Unmarshal(op.Payload, &env); err != nil {
@@ -417,80 +465,85 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 		return err
 	}
 	clusterID := installation.ClusterID.String()
+	if op.OperationType != "install" && !installation.RequestID.Valid {
+		return errors.New("catalog application has no Flux delivery ownership; direct Helm compatibility is disabled")
+	}
 	// Every path below writes a terminal installed-chart status (success or
 	// failed_*), so one deferred publish covers them all (P4.9).
 	defer h.publishCatalogReleaseChanged(clusterID, installation.ID.String())
 	switch op.OperationType {
 	case "install":
-		h.recordCatalogOperationEvent(ctx, op.ID, "info", "install", "installing catalog release", map[string]any{
-			"clusterId":   clusterID,
-			"releaseName": installation.ReleaseName,
-			"namespace":   installation.Namespace,
+		projectID, parseErr := uuid.Parse(env.ProjectID)
+		if parseErr != nil {
+			return fmt.Errorf("parse catalog project identity: %w", parseErr)
+		}
+		chartVersionID, parseErr := uuid.Parse(env.ChartVersionID)
+		if parseErr != nil {
+			return fmt.Errorf("parse catalog chart version identity: %w", parseErr)
+		}
+		h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "creating Flux-managed catalog application", map[string]any{
+			"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
 		})
-		result, err := h.sendHelm(ctx, clusterID, protocol.MsgHelmInstall, env)
-		if err != nil {
+		result, deliveryErr := h.delivery.Install(ctx, catalogapp.InstallRequest{
+			InstallationID: installation.ID, ProjectID: projectID, ClusterID: installation.ClusterID,
+			ChartVersionID: chartVersionID, ChartName: env.ChartName, ChartVersion: env.Version,
+			ChartDigest: env.ChartDigest, RepositoryURL: env.RepoURL, ReleaseName: installation.ReleaseName,
+			Namespace: installation.Namespace, ValuesYAML: env.ValuesOverride, Description: env.Notes,
+			ActorID: op.CreatedByID, IdempotencyKey: op.ID.String(),
+		})
+		if deliveryErr != nil {
 			_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_install", Revision: installation.Revision})
-			return err
+			return deliveryErr
 		}
-		return h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{
-			ID:       installation.ID,
-			Status:   normalizeToolStatus(result.Status),
-			Revision: int32(result.Revision),
+		h.recordCatalogOperationEvent(ctx, op.ID, "info", "rollout", "Flux rollout queued", map[string]any{
+			"targetId": result.TargetID.String(), "rolloutId": result.RolloutID.String(),
 		})
+		return nil
 	case "upgrade":
-		h.recordCatalogOperationEvent(ctx, op.ID, "info", "upgrade", "upgrading catalog release", map[string]any{
-			"clusterId":   clusterID,
-			"releaseName": installation.ReleaseName,
-			"namespace":   installation.Namespace,
+		chartVersionID, parseErr := uuid.Parse(env.ChartVersionID)
+		if parseErr != nil {
+			return fmt.Errorf("parse catalog chart version identity: %w", parseErr)
+		}
+		h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "advancing Flux-managed catalog application", map[string]any{
+			"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
 		})
-		result, err := h.sendHelm(ctx, clusterID, protocol.MsgHelmUpgrade, env)
-		if err != nil {
+		result, deliveryErr := h.delivery.Upgrade(ctx, catalogapp.InstallRequest{
+			InstallationID: installation.ID, ClusterID: installation.ClusterID,
+			ChartVersionID: chartVersionID, ChartName: env.ChartName, ChartVersion: env.Version,
+			ChartDigest: env.ChartDigest, RepositoryURL: env.RepoURL, ReleaseName: installation.ReleaseName,
+			Namespace: installation.Namespace, ValuesYAML: env.ValuesOverride, Description: env.Notes,
+			ActorID: op.CreatedByID, IdempotencyKey: op.ID.String(),
+		})
+		if deliveryErr != nil {
 			_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_upgrade", Revision: installation.Revision})
-			return err
+			return deliveryErr
 		}
-		_, err = h.queries.UpdateInstalledChartValues(ctx, sqlc.UpdateInstalledChartValuesParams{
-			ID:             installation.ID,
-			ValuesOverride: env.ValuesOverride,
-			Status:         normalizeToolStatus(result.Status),
-			Revision:       int32(result.Revision),
+		h.recordCatalogOperationEvent(ctx, op.ID, "info", "rollout", "Flux upgrade rollout queued", map[string]any{
+			"targetId": result.TargetID.String(), "rolloutId": result.RolloutID.String(),
 		})
-		return err
+		return nil
 	case "rollback":
-		h.recordCatalogOperationEvent(ctx, op.ID, "info", "rollback", "rolling back catalog release", map[string]any{
-			"clusterId":        clusterID,
-			"releaseName":      installation.ReleaseName,
-			"namespace":        installation.Namespace,
-			"rollbackRevision": env.RollbackRevision,
+		h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "rolling back Flux application to its previous immutable version", map[string]any{
+			"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
 		})
-		result, err := h.helm.Do(ctx, clusterID, protocol.MsgHelmRollback, protocol.HelmRequestPayload{
-			ReleaseName: installation.ReleaseName,
-			Namespace:   installation.Namespace,
-			Revision:    env.RollbackRevision,
-		})
-		if err != nil {
+		result, deliveryErr := h.delivery.Rollback(ctx, installation.ID, op.CreatedByID, op.ID.String())
+		if deliveryErr != nil {
 			_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_rollback", Revision: installation.Revision})
-			return err
+			return deliveryErr
 		}
-		return h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{
-			ID:       installation.ID,
-			Status:   normalizeToolStatus(result.Status),
-			Revision: int32(result.Revision),
+		h.recordCatalogOperationEvent(ctx, op.ID, "info", "rollout", "Flux rollback rollout queued", map[string]any{
+			"targetId": result.TargetID.String(), "rolloutId": result.RolloutID.String(),
 		})
+		return nil
 	case "uninstall":
-		h.recordCatalogOperationEvent(ctx, op.ID, "info", "uninstall", "uninstalling catalog release", map[string]any{
-			"clusterId":   clusterID,
-			"releaseName": installation.ReleaseName,
-			"namespace":   installation.Namespace,
+		h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "requesting fenced Flux application deletion", map[string]any{
+			"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
 		})
-		_, err := h.helm.Do(ctx, clusterID, protocol.MsgHelmUninstall, protocol.HelmRequestPayload{
-			ReleaseName: installation.ReleaseName,
-			Namespace:   installation.Namespace,
-		})
-		if err != nil {
+		if deliveryErr := h.delivery.Uninstall(ctx, installation.ID, op.CreatedByID); deliveryErr != nil {
 			_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_uninstall", Revision: installation.Revision})
-			return err
+			return deliveryErr
 		}
-		return h.queries.DeleteInstalledChart(ctx, installation.ID)
+		return nil
 	default:
 		return fmt.Errorf("unsupported catalog operation type: %s", op.OperationType)
 	}
@@ -633,6 +686,7 @@ func (h *CatalogHandler) runReconciler(ctx context.Context) {
 
 type catalogOperationEnvelope struct {
 	InstalledChartID string `json:"installedChartId"`
+	ProjectID        string `json:"projectId,omitempty"`
 	ClusterID        string `json:"clusterId"`
 	ReleaseName      string `json:"releaseName"`
 	Namespace        string `json:"namespace"`
@@ -640,6 +694,7 @@ type catalogOperationEnvelope struct {
 	ChartName        string `json:"chartName,omitempty"`
 	RepoURL          string `json:"repoUrl,omitempty"`
 	Version          string `json:"version,omitempty"`
+	ChartDigest      string `json:"chartDigest,omitempty"`
 	ValuesOverride   string `json:"valuesOverride,omitempty"`
 	Notes            string `json:"notes,omitempty"`
 	RollbackRevision int    `json:"rollbackRevision,omitempty"`

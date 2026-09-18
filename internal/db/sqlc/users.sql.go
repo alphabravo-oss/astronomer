@@ -56,23 +56,24 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 }
 
 const createBootstrapAdmin = `-- name: CreateBootstrapAdmin :one
-INSERT INTO users (email, username, first_name, last_name, password, is_active, is_staff, is_superuser)
-VALUES ($1, $2, $3, $4, $5, true, true, true)
+INSERT INTO users (email, username, first_name, last_name, password, is_active, is_staff, is_superuser, must_change_password)
+VALUES ($1, $2, $3, $4, $5, true, true, true, $6)
 RETURNING id, email, username, first_name, last_name, password, is_active, is_staff, is_superuser, last_login, date_joined, created_at, updated_at, must_change_password, failed_login_count, failed_login_at, locked_until, locked_reason, tokens_invalidated_at, quota_plan, quota_overrides, is_service
 `
 
 type CreateBootstrapAdminParams struct {
-	Email     string `json:"email"`
-	Username  string `json:"username"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Password  string `json:"password"`
+	Email              string `json:"email"`
+	Username           string `json:"username"`
+	FirstName          string `json:"first_name"`
+	LastName           string `json:"last_name"`
+	Password           string `json:"password"`
+	MustChangePassword bool   `json:"must_change_password"`
 }
 
 // Creates the initial admin user that ensure_admin runs on first boot of a
 // fresh database. The password is either operator-provided through Helm values
-// or auto-generated into the bootstrap Secret; the account is immediately
-// usable and is not forced through a first-login password reset.
+// or auto-generated into the bootstrap Secret. The chart may require a
+// first-login password reset, so persist that choice atomically with creation.
 func (q *Queries) CreateBootstrapAdmin(ctx context.Context, arg CreateBootstrapAdminParams) (User, error) {
 	row := q.db.QueryRow(ctx, createBootstrapAdmin,
 		arg.Email,
@@ -80,6 +81,7 @@ func (q *Queries) CreateBootstrapAdmin(ctx context.Context, arg CreateBootstrapA
 		arg.FirstName,
 		arg.LastName,
 		arg.Password,
+		arg.MustChangePassword,
 	)
 	var i User
 	err := row.Scan(

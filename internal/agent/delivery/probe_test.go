@@ -37,6 +37,46 @@ func readyController(t *testing.T, name string, remoteBases bool) *appsv1.Deploy
 	}
 }
 
+func TestDeploymentReadyAllowsSourceControllerWarmStandby(t *testing.T) {
+	controller := readyController(t, "source-controller", false)
+	replicas := int32(2)
+	controller.Spec.Replicas = &replicas
+	controller.Status.ReadyReplicas = 1
+	controller.Status.AvailableReplicas = 1
+	controller.Status.Conditions = []appsv1.DeploymentCondition{{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionFalse}}
+	if !deploymentReady(controller, "source-controller") {
+		t.Fatal("source-controller leader plus warm standby must be considered ready")
+	}
+	if deploymentReady(controller, "helm-controller") {
+		t.Fatal("ordinary controller with an unavailable Deployment condition must be degraded")
+	}
+}
+
+func TestClusterProbeRejectsMislabeledControllerVersion(t *testing.T) {
+	objects := []runtime.Object{
+		readyController(t, "source-controller", false),
+		readyController(t, "kustomize-controller", true),
+		readyController(t, "helm-controller", false),
+	}
+	objects[0].(*appsv1.Deployment).Labels["app.kubernetes.io/version"] = "v0.0.0"
+	client := clientfake.NewClientset(objects...)
+	discovery := &fake.FakeDiscovery{Fake: &ktesting.Fake{}, FakedServerVersion: &version.Info{GitVersion: "v1.35.2"}}
+	for _, apiVersion := range expectedFluxAPIs {
+		discovery.Resources = append(discovery.Resources, &metav1.APIResourceList{GroupVersion: apiVersion})
+	}
+	probe, err := NewClusterProbe(client, discovery, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inventory, _, err := probe.Inspect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inventory.Ready {
+		t.Fatalf("mislabeled controller was reported ready: %#v", inventory)
+	}
+}
+
 func TestClusterProbeAdvertisesOnlyObservedHardenedDistribution(t *testing.T) {
 	objects := []runtime.Object{
 		readyController(t, "source-controller", false),

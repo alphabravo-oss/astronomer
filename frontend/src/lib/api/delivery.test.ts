@@ -25,7 +25,7 @@ vi.mock("@/lib/api/generated/client", async (importOriginal) => {
     postDeliverySources: vi.fn(),
     postDeliveryTargetsByIdPreview: vi.fn(),
     postDeliveryTargetsByIdRollouts: vi.fn(),
-    getDeliveryEstate: vi.fn(),
+    getDeliveryFleet: vi.fn(),
     executeOpenAPIOperationWithResponse: vi.fn(),
   };
 });
@@ -281,10 +281,10 @@ describe("delivery generated API boundary", () => {
   });
 
   it("maps the estate scoreboard from raw wire casing", async () => {
-    vi.mocked(generated.getDeliveryEstate).mockResolvedValueOnce({
+    vi.mocked(generated.getDeliveryFleet).mockResolvedValueOnce({
       data: {
         summary: {
-          adopted_clusters: 2,
+          managed_clusters: 2,
           flux_ready: 2,
           incompatible: 0,
           disconnected: 0,
@@ -307,7 +307,7 @@ describe("delivery generated API boundary", () => {
 
     await expect(getDeliveryEstate()).resolves.toEqual(
       expect.objectContaining({
-        summary: expect.objectContaining({ adoptedClusters: 2, fluxReady: 2 }),
+        summary: expect.objectContaining({ managedClusters: 2, fluxReady: 2 }),
       }),
     );
   });

@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -29,6 +31,90 @@ func catalogProjectQuery(w http.ResponseWriter, r *http.Request) (uuid.UUID, boo
 	return projectID, true, true
 }
 
+func catalogClusterQuery(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("cluster_id"))
+	if raw == "" {
+		return uuid.Nil, false, true
+	}
+	clusterID, err := uuid.Parse(raw)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster_id query param")
+		return uuid.Nil, false, false
+	}
+	return clusterID, true, true
+}
+
+var errCatalogClusterAccessDenied = errors.New("catalog access denied for cluster")
+
+func (h *CatalogHandler) visibleCatalogRepositoryIDs(ctx context.Context, clusterID uuid.UUID) ([]uuid.UUID, error) {
+	resolver, ok := h.queries.(catalogClusterProjectResolver)
+	if !ok {
+		return nil, errors.New("cluster project resolver is unavailable")
+	}
+	projects, err := resolver.ListProjectsByCluster(ctx, sqlc.ListProjectsByClusterParams{ClusterID: clusterID, QueryLimit: 10_000, QueryOffset: 0})
+	if err != nil {
+		return nil, err
+	}
+	bindings, restricted, err := h.authz.bindingsForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	allows := func(projectID uuid.UUID, namespace string) bool {
+		if !restricted {
+			return true
+		}
+		return h.authz.engine != nil && h.authz.engine.CheckPermission(bindings, rbac.ResourceCatalog, rbac.VerbRead, clusterID, projectID, namespace)
+	}
+	clusterWide := allows(uuid.Nil, "")
+	allowedProjects := make([]uuid.UUID, 0, len(projects))
+	for _, project := range projects {
+		allowed := clusterWide || allows(project.ID, "")
+		if !allowed {
+			if lister, ok := h.queries.(catalogProjectNamespaceLister); ok {
+				namespaces, listErr := lister.ListProjectNamespaces(ctx, project.ID)
+				if listErr != nil {
+					return nil, listErr
+				}
+				for _, item := range namespaces {
+					if item.ClusterID == clusterID && allows(project.ID, item.Namespace) {
+						allowed = true
+						break
+					}
+				}
+			}
+		}
+		if allowed {
+			allowedProjects = append(allowedProjects, project.ID)
+		}
+	}
+	if !clusterWide && len(allowedProjects) == 0 {
+		return nil, errCatalogClusterAccessDenied
+	}
+	repositories := make(map[uuid.UUID]struct{})
+	globals, err := h.queries.ListGlobalHelmRepositories(ctx, sqlc.ListGlobalHelmRepositoriesParams{Limit: 10_000, Offset: 0})
+	if err != nil {
+		return nil, err
+	}
+	for _, repository := range globals {
+		repositories[repository.ID] = struct{}{}
+	}
+	for _, projectID := range allowedProjects {
+		rows, listErr := h.queries.ListCatalogsForProject(ctx, projectID)
+		if listErr != nil {
+			return nil, listErr
+		}
+		for _, repository := range rows {
+			repositories[repository.ID] = struct{}{}
+		}
+	}
+	ids := make([]uuid.UUID, 0, len(repositories))
+	for id := range repositories {
+		ids = append(ids, id)
+	}
+	slices.SortFunc(ids, func(left, right uuid.UUID) int { return strings.Compare(left.String(), right.String()) })
+	return ids, nil
+}
+
 func catalogVisibilityAllowsRead(visibility sqlc.CatalogVisibility) bool {
 	switch visibility {
 	case sqlc.CatalogVisibilityOwn, sqlc.CatalogVisibilitySubscribedPublic, sqlc.CatalogVisibilityPublic:
@@ -43,10 +129,30 @@ func (h *CatalogHandler) authorizeChartRead(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return false
 	}
+	clusterID, clusterScoped, ok := catalogClusterQuery(w, r)
+	if !ok {
+		return false
+	}
 	repository, err := h.queries.GetHelmRepositoryByID(r.Context(), chart.RepositoryID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart repository not found")
 		return false
+	}
+	if clusterScoped && !projectScoped {
+		visible, visibilityErr := h.visibleCatalogRepositoryIDs(r.Context(), clusterID)
+		if visibilityErr != nil {
+			if errors.Is(visibilityErr, errCatalogClusterAccessDenied) {
+				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have catalog access on this cluster")
+			} else {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to resolve cluster catalog visibility")
+			}
+			return false
+		}
+		if !slices.Contains(visible, repository.ID) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+			return false
+		}
+		return true
 	}
 	if !projectScoped {
 		if repository.OwnerProjectID.Valid {
@@ -89,10 +195,14 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	clusterID, clusterScoped, ok := catalogClusterQuery(w, r)
+	if !ok {
+		return
+	}
 	if projectScoped && !h.authz.authorizeProjectAction(w, r, pid, rbac.ResourceCatalog, rbac.VerbRead) {
 		return
 	}
-	if !projectScoped && !h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead) {
+	if !projectScoped && !clusterScoped && !h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead) {
 		return
 	}
 
@@ -155,6 +265,34 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if clusterScoped {
+		repoIDs, visibilityErr := h.visibleCatalogRepositoryIDs(r.Context(), clusterID)
+		if visibilityErr != nil {
+			if errors.Is(visibilityErr, errCatalogClusterAccessDenied) {
+				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have catalog access on this cluster")
+			} else {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve cluster catalogs")
+			}
+			return
+		}
+		if len(repoIDs) == 0 {
+			paging.Write(w, []sqlc.HelmChart{}, paging.Exact(0, int(limit), int(offset), 0))
+			return
+		}
+		charts, listErr := h.queries.ListChartsByRepositoryIDs(r.Context(), sqlc.ListChartsByRepositoryIDsParams{RepositoryIds: repoIDs, QueryLimit: limit, QueryOffset: offset})
+		if listErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster charts")
+			return
+		}
+		total, countErr := h.queries.CountChartsByRepositoryIDs(r.Context(), repoIDs)
+		if countErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count cluster charts")
+			return
+		}
+		paging.Write(w, charts, paging.Exact(total, int(limit), int(offset), len(charts)))
+		return
+	}
+
 	charts, err := h.queries.ListHelmCharts(r.Context(), sqlc.ListHelmChartsParams{
 		Limit:  limit,
 		Offset: offset,
@@ -188,6 +326,13 @@ func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 	}
 	if !h.authorizeChartRead(w, r, chart) {
 		return
+	}
+	if user := currentUserUUID(r); user.Valid {
+		if store, ok := h.queries.(catalogUserDiscoveryQuerier); ok {
+			_ = store.RecordCatalogChartView(r.Context(), sqlc.RecordCatalogChartViewParams{
+				UserID: uuid.UUID(user.Bytes), ChartID: chart.ID,
+			})
+		}
 	}
 
 	RespondJSON(w, http.StatusOK, chart)

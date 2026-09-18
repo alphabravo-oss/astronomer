@@ -158,6 +158,8 @@ export const operationMetadata = {
   "deleteClusterTemplatesById": { method: "DELETE", path: "/api/v1/cluster-templates/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteControllersSilencesById": { method: "DELETE", path: "/api/v1/controllers/silences/{id}", pathParameters: ["id"], responseType: "json" },
   "deleteDeliveryBundlesById": { method: "DELETE", path: "/api/v1/delivery/bundles/{id}/", pathParameters: ["id"], responseType: "json" },
+  "deleteDeliveryConfigurationTemplatesById": { method: "DELETE", path: "/api/v1/delivery/configuration-templates/{id}/", pathParameters: ["id"], responseType: "json" },
+  "deleteDeliveryOverrideSetsById": { method: "DELETE", path: "/api/v1/delivery/override-sets/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteDeliverySourcesById": { method: "DELETE", path: "/api/v1/delivery/sources/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteDeliveryTargetsById": { method: "DELETE", path: "/api/v1/delivery/targets/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteLoggingOutputsById": { method: "DELETE", path: "/api/v1/logging/outputs/{id}", pathParameters: ["id"], responseType: "json" },
@@ -273,14 +275,18 @@ export const operationMetadata = {
   "getBackupsSchedulesById": { method: "GET", path: "/api/v1/backups/schedules/{id}", pathParameters: ["id"], responseType: "json" },
   "getBackupsStorage": { method: "GET", path: "/api/v1/backups/storage", pathParameters: [], responseType: "json" },
   "getBackupsStorageById": { method: "GET", path: "/api/v1/backups/storage/{id}", pathParameters: ["id"], responseType: "json" },
+  "getCatalogApplications": { method: "GET", path: "/api/v1/catalog/applications/", pathParameters: [], responseType: "json" },
+  "getCatalogApplicationSources": { method: "GET", path: "/api/v1/catalog/application-sources/", pathParameters: [], responseType: "json" },
   "getCatalogCharts": { method: "GET", path: "/api/v1/catalog/charts/", pathParameters: [], responseType: "json" },
   "getCatalogChartsById": { method: "GET", path: "/api/v1/catalog/charts/{id}/", pathParameters: ["id"], responseType: "json" },
   "getCatalogChartsByIdReadme": { method: "GET", path: "/api/v1/catalog/charts/{id}/readme/", pathParameters: ["id"], responseType: "json" },
   "getCatalogChartsByIdValues": { method: "GET", path: "/api/v1/catalog/charts/{id}/values/", pathParameters: ["id"], responseType: "json" },
   "getCatalogChartsByIdVersions": { method: "GET", path: "/api/v1/catalog/charts/{id}/versions/", pathParameters: ["id"], responseType: "json" },
   "getCatalogControllerStatus": { method: "GET", path: "/api/v1/catalog/controller/status/", pathParameters: [], responseType: "json" },
+  "getCatalogDiscovery": { method: "GET", path: "/api/v1/catalog/discovery/", pathParameters: [], responseType: "json" },
   "getCatalogInstalled": { method: "GET", path: "/api/v1/catalog/installed/", pathParameters: [], responseType: "json" },
   "getCatalogInstalledByIdRevisions": { method: "GET", path: "/api/v1/catalog/installed/{id}/revisions", pathParameters: ["id"], responseType: "json" },
+  "getCatalogInstalledByIdUpgradeVersions": { method: "GET", path: "/api/v1/catalog/installed/{id}/upgrade-versions/", pathParameters: ["id"], responseType: "json" },
   "getCatalogInstalledByIdValues": { method: "GET", path: "/api/v1/catalog/installed/{id}/values/", pathParameters: ["id"], responseType: "json" },
   "getCatalogOperations": { method: "GET", path: "/api/v1/catalog/operations/", pathParameters: [], responseType: "json" },
   "getCatalogOperationsById": { method: "GET", path: "/api/v1/catalog/operations/{id}/", pathParameters: ["id"], responseType: "json" },
@@ -392,10 +398,14 @@ export const operationMetadata = {
   "getDeliveryBundlesByIdVersions": { method: "GET", path: "/api/v1/delivery/bundles/{id}/versions/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryBundlesByIdVersionsByVersionId": { method: "GET", path: "/api/v1/delivery/bundles/{id}/versions/{versionId}/", pathParameters: ["id","versionId"], responseType: "json" },
   "getDeliveryClustersByClusterIdInventory": { method: "GET", path: "/api/v1/delivery/clusters/{clusterId}/inventory/", pathParameters: ["clusterId"], responseType: "json" },
+  "getDeliveryConfigurationTemplates": { method: "GET", path: "/api/v1/delivery/configuration-templates/", pathParameters: [], responseType: "json" },
+  "getDeliveryConfigurationTemplatesById": { method: "GET", path: "/api/v1/delivery/configuration-templates/{id}/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryDeployments": { method: "GET", path: "/api/v1/delivery/deployments/", pathParameters: [], responseType: "json" },
   "getDeliveryDeploymentsById": { method: "GET", path: "/api/v1/delivery/deployments/{id}/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryDeploymentsByIdEvents": { method: "GET", path: "/api/v1/delivery/deployments/{id}/events/", pathParameters: ["id"], responseType: "json" },
-  "getDeliveryEstate": { method: "GET", path: "/api/v1/delivery/estate/", pathParameters: [], responseType: "json" },
+  "getDeliveryFleet": { method: "GET", path: "/api/v1/delivery/estate/", pathParameters: [], responseType: "json" },
+  "getDeliveryOverrideSets": { method: "GET", path: "/api/v1/delivery/override-sets/", pathParameters: [], responseType: "json" },
+  "getDeliveryOverrideSetsById": { method: "GET", path: "/api/v1/delivery/override-sets/{id}/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryRollouts": { method: "GET", path: "/api/v1/delivery/rollouts/", pathParameters: [], responseType: "json" },
   "getDeliveryRolloutsById": { method: "GET", path: "/api/v1/delivery/rollouts/{id}/", pathParameters: ["id"], responseType: "json" },
   "getDeliveryRolloutsByIdClusters": { method: "GET", path: "/api/v1/delivery/rollouts/{id}/clusters/", pathParameters: ["id"], responseType: "json" },
@@ -427,7 +437,6 @@ export const operationMetadata = {
   "getNodeOperation": { method: "GET", path: "/api/v1/nodes/{cluster_id}/{node_name}/operations/{id}/", pathParameters: ["cluster_id","node_name","id"], responseType: "json" },
   "getObservabilityGrafana": { method: "GET", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
   "getObservabilityGrafanaProxy": { method: "GET", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
-  "getObservabilityGrafanaTicket": { method: "GET", path: "/api/v1/observability/grafana-ticket", pathParameters: [], responseType: "json" },
   "getPlatformHealthSummary": { method: "GET", path: "/api/v1/platform/health-summary", pathParameters: [], responseType: "json" },
   "getProjects": { method: "GET", path: "/api/v1/projects/", pathParameters: [], responseType: "json" },
   "getProjectsById": { method: "GET", path: "/api/v1/projects/{id}/", pathParameters: ["id"], responseType: "json" },
@@ -612,6 +621,7 @@ export const operationMetadata = {
   "postBackupsSchedulesByIdTriggerNow": { method: "POST", path: "/api/v1/backups/schedules/{id}/trigger-now", pathParameters: ["id"], responseType: "json" },
   "postBackupsStorage": { method: "POST", path: "/api/v1/backups/storage", pathParameters: [], responseType: "json" },
   "postBackupsStorageByIdTestConnection": { method: "POST", path: "/api/v1/backups/storage/{id}/test-connection", pathParameters: ["id"], responseType: "json" },
+  "postCatalogApplicationsPreview": { method: "POST", path: "/api/v1/catalog/applications/preview/", pathParameters: [], responseType: "json" },
   "postCatalogInstalled": { method: "POST", path: "/api/v1/catalog/installed/", pathParameters: [], responseType: "json" },
   "postCatalogInstalledByIdRollback": { method: "POST", path: "/api/v1/catalog/installed/{id}/rollback/", pathParameters: ["id"], responseType: "json" },
   "postCatalogOperationsByIdRetry": { method: "POST", path: "/api/v1/catalog/operations/{id}/retry/", pathParameters: ["id"], responseType: "json" },
@@ -667,9 +677,12 @@ export const operationMetadata = {
   "postControllersSilences": { method: "POST", path: "/api/v1/controllers/silences", pathParameters: [], responseType: "json" },
   "postDeliveryBundles": { method: "POST", path: "/api/v1/delivery/bundles/", pathParameters: [], responseType: "json" },
   "postDeliveryBundlesByIdVersions": { method: "POST", path: "/api/v1/delivery/bundles/{id}/versions/", pathParameters: ["id"], responseType: "json" },
+  "postDeliveryConfigurationTemplates": { method: "POST", path: "/api/v1/delivery/configuration-templates/", pathParameters: [], responseType: "json" },
   "postDeliveryDeploymentsByIdReconcile": { method: "POST", path: "/api/v1/delivery/deployments/{id}/reconcile/", pathParameters: ["id"], responseType: "json" },
   "postDeliveryDeploymentsByIdResume": { method: "POST", path: "/api/v1/delivery/deployments/{id}/resume/", pathParameters: ["id"], responseType: "json" },
   "postDeliveryDeploymentsByIdSuspend": { method: "POST", path: "/api/v1/delivery/deployments/{id}/suspend/", pathParameters: ["id"], responseType: "json" },
+  "postDeliveryOverrideSets": { method: "POST", path: "/api/v1/delivery/override-sets/", pathParameters: [], responseType: "json" },
+  "postDeliveryOverrideSetsEffective": { method: "POST", path: "/api/v1/delivery/override-sets/effective/", pathParameters: [], responseType: "json" },
   "postDeliveryRolloutsByIdAbort": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/abort/", pathParameters: ["id"], responseType: "json" },
   "postDeliveryRolloutsByIdApprove": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/approve/", pathParameters: ["id"], responseType: "json" },
   "postDeliveryRolloutsByIdPause": { method: "POST", path: "/api/v1/delivery/rollouts/{id}/pause/", pathParameters: ["id"], responseType: "json" },
@@ -784,6 +797,7 @@ export const operationMetadata = {
   "putAuthMePreferences": { method: "PUT", path: "/api/v1/auth/me/preferences/", pathParameters: [], responseType: "json" },
   "putBackupsSchedulesById": { method: "PUT", path: "/api/v1/backups/schedules/{id}", pathParameters: ["id"], responseType: "json" },
   "putBackupsStorageById": { method: "PUT", path: "/api/v1/backups/storage/{id}", pathParameters: ["id"], responseType: "json" },
+  "putCatalogChartsByIdFavorite": { method: "PUT", path: "/api/v1/catalog/charts/{id}/favorite/", pathParameters: ["id"], responseType: "json" },
   "putCatalogInstalledByIdUpgrade": { method: "PUT", path: "/api/v1/catalog/installed/{id}/upgrade/", pathParameters: ["id"], responseType: "json" },
   "putCatalogRepositoriesById": { method: "PUT", path: "/api/v1/catalog/repositories/{id}/", pathParameters: ["id"], responseType: "json" },
   "putChartsByChartIdRatingsByRatingId": { method: "PUT", path: "/api/v1/charts/{chart_id}/ratings/{rating_id}", pathParameters: ["chart_id","rating_id"], responseType: "json" },
@@ -800,6 +814,8 @@ export const operationMetadata = {
   "putClustersByIdRegistry": { method: "PUT", path: "/api/v1/clusters/{id}/registry", pathParameters: ["id"], responseType: "json" },
   "putClusterTemplatesById": { method: "PUT", path: "/api/v1/cluster-templates/{id}", pathParameters: ["id"], responseType: "json" },
   "putControllersPolicy": { method: "PUT", path: "/api/v1/controllers/policy", pathParameters: [], responseType: "json" },
+  "putDeliveryConfigurationTemplatesById": { method: "PUT", path: "/api/v1/delivery/configuration-templates/{id}/", pathParameters: ["id"], responseType: "json" },
+  "putDeliveryOverrideSetsById": { method: "PUT", path: "/api/v1/delivery/override-sets/{id}/", pathParameters: ["id"], responseType: "json" },
   "putLoggingOutputsById": { method: "PUT", path: "/api/v1/logging/outputs/{id}", pathParameters: ["id"], responseType: "json" },
   "putLoggingPipelinesById": { method: "PUT", path: "/api/v1/logging/pipelines/{id}", pathParameters: ["id"], responseType: "json" },
   "putLoggingSavedSearchesById": { method: "PUT", path: "/api/v1/logging/saved-searches/{id}", pathParameters: ["id"], responseType: "json" },
@@ -1506,6 +1522,16 @@ export function deleteDeliveryBundlesById(args: OpenAPIArguments<"deleteDelivery
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function deleteDeliveryConfigurationTemplatesById(args: OpenAPIArguments<"deleteDeliveryConfigurationTemplatesById">) {
+  const operationId = "deleteDeliveryConfigurationTemplatesById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function deleteDeliveryOverrideSetsById(args: OpenAPIArguments<"deleteDeliveryOverrideSetsById">) {
+  const operationId = "deleteDeliveryOverrideSetsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function deleteDeliverySourcesById(args: OpenAPIArguments<"deleteDeliverySourcesById">) {
   const operationId = "deleteDeliverySourcesById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -2081,6 +2107,16 @@ export function getBackupsStorageById(args: OpenAPIArguments<"getBackupsStorageB
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getCatalogApplications(args?: OpenAPIArguments<"getCatalogApplications">) {
+  const operationId = "getCatalogApplications" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getCatalogApplicationSources(args?: OpenAPIArguments<"getCatalogApplicationSources">) {
+  const operationId = "getCatalogApplicationSources" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function getCatalogCharts(args?: OpenAPIArguments<"getCatalogCharts">) {
   const operationId = "getCatalogCharts" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -2111,6 +2147,11 @@ export function getCatalogControllerStatus(args?: OpenAPIArguments<"getCatalogCo
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
+export function getCatalogDiscovery(args?: OpenAPIArguments<"getCatalogDiscovery">) {
+  const operationId = "getCatalogDiscovery" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function getCatalogInstalled(args?: OpenAPIArguments<"getCatalogInstalled">) {
   const operationId = "getCatalogInstalled" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -2118,6 +2159,11 @@ export function getCatalogInstalled(args?: OpenAPIArguments<"getCatalogInstalled
 
 export function getCatalogInstalledByIdRevisions(args: OpenAPIArguments<"getCatalogInstalledByIdRevisions">) {
   const operationId = "getCatalogInstalledByIdRevisions" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getCatalogInstalledByIdUpgradeVersions(args: OpenAPIArguments<"getCatalogInstalledByIdUpgradeVersions">) {
+  const operationId = "getCatalogInstalledByIdUpgradeVersions" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -2676,6 +2722,16 @@ export function getDeliveryClustersByClusterIdInventory(args: OpenAPIArguments<"
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getDeliveryConfigurationTemplates(args: OpenAPIArguments<"getDeliveryConfigurationTemplates">) {
+  const operationId = "getDeliveryConfigurationTemplates" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getDeliveryConfigurationTemplatesById(args: OpenAPIArguments<"getDeliveryConfigurationTemplatesById">) {
+  const operationId = "getDeliveryConfigurationTemplatesById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function getDeliveryDeployments(args: OpenAPIArguments<"getDeliveryDeployments">) {
   const operationId = "getDeliveryDeployments" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -2691,9 +2747,19 @@ export function getDeliveryDeploymentsByIdEvents(args: OpenAPIArguments<"getDeli
   return executeOpenAPIOperation(operationId, args);
 }
 
-export function getDeliveryEstate(args?: OpenAPIArguments<"getDeliveryEstate">) {
-  const operationId = "getDeliveryEstate" as const;
+export function getDeliveryFleet(args?: OpenAPIArguments<"getDeliveryFleet">) {
+  const operationId = "getDeliveryFleet" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getDeliveryOverrideSets(args: OpenAPIArguments<"getDeliveryOverrideSets">) {
+  const operationId = "getDeliveryOverrideSets" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function getDeliveryOverrideSetsById(args: OpenAPIArguments<"getDeliveryOverrideSetsById">) {
+  const operationId = "getDeliveryOverrideSetsById" as const;
+  return executeOpenAPIOperation(operationId, args);
 }
 
 export function getDeliveryRollouts(args: OpenAPIArguments<"getDeliveryRollouts">) {
@@ -2848,11 +2914,6 @@ export function getObservabilityGrafana(args?: OpenAPIArguments<"getObservabilit
 
 export function getObservabilityGrafanaProxy(args?: OpenAPIArguments<"getObservabilityGrafanaProxy">) {
   const operationId = "getObservabilityGrafanaProxy" as const;
-  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
-}
-
-export function getObservabilityGrafanaTicket(args?: OpenAPIArguments<"getObservabilityGrafanaTicket">) {
-  const operationId = "getObservabilityGrafanaTicket" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
@@ -3776,6 +3837,11 @@ export function postBackupsStorageByIdTestConnection(args: OpenAPIArguments<"pos
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function postCatalogApplicationsPreview(args: OpenAPIArguments<"postCatalogApplicationsPreview">) {
+  const operationId = "postCatalogApplicationsPreview" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function postCatalogInstalled(args: OpenAPIArguments<"postCatalogInstalled">) {
   const operationId = "postCatalogInstalled" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4051,6 +4117,11 @@ export function postDeliveryBundlesByIdVersions(args: OpenAPIArguments<"postDeli
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function postDeliveryConfigurationTemplates(args: OpenAPIArguments<"postDeliveryConfigurationTemplates">) {
+  const operationId = "postDeliveryConfigurationTemplates" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function postDeliveryDeploymentsByIdReconcile(args: OpenAPIArguments<"postDeliveryDeploymentsByIdReconcile">) {
   const operationId = "postDeliveryDeploymentsByIdReconcile" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4063,6 +4134,16 @@ export function postDeliveryDeploymentsByIdResume(args: OpenAPIArguments<"postDe
 
 export function postDeliveryDeploymentsByIdSuspend(args: OpenAPIArguments<"postDeliveryDeploymentsByIdSuspend">) {
   const operationId = "postDeliveryDeploymentsByIdSuspend" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postDeliveryOverrideSets(args: OpenAPIArguments<"postDeliveryOverrideSets">) {
+  const operationId = "postDeliveryOverrideSets" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function postDeliveryOverrideSetsEffective(args: OpenAPIArguments<"postDeliveryOverrideSetsEffective">) {
+  const operationId = "postDeliveryOverrideSetsEffective" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4636,6 +4717,11 @@ export function putBackupsStorageById(args: OpenAPIArguments<"putBackupsStorageB
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function putCatalogChartsByIdFavorite(args: OpenAPIArguments<"putCatalogChartsByIdFavorite">) {
+  const operationId = "putCatalogChartsByIdFavorite" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
 export function putCatalogInstalledByIdUpgrade(args: OpenAPIArguments<"putCatalogInstalledByIdUpgrade">) {
   const operationId = "putCatalogInstalledByIdUpgrade" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4713,6 +4799,16 @@ export function putClusterTemplatesById(args: OpenAPIArguments<"putClusterTempla
 
 export function putControllersPolicy(args: OpenAPIArguments<"putControllersPolicy">) {
   const operationId = "putControllersPolicy" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putDeliveryConfigurationTemplatesById(args: OpenAPIArguments<"putDeliveryConfigurationTemplatesById">) {
+  const operationId = "putDeliveryConfigurationTemplatesById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putDeliveryOverrideSetsById(args: OpenAPIArguments<"putDeliveryOverrideSetsById">) {
+  const operationId = "putDeliveryOverrideSetsById" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 

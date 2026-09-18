@@ -65,6 +65,7 @@ API authority and are cleared when the claimed work completes or is released.
 | `credential_state` | Bounded lifecycle enum. |
 | `delivery_sources.credential_key_version`, `delivery_sources.credential_epoch` | Encryption-key and rotation generation metadata. |
 | `delivery_assignment_receipts.credential_content_digest` | SHA-256 over deployment IDs and credential epochs; no secret or ciphertext input. |
+| `delivery_configuration_templates.secret_refs` | Kubernetes Secret names, keys, and Helm target paths only; secret values are never stored. |
 
 The migration classifier also sees the function-local variable `token` in
 `017_durable_audit_siem_fanout.up.sql`. It is not a database column: it holds

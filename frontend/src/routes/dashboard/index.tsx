@@ -1,10 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { ComponentPropsWithoutRef } from "react";
 
-import {
-  useClusterEstateSummary,
-  useClusters,
-} from "@/lib/hooks/clusters";
+import { useClusterEstateSummary, useClusters } from "@/lib/hooks/clusters";
 import { useActivityFeed } from "@/lib/hooks/audit";
 import { queryKeys } from "@/lib/query-keys";
 import { useAlertEventSummary } from "@/lib/hooks/alerting";
@@ -241,10 +238,10 @@ function DashboardPage() {
                             : event.type === "workload"
                               ? "bg-status-success"
                               : event.type === "deployment"
-                                ? "bg-violet-400"
+                                ? "bg-primary"
                                 : event.type === "rbac"
                                   ? "bg-status-warning"
-                                  : "bg-zinc-400"
+                                  : "bg-muted-foreground"
                         }`}
                       />
                       <div className="flex-1 min-w-0">
@@ -519,7 +516,7 @@ function HealthRow({
         ? "bg-status-warning"
         : tone === "success"
           ? "bg-status-success"
-          : "bg-zinc-400";
+          : "bg-muted-foreground";
   return (
     <DashboardLink
       destination={destination}

@@ -331,6 +331,12 @@ func validateProductionSecurityWiring(cfg *config.Config, deps RouterDependencie
 	if deps.ClusterResources.ProjectCatalogs != nil && !deps.ClusterResources.ProjectCatalogs.TransactionalAuditWired() {
 		errs = append(errs, "project catalog transactional audit is not wired")
 	}
+	if deps.Delivery.ConfigurationTemplates != nil && !deps.Delivery.ConfigurationTemplates.TransactionalAuditWired() {
+		errs = append(errs, "delivery configuration template transactional audit is not wired")
+	}
+	if deps.Delivery.OverrideSets != nil && !deps.Delivery.OverrideSets.TransactionalAuditWired() {
+		errs = append(errs, "delivery override set transactional audit is not wired")
+	}
 	if deps.AdminPlatform.SupportBundle != nil && !deps.AdminPlatform.SupportBundle.TransactionalMutationWired() {
 		errs = append(errs, "support bundle durable operation store is not wired")
 	}

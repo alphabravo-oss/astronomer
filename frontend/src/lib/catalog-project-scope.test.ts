@@ -70,7 +70,7 @@ describe("catalog project isolation", () => {
     });
 
     await getHelmCharts({ projectId: "project-1", search: "metrics" }, signal);
-    await getHelmChartVersions("project-1", "chart-1", signal);
+    await getHelmChartVersions("project-1", "chart-1", "project", signal);
 
     expect(generated.getCatalogCharts).toHaveBeenCalledWith({
       query: { project_id: "project-1", limit: 200 },

@@ -65,11 +65,11 @@ function DeliveryOverviewPage() {
   const { projectId, projects, projectQuery, setProjectId } =
     useDeliveryProjectScope();
   const { data: user } = useCurrentUser();
-  const canReadFleet = can(user, "delivery_inventory", "read");
+  const canReadEstate = can(user, "delivery_inventory", "read");
   const estate = useQuery({
     queryKey: queryKeys.delivery.estate,
     queryFn: ({ signal }) => getDeliveryEstate(signal),
-    enabled: canReadFleet,
+    enabled: canReadEstate,
     refetchInterval: liveFallback(15_000),
     retry: (failureCount, error) =>
       !isForbiddenError(error) && failureCount < 2,
@@ -86,9 +86,9 @@ function DeliveryOverviewPage() {
     ],
     [queryKeys.delivery.estate],
   );
-  const showFleet = canReadFleet && !isForbiddenError(estate.error);
-  if (showFleet) {
-    return <FleetDeliveryOverview query={estate} />;
+  const showEstate = canReadEstate && !isForbiddenError(estate.error);
+  if (showEstate) {
+    return <EstateDeliveryOverview query={estate} />;
   }
   return (
     <DeliveryShell
@@ -105,7 +105,7 @@ function DeliveryOverviewPage() {
   );
 }
 
-const fleetFocusLabels: Record<string, string> = {
+const estateFocusLabels: Record<string, string> = {
   adopted: "Adopted clusters",
   flux_ready: "Flux-ready clusters",
   incompatible: "Incompatible clusters",
@@ -172,7 +172,7 @@ function clusterMatchesFocus(
   }
 }
 
-function FleetDeliveryOverview({
+function EstateDeliveryOverview({
   query,
 }: {
   query: UseQueryResult<DeliveryEstate>;
@@ -315,28 +315,28 @@ function FleetDeliveryOverview({
             Cluster health
           </h2>
           <div className="grid grid-cols-2 gap-3">
-            <FleetTile
+            <EstateTile
               icon={<Radio className="h-4 w-4" />}
               title="Adopted"
-              value={summary?.adoptedClusters ?? "—"}
+              value={summary?.managedClusters ?? "—"}
               active={focus === "adopted"}
               onClick={() => setFocus("adopted")}
             />
-            <FleetTile
+            <EstateTile
               icon={<ServerCog className="h-4 w-4" />}
               title="Flux ready"
               value={summary?.fluxReady ?? "—"}
               active={focus === "flux_ready"}
               onClick={() => setFocus("flux_ready")}
             />
-            <FleetTile
+            <EstateTile
               icon={<AlertTriangle className="h-4 w-4" />}
               title="Incompatible"
               value={summary?.incompatible ?? "—"}
               active={focus === "incompatible"}
               onClick={() => setFocus("incompatible")}
             />
-            <FleetTile
+            <EstateTile
               icon={<Unplug className="h-4 w-4" />}
               title="Disconnected"
               value={summary?.disconnected ?? "—"}
@@ -348,28 +348,28 @@ function FleetDeliveryOverview({
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground">Assignments</h2>
           <div className="grid grid-cols-2 gap-3">
-            <FleetTile
+            <EstateTile
               icon={<Layers className="h-4 w-4" />}
               title="Assigned"
               value={summary?.assignments ?? "—"}
               active={focus === "assignments"}
               onClick={() => setFocus("assignments")}
             />
-            <FleetTile
+            <EstateTile
               icon={<AlertTriangle className="h-4 w-4" />}
               title="Failed"
               value={summary?.failed ?? "—"}
               active={focus === "failed"}
               onClick={() => setFocus("failed")}
             />
-            <FleetTile
+            <EstateTile
               icon={<GitBranch className="h-4 w-4" />}
               title="Drifted"
               value={summary?.drifted ?? "—"}
               active={focus === "drifted"}
               onClick={() => setFocus("drifted")}
             />
-            <FleetTile
+            <EstateTile
               icon={<Rocket className="h-4 w-4" />}
               title="Active rollouts"
               value={summary?.activeRollouts ?? "—"}
@@ -435,7 +435,7 @@ function FleetDeliveryOverview({
                 className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-xs text-muted-foreground hover:bg-accent"
               >
                 <X className="h-3 w-3" />
-                {fleetFocusLabels[focus] ?? focus.replaceAll("_", " ")}
+                {estateFocusLabels[focus] ?? focus.replaceAll("_", " ")}
               </button>
             ) : null
           }
@@ -466,7 +466,7 @@ function FleetDeliveryOverview({
   );
 }
 
-function FleetTile({
+function EstateTile({
   title,
   value,
   icon,

@@ -190,9 +190,10 @@ func main() {
 		// and flag must_change_password so the dashboard forces a rotation
 		// on first sign-in.
 		if err := auth.EnsureBootstrapAdmin(context.Background(), queries, auth.BootstrapAdminConfig{
-			Password: cfg.BootstrapAdminPassword,
-			Username: cfg.BootstrapAdminUsername,
-			Email:    cfg.BootstrapAdminEmail,
+			Password:            cfg.BootstrapAdminPassword,
+			Username:            cfg.BootstrapAdminUsername,
+			Email:               cfg.BootstrapAdminEmail,
+			ForcePasswordChange: cfg.BootstrapAdminForcePasswordChange,
 		}, logger); err != nil {
 			logger.Error("failed to ensure bootstrap admin", "error", err)
 			os.Exit(1)

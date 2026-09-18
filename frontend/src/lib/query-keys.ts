@@ -374,6 +374,16 @@ export const queryKeys = {
     ) => ["delivery", projectId, "bundles", id, "versions", params] as const,
     bundleVersion: (projectId: string, id: string, versionId: string) =>
       ["delivery", projectId, "bundles", id, "versions", versionId] as const,
+    configurationTemplates: (
+      projectId: string,
+      params?: Record<string, unknown>,
+    ) => ["delivery", projectId, "configuration-templates", params] as const,
+    configurationTemplatesAll: (projectId: string) =>
+      ["delivery", projectId, "configuration-templates"] as const,
+    overrideSets: (projectId: string, params?: Record<string, unknown>) =>
+      ["delivery", projectId, "override-sets", params] as const,
+    overrideSetsAll: (projectId: string) =>
+      ["delivery", projectId, "override-sets"] as const,
     targets: (projectId: string, params?: Record<string, unknown>) =>
       ["delivery", projectId, "targets", params] as const,
     targetsAll: (projectId: string) =>
@@ -479,16 +489,27 @@ export const queryKeys = {
   },
   catalog: {
     all: ["catalog"] as const,
+    applications: ["catalog", "applications"] as const,
+    applicationSources: ["catalog", "application-sources"] as const,
+    discovery: ["catalog", "discovery"] as const,
     repositories: ["catalog", "repositories"] as const,
+    repositoriesFor: (scopeId?: string) =>
+      ["catalog", "repositories", scopeId ?? "global"] as const,
     charts: (params?: Record<string, unknown>) =>
       ["catalog", "charts", params] as const,
-    chartVersions: (projectId: string, chartId: string) =>
-      ["catalog", projectId, "charts", chartId, "versions"] as const,
+    chartVersions: (
+      scopeId: string,
+      chartId: string,
+      scope: "cluster" | "project" = "project",
+    ) => ["catalog", scope, scopeId, "charts", chartId, "versions"] as const,
     installed: (params?: Record<string, unknown>) =>
       ["catalog", "installed", params] as const,
     // Prefix matching every `installed(params)` variant — used by the live
     // routing table on `catalog_release.changed` + Helm-Secret k8s events.
     installedAll: ["catalog", "installed"] as const,
+    upgradeVersions: (installationId: string) =>
+      ["catalog", "installed", installationId, "upgrade-versions"] as const,
+    operations: ["catalog", "operations"] as const,
     operation: (id: string) => ["catalog", "operations", id] as const,
     // App-install/upgrade modal — distinct endpoints from `chartVersions` above
     // (note the different array shapes), kept verbatim to preserve cache identity.
@@ -499,6 +520,10 @@ export const queryKeys = {
       chartId: string,
       version?: string,
     ) => ["catalog", projectId, "chart-values", chartId, version] as const,
+    chart: (scopeId: string, chartId: string) =>
+      ["catalog", scopeId, "chart", chartId] as const,
+    chartReadme: (scopeId: string, chartId: string, version?: string) =>
+      ["catalog", scopeId, "chart", chartId, "readme", version] as const,
   },
   backups: {
     all: ["backups"] as const,
