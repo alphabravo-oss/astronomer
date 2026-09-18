@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,7 +74,7 @@ func createMonitoringOperationWith(ctx context.Context, q monitoringOperationCre
 				Status:         params.Status,
 				CreatedByID:    params.CreatedByID,
 			})
-			if err == nil && op.ID != uuid.Nil && (op.TargetType != params.TargetType || op.TargetKey != params.TargetKey || op.OperationType != params.OperationType || !bytes.Equal(op.Payload, params.Payload)) {
+			if err == nil && op.ID != uuid.Nil && (op.TargetType != params.TargetType || op.TargetKey != params.TargetKey || op.OperationType != params.OperationType || !jsonPayloadEqual(op.Payload, params.Payload)) {
 				return sqlc.MonitoringOperation{}, errMonitoringOperationIdempotencyConflict
 			}
 			return op, err

@@ -53,3 +53,17 @@ func TestRequireOperationIdempotencyKeyRejectsDuplicateHeader(t *testing.T) {
 		t.Fatalf("status=%d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
+
+func TestJSONPayloadEqualIgnoresJSONBObjectKeyOrder(t *testing.T) {
+	left := json.RawMessage(`{"cluster_id":"cluster-a","request":{"namespace":"monitoring","grafana":true}}`)
+	right := json.RawMessage(`{"request": {"grafana": true, "namespace": "monitoring"}, "cluster_id": "cluster-a"}`)
+	if !jsonPayloadEqual(left, right) {
+		t.Fatal("semantically equivalent JSON payloads were not equal")
+	}
+	if jsonPayloadEqual(left, json.RawMessage(`{"cluster_id":"cluster-b"}`)) {
+		t.Fatal("different JSON payloads were equal")
+	}
+	if jsonPayloadEqual(left, json.RawMessage(`not-json`)) {
+		t.Fatal("invalid JSON payload was equal")
+	}
+}

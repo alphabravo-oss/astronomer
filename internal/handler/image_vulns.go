@@ -3,7 +3,6 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -255,7 +254,7 @@ func (h *ImageVulnHandler) ClusterRescan(w http.ResponseWriter, r *http.Request)
 				TargetKey: params.TargetKey, OperationType: params.OperationType, Payload: params.Payload,
 				Status: params.Status, CreatedByID: params.CreatedByID,
 			})
-			if err == nil && operation.ID != uuid.Nil && (operation.TargetType != params.TargetType || operation.TargetKey != params.TargetKey || operation.OperationType != params.OperationType || !bytes.Equal(operation.Payload, params.Payload)) {
+			if err == nil && operation.ID != uuid.Nil && (operation.TargetType != params.TargetType || operation.TargetKey != params.TargetKey || operation.OperationType != params.OperationType || !jsonPayloadEqual(operation.Payload, params.Payload)) {
 				return errWorkloadOperationIdempotencyConflict
 			}
 		} else {
