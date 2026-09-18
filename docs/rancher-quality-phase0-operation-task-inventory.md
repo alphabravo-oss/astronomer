@@ -9,9 +9,9 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 ## Scan Scope
 
 - Worker Go files scanned: 102
-- Handler Go files scanned: 320
-- Production source files scanned: 456
-- Task constants resolved: 159
+- Handler Go files scanned: 324
+- Production source files scanned: 461
+- Task constants resolved: 160
 - Worker handler registrations: 91
 - Periodic schedules: 62
 - Task constructors: 71
@@ -180,7 +180,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/node_operations.go:167`](internal/handler/node_operations.go:167) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/platform_default_template.go:358`](internal/handler/platform_default_template.go:358) - `app, persisted, txErr = upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), q, q, sqlc.UpsertClusterTemplateApplicationParams{`
 - [`internal/handler/resource_operations.go:203`](internal/handler/resource_operations.go:203) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/workloads_resources.go:270`](internal/handler/workloads_resources.go:270) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
+- [`internal/handler/workloads_resources.go:453`](internal/handler/workloads_resources.go:453) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/worker/tasks/gitops_sync.go:550`](internal/worker/tasks/gitops_sync.go:550) - `if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/notification_dispatch.go:120`](internal/worker/tasks/notification_dispatch.go:120) - `_, err = EnqueueTaskOutbox(ctx, q, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/security_scan.go:255`](internal/worker/tasks/security_scan.go:255) - `_, err = EnqueueTaskOutbox(ctx, runtime.Deps.Outbox, task, TaskOutboxOptions{`
@@ -237,7 +237,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `agent_lifecycle` |1 |[`internal/handler/cluster_agents_upgrade.go:90`](internal/handler/cluster_agents_upgrade.go:90) |
 | `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:238`](internal/handler/clusters_registration.go:238) |
 | `apiserver_allowlist_reconcile` |1 |[`internal/handler/apiserver_allowlist.go:391`](internal/handler/apiserver_allowlist.go:391) |
-| `catalog` |4 |[`internal/handler/catalog_installations.go:170`](internal/handler/catalog_installations.go:170)<br>[`internal/handler/catalog_installations.go:231`](internal/handler/catalog_installations.go:231)<br>[`internal/handler/catalog_installations.go:425`](internal/handler/catalog_installations.go:425)<br>[`internal/handler/catalog_installations.go:503`](internal/handler/catalog_installations.go:503) |
+| `catalog` |4 |[`internal/handler/catalog_installations.go:231`](internal/handler/catalog_installations.go:231)<br>[`internal/handler/catalog_installations.go:292`](internal/handler/catalog_installations.go:292)<br>[`internal/handler/catalog_installations.go:540`](internal/handler/catalog_installations.go:540)<br>[`internal/handler/catalog_installations.go:618`](internal/handler/catalog_installations.go:618) |
 | `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:359`](internal/handler/catalog_repositories.go:359) |
 | `cluster_template_apply` |1 |[`internal/handler/cluster_templates_applications.go:103`](internal/handler/cluster_templates_applications.go:103) |
 | `cluster_template_reapply` |1 |[`internal/handler/cluster_templates_applications.go:226`](internal/handler/cluster_templates_applications.go:226) |
@@ -254,7 +254,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `monitoring_operation_retry` |1 |[`internal/handler/monitoring_operations.go:166`](internal/handler/monitoring_operations.go:166) |
 | `network_policy_apply` |1 |[`internal/handler/network_policies.go:557`](internal/handler/network_policies.go:557) |
 | `network_policy_reapply` |1 |[`internal/handler/network_policies.go:757`](internal/handler/network_policies.go:757) |
-| `pod-deletes` |1 |[`internal/handler/workloads_resources.go:227`](internal/handler/workloads_resources.go:227) |
+| `pod-deletes` |1 |[`internal/handler/workloads_resources.go:410`](internal/handler/workloads_resources.go:410) |
 | `restore` |1 |[`internal/handler/backups_restores.go:76`](internal/handler/backups_restores.go:76) |
 | `support_bundle` |1 |[`internal/handler/supportbundle_api.go:37`](internal/handler/supportbundle_api.go:37) |
 | `tools` |1 |[`internal/handler/tools_operation_engine.go:48`](internal/handler/tools_operation_engine.go:48) |
