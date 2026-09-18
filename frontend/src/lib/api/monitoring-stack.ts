@@ -142,7 +142,8 @@ export function isRetryableOperationStatus(
 /**
  * MonitoringStackRequest, internal/handler/monitoring.go. Every field is
  * optional on the wire: the handler defaults releaseName=prometheus,
- * namespace=monitoring, retention=15d, storageSize=50Gi, storageClass=default,
+ * namespace=monitoring, retention=15d, storageSize=50Gi, storageClass omitted
+ * (so Kubernetes selects the cluster's annotated default),
  * scrapeInterval=30s, clusterLabel=cluster_id, clusterLabelValue=<cluster id>,
  * chartVersion=61.3.2, and treats enableAlertmanager / thanosSidecarEnabled as
  * true when absent. Omitted enableGrafana is true unless shared Grafana is

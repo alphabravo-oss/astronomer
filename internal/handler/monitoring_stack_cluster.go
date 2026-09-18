@@ -451,9 +451,6 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	if req.StorageSize == "" {
 		req.StorageSize = "50Gi"
 	}
-	if req.StorageClass == "" {
-		req.StorageClass = "default"
-	}
 	if req.ScrapeInterval == "" {
 		req.ScrapeInterval = "30s"
 	}
@@ -481,6 +478,17 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	enableSidecar := true
 	if req.ThanosSidecarEnabled != nil {
 		enableSidecar = *req.ThanosSidecarEnabled
+	}
+	prometheusPVCSpec := map[string]any{
+		"accessModes": []string{"ReadWriteOnce"},
+		"resources": map[string]any{
+			"requests": map[string]any{
+				"storage": req.StorageSize,
+			},
+		},
+	}
+	if req.StorageClass != "" {
+		prometheusPVCSpec["storageClassName"] = req.StorageClass
 	}
 	values := map[string]any{
 		"additionalPrometheusRulesMap": map[string]any{
@@ -516,15 +524,7 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 				"enableAdminAPI": false,
 				"storageSpec": map[string]any{
 					"volumeClaimTemplate": map[string]any{
-						"spec": map[string]any{
-							"storageClassName": req.StorageClass,
-							"accessModes":      []string{"ReadWriteOnce"},
-							"resources": map[string]any{
-								"requests": map[string]any{
-									"storage": req.StorageSize,
-								},
-							},
-						},
+						"spec": prometheusPVCSpec,
 					},
 				},
 				"thanos": map[string]any{

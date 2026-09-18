@@ -653,6 +653,10 @@ func TestClusterStackPreviewPinsFleetProvenanceAndKubernetesLabelInventory(t *te
 	}
 	prometheus := body.Data.Values["prometheus"].(map[string]any)
 	spec := prometheus["prometheusSpec"].(map[string]any)
+	pvcSpec := spec["storageSpec"].(map[string]any)["volumeClaimTemplate"].(map[string]any)["spec"].(map[string]any)
+	if _, exists := pvcSpec["storageClassName"]; exists {
+		t.Fatalf("default storageClassName = %#v, want omitted so Kubernetes selects the cluster default", pvcSpec["storageClassName"])
+	}
 	labels := spec["externalLabels"].(map[string]any)
 	if len(labels) != 1 || labels["cluster_id"] != stackTestClusterID {
 		t.Fatalf("externalLabels = %#v, want immutable cluster_id only", labels)
@@ -675,6 +679,34 @@ func TestClusterStackPreviewPinsFleetProvenanceAndKubernetesLabelInventory(t *te
 	allowlist := kubeState["metricLabelsAllowlist"].([]any)
 	if len(allowlist) < 3 {
 		t.Fatalf("metricLabelsAllowlist = %#v, want namespace/node/pod and workload entries", allowlist)
+	}
+}
+
+func TestClusterStackPreviewPreservesExplicitStorageClass(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	rec := httptest.NewRecorder()
+	request := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{"storageClass":"fast-rwo"}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(rec, request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data struct {
+			Values map[string]any `json:"values"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	spec := body.Data.Values["prometheus"].(map[string]any)["prometheusSpec"].(map[string]any)
+	pvcSpec := spec["storageSpec"].(map[string]any)["volumeClaimTemplate"].(map[string]any)["spec"].(map[string]any)
+	if got := pvcSpec["storageClassName"]; got != "fast-rwo" {
+		t.Fatalf("storageClassName = %#v, want fast-rwo", got)
 	}
 }
 
