@@ -1260,6 +1260,25 @@ func TestEncryptionKeyNameHasNoBareDrift(t *testing.T) {
 	}
 }
 
+func TestServerHelmRepositoryStateUsesWritableTmp(t *testing.T) {
+	root := repoRoot(t)
+	raw, err := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "server-deployment.yaml"))
+	if err != nil {
+		t.Fatalf("read server deployment: %v", err)
+	}
+	template := string(raw)
+	for _, required := range []string{
+		"name: HELM_CACHE_HOME\n              value: /tmp/helm/cache",
+		"name: HELM_CONFIG_HOME\n              value: /tmp/helm/config",
+		"name: HELM_DATA_HOME\n              value: /tmp/helm/data",
+		"mountPath: /tmp",
+	} {
+		if !strings.Contains(template, required) {
+			t.Fatalf("server Helm runtime is missing writable-path contract %q", required)
+		}
+	}
+}
+
 // C-02: the worker Deployment must ship liveness + readiness probes hitting
 // /healthz so a wedged consumer is restarted and rollouts gate on health.
 func TestWorkerDeploymentHasProbes(t *testing.T) {

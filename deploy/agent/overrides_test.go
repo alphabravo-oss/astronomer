@@ -53,6 +53,9 @@ func TestRenderInstallYAMLAppliesOverridesWithoutRelaxingPlatformPlacement(t *te
 		"cpu: 250m", "memory: 1Gi", "name: HTTPS_PROXY", `value: "http://proxy.internal:3128"`,
 		"topology.kubernetes.io/zone", "west-a",
 		"allowPrivilegeEscalation: false", "readOnlyRootFilesystem: true",
+		"name: HELM_CACHE_HOME", "value: /tmp/helm/cache",
+		"name: HELM_CONFIG_HOME", "value: /tmp/helm/config",
+		"name: HELM_DATA_HOME", "value: /tmp/helm/data",
 	} {
 		if !strings.Contains(manifest, required) {
 			t.Fatalf("manifest missing %q", required)

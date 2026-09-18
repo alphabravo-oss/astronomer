@@ -719,6 +719,15 @@ spec:
             - astronomer-agent
             - connect
           env:
+            # Helm's traditional-repository resolver consults these process
+            # variables directly. The agent root filesystem is read-only, so
+            # all Helm state must stay on its writable /tmp emptyDir.
+            - name: HELM_CACHE_HOME
+              value: /tmp/helm/cache
+            - name: HELM_CONFIG_HOME
+              value: /tmp/helm/config
+            - name: HELM_DATA_HOME
+              value: /tmp/helm/data
             - name: ASTRONOMER_SERVER_URL
               valueFrom:
                 configMapKeyRef:

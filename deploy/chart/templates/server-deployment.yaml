@@ -108,6 +108,15 @@ spec:
             - secretRef:
                 name: {{ include "astronomer.secretsSecretName" . }}
           env:
+            # Helm's traditional-repository resolver consults these process
+            # variables directly instead of cli.EnvSettings. Keep every path
+            # on the writable /tmp volume for the non-root, read-only runtime.
+            - name: HELM_CACHE_HOME
+              value: /tmp/helm/cache
+            - name: HELM_CONFIG_HOME
+              value: /tmp/helm/config
+            - name: HELM_DATA_HOME
+              value: /tmp/helm/data
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
