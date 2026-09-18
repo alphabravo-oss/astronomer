@@ -532,13 +532,6 @@ func uniqueUUIDs(input []uuid.UUID) []uuid.UUID {
 	return result
 }
 
-func effectiveTargetSpecDigest(bundle model.Digest, overrides model.TargetOverrides) (model.Digest, error) {
-	return model.CanonicalDigest(struct {
-		Bundle    model.Digest          `json:"bundle_spec_digest"`
-		Overrides model.TargetOverrides `json:"overrides"`
-	}{Bundle: bundle, Overrides: overrides})
-}
-
 func deliveryCapabilities(fluxVersion string, raw json.RawMessage) (map[string]string, error) {
 	components := make(map[string]string)
 	if len(raw) != 0 {
