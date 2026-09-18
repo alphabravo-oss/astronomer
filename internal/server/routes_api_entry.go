@@ -94,7 +94,7 @@ func registerAPIIdentityEntryRoutes(r chi.Router, deps RouterDependencies) {
 				permissionRequirement{resource: rbac.ResourceAuditLogs, verb: rbac.VerbRead},
 				permissionRequirement{resource: rbac.ResourceAuditLogs, verb: rbac.VerbList},
 			),
-		).Get("/activity", deps.ClusterResources.Resources.ListActivity)
+		).Get("/activity/", deps.ClusterResources.Resources.ListActivity)
 		r.Route("/settings", func(r chi.Router) {
 			r.Get("/general/", deps.ClusterResources.Resources.GetGeneralSettings)
 			r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries), requireScope(iauth.ScopeAdmin), requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceSettings, rbac.VerbUpdate)).

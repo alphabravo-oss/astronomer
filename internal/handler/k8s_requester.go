@@ -360,6 +360,7 @@ func parseJSONResponse(resp *protocol.K8sResponsePayload, out any) error {
 type kubernetesResponseError struct {
 	StatusCode int
 	Body       string
+	Headers    map[string]string
 }
 
 func (e *kubernetesResponseError) Error() string {
@@ -374,7 +375,7 @@ func (e *kubernetesResponseError) Error() string {
 
 func responseError(resp *protocol.K8sResponsePayload) error {
 	body, _ := decodeResponseBody(resp)
-	return &kubernetesResponseError{StatusCode: resp.StatusCode, Body: string(body)}
+	return &kubernetesResponseError{StatusCode: resp.StatusCode, Body: string(body), Headers: resp.Headers}
 }
 
 func requestHeaders(contentType string) map[string]string {

@@ -77,7 +77,7 @@ type AgentConfig struct {
 	//     exec, log tails, Helm operations), which must not share a bound with
 	//     the unary ones or a handful of open watches would starve every API call.
 	// Env: ASTRONOMER_MAX_INFLIGHT_REQUESTS, ASTRONOMER_MAX_INFLIGHT_STREAMS.
-	MaxInflightRequests int `mapstructure:"max_inflight_requests"` // default 16
+	MaxInflightRequests int `mapstructure:"max_inflight_requests"` // default 64
 	MaxInflightStreams  int `mapstructure:"max_inflight_streams"`  // default 256
 
 	// kube-apiserver audit-log forwarding (opt-in; disabled by default).

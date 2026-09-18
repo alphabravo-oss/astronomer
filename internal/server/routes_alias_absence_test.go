@@ -27,7 +27,6 @@ func TestRemovedPublicAPIAliasesAreNotMounted(t *testing.T) {
 		{http.MethodPost, "/api/v1/alerts/rules/" + resourceID + "/disable/"},
 		{http.MethodPost, "/api/v1/alerts/silences/" + resourceID + "/expire/"},
 		{http.MethodGet, "/api/v1/delivery/fleet/"},
-		{http.MethodGet, "/api/v1/activity/"},
 		{http.MethodPost, "/api/v1/clusters/" + clusterID + "/generate_kubeconfig/"},
 		{http.MethodGet, "/api/v1/clusters/" + clusterID + "/kubeconfig/"},
 		{http.MethodGet, "/api/v1/backups/runs/"},
@@ -55,6 +54,7 @@ func TestCanonicalPublicRoutesRemainProtected(t *testing.T) {
 	}{
 		{http.MethodPost, "/api/v1/alerting/rules/" + resourceID + "/enable/"},
 		{http.MethodGet, "/api/v1/delivery/estate/"},
+		{http.MethodGet, "/api/v1/activity/"},
 		{http.MethodPost, "/api/v1/clusters/" + clusterID + "/generate-kubeconfig/"},
 		{http.MethodGet, "/api/v1/clusters/" + clusterID + "/kubeconfig-preview/"},
 		{http.MethodGet, "/api/v1/backups/"},

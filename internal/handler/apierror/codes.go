@@ -32,6 +32,11 @@ type Code = string
 // --- Validation / bad client input (typically HTTP 400) ---
 
 const (
+	// AgentOverloaded indicates the connected cluster agent reached its bounded
+	// in-flight request capacity. Clients may retry after the response's
+	// Retry-After interval (HTTP 429).
+	AgentOverloaded Code = "agent_overloaded"
+
 	// InvalidBody indicates the request body could not be decoded (malformed
 	// JSON or wrong shape).
 	InvalidBody Code = "invalid_body"

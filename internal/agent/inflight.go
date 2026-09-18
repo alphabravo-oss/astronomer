@@ -46,12 +46,15 @@ const (
 )
 
 const (
-	// defaultMaxInflightRequests bounds concurrent buffering handlers. Sixteen
-	// concurrent LISTs is far more parallelism than a single cluster's UI
-	// generates, while being small enough that the per-request work (an
-	// upstream round trip plus its buffered body) stays comfortably inside the
-	// byte budget. Override with ASTRONOMER_MAX_INFLIGHT_REQUESTS.
-	defaultMaxInflightRequests = 16
+	// defaultMaxInflightRequests bounds concurrent buffering handlers. A single
+	// cluster page can legitimately fan out past sixteen short LISTs (resource
+	// counts, navigation badges, and the visible table all load together), and
+	// multiple browser tabs must not turn that ordinary burst into user-visible
+	// overload errors. The independent process-wide response byte budget still
+	// caps aggregate buffered memory, so increasing dispatch concurrency does
+	// not weaken the 512 MiB container safety boundary. Override with
+	// ASTRONOMER_MAX_INFLIGHT_REQUESTS.
+	defaultMaxInflightRequests = 64
 	// defaultMaxInflightStreams bounds concurrent long-lived handlers. Sized
 	// for real fan-out — a busy dashboard opens tens of watches per user — and
 	// matched to the data queue's 256 slots, since each stream is a producer
