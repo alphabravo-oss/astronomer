@@ -74,7 +74,11 @@ data:
         K8S-Logging.Parser  On
         K8S-Logging.Exclude On
         Keep_Log            Off
+        Labels              On
         Annotations         Off
+        Owner_References    On
+        Namespace_Labels    On
+        Namespace_Annotations Off
 
     [FILTER]
         Name          record_modifier
@@ -125,8 +129,9 @@ data:
         Port              {{ $port }}
         Tls               {{ $tls }}
         Tls.verify        On
-        Labels            job=astronomer, release={{ .Release.Name }}, namespace={{ .Release.Namespace }}, component=$kubernetes['labels']['app.kubernetes.io/component'], pod=$kubernetes['pod_name']
+        Labels            job=astronomer{{ with .Values.managementLogging.loki.tenantID }}, cluster={{ . }}, cluster_id={{ . }}{{ end }}, release={{ .Release.Name }}, namespace=$kubernetes['namespace_name'], node=$kubernetes['host'], pod=$kubernetes['pod_name'], container=$kubernetes['container_name'], component=$kubernetes['labels']['app.kubernetes.io/component']
         Label_keys        $kubernetes['labels']['app.kubernetes.io/component']
+        Structured_metadata pod_uid=$kubernetes['pod_id'],container_image=$kubernetes['container_image']
         Line_format       json
         {{- with .Values.managementLogging.loki.tenantID }}
         Tenant_id         {{ . }}

@@ -343,6 +343,12 @@ func TestRenderOutputBlockSystemLokiBearerAndTLS(t *testing.T) {
 		"tls.verify on",
 		"bearer_token_file " + fluentBitIngestTokenFile,
 		"tenant_id " + clusterID,
+		"cluster_id=" + clusterID,
+		"namespace=$kubernetes['namespace_name']",
+		"node=$kubernetes['host']",
+		"pod=$kubernetes['pod_name']",
+		"container=$kubernetes['container_name']",
+		"structured_metadata pod_uid=$kubernetes['pod_id'],container_image=$kubernetes['container_image']",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)

@@ -578,6 +578,11 @@ func (h *LoggingHandler) renderFullFluentbitConfig(ctx context.Context, clusterI
 	writeKV(&b, "Name", "kubernetes")
 	writeKV(&b, "Match", "kube.*")
 	writeKV(&b, "Merge_Log", "On")
+	writeKV(&b, "Labels", "On")
+	writeKV(&b, "Annotations", "Off")
+	writeKV(&b, "Owner_References", "On")
+	writeKV(&b, "Namespace_Labels", "On")
+	writeKV(&b, "Namespace_Annotations", "Off")
 
 	pipelines, err := h.queries.ListPipelinesByCluster(ctx, sqlc.ListPipelinesByClusterParams{ClusterID: clusterID, Limit: 500, Offset: 0})
 	if err != nil {

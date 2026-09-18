@@ -471,11 +471,18 @@ func renderOutputBlock(env loggingOperationEnvelope) string {
 			writeKV(&b, "bearer_token", env.BearerToken)
 		}
 		labels := configString(cfg, "labels", "")
-		if env.IsSystem && labels == "" && env.ClusterID != "" {
-			labels = "cluster=" + env.ClusterID + ",job=fluentbit"
+		if env.IsSystem && env.ClusterID != "" {
+			labels = systemLokiLabels(env.ClusterID)
 		}
 		if labels != "" {
 			writeKV(&b, "Labels", labels)
+		}
+		if env.IsSystem {
+			// Keep identifiers needed for a precise drill-down without turning
+			// image digests and Pod UIDs into Loki stream-cardinality dimensions.
+			// The complete Kubernetes labels and ownerReferences maps remain in
+			// the JSON log record produced by the kubernetes filter.
+			writeKV(&b, "structured_metadata", "pod_uid=$kubernetes['pod_id'],container_image=$kubernetes['container_image']")
 		}
 		tenant := configString(cfg, "tenant_id", "")
 		if env.IsSystem {

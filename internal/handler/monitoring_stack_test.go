@@ -187,10 +187,25 @@ func (q *stackLifecycleQuerier) ListClusters(context.Context, sqlc.ListClustersP
 	rows := []sqlc.Cluster{{
 		ID:                uuid.MustParse(stackTestClusterID),
 		Name:              "local",
+		DisplayName:       "Production West",
+		Environment:       "production",
+		Region:            "us-west-2",
+		Provider:          "k3s",
+		ClusterUid:        "kube-system-uid",
 		IsLocal:           true,
 		KubernetesVersion: "v1.31.4",
 	}}
 	return append(rows, q.extraClusters...), nil
+}
+
+func (q *stackLifecycleQuerier) GetClusterByID(_ context.Context, id uuid.UUID) (sqlc.Cluster, error) {
+	clusters, _ := q.ListClusters(context.Background(), sqlc.ListClustersParams{})
+	for _, cluster := range clusters {
+		if cluster.ID == id {
+			return cluster, nil
+		}
+	}
+	return sqlc.Cluster{}, pgx.ErrNoRows
 }
 
 func (q *stackLifecycleQuerier) ListClusterLivenessForClusters(context.Context, []uuid.UUID) ([]sqlc.ClusterLiveness, error) {
@@ -613,6 +628,76 @@ func TestClusterStackResolvesClusterIDFromTheRoutedParam(t *testing.T) {
 			t.Fatalf("clusterId = %q, want %q", body.Data.ClusterID, stackTestClusterID)
 		}
 	})
+}
+
+func TestClusterStackPreviewPinsFleetProvenanceAndKubernetesLabelInventory(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	rec := httptest.NewRecorder()
+	request := (stackLifecycleCase{
+		method: http.MethodPost,
+		target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+		body:   `{}`,
+		params: map[string]string{"id": stackTestClusterID},
+	}).request()
+	h.PreviewStack(rec, request)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Data struct {
+			Values map[string]any `json:"values"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	prometheus := body.Data.Values["prometheus"].(map[string]any)
+	spec := prometheus["prometheusSpec"].(map[string]any)
+	labels := spec["externalLabels"].(map[string]any)
+	if len(labels) != 1 || labels["cluster_id"] != stackTestClusterID {
+		t.Fatalf("externalLabels = %#v, want immutable cluster_id only", labels)
+	}
+	ruleMaps := body.Data.Values["additionalPrometheusRulesMap"].(map[string]any)
+	metadataRule := ruleMaps["astronomer-cluster-metadata"].(map[string]any)
+	groups := metadataRule["groups"].([]any)
+	rules := groups[0].(map[string]any)["rules"].([]any)
+	infoLabels := rules[0].(map[string]any)["labels"].(map[string]any)
+	for key, want := range map[string]string{
+		"cluster_id": stackTestClusterID, "cluster_name": "Production West",
+		"environment": "production", "region": "us-west-2", "provider": "k3s",
+		"kubernetes_cluster_uid": "kube-system-uid",
+	} {
+		if got := infoLabels[key]; got != want {
+			t.Errorf("astronomer_cluster_info label %s = %v, want %q", key, got, want)
+		}
+	}
+	kubeState := body.Data.Values["kube-state-metrics"].(map[string]any)
+	allowlist := kubeState["metricLabelsAllowlist"].([]any)
+	if len(allowlist) < 3 {
+		t.Fatalf("metricLabelsAllowlist = %#v, want namespace/node/pod and workload entries", allowlist)
+	}
+}
+
+func TestClusterStackRejectsCallerControlledFleetIdentity(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	for name, body := range map[string]string{
+		"label name":  `{"clusterLabel":"pretend_cluster"}`,
+		"label value": `{"clusterLabelValue":"another-cluster"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			request := (stackLifecycleCase{
+				method: http.MethodPost,
+				target: "/api/v1/clusters/" + stackTestClusterID + "/monitoring/stack/preview/",
+				body:   body,
+				params: map[string]string{"id": stackTestClusterID},
+			}).request()
+			h.PreviewStack(rec, request)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
 }
 
 // --- the audit contract -------------------------------------------------------

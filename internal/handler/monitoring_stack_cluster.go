@@ -427,6 +427,18 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
 		return "", MonitoringStackRequest{}, nil, fmt.Errorf("invalid JSON body")
 	}
+	// A managed stack's fleet identity is derived from the routed cluster, not
+	// from caller-controlled Helm values. Thanos uses this label to separate
+	// sources and the Grafana proxy uses it as an authorization boundary, so
+	// accepting a different key/value here would let one cluster masquerade as
+	// another in fleet queries. Keep the legacy request fields wire-compatible,
+	// but reject attempts to change the canonical identity.
+	if req.ClusterLabel != "" && req.ClusterLabel != "cluster_id" {
+		return "", MonitoringStackRequest{}, nil, fmt.Errorf("clusterLabel is managed by Astronomer and must be cluster_id")
+	}
+	if req.ClusterLabelValue != "" && req.ClusterLabelValue != clusterID {
+		return "", MonitoringStackRequest{}, nil, fmt.Errorf("clusterLabelValue is managed by Astronomer and must match the routed cluster")
+	}
 	if req.ReleaseName == "" {
 		req.ReleaseName = "prometheus"
 	}
@@ -445,12 +457,8 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	if req.ScrapeInterval == "" {
 		req.ScrapeInterval = "30s"
 	}
-	if req.ClusterLabel == "" {
-		req.ClusterLabel = "cluster_id"
-	}
-	if req.ClusterLabelValue == "" {
-		req.ClusterLabelValue = clusterID
-	}
+	req.ClusterLabel = "cluster_id"
+	req.ClusterLabelValue = clusterID
 	if req.ChartVersion == "" {
 		req.ChartVersion = "61.3.2"
 	}
@@ -475,6 +483,22 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 		enableSidecar = *req.ThanosSidecarEnabled
 	}
 	values := map[string]any{
+		"additionalPrometheusRulesMap": map[string]any{
+			"astronomer-cluster-metadata": map[string]any{
+				"groups": []any{
+					map[string]any{
+						"name": "astronomer.cluster.metadata",
+						"rules": []any{
+							map[string]any{
+								"record": "astronomer_cluster_info",
+								"expr":   "vector(1)",
+								"labels": h.monitoringClusterInfoLabels(ctx, clusterID),
+							},
+						},
+					},
+				},
+			},
+		},
 		"grafana": map[string]any{
 			"enabled": enableGrafana,
 		},
@@ -487,7 +511,7 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 		"prometheus": map[string]any{
 			"prometheusSpec": map[string]any{
 				"retention":      req.Retention,
-				"externalLabels": map[string]any{req.ClusterLabel: req.ClusterLabelValue},
+				"externalLabels": map[string]any{"cluster_id": clusterID},
 				"scrapeInterval": req.ScrapeInterval,
 				"enableAdminAPI": false,
 				"storageSpec": map[string]any{
@@ -508,6 +532,14 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 					"version":   "v0.36.1",
 				},
 			},
+		},
+		// kube-state-metrics keeps the full Kubernetes object relationship
+		// model queryable without copying every arbitrary Pod label onto every
+		// Prometheus series. The curated labels cover placement, ownership and
+		// the app.kubernetes.io identity convention while avoiding rollout
+		// hashes and annotations that cause unbounded cardinality.
+		"kube-state-metrics": map[string]any{
+			"metricLabelsAllowlist": monitoringKubeStateMetricLabelAllowlist,
 		},
 	}
 	if enableSidecar && req.StorageConfigID != "" {
@@ -536,6 +568,63 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 		delete(values["prometheus"].(map[string]any)["prometheusSpec"].(map[string]any), "thanos")
 	}
 	return clusterID, req, values, nil
+}
+
+var monitoringKubeStateMetricLabelAllowlist = []string{
+	"namespaces=[app.kubernetes.io/name,environment,team,owner,cost-center]",
+	"nodes=[kubernetes.io/arch,kubernetes.io/os,node.kubernetes.io/instance-type,topology.kubernetes.io/region,topology.kubernetes.io/zone]",
+	"pods=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"deployments=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"statefulsets=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"daemonsets=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"jobs=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+	"cronjobs=[app.kubernetes.io/name,app.kubernetes.io/instance,app.kubernetes.io/component,app.kubernetes.io/part-of,app.kubernetes.io/version,environment,team,owner,cost-center]",
+}
+
+// monitoringClusterIdentityReader is deliberately narrower than
+// MonitoringQuerier. Production's *sqlc.Queries implements it, while small
+// handler fakes and deployments without a configured store still receive the
+// mandatory cluster_id label.
+type monitoringClusterIdentityReader interface {
+	GetClusterByID(context.Context, uuid.UUID) (sqlc.Cluster, error)
+}
+
+// monitoringClusterInfoLabels returns the human and infrastructure metadata on
+// the single astronomer_cluster_info series. Only immutable cluster_id belongs
+// in Prometheus externalLabels: Thanos groups blocks by the complete external
+// label set and requires it to remain persistent. Keeping mutable display
+// metadata here lets dashboards join it by cluster_id without fragmenting or
+// duplicating every source series when a cluster is renamed or reclassified.
+func (h *MonitoringHandler) monitoringClusterInfoLabels(ctx context.Context, clusterID string) map[string]any {
+	labels := map[string]any{"cluster_id": clusterID}
+	reader, ok := h.queries.(monitoringClusterIdentityReader)
+	if !ok {
+		return labels
+	}
+	id, err := uuid.Parse(clusterID)
+	if err != nil {
+		return labels
+	}
+	cluster, err := reader.GetClusterByID(ctx, id)
+	if err != nil {
+		return labels
+	}
+	clusterName := cluster.DisplayName
+	if clusterName == "" {
+		clusterName = cluster.Name
+	}
+	for key, value := range map[string]string{
+		"cluster_name":           clusterName,
+		"kubernetes_cluster_uid": cluster.ClusterUid,
+		"environment":            cluster.Environment,
+		"region":                 cluster.Region,
+		"provider":               cluster.Provider,
+	} {
+		if value != "" {
+			labels[key] = value
+		}
+	}
+	return labels
 }
 
 func clusterMonitoringReplaceRequired(cfg sqlc.ClusterMonitoringConfig, exists bool, req MonitoringStackRequest) (bool, []string) {

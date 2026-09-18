@@ -34,7 +34,10 @@ func TestRenderFullFluentbitConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, want := range []string{"[SERVICE]", "Name tail", "Name kubernetes", "Name es", "Name splunk"} {
+	for _, want := range []string{
+		"[SERVICE]", "Name tail", "Name kubernetes", "Name es", "Name splunk",
+		"Labels On", "Owner_References On", "Namespace_Labels On",
+	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config missing %q:\n%s", want, cfg)
 		}
