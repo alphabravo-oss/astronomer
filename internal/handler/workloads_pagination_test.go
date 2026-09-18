@@ -315,6 +315,33 @@ func TestListGenericResourcesPagesSearchesAndSortsFullResult(t *testing.T) {
 	}
 }
 
+func TestListNamedResourcesPreservesUpstreamForbidden(t *testing.T) {
+	body := base64.StdEncoding.EncodeToString([]byte(`{"reason":"Forbidden","message":"sensitive upstream detail"}`))
+	stub := &stubK8sRequester{respFn: func(stubReq) (*protocol.K8sResponsePayload, error) {
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusForbidden, Body: body}, nil
+	}}
+	h := &ResourceHandler{requester: stub}
+	clusterID := uuid.NewString()
+	route := chi.NewRouteContext()
+	route.URLParams.Add("cluster_id", clusterID)
+	route.URLParams.Add("resource_type", "grpcroutes")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/resources/grpcroutes/", nil)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+	rec := httptest.NewRecorder()
+
+	h.ListNamedResources(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "sensitive upstream detail") {
+		t.Fatalf("upstream Kubernetes detail leaked to client: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"code":"forbidden"`) {
+		t.Fatalf("response lacks stable forbidden code: %s", rec.Body.String())
+	}
+}
+
 func doListNodes(t *testing.T, h *WorkloadHandler, query string) listEnvelope {
 	t.Helper()
 	clusterID := uuid.NewString()

@@ -34,7 +34,7 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 				// Inventory mirrors the agent watches read-only.
 				`apiGroups: ["events.k8s.io"]`,
 				`resources: ["ingresses", "ingressclasses", "networkpolicies"]`,
-				`resources: ["gatewayclasses"]`,
+				`resources: ["gatewayclasses", "gateways", "httproutes", "grpcroutes", "referencegrants", "tcproutes", "udproutes", "tlsroutes"]`,
 				`resources: ["vulnerabilityreports"]`,
 				`verbs: ["get", "list", "watch"]`,
 			},
@@ -75,6 +75,7 @@ func TestRBACRulesYAMLProfiles(t *testing.T) {
 			want: []string{
 				`Namespace-scoped read-only inventory`,
 				`resources: ["configmaps", "endpoints", "events", "persistentvolumeclaims"`,
+				`resources: ["gateways", "httproutes", "grpcroutes", "referencegrants", "tcproutes", "udproutes", "tlsroutes"]`,
 				`verbs: ["get", "list", "watch"]`,
 			},
 			notWant: []string{

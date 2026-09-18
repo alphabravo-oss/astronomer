@@ -410,7 +410,7 @@ const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints
   # grants nothing). Present so the agent's GatewayClass / Trivy informers don't
   # log RBAC denials where those operators are installed.
   - apiGroups: ["gateway.networking.k8s.io"]
-    resources: ["gatewayclasses"]
+    resources: ["gatewayclasses", "gateways", "httproutes", "grpcroutes", "referencegrants", "tcproutes", "udproutes", "tlsroutes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["aquasecurity.github.io"]
     resources: ["vulnerabilityreports"]
@@ -447,6 +447,9 @@ const namespaceViewerRBACRulesYAML = `  # Namespace-scoped read-only inventory a
     verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "httproutes", "grpcroutes", "referencegrants", "tcproutes", "udproutes", "tlsroutes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]

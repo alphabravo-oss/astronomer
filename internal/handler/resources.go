@@ -346,7 +346,7 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 	// Treat 404 as "CRD not installed" for optional Gateway API resources.
 	resp, installed, err := h.listKubernetesResourcePages(r.Context(), clusterID, path, true)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		respondKubernetesResourceReadError(w, r, err)
 		return
 	}
 	items := make([]map[string]any, 0)
@@ -416,7 +416,7 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 	}
 	resp, _, err := h.listKubernetesResourcePages(r.Context(), clusterID, path, false)
 	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		respondKubernetesResourceReadError(w, r, err)
 		return
 	}
 	items := flattenGenericResources(clusterID, resourceType, resp)
@@ -468,6 +468,16 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 	sortGenericResourceItems(items, field, descending)
 	page, metadata := pageWindow(r, items)
 	paging.Write(w, page, metadata)
+}
+
+func respondKubernetesResourceReadError(w http.ResponseWriter, r *http.Request, err error) {
+	var upstream *kubernetesResponseError
+	if errors.As(err, &upstream) && upstream.StatusCode == http.StatusForbidden {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden,
+			"The cluster agent is not authorized to list this Kubernetes resource")
+		return
+	}
+	respondClusterAccessError(w, r, err)
 }
 
 const upstreamResourcePageLimit = 500

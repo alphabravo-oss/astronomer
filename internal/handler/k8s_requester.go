@@ -357,12 +357,24 @@ func parseJSONResponse(resp *protocol.K8sResponsePayload, out any) error {
 	return json.Unmarshal(body, out)
 }
 
+type kubernetesResponseError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *kubernetesResponseError) Error() string {
+	if e == nil {
+		return "k8s request failed"
+	}
+	if e.Body == "" {
+		return fmt.Sprintf("k8s request failed with status %d", e.StatusCode)
+	}
+	return fmt.Sprintf("k8s request failed with status %d: %s", e.StatusCode, e.Body)
+}
+
 func responseError(resp *protocol.K8sResponsePayload) error {
 	body, _ := decodeResponseBody(resp)
-	if len(body) == 0 {
-		return fmt.Errorf("k8s request failed with status %d", resp.StatusCode)
-	}
-	return fmt.Errorf("k8s request failed with status %d: %s", resp.StatusCode, string(body))
+	return &kubernetesResponseError{StatusCode: resp.StatusCode, Body: string(body)}
 }
 
 func requestHeaders(contentType string) map[string]string {
