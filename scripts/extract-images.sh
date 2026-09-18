@@ -12,11 +12,13 @@
 # Output format: one image per line, sorted, comments stripped.
 # Example line: postgres:16-alpine
 #
-# The script renders the chart twice:
+# The script renders the chart three times:
 #   1) base values plus the explicit local-development profile
 #   2) production-like optional components (Dex, management backup with a
 #      dummy S3 target + key wrap, management logging) so air-gapped prod
 #      installs don't miss dex / astronomer-dr / fluent-bit.
+#   3) the optional CloudNativePG database profile, whose CRD uses imageName
+#      instead of a Pod-spec image field.
 # Results are unioned. The agent image and digest-pinned downstream controller
 # images are added explicitly because they run only in managed clusters and do
 # not appear in a management-plane Deployment.
@@ -48,7 +50,8 @@ if [[ ! -f "$BUNDLE_CATALOG" ]]; then
     exit 2
 fi
 
-# Pull every `image:` reference out of a helm template render. The chart ships
+# Pull every Pod `image:` and operator CRD `imageName:` reference out of a
+# Helm template render. The chart ships
 # no key material (secrets.secretKey / secrets.encryptionKey are empty and the
 # render fails without them), so every call passes throwaway values — nothing
 # here ever reaches a cluster, we only want the image refs.
@@ -62,8 +65,8 @@ extract_images() {
         --set secrets.secretKey=extract-images-render-only \
         --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= \
         $@ \
-        | grep -oE 'image: "?[^"]+"?' \
-        | sed -E 's/^image: //; s/^"//; s/"$//'
+        | grep -oE 'image(Name)?: "?[^"]+"?' \
+        | sed -E 's/^image(Name)?: //; s/^"//; s/"$//'
 }
 
 # Explicit development render — covers server/worker/migrate/frontend/
@@ -96,7 +99,16 @@ prod_like_images="$(
         --set managementBackup.retention.credentialsSecretRef.name=image-inventory-retention
 )"
 
-images="$(printf '%s\n%s' "$dev_images" "$prod_like_images" | sed '/^$/d' | LC_ALL=C sort -u)"
+# CloudNativePG is a supported production database mode but cannot be enabled
+# in the same render as the bundled development PostgreSQL StatefulSet.
+cnpg_images="$(
+    extract_images \
+        -f "$CHART_DIR/values.yaml" \
+        -f "$CHART_DIR/values-dev.yaml" \
+        --set postgres.mode=cloudNativePG
+)"
+
+images="$(printf '%s\n%s\n%s' "$dev_images" "$prod_like_images" "$cnpg_images" | sed '/^$/d' | LC_ALL=C sort -u)"
 
 # The agent image isn't in any Deployment — it's referenced when the
 # server renders the install.yaml that operators apply in a new member
