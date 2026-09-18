@@ -89,9 +89,13 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	monitoringHandler.SetUserLookup(queries)
 	monitoringHandler.SetServerURL(cfg.ServerURL)
 	monitoringHandler.SetGrafanaProxyImage(cfg.ServerImage)
+	platformGatewayNamespace := cfg.GatewayNamespace
+	if platformGatewayNamespace == "" {
+		platformGatewayNamespace = cfg.PodNamespace
+	}
 	monitoringHandler.SetGrafanaExpose(handler.GrafanaExpose{
 		GatewayClass: cfg.GatewayClass, IngressClass: cfg.IngressClass,
-		GatewayName: cfg.GatewayName, PlatformNamespace: cfg.PodNamespace,
+		GatewayName: cfg.GatewayName, PlatformNamespace: platformGatewayNamespace,
 		TLSIssuerName: cfg.TLSIssuerName, TLSIssuerKind: cfg.TLSIssuerKind,
 	})
 	grafanaSessionTTL := newSessionTimeoutResolver(queries, logger)

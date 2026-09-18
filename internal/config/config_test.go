@@ -140,6 +140,7 @@ func TestLoadCentralizesRuntimeCompositionEnvironment(t *testing.T) {
 	t.Setenv("DEX_BUNDLED_ISSUER_URL", "https://example.test/dex")
 	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.25")
 	t.Setenv("CHART_RATING_BAYESIAN_AVG", "4.2")
+	t.Setenv("ASTRONOMER_GATEWAY_NAMESPACE", "platform-gateway")
 
 	cfg, err := Load()
 	if err != nil {
@@ -153,5 +154,8 @@ func TestLoadCentralizesRuntimeCompositionEnvironment(t *testing.T) {
 	}
 	if cfg.OTELSamplerRatio != 0.25 || cfg.ChartRatingBayesianAverage != 4.2 {
 		t.Fatalf("numeric runtime config was not loaded: %#v", cfg)
+	}
+	if cfg.GatewayNamespace != "platform-gateway" {
+		t.Fatalf("GatewayNamespace = %q, want platform-gateway", cfg.GatewayNamespace)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/go-chi/chi/v5"
@@ -59,6 +60,48 @@ func TestPageWindow(t *testing.T) {
 	page3, pg3 := pageWindow(req3, items)
 	if len(page3) != 0 || pg3.HasMore {
 		t.Fatalf("out-of-range offset should return empty last page, got len=%d has_more=%v", len(page3), pg3.HasMore)
+	}
+}
+
+func TestLayerResourceSummaryUsage(t *testing.T) {
+	nodes := []map[string]any{
+		{"name": "node-1", "cpuUsage": 0, "memoryUsage": 0},
+		{"name": "node-without-metrics", "cpuUsage": 0, "memoryUsage": 0},
+	}
+	namespaces := []map[string]any{
+		{"name": "apps", "cpuUsage": 0, "memoryUsage": 0},
+		{"name": "empty", "cpuUsage": 0, "memoryUsage": 0},
+	}
+	snapshot := clustermetrics.Snapshot{
+		Nodes: map[string]clustermetrics.NodeMetrics{
+			"node-1": {Name: "node-1", CPUUsageMillicores: 725, MemoryUsageBytes: 4 << 30},
+		},
+		Pods: map[string]clustermetrics.PodMetrics{
+			"apps/api":    {Namespace: "apps", Name: "api", CPUUsageMillicores: 125, MemoryUsageBytes: 1 << 20},
+			"apps/worker": {Namespace: "apps", Name: "worker", CPUUsageMillicores: 250, MemoryUsageBytes: 2 << 20},
+		},
+	}
+
+	layerNodeSummaryUsage(nodes, snapshot)
+	layerNamespaceUsage(namespaces, snapshot)
+
+	if got := nodes[0]["cpuUsage"]; got != int64(725) {
+		t.Fatalf("node cpuUsage = %v, want 725", got)
+	}
+	if got := nodes[0]["memoryUsage"]; got != int64(4<<30) {
+		t.Fatalf("node memoryUsage = %v, want %d", got, int64(4<<30))
+	}
+	if got := nodes[1]["cpuUsage"]; got != 0 {
+		t.Fatalf("missing node cpuUsage = %v, want zero fallback", got)
+	}
+	if got := namespaces[0]["cpuUsage"]; got != int64(375) {
+		t.Fatalf("namespace cpuUsage = %v, want 375", got)
+	}
+	if got := namespaces[0]["memoryUsage"]; got != int64(3<<20) {
+		t.Fatalf("namespace memoryUsage = %v, want %d", got, int64(3<<20))
+	}
+	if got := namespaces[1]["memoryUsage"]; got != 0 {
+		t.Fatalf("empty namespace memoryUsage = %v, want zero fallback", got)
 	}
 }
 

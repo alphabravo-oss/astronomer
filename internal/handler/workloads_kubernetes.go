@@ -359,7 +359,23 @@ func (h *WorkloadHandler) getNodes(ctx context.Context, clusterID string) ([]map
 	for _, node := range nodes.Items {
 		items = append(items, nodeSummaryMap(node, podCounts[node.Metadata.Name]))
 	}
+	if h.metrics != nil {
+		isLocal := clusterID == h.localClusterID && h.localClusterID != ""
+		layerNodeSummaryUsage(items, h.metrics.Get(ctx, clusterID, isLocal))
+	}
 	return items, nil
+}
+
+func layerNodeSummaryUsage(items []map[string]any, snapshot clustermetrics.Snapshot) {
+	for _, item := range items {
+		name, _ := item["name"].(string)
+		metrics, ok := snapshot.Nodes[name]
+		if !ok {
+			continue
+		}
+		item["cpuUsage"] = metrics.CPUUsageMillicores
+		item["memoryUsage"] = metrics.MemoryUsageBytes
+	}
 }
 
 func (h *WorkloadHandler) getNodeDetail(ctx context.Context, clusterID, nodeName string) (map[string]any, error) {

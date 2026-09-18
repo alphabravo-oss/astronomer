@@ -6,15 +6,17 @@ const source = `
  Enabled bool \`mapstructure:"enabled"\`
  Secret string \`mapstructure:"secret"\`
  Count int \`mapstructure:"count"\`
+ Mapping string \`mapstructure:"mapping"\`
  envconfig.Default{Key: "enabled", Value: true}
  envconfig.Default{Key: "count", Value: 12}
+ envconfig.Default{Key: "mapping", Value: "{}"}
  envconfig.BindEnv(v, "secret"); err
 `;
 const vite = `process.env.BACKEND_URL ?? 'http://localhost:8001'`;
 
 test("environment keys and defaults follow the configuration schema", () => {
   const output = renderEnvironment(source, 'os.Getenv("LISTEN_ADDR")', vite);
-  assert.match(output, /ENABLED="true"\nSECRET=\nCOUNT="12"/);
+  assert.match(output, /ENABLED="true"\nSECRET=\nCOUNT="12"\nMAPPING="{}"/);
   assert.match(output, /LISTEN_ADDR=\n/);
   assert.match(output, /BACKEND_URL="http:\/\/localhost:8001"/);
   assert.doesNotMatch(output, /CELERY|NEXTAUTH|POSTGRES_PORT/);

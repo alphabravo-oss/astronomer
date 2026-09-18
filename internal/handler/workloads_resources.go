@@ -13,6 +13,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
+	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
@@ -60,6 +61,10 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 			"createdAt":   ns.Metadata.CreationTimestamp.UTC().Format(time.RFC3339),
 		})
 	}
+	if h.metrics != nil {
+		isLocal := clusterID == h.localClusterID && h.localClusterID != ""
+		layerNamespaceUsage(items, h.metrics.Get(r.Context(), clusterID, isLocal))
+	}
 	sort.Slice(items, func(i, j int) bool { return items[i]["name"].(string) < items[j]["name"].(string) })
 	all, names, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourceClusters, rbac.VerbRead)
 	if err != nil {
@@ -73,6 +78,25 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 	// requested page so Total reflects the full set and Next advances correctly.
 	page, pagination := pageWindow(r, items)
 	paging.Write(w, page, pagination)
+}
+
+func layerNamespaceUsage(items []map[string]any, snapshot clustermetrics.Snapshot) {
+	usage := make(map[string]struct{ cpu, memory int64 })
+	for _, metrics := range snapshot.Pods {
+		current := usage[metrics.Namespace]
+		current.cpu += metrics.CPUUsageMillicores
+		current.memory += metrics.MemoryUsageBytes
+		usage[metrics.Namespace] = current
+	}
+	for _, item := range items {
+		name, _ := item["name"].(string)
+		current, ok := usage[name]
+		if !ok {
+			continue
+		}
+		item["cpuUsage"] = current.cpu
+		item["memoryUsage"] = current.memory
+	}
 }
 
 func (h *WorkloadHandler) ListNodes(w http.ResponseWriter, r *http.Request) {

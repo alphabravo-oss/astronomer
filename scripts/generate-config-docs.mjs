@@ -37,7 +37,7 @@ export function parseFields(source) {
 export function parseDefaults(source) {
   const defaults = new Map();
   const pattern =
-    /envconfig\.Default\{Key:\s*"([^"]+)",\s*Value:\s*([^}\n]+)\}/g;
+    /envconfig\.Default\{Key:\s*"([^"]+)",\s*Value:\s*((?:"(?:\\.|[^"\\])*")|(?:[^}\n]+))\}/g;
   for (const match of source.matchAll(pattern)) {
     defaults.set(match[1], match[2].trim());
   }

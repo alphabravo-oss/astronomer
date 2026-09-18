@@ -43,6 +43,7 @@ Production-specific invariants are enforced at startup by
 | `ASTRONOMER_BOOTSTRAP_PASSWORD` | `BootstrapAdminPassword` | string | Go zero value | Yes |
 | `ASTRONOMER_BOOTSTRAP_USERNAME` | `BootstrapAdminUsername` | string | `admin` | No |
 | `ASTRONOMER_BOOTSTRAP_EMAIL` | `BootstrapAdminEmail` | string | `admin@astronomer.local` | No |
+| `ASTRONOMER_BOOTSTRAP_FORCE_PASSWORD_CHANGE` | `BootstrapAdminForcePasswordChange` | boolean | `false` | No |
 | `CORS_ALLOWED_ORIGINS` | `CORSAllowedOrigins` | string | `http://localhost:3000` | No |
 | `TRUSTED_PROXY_CIDRS` | `TrustedProxyCIDRs` | string | Empty | No |
 | `SESSION_TIMEOUT_MINUTES` | `SessionTimeoutMinutes` | integer | `15` | No |
@@ -64,6 +65,7 @@ Production-specific invariants are enforced at startup by
 | `RELEASE_MANIFEST_PATH` | `ReleaseManifestPath` | string | Go zero value | No |
 | `RELEASE_MIRROR_MAPPING_PATH` | `ReleaseMirrorMappingPath` | string | Go zero value | No |
 | `DELIVERY_ENABLED` | `DeliveryEnabled` | boolean | `true` | No |
+| `DELIVERY_LOCAL_FLUX_BOOTSTRAP` | `DeliveryLocalFluxBootstrap` | boolean | `true` | No |
 | `DELIVERY_KUBERNETES_MIN_MINOR` | `DeliveryKubernetesMinMinor` | string | `1.33` | No |
 | `DELIVERY_KUBERNETES_MAX_MINOR` | `DeliveryKubernetesMaxMinor` | string | `1.35` | No |
 | `DELIVERY_FLUX_VERSION` | `DeliveryFluxVersion` | string | `v2.9.3` | No |
@@ -138,11 +140,23 @@ Production-specific invariants are enforced at startup by
 | `ASTRONOMER_GATEWAY_CLASS` | `GatewayClass` | string | Go zero value | No |
 | `ASTRONOMER_INGRESS_CLASS` | `IngressClass` | string | Go zero value | No |
 | `ASTRONOMER_GATEWAY_NAME` | `GatewayName` | string | Go zero value | No |
+| `ASTRONOMER_GATEWAY_NAMESPACE` | `GatewayNamespace` | string | Go zero value | No |
 | `ASTRONOMER_TLS_ISSUER` | `TLSIssuerName` | string | Go zero value | No |
 | `ASTRONOMER_TLS_ISSUER_KIND` | `TLSIssuerKind` | string | Go zero value | No |
 | `ASTRONOMER_CATALOG_URL` | `CatalogURL` | string | Go zero value | No |
 | `CHART_RATING_BAYESIAN_AVG` | `ChartRatingBayesianAverage` | number | `4.0` | No |
 | `CHART_RATING_BAYESIAN_WEIGHT` | `ChartRatingBayesianWeight` | number | `10.0` | No |
+| `ASTRONOMER_CATALOG_DIGEST` | `CatalogDigest` | string | Go zero value | No |
+| `ASTRONOMER_CATALOG_MIRRORS` | `CatalogMirrors` | string | `{}` | No |
+| `ASTRONOMER_CATALOG_PROXY_URL` | `CatalogProxyURL` | string | Go zero value | No |
+| `ASTRONOMER_CATALOG_CA_FILE` | `CatalogCAFile` | string | Go zero value | No |
+| `ASTRONOMER_CATALOG_ALLOW_PRIVATE_MIRRORS` | `CatalogAllowPrivateMirrors` | boolean | `false` | No |
+| `ASTRONOMER_CATALOG_SIGNATURE_REQUIRED` | `CatalogSignatureRequired` | boolean | Go zero value | No |
+| `ASTRONOMER_CATALOG_SIGNATURE_PROVIDER` | `CatalogSignatureProvider` | string | Go zero value | No |
+| `ASTRONOMER_CATALOG_SIGNATURE_IDENTITY` | `CatalogSignatureIdentity` | string | Go zero value | No |
+| `ASTRONOMER_CATALOG_SIGNATURE_ISSUER` | `CatalogSignatureIssuer` | string | Go zero value | No |
+| `ASTRONOMER_CATALOG_SIGNATURE_KEY_REF` | `CatalogSignatureKeyRef` | string | Go zero value | No |
+| `ASTRONOMER_CATALOG_TRUST_DIRECTORY` | `CatalogTrustDirectory` | string | Go zero value | No |
 | `TUNNEL_CONNECT_AUTH_FAILURE_LIMIT` | `TunnelConnectAuthFailureLimit` | integer | `50` | No |
 | `TUNNEL_CONNECT_AUTH_FAILURE_WINDOW_MINUTES` | `TunnelConnectAuthFailureWindowMinutes` | integer | `5` | No |
 | `TUNNEL_CONNECT_CLOCK_SKEW_MINUTES` | `TunnelConnectClockSkewMinutes` | integer | `5` | No |

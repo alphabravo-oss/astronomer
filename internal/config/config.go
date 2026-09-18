@@ -265,6 +265,7 @@ type Config struct {
 	GatewayClass              string `mapstructure:"astronomer_gateway_class"`
 	IngressClass              string `mapstructure:"astronomer_ingress_class"`
 	GatewayName               string `mapstructure:"astronomer_gateway_name"`
+	GatewayNamespace          string `mapstructure:"astronomer_gateway_namespace"`
 	TLSIssuerName             string `mapstructure:"astronomer_tls_issuer"`
 	TLSIssuerKind             string `mapstructure:"astronomer_tls_issuer_kind"`
 
@@ -456,7 +457,7 @@ func Load() (*Config, error) {
 		"extension_bundle_trusted_key",
 		"astronomer_gateway_class",
 		"astronomer_ingress_class",
-		"astronomer_gateway_name",
+		"astronomer_gateway_name", "astronomer_gateway_namespace",
 		"astronomer_tls_issuer",
 		"astronomer_tls_issuer_kind",
 		"astronomer_catalog_url",
