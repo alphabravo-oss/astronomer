@@ -60,10 +60,26 @@ sha256sum --check SHA256SUMS
 On a host that can pull public registries:
 
 ```bash
+./airgap-kit.py approve \
+  --manifest release-manifest.json \
+  --signature release-manifest.sigstore.json \
+  --signing-key /secure/path/airgap-approval.key \
+  --signature-output release-manifest.offline.sigstore.json
+
 ./astronomer-save-images.sh \
   --manifest release-manifest.json \
   --output astronomer-images.tar.gz
 ```
+
+`approve` verifies the upstream GitHub/Sigstore signature while the verifier
+has its normal Sigstore trust services, then signs the exact manifest bytes
+with an installation-owned key without uploading that local signature to a
+transparency log. The manifest SHA-256 is embedded in the image archive index,
+so the offline signature authenticates the release contract and thereby the
+exact image set. Transfer `release-manifest.offline.sigstore.json` and the
+trusted public key through your approved channel; never transfer the private
+key. Prefer a dedicated handoff key, separate from the key used to sign Flux
+distribution artifacts.
 
 Move the kit directory **and** `astronomer-images.tar.gz` into the dark site.
 Authenticate Skopeo to the private registry using its normal credential file
@@ -73,14 +89,18 @@ Authenticate Skopeo to the private registry using its normal credential file
 ./astronomer-load-images.sh \
   --manifest release-manifest.json \
   --signature release-manifest.sigstore.json \
+  --offline-signature release-manifest.offline.sigstore.json \
+  --offline-public-key /secure/path/airgap-approval.pub \
   --images astronomer-images.tar.gz \
   --destination-registry registry.internal.example.com \
   --values-output airgap-values.json
 ```
 
-The load command verifies the Sigstore workflow identity first, then validates
-the archive's closed index, exact release image set, paths, member types, and
-every payload checksum before extracting anything or writing to the registry.
+The load command verifies the offline handoff signature against the explicitly
+trusted public key, then validates the archive's closed index, exact release
+image set, paths, member types, and every payload checksum before extracting
+anything or writing to the registry. Keep the upstream keyless bundle with the
+release for audit; no network access to Sigstore is needed at the dark site.
 Links, traversal, duplicate or extra members, and archives from another release
 are rejected.
 
@@ -155,7 +175,9 @@ release-manifest-referenced content.
 ## 3. Generate the deterministic mirror and install contracts
 
 Authenticate Skopeo and ORAS to the destination registry using their standard
-credential files, then generate a plan without writing the registry:
+credential files. First complete the keyless release-manifest verification in
+step 1 on this connected verification host; then generate a plan without
+writing the registry:
 
 ```bash
 export PRIVATE_REGISTRY=registry.internal.example.com
@@ -202,8 +224,40 @@ password through Cosign's documented environment mechanism.
 cosign verify-blob \
   --key /secure/path/airgap-mirror.pub \
   --bundle mirror-mapping.sigstore.json \
+  --insecure-ignore-tlog \
   mirror-mapping.json
 ```
+
+The signed mirror mapping authenticates the source-to-target digest map; it does
+not create a signature for the Flux OCI artifact. For an installation that must
+verify Flux without Sigstore's public transparency service, sign the exact
+mirrored digest with the offline installation key. This does not change the OCI
+artifact digest. Keep the private key on the controlled signing host and transfer
+only the public key through the approved media process:
+
+```bash
+FLUX_SOURCE=$(jq -er '.flux.distribution.reference' release-manifest.json)
+FLUX_TARGET=$(jq -er --arg source "$FLUX_SOURCE" \
+  '.entries[] | select(.source == $source) | .target' mirror-mapping.json)
+test -n "$FLUX_TARGET"
+
+COSIGN_YES=true cosign sign \
+  --key /secure/path/airgap-mirror.key \
+  --tlog-upload=false \
+  "$FLUX_TARGET"
+
+cosign verify \
+  --key /secure/path/airgap-mirror.pub \
+  --insecure-ignore-tlog \
+  "$FLUX_TARGET"
+```
+
+The verification still checks the signature against the pinned public key and
+the exact artifact digest; `--insecure-ignore-tlog` skips only transparency-log
+verification because this signature was deliberately created without a log
+entry. The signed release manifest and mapping must still pass their separate
+release-workflow signature checks. Repeat the artifact signing and verification
+for every new Flux-distribution digest imported for an upgrade.
 
 Container images are copied with all platforms and preserved digests. Helm and
 OCI artifacts are copied recursively so OCI referrers such as signatures, SPDX
@@ -218,10 +272,31 @@ Transfer these files into the disconnected environment:
 - `release-manifest.json` and `release-manifest.sigstore.json`
 - `mirror-mapping.json` and `mirror-mapping.sigstore.json`
 - `airgap-values.json`, `SHA256SUMS`, `RELEASE_SUBJECTS`, SBOMs, and provenance
+- for a USB transfer, `release-manifest.offline.sigstore.json` and its trusted
+  public key (never the private handoff key)
+- the verified offline Flux-signing **public** key (never its private key)
 
-Re-run the checksum, release-manifest signature, mirror-mapping signature, and
-`mirror-release.py verify` checks from inside the environment. Verification
+Re-run the checksums and `mirror-release.py verify` from inside the environment.
+For a registry mirror, verify the offline mirror-map signature with its trusted
+public key and compare `release_manifest_digest` to the exact manifest file;
+the signed map binds the manifest and every digest-preserving rewrite. For the
+USB flow, verify the manifest handoff signature passed to `load-images`. These
+local signatures avoid calling public transparency services from the dark site. Verification
 must succeed against the private registry before Helm is allowed to run.
+
+The registry-mirror checks are:
+
+```bash
+cosign verify-blob \
+  --key /secure/path/airgap-mirror.pub \
+  --bundle mirror-mapping.sigstore.json \
+  --insecure-ignore-tlog \
+  mirror-mapping.json
+
+test "$(jq -er '.release_manifest_digest' mirror-mapping.json)" = \
+  "sha256:$(sha256sum release-manifest.json | awk '{print $1}')"
+./mirror-release.py verify --plan mirror-mapping.json
+```
 
 ## 5. Prepare the cluster
 
@@ -260,6 +335,9 @@ helm template astronomer ./astronomer-1.2.0.tgz \
   --set 'image.pullSecrets[0].name=internal-registry-creds' \
   --set secrets.existingSecret=astronomer-secrets \
   --set bootstrap.existingSecret=astronomer-bootstrap \
+  --set-string delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity= \
+  --set-string delivery.artifacts.fluxDistribution.trustPolicy.oidcIssuer= \
+  --set-file 'delivery.artifacts.fluxDistribution.trustPolicy.publicKeys[0]=/secure/path/airgap-mirror.pub' \
   --set-file release.manifest=release-manifest.json \
   --set-file release.mirrorMapping=mirror-mapping.json \
   > rendered.yaml
@@ -287,6 +365,9 @@ helm upgrade --install astronomer ./astronomer-1.2.0.tgz \
   --set 'image.pullSecrets[0].name=internal-registry-creds' \
   --set secrets.existingSecret=astronomer-secrets \
   --set bootstrap.existingSecret=astronomer-bootstrap \
+  --set-string delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity= \
+  --set-string delivery.artifacts.fluxDistribution.trustPolicy.oidcIssuer= \
+  --set-file 'delivery.artifacts.fluxDistribution.trustPolicy.publicKeys[0]=/secure/path/airgap-mirror.pub' \
   --set-file release.manifest=release-manifest.json \
   --set-file release.mirrorMapping=mirror-mapping.json \
   --atomic --cleanup-on-fail --timeout 15m
@@ -295,6 +376,22 @@ helm upgrade --install astronomer ./astronomer-1.2.0.tgz \
 The server and worker reject an unknown, malformed, wrong-version, or mutable
 release contract at startup. The mirror mapping is accepted only when it binds
 the exact bytes of that release manifest and preserves every digest.
+
+For each update, repeat the release verification, mirror plan/copy, and
+Flux-artifact signing steps with the new exact release version, then run the
+same atomic Helm upgrade with its new chart and image mapping. An air-gapped
+installation does not discover GitHub releases on its own: an operator imports
+and approves each release, while the selected artifact trust policy verifies
+what was imported. Re-use the protected offline signer for routine updates.
+
+The Flux trust policy supports up to eight overlapping public keys. To rotate
+one, first upgrade the management-plane keyring with both old and next public
+keys, then re-apply the refreshed agent manifest on every enrolled cluster and
+verify the new fingerprint is pinned before signing or promoting a release
+that uses the next key. Keep the old key through the rollback window. Only
+after rollback no longer requires it should you remove it from the keyring and
+re-apply manifests to retire the old agent pin. Do not send private keys through
+the mirror, chart, air-gap kit, or Kubernetes Secret.
 
 ## 7. Enroll member clusters and qualify Charlie
 

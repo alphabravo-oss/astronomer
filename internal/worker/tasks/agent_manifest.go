@@ -64,7 +64,17 @@ func renderAgentManifest(ctx context.Context, clusterID, agentToken, serverURL, 
 		SystemArtifactDigest: runtimeDependencies(ctx).SystemArtifactDigest,
 		SystemOIDCIssuer:     runtimeDependencies(ctx).SystemOIDCIssuer,
 		SystemOIDCIdentity:   runtimeDependencies(ctx).SystemOIDCIdentity,
+		SystemPublicKey:      append([]byte(nil), runtimeDependencies(ctx).SystemPublicKey...),
+		SystemPublicKeys:     cloneSystemPublicKeys(runtimeDependencies(ctx).SystemPublicKeys),
 	})
+}
+
+func cloneSystemPublicKeys(keys [][]byte) [][]byte {
+	result := make([][]byte, len(keys))
+	for index := range keys {
+		result[index] = append([]byte(nil), keys[index]...)
+	}
+	return result
 }
 
 func agentImageReference(repository, tag string) string {

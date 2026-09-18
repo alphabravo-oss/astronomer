@@ -248,6 +248,7 @@ func main() {
 		SystemArtifactDigest:          cfg.DeliveryFluxDistributionDigest,
 		SystemOIDCIssuer:              cfg.DeliveryFluxDistributionOIDCIssuer,
 		SystemOIDCIdentity:            cfg.DeliveryFluxDistributionCertificateIdentity,
+		SystemPublicKeys:              cfg.DeliveryFluxDistributionKeyring,
 		PlatformName:                  "Astronomer",
 		ChartRecommendationPolicy:     catalog.NewRecommendationPolicy(cfg.ChartRatingBayesianAverage, cfg.ChartRatingBayesianWeight),
 		AuditLogRetentionMonths:       cfg.AuditLogRetentionMonths,

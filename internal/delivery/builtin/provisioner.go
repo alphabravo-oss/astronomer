@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/rollout"
@@ -551,8 +552,29 @@ func (p *Provisioner) ensureRollout(ctx context.Context, target targetIdentity, 
 		TargetID: target.id, ExpectedTargetGeneration: snapshot.TargetGeneration,
 		PreviewDigest: result.PreviewDigest, Strategy: strategy,
 		Actor: systemActor, IdempotencyKey: key,
+		Audit: builtInRolloutAuditIntent(target, key),
 	})
 	return err
+}
+
+func builtInRolloutAuditIntent(target targetIdentity, idempotencyKey string) audit.Intent {
+	const action = "delivery.rollout.created"
+	const resourceType = "delivery_rollout"
+	return audit.Intent{
+		Event: audit.Event{
+			Source: "service", ActionClass: "system", Action: action,
+			ResourceType: resourceType, ResourceID: target.id.String(),
+			ResourceName: "astronomer-builtins-" + target.slug,
+			RequestID:    idempotencyKey,
+			Detail: map[string]any{
+				"actor":             systemActor,
+				"target_generation": target.generation,
+				"builtin_slug":      target.slug,
+				"release":           target.release,
+			},
+		},
+		DedupeKey: audit.MutationDedupeKey(idempotencyKey, action, resourceType, target.id.String()),
+	}
 }
 
 func retryAfter(requestedAt *time.Time, rolloutCreatedAt time.Time) bool {

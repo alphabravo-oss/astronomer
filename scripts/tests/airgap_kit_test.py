@@ -252,6 +252,10 @@ printf '%s\n' "$*" >>"$SKOPEO_LOG"
             cosign.chmod(cosign.stat().st_mode | stat.S_IXUSR)
             signature = root / "release.sigstore.json"
             signature.write_text("{}", encoding="utf-8")
+            offline_signature = root / "release.offline.sigstore.json"
+            offline_signature.write_text("{}", encoding="utf-8")
+            offline_public_key = root / "airgap-approval.pub"
+            offline_public_key.write_text("public key", encoding="utf-8")
             env = os.environ.copy()
             env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
             env["SKOPEO_LOG"] = str(log)
@@ -269,6 +273,16 @@ printf '%s\n' "$*" >>"$SKOPEO_LOG"
                     destination_registry="mirror.example.test",
                     values_output=values,
                 )
+                offline_values = root / "offline-values.json"
+                KIT.load(
+                    manifest_path=manifest_path,
+                    signature=signature,
+                    offline_signature=offline_signature,
+                    offline_public_key=offline_public_key,
+                    images_archive=archive,
+                    destination_registry="mirror.example.test",
+                    values_output=offline_values,
+                )
             finally:
                 os.environ.clear()
                 os.environ.update(old)
@@ -277,11 +291,65 @@ printf '%s\n' "$*" >>"$SKOPEO_LOG"
             self.assertIn("--override-arch amd64", logged)
             self.assertIn("verify-blob --bundle", logged)
             self.assertIn("release.yaml@refs/tags/v1.0.0", logged)
+            self.assertIn("--insecure-ignore-tlog --bundle", logged)
+            self.assertIn("--key", logged)
             self.assertNotIn("--all", logged)
             self.assertNotRegex(logged, r"password|secret|--token(?:=|\s)")
             self.assertTrue(values.is_file())
             document_values = json.loads(values.read_text(encoding="utf-8"))
             self.assertEqual(document_values["delivery"]["artifacts"]["privateRegistry"], "mirror.example.test")
+            self.assertTrue(offline_values.is_file())
+
+    def test_approve_verifies_upstream_before_creating_offline_signature(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest_path = root / "release.json"
+            manifest_path.write_bytes(MIRROR.canonical(manifest()))
+            upstream_signature = root / "release.sigstore.json"
+            upstream_signature.write_text("{}", encoding="utf-8")
+            signing_key = root / "offline.key"
+            signing_key.write_text("private test key", encoding="utf-8")
+            signature_output = root / "release.offline.sigstore.json"
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            log = root / "cosign.log"
+            cosign = bin_dir / "cosign"
+            cosign.write_text(
+                """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >>"$COSIGN_LOG"
+if [[ "$1" == "sign-blob" ]]; then
+  while [[ $# -gt 0 ]]; do
+    [[ "$1" == "--bundle" ]] && bundle="$2" && shift 2 || shift
+  done
+  printf '{"signed":true}\\n' >"$bundle"
+fi
+""",
+                encoding="utf-8",
+            )
+            cosign.chmod(cosign.stat().st_mode | stat.S_IXUSR)
+            env = os.environ.copy()
+            env.update({"PATH": f"{bin_dir}{os.pathsep}{env.get('PATH', '')}", "COSIGN_LOG": str(log)})
+            old = os.environ.copy()
+            os.environ.clear()
+            os.environ.update(env)
+            try:
+                KIT.approve_release_manifest(
+                    manifest_path=manifest_path,
+                    signature=upstream_signature,
+                    signing_key=signing_key,
+                    signature_output=signature_output,
+                )
+            finally:
+                os.environ.clear()
+                os.environ.update(old)
+            commands = log.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(commands), 2)
+            self.assertIn("verify-blob", commands[0])
+            self.assertIn("sign-blob", commands[1])
+            self.assertIn("--tlog-upload=false", commands[1])
+            self.assertIn(str(manifest_path), commands[1])
+            self.assertTrue(signature_output.is_file())
 
     def test_cli_refuses_secret_shaped_arguments(self) -> None:
         self.assertEqual(KIT.main(["list-images", "--manifest", "x", "--password=secret"]), 1)

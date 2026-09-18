@@ -63,7 +63,26 @@ cosign verify-blob \\
 from that manifest (management images, runtime images, Flux controllers,
 built-in bundle images, Charlie).
 
-## 2. Connected host — save images
+## 2. Connected host — approve the offline handoff
+
+On a connected verification host, use an installation-owned Cosign key to
+endorse the exact release manifest after verifying its upstream GitHub
+signature. Transfer the public key and resulting bundle through your approved
+trusted channel; never transfer the private key.
+
+```bash
+./airgap-kit.py approve \\
+  --manifest release-manifest.json \\
+  --signature release-manifest.sigstore.json \\
+  --signing-key /secure/path/airgap-approval.key \\
+  --signature-output release-manifest.offline.sigstore.json
+```
+
+The offline signature intentionally has no public transparency-log entry. Its
+trust comes from the approved public key and the connected-host verification
+performed by this command.
+
+## 3. Connected host — save images
 
 Requires Skopeo. Default is `linux/amd64` only.
 
@@ -76,7 +95,7 @@ Requires Skopeo. Default is `linux/amd64` only.
 Pass `--all-platforms` for the full multi-arch index. Pass `--first-party`
 to copy only the seven Astronomer images (smoke / smaller USB).
 
-## 3. Dark site — load images
+## 4. Dark site — load images
 
 Authenticate Skopeo to the private registry using its normal credential file.
 This script does not accept passwords.
@@ -85,12 +104,14 @@ This script does not accept passwords.
 ./astronomer-load-images.sh \\
   --manifest release-manifest.json \\
   --signature release-manifest.sigstore.json \\
+  --offline-signature release-manifest.offline.sigstore.json \\
+  --offline-public-key /secure/path/airgap-approval.pub \\
   --images astronomer-images.tar.gz \\
   --destination-registry registry.internal.example.com \\
   --values-output airgap-values.json
 ```
 
-## 4. Install
+## 5. Install
 
 Use the included chart, `values-production.yaml`, `airgap-values.json`, and
 `--set-file release.manifest=release-manifest.json`. Flux and built-in bundle
@@ -200,10 +221,17 @@ def run(command: list[str], failure: str = "copying an immutable image") -> None
         raise KitError(f"{command[0]} failed {failure}") from exc
 
 
-def verify_release_manifest(manifest_path: Path, signature: Path, manifest: dict[str, Any]) -> None:
-    version = manifest.get("release", {}).get("version")
+def validate_release_version(manifest: Any) -> str:
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("release"), dict):
+        raise KitError("release manifest is missing its release metadata")
+    version = manifest["release"].get("version")
     if not isinstance(version, str) or re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", version) is None:
         raise KitError("release manifest has an invalid release.version")
+    return version
+
+
+def verify_release_manifest(manifest_path: Path, signature: Path, manifest: dict[str, Any]) -> None:
+    version = validate_release_version(manifest)
     if not signature.is_file():
         raise KitError("release manifest Sigstore bundle is required before loading images")
     run(
@@ -220,6 +248,26 @@ def verify_release_manifest(manifest_path: Path, signature: Path, manifest: dict
         ],
         "verifying the release manifest Sigstore identity",
     )
+
+
+def approve_release_manifest(
+    *, manifest_path: Path, signature: Path, signing_key: Path, signature_output: Path
+) -> None:
+    """Verify upstream provenance online, then add a local offline handoff signature."""
+    manifest = load_json(manifest_path)
+    verify_release_manifest(manifest_path, signature, manifest)
+    if not signing_key.is_file():
+        raise KitError("offline handoff signing key is not a readable file")
+    signature_output.parent.mkdir(parents=True, exist_ok=True)
+    run(
+        [
+            "cosign", "sign-blob", "--yes", "--key", str(signing_key),
+            "--tlog-upload=false", "--bundle", str(signature_output), str(manifest_path),
+        ],
+        "signing the verified release-manifest handoff",
+    )
+    if not signature_output.is_file():
+        raise KitError("Cosign did not write the offline handoff signature bundle")
 
 
 def write_kit_file(root: Path, relative: str, data: bytes, mode: int = 0o644) -> None:
@@ -490,9 +538,25 @@ def load(
     images_archive: Path,
     destination_registry: str,
     values_output: Path | None = None,
+    offline_signature: Path | None = None,
+    offline_public_key: Path | None = None,
 ) -> None:
     manifest = load_json(manifest_path)
-    verify_release_manifest(manifest_path, signature, manifest)
+    validate_release_version(manifest)
+    if (offline_signature is None) != (offline_public_key is None):
+        raise KitError("--offline-signature and --offline-public-key must be supplied together")
+    if offline_signature is None:
+        verify_release_manifest(manifest_path, signature, manifest)
+    else:
+        if not signature.is_file() or not offline_signature.is_file() or not offline_public_key.is_file():
+            raise KitError("release provenance and offline handoff signature files are required")
+        run(
+            [
+                "cosign", "verify-blob", "--key", str(offline_public_key),
+                "--insecure-ignore-tlog", "--bundle", str(offline_signature), str(manifest_path),
+            ],
+            "verifying the offline release-manifest handoff signature",
+        )
     mirror = load_mirror()
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
@@ -548,12 +612,20 @@ def parser() -> argparse.ArgumentParser:
     saving.add_argument("--all-platforms", action="store_true")
     saving.add_argument("--first-party", action="store_true")
 
+    approving = sub.add_parser("approve", help="verify upstream release provenance and sign an offline handoff")
+    approving.add_argument("--manifest", type=Path, required=True)
+    approving.add_argument("--signature", type=Path, required=True, help="upstream keyless Sigstore bundle")
+    approving.add_argument("--signing-key", type=Path, required=True, help="offline handoff private key; never transfer it")
+    approving.add_argument("--signature-output", type=Path, required=True)
+
     loading = sub.add_parser("load", help="Copy a saved archive into a private registry (dark site)")
     loading.add_argument("--manifest", type=Path, required=True)
     loading.add_argument("--signature", type=Path, required=True)
     loading.add_argument("--images", type=Path, required=True)
     loading.add_argument("--destination-registry", required=True)
     loading.add_argument("--values-output", type=Path)
+    loading.add_argument("--offline-signature", type=Path, help="local handoff Cosign bundle for no-egress verification")
+    loading.add_argument("--offline-public-key", type=Path, help="trusted public key for the offline handoff bundle")
     return result
 
 
@@ -583,6 +655,13 @@ def main(argv: list[str] | None = None) -> int:
                 all_platforms=args.all_platforms,
                 first_party=args.first_party,
             )
+        elif args.command == "approve":
+            approve_release_manifest(
+                manifest_path=args.manifest,
+                signature=args.signature,
+                signing_key=args.signing_key,
+                signature_output=args.signature_output,
+            )
         elif args.command == "load":
             load(
                 manifest_path=args.manifest,
@@ -590,6 +669,8 @@ def main(argv: list[str] | None = None) -> int:
                 images_archive=args.images,
                 destination_registry=args.destination_registry,
                 values_output=args.values_output,
+                offline_signature=args.offline_signature,
+                offline_public_key=args.offline_public_key,
             )
         return 0
     except KitError as exc:

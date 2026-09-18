@@ -1,9 +1,17 @@
 package agenttemplate
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
+	"io"
 	"strings"
 	"testing"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1061,6 +1069,93 @@ func TestRenderInstallYAMLBootstrapsSuspendedSignedSystemAfterAgent(t *testing.T
 	invalid := RenderInstallYAML(InstallTemplateData{ServerURL: "https://astro.example.test", ClusterID: "c1", RegistrationToken: "tok", AgentImage: "agent:v1", SystemArtifactURL: "oci://user:secret@example.test/system"})
 	if strings.Contains(invalid, "name: astronomer-system-release") {
 		t.Fatal("invalid or credential-bearing system source was rendered")
+	}
+}
+
+func TestRenderInstallYAMLBootstrapsOfflinePinnedCosignKey(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded})
+	manifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL: "https://astro.example.test", ClusterID: "c1", RegistrationToken: "tok",
+		AgentImage:           "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
+		SystemArtifactURL:    "registry.internal.example.test/astronomer/system",
+		SystemArtifactDigest: "sha256:" + strings.Repeat("b", 64),
+		SystemPublicKey:      publicKey,
+	})
+	fingerprint := protocol.DeliverySystemKeyFingerprint(publicKey)
+	for _, required := range []string{
+		"name: astronomer-system-release-trust", "cosign.pub: " + base64.StdEncoding.EncodeToString(publicKey),
+		"secretRef:\n      name: astronomer-system-release-trust", "ASTRONOMER_SYSTEM_KEY_FINGERPRINT",
+		"value: \"" + fingerprint + "\"", "kind: OCIRepository", "kind: Kustomization",
+	} {
+		if !strings.Contains(manifest, required) {
+			t.Fatalf("offline enrollment manifest missing %q", required)
+		}
+	}
+	systemSource := strings.LastIndex(manifest, "kind: OCIRepository\nmetadata:\n  name: astronomer-system-release")
+	if systemSource < 0 {
+		t.Fatal("offline system OCIRepository was not rendered")
+	}
+	if strings.Contains(manifest[systemSource:], "matchOIDCIdentity") {
+		t.Fatal("offline key policy also rendered a keyless OIDC verifier")
+	}
+	decoder := yaml.NewDecoder(strings.NewReader(manifest))
+	documents := 0
+	for {
+		var doc any
+		if err := decoder.Decode(&doc); err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatalf("offline enrollment manifest is invalid YAML at document %d: %v", documents, err)
+		}
+		documents++
+	}
+	if documents < 7 {
+		t.Fatalf("offline enrollment rendered only %d YAML documents", documents)
+	}
+
+	nextKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextDER, err := x509.MarshalPKIXPublicKey(&nextKey.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextPublicKey := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: nextDER})
+	keyringManifest := RenderInstallYAML(InstallTemplateData{
+		ServerURL: "https://astro.example.test", ClusterID: "c2", RegistrationToken: "tok",
+		AgentImage:        "registry.example.test/agent@sha256:" + strings.Repeat("a", 64),
+		SystemArtifactURL: "registry.internal.example.test/astronomer/system", SystemArtifactDigest: "sha256:" + strings.Repeat("b", 64),
+		SystemPublicKeys: [][]byte{publicKey, nextPublicKey},
+	})
+	keyringFingerprint := protocol.DeliverySystemKeyFingerprint(nextPublicKey)
+	for _, required := range []string{
+		"cosign.pub: " + base64.StdEncoding.EncodeToString(publicKey),
+		"cosign-" + strings.TrimPrefix(keyringFingerprint, "sha256:") + ".pub: " + base64.StdEncoding.EncodeToString(nextPublicKey),
+		"ASTRONOMER_SYSTEM_KEY_FINGERPRINTS", fingerprint + "," + keyringFingerprint,
+	} {
+		if !strings.Contains(keyringManifest, required) {
+			t.Fatalf("overlapping offline enrollment keyring missing %q", required)
+		}
+	}
+
+	mixed := RenderInstallYAML(InstallTemplateData{
+		ServerURL: "https://astro.example.test", ClusterID: "c1", RegistrationToken: "tok",
+		AgentImage: "agent:v1", SystemArtifactURL: "oci://registry.example.test/system",
+		SystemArtifactDigest: "sha256:" + strings.Repeat("b", 64), SystemPublicKey: publicKey,
+		SystemOIDCIssuer: "https://token.actions.githubusercontent.com", SystemOIDCIdentity: "release@example.test",
+	})
+	if strings.Contains(mixed, "name: astronomer-system-release\n") {
+		t.Fatal("mixed key and OIDC trust rendered a system bootstrap")
 	}
 }
 

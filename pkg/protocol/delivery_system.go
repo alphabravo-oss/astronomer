@@ -1,6 +1,11 @@
 package protocol
 
 import (
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/url"
@@ -10,9 +15,13 @@ import (
 )
 
 const MaxDeliverySystemTrustBytes = 256 << 10
+const MaxDeliverySystemPublicKeys = 8
 
 var (
-	semanticVersionPattern   = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
+	// System release identities append build metadata to the app version. A
+	// SemVer prerelease (for example, local/dev builds) and build metadata may
+	// coexist, so keep both optional suffixes independently representable.
+	semanticVersionPattern   = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
 	kubernetesVersionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]+(?:\.[0-9]+)?$`)
 	immutableImagePattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9._:/-]*@sha256:[0-9a-f]{64}$`)
 )
@@ -42,13 +51,102 @@ type DeliverySystemReleaseV2 struct {
 }
 
 // DeliverySystemVerification is always present. Keyless verification is bound
-// to exact OIDC identities. Disconnected installations use an embedded public
-// key whose SHA-256 fingerprint is allowlisted by the agent release policy.
+// to exact OIDC identities. Disconnected installations may publish a bounded
+// overlapping key set so operators can rotate signers without a one-key
+// cutover. The agent pins every key fingerprint during enrollment.
 type DeliverySystemVerification struct {
 	Provider       string                 `json:"provider"`
 	OIDCIdentities []DeliveryOIDCIdentity `json:"oidc_identities,omitempty"`
-	PublicKey      []byte                 `json:"public_key,omitempty"`
-	KeyFingerprint string                 `json:"key_fingerprint,omitempty"`
+	PublicKeys     [][]byte               `json:"public_keys,omitempty"`
+	// PublicKey and KeyFingerprint are retained for snapshots produced by
+	// pre-keyring servers. New releases must use PublicKeys, including for a
+	// one-key set, so the keyring contract has one canonical representation.
+	PublicKey      []byte `json:"public_key,omitempty"`
+	KeyFingerprint string `json:"key_fingerprint,omitempty"`
+}
+
+// DeliverySystemKeyFingerprint identifies the exact PEM bytes pinned at
+// enrollment. Keep the bytes stable across the server, manifest, and agent:
+// harmless-looking PEM reformatting changes the trust anchor.
+func DeliverySystemKeyFingerprint(publicKey []byte) string {
+	if len(publicKey) == 0 {
+		return ""
+	}
+	sum := sha256.Sum256(publicKey)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// DeliverySystemPublicKeySet returns the canonical set represented by either
+// the current keyring fields or the legacy single-key fields. It always copies
+// bytes so a caller cannot mutate protocol-owned trust material.
+func (v DeliverySystemVerification) DeliverySystemPublicKeySet() [][]byte {
+	if len(v.PublicKeys) != 0 {
+		keys := make([][]byte, len(v.PublicKeys))
+		for index := range v.PublicKeys {
+			keys[index] = append([]byte(nil), v.PublicKeys[index]...)
+		}
+		return keys
+	}
+	if len(v.PublicKey) == 0 {
+		return nil
+	}
+	return [][]byte{append([]byte(nil), v.PublicKey...)}
+}
+
+// DeliverySystemKeyFingerprints computes stable exact-PEM pins for a keyring.
+func DeliverySystemKeyFingerprints(publicKeys [][]byte) []string {
+	fingerprints := make([]string, 0, len(publicKeys))
+	for _, publicKey := range publicKeys {
+		fingerprints = append(fingerprints, DeliverySystemKeyFingerprint(publicKey))
+	}
+	return fingerprints
+}
+
+// ParseDeliverySystemPublicKeys decodes the chart's JSON-encoded keyring and
+// validates it before it can cross the server/agent boundary. An empty value
+// means the caller selected keyless OIDC mode.
+func ParseDeliverySystemPublicKeys(encoded string) ([][]byte, error) {
+	if strings.TrimSpace(encoded) == "" {
+		return nil, nil
+	}
+	var values []string
+	if err := json.Unmarshal([]byte(encoded), &values); err != nil {
+		return nil, errors.New("system public-key set must be a JSON array of PEM strings")
+	}
+	if len(values) == 0 {
+		return nil, nil
+	}
+	if len(values) > MaxDeliverySystemPublicKeys {
+		return nil, fmt.Errorf("system public-key set must contain at most %d keys", MaxDeliverySystemPublicKeys)
+	}
+	keys := make([][]byte, len(values))
+	for index, value := range values {
+		keys[index] = []byte(value)
+	}
+	if err := (DeliverySystemVerification{Provider: "cosign", PublicKeys: keys}).Validate(); err != nil {
+		return nil, err
+	}
+	return keys, nil
+}
+
+// ValidateDeliverySystemPublicKey accepts the standard Cosign PEM public-key
+// formats and enforces the protocol size bound before trust material is
+// persisted or projected into a cluster Secret.
+func ValidateDeliverySystemPublicKey(publicKey []byte) error {
+	if len(publicKey) == 0 || len(publicKey) > MaxDeliverySystemTrustBytes {
+		return errors.New("system release public key is empty or exceeds the size limit")
+	}
+	block, rest := pem.Decode(publicKey)
+	if block == nil || len(strings.TrimSpace(string(rest))) != 0 {
+		return errors.New("system release public key must be a single PEM-encoded public key")
+	}
+	if _, err := x509.ParsePKIXPublicKey(block.Bytes); err == nil {
+		return nil
+	}
+	if _, err := x509.ParsePKCS1PublicKey(block.Bytes); err == nil {
+		return nil
+	}
+	return errors.New("system release public key PEM is not a supported public-key encoding")
 }
 
 func (r DeliverySystemReleaseV2) Validate() error {
@@ -94,17 +192,40 @@ func (v DeliverySystemVerification) Validate() error {
 	if v.Provider != "cosign" {
 		return fmt.Errorf("system release verification provider %q is not supported", v.Provider)
 	}
-	if len(v.OIDCIdentities) > 16 || len(v.PublicKey) > MaxDeliverySystemTrustBytes {
+	if len(v.OIDCIdentities) > 16 || len(v.PublicKey) > MaxDeliverySystemTrustBytes || len(v.PublicKeys) > MaxDeliverySystemPublicKeys {
 		return errors.New("system release verification policy exceeds limits")
 	}
-	keyMode := len(v.PublicKey) != 0 || v.KeyFingerprint != ""
+	keyMode := len(v.PublicKeys) != 0 || len(v.PublicKey) != 0 || v.KeyFingerprint != ""
 	identityMode := len(v.OIDCIdentities) != 0
 	if keyMode == identityMode {
 		return errors.New("system release verification requires exactly one of OIDC identity or public-key mode")
 	}
 	if keyMode {
-		if len(v.PublicKey) == 0 || !validDigest(v.KeyFingerprint) {
-			return errors.New("system public-key verification requires key bytes and a sha256 fingerprint")
+		if len(v.PublicKeys) != 0 {
+			if len(v.PublicKey) != 0 || v.KeyFingerprint != "" {
+				return errors.New("system release must use either the public-key set or legacy single-key fields")
+			}
+			var totalBytes int
+			fingerprints := make(map[string]struct{}, len(v.PublicKeys))
+			for _, publicKey := range v.PublicKeys {
+				totalBytes += len(publicKey)
+				if totalBytes > MaxDeliverySystemTrustBytes {
+					return errors.New("system release public-key set exceeds the size limit")
+				}
+				if err := ValidateDeliverySystemPublicKey(publicKey); err != nil {
+					return err
+				}
+				fingerprint := DeliverySystemKeyFingerprint(publicKey)
+				if _, exists := fingerprints[fingerprint]; exists {
+					return errors.New("system release public-key set contains a duplicate key")
+				}
+				fingerprints[fingerprint] = struct{}{}
+			}
+			return nil
+		}
+		if err := ValidateDeliverySystemPublicKey(v.PublicKey); err != nil || !validDigest(v.KeyFingerprint) ||
+			DeliverySystemKeyFingerprint(v.PublicKey) != v.KeyFingerprint {
+			return errors.New("legacy system public-key verification requires key bytes and a sha256 fingerprint")
 		}
 		return nil
 	}

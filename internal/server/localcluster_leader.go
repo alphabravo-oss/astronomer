@@ -29,6 +29,7 @@ func buildLocalAgentLeaderRuntime(
 	helmRuntime helmruntime.Config,
 	namespace string,
 	identity string,
+	deliveryConfig localAgentDeliveryConfig,
 ) (func(context.Context) error, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -91,6 +92,7 @@ func buildLocalAgentLeaderRuntime(
 						queries,
 						clusterID,
 						helmRuntime,
+						deliveryConfig,
 					)
 					if buildErr != nil {
 						reportRuntimeError(fmt.Errorf("build local agent runtime: %w", buildErr))

@@ -1,6 +1,11 @@
 package systemrelease
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"reflect"
 	"strings"
 	"testing"
@@ -32,8 +37,24 @@ func TestBuildProducesValidatedDeterministicRelease(t *testing.T) {
 	if firstDigest != secondDigest || !reflect.DeepEqual(first, second) {
 		t.Fatal("release construction is not deterministic")
 	}
-	if first.ArtifactURL != "oci://registry.example.test/astronomer/system" || first.Version != "v1.0.0" || first.AgentVersion != "v1.0.0" {
+	if first.ArtifactURL != "oci://registry.example.test/astronomer/system" || !strings.HasPrefix(first.Version, "v1.0.0+system.") || first.AgentVersion != "v1.0.0" {
 		t.Fatalf("release was not normalized: %#v", first)
+	}
+}
+
+func TestBuildPreservesPrereleaseWhenAddingSystemIdentityMetadata(t *testing.T) {
+	config := validConfig()
+	config.Version = "1.2.0-local.52350a38.a60bcdd3"
+	config.AgentVersion = config.Version
+	spec, _, err := build(config)
+	if err != nil {
+		t.Fatalf("local prerelease system release rejected: %v", err)
+	}
+	if !strings.HasPrefix(spec.Version, "v1.2.0-local.52350a38.a60bcdd3+system.") {
+		t.Fatalf("system identity did not preserve prerelease version: %q", spec.Version)
+	}
+	if len(spec.Version) > 64 {
+		t.Fatalf("system release version exceeds the database column bound: %d (%q)", len(spec.Version), spec.Version)
 	}
 }
 
@@ -47,6 +68,78 @@ func TestBuildRejectsPartialConfiguration(t *testing.T) {
 		if _, _, err := build(config); err == nil {
 			t.Fatal("partial release configuration accepted")
 		}
+	}
+}
+
+func TestBuildSupportsOfflinePinnedCosignKey(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded})
+	config := validConfig()
+	config.CertificateIssuer = ""
+	config.CertificateIdentity = ""
+	config.PublicKey = publicKey
+	spec, digest, err := build(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest == "" || len(spec.Verification.OIDCIdentities) != 0 || len(spec.Verification.PublicKeys) != 1 ||
+		string(spec.Verification.PublicKeys[0]) != string(publicKey) {
+		t.Fatalf("offline public-key policy not bound into release: %#v", spec.Verification)
+	}
+
+	config.CertificateIssuer = validConfig().CertificateIssuer
+	if _, _, err := build(config); err == nil {
+		t.Fatal("mixed public-key and keyless trust was accepted")
+	}
+	config.CertificateIssuer = ""
+	config.PublicKey = []byte("not a public key")
+	if _, _, err := build(config); err == nil {
+		t.Fatal("malformed public key was accepted")
+	}
+}
+
+func TestBuildSupportsOverlappingOfflineKeyRotation(t *testing.T) {
+	makeKey := func() []byte {
+		t.Helper()
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded})
+	}
+	oldKey, nextKey := makeKey(), makeKey()
+	config := validConfig()
+	config.CertificateIssuer = ""
+	config.CertificateIdentity = ""
+	config.PublicKeys = [][]byte{oldKey, nextKey}
+	spec, _, err := build(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Verification.PublicKeys) != 2 || len(spec.Verification.OIDCIdentities) != 0 {
+		t.Fatalf("rotating keyring not included in immutable release: %#v", spec.Verification)
+	}
+	oldOnly := validConfig()
+	oldOnly.CertificateIssuer = ""
+	oldOnly.CertificateIdentity = ""
+	oldOnly.PublicKeys = [][]byte{oldKey}
+	oldSpec, _, err := build(oldOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldSpec.Version == spec.Version {
+		t.Fatal("changing the trust keyring reused an immutable system release identity")
 	}
 }
 

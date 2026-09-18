@@ -809,6 +809,8 @@ spec:
               value: "{{SYSTEM_OIDC_ISSUER}}"
             - name: ASTRONOMER_SYSTEM_OIDC_IDENTITY
               value: "{{SYSTEM_OIDC_IDENTITY}}"
+            - name: ASTRONOMER_SYSTEM_KEY_FINGERPRINTS
+              value: "{{SYSTEM_KEY_FINGERPRINTS}}"
 {{AGENT_PROXY_ENV}}
           ports:
             - name: health

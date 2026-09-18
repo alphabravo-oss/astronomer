@@ -1,7 +1,9 @@
 ---
 # Bootstrap creates the signed system source in a suspended state. The agent
 # validates enrollment, compatibility, rollout cohort, immutable digest, and
-# signing identity before it unsuspends these fixed-name resources.
+# pinned signing policy before it unsuspends these fixed-name resources.
+{{SYSTEM_TRUST_SECRET}}
+---
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
@@ -18,9 +20,7 @@ spec:
     digest: "{{SYSTEM_ARTIFACT_DIGEST}}"
   verify:
     provider: cosign
-    matchOIDCIdentity:
-      - issuer: "{{SYSTEM_OIDC_ISSUER}}"
-        subject: "{{SYSTEM_OIDC_IDENTITY}}"
+{{SYSTEM_VERIFY_POLICY}}
   suspend: true
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1

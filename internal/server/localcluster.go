@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
@@ -18,6 +19,7 @@ import (
 
 	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
+	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/helmruntime"
@@ -38,6 +40,14 @@ const localAgentDialURL = "ws://127.0.0.1:8000"
 // legitimate namespace reconciliation as missing the mutate capability.
 const localAgentPrivilegeProfile = agenttemplate.PrivilegeProfileAdmin
 
+type localAgentDeliveryConfig struct {
+	Enabled            bool
+	Namespace          string
+	SystemOIDCIssuer   string
+	SystemOIDCIdentity string
+	SystemPublicKeys   [][]byte
+}
+
 // localClusterName is the canonical name for the management cluster row,
 // matching Rancher's convention. The user-visible UI surfaces this directly.
 const localClusterName = "local"
@@ -47,6 +57,10 @@ const localClusterName = "local"
 // outlive any plausible reconnect backoff window. 30 days is generous; the
 // token never leaves this pod.
 const localRegistrationTokenTTL = 30 * 24 * time.Hour
+
+func systemKeyFingerprintAllowlist(publicKeys [][]byte) []string {
+	return protocol.DeliverySystemKeyFingerprints(publicKeys)
+}
 
 // EnsureLocalCluster idempotently creates (or fetches) the singleton local
 // cluster row and refreshes its k8s-derived metadata fields (kubernetes
@@ -130,6 +144,75 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 	return cluster, nil
 }
 
+// ensureLocalFluxUntilReady keeps the management cluster on the same embedded,
+// release-pinned Flux distribution as adopted clusters. It retries API and
+// controller-readiness failures so the local cluster does not report delivery
+// capability until the pinned Flux controllers and APIs are actually ready.
+func ensureLocalFluxUntilReady(ctx context.Context, logger *slog.Logger) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	restConfig, err := rest.InClusterConfig()
+	if err != nil {
+		logger.Info("local Flux bootstrap skipped: server is not running in-cluster")
+		return nil
+	}
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("create local Flux readiness client: %w", err)
+	}
+	probe, err := agentdelivery.NewClusterProbe(clientset, clientset.Discovery(), false)
+	if err != nil {
+		return fmt.Errorf("create local Flux readiness probe: %w", err)
+	}
+	return retryLocalFluxBootstrap(ctx, logger, 30*time.Second, func(ctx context.Context) error {
+		if err := EnsureLocalFlux(ctx, restConfig); err != nil {
+			return err
+		}
+		inventory, _, err := probe.Inspect(ctx)
+		if err != nil {
+			return fmt.Errorf("inspect local Flux readiness: %w", err)
+		}
+		if !inventory.Ready {
+			return fmt.Errorf("local Flux distribution is not ready: %s", inventory.CompatibilityMessage)
+		}
+		return nil
+	})
+}
+
+func retryLocalFluxBootstrap(ctx context.Context, logger *slog.Logger, retryInterval time.Duration, apply func(context.Context) error) error {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if retryInterval <= 0 {
+		retryInterval = 30 * time.Second
+	}
+	if apply == nil {
+		return fmt.Errorf("local Flux bootstrap apply function is required")
+	}
+	ticker := time.NewTicker(retryInterval)
+	defer ticker.Stop()
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+		if err := apply(ctx); err == nil {
+			logger.Info("local Flux distribution is ready")
+			return nil
+		} else {
+			if ctx.Err() != nil {
+				return nil
+			}
+			logger.Warn("local Flux bootstrap failed; retrying", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
 // StartLocalAgent spins up an embedded agent goroutine that connects to the
 // server's own WebSocket tunnel endpoint. From the Hub's perspective this is
 // indistinguishable from an externally-installed agent, so all existing
@@ -141,7 +224,7 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 // logs a warning and returns nil — the server still comes up, just without
 // the local cluster's data plane.
 func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID) error {
-	run, err := buildLocalAgentRuntime(ctx, logger, queries, clusterID, helmruntime.InClusterDefaults())
+	run, err := buildLocalAgentRuntime(ctx, logger, queries, clusterID, helmruntime.InClusterDefaults(), localAgentDeliveryConfig{})
 	if err != nil || run == nil {
 		return err
 	}
@@ -151,7 +234,7 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 
 // buildLocalAgentRuntime performs fallible setup synchronously, then returns a
 // blocking runtime that joins the tunnel, informer, and health loops.
-func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID, helmRuntime helmruntime.Config) (func(context.Context) error, error) {
+func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID, helmRuntime helmruntime.Config, deliveryConfig localAgentDeliveryConfig) (func(context.Context) error, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -230,6 +313,59 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 	svcProxy := agent.NewServiceProxy(logger)
 	tunnelClient.RegisterHandler(protocol.MsgServiceProxyRequest, svcProxy.HandleRequest)
 
+	var deliveryRuntime *agentdelivery.Runtime
+	if deliveryConfig.Enabled {
+		deliveryDynamic, err := dynamic.NewForConfig(restCfg)
+		if err != nil {
+			return nil, fmt.Errorf("initialize local delivery dynamic client: %w", err)
+		}
+		deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
+		if err != nil {
+			return nil, fmt.Errorf("initialize local delivery executor: %w", err)
+		}
+		deliveryNamespace := strings.TrimSpace(deliveryConfig.Namespace)
+		if deliveryNamespace == "" {
+			deliveryNamespace = "astronomer"
+		}
+		deliveryStore, err := agentdelivery.NewKubernetesCheckpointStore(clientset, deliveryNamespace)
+		if err != nil {
+			return nil, fmt.Errorf("initialize local delivery checkpoint: %w", err)
+		}
+		deliveryProbe, err := agentdelivery.NewClusterProbe(clientset, clientset.Discovery(), true)
+		if err != nil {
+			return nil, fmt.Errorf("initialize local delivery capability probe: %w", err)
+		}
+		deliveryProbe.WithDynamicClient(deliveryDynamic)
+		deliveryRuntime, err = agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
+			ClusterID:        clusterID.String(),
+			AgentVersion:     version.Version,
+			ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: true},
+			Connected:        tunnelClient.IsConnected,
+			Logger:           logger.With("component", "local-agent-delivery"),
+		}, deliveryExecutor, deliveryStore, deliveryProbe)
+		if err != nil {
+			return nil, fmt.Errorf("initialize local delivery runtime: %w", err)
+		}
+		systemManager, err := agentdelivery.NewSystemManager(deliveryDynamic, clientset, agentdelivery.SystemManagerConfig{
+			CurrentAgentVersion: version.Version,
+			AgentNamespace:      deliveryNamespace,
+			EmbeddedAgent:       true,
+			TrustPolicy: agentdelivery.SystemTrustPolicy{
+				OIDCIdentities: []protocol.DeliveryOIDCIdentity{{
+					Issuer:  strings.TrimSpace(deliveryConfig.SystemOIDCIssuer),
+					Subject: strings.TrimSpace(deliveryConfig.SystemOIDCIdentity),
+				}},
+				KeyFingerprints: systemKeyFingerprintAllowlist(deliveryConfig.SystemPublicKeys),
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("initialize local system manager: %w", err)
+		}
+		deliveryRuntime.SetSystemManager(systemManager)
+		tunnelClient.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
+		tunnelClient.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
+	}
+
 	helm := agent.NewHelmHandler(logger, helmRuntime)
 	tunnelClient.RegisterHandler(protocol.MsgHelmInstall, helm.HandleInstall)
 	tunnelClient.RegisterHandler(protocol.MsgHelmUpgrade, helm.HandleUpgrade)
@@ -251,7 +387,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 	}
 
 	return func(ctx context.Context) error {
-		return runRuntimeLoopGroup(ctx,
+		loops := []namedRuntimeLoop{
 			namedRuntimeLoop{name: "local-agent-observers", run: func(ctx context.Context) {
 				// Wait until the tunnel reports connected so the first heartbeat isn't
 				// dropped on the floor by the send-buffer fast path and so the informer
@@ -322,7 +458,15 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 					}
 				}
 			}},
-		)
+		}
+		if deliveryRuntime != nil {
+			loops = append(loops, namedRuntimeLoop{name: "local-agent-delivery", run: func(ctx context.Context) {
+				if err := deliveryRuntime.Run(ctx, tunnelClient.SendFunc(ctx)); err != nil && ctx.Err() == nil {
+					logger.Error("local delivery runtime stopped", "error", err)
+				}
+			}})
+		}
+		return runRuntimeLoopGroup(ctx, loops...)
 	}, nil
 }
 

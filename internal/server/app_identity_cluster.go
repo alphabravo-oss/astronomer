@@ -136,11 +136,12 @@ func (c *productionComposition) initializeIdentityAndClusterHandlers(ctx context
 	clusterHandler.SetAgentDisconnector(hub)
 	clusterHandler.SetAgentImage(cfg.AgentImageRepository, cfg.AgentImageTag)
 	clusterHandler.SetAgentTelemetry(cfg.AgentOTELExporterEndpoint, cfg.AgentOTELExporterInsecure, cfg.AgentOTELSamplerRatio, cfg.Env)
-	clusterHandler.SetDeliverySystemBootstrap(
+	clusterHandler.SetDeliverySystemBootstrapKeys(
 		cfg.DeliveryFluxDistributionRepository,
 		cfg.DeliveryFluxDistributionDigest,
 		cfg.DeliveryFluxDistributionOIDCIssuer,
 		cfg.DeliveryFluxDistributionCertificateIdentity,
+		cfg.DeliveryFluxDistributionKeyring,
 	)
 	clusterHandler.SetRegistrationTokenTTL(time.Duration(cfg.RegistrationTokenTTLHours) * time.Hour)
 	// HMAC key for short-TTL signed manifest-download URLs. Falls back to

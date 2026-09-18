@@ -10,7 +10,35 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	builtinbundles "github.com/alphabravocompany/astronomer-go/deploy/bundles"
+	"github.com/alphabravocompany/astronomer-go/internal/audit"
 )
+
+func TestBuiltInRolloutAuditIntentIsStableAndPopulated(t *testing.T) {
+	target := targetIdentity{
+		id:         uuid.MustParse("2441078f-b2ea-425e-943d-e251ed8b7924"),
+		generation: 3, slug: "kube-state-metrics", release: "v1.0.0",
+	}
+	key := "builtins:v1.0.0:kube-state-metrics"
+	first, second := builtInRolloutAuditIntent(target, key), builtInRolloutAuditIntent(target, key)
+	if first.IsZero() {
+		t.Fatal("built-in rollout did not provide a transactional audit intent")
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatal("built-in rollout audit intent changed across identical retries")
+	}
+	if first.Event.Source != "service" || first.Event.ActionClass != "system" || first.Event.Action != "delivery.rollout.created" {
+		t.Fatalf("audit event classification is incomplete: %+v", first.Event)
+	}
+	if first.Event.ResourceType != "delivery_rollout" || first.Event.ResourceID != target.id.String() || first.Event.ResourceName != "astronomer-builtins-kube-state-metrics" {
+		t.Fatalf("audit resource identity is incomplete: %+v", first.Event)
+	}
+	if first.DedupeKey != audit.MutationDedupeKey(key, first.Event.Action, first.Event.ResourceType, target.id.String()) {
+		t.Fatalf("audit dedupe key is not tied to rollout identity: %q", first.DedupeKey)
+	}
+	if first.Event.Detail["actor"] != systemActor || first.Event.Detail["target_generation"] != uint64(3) || first.Event.Detail["builtin_slug"] != target.slug || first.Event.Detail["release"] != target.release {
+		t.Fatalf("audit detail is incomplete: %+v", first.Event.Detail)
+	}
+}
 
 func TestStableIDIsDeterministicAndDomainSeparated(t *testing.T) {
 	first := stableID("target", "cluster-a", "kube-state-metrics")

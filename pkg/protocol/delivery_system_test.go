@@ -2,6 +2,12 @@ package protocol
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"testing"
 )
 
@@ -49,6 +55,98 @@ func TestDeliverySystemReleaseValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeliverySystemPublicKeyVerificationIsPinnedToExactPEM(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded})
+	release := validSystemRelease()
+	release.Verification = DeliverySystemVerification{
+		Provider: "cosign", PublicKey: publicKey,
+		KeyFingerprint: DeliverySystemKeyFingerprint(publicKey),
+	}
+	if err := release.Validate(); err != nil {
+		t.Fatalf("valid pinned public-key verification rejected: %v", err)
+	}
+	release.Verification.KeyFingerprint = DeliverySystemKeyFingerprint(append(append([]byte(nil), publicKey...), '\n'))
+	if err := release.Validate(); err == nil {
+		t.Fatal("public-key fingerprint for reformatted PEM bytes was accepted")
+	}
+	release.Verification.KeyFingerprint = DeliverySystemKeyFingerprint(publicKey)
+	release.Verification.PublicKey = []byte("not a PEM key")
+	if err := release.Validate(); err == nil {
+		t.Fatal("malformed public-key material was accepted")
+	}
+}
+
+func TestDeliverySystemPublicKeySetSupportsOverlappingRotation(t *testing.T) {
+	makeKey := func() []byte {
+		t.Helper()
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded})
+	}
+	oldKey, nextKey := makeKey(), makeKey()
+	release := validSystemRelease()
+	release.Verification = DeliverySystemVerification{Provider: "cosign", PublicKeys: [][]byte{oldKey, nextKey}}
+	if err := release.Validate(); err != nil {
+		t.Fatalf("valid overlapping key set rejected: %v", err)
+	}
+	if got := DeliverySystemKeyFingerprints(release.Verification.DeliverySystemPublicKeySet()); len(got) != 2 || got[0] == got[1] {
+		t.Fatalf("key fingerprints = %v, want two distinct pins", got)
+	}
+	release.Verification.PublicKeys = [][]byte{oldKey, oldKey}
+	if err := release.Validate(); err == nil {
+		t.Fatal("duplicate public key in keyring was accepted")
+	}
+	release.Verification = DeliverySystemVerification{
+		Provider: "cosign", PublicKeys: [][]byte{oldKey},
+		PublicKey: oldKey, KeyFingerprint: DeliverySystemKeyFingerprint(oldKey),
+	}
+	if err := release.Validate(); err == nil {
+		t.Fatal("mixed legacy and keyring fields were accepted")
+	}
+}
+
+func TestParseDeliverySystemPublicKeys(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded})
+	keys, err := ParseDeliverySystemPublicKeys(string(mustJSON(t, []string{string(publicKey)})))
+	if err != nil || len(keys) != 1 || !bytes.Equal(keys[0], publicKey) {
+		t.Fatalf("parse keyring = %q, %v", keys, err)
+	}
+	if keys, err := ParseDeliverySystemPublicKeys("not-json"); err == nil || keys != nil {
+		t.Fatalf("malformed keyring = %q, %v", keys, err)
+	}
+}
+
+func mustJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
 }
 
 func TestSystemReleaseParticipatesInETagWithoutCredentialBytes(t *testing.T) {

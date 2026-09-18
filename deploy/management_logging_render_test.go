@@ -37,6 +37,10 @@ func helmTemplate(t *testing.T, sets ...string) string {
 }
 
 func helmTemplateWithValueFiles(t *testing.T, valueFiles []string, sets ...string) string {
+	return helmTemplateWithValueFilesAndFlags(t, valueFiles, nil, sets...)
+}
+
+func helmTemplateWithValueFilesAndFlags(t *testing.T, valueFiles, flags []string, sets ...string) string {
 	t.Helper()
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skipf("helm binary not on PATH (%v); skipping chart-render test", err)
@@ -53,6 +57,7 @@ func helmTemplateWithValueFiles(t *testing.T, valueFiles []string, sets ...strin
 	devValuesFile := filepath.Join(chartDir, "values-dev.yaml")
 
 	args := []string{"template", "astronomer", chartDir, "-f", valuesFile, "-f", devValuesFile, "--kube-version", "1.35.0"}
+	args = append(args, flags...)
 	for _, file := range valueFiles {
 		args = append(args, "-f", file)
 	}

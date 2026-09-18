@@ -861,10 +861,45 @@
                       "trustPolicy": {
                         "properties": {
                           "requireSignature": { "const": true },
-                          "certificateIdentity": { "type": "string", "minLength": 1 },
-                          "oidcIssuer": { "type": "string", "pattern": "^https://", "minLength": 1 }
+                          "certificateIdentity": { "type": "string", "maxLength": 1024 },
+                          "oidcIssuer": { "type": "string", "pattern": "^$|^https://", "maxLength": 1024 },
+                          "publicKey": { "type": "string", "maxLength": 262144 },
+                          "publicKeys": {
+                            "type": "array",
+                            "maxItems": 8,
+                            "items": { "type": "string", "minLength": 1, "maxLength": 262144 }
+                          }
                         },
-                        "required": ["requireSignature", "certificateIdentity", "oidcIssuer"]
+                        "required": ["requireSignature"],
+                        "oneOf": [
+                          {
+                            "required": ["certificateIdentity", "oidcIssuer"],
+                            "properties": {
+                              "certificateIdentity": { "minLength": 1 },
+                              "oidcIssuer": { "pattern": "^https://", "minLength": 1 },
+                              "publicKey": { "const": "" },
+                              "publicKeys": { "maxItems": 0 }
+                            }
+                          },
+                          {
+                            "required": ["publicKey"],
+                            "properties": {
+                              "certificateIdentity": { "const": "" },
+                              "oidcIssuer": { "const": "" },
+                              "publicKey": { "minLength": 1 },
+                              "publicKeys": { "maxItems": 0 }
+                            }
+                          },
+                          {
+                            "required": ["publicKeys"],
+                            "properties": {
+                              "certificateIdentity": { "const": "" },
+                              "oidcIssuer": { "const": "" },
+                              "publicKey": { "const": "" },
+                              "publicKeys": { "minItems": 1, "maxItems": 8 }
+                            }
+                          }
+                        ]
                       }
                     },
                     "required": ["ociRepository", "digest", "trustPolicy"],
@@ -1043,11 +1078,17 @@
         "trustPolicy": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["requireSignature", "certificateIdentity", "oidcIssuer"],
+          "required": ["requireSignature"],
           "properties": {
             "requireSignature": { "const": true },
             "certificateIdentity": { "type": "string", "maxLength": 1024 },
-            "oidcIssuer": { "type": "string", "maxLength": 1024, "pattern": "^https://" }
+            "oidcIssuer": { "type": "string", "maxLength": 1024, "pattern": "^$|^https://" },
+            "publicKey": { "type": "string", "maxLength": 262144 },
+            "publicKeys": {
+              "type": "array",
+              "maxItems": 8,
+              "items": { "type": "string", "minLength": 1, "maxLength": 262144 }
+            }
           }
         }
       }

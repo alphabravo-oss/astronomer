@@ -20,6 +20,15 @@
 {{- if and .Values.catalog.signature.required (eq .Values.catalog.signature.provider "cosign_key") (not .Values.catalog.signature.keyRef) }}
 {{- fail "key-based catalog signatures require keyRef" }}
 {{- end }}
+{{- /* `--reuse-values` can carry a nil when a field was added in a newer chart.
+     Normalize absent/null trust values so keyless OIDC renders an empty array,
+     not the invalid JSON `[null]`. */ -}}
+{{- $fluxTrustPolicy := .Values.delivery.artifacts.fluxDistribution.trustPolicy -}}
+{{- $fluxPublicKeys := default (list) $fluxTrustPolicy.publicKeys -}}
+{{- $legacyFluxPublicKey := default "" $fluxTrustPolicy.publicKey -}}
+{{- if and (empty $fluxPublicKeys) (ne $legacyFluxPublicKey "") -}}
+{{- $fluxPublicKeys = list $legacyFluxPublicKey -}}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -95,6 +104,8 @@ data:
   DELIVERY_FLUX_DISTRIBUTION_REQUIRE_SIGNATURE: {{ .Values.delivery.artifacts.fluxDistribution.trustPolicy.requireSignature | quote }}
   DELIVERY_FLUX_DISTRIBUTION_CERTIFICATE_IDENTITY: {{ .Values.delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity | quote }}
   DELIVERY_FLUX_DISTRIBUTION_OIDC_ISSUER: {{ .Values.delivery.artifacts.fluxDistribution.trustPolicy.oidcIssuer | quote }}
+  DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEY: ""
+  DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEYS: {{ toJson $fluxPublicKeys | quote }}
   DELIVERY_BUNDLE_REPOSITORY: {{ .Values.delivery.artifacts.builtInBundles.ociRepository | quote }}
   DELIVERY_BUNDLE_DIGEST: {{ .Values.delivery.artifacts.builtInBundles.digest | quote }}
   DELIVERY_BUNDLE_ASSET_PATH: {{ .Values.delivery.artifacts.builtInBundles.disconnectedAssetPath | quote }}

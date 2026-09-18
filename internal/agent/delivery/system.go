@@ -2,7 +2,7 @@ package delivery
 
 import (
 	"context"
-	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,7 +43,12 @@ type SystemManagerConfig struct {
 	CurrentAgentVersion string
 	AgentNamespace      string
 	AgentDeployment     string
-	TrustPolicy         SystemTrustPolicy
+	// EmbeddedAgent marks the management-plane agent, which is compiled into
+	// the server process and therefore cannot be replaced by editing a
+	// Kubernetes Deployment. A newer system release must wait for the server
+	// itself to be upgraded.
+	EmbeddedAgent bool
+	TrustPolicy   SystemTrustPolicy
 }
 
 // SystemManager owns the intentionally tiny, fixed-name system-reconciliation
@@ -79,10 +84,22 @@ func NewSystemManager(dynamicClient dynamic.Interface, client kubernetes.Interfa
 // authoritative snapshot, and only then upgrades Flux.
 func (m *SystemManager) Reconcile(ctx context.Context, release protocol.DeliverySystemReleaseV2) (complete bool, err error) {
 	defer zeroSystemCredential(&release)
-	if err := m.validateRelease(release); err != nil {
+	currentAgentVersion, err := semver.NewVersion(normalizeVersion(m.config.CurrentAgentVersion))
+	if err != nil {
+		return false, fmt.Errorf("parse current agent version: %w", err)
+	}
+	desiredAgentVersion, err := semver.NewVersion(normalizeVersion(release.AgentVersion))
+	if err != nil {
+		return false, fmt.Errorf("parse system release agent version: %w", err)
+	}
+	agentUpgradeRequired := currentAgentVersion.LessThan(desiredAgentVersion)
+	if err := m.validateRelease(release, agentUpgradeRequired && !m.config.EmbeddedAgent); err != nil {
 		return false, err
 	}
-	if normalizeVersion(m.config.CurrentAgentVersion) != normalizeVersion(release.AgentVersion) {
+	if agentUpgradeRequired {
+		if m.config.EmbeddedAgent {
+			return false, fmt.Errorf("embedded agent version %q is older than system release agent %q; upgrade the management plane first", m.config.CurrentAgentVersion, release.AgentVersion)
+		}
 		changed, err := m.reconcileAgentImage(ctx, release.AgentImage)
 		if err != nil {
 			return false, err
@@ -90,8 +107,12 @@ func (m *SystemManager) Reconcile(ctx context.Context, release protocol.Delivery
 		if changed {
 			return false, nil
 		}
-		return false, fmt.Errorf("running agent version %q does not match desired %q", m.config.CurrentAgentVersion, release.AgentVersion)
+		return false, fmt.Errorf("running agent version %q did not converge to desired %q", m.config.CurrentAgentVersion, release.AgentVersion)
 	}
+	// A system release may remain pinned while the agent advances through an
+	// independent Astronomer release. Never roll a newer connected agent back
+	// to the older image recorded in that system release; the signed Flux
+	// artifact is still reconciled below.
 
 	// Enrollment already materializes the exact reviewed controller set.
 	// Treat that as complete so the first released generation does not wait
@@ -115,7 +136,7 @@ func (m *SystemManager) Reconcile(ctx context.Context, release protocol.Delivery
 	return m.ready(ctx, release)
 }
 
-func (m *SystemManager) validateRelease(release protocol.DeliverySystemReleaseV2) error {
+func (m *SystemManager) validateRelease(release protocol.DeliverySystemReleaseV2, agentUpgradeRequired bool) error {
 	if err := release.Validate(); err != nil {
 		return err
 	}
@@ -135,14 +156,26 @@ func (m *SystemManager) validateRelease(release protocol.DeliverySystemReleaseV2
 	if err != nil || current.LessThan(minimum) || current.GreaterThan(maximum) {
 		return fmt.Errorf("Kubernetes %q is outside system release range %s-%s", serverVersion.GitVersion, minimum, maximum)
 	}
-	if !containsString(m.config.TrustPolicy.AgentImageRepositories, imageRepository(release.AgentImage)) {
+	// The image repository is an additional pull boundary, not a reason to
+	// reject a signed release whose agent image will not be pulled. Requiring
+	// it only for an actual forward upgrade lets newer agents safely consume a
+	// still-current Flux artifact without trusting or contacting an obsolete
+	// image registry (important for mirrored/air-gapped installs).
+	if agentUpgradeRequired && !containsString(m.config.TrustPolicy.AgentImageRepositories, imageRepository(release.AgentImage)) {
 		return errors.New("system release agent image repository is not allowlisted")
 	}
 	verification := release.Verification
-	if len(verification.PublicKey) != 0 {
-		fingerprint := fmt.Sprintf("sha256:%x", sha256.Sum256(verification.PublicKey))
-		if fingerprint != verification.KeyFingerprint || !containsString(m.config.TrustPolicy.KeyFingerprints, fingerprint) {
-			return errors.New("system release public key is not trusted")
+	if publicKeys := verification.DeliverySystemPublicKeySet(); len(publicKeys) != 0 {
+		trustedCount := 0
+		for _, publicKey := range publicKeys {
+			fingerprint := protocol.DeliverySystemKeyFingerprint(publicKey)
+			if !containsString(m.config.TrustPolicy.KeyFingerprints, fingerprint) {
+				return errors.New("system release public-key set contains a key that was not pinned at enrollment")
+			}
+			trustedCount++
+		}
+		if trustedCount == 0 {
+			return errors.New("system release has no trusted public keys")
 		}
 	} else {
 		for _, identity := range verification.OIDCIdentities {
@@ -271,13 +304,22 @@ func systemObjects(release protocol.DeliverySystemReleaseV2) []*unstructured.Uns
 	objects := make([]*unstructured.Unstructured, 0, 4)
 	if release.Credential != nil {
 		objects = append(objects, systemObject(secretGVK, systemObjectName+"-auth", labels, map[string]any{
-			"type": "kubernetes.io/dockerconfigjson", "data": map[string]any{".dockerconfigjson": append([]byte(nil), release.Credential.Data[".dockerconfigjson"]...)},
+			"type": "kubernetes.io/dockerconfigjson", "data": map[string]any{".dockerconfigjson": base64.StdEncoding.EncodeToString(release.Credential.Data[".dockerconfigjson"])},
 		}))
 	}
 	verification := map[string]any{"provider": "cosign"}
-	if len(release.Verification.PublicKey) != 0 {
+	if publicKeys := release.Verification.DeliverySystemPublicKeySet(); len(publicKeys) != 0 {
+		data := make(map[string]any, len(publicKeys))
+		for index, publicKey := range publicKeys {
+			name := "cosign.pub"
+			if index > 0 {
+				fingerprint := strings.TrimPrefix(protocol.DeliverySystemKeyFingerprint(publicKey), "sha256:")
+				name = "cosign-" + fingerprint + ".pub"
+			}
+			data[name] = base64.StdEncoding.EncodeToString(publicKey)
+		}
 		objects = append(objects, systemObject(secretGVK, systemObjectName+"-trust", labels, map[string]any{
-			"type": "Opaque", "data": map[string]any{"cosign.pub": append([]byte(nil), release.Verification.PublicKey...)},
+			"type": "Opaque", "data": data,
 		}))
 		verification["secretRef"] = map[string]any{"name": systemObjectName + "-trust"}
 	} else {

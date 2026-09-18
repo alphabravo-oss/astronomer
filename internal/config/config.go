@@ -1,11 +1,14 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/envconfig"
 	"github.com/alphabravocompany/astronomer-go/internal/releasecontract"
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/alphabravocompany/astronomer-go/pkg/version"
 )
 
@@ -121,18 +124,23 @@ type Config struct {
 	DeliveryFluxDistributionAssetPath           string `mapstructure:"delivery_flux_distribution_asset_path"`
 	DeliveryFluxDistributionCertificateIdentity string `mapstructure:"delivery_flux_distribution_certificate_identity"`
 	DeliveryFluxDistributionOIDCIssuer          string `mapstructure:"delivery_flux_distribution_oidc_issuer"`
-	DeliveryBundleRepository                    string `mapstructure:"delivery_bundle_repository"`
-	DeliveryBundleDigest                        string `mapstructure:"delivery_bundle_digest"`
-	DeliveryBundleCertificateIdentity           string `mapstructure:"delivery_bundle_certificate_identity"`
-	DeliveryBundleOIDCIssuer                    string `mapstructure:"delivery_bundle_oidc_issuer"`
-	DeliverySourceAllowedPrivateHosts           string `mapstructure:"delivery_source_allowed_private_hosts"`
-	DeliverySourceEgressCIDRs                   string `mapstructure:"delivery_source_egress_cidrs"`
-	DeliverySourceProxyURL                      string `mapstructure:"delivery_source_proxy_url"`
-	DeliverySourceAllowSSH                      bool   `mapstructure:"delivery_source_allow_ssh"`
-	DeliverySourceCAFile                        string `mapstructure:"delivery_source_ca_file"`
-	DeliverySourceMaxArtifactBytes              int64  `mapstructure:"delivery_source_max_artifact_bytes"`
-	DeliverySourceMaxHelmChartBytes             int64  `mapstructure:"delivery_source_max_helm_chart_bytes"`
-	DeliverySourceTrustDirectory                string `mapstructure:"delivery_source_trust_directory"`
+	DeliveryFluxDistributionPublicKey           string `mapstructure:"delivery_flux_distribution_public_key"`
+	// DeliveryFluxDistributionPublicKeys is a JSON array of PEM public keys.
+	// The old singular field remains accepted for one-key installations.
+	DeliveryFluxDistributionPublicKeys string   `mapstructure:"delivery_flux_distribution_public_keys"`
+	DeliveryFluxDistributionKeyring    [][]byte `mapstructure:"-"`
+	DeliveryBundleRepository           string   `mapstructure:"delivery_bundle_repository"`
+	DeliveryBundleDigest               string   `mapstructure:"delivery_bundle_digest"`
+	DeliveryBundleCertificateIdentity  string   `mapstructure:"delivery_bundle_certificate_identity"`
+	DeliveryBundleOIDCIssuer           string   `mapstructure:"delivery_bundle_oidc_issuer"`
+	DeliverySourceAllowedPrivateHosts  string   `mapstructure:"delivery_source_allowed_private_hosts"`
+	DeliverySourceEgressCIDRs          string   `mapstructure:"delivery_source_egress_cidrs"`
+	DeliverySourceProxyURL             string   `mapstructure:"delivery_source_proxy_url"`
+	DeliverySourceAllowSSH             bool     `mapstructure:"delivery_source_allow_ssh"`
+	DeliverySourceCAFile               string   `mapstructure:"delivery_source_ca_file"`
+	DeliverySourceMaxArtifactBytes     int64    `mapstructure:"delivery_source_max_artifact_bytes"`
+	DeliverySourceMaxHelmChartBytes    int64    `mapstructure:"delivery_source_max_helm_chart_bytes"`
+	DeliverySourceTrustDirectory       string   `mapstructure:"delivery_source_trust_directory"`
 
 	LogLevel string `mapstructure:"log_level"`
 
@@ -362,6 +370,8 @@ func Load() (*Config, error) {
 		"delivery_flux_distribution_asset_path",
 		"delivery_flux_distribution_certificate_identity",
 		"delivery_flux_distribution_oidc_issuer",
+		"delivery_flux_distribution_public_key",
+		"delivery_flux_distribution_public_keys",
 		"delivery_bundle_repository",
 		"delivery_bundle_digest",
 		"delivery_bundle_certificate_identity",
@@ -570,6 +580,22 @@ func Load() (*Config, error) {
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(cfg.DeliveryFluxDistributionPublicKey) != "" {
+		if keys, err := protocol.ParseDeliverySystemPublicKeys(cfg.DeliveryFluxDistributionPublicKeys); err != nil {
+			return nil, fmt.Errorf("invalid delivery Flux distribution public-key set: %w", err)
+		} else if len(keys) != 0 {
+			return nil, errors.New("configure either delivery fluxDistribution trustPolicy publicKey or publicKeys, not both")
+		}
+		key := []byte(cfg.DeliveryFluxDistributionPublicKey)
+		if err := protocol.ValidateDeliverySystemPublicKey(key); err != nil {
+			return nil, fmt.Errorf("invalid delivery Flux distribution public key: %w", err)
+		}
+		cfg.DeliveryFluxDistributionKeyring = [][]byte{key}
+	} else if keys, err := protocol.ParseDeliverySystemPublicKeys(cfg.DeliveryFluxDistributionPublicKeys); err != nil {
+		return nil, fmt.Errorf("invalid delivery Flux distribution public-key set: %w", err)
+	} else {
+		cfg.DeliveryFluxDistributionKeyring = keys
+	}
 	if strings.TrimSpace(cfg.ReleaseManifestPath) != "" {
 		_, release, err := releasecontract.Load(cfg.ReleaseManifestPath, version.Version)
 		if err != nil {
@@ -588,8 +614,16 @@ func Load() (*Config, error) {
 		cfg.DeliveryFluxVersion = release.FluxVersion
 		cfg.DeliveryFluxDistributionRepository = release.FluxRepository
 		cfg.DeliveryFluxDistributionDigest = release.FluxDigest
-		cfg.DeliveryFluxDistributionOIDCIssuer = release.CertificateOIDCIssuer
-		cfg.DeliveryFluxDistributionCertificateIdentity = release.CertificateIdentity
+		if len(cfg.DeliveryFluxDistributionKeyring) == 0 {
+			cfg.DeliveryFluxDistributionOIDCIssuer = release.CertificateOIDCIssuer
+			cfg.DeliveryFluxDistributionCertificateIdentity = release.CertificateIdentity
+		} else {
+			// An air-gapped mirror can re-sign the preserved Flux artifact with
+			// an offline Cosign key. That key is an explicit installation trust
+			// root and takes precedence over the upstream keyless identity.
+			cfg.DeliveryFluxDistributionOIDCIssuer = ""
+			cfg.DeliveryFluxDistributionCertificateIdentity = ""
+		}
 		cfg.DeliveryBundleRepository = release.BundleRepository
 		cfg.DeliveryBundleDigest = release.BundleDigest
 		cfg.DeliveryBundleOIDCIssuer = release.CertificateOIDCIssuer

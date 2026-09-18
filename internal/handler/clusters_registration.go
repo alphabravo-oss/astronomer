@@ -143,10 +143,22 @@ func (h *ClusterHandler) SetAgentTelemetry(endpoint string, insecure bool, sampl
 }
 
 // SetDeliverySystemBootstrap configures the immutable, signed Flux system
-// artifact embedded in new-cluster registration manifests. Invalid or partial
-// values are omitted by the renderer; production startup validation rejects
-// that configuration before the API is served.
-func (h *ClusterHandler) SetDeliverySystemBootstrap(repository, digest, issuer, identity string) {
+// artifact embedded in new-cluster registration manifests. Trust is either
+// keyless OIDC identity or an offline Cosign public key, never both. Invalid or
+// partial values are omitted by the renderer; production startup validation
+// rejects that configuration before the API is served.
+func (h *ClusterHandler) SetDeliverySystemBootstrap(repository, digest, issuer, identity string, publicKey []byte) {
+	var keys [][]byte
+	if len(publicKey) != 0 {
+		keys = [][]byte{publicKey}
+	}
+	h.SetDeliverySystemBootstrapKeys(repository, digest, issuer, identity, keys)
+}
+
+// SetDeliverySystemBootstrapKeys configures the immutable system artifact in
+// new-cluster registration manifests. Keyring mode pins the complete staged
+// overlap set in the agent's initial trust policy.
+func (h *ClusterHandler) SetDeliverySystemBootstrapKeys(repository, digest, issuer, identity string, publicKeys [][]byte) {
 	if h == nil {
 		return
 	}
@@ -154,6 +166,20 @@ func (h *ClusterHandler) SetDeliverySystemBootstrap(repository, digest, issuer, 
 	h.systemArtifactDigest = strings.TrimSpace(digest)
 	h.systemOIDCIssuer = strings.TrimSpace(issuer)
 	h.systemOIDCIdentity = strings.TrimSpace(identity)
+	h.systemPublicKeys = clonePublicKeys(publicKeys)
+	if len(h.systemPublicKeys) == 1 {
+		h.systemPublicKey = append([]byte(nil), h.systemPublicKeys[0]...)
+	} else {
+		h.systemPublicKey = nil
+	}
+}
+
+func clonePublicKeys(keys [][]byte) [][]byte {
+	result := make([][]byte, len(keys))
+	for index := range keys {
+		result[index] = append([]byte(nil), keys[index]...)
+	}
+	return result
 }
 
 // SetRegistrationService wires the wizard-phase service so cluster
@@ -600,6 +626,8 @@ func (h *ClusterHandler) renderAgentInstallManifest(cluster sqlc.Cluster, token,
 		SystemArtifactDigest: h.systemArtifactDigest,
 		SystemOIDCIssuer:     h.systemOIDCIssuer,
 		SystemOIDCIdentity:   h.systemOIDCIdentity,
+		SystemPublicKey:      append([]byte(nil), h.systemPublicKey...),
+		SystemPublicKeys:     clonePublicKeys(h.systemPublicKeys),
 		OTELEndpoint:         h.agentOTELEndpoint,
 		OTELInsecure:         h.agentOTELInsecure,
 		OTELSamplerRatio:     h.agentOTELSampler,

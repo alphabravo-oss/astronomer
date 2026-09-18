@@ -33,6 +33,10 @@ type Config struct {
 	MaximumKubernetes   string
 	CertificateIssuer   string
 	CertificateIdentity string
+	PublicKeys          [][]byte
+	// PublicKey is a temporary compatibility input for existing chart values.
+	// build always emits the versioned keyring form in the immutable release.
+	PublicKey []byte
 }
 
 type immutableSpec struct {
@@ -64,10 +68,27 @@ func build(config Config) (immutableSpec, string, error) {
 		return immutableSpec{}, "", nil
 	}
 	values := []string{repository, artifactDigest, config.DistributionDigest,
-		config.AgentVersion, config.AgentImage, config.CertificateIssuer, config.CertificateIdentity}
+		config.AgentVersion, config.AgentImage}
 	complete := true
 	for _, value := range values {
 		complete = complete && strings.TrimSpace(value) != ""
+	}
+	publicKeys := config.PublicKeys
+	if len(publicKeys) == 0 && len(strings.TrimSpace(string(config.PublicKey))) != 0 {
+		publicKeys = [][]byte{config.PublicKey}
+	}
+	staticKey := len(publicKeys) != 0
+	keyless := strings.TrimSpace(config.CertificateIssuer) != "" || strings.TrimSpace(config.CertificateIdentity) != ""
+	if staticKey {
+		if keyless {
+			return immutableSpec{}, "", errors.New("delivery system release must use either an offline public key or keyless OIDC identity")
+		}
+		probe := protocol.DeliverySystemVerification{Provider: "cosign", PublicKeys: publicKeys}
+		if err := probe.Validate(); err != nil {
+			return immutableSpec{}, "", fmt.Errorf("invalid delivery system Cosign public-key set: %w", err)
+		}
+	} else if strings.TrimSpace(config.CertificateIssuer) == "" || strings.TrimSpace(config.CertificateIdentity) == "" {
+		complete = false
 	}
 	if !complete {
 		return immutableSpec{}, "", errors.New("delivery system release configuration is incomplete")
@@ -88,16 +109,36 @@ func build(config Config) (immutableSpec, string, error) {
 	if !strings.HasPrefix(agentVersion, "v") {
 		agentVersion = "v" + agentVersion
 	}
+	verification := protocol.DeliverySystemVerification{Provider: "cosign"}
+	if staticKey {
+		verification.PublicKeys = make([][]byte, len(publicKeys))
+		for index := range publicKeys {
+			verification.PublicKeys[index] = append([]byte(nil), publicKeys[index]...)
+		}
+	} else {
+		verification.OIDCIdentities = []protocol.DeliveryOIDCIdentity{{
+			Issuer: strings.TrimSpace(config.CertificateIssuer), Subject: strings.TrimSpace(config.CertificateIdentity),
+		}}
+	}
 	spec := immutableSpec{
 		Version: version, ArtifactURL: artifactURL,
 		ArtifactDigest: artifactDigest, DistributionDigest: strings.TrimSpace(config.DistributionDigest),
 		AgentVersion: agentVersion, AgentImage: strings.TrimSpace(config.AgentImage),
 		MinimumKubernetes: "v" + minimum + ".0", MaximumKubernetes: "v" + maximum + ".999",
 		CRDStorageVersion: "v1", Interval: "5m", Timeout: "15m",
-		Verification: protocol.DeliverySystemVerification{Provider: "cosign", OIDCIdentities: []protocol.DeliveryOIDCIdentity{{
-			Issuer: strings.TrimSpace(config.CertificateIssuer), Subject: strings.TrimSpace(config.CertificateIdentity),
-		}}},
+		Verification: verification,
 	}
+	// The app version alone is not a unique delivery-system release identity:
+	// installation-specific keyrings and mirror digests can change without a
+	// new Astronomer binary. Suffix the immutable spec hash as SemVer build
+	// metadata so an operator can stage a new trust configuration as a distinct
+	// draft instead of mutating the already-published version in place.
+	identityPayload, err := json.Marshal(spec)
+	if err != nil {
+		return immutableSpec{}, "", fmt.Errorf("encode delivery system release: %w", err)
+	}
+	identity := sha256.Sum256(identityPayload)
+	spec.Version = withSystemReleaseIdentity(version, identity)
 	probe := protocol.DeliverySystemReleaseV2{
 		Generation: 1, Version: spec.Version, ArtifactURL: spec.ArtifactURL,
 		ArtifactDigest: spec.ArtifactDigest, DistributionDigest: spec.DistributionDigest,
@@ -115,6 +156,20 @@ func build(config Config) (immutableSpec, string, error) {
 	}
 	digest := sha256.Sum256(payload)
 	return spec, fmt.Sprintf("sha256:%x", digest), nil
+}
+
+func withSystemReleaseIdentity(version string, identity [32]byte) string {
+	version = strings.TrimPrefix(version, "v")
+	// delivery_system_releases.version is varchar(64). Keep the installation
+	// identity bounded while retaining 64 bits of the immutable spec hash; the
+	// full spec digest is persisted separately and remains the conflict check.
+	metadata := fmt.Sprintf("system.%x", identity[:8])
+	if plus := strings.IndexByte(version, '+'); plus >= 0 {
+		version = version[:plus] + "+" + metadata + "." + version[plus+1:]
+	} else {
+		version += "+" + metadata
+	}
+	return "v" + version
 }
 
 // Ensure inserts and promotes exactly one immutable release under a

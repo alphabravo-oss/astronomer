@@ -37,6 +37,13 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 	}); err != nil {
 		return err
 	}
+	if cfg.DeliveryEnabled && cfg.DeliveryLocalFluxBootstrap {
+		if err := c.runtime.Task("local-flux-bootstrap", func(ctx context.Context) error {
+			return ensureLocalFluxUntilReady(ctx, logger)
+		}); err != nil {
+			return err
+		}
+	}
 	if localCluster, err := bootstrapLocalCluster(foundation.ctx, logger, c.queries); err != nil {
 		logger.Warn("local cluster bootstrap failed", "error", err)
 	} else if localCluster != nil {
@@ -45,7 +52,13 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 			Driver: cfg.HelmDriver, RegistryConfig: cfg.HelmRegistryConfig,
 			RepositoryConfig: cfg.HelmRepositoryConfig, RepositoryCache: cfg.HelmRepositoryCache,
 			PluginsDirectory: cfg.HelmPluginsDirectory, BurstLimit: 100,
-		}, cfg.PodNamespace, cfg.ProcessHostname)
+		}, cfg.PodNamespace, cfg.ProcessHostname, localAgentDeliveryConfig{
+			Enabled:            cfg.DeliveryEnabled,
+			Namespace:          cfg.PodNamespace,
+			SystemOIDCIssuer:   cfg.DeliveryFluxDistributionOIDCIssuer,
+			SystemOIDCIdentity: cfg.DeliveryFluxDistributionCertificateIdentity,
+			SystemPublicKeys:   cfg.DeliveryFluxDistributionKeyring,
+		})
 		if err != nil {
 			logger.Warn("local agent start failed", "error", err)
 		} else if localAgent != nil {

@@ -134,6 +134,8 @@ type ClusterHandler struct {
 	systemArtifactDigest string
 	systemOIDCIssuer     string
 	systemOIDCIdentity   string
+	systemPublicKey      []byte
+	systemPublicKeys     [][]byte
 	agentOTELEndpoint    string
 	agentOTELInsecure    bool
 	agentOTELSampler     string
