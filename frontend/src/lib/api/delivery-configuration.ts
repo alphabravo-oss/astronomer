@@ -15,18 +15,21 @@ import type { CamelizeKeys } from "@/types/wire-contract";
 type Contracts = OpenAPIComponents["schemas"];
 
 export type DeliveryConfigurationTemplate = CamelizeKeys<
-  Contracts["DeliveryConfigurationTemplate"]
+  OpenAPIComponents["schemas"]["DeliveryConfigurationTemplate"]
 >;
 export type DeliveryConfigurationTemplateWrite =
-  Contracts["DeliveryConfigurationTemplateWrite"] & { project_id: string };
+  OpenAPIComponents["schemas"]["DeliveryConfigurationTemplateWrite"] & {
+    project_id: string;
+  };
 export type DeliveryOverrideSet = CamelizeKeys<
-  Contracts["DeliveryOverrideSet"]
+  OpenAPIComponents["schemas"]["DeliveryOverrideSet"]
 >;
-export type DeliveryOverrideSetWrite = Contracts["DeliveryOverrideSetWrite"] & {
-  project_id: string;
-};
+export type DeliveryOverrideSetWrite =
+  OpenAPIComponents["schemas"]["DeliveryOverrideSetWrite"] & {
+    project_id: string;
+  };
 export type DeliveryEffectiveConfiguration = CamelizeKeys<
-  Contracts["DeliveryEffectiveConfiguration"]
+  OpenAPIComponents["schemas"]["DeliveryEffectiveConfiguration"]
 >;
 
 function mapConfigurationTemplate(

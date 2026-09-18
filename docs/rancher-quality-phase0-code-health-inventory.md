@@ -8,13 +8,13 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 763
-- Frontend source lines: 183776
-- Go source files under `internal/` excluding generated sqlc and tests: 891
-- Go source files scanned for sqlc query references excluding generated sqlc: 1926
-- sqlc query declarations: 1226
-- Component files scanned: 245
-- Helm top-level values scanned: 34
+- Frontend source files: 792
+- Frontend source lines: 189858
+- Go source files under `internal/` excluding generated sqlc and tests: 904
+- Go source files scanned for sqlc query references excluding generated sqlc: 1950
+- sqlc query declarations: 1249
+- Component files scanned: 254
+- Helm top-level values scanned: 35
 
 ## Hard Gates
 
@@ -99,12 +99,12 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `canonicalCandidates` in [`internal/delivery/placement/placement.go:412`](internal/delivery/placement/placement.go:412), [`internal/delivery/rollout/cohorts.go:85`](internal/delivery/rollout/cohorts.go:85)
 - `cloneStringMap` in [`internal/delivery/model/placement.go:193`](internal/delivery/model/placement.go:193), [`internal/delivery/placement/placement.go:557`](internal/delivery/placement/placement.go:557)
 - `contains` in [`internal/delivery/placement/placement.go:565`](internal/delivery/placement/placement.go:565), [`internal/server/vault_observer.go:108`](internal/server/vault_observer.go:108)
-- `containsControl` in [`internal/delivery/model/types.go:618`](internal/delivery/model/types.go:618), [`internal/handler/delivery/common.go:282`](internal/handler/delivery/common.go:282)
+- `containsControl` in [`internal/delivery/model/types.go:641`](internal/delivery/model/types.go:641), [`internal/handler/delivery/common.go:282`](internal/handler/delivery/common.go:282)
 - `containsString` in [`internal/agent/delivery/validator.go:454`](internal/agent/delivery/validator.go:454), [`internal/charlie/capability_schema.go:357`](internal/charlie/capability_schema.go:357)
-- `decisionDigest` in [`internal/delivery/rollout/scheduler.go:558`](internal/delivery/rollout/scheduler.go:558), [`internal/delivery/systemrollout/service.go:731`](internal/delivery/systemrollout/service.go:731)
+- `decisionDigest` in [`internal/delivery/rollout/scheduler.go:562`](internal/delivery/rollout/scheduler.go:562), [`internal/delivery/systemrollout/service.go:731`](internal/delivery/systemrollout/service.go:731)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac_guards.go:251`](internal/handler/rbac_guards.go:251), [`internal/server/middleware/rbac_queries.go:244`](internal/server/middleware/rbac_queries.go:244)
-- `decodeStrict` in [`internal/delivery/provider/provider.go:475`](internal/delivery/provider/provider.go:475), [`internal/delivery/rollout/postgres_store.go:334`](internal/delivery/rollout/postgres_store.go:334)
+- `decodeStrict` in [`internal/delivery/provider/provider.go:483`](internal/delivery/provider/provider.go:483), [`internal/delivery/rollout/postgres_store.go:507`](internal/delivery/rollout/postgres_store.go:507)
 - `defaultString` in [`internal/handler/resource_presenters.go:703`](internal/handler/resource_presenters.go:703), [`internal/helmruntime/config.go:109`](internal/helmruntime/config.go:109)
 - `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:186`](internal/delivery/resolver/network.go:186)
 - `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
@@ -113,29 +113,31 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `isUniqueViolation` in [`internal/handler/cluster_templates_registry.go:336`](internal/handler/cluster_templates_registry.go:336), [`internal/projects/service.go:571`](internal/projects/service.go:571)
 - `missingCapabilities` in [`internal/agentcompat/compat.go:119`](internal/agentcompat/compat.go:119), [`internal/delivery/placement/placement.go:392`](internal/delivery/placement/placement.go:392)
-- `mustJSON` in [`internal/handler/delivery/target.go:665`](internal/handler/delivery/target.go:665), [`internal/worker/tasks/catalog_sync.go:668`](internal/worker/tasks/catalog_sync.go:668)
+- `mustJSON` in [`internal/handler/delivery/target.go:715`](internal/handler/delivery/target.go:715), [`internal/worker/tasks/catalog_sync.go:668`](internal/worker/tasks/catalog_sync.go:668)
+- `normalizeDigest` in [`internal/charlie/admin_diagnostics.go:198`](internal/charlie/admin_diagnostics.go:198), [`internal/delivery/catalogapp/service.go:433`](internal/delivery/catalogapp/service.go:433)
 - `nullableTime` in [`internal/charlie/cluster_agent_capability_adapter.go:192`](internal/charlie/cluster_agent_capability_adapter.go:192), [`internal/handler/alerting_responses.go:538`](internal/handler/alerting_responses.go:538)
-- `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:530`](internal/charlie/delivery_capability_adapter.go:530), [`internal/handler/alerting_responses.go:524`](internal/handler/alerting_responses.go:524)
+- `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:530`](internal/charlie/delivery_capability_adapter.go:530), [`internal/handler/alerting_responses.go:524`](internal/handler/alerting_responses.go:524), [`internal/handler/delivery/override_set.go:367`](internal/handler/delivery/override_set.go:367)
 - `percentile` in [`internal/anomaly/stats.go:184`](internal/anomaly/stats.go:184), [`internal/delivery/qualification/report.go:134`](internal/delivery/qualification/report.go:134)
-- `podReady` in [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations_readiness.go:191`](internal/handler/monitoring_operations_readiness.go:191)
+- `podReady` in [`internal/agent/delivery/system_inventory.go:406`](internal/agent/delivery/system_inventory.go:406), [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations_readiness.go:191`](internal/handler/monitoring_operations_readiness.go:191)
 - `recordAuditOutbox` in [`internal/handler/audit_helpers.go:106`](internal/handler/audit_helpers.go:106), [`internal/handler/delivery/common.go:93`](internal/handler/delivery/common.go:93)
 - `requireSuperuser` in [`internal/handler/authorization.go:90`](internal/handler/authorization.go:90), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `retryAfter` in [`internal/apisvr/allowlist/providers/errors.go:51`](internal/apisvr/allowlist/providers/errors.go:51), [`internal/delivery/builtin/provisioner.go:558`](internal/delivery/builtin/provisioner.go:558)
 - `sortedUUIDs` in [`internal/delivery/model/placement.go:187`](internal/delivery/model/placement.go:187), [`internal/handler/authorization.go:223`](internal/handler/authorization.go:223)
-- `strictJSON` in [`internal/agent/delivery/checkpoint.go:276`](internal/agent/delivery/checkpoint.go:276), [`internal/delivery/resolver/postgres_worker.go:381`](internal/delivery/resolver/postgres_worker.go:381)
-- `stringValue` in [`internal/agent/delivery/observer.go:440`](internal/agent/delivery/observer.go:440), [`internal/handler/resource_presenters.go:566`](internal/handler/resource_presenters.go:566)
-- ... 5 more
+- `stableID` in [`internal/delivery/builtin/provisioner.go:562`](internal/delivery/builtin/provisioner.go:562), [`internal/delivery/catalogapp/service.go:429`](internal/delivery/catalogapp/service.go:429)
+- ... 7 more
 
 ### Dead-Code Candidates
 
 Owner: database/backend. Classification rule: remove only after confirming no handler, worker, CLI, migration test, or planned compatibility path uses the query.
 
-- `ListProjectResourceQuotaAllocations` declared at [`internal/db/queries/projects.sql:172`](internal/db/queries/projects.sql:172) has no non-generated Go reference
+- `ListProjectResourceQuotaAllocations` declared at [`internal/db/queries/projects.sql:179`](internal/db/queries/projects.sql:179) has no non-generated Go reference
 - `UpsertCloudCredentialMaterialization` declared at [`internal/db/queries/cloud_credentials.sql:67`](internal/db/queries/cloud_credentials.sql:67) has no non-generated Go reference
 
 Owner: frontend/platform. Classification rule: verify relative imports and dynamic imports before removal.
 
-- None.
+- `@/components/catalog/catalog-icon` (frontend/src/components/catalog/catalog-icon.tsx) has no absolute `@/components/...` import
+- `@/components/catalog/catalog-source-badge` (frontend/src/components/catalog/catalog-source-badge.tsx) has no absolute `@/components/...` import
+- `@/components/ui/table-text` (frontend/src/components/ui/table-text.tsx) has no absolute `@/components/...` import
 
 Owner: deployment/platform. Classification rule: keep if consumed by tests, docs, subcharts, or future production overrides; otherwise remove from values and schema together.
 
@@ -144,8 +146,8 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 35
-- Dead-code candidates: 2
+- Duplicate-code candidates: 37
+- Dead-code candidates: 5
 
 ## Definition Of Done For Each Candidate
 

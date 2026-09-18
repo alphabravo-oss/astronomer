@@ -56,9 +56,11 @@ export type ChartRatingAggregate = CamelizeKeys<
 >;
 export type ChartScore = CamelizeKeys<ChartRecommendationWire>;
 export type CatalogApplicationPresentation =
-  Schemas["CatalogApplicationPresentation"];
-export type CatalogInstallationPreview = Schemas["CatalogInstallationPreview"];
-export type ApplicationCatalogSource = Schemas["ApplicationCatalogSource"];
+  OpenAPIComponents["schemas"]["CatalogApplicationPresentation"];
+export type CatalogInstallationPreview =
+  OpenAPIComponents["schemas"]["CatalogInstallationPreview"];
+export type ApplicationCatalogSource =
+  OpenAPIComponents["schemas"]["ApplicationCatalogSource"];
 export type CatalogOperation =
   OpenAPIComponents["schemas"]["CatalogOperation"] & {
     events?: Schemas["CatalogOperationEvent"][];
@@ -71,7 +73,7 @@ export interface CatalogInstallationReceipt {
 
 export type CatalogInstallationAccepted = CatalogInstallationReceipt;
 export type CatalogUserDiscovery = CamelizeKeys<
-  Schemas["CatalogUserDiscovery"]
+  OpenAPIComponents["schemas"]["CatalogUserDiscovery"]
 >;
 
 const CATALOG_PAGE_LIMIT = 200;
