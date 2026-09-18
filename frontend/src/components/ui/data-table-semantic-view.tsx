@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface SemanticDataTableProps<T extends RowData> {
   table: RtTable<DataTableFeatures, T>;
@@ -81,12 +82,10 @@ export function SemanticDataTable<T extends RowData>({
             <TableRow className="border-b border-border bg-muted/50">
               {selectable && (
                 <TableHead className={cn("w-10", selectPadding)}>
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     aria-label="Select all rows on this page"
                     checked={table.getIsAllPageRowsSelected()}
                     onChange={table.getToggleAllPageRowsSelectedHandler()}
-                    className="rounded-sm border-border text-primary focus:ring-ring"
                   />
                 </TableHead>
               )}
@@ -283,13 +282,11 @@ export function SemanticDataTable<T extends RowData>({
                   >
                     {selectable && (
                       <TableCell className={selectPadding}>
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           aria-label={`Select row ${keyExtractor(row.original)}`}
                           checked={isSelected}
                           disabled={!row.getCanSelect()}
                           onChange={row.getToggleSelectedHandler()}
-                          className="rounded-sm border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
                         />
                       </TableCell>
                     )}

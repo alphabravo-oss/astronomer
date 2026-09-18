@@ -7,6 +7,7 @@ import type {
 } from "@tanstack/react-table";
 import { Filter, Search, SlidersHorizontal, X } from "lucide-react";
 import type { Column } from "@/components/ui/data-table";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { DataTableFeatures } from "./data-table-features";
 import { cn } from "@/lib/utils";
 
@@ -97,17 +98,16 @@ export function DataTableToolbar<T extends RowData>({
             <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-popover p-1 shadow-lg">
               {columns.map((definition) => {
                 const column = table.getColumn(definition.key);
+                if (!column?.getCanHide()) return null;
                 const isVisible = column?.getIsVisible() ?? true;
                 return (
                   <label
                     key={definition.key}
                     className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={isVisible}
                       onChange={() => column?.toggleVisibility()}
-                      className="rounded-sm border-border text-primary focus:ring-ring"
                     />
                     {definition.header}
                   </label>
@@ -197,11 +197,9 @@ function FacetedFilter<T extends RowData>({
                 key={option}
                 className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={selected.includes(option)}
                   onChange={() => toggle(option)}
-                  className="rounded-sm border-border text-primary focus:ring-ring"
                 />
                 {option}
               </label>

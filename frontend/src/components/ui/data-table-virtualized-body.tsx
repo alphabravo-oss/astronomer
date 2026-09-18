@@ -17,6 +17,7 @@ import type { Column } from "@/components/ui/data-table";
 import type { VirtualRows } from "@/components/ui/use-virtual-rows";
 import { eventStartedInRowAction } from "@/components/ui/data-table-row-actions";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export function VirtualizedGrid<T extends RowData>({
   activeColumns,
@@ -125,12 +126,10 @@ export function VirtualizedGrid<T extends RowData>({
               className={cn("flex items-center", selectPadding)}
               style={selectColStyle}
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 aria-label="Select all rows on this page"
                 checked={table.getIsAllPageRowsSelected()}
                 onChange={table.getToggleAllPageRowsSelectedHandler()}
-                className="rounded-sm border-border text-primary focus:ring-ring"
               />
             </div>
           )}
@@ -315,13 +314,11 @@ export function VirtualizedGrid<T extends RowData>({
                       className={cn("flex items-center", selectPadding)}
                       style={selectColStyle}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={`Select row ${keyExtractor(row.original)}`}
                         checked={isSelected}
                         disabled={!row.getCanSelect()}
                         onChange={row.getToggleSelectedHandler()}
-                        className="rounded-sm border-border text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </div>
                   )}

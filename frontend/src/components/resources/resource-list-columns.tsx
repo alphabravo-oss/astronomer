@@ -281,6 +281,7 @@ const podColumns: Column<Pod>[] = [
   {
     key: "images",
     header: "Images",
+    hidden: true,
     accessor: (row) => {
       const [first, ...rest] = row.images;
       return (
@@ -323,6 +324,7 @@ const podColumns: Column<Pod>[] = [
   {
     key: "lastRestart",
     header: "Last Restart",
+    hidden: true,
     accessor: (row) => (
       <span className="whitespace-nowrap text-xs text-muted-foreground">
         {row.lastRestartAt ? formatRelativeTime(row.lastRestartAt) : "—"}
@@ -333,6 +335,7 @@ const podColumns: Column<Pod>[] = [
   {
     key: "ip",
     header: "Pod IP",
+    hidden: true,
     accessor: (row) => (
       <span className="font-mono text-xs text-muted-foreground">
         {row.ip || "—"}

@@ -72,6 +72,16 @@ export function useDataTableState<T>({
           .map((column) => [column.key, false]),
       ),
       ...parsePersistedVisibility(storedVisibility),
+      // Structural columns (normally the unlabeled row-actions column) stay
+      // pinned even if an older browser preference hid them.
+      ...Object.fromEntries(
+        columns
+          .filter(
+            (column) =>
+              column.hideable === false || column.header.trim() === "",
+          )
+          .map((column) => [column.key, true]),
+      ),
     }),
     [columns, storedVisibility],
   );

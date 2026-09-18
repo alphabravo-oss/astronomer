@@ -188,6 +188,55 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     window.localStorage.clear();
   });
 
+  it("starts optional columns hidden and exposes them through a themed selector", () => {
+    window.localStorage.setItem(
+      "dt:optional-table:visibility",
+      JSON.stringify({ actions: false }),
+    );
+    const optionalColumns: Column<Row>[] = [
+      columns[0],
+      { ...columns[1], hidden: true },
+      {
+        key: "actions",
+        header: "",
+        accessor: () => "Actions",
+        sortable: false,
+      },
+    ];
+
+    render(
+      <DataTable
+        data={rows}
+        columns={optionalColumns}
+        keyExtractor={(row) => row.id}
+        persistKey="optional-table"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("columnheader", { name: /size/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /columns/i }));
+    const optionalToggle = screen.getByRole("checkbox", { name: "Size" });
+    expect(optionalToggle).not.toBeChecked();
+    expect(
+      optionalToggle.parentElement?.querySelector(
+        '[data-slot="checkbox-indicator"]',
+      ),
+    ).toHaveClass("bg-background", "peer-checked:bg-primary");
+    // Structural columns with no heading (for example, row actions) remain
+    // pinned and are not rendered as a blank selector entry.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.getAllByText("Actions")).toHaveLength(rows.length);
+
+    fireEvent.click(optionalToggle);
+    expect(
+      screen.getByRole("columnheader", { name: /size/i }),
+    ).toBeInTheDocument();
+    window.localStorage.clear();
+  });
+
   it("filters rows via a faceted multi-select column filter", () => {
     type R = { id: string; name: string; status: string };
     const facetRows: R[] = [

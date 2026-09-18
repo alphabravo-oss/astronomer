@@ -30,6 +30,8 @@ export interface Column<T> {
   sortable?: boolean;
   filterable?: boolean;
   hidden?: boolean;
+  /** Keep structural columns, such as row actions, visible and out of the selector. */
+  hideable?: boolean;
   width?: string;
   align?: "left" | "center" | "right";
   /**
