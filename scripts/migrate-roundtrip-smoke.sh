@@ -78,13 +78,13 @@ SELECT md5(string_agg(item, E'\\n' ORDER BY item)) FROM catalog;"
 
 seed_signature_sql="
 SELECT string_agg(signature, E'\\n' ORDER BY signature) FROM (
-  SELECT 'global_roles|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY id), '')) AS signature FROM global_roles t
+  SELECT 'global_roles|' || count(*) || '|' || md5(COALESCE(string_agg((to_jsonb(t) - 'created_at' - 'updated_at')::text, '' ORDER BY id), '')) AS signature FROM global_roles t
   UNION ALL SELECT 'cluster_roles|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY id), '')) FROM cluster_roles t
-  UNION ALL SELECT 'project_roles|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY id), '')) FROM project_roles t
-  -- Curated tools and corrective Helm-repository migrations use clock-based
-  -- created/updated audit timestamps. Those timestamps are expected to change
-  -- on a destructive rebuild; hash the durable seed contract, not wall-clock
-  -- time.
+  UNION ALL SELECT 'project_roles|' || count(*) || '|' || md5(COALESCE(string_agg((to_jsonb(t) - 'created_at' - 'updated_at')::text, '' ORDER BY id), '')) FROM project_roles t
+  -- Role, curated-tool, and corrective Helm-repository migrations use
+  -- clock-based created/updated audit timestamps. Those timestamps are
+  -- expected to change on a destructive rebuild; hash the durable seed
+  -- contract, not wall-clock time.
   UNION ALL SELECT 'cluster_tools|' || count(*) || '|' || md5(COALESCE(string_agg((to_jsonb(t) - 'created_at' - 'updated_at')::text, '' ORDER BY id), '')) FROM cluster_tools t
   UNION ALL SELECT 'platform_settings|' || count(*) || '|' || md5(COALESCE(string_agg(row_to_json(t)::text, '' ORDER BY key), '')) FROM platform_settings t
   UNION ALL SELECT 'helm_repositories|' || count(*) || '|' || md5(COALESCE(string_agg((to_jsonb(t) - 'created_at' - 'updated_at')::text, '' ORDER BY id), '')) FROM helm_repositories t

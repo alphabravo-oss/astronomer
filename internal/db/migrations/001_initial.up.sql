@@ -106,7 +106,7 @@ CREATE FUNCTION public.revoke_charlie_delegations_for_deactivated_user() RETURNS
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    UPDATE charlie_delegations
+    UPDATE public.charlie_delegations
     SET revoked_at = now()
     WHERE principal_id = NEW.id
       AND revoked_at IS NULL;
@@ -123,9 +123,9 @@ CREATE FUNCTION public.revoke_charlie_delegations_for_inactive_connection() RETU
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    UPDATE charlie_delegations AS delegation
+    UPDATE public.charlie_delegations AS delegation
     SET revoked_at = now()
-    FROM charlie_sessions AS session
+    FROM public.charlie_sessions AS session
     WHERE session.connection_id = NEW.id
       AND delegation.session_id = session.id
       AND delegation.revoked_at IS NULL;
@@ -142,7 +142,7 @@ CREATE FUNCTION public.revoke_charlie_delegations_on_rbac_change() RETURNS trigg
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    UPDATE charlie_delegations
+    UPDATE public.charlie_delegations
     SET revoked_at = now()
     WHERE revoked_at IS NULL;
     RETURN NULL;

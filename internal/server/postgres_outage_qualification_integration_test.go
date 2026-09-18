@@ -228,6 +228,8 @@ func postgresOutageFamilies(database *db.DB) []postgresOutageFamily {
 		postgresOutageTypedFamily[handler.WebhookMutationTx](database, "webhook"),
 		postgresOutageTypedFamily[handler.WorkloadMutationTx](database, "workload"),
 		postgresOutageTypedFamily[deliveryhandler.BundleMutationTx](database, "delivery_bundle"),
+		postgresOutageTypedFamily[deliveryhandler.ConfigurationTemplateMutationTx](database, "delivery_configuration_template"),
+		postgresOutageTypedFamily[deliveryhandler.OverrideSetMutationTx](database, "delivery_override_set"),
 		postgresOutageTypedFamily[deliveryhandler.SourceMutationTx](database, "delivery_source"),
 		postgresOutageTypedFamily[deliveryhandler.TargetMutationTx](database, "delivery_target"),
 		postgresOutageTypedFamily[tasks.AlertNotificationMutationTx](database, "alert_notification"),
@@ -570,6 +572,16 @@ func (r *postgresOutageResiduals) seedDeliveryGraph(t *testing.T, ctx context.Co
 	if err != nil {
 		t.Fatal(err)
 	}
+	rendererSpec, err := json.Marshal(model.RendererSpec{
+		Kind: model.RendererKustomize,
+		Kustomize: &model.KustomizeSpec{
+			Path:            "./clusters/prod",
+			TargetNamespace: "platform",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	statements := []struct {
 		sql  string
 		args []any
@@ -581,7 +593,7 @@ func (r *postgresOutageResiduals) seedDeliveryGraph(t *testing.T, ctx context.Co
 		{`INSERT INTO delivery_controller_inventory (cluster_id,flux_version,components,ready,compatibility_status,status_digest,agent_session_id,agent_sequence,semantic_sequence) VALUES ($1,'2.4.0','{}',true,'compatible','sha256:0000000000000000000000000000000000000000000000000000000000000000','fixture',1,1)`, []any{clusterID}},
 		{`INSERT INTO delivery_sources (id,project_id,name,source_type,url,status) VALUES ($1,$2,$3,'git',$4,'ready')`, []any{sourceID, projectID, "qualification-source", "https://git.example.test/qualification.git"}},
 		{`INSERT INTO component_bundles (id,project_id,name) VALUES ($1,$2,$3)`, []any{bundleID, projectID, "qualification-bundle"}},
-		{`INSERT INTO component_bundle_versions (id,bundle_id,source_id,version,renderer,requested_revision,resolved_revision,artifact_digest,source_spec,requirements,spec_digest,verification_status,state) VALUES ($1,$2,$3,'v1','kustomize',$4,$4,$5,$6,'[]',$5,'verified','ready')`, []any{versionID, bundleID, sourceID, strings.Repeat("b", 40), digest, sourceSpec}},
+		{`INSERT INTO component_bundle_versions (id,bundle_id,source_id,version,renderer,requested_revision,resolved_revision,artifact_digest,source_spec,renderer_spec,requirements,spec_digest,verification_status,state) VALUES ($1,$2,$3,'v1','kustomize',$4,$4,$5,$6,$7,'[]',$5,'verified','ready')`, []any{versionID, bundleID, sourceID, strings.Repeat("b", 40), digest, sourceSpec, rendererSpec}},
 		{`INSERT INTO delivery_targets (id,project_id,name,bundle_version_id,placement,rollout_policy) VALUES ($1,$2,$3,$4,'{"all_clusters":true}','{"approval_required":false}')`, []any{r.targetID, projectID, "qualification-target", versionID}},
 		{`INSERT INTO delivery_targets (id,project_id,name,bundle_version_id,placement,rollout_policy) VALUES ($1,$2,$3,$4,'{"all_clusters":true}','{"approval_required":true}')`, []any{r.approvalTarget, projectID, "qualification-approval-target", versionID}},
 		{`INSERT INTO cluster_deployments (id,target_id,cluster_id,desired_bundle_version_id,desired_generation,desired_spec_digest,desired_revision,action,phase) VALUES ($1,$2,$3,$4,1,$5,$6,'apply','ready')`, []any{r.deploymentID, r.targetID, clusterID, versionID, digest, strings.Repeat("b", 40)}},

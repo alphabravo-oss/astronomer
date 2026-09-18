@@ -9,7 +9,7 @@ SELECT installation.id, chart_version.id, target.bundle_version_id,
        catalog_entry.slug, chart_version.version,
        CASE WHEN chart_version.digest LIKE 'sha256:%' THEN chart_version.digest
             ELSE 'sha256:' || chart_version.digest END,
-       'sha256:' || encode(digest(installation.values_override, 'sha256'), 'hex'),
+       'sha256:' || encode(public.digest(installation.values_override, 'sha256'), 'hex'),
        catalog_entry.verification_status
 FROM public.installed_charts installation
 JOIN public.helm_chart_versions chart_version
