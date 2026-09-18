@@ -679,9 +679,16 @@ func (s *AdminService) UpdateMode(ctx context.Context, desired Mode, revision in
 			if desired != ModeDisabled && kubernetesVisibilityAuthorityPending(connection) {
 				return AdminModeView{}, fmt.Errorf("%w: accept the rediscovered Kubernetes catalog in Astronomer before restoring Charlie authority", ErrAdminConflict)
 			}
-			prerequisites, prerequisitesErr := s.modePrerequisites(ctx)
-			if prerequisitesErr != nil {
-				return AdminModeView{}, prerequisitesErr
+			prerequisites := ModePrerequisites{}
+			// Only Auto consumes these prerequisites. Lower-authority changes must
+			// remain available even when automation identity/catalog checks are
+			// unhealthy so an operator can always fail closed.
+			if desired == ModeAuto {
+				var prerequisitesErr error
+				prerequisites, prerequisitesErr = s.modePrerequisites(ctx)
+				if prerequisitesErr != nil {
+					return AdminModeView{}, prerequisitesErr
+				}
 			}
 			state, err = s.mode.Request(ctx, desired, revision, prerequisites)
 		}
@@ -754,38 +761,6 @@ func (s *AdminService) AcknowledgeDisclosure(ctx context.Context, digest string)
 		return AdminModeView{}, err
 	}
 	return s.enrichMode(ctx, safeAdminMode(connection)), nil
-}
-
-func (s *AdminService) modePrerequisites(ctx context.Context) (ModePrerequisites, error) {
-	connection, err := s.connection(ctx)
-	if err != nil {
-		return ModePrerequisites{}, err
-	}
-	enabled, grants, err := s.automationState(ctx)
-	if err != nil {
-		return ModePrerequisites{}, err
-	}
-	prerequisites := ModePrerequisites{
-		DisclosureAcknowledged:  connection.DisclosureDigest != "" && connection.AcknowledgedDisclosureDigest == connection.DisclosureDigest,
-		AutomationIdentityReady: enabled,
-		AutomationTargetReady:   grants,
-	}
-	if s.bridge == nil {
-		return prerequisites, ErrAdminUnavailable
-	}
-	status, err := s.bridge.AdminStatus(ctx)
-	if err != nil {
-		return prerequisites, err
-	}
-	for _, capability := range status.AutoAllowlist {
-		for _, descriptor := range WriteCapabilityCatalog() {
-			if capability == descriptor.Name && descriptor.AutoEligible {
-				prerequisites.AutomationAllowlistReady = true
-				return prerequisites, nil
-			}
-		}
-	}
-	return prerequisites, nil
 }
 
 func (s *AdminService) Automation(ctx context.Context) (AdminAutomationView, error) {
