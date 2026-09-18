@@ -92,17 +92,15 @@ api.interceptors.response.use(
     }>,
   ) => {
     const originalRequest = error.config as AstronomerRequestConfig;
+    const isSessionEndpoint =
+      originalRequest?.url?.includes("/auth/login") ||
+      originalRequest?.url?.includes("/auth/refresh");
     if (
       error.response?.status === 401 &&
       !originalRequest?._retry &&
-      typeof window !== "undefined"
+      typeof window !== "undefined" &&
+      !isSessionEndpoint
     ) {
-      if (
-        originalRequest.url?.includes("/auth/login") ||
-        originalRequest.url?.includes("/auth/refresh")
-      ) {
-        return Promise.reject(error);
-      }
       // Mark queued followers as well as the refresh owner. A second 401 must
       // surface to the caller instead of re-entering the refresh flow.
       originalRequest._retry = true;

@@ -46,6 +46,49 @@ describe("account security generated API boundary", () => {
     });
   });
 
+  it("turns a credential 401 into a safe, useful login error", async () => {
+    operations.login.mockRejectedValue({
+      message: "Request failed with status code 401",
+      status: 401,
+      response: {
+        status: 401,
+        data: {
+          error: {
+            code: "authentication_required",
+            message: "Invalid credentials",
+          },
+        },
+      },
+    });
+
+    await expect(
+      loginWithCredentialsChallengeAware(
+        "operator@example.com",
+        "wrong-password",
+      ),
+    ).rejects.toThrow("Incorrect email or password");
+  });
+
+  it("preserves a structured non-credential login error", async () => {
+    operations.login.mockRejectedValue({
+      message: "Request failed with status code 403",
+      status: 403,
+      response: {
+        status: 403,
+        data: {
+          error: {
+            code: "account_disabled",
+            message: "Account is disabled",
+          },
+        },
+      },
+    });
+
+    await expect(
+      loginWithCredentialsChallengeAware("operator@example.com", "password"),
+    ).rejects.toThrow("Account is disabled");
+  });
+
   it("maps a successful login's raw user wire shape", async () => {
     operations.login.mockResolvedValue({
       data: {

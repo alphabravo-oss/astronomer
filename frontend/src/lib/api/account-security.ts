@@ -169,8 +169,7 @@ export async function verifyTotpChallenge(
  * Login wrapper that surfaces the typed TOTP challenge instead of throwing.
  */
 export type LoginResult =
-  | { kind: "ok"; user: User }
-  | { kind: "challenge"; challenge: TotpChallenge };
+  { kind: "ok"; user: User } | { kind: "challenge"; challenge: TotpChallenge };
 
 export async function loginWithCredentialsChallengeAware(
   email: string,
@@ -197,12 +196,14 @@ export async function loginWithCredentialsChallengeAware(
       response?: { status?: number; data?: unknown };
     };
     const body = requestError.response?.data as
-      | { error?: string; challenge_token?: string; message?: string }
+      | {
+          error?: string | { code?: string; message?: string };
+          challenge_token?: string;
+          message?: string;
+        }
       | undefined;
-    if (
-      (requestError.status ?? requestError.response?.status) === 423 &&
-      body
-    ) {
+    const status = requestError.status ?? requestError.response?.status;
+    if (status === 423 && body) {
       if (
         (body.error === "totp_required" ||
           body.error === "totp_enrollment_required") &&
@@ -217,7 +218,18 @@ export async function loginWithCredentialsChallengeAware(
         };
       }
     }
-    const message = body?.message || requestError.message || "Login failed";
+    // Keep authentication failures useful without revealing whether an email
+    // exists. This also prevents a raw Axios "status code 401" message from
+    // becoming the primary login error if a caller bypasses normalization.
+    if (status === 401) {
+      throw new Error("Incorrect email or password");
+    }
+    const nestedMessage =
+      body?.error && typeof body.error === "object"
+        ? body.error.message
+        : undefined;
+    const message =
+      nestedMessage || body?.message || requestError.message || "Login failed";
     throw new Error(message);
   }
 }
