@@ -33,10 +33,10 @@ catalog:
   # management of already-installed releases and operator-added repositories.
   # The UI degrades to an explicit unavailable/empty catalog state.
   enabled: true
-  sourceURL: "https://raw.githubusercontent.com/alphabravo-oss/astronomer-catalog/e9adffbdd888dd3f9e7ea0dbe516a0bbd42f6d9e/catalog.json"
+  sourceURL: "https://raw.githubusercontent.com/alphabravo-oss/astronomer-catalog/3e24ab98f0805bd54d6591d9b9b961bbfd1f5db5/catalog.json"
   # SHA-256 of the catalog document. HTTPS sources are rejected when their
   # bytes do not match; OCI sources additionally require an @sha256 digest.
-  digest: "sha256:747042ed13cfac1f111aa29a919a65f8cb1ad1aab3eb8942d1ed0dedd54eeaab"
+  digest: "sha256:084aa9dec47d9612fdebd848737f53f9feb70e248a4e8e5ccbc93491e1f4ae0c"
   # Longest-prefix rewrites. Both source and target must use HTTPS or OCI.
   # Example: {"oci://ghcr.io/alphabravo-oss/astronomer-catalog":"oci://registry.internal/catalog"}
   mirrors: {}

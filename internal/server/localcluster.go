@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
+	agenttemplate "github.com/alphabravocompany/astronomer-go/deploy/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
@@ -29,6 +30,13 @@ import (
 // 127.0.0.1 keeps the connection on the loopback interface and avoids any
 // dependency on the in-cluster service mesh / DNS.
 const localAgentDialURL = "ws://127.0.0.1:8000"
+
+// localAgentPrivilegeProfile matches the dedicated management-plane
+// ServiceAccount installed by the chart. The embedded agent manages the local
+// cluster with that allowlisted administrative RBAC; leaving this unset makes
+// the generic agent default to viewer and causes CONNECT admission to reject
+// legitimate namespace reconciliation as missing the mutate capability.
+const localAgentPrivilegeProfile = agenttemplate.PrivilegeProfileAdmin
 
 // localClusterName is the canonical name for the management cluster row,
 // matching Rancher's convention. The user-visible UI surfaces this directly.
@@ -187,6 +195,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 		HeartbeatInterval: 30,
 		MetricsInterval:   60,
 		HealthAddr:        "", // health probe server is owned by the main process
+		PrivilegeProfile:  localAgentPrivilegeProfile,
 	}
 
 	tunnelClient := agent.NewTunnelClient(cfg, logger.With("component", "local-agent"))
@@ -234,6 +243,7 @@ func buildLocalAgentRuntime(ctx context.Context, logger *slog.Logger, queries *s
 	health := agent.NewHealthReporter(clientset, logger, cfg.HeartbeatInterval, cfg.MetricsInterval)
 	health.SetAgentVersion(version.Version)
 	health.SetClusterID(cfg.ClusterID)
+	health.SetPrivilegeProfile(cfg.PrivilegeProfile)
 	if mc, err := metricsv.NewForConfig(restCfg); err == nil {
 		health.SetMetricsClient(mc)
 	} else {
