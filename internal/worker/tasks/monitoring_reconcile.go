@@ -218,7 +218,14 @@ func reconcileClusterMonitoring(ctx context.Context, client *imonitoring.Client,
 		if value == "" {
 			value = cluster.ID.String()
 		}
-		upCount, err := client.QueryScalar(ctx, fmt.Sprintf(`count(up{%s="%s"})`, label, escapePromLabelLocal(value)))
+		// externalLabels are attached when Prometheus ships/query-federates
+		// samples; they are not added to local TSDB series. Querying up{} with
+		// the managed cluster label therefore reports zero for the common
+		// single-cluster backend even while every target is healthy. The stack
+		// installs this purpose-built heartbeat recording rule with the
+		// canonical cluster identity, so it works both against local Prometheus
+		// and against a fleet Thanos query endpoint.
+		upCount, err := client.QueryScalar(ctx, clusterHeartbeatQuery(label, value))
 		if err != nil {
 			runtimeLogger(ctx).WarnContext(ctx, "cluster metrics query failed", "cluster_id", cluster.ID.String(), "error", err)
 		} else if upCount > 0 {
@@ -275,4 +282,8 @@ func mapFromAny(v any) map[string]any {
 func escapePromLabelLocal(value string) string {
 	replacer := strings.NewReplacer(`\`, `\\`, `"`, `\"`)
 	return replacer.Replace(value)
+}
+
+func clusterHeartbeatQuery(label, value string) string {
+	return fmt.Sprintf(`count(astronomer_cluster_info{%s="%s"})`, label, escapePromLabelLocal(value))
 }

@@ -187,6 +187,17 @@ func TestMonitoringReconcileTickReconcilesClustersWhenTheCredentialIsUnreadable(
 	}
 }
 
+func TestReconcileClusterMonitoringUsesManagedHeartbeatLabel(t *testing.T) {
+	clusterID := uuid.New()
+	wantQuery := `count(astronomer_cluster_info{cluster_id="` + clusterID.String() + `"})`
+	if got := clusterHeartbeatQuery("cluster_id", clusterID.String()); got != wantQuery {
+		t.Fatalf("query = %q, want %q", got, wantQuery)
+	}
+	if got := clusterHeartbeatQuery("site", `east\"prod`); got != `count(astronomer_cluster_info{site="east\\\"prod"})` {
+		t.Fatalf("escaped query = %q", got)
+	}
+}
+
 // monitoringReconcileTickQuerier adds the cluster-side reads/writes the tick
 // makes after the backend step.
 type monitoringReconcileTickQuerier struct {
