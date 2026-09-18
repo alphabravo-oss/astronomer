@@ -46,6 +46,9 @@ export default defineConfig({
   build: {
     manifest: true,
     outDir: "dist",
+    // CSP keeps font-src limited to same-origin files. Do not turn small font
+    // subsets into data: URLs that browsers must reject.
+    assetsInlineLimit: 0,
     chunkSizeWarningLimit: 650,
   },
 });

@@ -8,10 +8,10 @@
   },
   "scripts": {
     "dev": "vite",
-    "predev": "mkdir -p public && cp node_modules/@wterm/core/wasm/wterm.wasm public/wterm.wasm",
-    "build": "npm run type-check && vite build",
+    "predev": "node scripts/prepare-static-assets.mjs",
+    "build": "npm run type-check && vite build && node scripts/check-csp-build.mjs",
     "bundle:check": "node --test scripts/check-bundle-budget.test.mjs && node scripts/check-bundle-budget.mjs",
-    "prebuild": "mkdir -p public && cp node_modules/@wterm/core/wasm/wterm.wasm public/wterm.wasm",
+    "prebuild": "node scripts/prepare-static-assets.mjs",
     "preview": "vite preview",
     "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
     "format": "prettier --write .",

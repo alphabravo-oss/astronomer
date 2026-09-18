@@ -1,11 +1,10 @@
-
 import { lazy, Suspense, useRef, useCallback } from "react";
 import { CheckCircle2, Copy, Download, Save, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toastError, toastSuccess } from "@/lib/toast";
 import { ActionButton } from "@/components/ui/action-button";
 
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+const MonacoEditor = lazy(() => import("@/components/ui/monaco-editor"));
 
 function EditorLoading() {
   return (

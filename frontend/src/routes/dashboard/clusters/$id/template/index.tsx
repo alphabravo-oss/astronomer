@@ -45,7 +45,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 // Monaco stays a lazy chunk (second of the 2 monaco sites; the first is
 // components/ui/yaml-editor.tsx) so the editor bundle loads only when the
 // applied-spec panel is opened.
-const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+const MonacoEditor = lazy(() => import("@/components/ui/monaco-editor"));
 
 function EditorLoading() {
   return (
