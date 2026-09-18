@@ -181,7 +181,7 @@ func TestProxyClusterGrafanaUsesPrivateClusterService(t *testing.T) {
 	if len(fake.paths) != 2 {
 		t.Fatalf("paths = %#v, want service discovery plus proxy", fake.paths)
 	}
-	wantPath := "/api/v1/namespaces/astronomer-monitoring/services/http:astronomer-monitoring-grafana:80/proxy/d/local?orgId=1"
+	wantPath := "/api/v1/namespaces/astronomer-monitoring/services/http:astronomer-monitoring-grafana:80/proxy/api/v1/clusters/" + stackTestClusterID + "/observability/grafana/d/local?orgId=1"
 	if fake.paths[1] != wantPath {
 		t.Fatalf("proxy path = %q, want %q", fake.paths[1], wantPath)
 	}

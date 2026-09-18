@@ -164,10 +164,14 @@ func (h *MonitoringHandler) ProxyClusterGrafana(w http.ResponseWriter, r *http.R
 	}
 
 	suffix := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
-	proxyPath := fmt.Sprintf("/api/v1/namespaces/%s/services/http:%s:80/proxy/", cfg.StackNamespace, service)
+	// Grafana's serve_from_sub_path router expects the configured external
+	// prefix on the upstream request as well. Forwarding only the wildcard
+	// suffix makes / redirect back to Astronomer and turns /api/* into a 404.
+	upstreamPath := clusterGrafanaProxyPath(clusterUUID.String())
 	if suffix != "" {
-		proxyPath += suffix
+		upstreamPath += suffix
 	}
+	proxyPath := fmt.Sprintf("/api/v1/namespaces/%s/services/http:%s:80/proxy%s", cfg.StackNamespace, service, upstreamPath)
 	if r.URL.RawQuery != "" {
 		proxyPath += "?" + r.URL.RawQuery
 	}
