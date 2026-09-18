@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -378,6 +379,12 @@ func (h *MonitoringHandler) GetStackStatus(w http.ResponseWriter, r *http.Reques
 		status["operation"] = op
 	}
 	if h.requester != nil {
+		if _, grafanaErr := h.findGrafanaServiceName(r.Context(), clusterID, cfg.StackNamespace, cfg.PrometheusReleaseName); grafanaErr == nil {
+			status["grafanaAvailable"] = true
+			status["grafanaProxyPath"] = clusterGrafanaProxyPath(clusterID)
+		} else {
+			status["grafanaAvailable"] = false
+		}
 		path := fmt.Sprintf("/api/v1/namespaces/%s/pods?labelSelector=%s", cfg.StackNamespace, url.QueryEscape("app.kubernetes.io/instance="+cfg.PrometheusReleaseName))
 		resp, doErr := h.requester.Do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
 		if doErr == nil && ensureSuccess(resp) == nil {
@@ -490,6 +497,27 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 	if req.StorageClass != "" {
 		prometheusPVCSpec["storageClassName"] = req.StorageClass
 	}
+	grafanaValues := map[string]any{"enabled": enableGrafana}
+	if enableGrafana {
+		rootURL := strings.TrimRight(h.serverURL, "/") + clusterGrafanaProxyPath(clusterID)
+		grafanaValues["grafana.ini"] = map[string]any{
+			"server": map[string]any{
+				"root_url":            rootURL,
+				"serve_from_sub_path": true,
+			},
+			"auth": map[string]any{
+				"disable_login_form":   true,
+				"disable_signout_menu": true,
+			},
+			"auth.anonymous": map[string]any{
+				"enabled":  true,
+				"org_role": "Viewer",
+			},
+			"auth.basic": map[string]any{"enabled": false},
+			"security":   map[string]any{"allow_embedding": true},
+			"users":      map[string]any{"allow_sign_up": false},
+		}
+	}
 	values := map[string]any{
 		"additionalPrometheusRulesMap": map[string]any{
 			"astronomer-cluster-metadata": map[string]any{
@@ -507,9 +535,7 @@ func (h *MonitoringHandler) monitoringStackPayload(ctx context.Context, r *http.
 				},
 			},
 		},
-		"grafana": map[string]any{
-			"enabled": enableGrafana,
-		},
+		"grafana": grafanaValues,
 		"alertmanager": map[string]any{
 			"enabled": enableAlertmanager,
 			"alertmanagerSpec": map[string]any{

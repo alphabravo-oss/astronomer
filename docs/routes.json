@@ -1900,6 +1900,90 @@
     "pattern": "/api/v1/clusters/{id}/monitoring/stack/upgrade"
   },
   {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana/*"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana/*"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana/*"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana/*"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana/*"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/clusters/{id}/observability/grafana/*"
+  },
+  {
     "method": "POST",
     "pattern": "/api/v1/clusters/{id}/ownership/takeover"
   },

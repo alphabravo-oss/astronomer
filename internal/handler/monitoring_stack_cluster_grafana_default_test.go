@@ -14,7 +14,28 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 )
+
+func TestClusterGrafanaUsesAuthenticatedSameOriginPath(t *testing.T) {
+	h, _ := newStackLifecycleHandler(t)
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"enableGrafana":true}`))
+	_, _, values, err := h.monitoringStackPayload(context.Background(), req, stackTestClusterID, rbac.VerbRead)
+	if err != nil {
+		t.Fatalf("monitoringStackPayload: %v", err)
+	}
+	grafana, _ := values["grafana"].(map[string]any)
+	ini, _ := grafana["grafana.ini"].(map[string]any)
+	server, _ := ini["server"].(map[string]any)
+	wantRoot := "https://astronomer.example.com" + clusterGrafanaProxyPath(stackTestClusterID)
+	if server["root_url"] != wantRoot || server["serve_from_sub_path"] != true {
+		t.Fatalf("grafana server config = %#v, want same-origin root %q", server, wantRoot)
+	}
+	anonymous, _ := ini["auth.anonymous"].(map[string]any)
+	if anonymous["enabled"] != true || anonymous["org_role"] != "Viewer" {
+		t.Fatalf("anonymous auth = %#v, want Viewer behind Astronomer RBAC", anonymous)
+	}
+}
 
 func TestMonitoringStackPayloadOmitsGrafanaWhenFleetHealthyAndNotConfigured(t *testing.T) {
 	t.Parallel()

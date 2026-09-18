@@ -702,7 +702,7 @@ describe("per-cluster monitoring stack page", () => {
     await waitFor(() => expect(objectStorage).toHaveValue("storage-1"));
   });
 
-  it("explains two Grafanas and omits Open when shared Grafana is not proxy", async () => {
+  it("explains the private cluster Grafana and omits its link when absent", async () => {
     grant(["read", "create", "update", "delete"]);
     statusPerTarget({ cluster: { status: "not_configured" } });
     render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, {
@@ -711,31 +711,30 @@ describe("per-cluster monitoring stack page", () => {
 
     const copy = await screen.findByTestId("two-grafana-copy");
     expect(copy).toHaveTextContent(/this cluster.+Prometheus \(15d/);
-    expect(copy).toHaveTextContent("survives an Astronomer outage");
-    expect(copy).toHaveTextContent("lobby");
-    expect(copy).toHaveTextContent("dies with Astronomer");
+    expect(copy).toHaveTextContent("cluster-scoped monitoring permissions");
+    expect(copy).toHaveTextContent("no public ingress");
     expect(
-      screen.queryByRole("link", { name: /Open shared Grafana/ }),
+      screen.queryByRole("link", { name: "Grafana" }),
     ).not.toBeInTheDocument();
   });
 
-  it("links to in-console shared Grafana with var-cluster when available", async () => {
+  it("links to this cluster's in-console Grafana when available", async () => {
     grant(["read", "create", "update", "delete"]);
-    statusPerTarget({ cluster: { status: "not_configured" } });
-    vi.mocked(getSharedGrafanaStatus).mockResolvedValue({
-      status: "healthy",
-      authMode: "same_origin_proxy",
+    statusPerTarget({
+      cluster: {
+        status: "healthy",
+        grafanaAvailable: true,
+        grafanaProxyPath: `/api/v1/clusters/${CLUSTER_ID}/observability/grafana/`,
+      },
     });
     render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, {
       wrapper: Wrapper,
     });
 
-    const open = await screen.findByRole("link", {
-      name: /Open shared Grafana/,
-    });
+    const open = await screen.findByRole("link", { name: "Grafana" });
     expect(open).toHaveAttribute(
       "href",
-      `/dashboard/monitoring/grafana?var-cluster=${CLUSTER_ID}`,
+      `/dashboard/clusters/${CLUSTER_ID}/grafana`,
     );
   });
 });

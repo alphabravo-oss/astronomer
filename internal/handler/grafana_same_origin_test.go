@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -135,5 +136,59 @@ func TestProxyGrafanaRequiresMonitoringRead(t *testing.T) {
 	h.ProxyGrafana(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403: %s", rec.Code, rec.Body.String())
+	}
+}
+
+type clusterGrafanaRequesterFake struct {
+	paths    []string
+	response *protocol.K8sResponsePayload
+}
+
+func (f *clusterGrafanaRequesterFake) Do(_ context.Context, _, _, path string, _ []byte, _ map[string]string) (*protocol.K8sResponsePayload, error) {
+	f.paths = append(f.paths, path)
+	if strings.Contains(path, "/services?labelSelector=") {
+		body := `{"items":[{"metadata":{"name":"astronomer-monitoring-grafana"},"spec":{"ports":[{"port":80}]}}]}`
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64.StdEncoding.EncodeToString([]byte(body))}, nil
+	}
+	return f.response, nil
+}
+
+func TestProxyClusterGrafanaUsesPrivateClusterService(t *testing.T) {
+	h, q := newStackLifecycleHandler(t)
+	q.clusterErr = nil
+	q.clusterCfg = sqlc.ClusterMonitoringConfig{
+		ClusterID:             uuid.MustParse(stackTestClusterID),
+		StackNamespace:        "astronomer-monitoring",
+		PrometheusReleaseName: "astronomer-monitoring",
+		Status:                "healthy",
+	}
+	fake := &clusterGrafanaRequesterFake{response: &protocol.K8sResponsePayload{
+		StatusCode: http.StatusOK,
+		Headers:    map[string]string{"Content-Type": "text/html", "Set-Cookie": "must-not-leak=1"},
+		Body:       base64.StdEncoding.EncodeToString([]byte("<html>cluster grafana</html>")),
+	}}
+	h.requester = fake
+
+	router := chi.NewRouter()
+	router.Handle("/api/v1/clusters/{id}/observability/grafana/*", http.HandlerFunc(h.ProxyClusterGrafana))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+stackTestClusterID+"/observability/grafana/d/local?orgId=1", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "<html>cluster grafana</html>" {
+		t.Fatalf("response = %d %q", rec.Code, rec.Body.String())
+	}
+	if len(fake.paths) != 2 {
+		t.Fatalf("paths = %#v, want service discovery plus proxy", fake.paths)
+	}
+	wantPath := "/api/v1/namespaces/astronomer-monitoring/services/http:astronomer-monitoring-grafana:80/proxy/d/local?orgId=1"
+	if fake.paths[1] != wantPath {
+		t.Fatalf("proxy path = %q, want %q", fake.paths[1], wantPath)
+	}
+	if rec.Header().Get("Set-Cookie") != "" {
+		t.Fatal("cluster Grafana cookie crossed the proxy boundary")
+	}
+	if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "script-src 'self' 'unsafe-inline' 'unsafe-eval'") {
+		t.Fatalf("CSP = %q", got)
 	}
 }

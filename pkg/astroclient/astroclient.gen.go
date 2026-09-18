@@ -8519,6 +8519,8 @@ type MonitoringStackStatus struct {
 	DesiredSpecHash         *string                    `json:"desiredSpecHash,omitempty"`
 	DriftReasons            *[]string                  `json:"driftReasons,omitempty"`
 	Drifted                 *bool                      `json:"drifted,omitempty"`
+	GrafanaAvailable        *bool                      `json:"grafanaAvailable,omitempty"`
+	GrafanaProxyPath        *string                    `json:"grafanaProxyPath,omitempty"`
 	IngestHostname          *string                    `json:"ingestHostname,omitempty"`
 	IngestPublic            *bool                      `json:"ingestPublic,omitempty"`
 	LastDriftDetectedAt     *time.Time                 `json:"lastDriftDetectedAt"`
@@ -12813,6 +12815,24 @@ type PutClustersByIdMonitoringStackUpgradeParams struct {
 	IdempotencyKey RequiredIdempotencyKey `json:"Idempotency-Key"`
 }
 
+// PatchClustersByIdObservabilityGrafanaJSONBody defines parameters for PatchClustersByIdObservabilityGrafana.
+type PatchClustersByIdObservabilityGrafanaJSONBody = interface{}
+
+// PostClustersByIdObservabilityGrafanaJSONBody defines parameters for PostClustersByIdObservabilityGrafana.
+type PostClustersByIdObservabilityGrafanaJSONBody = interface{}
+
+// PutClustersByIdObservabilityGrafanaJSONBody defines parameters for PutClustersByIdObservabilityGrafana.
+type PutClustersByIdObservabilityGrafanaJSONBody = interface{}
+
+// PatchClustersByIdObservabilityGrafanaProxyJSONBody defines parameters for PatchClustersByIdObservabilityGrafanaProxy.
+type PatchClustersByIdObservabilityGrafanaProxyJSONBody = interface{}
+
+// PostClustersByIdObservabilityGrafanaProxyJSONBody defines parameters for PostClustersByIdObservabilityGrafanaProxy.
+type PostClustersByIdObservabilityGrafanaProxyJSONBody = interface{}
+
+// PutClustersByIdObservabilityGrafanaProxyJSONBody defines parameters for PutClustersByIdObservabilityGrafanaProxy.
+type PutClustersByIdObservabilityGrafanaProxyJSONBody = interface{}
+
 // GetClustersByIdVulnerabilitiesImagesParams defines parameters for GetClustersByIdVulnerabilitiesImages.
 type GetClustersByIdVulnerabilitiesImagesParams struct {
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
@@ -14625,6 +14645,24 @@ type PostClustersByIdMonitoringStackReplaceJSONRequestBody = MonitoringStackRequ
 
 // PutClustersByIdMonitoringStackUpgradeJSONRequestBody defines body for PutClustersByIdMonitoringStackUpgrade for application/json ContentType.
 type PutClustersByIdMonitoringStackUpgradeJSONRequestBody = MonitoringStackRequest
+
+// PatchClustersByIdObservabilityGrafanaJSONRequestBody defines body for PatchClustersByIdObservabilityGrafana for application/json ContentType.
+type PatchClustersByIdObservabilityGrafanaJSONRequestBody = PatchClustersByIdObservabilityGrafanaJSONBody
+
+// PostClustersByIdObservabilityGrafanaJSONRequestBody defines body for PostClustersByIdObservabilityGrafana for application/json ContentType.
+type PostClustersByIdObservabilityGrafanaJSONRequestBody = PostClustersByIdObservabilityGrafanaJSONBody
+
+// PutClustersByIdObservabilityGrafanaJSONRequestBody defines body for PutClustersByIdObservabilityGrafana for application/json ContentType.
+type PutClustersByIdObservabilityGrafanaJSONRequestBody = PutClustersByIdObservabilityGrafanaJSONBody
+
+// PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody defines body for PatchClustersByIdObservabilityGrafanaProxy for application/json ContentType.
+type PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody = PatchClustersByIdObservabilityGrafanaProxyJSONBody
+
+// PostClustersByIdObservabilityGrafanaProxyJSONRequestBody defines body for PostClustersByIdObservabilityGrafanaProxy for application/json ContentType.
+type PostClustersByIdObservabilityGrafanaProxyJSONRequestBody = PostClustersByIdObservabilityGrafanaProxyJSONBody
+
+// PutClustersByIdObservabilityGrafanaProxyJSONRequestBody defines body for PutClustersByIdObservabilityGrafanaProxy for application/json ContentType.
+type PutClustersByIdObservabilityGrafanaProxyJSONRequestBody = PutClustersByIdObservabilityGrafanaProxyJSONBody
 
 // PutClustersByIdRegistrationOptionsJSONRequestBody defines body for PutClustersByIdRegistrationOptions for application/json ContentType.
 type PutClustersByIdRegistrationOptionsJSONRequestBody = SetOptionsRequest
@@ -21863,6 +21901,60 @@ type ClientInterface interface {
 	PutClustersByIdMonitoringStackUpgradeWithBody(ctx context.Context, id string, params *PutClustersByIdMonitoringStackUpgradeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PutClustersByIdMonitoringStackUpgrade(ctx context.Context, id string, params *PutClustersByIdMonitoringStackUpgradeParams, body PutClustersByIdMonitoringStackUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteClustersByIdObservabilityGrafana request
+	DeleteClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetClustersByIdObservabilityGrafana request
+	GetClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadClustersByIdObservabilityGrafana request
+	HeadClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OptionsClustersByIdObservabilityGrafana request
+	OptionsClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchClustersByIdObservabilityGrafanaWithBody request with any body
+	PatchClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchClustersByIdObservabilityGrafana(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostClustersByIdObservabilityGrafanaWithBody request with any body
+	PostClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostClustersByIdObservabilityGrafana(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutClustersByIdObservabilityGrafanaWithBody request with any body
+	PutClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutClustersByIdObservabilityGrafana(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteClustersByIdObservabilityGrafanaProxy request
+	DeleteClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetClustersByIdObservabilityGrafanaProxy request
+	GetClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadClustersByIdObservabilityGrafanaProxy request
+	HeadClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OptionsClustersByIdObservabilityGrafanaProxy request
+	OptionsClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchClustersByIdObservabilityGrafanaProxyWithBody request with any body
+	PatchClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostClustersByIdObservabilityGrafanaProxyWithBody request with any body
+	PostClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutClustersByIdObservabilityGrafanaProxyWithBody request with any body
+	PutClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostClustersByIdOwnershipTakeover request
 	PostClustersByIdOwnershipTakeover(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -30823,6 +30915,246 @@ func (c *Client) PutClustersByIdMonitoringStackUpgradeWithBody(ctx context.Conte
 
 func (c *Client) PutClustersByIdMonitoringStackUpgrade(ctx context.Context, id string, params *PutClustersByIdMonitoringStackUpgradeParams, body PutClustersByIdMonitoringStackUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutClustersByIdMonitoringStackUpgradeRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteClustersByIdObservabilityGrafanaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByIdObservabilityGrafanaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadClustersByIdObservabilityGrafanaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) OptionsClustersByIdObservabilityGrafana(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOptionsClustersByIdObservabilityGrafanaRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchClustersByIdObservabilityGrafanaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchClustersByIdObservabilityGrafana(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchClustersByIdObservabilityGrafanaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostClustersByIdObservabilityGrafanaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostClustersByIdObservabilityGrafana(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostClustersByIdObservabilityGrafanaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutClustersByIdObservabilityGrafanaWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutClustersByIdObservabilityGrafanaRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutClustersByIdObservabilityGrafana(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutClustersByIdObservabilityGrafanaRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteClustersByIdObservabilityGrafanaProxyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByIdObservabilityGrafanaProxyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadClustersByIdObservabilityGrafanaProxyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) OptionsClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOptionsClustersByIdObservabilityGrafanaProxyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchClustersByIdObservabilityGrafanaProxyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchClustersByIdObservabilityGrafanaProxyRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostClustersByIdObservabilityGrafanaProxyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostClustersByIdObservabilityGrafanaProxyRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutClustersByIdObservabilityGrafanaProxyWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutClustersByIdObservabilityGrafanaProxyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutClustersByIdObservabilityGrafanaProxy(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutClustersByIdObservabilityGrafanaProxyRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -59998,6 +60330,560 @@ func NewPutClustersByIdMonitoringStackUpgradeRequestWithBody(server string, id s
 	return req, nil
 }
 
+// NewDeleteClustersByIdObservabilityGrafanaRequest generates requests for DeleteClustersByIdObservabilityGrafana
+func NewDeleteClustersByIdObservabilityGrafanaRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetClustersByIdObservabilityGrafanaRequest generates requests for GetClustersByIdObservabilityGrafana
+func NewGetClustersByIdObservabilityGrafanaRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHeadClustersByIdObservabilityGrafanaRequest generates requests for HeadClustersByIdObservabilityGrafana
+func NewHeadClustersByIdObservabilityGrafanaRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOptionsClustersByIdObservabilityGrafanaRequest generates requests for OptionsClustersByIdObservabilityGrafana
+func NewOptionsClustersByIdObservabilityGrafanaRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchClustersByIdObservabilityGrafanaRequest calls the generic PatchClustersByIdObservabilityGrafana builder with application/json body
+func NewPatchClustersByIdObservabilityGrafanaRequest(server string, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchClustersByIdObservabilityGrafanaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPatchClustersByIdObservabilityGrafanaRequestWithBody generates requests for PatchClustersByIdObservabilityGrafana with any type of body
+func NewPatchClustersByIdObservabilityGrafanaRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostClustersByIdObservabilityGrafanaRequest calls the generic PostClustersByIdObservabilityGrafana builder with application/json body
+func NewPostClustersByIdObservabilityGrafanaRequest(server string, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostClustersByIdObservabilityGrafanaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostClustersByIdObservabilityGrafanaRequestWithBody generates requests for PostClustersByIdObservabilityGrafana with any type of body
+func NewPostClustersByIdObservabilityGrafanaRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutClustersByIdObservabilityGrafanaRequest calls the generic PutClustersByIdObservabilityGrafana builder with application/json body
+func NewPutClustersByIdObservabilityGrafanaRequest(server string, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutClustersByIdObservabilityGrafanaRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPutClustersByIdObservabilityGrafanaRequestWithBody generates requests for PutClustersByIdObservabilityGrafana with any type of body
+func NewPutClustersByIdObservabilityGrafanaRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteClustersByIdObservabilityGrafanaProxyRequest generates requests for DeleteClustersByIdObservabilityGrafanaProxy
+func NewDeleteClustersByIdObservabilityGrafanaProxyRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetClustersByIdObservabilityGrafanaProxyRequest generates requests for GetClustersByIdObservabilityGrafanaProxy
+func NewGetClustersByIdObservabilityGrafanaProxyRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHeadClustersByIdObservabilityGrafanaProxyRequest generates requests for HeadClustersByIdObservabilityGrafanaProxy
+func NewHeadClustersByIdObservabilityGrafanaProxyRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOptionsClustersByIdObservabilityGrafanaProxyRequest generates requests for OptionsClustersByIdObservabilityGrafanaProxy
+func NewOptionsClustersByIdObservabilityGrafanaProxyRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchClustersByIdObservabilityGrafanaProxyRequest calls the generic PatchClustersByIdObservabilityGrafanaProxy builder with application/json body
+func NewPatchClustersByIdObservabilityGrafanaProxyRequest(server string, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchClustersByIdObservabilityGrafanaProxyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPatchClustersByIdObservabilityGrafanaProxyRequestWithBody generates requests for PatchClustersByIdObservabilityGrafanaProxy with any type of body
+func NewPatchClustersByIdObservabilityGrafanaProxyRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostClustersByIdObservabilityGrafanaProxyRequest calls the generic PostClustersByIdObservabilityGrafanaProxy builder with application/json body
+func NewPostClustersByIdObservabilityGrafanaProxyRequest(server string, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostClustersByIdObservabilityGrafanaProxyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPostClustersByIdObservabilityGrafanaProxyRequestWithBody generates requests for PostClustersByIdObservabilityGrafanaProxy with any type of body
+func NewPostClustersByIdObservabilityGrafanaProxyRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutClustersByIdObservabilityGrafanaProxyRequest calls the generic PutClustersByIdObservabilityGrafanaProxy builder with application/json body
+func NewPutClustersByIdObservabilityGrafanaProxyRequest(server string, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutClustersByIdObservabilityGrafanaProxyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewPutClustersByIdObservabilityGrafanaProxyRequestWithBody generates requests for PutClustersByIdObservabilityGrafanaProxy with any type of body
+func NewPutClustersByIdObservabilityGrafanaProxyRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/clusters/%s/observability/grafana/*", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewPostClustersByIdOwnershipTakeoverRequest generates requests for PostClustersByIdOwnershipTakeover
 func NewPostClustersByIdOwnershipTakeoverRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -79462,6 +80348,60 @@ type ClientWithResponsesInterface interface {
 
 	PutClustersByIdMonitoringStackUpgradeWithResponse(ctx context.Context, id string, params *PutClustersByIdMonitoringStackUpgradeParams, body PutClustersByIdMonitoringStackUpgradeJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdMonitoringStackUpgradeResponse, error)
 
+	// DeleteClustersByIdObservabilityGrafanaWithResponse request
+	DeleteClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteClustersByIdObservabilityGrafanaResponse, error)
+
+	// GetClustersByIdObservabilityGrafanaWithResponse request
+	GetClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetClustersByIdObservabilityGrafanaResponse, error)
+
+	// HeadClustersByIdObservabilityGrafanaWithResponse request
+	HeadClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*HeadClustersByIdObservabilityGrafanaResponse, error)
+
+	// OptionsClustersByIdObservabilityGrafanaWithResponse request
+	OptionsClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*OptionsClustersByIdObservabilityGrafanaResponse, error)
+
+	// PatchClustersByIdObservabilityGrafanaWithBodyWithResponse request with any body
+	PatchClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaResponse, error)
+
+	PatchClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaResponse, error)
+
+	// PostClustersByIdObservabilityGrafanaWithBodyWithResponse request with any body
+	PostClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaResponse, error)
+
+	PostClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaResponse, error)
+
+	// PutClustersByIdObservabilityGrafanaWithBodyWithResponse request with any body
+	PutClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaResponse, error)
+
+	PutClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaResponse, error)
+
+	// DeleteClustersByIdObservabilityGrafanaProxyWithResponse request
+	DeleteClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// GetClustersByIdObservabilityGrafanaProxyWithResponse request
+	GetClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// HeadClustersByIdObservabilityGrafanaProxyWithResponse request
+	HeadClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*HeadClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// OptionsClustersByIdObservabilityGrafanaProxyWithResponse request
+	OptionsClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*OptionsClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// PatchClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PatchClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	PatchClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// PostClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PostClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	PostClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	// PutClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PutClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaProxyResponse, error)
+
+	PutClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaProxyResponse, error)
+
 	// PostClustersByIdOwnershipTakeoverWithResponse request
 	PostClustersByIdOwnershipTakeoverWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*PostClustersByIdOwnershipTakeoverResponse, error)
 
@@ -93679,6 +94619,382 @@ func (r PutClustersByIdMonitoringStackUpgradeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PutClustersByIdMonitoringStackUpgradeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type OptionsClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r OptionsClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OptionsClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutClustersByIdObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutClustersByIdObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutClustersByIdObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type OptionsClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r OptionsClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OptionsClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutClustersByIdObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutClustersByIdObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutClustersByIdObservabilityGrafanaProxyResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -108404,6 +109720,180 @@ func (c *ClientWithResponses) PutClustersByIdMonitoringStackUpgradeWithResponse(
 		return nil, err
 	}
 	return ParsePutClustersByIdMonitoringStackUpgradeResponse(rsp)
+}
+
+// DeleteClustersByIdObservabilityGrafanaWithResponse request returning *DeleteClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) DeleteClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.DeleteClustersByIdObservabilityGrafana(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// GetClustersByIdObservabilityGrafanaWithResponse request returning *GetClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) GetClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.GetClustersByIdObservabilityGrafana(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// HeadClustersByIdObservabilityGrafanaWithResponse request returning *HeadClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) HeadClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*HeadClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.HeadClustersByIdObservabilityGrafana(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// OptionsClustersByIdObservabilityGrafanaWithResponse request returning *OptionsClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) OptionsClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*OptionsClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.OptionsClustersByIdObservabilityGrafana(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOptionsClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// PatchClustersByIdObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PatchClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) PatchClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PatchClustersByIdObservabilityGrafanaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PatchClustersByIdObservabilityGrafana(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// PostClustersByIdObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PostClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) PostClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PostClustersByIdObservabilityGrafanaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PostClustersByIdObservabilityGrafana(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// PutClustersByIdObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PutClustersByIdObservabilityGrafanaResponse
+func (c *ClientWithResponses) PutClustersByIdObservabilityGrafanaWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PutClustersByIdObservabilityGrafanaWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutClustersByIdObservabilityGrafanaWithResponse(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaResponse, error) {
+	rsp, err := c.PutClustersByIdObservabilityGrafana(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutClustersByIdObservabilityGrafanaResponse(rsp)
+}
+
+// DeleteClustersByIdObservabilityGrafanaProxyWithResponse request returning *DeleteClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) DeleteClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*DeleteClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.DeleteClustersByIdObservabilityGrafanaProxy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// GetClustersByIdObservabilityGrafanaProxyWithResponse request returning *GetClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) GetClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*GetClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.GetClustersByIdObservabilityGrafanaProxy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// HeadClustersByIdObservabilityGrafanaProxyWithResponse request returning *HeadClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) HeadClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*HeadClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.HeadClustersByIdObservabilityGrafanaProxy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// OptionsClustersByIdObservabilityGrafanaProxyWithResponse request returning *OptionsClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) OptionsClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*OptionsClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.OptionsClustersByIdObservabilityGrafanaProxy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOptionsClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PatchClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PatchClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PatchClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PatchClustersByIdObservabilityGrafanaProxyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PatchClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PatchClustersByIdObservabilityGrafanaProxy(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PostClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PostClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PostClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PostClustersByIdObservabilityGrafanaProxyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PostClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PostClustersByIdObservabilityGrafanaProxy(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PutClustersByIdObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PutClustersByIdObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PutClustersByIdObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PutClustersByIdObservabilityGrafanaProxyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutClustersByIdObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutClustersByIdObservabilityGrafanaProxyWithResponse(ctx context.Context, id string, body PutClustersByIdObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutClustersByIdObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PutClustersByIdObservabilityGrafanaProxy(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutClustersByIdObservabilityGrafanaProxyResponse(rsp)
 }
 
 // PostClustersByIdOwnershipTakeoverWithResponse request returning *PostClustersByIdOwnershipTakeoverResponse
@@ -136954,6 +138444,846 @@ func ParsePutClustersByIdMonitoringStackUpgradeResponse(rsp *http.Response) (*Pu
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteClustersByIdObservabilityGrafanaResponse parses an HTTP response from a DeleteClustersByIdObservabilityGrafanaWithResponse call
+func ParseDeleteClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*DeleteClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersByIdObservabilityGrafanaResponse parses an HTTP response from a GetClustersByIdObservabilityGrafanaWithResponse call
+func ParseGetClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*GetClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadClustersByIdObservabilityGrafanaResponse parses an HTTP response from a HeadClustersByIdObservabilityGrafanaWithResponse call
+func ParseHeadClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*HeadClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseOptionsClustersByIdObservabilityGrafanaResponse parses an HTTP response from a OptionsClustersByIdObservabilityGrafanaWithResponse call
+func ParseOptionsClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*OptionsClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OptionsClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchClustersByIdObservabilityGrafanaResponse parses an HTTP response from a PatchClustersByIdObservabilityGrafanaWithResponse call
+func ParsePatchClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*PatchClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostClustersByIdObservabilityGrafanaResponse parses an HTTP response from a PostClustersByIdObservabilityGrafanaWithResponse call
+func ParsePostClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*PostClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutClustersByIdObservabilityGrafanaResponse parses an HTTP response from a PutClustersByIdObservabilityGrafanaWithResponse call
+func ParsePutClustersByIdObservabilityGrafanaResponse(rsp *http.Response) (*PutClustersByIdObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutClustersByIdObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a DeleteClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParseDeleteClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*DeleteClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a GetClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParseGetClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*GetClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a HeadClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParseHeadClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*HeadClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseOptionsClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a OptionsClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParseOptionsClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*OptionsClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OptionsClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a PatchClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParsePatchClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*PatchClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a PostClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParsePostClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*PostClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutClustersByIdObservabilityGrafanaProxyResponse parses an HTTP response from a PutClustersByIdObservabilityGrafanaProxyWithResponse call
+func ParsePutClustersByIdObservabilityGrafanaProxyResponse(rsp *http.Response) (*PutClustersByIdObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutClustersByIdObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest BadRequest

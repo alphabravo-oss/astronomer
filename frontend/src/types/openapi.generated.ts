@@ -4136,6 +4136,8 @@ export interface OpenAPIComponents {
           "logDatasourceUrl"?: string;
           "proxyPath"?: string;
           "authMode"?: string;
+          "grafanaAvailable"?: boolean;
+          "grafanaProxyPath"?: string;
           "autoRollbackOnFailure"?: boolean;
           "managedAssetHashes"?: Record<string, unknown>;
           "alertingAssetHashes"?: Record<string, unknown>;
@@ -6097,6 +6099,152 @@ export interface OpenAPIComponents {
 }
 
 export interface OpenAPIOperations {
+  "deleteClustersByIdObservabilityGrafana": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{id}/observability/grafana";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getClustersByIdObservabilityGrafana": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/observability/grafana";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "headClustersByIdObservabilityGrafana": {
+    method: "HEAD";
+    path: "/api/v1/clusters/{id}/observability/grafana";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "optionsClustersByIdObservabilityGrafana": {
+    method: "OPTIONS";
+    path: "/api/v1/clusters/{id}/observability/grafana";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "patchClustersByIdObservabilityGrafana": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{id}/observability/grafana";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": unknown;
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "postClustersByIdObservabilityGrafana": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/observability/grafana";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: unknown;
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "putClustersByIdObservabilityGrafana": {
+    method: "PUT";
+    path: "/api/v1/clusters/{id}/observability/grafana";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": unknown;
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "deleteClustersByIdObservabilityGrafanaProxy": {
+    method: "DELETE";
+    path: "/api/v1/clusters/{id}/observability/grafana/*";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: void;
+  };
+  "getClustersByIdObservabilityGrafanaProxy": {
+    method: "GET";
+    path: "/api/v1/clusters/{id}/observability/grafana/*";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "headClustersByIdObservabilityGrafanaProxy": {
+    method: "HEAD";
+    path: "/api/v1/clusters/{id}/observability/grafana/*";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "optionsClustersByIdObservabilityGrafanaProxy": {
+    method: "OPTIONS";
+    path: "/api/v1/clusters/{id}/observability/grafana/*";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "patchClustersByIdObservabilityGrafanaProxy": {
+    method: "PATCH";
+    path: "/api/v1/clusters/{id}/observability/grafana/*";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": unknown;
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "postClustersByIdObservabilityGrafanaProxy": {
+    method: "POST";
+    path: "/api/v1/clusters/{id}/observability/grafana/*";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body"?: unknown;
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "putClustersByIdObservabilityGrafanaProxy": {
+    method: "PUT";
+    path: "/api/v1/clusters/{id}/observability/grafana/*";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "body": unknown;
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
   "deleteObservabilityGrafana": {
     method: "DELETE";
     path: "/api/v1/observability/grafana";

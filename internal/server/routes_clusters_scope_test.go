@@ -127,6 +127,8 @@ func TestClusterScopeDeclarationCoversTheMonitoringGatedRoutes(t *testing.T) {
 	// scope without the declaration.
 	required := []string{
 		"/api/v1/clusters/{id}/health",
+		"/api/v1/clusters/{id}/observability/grafana",
+		"/api/v1/clusters/{id}/observability/grafana/*",
 		"/api/v1/clusters/{id}/monitoring/config",
 		"/api/v1/clusters/{id}/monitoring/stack/status",
 		"/api/v1/clusters/{id}/monitoring/stack/preview",

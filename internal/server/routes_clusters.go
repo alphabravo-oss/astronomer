@@ -1,6 +1,8 @@
 package server
 
 import (
+	"net/http"
+
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	appmiddleware "github.com/alphabravocompany/astronomer-go/internal/server/middleware"
@@ -96,6 +98,15 @@ func registerClusterRoutes(r chi.Router, deps RouterDependencies) {
 				r.With(writeClusters).Post("/{id}/logging/outputs/{output_id}/rotate-token/", deps.ClusterResources.Logging.RotateOutputToken)
 			}
 			if deps.ClusterResources.Monitoring != nil {
+				clusterGrafana := http.HandlerFunc(deps.ClusterResources.Monitoring.ProxyClusterGrafana)
+				for _, path := range []string{"/{id}/observability/grafana", "/{id}/observability/grafana/", "/{id}/observability/grafana/*"} {
+					for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodOptions} {
+						r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Method(method, path, clusterGrafana)
+					}
+					for _, method := range []string{http.MethodPut, http.MethodPatch, http.MethodDelete} {
+						r.With(writeClusters, requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceMonitoring, rbac.VerbUpdate)).Method(method, path, clusterGrafana)
+					}
+				}
 				r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/monitoring/config/", deps.ClusterResources.Monitoring.GetClusterConfig)
 				r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceMonitoring, rbac.VerbUpdate)).Put("/{id}/monitoring/config/", deps.ClusterResources.Monitoring.UpdateClusterConfig)
 				r.With(requirePermission(deps.CoreAuth.RBACEngine, deps.CoreAuth.RBACQueries, rbac.ResourceMonitoring, rbac.VerbRead)).Get("/{id}/monitoring/stack/status/", deps.ClusterResources.Monitoring.GetStackStatus)

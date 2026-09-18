@@ -37,6 +37,7 @@ import { useAuthStore, useUIStore } from "@/lib/store";
 import { useUserPreferences } from "@/lib/user-preferences";
 import { cn, formatK8sVersion } from "@/lib/utils";
 import { useSidebarResourceCounts } from "@/components/layout/use-sidebar-resource-counts";
+import { useClusterStackStatus } from "@/components/monitoring/hooks";
 
 // Vite stamps APP_VERSION from the release tag; local builds use the current
 // package fallback in lib/env.ts.
@@ -88,12 +89,14 @@ export function Sidebar() {
     enabled: isClusterContext && !!clusterId && !cluster?.isLocal,
     staleTime: 30_000,
   });
+  const { data: monitoringStatus } = useClusterStackStatus(clusterId);
 
   const navGroups = useMemo(() => {
     const baseGroups = isClusterContext
       ? getClusterNavGroups(clusterId!, {
           isLocal: cluster?.isLocal,
           veleroInstalled: !!veleroStatus?.installed,
+          grafanaAvailable: monitoringStatus?.grafanaAvailable === true,
         })
       : globalNavGroups;
     const groups = isClusterContext
@@ -107,6 +110,7 @@ export function Sidebar() {
     featureFlags,
     isClusterContext,
     preferences.favorites,
+    monitoringStatus?.grafanaAvailable,
     user,
     veleroStatus?.installed,
   ]);

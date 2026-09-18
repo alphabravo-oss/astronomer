@@ -1589,6 +1589,8 @@ components:
         logDatasourceUrl: {type: string, format: uri}
         proxyPath: {type: string, example: /api/v1/observability/grafana/}
         authMode: {type: string}
+        grafanaAvailable: {type: boolean}
+        grafanaProxyPath: {type: string, example: /api/v1/clusters/00000000-0000-4000-8000-000000000001/observability/grafana/}
         autoRollbackOnFailure: {type: boolean}
         managedAssetHashes: {type: object, additionalProperties: true}
         alertingAssetHashes: {type: object, additionalProperties: true}
@@ -11310,6 +11312,332 @@ tags:
   - name: Delivery
     description: Flux-native targets, authoritative placement, rollouts, deployments, and compatibility
 paths:
+  /api/v1/clusters/{id}/observability/grafana:
+    delete:
+      operationId: deleteClustersByIdObservabilityGrafana
+      tags: [Clusters]
+      summary: "Delete clusters/{id}/observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '204':
+          description: Resource deleted or already absent
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    get:
+      operationId: getClustersByIdObservabilityGrafana
+      tags: [Clusters]
+      summary: "Read clusters/{id}/observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    head:
+      operationId: headClustersByIdObservabilityGrafana
+      tags: [Clusters]
+      summary: "HEAD clusters/{id}/observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    options:
+      operationId: optionsClustersByIdObservabilityGrafana
+      tags: [Clusters]
+      summary: "OPTIONS clusters/{id}/observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      operationId: patchClustersByIdObservabilityGrafana
+      tags: [Clusters]
+      summary: "Update clusters/{id}/observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      x-astronomer-request-schema-status: passthrough
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: postClustersByIdObservabilityGrafana
+      tags: [Clusters]
+      summary: "Create or execute clusters/{id}/observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      x-astronomer-request-schema-status: passthrough
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: putClustersByIdObservabilityGrafana
+      tags: [Clusters]
+      summary: "Replace clusters/{id}/observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      x-astronomer-request-schema-status: passthrough
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/clusters/{id}/observability/grafana/*:
+    delete:
+      operationId: deleteClustersByIdObservabilityGrafanaProxy
+      tags: [Clusters]
+      summary: "Delete clusters/{id}/observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '204':
+          description: Resource deleted or already absent
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    get:
+      operationId: getClustersByIdObservabilityGrafanaProxy
+      tags: [Clusters]
+      summary: "Read clusters/{id}/observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    head:
+      operationId: headClustersByIdObservabilityGrafanaProxy
+      tags: [Clusters]
+      summary: "HEAD clusters/{id}/observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    options:
+      operationId: optionsClustersByIdObservabilityGrafanaProxy
+      tags: [Clusters]
+      summary: "OPTIONS clusters/{id}/observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      operationId: patchClustersByIdObservabilityGrafanaProxy
+      tags: [Clusters]
+      summary: "Update clusters/{id}/observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      x-astronomer-request-schema-status: passthrough
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: postClustersByIdObservabilityGrafanaProxy
+      tags: [Clusters]
+      summary: "Create or execute clusters/{id}/observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      x-astronomer-request-schema-status: passthrough
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: putClustersByIdObservabilityGrafanaProxy
+      tags: [Clusters]
+      summary: "Replace clusters/{id}/observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, minLength: 1}}
+      x-astronomer-request-schema-status: passthrough
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /api/v1/observability/grafana:
     delete:
       operationId: deleteObservabilityGrafana

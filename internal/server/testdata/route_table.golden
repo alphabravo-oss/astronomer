@@ -46,6 +46,8 @@ DELETE /api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}
 DELETE /api/v1/clusters/{id}
 DELETE /api/v1/clusters/{id}/gatekeeper/constraints/{name}
 DELETE /api/v1/clusters/{id}/monitoring/stack/uninstall
+DELETE /api/v1/clusters/{id}/observability/grafana
+DELETE /api/v1/clusters/{id}/observability/grafana/*
 DELETE /api/v1/clusters/{id}/registry
 DELETE /api/v1/controllers/silences/{id}
 DELETE /api/v1/delivery/bundles/{id}
@@ -315,6 +317,8 @@ GET /api/v1/clusters/{id}/metrics
 GET /api/v1/clusters/{id}/metrics/summary
 GET /api/v1/clusters/{id}/monitoring/config
 GET /api/v1/clusters/{id}/monitoring/stack/status
+GET /api/v1/clusters/{id}/observability/grafana
+GET /api/v1/clusters/{id}/observability/grafana/*
 GET /api/v1/clusters/{id}/registration/status
 GET /api/v1/clusters/{id}/registry
 GET /api/v1/compliance/posture
@@ -462,11 +466,15 @@ GET /scim/v2/Users/{id}
 HEAD /api/v1/clusters/{cluster_id}/k8s/*
 HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}
 HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*
+HEAD /api/v1/clusters/{id}/observability/grafana
+HEAD /api/v1/clusters/{id}/observability/grafana/*
 HEAD /api/v1/observability/grafana
 HEAD /api/v1/observability/grafana/*
 OPTIONS /api/v1/clusters/{cluster_id}/k8s/*
 OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}
 OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*
+OPTIONS /api/v1/clusters/{id}/observability/grafana
+OPTIONS /api/v1/clusters/{id}/observability/grafana/*
 OPTIONS /api/v1/observability/grafana
 OPTIONS /api/v1/observability/grafana/*
 PATCH /api/v1/admin/charlie/mode
@@ -479,6 +487,8 @@ PATCH /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}
 PATCH /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*
 PATCH /api/v1/clusters/{cluster_id}/workloads/{kind}/{namespace}/{name}/scale
 PATCH /api/v1/clusters/{id}
+PATCH /api/v1/clusters/{id}/observability/grafana
+PATCH /api/v1/clusters/{id}/observability/grafana/*
 PATCH /api/v1/delivery/bundles/{id}
 PATCH /api/v1/delivery/sources/{id}
 PATCH /api/v1/delivery/targets/{id}
@@ -622,6 +632,8 @@ POST /api/v1/clusters/{id}/logging/outputs/{output_id}/rotate-token
 POST /api/v1/clusters/{id}/monitoring/stack/install
 POST /api/v1/clusters/{id}/monitoring/stack/preview
 POST /api/v1/clusters/{id}/monitoring/stack/replace
+POST /api/v1/clusters/{id}/observability/grafana
+POST /api/v1/clusters/{id}/observability/grafana/*
 POST /api/v1/clusters/{id}/ownership/takeover
 POST /api/v1/clusters/{id}/register
 POST /api/v1/clusters/{id}/registration/cancel
@@ -778,6 +790,8 @@ PUT /api/v1/clusters/{cluster_id}/snapshot-schedules/{id}
 PUT /api/v1/clusters/{id}
 PUT /api/v1/clusters/{id}/monitoring/config
 PUT /api/v1/clusters/{id}/monitoring/stack/upgrade
+PUT /api/v1/clusters/{id}/observability/grafana
+PUT /api/v1/clusters/{id}/observability/grafana/*
 PUT /api/v1/clusters/{id}/registration/options
 PUT /api/v1/clusters/{id}/registry
 PUT /api/v1/controllers/policy

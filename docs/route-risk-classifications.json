@@ -115,6 +115,7 @@
       "methods": [
         "POST",
         "PUT",
+        "PATCH",
         "DELETE"
       ],
       "patterns": [
@@ -123,10 +124,12 @@
         "/api/v1/clusters/{id}/monitoring/stack/install",
         "/api/v1/clusters/{id}/monitoring/stack/upgrade",
         "/api/v1/clusters/{id}/monitoring/stack/replace",
-        "/api/v1/clusters/{id}/monitoring/stack/uninstall"
+        "/api/v1/clusters/{id}/monitoring/stack/uninstall",
+        "/api/v1/clusters/{id}/observability/grafana",
+        "/api/v1/clusters/{id}/observability/grafana/*"
       ],
       "classification": "covered-rbac-cluster-scoped",
-      "reason": "Per-cluster monitoring stack config and helm lifecycle. Each route carries requirePermission(monitoring, read/create/update/delete) middleware inside the authenticated /clusters group, blast radius is the owning cluster's monitoring release, and the mutations are audited (monitoring.stack.*)."
+      "reason": "Per-cluster monitoring stack config, Helm lifecycle, and the private same-origin Grafana proxy. Each route carries cluster-scoped monitoring RBAC inside the authenticated /clusters group; Grafana reads and POST-shaped queries require read, while PUT/PATCH/DELETE require update plus the write-clusters token scope. Blast radius is the owning cluster's monitoring release, and mutations are audited (monitoring.stack.* / monitoring.cluster_grafana.proxy)."
     },
     {
       "id": "monitoring-endpoint-and-metrics-queries",

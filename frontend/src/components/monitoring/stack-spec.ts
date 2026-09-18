@@ -596,6 +596,10 @@ export const SHARED_LOKI_FAMILY: StackFamilySpec = {
 export const FLEET_GRAFANA_ROUTE = "/dashboard/monitoring/grafana";
 export const FLEET_GRAFANA_PROXY_PATH = "/api/v1/observability/grafana/";
 
+export function clusterGrafanaProxyPath(clusterId: string): string {
+  return `/api/v1/clusters/${encodeURIComponent(clusterId)}/observability/grafana/`;
+}
+
 /** In-console Grafana URL only when the same-origin proxy is installed. */
 export function fleetGrafanaOpenURL(
   status?: Pick<SharedGrafanaStatus, "status" | "authMode"> | null,

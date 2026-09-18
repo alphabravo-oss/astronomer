@@ -285,7 +285,11 @@ export function withFavoriteNavigation(
 // Cluster-context navigation - Rancher-style resource browser
 export function getClusterNavGroups(
   clusterId: string,
-  opts: { isLocal?: boolean; veleroInstalled?: boolean } = {},
+  opts: {
+    isLocal?: boolean;
+    veleroInstalled?: boolean;
+    grafanaAvailable?: boolean;
+  } = {},
 ): NavGroup[] {
   const base = `/dashboard/clusters/${clusterId}`;
   // Tabs that need a real outbound tunnel to a remote cluster agent.
@@ -409,6 +413,20 @@ export function getClusterNavGroups(
           permission: { resource: "monitoring", verb: "read" as const },
           featureFlag: "feature.monitoring",
         },
+        ...(opts.grafanaAvailable
+          ? [
+              {
+                label: "Grafana",
+                href: `${base}/grafana`,
+                icon: BarChart3,
+                permission: {
+                  resource: "monitoring",
+                  verb: "read" as const,
+                },
+                featureFlag: "feature.monitoring" as const,
+              },
+            ]
+          : []),
         {
           label: "Alerting",
           href: `${base}/alerting`,

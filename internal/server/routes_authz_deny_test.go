@@ -273,14 +273,16 @@ var clusterMonitoringRoutes = []struct {
 	method string
 	path   string
 }{
-	{"config_get", http.MethodGet, "/config/"},
-	{"config_put", http.MethodPut, "/config/"},
-	{"stack_status", http.MethodGet, "/stack/status/"},
-	{"stack_preview", http.MethodPost, "/stack/preview/"},
-	{"stack_install", http.MethodPost, "/stack/install/"},
-	{"stack_upgrade", http.MethodPut, "/stack/upgrade/"},
-	{"stack_replace", http.MethodPost, "/stack/replace/"},
-	{"stack_uninstall", http.MethodDelete, "/stack/uninstall/"},
+	{"config_get", http.MethodGet, "/monitoring/config/"},
+	{"config_put", http.MethodPut, "/monitoring/config/"},
+	{"stack_status", http.MethodGet, "/monitoring/stack/status/"},
+	{"stack_preview", http.MethodPost, "/monitoring/stack/preview/"},
+	{"stack_install", http.MethodPost, "/monitoring/stack/install/"},
+	{"stack_upgrade", http.MethodPut, "/monitoring/stack/upgrade/"},
+	{"stack_replace", http.MethodPost, "/monitoring/stack/replace/"},
+	{"stack_uninstall", http.MethodDelete, "/monitoring/stack/uninstall/"},
+	{"grafana_get", http.MethodGet, "/observability/grafana/"},
+	{"grafana_query", http.MethodPost, "/observability/grafana/api/ds/query"},
 }
 
 func newClusterMonitoringAuthzRouter(jwtMgr *auth.JWTManager, bindings []rbac.RoleBinding) chi.Router {
@@ -326,8 +328,8 @@ func TestDirectKubeconfigRouteRequiresClusterUpdateRBAC(t *testing.T) {
 	}
 }
 
-// TestClusterMonitoringRoutesRequireMonitoringRBAC is the fence for the eight
-// handlers in internal/handler/monitoring_stack_cluster.go, which deliberately
+// TestClusterMonitoringRoutesRequireMonitoringRBAC is the fence for the
+// per-cluster monitoring handlers, which deliberately
 // carry no in-handler authorization: their entire gate is the requirePermission
 // wrapper mounted per route in routes_clusters.go.
 //
@@ -337,7 +339,7 @@ func TestDirectKubeconfigRouteRequiresClusterUpdateRBAC(t *testing.T) {
 // green; both chi.Walk callbacks in routes_security_test.go discard the
 // middleware chain, and the route-risk registries are static (method, pattern)
 // maps. So this test drives an AUTHENTICATED principal holding every verb on
-// clusters and nothing on monitoring, and requires 403 from all eight — the
+// clusters and nothing on monitoring, and requires 403 from every route — the
 // only assertion in the tree that fails if a wrapper is dropped.
 func TestClusterMonitoringRoutesRequireMonitoringRBAC(t *testing.T) {
 	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
@@ -345,7 +347,7 @@ func TestClusterMonitoringRoutesRequireMonitoringRBAC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate token: %v", err)
 	}
-	base := "/api/v1/clusters/" + uuid.NewString() + "/monitoring"
+	base := "/api/v1/clusters/" + uuid.NewString()
 
 	noMonitoringRBAC := newClusterMonitoringAuthzRouter(jwtMgr, routeSecurityBindings(
 		rbac.ResourceClusters, rbac.VerbRead, rbac.VerbList, rbac.VerbCreate, rbac.VerbUpdate, rbac.VerbDelete))

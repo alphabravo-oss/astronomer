@@ -76,6 +76,7 @@ function classify(routePath) {
 
 function isPassthroughRoute(routePath) {
   return (routePath.startsWith('/api/v1/clusters/') && routePath.includes('/k8s/')) ||
+    /^\/api\/v1\/clusters\/\{[^}]+\}\/observability\/grafana(?:\/\*)?$/.test(routePath) ||
     routePath === '/api/v1/observability/grafana' ||
     routePath.startsWith('/api/v1/observability/grafana/') ||
     routePath.includes('/proxy/service/') ||
@@ -233,9 +234,19 @@ function ensureOperationMetadata(source) {
       lines[i + 1 + routeClassIndex] = block[routeClassIndex];
     }
     const hasJSONRequestBody = block.some((candidate) => /^      requestBody:/.test(candidate));
-    if (isPassthroughRoute(currentPath) && hasJSONRequestBody &&
-        !block.some((candidate) => /^      x-astronomer-request-schema-status:/.test(candidate))) {
-      additions.push('      x-astronomer-request-schema-status: passthrough');
+    if (isPassthroughRoute(currentPath) && hasJSONRequestBody) {
+      if (requestStatusIndex < 0) {
+        additions.push('      x-astronomer-request-schema-status: passthrough');
+      } else if (block[requestStatusIndex] !== '      x-astronomer-request-schema-status: passthrough') {
+        block[requestStatusIndex] = '      x-astronomer-request-schema-status: passthrough';
+        lines[i + 1 + requestStatusIndex] = block[requestStatusIndex];
+      }
+      const mutationSchemaIndex = block.findIndex((candidate) =>
+        candidate.includes("schema: {$ref: '#/components/schemas/RouteMutationRequest'}"));
+      if (mutationSchemaIndex >= 0) {
+        block[mutationSchemaIndex] = '            schema: {}';
+        lines[i + 1 + mutationSchemaIndex] = block[mutationSchemaIndex];
+      }
     }
     if (isPolymorphicRoute(currentPath) && hasJSONRequestBody &&
         !block.some((candidate) => /^      x-astronomer-request-schema-status:/.test(candidate))) {

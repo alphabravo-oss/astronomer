@@ -47,6 +47,7 @@ import { Route as DashboardClusterTemplatesIdIndexRouteImport } from './routes/d
 import { Route as DashboardClusterTemplatesNewIndexRouteImport } from './routes/dashboard/cluster-templates/new/index'
 import { Route as DashboardClustersIdIndexRouteImport } from './routes/dashboard/clusters/$id/index'
 import { Route as DashboardClustersIdDeliveryRouteRouteImport } from './routes/dashboard/clusters/$id/delivery/route'
+import { Route as DashboardClustersIdGrafanaRouteImport } from './routes/dashboard/clusters/$id/grafana'
 import { Route as DashboardClustersRegisterIndexRouteImport } from './routes/dashboard/clusters/register/index'
 import { Route as DashboardDeliveryBundlesIndexRouteImport } from './routes/dashboard/delivery/bundles/index'
 import { Route as DashboardDeliveryConfigurationTemplatesIndexRouteImport } from './routes/dashboard/delivery/configuration-templates/index'
@@ -356,6 +357,12 @@ const DashboardClustersIdDeliveryRouteRoute =
   DashboardClustersIdDeliveryRouteRouteImport.update({
     id: '/delivery',
     path: '/delivery',
+    getParentRoute: () => DashboardClustersIdRouteRoute,
+  } as any)
+const DashboardClustersIdGrafanaRoute =
+  DashboardClustersIdGrafanaRouteImport.update({
+    id: '/grafana',
+    path: '/grafana',
     getParentRoute: () => DashboardClustersIdRouteRoute,
   } as any)
 const DashboardClustersRegisterIndexRoute =
@@ -1015,6 +1022,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/tools/': typeof DashboardToolsIndexRoute
   '/dashboard/workloads/': typeof DashboardWorkloadsIndexRoute
   '/dashboard/clusters/$id/delivery': typeof DashboardClustersIdDeliveryRouteRouteWithChildren
+  '/dashboard/clusters/$id/grafana': typeof DashboardClustersIdGrafanaRoute
   '/auth/login/forgot-password/': typeof AuthLoginForgotPasswordIndexRoute
   '/auth/login/reset-password/': typeof AuthLoginResetPasswordIndexRoute
   '/dashboard/account/preferences/': typeof DashboardAccountPreferencesIndexRoute
@@ -1154,6 +1162,7 @@ export interface FileRoutesByTo {
   '/dashboard/settings': typeof DashboardSettingsIndexRoute
   '/dashboard/tools': typeof DashboardToolsIndexRoute
   '/dashboard/workloads': typeof DashboardWorkloadsIndexRoute
+  '/dashboard/clusters/$id/grafana': typeof DashboardClustersIdGrafanaRoute
   '/auth/login/forgot-password': typeof AuthLoginForgotPasswordIndexRoute
   '/auth/login/reset-password': typeof AuthLoginResetPasswordIndexRoute
   '/dashboard/account/preferences': typeof DashboardAccountPreferencesIndexRoute
@@ -1299,6 +1308,7 @@ export interface FileRoutesById {
   '/dashboard/tools/': typeof DashboardToolsIndexRoute
   '/dashboard/workloads/': typeof DashboardWorkloadsIndexRoute
   '/dashboard/clusters/$id/delivery': typeof DashboardClustersIdDeliveryRouteRouteWithChildren
+  '/dashboard/clusters/$id/grafana': typeof DashboardClustersIdGrafanaRoute
   '/auth/login/forgot-password/': typeof AuthLoginForgotPasswordIndexRoute
   '/auth/login/reset-password/': typeof AuthLoginResetPasswordIndexRoute
   '/dashboard/account/preferences/': typeof DashboardAccountPreferencesIndexRoute
@@ -1445,6 +1455,7 @@ export interface FileRouteTypes {
     | '/dashboard/tools/'
     | '/dashboard/workloads/'
     | '/dashboard/clusters/$id/delivery'
+    | '/dashboard/clusters/$id/grafana'
     | '/auth/login/forgot-password/'
     | '/auth/login/reset-password/'
     | '/dashboard/account/preferences/'
@@ -1584,6 +1595,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/dashboard/tools'
     | '/dashboard/workloads'
+    | '/dashboard/clusters/$id/grafana'
     | '/auth/login/forgot-password'
     | '/auth/login/reset-password'
     | '/dashboard/account/preferences'
@@ -1728,6 +1740,7 @@ export interface FileRouteTypes {
     | '/dashboard/tools/'
     | '/dashboard/workloads/'
     | '/dashboard/clusters/$id/delivery'
+    | '/dashboard/clusters/$id/grafana'
     | '/auth/login/forgot-password/'
     | '/auth/login/reset-password/'
     | '/dashboard/account/preferences/'
@@ -2118,6 +2131,13 @@ declare module '@tanstack/react-router' {
       path: '/delivery'
       fullPath: '/dashboard/clusters/$id/delivery'
       preLoaderRoute: typeof DashboardClustersIdDeliveryRouteRouteImport
+      parentRoute: typeof DashboardClustersIdRouteRoute
+    }
+    '/dashboard/clusters/$id/grafana': {
+      id: '/dashboard/clusters/$id/grafana'
+      path: '/grafana'
+      fullPath: '/dashboard/clusters/$id/grafana'
+      preLoaderRoute: typeof DashboardClustersIdGrafanaRouteImport
       parentRoute: typeof DashboardClustersIdRouteRoute
     }
     '/dashboard/clusters/register/': {
@@ -3015,6 +3035,7 @@ const DashboardClustersIdDeliveryRouteRouteWithChildren =
 
 interface DashboardClustersIdRouteRouteChildren {
   DashboardClustersIdDeliveryRouteRoute: typeof DashboardClustersIdDeliveryRouteRouteWithChildren
+  DashboardClustersIdGrafanaRoute: typeof DashboardClustersIdGrafanaRoute
   DashboardClustersIdIndexRoute: typeof DashboardClustersIdIndexRoute
   DashboardClustersIdResourceSplatRoute: typeof DashboardClustersIdResourceSplatRoute
   DashboardClustersIdCustomResourcesSplatRoute: typeof DashboardClustersIdCustomResourcesSplatRoute
@@ -3047,6 +3068,7 @@ const DashboardClustersIdRouteRouteChildren: DashboardClustersIdRouteRouteChildr
   {
     DashboardClustersIdDeliveryRouteRoute:
       DashboardClustersIdDeliveryRouteRouteWithChildren,
+    DashboardClustersIdGrafanaRoute: DashboardClustersIdGrafanaRoute,
     DashboardClustersIdIndexRoute: DashboardClustersIdIndexRoute,
     DashboardClustersIdResourceSplatRoute:
       DashboardClustersIdResourceSplatRoute,

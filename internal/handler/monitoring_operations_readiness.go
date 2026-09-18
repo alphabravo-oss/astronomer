@@ -340,6 +340,36 @@ func (h *MonitoringHandler) findPrometheusServiceName(ctx context.Context, clust
 	return "", fmt.Errorf("prometheus service not found for release %s", releaseName)
 }
 
+func (h *MonitoringHandler) findGrafanaServiceName(ctx context.Context, clusterID, namespace, releaseName string) (string, error) {
+	if h.requester == nil {
+		return "", fmt.Errorf("kubernetes requester not configured")
+	}
+	if !isSafeK8sName(namespace) || !isSafeK8sName(releaseName) {
+		return "", fmt.Errorf("invalid Grafana release target")
+	}
+	path := fmt.Sprintf("/api/v1/namespaces/%s/services?labelSelector=%s", namespace, url.QueryEscape("app.kubernetes.io/instance="+releaseName))
+	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	if err != nil {
+		return "", err
+	}
+	if err := ensureSuccess(resp); err != nil {
+		return "", err
+	}
+	var payload map[string]any
+	if err := parseJSONResponse(resp, &payload); err != nil {
+		return "", err
+	}
+	for _, item := range objectItems(payload) {
+		meta, _ := item["metadata"].(map[string]any)
+		spec, _ := item["spec"].(map[string]any)
+		name, _ := meta["name"].(string)
+		if isSafeK8sName(name) && strings.Contains(strings.ToLower(name), "grafana") && serviceExposesPort(spec, 80) {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("grafana service not found for release %s", releaseName)
+}
+
 func serviceExposesPort(spec map[string]any, port int) bool {
 	ports, _ := spec["ports"].([]any)
 	for _, item := range ports {
