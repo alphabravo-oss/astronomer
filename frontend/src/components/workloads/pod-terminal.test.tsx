@@ -7,11 +7,20 @@ import * as api from "@/lib/api/auth";
 vi.mock("@wterm/react", async () => {
   const React = await import("react");
   return {
-    Terminal: ({ onReady }: { onReady?: () => void }) => {
+    Terminal: ({
+      onReady,
+    }: {
+      onReady?: (terminal: { element: HTMLElement }) => void;
+    }) => {
+      const rootRef = React.useRef<HTMLDivElement>(null);
       React.useEffect(() => {
-        onReady?.();
+        if (rootRef.current) onReady?.({ element: rootRef.current });
       }, [onReady]);
-      return React.createElement("div", { "data-testid": "terminal" });
+      return React.createElement(
+        "div",
+        { ref: rootRef, "data-testid": "terminal" },
+        React.createElement("textarea", { "aria-hidden": "true" }),
+      );
     },
     useTerminal: () => ({
       ref: { current: null },
@@ -29,6 +38,31 @@ import { PodTerminal } from "./pod-terminal";
 const mockedCreateStreamTicket = api.createStreamTicket as MockedFunction<
   typeof api.createStreamTicket
 >;
+
+describe("PodTerminal — accessible keyboard input", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("exposes and labels wterm's focused textarea", async () => {
+    mockedCreateStreamTicket.mockImplementation(() => new Promise(() => {}));
+
+    const { container } = render(
+      <PodTerminal
+        clusterId="c1"
+        namespace="ns"
+        pod="pod-a"
+        container="main"
+      />,
+    );
+
+    await waitFor(() => {
+      const input = container.querySelector("[data-testid=terminal] textarea");
+      expect(input?.getAttribute("aria-hidden")).toBeNull();
+      expect(input?.getAttribute("aria-label")).toBe("Pod terminal input");
+    });
+  });
+});
 
 // Regression: unmounting (or an effect re-run) before the stream-ticket XHR
 // resolves must cancel the pending connect so the late .then does NOT open an

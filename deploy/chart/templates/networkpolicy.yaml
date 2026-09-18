@@ -99,6 +99,18 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # Metrics handlers query the selected managed Prometheus backend directly.
+    # Monitoring stacks may live in an operator-selected namespace, so keep
+    # the peer namespace-aware while restricting it to Prometheus pods and the
+    # Prometheus HTTP API port.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
     - to:
         - podSelector:
             matchLabels:

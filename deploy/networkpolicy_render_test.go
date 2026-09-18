@@ -161,6 +161,40 @@ func TestWorkerNetworkPolicyAllowsOnlyManagedMonitoringAPIs(t *testing.T) {
 	}
 }
 
+func TestServerNetworkPolicyAllowsManagedPrometheusAPI(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	server := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-server")
+	egress, _ := nestedMap(server, "spec")["egress"].([]any)
+	found := false
+	for _, rawRule := range egress {
+		rule, _ := rawRule.(map[string]any)
+		ports, _ := rule["ports"].([]any)
+		if len(ports) != 1 {
+			continue
+		}
+		port, _ := ports[0].(map[string]any)
+		if fmt.Sprint(port["port"]) != "9090" || stringValue(port["protocol"]) != "TCP" {
+			continue
+		}
+		peers, _ := rule["to"].([]any)
+		if len(peers) != 1 {
+			t.Fatalf("Prometheus egress peers = %#v, want one label-scoped peer", peers)
+		}
+		peer, _ := peers[0].(map[string]any)
+		if _, ok := peer["namespaceSelector"]; !ok {
+			t.Fatalf("Prometheus egress peer is not namespace-aware: %#v", peer)
+		}
+		podSelector, _ := peer["podSelector"].(map[string]any)
+		if got := nestedStringMap(podSelector, "matchLabels"); !reflect.DeepEqual(got, map[string]string{"app.kubernetes.io/name": "prometheus"}) {
+			t.Fatalf("Prometheus pod selector = %#v, want exact workload identity", got)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("server policy has no label-scoped Prometheus egress on TCP 9090")
+	}
+}
+
 func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
 	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
