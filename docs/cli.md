@@ -2493,11 +2493,14 @@ Usage:
   astro delivery [command]
 
 Available Commands:
-  bundle      Manage versioned Continuous Delivery bundles
-  deployment  Inspect and control Continuous Delivery deployments
-  rollout     Control Continuous Delivery rollouts
-  source      Manage immutable Continuous Delivery sources
-  target      Manage Continuous Delivery targets and placement
+  bundle                 Manage versioned Continuous Delivery bundles
+  configuration-template Manage reusable delivery configuration templates
+  deployment             Inspect and control Continuous Delivery deployments
+  inventory              Inspect delivery and system-component inventory
+  override-set           Manage deterministic scoped configuration overrides
+  rollout                Control Continuous Delivery rollouts
+  source                 Manage immutable Continuous Delivery sources
+  target                 Manage Continuous Delivery targets and placement
 
 Flags:
   -h, --help   help for delivery
@@ -2798,6 +2801,215 @@ Usage:
 Flags:
       --data string      optional action JSON, @file, or - for stdin
   -h, --help             help for suspend
+      --project string   project UUID
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+```
+
+## `astro delivery inventory`
+
+```text
+Inspect delivery and system-component inventory
+
+Usage:
+  astro delivery inventory [command]
+
+Available Commands:
+  cluster     Show Flux deployments and observed system components for a cluster
+  estate      Show estate-wide delivery health and compatibility
+
+Flags:
+  -h, --help   help for inventory
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+
+Use "astro delivery inventory [command] --help" for more information about a command.
+```
+
+## `astro delivery inventory cluster`
+
+```text
+Show Flux deployments and observed system components for a cluster
+
+Usage:
+  astro delivery inventory cluster <cluster-id> [flags]
+
+Flags:
+  -h, --help             help for cluster
+      --project string   project UUID
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+```
+
+## `astro delivery inventory estate`
+
+```text
+Show estate-wide delivery health and compatibility
+
+Usage:
+  astro delivery inventory estate [flags]
+
+Flags:
+  -h, --help   help for estate
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+```
+
+## `astro delivery override-set`
+
+```text
+Manage deterministic scoped configuration overrides
+
+Usage:
+  astro delivery override-set [command]
+
+Available Commands:
+  create      Create a scoped override set
+  delete      Delete a delivery override set with optimistic concurrency
+  effective   Resolve effective values, patches, layer order, and digest
+  get         Show one delivery override set
+  list        List delivery override sets
+  update      Update a delivery override set with optimistic concurrency
+
+Flags:
+  -h, --help   help for override-set
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+
+Use "astro delivery override-set [command] --help" for more information about a command.
+```
+
+## `astro delivery override-set create`
+
+```text
+Create a scoped override set
+
+Usage:
+  astro delivery override-set create [flags]
+
+Flags:
+      --data string      request JSON, @file, or - for stdin
+  -h, --help             help for create
+      --project string   project UUID
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+```
+
+## `astro delivery override-set delete`
+
+```text
+Delete a delivery override set with optimistic concurrency
+
+Usage:
+  astro delivery override-set delete <id> [flags]
+
+Flags:
+  -h, --help             help for delete
+      --project string   project UUID
+      --yes              confirm deletion without a prompt
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+```
+
+## `astro delivery override-set effective`
+
+```text
+Resolve effective values, patches, layer order, and digest
+
+Usage:
+  astro delivery override-set effective [flags]
+
+Flags:
+      --data string      base_values and override_ids JSON, @file, or - for stdin
+  -h, --help             help for effective
+      --project string   project UUID
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+```
+
+## `astro delivery override-set get`
+
+```text
+Show one delivery override set
+
+Usage:
+  astro delivery override-set get <id> [flags]
+
+Flags:
+  -h, --help             help for get
+      --project string   project UUID
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+```
+
+## `astro delivery override-set list`
+
+```text
+List delivery override sets
+
+Usage:
+  astro delivery override-set list [flags]
+
+Flags:
+  -h, --help             help for list
+      --limit int        maximum records to return (default 50)
+      --offset int       records to skip
+      --project string   project UUID
+
+Global Flags:
+      --json            alias for --output json (deprecated)
+  -o, --output string   output format: table|json|yaml (default "table")
+      --server string   Astronomer server URL (overrides ~/.config/astronomer/config.yaml)
+      --token string    API bearer token (overrides stored JWT; ASTRO_API_TOKEN also honored)
+```
+
+## `astro delivery override-set update`
+
+```text
+Update a delivery override set with optimistic concurrency
+
+Usage:
+  astro delivery override-set update <id> [flags]
+
+Flags:
+      --data string      request JSON, @file, or - for stdin
+  -h, --help             help for update
       --project string   project UUID
 
 Global Flags:
