@@ -93,6 +93,8 @@
         "control_plane_silences",
         "dashboard_widgets",
         "deferred_operations",
+        "delivery_configuration_templates",
+        "delivery_override_sets",
         "delivery_sources",
         "dex_connectors",
         "gitops_registration_sources",
