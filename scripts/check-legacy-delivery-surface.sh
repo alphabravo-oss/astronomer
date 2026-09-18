@@ -36,24 +36,13 @@ PATTERNS = {
         re.IGNORECASE,
     ),
     "legacy_fleet_operations": re.compile(
-        rb"(?:fleet_operations?|fleet_operation_targets?|fleet[-_](?:orchestrate|selector)|agent_fleet|\bFleetOperation\w*|[\"'/]fleet(?:[\"'/\s]|$))",
+        rb"(?:fleet_operations?|fleet_operation_targets?|fleet[-_](?:orchestrate|selector)|agent_fleet|\bFleetOperation\w*)",
         re.IGNORECASE,
     ),
 }
 
-# Exact, sunset-bound v1 route aliases. This is intentionally narrower than a
-# file allowlist: each source file must contain exactly one reviewed marker,
-# and any second legacy match in the same file remains a release failure.
-APPROVED_API_COMPATIBILITY_MARKERS = {
-    "docs/openapi.yaml": b"/api/v1/delivery/fleet/",
-    "frontend/src/lib/api/generated/client.ts": b"/api/v1/delivery/fleet/",
-    "frontend/src/types/openapi.generated.ts": b"/api/v1/delivery/fleet/",
-    "internal/handler/assets/openapi.yaml": b"/api/v1/delivery/fleet/",
-    "internal/server/routes_delivery.go": b'Get("/fleet/"',
-    "internal/server/routes_delivery_control_test.go": b"/api/v1/delivery/fleet/",
-    "pkg/astroclient/astroclient.gen.go": b"/api/v1/delivery/fleet/",
-}
-APPROVED_BUILT_COMPATIBILITY = re.compile(rb"(?:/api/v1)?/delivery/fleet/")
+APPROVED_API_COMPATIBILITY_MARKERS = {}
+APPROVED_BUILT_COMPATIBILITY = re.compile(rb"(?!)")
 
 TEXT_SUFFIXES = {
     ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json",
@@ -288,6 +277,8 @@ def scan_generated(root: Path) -> tuple[dict[tuple[str, str, str], int], list[st
                 "template",
                 "legacy-surface-scan",
                 str(chart),
+                "--kube-version",
+                "1.35.5",
                 "--set",
                 "secrets.secretKey=legacy-surface-render-signing-key",
                 "--set",

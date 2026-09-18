@@ -22,6 +22,7 @@ var classifiedSecretColumns = map[string]string{
 	"003_loki_ingest_tokens.up.sql:token_hash":                        "hashed hosted Loki ingest bearer",
 	"003_loki_ingest_tokens.up.sql:token_encrypted":                   "encrypted hosted Loki ingest token for Fluent Bit re-render",
 	"017_durable_audit_siem_fanout.up.sql:token":                      "PL/pgSQL local containing one glob-pattern character; not a table column",
+	"033_delivery_configuration_templates.up.sql:secret_refs":         "Kubernetes Secret name, key, and Helm target-path references only; never secret values",
 	"001_initial.up.sql:object_storage_secret_name":                   "Kubernetes Secret name reference",
 	"001_initial.up.sql:password":                                     "hashed bcrypt user password",
 	"001_initial.up.sql:password_encrypted":                           "encrypted SMTP password",

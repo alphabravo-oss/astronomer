@@ -328,10 +328,10 @@ function DashboardPage() {
                             : event.type === "workload"
                               ? "bg-status-success"
                               : event.type === "deployment"
-                                ? "bg-violet-400"
+                                ? "bg-primary"
                                 : event.type === "rbac"
                                   ? "bg-status-warning"
-                                  : "bg-zinc-400"
+                                  : "bg-muted-foreground"
                         }`}
                       />
                       <div className="flex-1 min-w-0">
@@ -552,7 +552,7 @@ function HealthRow({
         ? "bg-status-warning"
         : tone === "success"
           ? "bg-status-success"
-          : "bg-zinc-400";
+          : "bg-muted-foreground";
   return (
     <Link
       href={href}

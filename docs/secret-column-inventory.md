@@ -22,6 +22,7 @@ unclassified column fails CI.
 | `cluster_registry_configs.registry_password_encrypted` | Fernet ciphertext | Complete cluster registry password. |
 | `project_registry_credentials.registry_credential_encrypted` | Fernet ciphertext | Complete project registry credential. |
 | `delivery_sources.credential_encrypted` | Fernet ciphertext | Complete write-only delivery-source credential map. |
+| `delivery_configuration_templates.secret_refs` | Reference metadata only | Kubernetes Secret name, key, and Helm values target path. Secret contents remain in the member cluster and are read directly by Flux. |
 | `dex_operations.payload_encrypted` | Fernet ciphertext | Durable, bounded Dex SSO-finalization input; never returned or logged. |
 | `api_tokens.token_hash` | Password-style token hash | Plaintext is returned once. |
 | `cluster_registration_tokens.token_hash` | Token hash | Registration authentication uses only the hash. |

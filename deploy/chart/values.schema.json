@@ -15,6 +15,61 @@
         "mirrorMapping": {"type": "string", "maxLength": 900000}
       }
     },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "sourceURL", "digest", "mirrors", "allowPrivateMirrors", "proxy", "ca", "signature"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "sourceURL": {
+          "type": "string",
+          "pattern": "^(https://[^?#]+|oci://[^?#]+@sha256:[0-9a-f]{64})$"
+        },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "mirrors": {
+          "type": "object",
+          "propertyNames": { "pattern": "^(https|oci)://[^?#]+$" },
+          "additionalProperties": { "type": "string", "pattern": "^(https|oci)://[^?#]+$" }
+        },
+        "allowPrivateMirrors": { "type": "boolean" },
+        "proxy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "urlSecretRef"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "urlSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+          }
+        },
+        "ca": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "key"],
+          "properties": {
+            "existingSecret": { "type": "string" },
+            "key": { "type": "string", "minLength": 1 }
+          }
+        },
+        "signature": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "provider", "identity", "issuer", "keyRef", "trustKeys"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "provider": { "type": "string", "enum": ["cosign_key", "cosign_keyless"] },
+            "identity": { "type": "string", "maxLength": 2048 },
+            "issuer": { "type": "string", "maxLength": 2048 },
+            "keyRef": { "type": "string", "maxLength": 253 },
+            "trustKeys": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["existingSecret"],
+              "properties": { "existingSecret": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
     "image": {
       "type": "object",
       "additionalProperties": true,
@@ -36,6 +91,7 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "mode": { "type": "string", "enum": ["", "bundled", "cloudNativePG", "external"] },
         "bundled": {
           "type": "object",
           "additionalProperties": true,
@@ -49,6 +105,52 @@
           "properties": {
             "dsn": { "type": "string" },
             "dsnSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+          }
+        },
+        "cloudNativePG": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "clusterName": { "type": "string" },
+            "instances": { "type": "integer", "minimum": 1 },
+            "imageName": { "type": "string", "minLength": 1 },
+            "storage": { "type": "object", "additionalProperties": true },
+            "walStorage": { "type": "object", "additionalProperties": true },
+            "parameters": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "synchronousReplication": { "type": "object", "additionalProperties": true },
+            "monitoring": { "type": "object", "additionalProperties": true },
+            "barmanCloud": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "pluginName": { "type": "string", "minLength": 1 },
+                "objectStoreName": { "type": "string" },
+                "scheduledBackup": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "schedule": { "type": "string", "minLength": 1 },
+                    "backupOwnerReference": { "type": "string", "enum": ["none", "self", "cluster"] }
+                  }
+                },
+                "recovery": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enabled": { "type": "boolean" },
+                    "sourceName": { "type": "string", "minLength": 1 },
+                    "objectStoreName": { "type": "string" },
+                    "serverName": { "type": "string" },
+                    "targetTime": { "type": "string" }
+                  }
+                }
+              }
+            }
           }
         },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
@@ -73,6 +175,7 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
+        "mode": { "type": "string", "enum": ["", "standalone", "sentinel", "external"] },
         "bundled": {
           "type": "object",
           "additionalProperties": true,
@@ -89,6 +192,22 @@
             "database": { "type": "integer", "minimum": 0 },
             "urlSecretRef": { "$ref": "#/definitions/secretKeyRef" },
             "passwordSecretRef": { "$ref": "#/definitions/secretKeyRef" }
+          }
+        },
+        "sentinel": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "replicas": { "type": "integer", "minimum": 3 },
+            "sentinels": { "type": "integer", "minimum": 3 },
+            "masterName": { "type": "string", "minLength": 1 },
+            "quorum": { "type": "integer", "minimum": 2 },
+            "downAfterMilliseconds": { "type": "integer", "minimum": 1000 },
+            "failoverTimeoutMilliseconds": { "type": "integer", "minimum": 1000 },
+            "parallelSyncs": { "type": "integer", "minimum": 1 },
+            "passwordSecretRef": { "$ref": "#/definitions/secretKeyRef" },
+            "podDisruptionBudget": { "type": "object", "additionalProperties": true },
+            "topologySpread": { "type": "object", "additionalProperties": true }
           }
         },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
@@ -143,6 +262,9 @@
           "required": ["phase", "requirePreparedConfig"]
         },
         "image": { "$ref": "#/definitions/imageRef" },
+        "podDisruptionBudget": { "type": "object", "additionalProperties": true },
+        "affinity": { "type": "object", "additionalProperties": true },
+        "topologySpread": { "type": "object", "additionalProperties": true },
         "resources": { "type": "object", "additionalProperties": true },
         "podSecurityContext": { "type": "object", "additionalProperties": true },
         "securityContext": { "type": "object", "additionalProperties": true }
@@ -180,9 +302,10 @@
     "delivery": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "compatibility", "artifacts", "sourceResolution", "rollout", "status", "monitoring"],
+      "required": ["enabled", "localFluxBootstrap", "compatibility", "artifacts", "sourceResolution", "rollout", "status", "monitoring"],
       "properties": {
-        "enabled": { "const": true },
+        "enabled": { "type": "boolean" },
+        "localFluxBootstrap": { "type": "boolean" },
         "compatibility": {
           "type": "object",
           "additionalProperties": false,
@@ -339,6 +462,7 @@
         "username": { "type": "string", "minLength": 1 },
         "email": { "type": "string" },
         "password": { "type": "string" },
+        "forcePasswordChange": { "type": "boolean" },
         "existingSecret": { "type": "string" },
         "existingSecretKey": { "type": "string", "minLength": 1 }
       }
@@ -347,7 +471,7 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "source": { "type": "string", "enum": ["none", "selfSigned", "letsEncrypt", "secret"] },
+        "source": { "type": "string", "enum": ["none", "selfSigned", "letsEncrypt", "secret", "externalGateway"] },
         "secretName": { "type": "string" },
         "requireCertManager": { "type": "boolean" },
         "letsEncrypt": {
@@ -372,7 +496,11 @@
       "additionalProperties": true,
       "properties": {
         "enabled": { "type": "boolean" },
+        "create": { "type": "boolean" },
         "className": { "type": "string" },
+        "name": { "type": "string" },
+        "namespace": { "type": "string" },
+        "sectionName": { "type": "string" },
         "hosts": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
@@ -464,38 +592,63 @@
       "then": {
         "properties": {
           "postgres": {
-            "properties": {
-              "bundled": {
+            "anyOf": [
+              {
                 "properties": {
-                  "enabled": { "const": false }
+                  "mode": { "const": "cloudNativePG" },
+                  "cloudNativePG": {
+                    "properties": { "instances": { "type": "integer", "minimum": 3 } },
+                    "required": ["instances"]
+                  }
                 },
-                "required": ["enabled"]
+                "required": ["mode", "cloudNativePG"]
               },
-              "external": {
-                "anyOf": [
-                  { "required": ["dsn"], "properties": { "dsn": { "type": "string", "minLength": 1 } } },
-                  { "required": ["dsnSecretRef"], "properties": { "dsnSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
-                ]
+              {
+                "properties": {
+                  "mode": { "const": "external" },
+                  "external": {
+                    "anyOf": [
+                      { "required": ["dsn"], "properties": { "dsn": { "type": "string", "minLength": 1 } } },
+                      { "required": ["dsnSecretRef"], "properties": { "dsnSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
+                    ]
+                  }
+                },
+                "required": ["mode", "external"]
               }
-            },
-            "required": ["bundled", "external"]
+            ]
           },
           "redis": {
-            "properties": {
-              "bundled": {
+            "anyOf": [
+              {
                 "properties": {
-                  "enabled": { "const": false }
+                  "mode": { "const": "sentinel" },
+                  "sentinel": {
+                    "properties": {
+                      "replicas": { "type": "integer", "minimum": 3 },
+                      "sentinels": { "type": "integer", "minimum": 3 },
+                      "passwordSecretRef": {
+                        "properties": { "name": { "type": "string", "minLength": 1 } },
+                        "required": ["name"]
+                      }
+                    },
+                    "required": ["replicas", "sentinels", "passwordSecretRef"]
+                  }
                 },
-                "required": ["enabled"]
+                "required": ["mode", "sentinel"]
               },
-              "external": {
-                "anyOf": [
-                  { "required": ["address"], "properties": { "address": { "type": "string", "minLength": 1 } } },
-                  { "required": ["urlSecretRef"], "properties": { "urlSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
-                ]
+              {
+                "properties": {
+                  "mode": { "const": "external" },
+                  "external": {
+                    "anyOf": [
+                      { "required": ["address"], "properties": { "address": { "type": "string", "minLength": 1 } } },
+                      { "required": ["urlSecretRef"], "properties": { "urlSecretRef": { "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 } } } } }
+                    ]
+                  }
+                },
+                "required": ["mode", "external"]
               }
-            },
-            "required": ["bundled", "external"]
+            ]
           },
           "config": {
             "properties": {
@@ -512,7 +665,7 @@
           },
           "tls": {
             "properties": {
-              "source": { "enum": ["selfSigned", "letsEncrypt", "secret"] }
+              "source": { "enum": ["selfSigned", "letsEncrypt", "secret", "externalGateway"] }
             },
             "required": ["source"]
           },
@@ -566,11 +719,9 @@
             "properties": {
               "enabled": { "const": true },
               "defaultDeny": { "const": true },
-              "externalPostgresEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" },
-              "externalRedisEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" },
               "kubernetesAPIEgressCIDRs": { "$ref": "#/definitions/nonEmptyStringArray" }
             },
-            "required": ["enabled", "defaultDeny", "externalPostgresEgressCIDRs", "externalRedisEgressCIDRs", "kubernetesAPIEgressCIDRs"]
+            "required": ["enabled", "defaultDeny", "kubernetesAPIEgressCIDRs"]
           },
           "preflight": {
             "properties": {

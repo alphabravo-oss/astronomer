@@ -27,9 +27,11 @@ const (
 // VersionIdentity is all immutable information needed to apply or roll back a
 // cluster. Mutable source requests are deliberately absent.
 type VersionIdentity struct {
-	BundleVersionID uuid.UUID                `json:"bundle_version_id"`
-	SpecDigest      model.Digest             `json:"spec_digest"`
-	Source          model.ResolvedSourceSpec `json:"source"`
+	BundleVersionID     uuid.UUID                `json:"bundle_version_id"`
+	SpecDigest          model.Digest             `json:"spec_digest"`
+	Source              model.ResolvedSourceSpec `json:"source"`
+	Renderer            *model.RendererSpec      `json:"renderer,omitempty"`
+	ConfigurationDigest model.Digest             `json:"configuration_digest,omitempty"`
 }
 
 func (v VersionIdentity) Validate() error {
@@ -41,6 +43,16 @@ func (v VersionIdentity) Validate() error {
 	}
 	if err := v.Source.Validate(); err != nil {
 		return &Error{Code: CodeInvalidInput, Field: "source", Cause: err}
+	}
+	if v.Renderer != nil {
+		if err := v.Renderer.Validate(); err != nil {
+			return &Error{Code: CodeInvalidInput, Field: "renderer", Cause: err}
+		}
+		if err := v.ConfigurationDigest.Validate(); err != nil {
+			return &Error{Code: CodeInvalidInput, Field: "configuration_digest", Cause: err}
+		}
+	} else if v.ConfigurationDigest != "" {
+		return fail(CodeInvalidInput, "configuration_digest", "requires a frozen renderer")
 	}
 	return nil
 }
@@ -78,6 +90,7 @@ type PlannedCluster struct {
 	ClusterID uuid.UUID           `json:"cluster_id"`
 	Cohort    int                 `json:"cohort"`
 	Order     int                 `json:"order"`
+	Desired   *VersionIdentity    `json:"desired,omitempty"`
 	Previous  *PreviousDeployment `json:"previous,omitempty"`
 }
 
@@ -107,13 +120,15 @@ type FrozenRollout struct {
 // insert the plan. It is a complete batch projection; the planner never makes
 // a per-cluster storage call.
 type PlanningSnapshot struct {
-	TargetID          uuid.UUID
-	ProjectID         uuid.UUID
-	TargetGeneration  uint64
-	Desired           VersionIdentity
-	PlacementRequest  placement.Request
-	InitialApproval   bool
-	PreviousByCluster map[uuid.UUID]PreviousDeployment
+	TargetID               uuid.UUID
+	ProjectID              uuid.UUID
+	TargetGeneration       uint64
+	Desired                VersionIdentity
+	DesiredByCluster       map[uuid.UUID]VersionIdentity
+	ConfigurationSetDigest model.Digest
+	PlacementRequest       placement.Request
+	InitialApproval        bool
+	PreviousByCluster      map[uuid.UUID]PreviousDeployment
 }
 
 type CreateRequest struct {

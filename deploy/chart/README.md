@@ -1,6 +1,6 @@
 # Astronomer management-plane chart
 
-This chart installs the Astronomer 1.1.0 API, worker, web application, database
+This chart installs the Astronomer 1.2.0 API, worker, web application, database
 migration job, and optional supporting services. It is the only supported
 management-plane installation path for the v1 release line.
 
@@ -12,7 +12,7 @@ never installs delivery controllers in the management cluster.
 
 | Contract | Supported value |
 |---|---|
-| Chart and application | 1.1.0 |
+| Chart and application | 1.2.0 |
 | Kubernetes | 1.33 through 1.35 |
 | Agent protocol | 2 |
 | Flux | 2.9.3 |
@@ -30,21 +30,19 @@ sync with that file.
 
 ## Install
 
-Create the secrets before invoking Helm. This first command is a runnable local
-or evaluation install using the bundled single-node data services:
+Generate the two long-lived application keys before invoking Helm. This first
+command is a runnable local or evaluation install using the bundled single-node
+data services. The chart owns the bundled PostgreSQL password so its database
+and application connection string cannot drift:
 
 ```bash
-kubectl create namespace astronomer
-kubectl -n astronomer create secret generic astronomer-core \
-  --from-literal=SECRET_KEY='<jwt-signing-secret>' \
-  --from-literal=ASTRONOMER_ENCRYPTION_KEY='<fernet-key>'
-kubectl -n astronomer create secret generic astronomer-bootstrap \
-  --from-literal=password='<initial-admin-password>'
+openssl rand -base64 32 > ./jwt-key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" > ./fernet-key
 
 helm upgrade --install astronomer ./deploy/chart \
-  --namespace astronomer \
-  --set secrets.existingSecret=astronomer-core \
-  --set bootstrap.existingSecret=astronomer-bootstrap \
+  --namespace astronomer --create-namespace \
+  --set-file secrets.secretKey=./jwt-key \
+  --set-file secrets.encryptionKey=./fernet-key \
   --set gateway.enabled=false \
   --wait --timeout 15m
 ```
@@ -55,15 +53,37 @@ Gateway routing and requires its hostname and TLS inputs.
 
 The exact Secret key names accepted by `secrets.existingSecret` are documented
 beside the `secrets` values. Prefer an external secret controller or an
-encrypted secret workflow; do not commit plaintext production values.
+encrypted secret workflow; do not commit plaintext production values. An
+externally-owned core Secret must be paired with external PostgreSQL; the chart
+fails fast if `secrets.existingSecret` is combined with bundled PostgreSQL
+because Kubernetes cannot safely interpolate that Secret's password into the
+application DSN.
 
-Production must use managed or highly available PostgreSQL and Redis,
+To share a platform-managed Gateway and load balancer, keep `gateway.enabled`
+on and set `gateway.create=false`, `gateway.name`, and, for a cross-namespace
+Gateway, `gateway.namespace`. Use `tls.source=externalGateway` when that
+Gateway already terminates TLS. The chart then owns only its HTTPRoutes and
+application workloads.
+
+Production must use managed or highly available PostgreSQL and Valkey,
 externally managed TLS, digest-pinned first-party images, signed delivery
 artifacts, narrow dependency/source egress, enterprise identity, and working
 backup/key-custody settings. Start with `values-production.yaml`; its schema is
 deliberately incomplete until every site- and release-specific requirement is
-provided. The bundled PostgreSQL and Valkey StatefulSets are not a production
-topology.
+provided. The chart supports either external services or its managed HA
+profiles: `postgres.mode=cloudNativePG` (one instance for small installs, three
+or more in production) and `redis.mode=sentinel` (three Valkey data pods and
+three Sentinels). CloudNativePG must be installed before Helm creates a managed
+database. The bundled single-node PostgreSQL and Valkey modes remain
+development-only.
+
+The managed HA production defaults use required hostname anti-affinity,
+Longhorn-compatible `ReadWriteOnce` claims, synchronous PostgreSQL replication,
+authenticated Sentinel discovery, and PDBs. Supply the Valkey password as a
+Secret reference; it is loaded separately from `REDIS_URL`, so URL-reserved
+characters in the password are safe and credentials are not copied into the
+connection URI. HA is not disaster recovery: configure and test off-cluster
+CloudNativePG/management backups before treating an installation as production.
 
 ## Clean v1 upgrades
 
@@ -114,11 +134,13 @@ new volume to the chart's declared target schema.
 
 ## Flux-native delivery contract
 
-`delivery.enabled` is always true. It is an enablement invariant, not an engine
-selector. Astronomer resolves declared sources centrally, creates immutable
+`delivery.enabled` and `delivery.localFluxBootstrap` default to true. The
+server idempotently installs the release-pinned Flux distribution in its local
+management cluster, while enrolled agents install the same distribution in
+downstream clusters. Astronomer resolves declared sources centrally, creates immutable
 deployment assignments, and receives normalized controller status through the
-agent protocol. Agents install and manage the pinned Flux distribution in each
-managed cluster.
+agent protocol. Helm remains responsible for the initial Astronomer release;
+Flux manages delivery assignments after bootstrap.
 
 The management plane does not require direct Kubernetes credentials for
 managed clusters. Provider lifecycle hooks are typed operations implemented by
@@ -182,6 +204,16 @@ verified release payload and retain the same digest and trust policy. Release
 preparation is responsible for mounting that asset where the worker can read
 it.
 
+The application catalog has the same production trust boundary. Use a
+digest-pinned OCI `catalog.sourceURL`, set `catalog.signature.required=true`,
+and provide `catalog.signature.trustKeys.existingSecret`. Keyless verification
+requires the exact workflow certificate identity, issuer, and an offline
+Sigstore `trusted_root.json` in that Secret. Key verification uses
+`provider=cosign_key`, `keyRef=<name>`, and `<name>.pub`. Verification runs
+in-process before import; invalid evidence leaves the last-known-good catalog
+untouched. Leaving signature verification disabled is intended only for an
+explicitly unsigned development catalog.
+
 ### Registry mirrors
 
 Registry rewrites are exact host-to-host mappings. Wildcards, repository-prefix
@@ -237,6 +269,41 @@ delivery:
 The preflight verifies referenced Secret keys without printing their values.
 The proxy URL is projected directly from the Secret. The CA bundle is mounted
 read-only. Enabling SSH opens port 22 only to the declared CIDRs.
+
+The application catalog has the same portability controls, independently of
+delivery-source credentials. HTTPS sources are checked against `catalog.digest`;
+OCI sources must include an immutable `@sha256:...` manifest reference and the
+single catalog layer is checked against its descriptor. Mirrors use exact,
+longest-prefix rewrites and cannot change HTTPS into OCI or vice versa:
+
+```yaml
+catalog:
+  enabled: true # false skips sync but preserves installed/custom app management
+  sourceURL: oci://ghcr.io/alphabravo-oss/astronomer-catalog@sha256:...
+  digest: sha256:... # digest of catalog.json inside the artifact
+  mirrors:
+    oci://ghcr.io/alphabravo-oss/astronomer-catalog: oci://registry.internal/astronomer/catalog
+  allowPrivateMirrors: true
+  proxy:
+    enabled: true
+    urlSecretRef:
+      name: catalog-proxy
+      key: url
+  ca:
+    existingSecret: catalog-registry-ca
+    key: ca.crt
+```
+
+Proxy credentials remain in the referenced Secret. The CA is appended to the
+system trust pool rather than replacing public roots. A mirrored fetch without
+the configured document digest fails closed and retains the last-known-good
+catalog.
+
+For disconnected sites, use `scripts/application-catalog-airgap.sh` to export
+the pinned index, every chart archive, checksums, and an image inventory, then
+import it under an internal HTTPS document root. When a private CA Secret is
+configured, the management backup includes that CA inside the wrapped key
+bundle and the restore drill verifies the complete delivery/catalog schema.
 
 ### Rollout safety and status retention
 
@@ -305,12 +372,12 @@ The chart itself needs no repository download. Package and validate it with:
 ```bash
 helm dependency list deploy/chart
 helm lint deploy/chart \
-  --set bootstrap.existingSecret=bootstrap-credentials \
-  --set secrets.existingSecret=core-credentials
+  --set secrets.secretKey=render-only-jwt-key \
+  --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
 helm template astronomer deploy/chart \
   --namespace astronomer \
-  --set bootstrap.existingSecret=bootstrap-credentials \
-  --set secrets.existingSecret=core-credentials >/tmp/astronomer-rendered.yaml
+  --set secrets.secretKey=render-only-jwt-key \
+  --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= >/tmp/astronomer-rendered.yaml
 ```
 
 For production validation, layer `values-production.yaml` and provide the
@@ -339,11 +406,11 @@ encryption keys, release metadata, and external secret-manager references.
 ```bash
 jq empty deploy/chart/values.schema.json
 helm lint deploy/chart \
-  --set bootstrap.existingSecret=bootstrap-credentials \
-  --set secrets.existingSecret=core-credentials
+  --set secrets.secretKey=render-only-jwt-key \
+  --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo=
 helm template astronomer deploy/chart \
-  --set bootstrap.existingSecret=bootstrap-credentials \
-  --set secrets.existingSecret=core-credentials >/tmp/astronomer.yaml
+  --set secrets.secretKey=render-only-jwt-key \
+  --set secrets.encryptionKey=I2oWSIt6LO68xR6lxhqBpQxhesPuii5R6ubog-Id-yo= >/tmp/astronomer.yaml
 go test ./deploy -run 'TestAstronomerChart'
 git diff --check -- deploy/chart deploy/chartrepo.go deploy/chartrepo_test.go
 ```

@@ -1660,6 +1660,28 @@ export async function listClusterApps(
   return { items, total: wire.count ?? items.length };
 }
 
+/** Load the complete cluster installation set for catalog cards and counts. */
+export async function listAllClusterApps(
+  clusterId: string,
+  signal?: AbortSignal,
+): Promise<ClusterAppsResponse> {
+  const items: ClusterAppRow[] = [];
+  let offset = 0;
+  let total = 0;
+  do {
+    const page = await listClusterApps(
+      clusterId,
+      { limit: 500, offset },
+      signal,
+    );
+    items.push(...page.items);
+    total = page.total;
+    offset += page.items.length;
+    if (page.items.length === 0) break;
+  } while (offset < total);
+  return { items, total };
+}
+
 // Browse view: lists charts in the catalog. Wraps existing
 // /catalog/charts/ but normalises the response shape and snake→camel.
 export interface CatalogChartSummary {
@@ -1676,7 +1698,8 @@ export interface CatalogChartSummary {
 }
 
 export async function listCatalogCharts(params: {
-  projectId: string;
+  clusterId?: string;
+  projectId?: string;
   limit?: number;
   offset?: number;
   search?: string;
@@ -1684,6 +1707,7 @@ export async function listCatalogCharts(params: {
 }): Promise<{ items: CatalogChartSummary[]; total: number }> {
   const wire = await generated.getCatalogCharts({
     query: {
+      cluster_id: params.clusterId,
       project_id: params.projectId,
       limit: params.limit,
       offset: params.offset,
@@ -1743,12 +1767,12 @@ export interface ChartVersionRow {
 }
 
 export async function listChartVersions(
-  projectId: string,
+	clusterId: string,
   chartId: string,
   signal?: AbortSignal,
 ): Promise<ChartVersionRow[]> {
   const wire = await generated.getCatalogChartsByIdVersions({
-    path: { id: chartId }, query: { project_id: projectId, limit: 50 }, signal,
+    path: { id: chartId }, query: { cluster_id: clusterId, limit: 50 }, signal,
   });
   return wire.data.map((raw) => ({
     id: raw.id ?? "",
@@ -1762,14 +1786,14 @@ export async function listChartVersions(
 // First call on a given version triggers backend hydration (~1-2s);
 // subsequent calls are cached in the DB row.
 export async function getChartDefaultValues(
-  projectId: string,
+	clusterId: string,
   chartId: string,
   version?: string,
   signal?: AbortSignal,
 ): Promise<{ chart: string; version: string; defaultValues: string }> {
   const wire = await generated.getCatalogChartsByIdValues({
     path: { id: chartId },
-    query: { project_id: projectId, version },
+    query: { cluster_id: clusterId, version },
     signal,
   });
   return {
@@ -1783,7 +1807,7 @@ export async function getChartDefaultValues(
 // installed_charts row id; the helm install itself happens
 // asynchronously via the tunnel + worker queue.
 export async function installChartOnCluster(req: {
-  projectId: string;
+  projectId?: string;
   clusterId: string;
   chartVersionId: string;
   releaseName: string;
@@ -1791,7 +1815,7 @@ export async function installChartOnCluster(req: {
   valuesOverride: string;
   idempotencyKey?: string;
   signal?: AbortSignal;
-}): Promise<{ id: string }> {
+}): Promise<{ id: string; operationId: string }> {
   const wire = await generated.postCatalogInstalled({
     headerParams: { "Idempotency-Key": req.idempotencyKey ?? createIdempotencyKey() },
     body: {
@@ -1804,7 +1828,10 @@ export async function installChartOnCluster(req: {
     },
     signal: req.signal,
   });
-  return { id: wire.data.installation.id ?? "" };
+  return {
+    id: wire.data.installation.id ?? "",
+    operationId: wire.data.operation.id ?? "",
+  };
 }
 
 export async function uninstallCatalogRelease(

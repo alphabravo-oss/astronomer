@@ -128,19 +128,21 @@ type RouterDependencies struct {
 	// surface. Inventory also serves the separately authorized platform-wide
 	// compatibility projection.
 	// Nil-safe so partial test/bootstrap routers simply omit these routes.
-	DeliverySources     *deliveryhandler.SourceHandler
-	DeliveryBundles     *deliveryhandler.BundleHandler
-	DeliveryTargets     *deliveryhandler.TargetHandler
-	DeliveryRollouts    *deliveryhandler.RolloutHandler
-	DeliveryDeployments *deliveryhandler.DeploymentHandler
-	DeliveryInventory   *deliveryhandler.InventoryHandler
-	DeliverySystem      *deliveryhandler.SystemRolloutHandler
-	Tools               *handler.ToolHandler
-	Audit               *handler.AuditHandler
-	Alerting            *handler.AlertingHandler
-	Anomaly             *handler.AnomalyHandler
-	Backups             *handler.BackupHandler
-	Catalog             *handler.CatalogHandler
+	DeliverySources                *deliveryhandler.SourceHandler
+	DeliveryBundles                *deliveryhandler.BundleHandler
+	DeliveryTargets                *deliveryhandler.TargetHandler
+	DeliveryRollouts               *deliveryhandler.RolloutHandler
+	DeliveryDeployments            *deliveryhandler.DeploymentHandler
+	DeliveryInventory              *deliveryhandler.InventoryHandler
+	DeliverySystem                 *deliveryhandler.SystemRolloutHandler
+	DeliveryConfigurationTemplates *deliveryhandler.ConfigurationTemplateHandler
+	DeliveryOverrideSets           *deliveryhandler.OverrideSetHandler
+	Tools                          *handler.ToolHandler
+	Audit                          *handler.AuditHandler
+	Alerting                       *handler.AlertingHandler
+	Anomaly                        *handler.AnomalyHandler
+	Backups                        *handler.BackupHandler
+	Catalog                        *handler.CatalogHandler
 	// ChartRatings owns /api/v1/charts/{chart_id}/ratings/* and
 	// /api/v1/catalog/recommendations/{popular,similar}/* — the
 	// migration-055 catalog rating surface. Nil-safe: routes are

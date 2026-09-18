@@ -37,12 +37,18 @@ import {
 import {
   deleteDeliveryTarget,
   getDeliveryTarget,
+  listDeliveryConfigurationTemplates,
+  listDeliveryOverrideSets,
+  listClusterDeployments,
+  listDeliveryRollouts,
   orphanDeliveryTarget,
   previewDeliveryTarget,
   startDeliveryRollout,
   updateDeliveryTarget,
   type AmountType,
   type DeliveryTarget,
+  type ClusterDeployment,
+  type DeliveryRollout,
   type DriftPolicy,
   type PlacementDecision,
   type PlacementPreview,
@@ -56,15 +62,23 @@ import {
   placementHasSelector,
 } from "@/components/delivery/target-form";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useAuditLogs, useClusters, useCurrentUser } from "@/lib/hooks";
 import { can, isSuperuser } from "@/lib/permissions";
 import { useParams, useRouter } from "@/lib/navigation";
 import { toastSuccess } from "@/lib/toast";
+import { formatRelativeTime } from "@/lib/utils";
+import type { AuditLogEntry } from "@/types";
 
 export function TargetDetailPage() {
   const { targetId } = useParams<{ targetId: string }>();
-  const { projectId, projects, projectQuery, setProjectId, listHref } =
-    useDeliveryWorkspace();
+  const {
+    projectId,
+    projects,
+    projectQuery,
+    setProjectId,
+    listHref,
+    entityHref,
+  } = useDeliveryWorkspace();
   const { data: user } = useCurrentUser();
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_targets", "read", scope);
@@ -87,6 +101,48 @@ export function TargetDetailPage() {
     queryFn: ({ signal }) => getDeliveryTarget(projectId, targetId, signal),
     enabled: Boolean(projectId && targetId && allowed),
   });
+  const deployments = useQuery({
+    queryKey: queryKeys.delivery.deployments(projectId, {
+      target_id: targetId,
+      limit: 200,
+    }),
+    queryFn: ({ signal }) =>
+      listClusterDeployments(
+        projectId,
+        { target_id: targetId, limit: 200 },
+        signal,
+      ),
+    enabled: Boolean(projectId && targetId && allowed),
+  });
+  const rollouts = useQuery({
+    queryKey: queryKeys.delivery.rollouts(projectId, {
+      target_id: targetId,
+      limit: 25,
+    }),
+    queryFn: ({ signal }) =>
+      listDeliveryRollouts(
+        projectId,
+        { target_id: targetId, limit: 25 },
+        signal,
+      ),
+    enabled: Boolean(projectId && targetId && allowed),
+  });
+  const clusterQuery = useClusters({ pageSize: 200 });
+  const audit = useAuditLogs(
+    {
+      resource_type: "delivery_target",
+      resource_id: targetId,
+      project_id: projectId,
+      limit: 50,
+    },
+    { enabled: Boolean(projectId && targetId && allowed) },
+  );
+  const clusterNames = new Map(
+    (clusterQuery.data?.data ?? []).map((cluster) => [
+      cluster.id,
+      cluster.displayName || cluster.name,
+    ]),
+  );
   const previewMutation = useMutation({
     mutationFn: ({
       cursor,
@@ -289,11 +345,75 @@ export function TargetDetailPage() {
                   label="Drift policy"
                   value={target.reconciliationPolicy.drift}
                 />
+                <Detail
+                  label="Configuration template"
+                  value={target.configurationTemplateId ?? "Bundle defaults"}
+                  mono={Boolean(target.configurationTemplateId)}
+                />
+                <Detail
+                  label="Override layers"
+                  value={target.overrideSetIds.length}
+                />
               </DetailGrid>
               <PageSection title="Placement intent">
                 <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-muted/30 p-4 text-xs">
                   {JSON.stringify(target.placement, null, 2)}
                 </pre>
+              </PageSection>
+              <ApplicationStatus
+                target={target}
+                deployments={deployments.data?.data ?? []}
+              />
+              <PageSection
+                title="Cluster deployments"
+                description="Desired and observed state for every cluster selected by this application target."
+              >
+                <DataTable
+                  data={deployments.data?.data ?? []}
+                  columns={deploymentColumns(clusterNames)}
+                  keyExtractor={(row) => row.id}
+                  searchable={false}
+                  loading={deployments.isLoading}
+                  isError={deployments.isError}
+                  onRetry={() => void deployments.refetch()}
+                  emptyMessage="This application has no cluster deployments yet"
+                  onRowClick={(row) =>
+                    router.push(entityHref("deployments", row.id))
+                  }
+                />
+              </PageSection>
+              <PageSection
+                title="Release history"
+                description="Immutable rollout plans for this application, newest first."
+              >
+                <DataTable
+                  data={rollouts.data?.data ?? []}
+                  columns={rolloutColumns}
+                  keyExtractor={(row) => row.id}
+                  searchable={false}
+                  loading={rollouts.isLoading}
+                  isError={rollouts.isError}
+                  onRetry={() => void rollouts.refetch()}
+                  emptyMessage="No rollouts have been launched"
+                  onRowClick={(row) =>
+                    router.push(entityHref("rollouts", row.id))
+                  }
+                />
+              </PageSection>
+              <PageSection
+                title="Audit history"
+                description="Who changed this application target and when. Rollout and per-cluster events remain in their operational timelines."
+              >
+                <DataTable
+                  data={audit.data?.data ?? []}
+                  columns={auditColumns}
+                  keyExtractor={(row) => row.id}
+                  searchable={false}
+                  loading={audit.isLoading}
+                  isError={audit.isError}
+                  onRetry={() => void audit.refetch()}
+                  emptyMessage="No audited target changes are visible"
+                />
               </PageSection>
             </>
           )}
@@ -380,6 +500,204 @@ export function TargetDetailPage() {
     </DeliveryShell>
   );
 }
+
+function ApplicationStatus({
+  target,
+  deployments,
+}: {
+  target: DeliveryTarget;
+  deployments: ClusterDeployment[];
+}) {
+  const ready = deployments.filter((row) => row.phase === "ready").length;
+  const drifted = deployments.filter((row) =>
+    row.conditions.some(
+      (condition) =>
+        condition.type === "Drifted" && condition.status === "True",
+    ),
+  ).length;
+  const failed = deployments.filter(
+    (row) => row.phase === "failed" || row.phase === "degraded",
+  ).length;
+  const lastObserved = deployments
+    .map((row) => row.lastObservedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+  return (
+    <PageSection
+      title="Application overview"
+      description="A target is the durable application identity; each selected cluster has its own observed deployment."
+    >
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <Metric
+          label="Ready / desired"
+          value={`${ready} / ${deployments.length}`}
+        />
+        <Metric label="Failed / degraded" value={failed} />
+        <Metric label="Drifted" value={drifted} />
+        <Metric label="Target generation" value={target.generation} />
+        <Metric
+          label="Last observation"
+          value={lastObserved ? formatRelativeTime(lastObserved) : "Never"}
+        />
+      </div>
+    </PageSection>
+  );
+}
+
+function deploymentColumns(
+  clusterNames: Map<string, string>,
+): Column<ClusterDeployment>[] {
+  return [
+    {
+      key: "cluster",
+      header: "Cluster",
+      accessor: (row) => (
+        <div>
+          <p className="font-medium">
+            {clusterNames.get(row.clusterId) || row.clusterId}
+          </p>
+          {clusterNames.has(row.clusterId) && (
+            <p className="font-mono text-xs text-muted-foreground">
+              {row.clusterId}
+            </p>
+          )}
+        </div>
+      ),
+      sortAccessor: (row) => clusterNames.get(row.clusterId) || row.clusterId,
+    },
+    {
+      key: "phase",
+      header: "Phase",
+      accessor: (row) => <DeliveryPhaseBadge value={row.phase} />,
+      sortAccessor: (row) => row.phase,
+    },
+    {
+      key: "revision",
+      header: "Observed revision",
+      accessor: (row) => (
+        <div>
+          <p className="max-w-64 truncate font-mono text-xs">
+            {row.observedRevision || "Not observed"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            generation {row.observedGeneration}/{row.desiredGeneration}
+          </p>
+        </div>
+      ),
+    },
+    {
+      key: "drift",
+      header: "Drift",
+      accessor: (row) =>
+        row.conditions.some(
+          (condition) =>
+            condition.type === "Drifted" && condition.status === "True",
+        ) ? (
+          <DeliveryPhaseBadge value="drifted" />
+        ) : (
+          "In sync"
+        ),
+    },
+    {
+      key: "inventory",
+      header: "Resources",
+      accessor: (row) => {
+        const inventory = row.inventory as {
+          entries?: number;
+          ready?: number;
+          failed?: number;
+        };
+        return `${inventory.ready ?? 0} / ${inventory.entries ?? 0} ready`;
+      },
+    },
+    {
+      key: "observed",
+      header: "Last observed",
+      accessor: (row) =>
+        row.lastObservedAt ? formatRelativeTime(row.lastObservedAt) : "Never",
+      sortAccessor: (row) => row.lastObservedAt || "",
+    },
+  ];
+}
+
+const rolloutColumns: Column<DeliveryRollout>[] = [
+  {
+    key: "state",
+    header: "State",
+    accessor: (row) => <DeliveryPhaseBadge value={row.state} />,
+    sortAccessor: (row) => row.state,
+  },
+  {
+    key: "version",
+    header: "Version transition",
+    accessor: (row) => (
+      <div className="font-mono text-xs">
+        <p>{row.fromBundleVersionId?.slice(0, 12) || "initial install"}</p>
+        <p className="text-muted-foreground">
+          → {row.toBundleVersionId.slice(0, 12)}
+        </p>
+      </div>
+    ),
+  },
+  {
+    key: "strategy",
+    header: "Strategy",
+    accessor: (row) => row.strategy.type.replaceAll("_", " "),
+  },
+  {
+    key: "progress",
+    header: "Ready / desired",
+    accessor: (row) => `${row.readyClusters} / ${row.totalClusters}`,
+    sortAccessor: (row) => row.readyClusters,
+  },
+  {
+    key: "failures",
+    header: "Failed / blocked",
+    accessor: (row) => `${row.failedClusters} / ${row.blockedClusters}`,
+  },
+  {
+    key: "created",
+    header: "Created",
+    accessor: (row) => formatRelativeTime(row.createdAt),
+    sortAccessor: (row) => row.createdAt,
+  },
+];
+
+const auditColumns: Column<AuditLogEntry>[] = [
+  {
+    key: "time",
+    header: "Time",
+    accessor: (row) =>
+      row.timestamp ? new Date(row.timestamp).toLocaleString() : "—",
+    sortAccessor: (row) => row.timestamp,
+  },
+  {
+    key: "action",
+    header: "Action",
+    accessor: (row) => row.action.replaceAll(".", " "),
+    sortAccessor: (row) => row.action,
+  },
+  {
+    key: "actor",
+    header: "Actor",
+    accessor: (row) => row.user || row.userId || "system",
+  },
+  {
+    key: "result",
+    header: "Result",
+    accessor: (row) => <DeliveryPhaseBadge value={row.status} />,
+  },
+  {
+    key: "request",
+    header: "Request",
+    accessor: (row) => (
+      <span className="font-mono text-xs text-muted-foreground">
+        {row.requestId || row.correlationId || "—"}
+      </span>
+    ),
+  },
+];
 
 function PreviewPanel({
   preview,
@@ -537,6 +855,18 @@ function TargetEditDialog({
     target.reconciliationPolicy.drift,
   );
   const [formError, setFormError] = useState<Error | null>(null);
+  const templates = useQuery({
+    queryKey: queryKeys.delivery.configurationTemplates(projectId, {
+      limit: 200,
+    }),
+    queryFn: ({ signal }) =>
+      listDeliveryConfigurationTemplates(projectId, { limit: 200 }, signal),
+  });
+  const overrides = useQuery({
+    queryKey: queryKeys.delivery.overrideSets(projectId, { limit: 200 }),
+    queryFn: ({ signal }) =>
+      listDeliveryOverrideSets(projectId, { limit: 200 }, signal),
+  });
   const mutation = useMutation({
     mutationFn: (body: Parameters<typeof updateDeliveryTarget>[1]) =>
       updateDeliveryTarget(target.id, body, etag, crypto.randomUUID()),
@@ -591,6 +921,11 @@ function TargetEditDialog({
           drift,
         },
         maintenance_window_policy: maintenanceWindowPolicy,
+        configuration_template_id:
+          String(form.get("configuration_template_id") ?? "") || null,
+        override_set_ids: form
+          .getAll("override_set_ids")
+          .map((value) => String(value)),
       });
     } catch (error) {
       setFormError(
@@ -626,6 +961,61 @@ function TargetEditDialog({
             />
           </Field>
         </div>
+        <fieldset className="space-y-4 rounded-md border border-border p-4">
+          <legend className="px-1 text-sm font-medium">
+            Effective configuration
+          </legend>
+          <p className="text-sm text-muted-foreground">
+            Changes create a new target generation. Resolution and conflict
+            checks run before the next rollout plan is created.
+          </p>
+          <Field label="Base configuration template">
+            <select
+              name="configuration_template_id"
+              defaultValue={target.configurationTemplateId ?? ""}
+              className={inputClass}
+            >
+              <option value="">Use bundle defaults</option>
+              {templates.data?.data.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} · {template.renderer}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(overrides.data?.data ?? []).map((item) => (
+              <label
+                key={item.id}
+                className="flex items-start gap-2 rounded-md border border-border p-3 text-sm"
+              >
+                <input
+                  name="override_set_ids"
+                  type="checkbox"
+                  value={item.id}
+                  defaultChecked={target.overrideSetIds.includes(item.id)}
+                  disabled={
+                    !item.enabled && !target.overrideSetIds.includes(item.id)
+                  }
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block font-medium">{item.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {item.scope} · precedence {item.precedence}
+                    {!item.enabled ? " · disabled" : ""}
+                  </span>
+                </span>
+              </label>
+            ))}
+            {!overrides.isLoading &&
+              (overrides.data?.data ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No configuration overrides are available.
+                </p>
+              )}
+          </div>
+        </fieldset>
         <fieldset className="space-y-4 rounded-md border border-border p-4">
           <legend className="px-1 text-sm font-medium">
             Placement selector

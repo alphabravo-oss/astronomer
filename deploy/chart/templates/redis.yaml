@@ -61,6 +61,8 @@ spec:
               port: redis
             initialDelaySeconds: 30
             periodSeconds: 30
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -72,4 +74,257 @@ spec:
         resources:
           requests:
             storage: {{ .Values.redis.storage.size }}
+{{- end }}
+{{- if eq (include "astronomer.redisMode" .) "sentinel" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astronomer.fullname" . }}-valkey-headless
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "redis") | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+  selector:
+    {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "astronomer.fullname" . }}-valkey
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "redis") | nindent 4 }}
+spec:
+  serviceName: {{ include "astronomer.fullname" . }}-valkey-headless
+  replicas: {{ .Values.redis.sentinel.replicas }}
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "redis") | nindent 8 }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 18 }}
+      {{- with .Values.redis.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: redis
+          {{- with .Values.redis.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.redisPasswordSecretName" . | quote }}
+                  key: {{ include "astronomer.redisPasswordSecretKey" . | quote }}
+            - name: HEADLESS_SERVICE
+              value: {{ printf "%s-valkey-headless" (include "astronomer.fullname" .) | quote }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              set -- valkey-server \
+                --appendonly yes \
+                --appendfsync everysec \
+                --requirepass "$VALKEY_PASSWORD" \
+                --masterauth "$VALKEY_PASSWORD" \
+                --min-replicas-to-write 1 \
+                --min-replicas-max-lag 10
+              ordinal="${HOSTNAME##*-}"
+              if [ "$ordinal" != "0" ]; then
+                set -- "$@" --replicaof "{{ include "astronomer.fullname" . }}-valkey-0.${HEADLESS_SERVICE}" 6379
+              fi
+              exec "$@"
+          ports:
+            - name: redis
+              containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "valkey-cli -a \"$VALKEY_PASSWORD\" ping | grep -q PONG"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "valkey-cli -a \"$VALKEY_PASSWORD\" ping | grep -q PONG"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.redis.storage.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.storage.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "astronomer.fullname" . }}-redis-sentinel
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "redis-sentinel") | nindent 4 }}
+spec:
+  ports:
+    - name: sentinel
+      port: 26379
+      targetPort: sentinel
+  selector:
+    {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "astronomer.fullname" . }}-redis-sentinel
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "redis-sentinel") | nindent 4 }}
+spec:
+  replicas: {{ .Values.redis.sentinel.sentinels }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Required hostname anti-affinity intentionally permits only one
+      # Sentinel per node. Remove one old pod before creating its replacement
+      # so a three-node rolling upgrade cannot deadlock on a fourth pod.
+      maxUnavailable: 1
+      maxSurge: 0
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "astronomer.componentLabels" (dict "context" . "component" "redis-sentinel") | nindent 8 }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 18 }}
+      {{- with .Values.redis.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: configure
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.redisPasswordSecretName" . | quote }}
+                  key: {{ include "astronomer.redisPasswordSecretKey" . | quote }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              umask 077
+              until getent hosts {{ include "astronomer.fullname" . }}-valkey-0.{{ include "astronomer.fullname" . }}-valkey-headless >/dev/null 2>&1; do
+                sleep 1
+              done
+              cat > /sentinel/sentinel.conf <<EOF
+              port 26379
+              dir /tmp
+              protected-mode no
+              requirepass $VALKEY_PASSWORD
+              sentinel resolve-hostnames yes
+              sentinel announce-hostnames yes
+              sentinel monitor {{ .Values.redis.sentinel.masterName }} {{ include "astronomer.fullname" . }}-valkey-0.{{ include "astronomer.fullname" . }}-valkey-headless 6379 {{ .Values.redis.sentinel.quorum }}
+              sentinel auth-pass {{ .Values.redis.sentinel.masterName }} $VALKEY_PASSWORD
+              sentinel down-after-milliseconds {{ .Values.redis.sentinel.masterName }} {{ .Values.redis.sentinel.downAfterMilliseconds }}
+              sentinel failover-timeout {{ .Values.redis.sentinel.masterName }} {{ .Values.redis.sentinel.failoverTimeoutMilliseconds }}
+              sentinel parallel-syncs {{ .Values.redis.sentinel.masterName }} {{ .Values.redis.sentinel.parallelSyncs }}
+              EOF
+          volumeMounts:
+            - name: sentinel-config
+              mountPath: /sentinel
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+      containers:
+        - name: sentinel
+          {{- with .Values.redis.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.redis.image.repository "tag" .Values.redis.image.tag "digest" .Values.redis.image.digest "registry" .Values.redis.image.registry "fallback" .Values.image.registry) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "astronomer.redisPasswordSecretName" . | quote }}
+                  key: {{ include "astronomer.redisPasswordSecretKey" . | quote }}
+          command: ["valkey-sentinel", "/sentinel/sentinel.conf"]
+          ports:
+            - name: sentinel
+              containerPort: 26379
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "valkey-cli -p 26379 -a \"$VALKEY_PASSWORD\" ping | grep -q PONG"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-ec", "valkey-cli -p 26379 -a \"$VALKEY_PASSWORD\" ping | grep -q PONG"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: sentinel-config
+              mountPath: /sentinel
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+      volumes:
+        - name: sentinel-config
+          emptyDir: {}
+{{- if .Values.redis.sentinel.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "astronomer.fullname" . }}-valkey
+spec:
+  minAvailable: {{ .Values.redis.sentinel.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 6 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "astronomer.fullname" . }}-redis-sentinel
+spec:
+  minAvailable: {{ .Values.redis.sentinel.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "redis-sentinel") | nindent 6 }}
+{{- end }}
 {{- end }}

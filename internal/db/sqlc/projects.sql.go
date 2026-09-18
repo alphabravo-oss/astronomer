@@ -313,6 +313,35 @@ func (q *Queries) GetProjectByNameAndCluster(ctx context.Context, arg GetProject
 	return i, err
 }
 
+const getProjectNamespaceByClusterAndNamespace = `-- name: GetProjectNamespaceByClusterAndNamespace :one
+SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at FROM project_namespaces
+WHERE cluster_id = $1 AND namespace = $2
+`
+
+type GetProjectNamespaceByClusterAndNamespaceParams struct {
+	ClusterID uuid.UUID `json:"cluster_id"`
+	Namespace string    `json:"namespace"`
+}
+
+// Resolve optional project ownership from the Kubernetes deployment target.
+// The partial unique index on (cluster_id, namespace) guarantees at most one
+// owning project, so callers never need a user-selected project discriminator.
+func (q *Queries) GetProjectNamespaceByClusterAndNamespace(ctx context.Context, arg GetProjectNamespaceByClusterAndNamespaceParams) (ProjectNamespace, error) {
+	row := q.db.QueryRow(ctx, getProjectNamespaceByClusterAndNamespace, arg.ClusterID, arg.Namespace)
+	var i ProjectNamespace
+	err := row.Scan(
+		&i.ProjectID,
+		&i.ClusterID,
+		&i.Namespace,
+		&i.LastReconciledAt,
+		&i.LastReconcileError,
+		&i.LockedUntil,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listAllProjectNamespaces = `-- name: ListAllProjectNamespaces :many
 SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at FROM project_namespaces
 ORDER BY project_id, cluster_id, namespace

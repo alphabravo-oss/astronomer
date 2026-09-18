@@ -42,7 +42,7 @@ function ClusterAlertingPage() {
               href="/dashboard/alerting"
               className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
             >
-              Estate inbox
+              Fleet inbox
             </Link>
             {activeTab === "rules" ? (
               <ActionButton

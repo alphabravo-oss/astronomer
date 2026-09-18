@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "release": "v1.1.0",
+  "release": "v1.2.0",
   "components": [
     {
       "slug": "kube-state-metrics",
@@ -51,6 +51,8 @@
         "quay.io/prometheus/node-exporter@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0"
       ],
       "values": {
+        "hostNetwork": false,
+        "hostPID": false,
         "image": {
           "digest": "sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0"
         },

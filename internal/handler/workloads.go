@@ -314,8 +314,11 @@ type podResource struct {
 	Spec struct {
 		NodeName   string `json:"nodeName"`
 		Containers []struct {
-			Name  string `json:"name"`
-			Image string `json:"image"`
+			Name      string `json:"name"`
+			Image     string `json:"image"`
+			Resources struct {
+				Limits map[string]string `json:"limits"`
+			} `json:"resources"`
 			Ports []struct {
 				Name          string `json:"name"`
 				ContainerPort int    `json:"containerPort"`
@@ -348,18 +351,6 @@ type podResource struct {
 
 type podList struct {
 	Items []podResource `json:"items"`
-}
-
-// podMetadataList decodes a PartialObjectMetadataList (or a full PodList — both
-// carry metadata.namespace). Used by callers that only need per-namespace or
-// per-node pod counts, so they don't pull every pod's spec+status.
-type podMetadataList struct {
-	Items []struct {
-		Metadata struct {
-			Name      string `json:"name"`
-			Namespace string `json:"namespace"`
-		} `json:"metadata"`
-	} `json:"items"`
 }
 
 type namespaceList struct {
@@ -856,14 +847,29 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	pods, err := h.listPodMetadata(r.Context(), clusterID, "/api/v1/pods")
-	if err != nil {
+	var pods podList
+	if err := h.getJSON(r.Context(), clusterID, "/api/v1/pods", &pods); err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	counts := map[string]int{}
+	counts := make(map[string]int)
+	cpuLimits := make(map[string]int)
+	memoryLimits := make(map[string]int)
 	for _, pod := range pods.Items {
 		counts[pod.Metadata.Namespace]++
+		for _, container := range pod.Spec.Containers {
+			cpuLimits[pod.Metadata.Namespace] += parseCPU(container.Resources.Limits["cpu"])
+			memoryLimits[pod.Metadata.Namespace] += parseMemory(container.Resources.Limits["memory"])
+		}
+	}
+	cpuUsage := make(map[string]int64)
+	memoryUsage := make(map[string]int64)
+	if h.metrics != nil {
+		isLocal := clusterID == h.localClusterID && h.localClusterID != ""
+		for _, metric := range h.metrics.Get(r.Context(), clusterID, isLocal).Pods {
+			cpuUsage[metric.Namespace] += metric.CPUUsageMillicores
+			memoryUsage[metric.Namespace] += metric.MemoryUsageBytes
+		}
 	}
 	items := make([]map[string]any, 0, len(namespaces.Items))
 	for _, ns := range namespaces.Items {
@@ -874,10 +880,10 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 			"labels":      defaultMap(ns.Metadata.Labels),
 			"annotations": defaultMap(ns.Metadata.Annotations),
 			"podCount":    counts[ns.Metadata.Name],
-			"cpuUsage":    0,
-			"cpuLimit":    0,
-			"memoryUsage": 0,
-			"memoryLimit": 0,
+			"cpuUsage":    cpuUsage[ns.Metadata.Name],
+			"cpuLimit":    cpuLimits[ns.Metadata.Name],
+			"memoryUsage": memoryUsage[ns.Metadata.Name],
+			"memoryLimit": memoryLimits[ns.Metadata.Name],
 			"createdAt":   ns.Metadata.CreationTimestamp.UTC().Format(time.RFC3339),
 		})
 	}
@@ -1253,30 +1259,6 @@ func (h *WorkloadHandler) listPodsFieldSelector(ctx context.Context, clusterID, 
 	return items, nil
 }
 
-// listPodMetadata fetches a lightweight PartialObjectMetadataList of pods. The
-// content-negotiation Accept header asks the apiserver to strip spec/status;
-// it falls back to a normal PodList when partial metadata isn't available, and
-// podMetadataList decodes either shape.
-func (h *WorkloadHandler) listPodMetadata(ctx context.Context, clusterID, path string) (*podMetadataList, error) {
-	if h.requester == nil {
-		return nil, fmt.Errorf("tunnel requester not configured")
-	}
-	headers := requestHeaders("")
-	headers["Accept"] = "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json"
-	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, headers)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensureSuccess(resp); err != nil {
-		return nil, err
-	}
-	var out podMetadataList
-	if err := parseJSONResponse(resp, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
 func (h *WorkloadHandler) getNodes(ctx context.Context, clusterID string) ([]map[string]any, error) {
 	var nodes nodeList
 	if err := h.getJSON(ctx, clusterID, "/api/v1/nodes", &nodes); err != nil {
@@ -1292,7 +1274,23 @@ func (h *WorkloadHandler) getNodes(ctx context.Context, clusterID string) ([]map
 	for _, node := range nodes.Items {
 		items = append(items, nodeSummaryMap(node, podCounts[node.Metadata.Name]))
 	}
+	if h.metrics != nil {
+		isLocal := clusterID == h.localClusterID && h.localClusterID != ""
+		layerNodeSummaryUsage(items, h.metrics.Get(ctx, clusterID, isLocal))
+	}
 	return items, nil
+}
+
+func layerNodeSummaryUsage(items []map[string]any, snapshot clustermetrics.Snapshot) {
+	for _, item := range items {
+		name, _ := item["name"].(string)
+		metrics, ok := snapshot.Nodes[name]
+		if !ok {
+			continue
+		}
+		item["cpuUsage"] = int(metrics.CPUUsageMillicores)
+		item["memoryUsage"] = int(metrics.MemoryUsageBytes)
+	}
 }
 
 func (h *WorkloadHandler) getNodeDetail(ctx context.Context, clusterID, nodeName string) (map[string]any, error) {

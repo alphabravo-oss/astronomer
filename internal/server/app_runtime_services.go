@@ -6,7 +6,7 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/config"
-	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 	livemetrics "github.com/alphabravocompany/astronomer-go/internal/metrics"
 	"github.com/alphabravocompany/astronomer-go/internal/tunnel"
 )
@@ -25,7 +25,7 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		logger.Warn("local cluster bootstrap failed", "error", err)
 	} else if localCluster != nil {
 		c.workloadHandler.SetLocalClusterID(localCluster.ID.String())
-		if err := StartLocalAgent(foundation.ctx, logger, c.queries, localCluster.ID); err != nil {
+		if err := StartLocalAgentLeaderElection(foundation.ctx, logger, c.queries, localCluster.ID, cfg.DeliveryEnabled, cfg.DeliveryLocalFluxBootstrap); err != nil {
 			logger.Warn("local agent start failed", "error", err)
 		}
 	}
@@ -34,7 +34,34 @@ func (c *productionComposition) startRuntimeServices(cfg *config.Config, logger 
 		return err
 	}
 	kickFirstBootCatalogSync(foundation.ctx, logger, c.queries, c.queue)
-	if count, err := catalog.Load(foundation.ctx, c.queries, httpclient.SafeClient(15*time.Second), cfg.CatalogURL); err != nil {
+	catalogClients, catalogClientErr := catalog.NewSourceClients(catalog.SourceClientOptions{
+		Timeout:             15 * time.Second,
+		ProxyURL:            cfg.CatalogProxyURL,
+		CAFile:              cfg.CatalogCAFile,
+		AllowPrivateMirrors: cfg.CatalogAllowPrivateMirrors,
+	})
+	if catalogClientErr != nil {
+		logger.Warn("catalog transport configuration failed; keeping existing rows", "error", catalogClientErr)
+		return nil
+	}
+	var catalogTrust *model.TrustPolicy
+	if cfg.CatalogSignatureRequired {
+		policy := model.TrustPolicy{
+			Provider: model.SignatureProvider(cfg.CatalogSignatureProvider),
+			Identity: cfg.CatalogSignatureIdentity,
+			Issuer:   cfg.CatalogSignatureIssuer,
+			KeyRef:   cfg.CatalogSignatureKeyRef,
+		}
+		catalogTrust = &policy
+	}
+	if count, err := catalog.LoadSource(foundation.ctx, c.queries, catalog.SourceOptions{
+		URL:            cfg.CatalogURL,
+		ExpectedDigest: cfg.CatalogDigest,
+		MirrorsJSON:    cfg.CatalogMirrors,
+		Clients:        catalogClients,
+		TrustPolicy:    catalogTrust,
+		TrustDirectory: cfg.CatalogTrustDirectory,
+	}); err != nil {
 		logger.Warn("blessed catalog reconcile failed; keeping existing rows", "url", cfg.CatalogURL, "error", err)
 	} else if count > 0 {
 		logger.Info("blessed catalog reconciled", "entries", count, "url", cfg.CatalogURL)

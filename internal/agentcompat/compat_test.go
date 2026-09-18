@@ -11,15 +11,16 @@ func TestEvaluate(t *testing.T) {
 		status  string
 		blocked bool
 	}{
-		"v1.2.3": {"supported", false},
-		"1.2.3":  {"supported", false},
-		"v1.1.0": {"supported", false},
-		"v1.0.0": {"deprecated", false},
-		"v0.9.9": {"blocked", true},
-		"v2.0.0": {"blocked", true},
-		"":       {"unknown", true},
-		"latest": {"unknown", true},
-		"dev":    {"unknown", true},
+		"v1.2.3":               {"supported", false},
+		"1.2.3":                {"supported", false},
+		"v1.1.0":               {"supported", false},
+		"1.2.0-local.20260825": {"supported", false},
+		"v1.0.0":               {"deprecated", false},
+		"v0.9.9":               {"blocked", true},
+		"v2.0.0":               {"blocked", true},
+		"":                     {"unknown", true},
+		"latest":               {"unknown", true},
+		"dev":                  {"unknown", true},
 	}
 	for version, want := range cases {
 		got := Evaluate(version)

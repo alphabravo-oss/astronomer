@@ -23,7 +23,7 @@ const deliveryRouteMaxBodyBytes = 1 << 20
 // dedicated resource permission at that exact project.
 func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 	if deps.DeliverySources == nil && deps.DeliveryBundles == nil && deps.DeliveryTargets == nil &&
-		deps.DeliveryRollouts == nil && deps.DeliveryDeployments == nil && deps.DeliveryInventory == nil && deps.DeliverySystem == nil {
+		deps.DeliveryRollouts == nil && deps.DeliveryDeployments == nil && deps.DeliveryInventory == nil && deps.DeliverySystem == nil && deps.DeliveryConfigurationTemplates == nil && deps.DeliveryOverrideSets == nil {
 		return
 	}
 
@@ -34,10 +34,8 @@ func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 
 	r.Route("/delivery", func(r chi.Router) {
 		if deps.DeliveryInventory != nil {
-			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryInventory, rbac.VerbRead), deprecatedAPIAlias("/api/v1/delivery/estate")).
-				Get("/fleet/", deps.DeliveryInventory.Estate)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryInventory, rbac.VerbRead)).
-				Get("/estate/", deps.DeliveryInventory.Estate)
+				Get("/fleet/", deps.DeliveryInventory.Fleet)
 			r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryPlatform, rbac.VerbRead)).
 				Get("/system/compatibility/", deps.DeliveryInventory.SystemCompatibility)
 		}
@@ -65,6 +63,27 @@ func registerDeliveryRoutes(r chi.Router, deps RouterDependencies) {
 
 		r.Group(func(r chi.Router) {
 			r.Use(deliveryProjectScope)
+
+			if deps.DeliveryOverrideSets != nil {
+				r.Route("/override-sets", func(r chi.Router) {
+					r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbList)).Get("/", deps.DeliveryOverrideSets.List)
+					r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbCreate), idempotency).Post("/", deps.DeliveryOverrideSets.Create)
+					r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Get("/{id}/", deps.DeliveryOverrideSets.Get)
+					r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbUpdate), idempotency).Put("/{id}/", deps.DeliveryOverrideSets.Update)
+					r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbDelete), idempotency).Delete("/{id}/", deps.DeliveryOverrideSets.Delete)
+					r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Post("/effective/", deps.DeliveryOverrideSets.Effective)
+				})
+			}
+
+			if deps.DeliveryConfigurationTemplates != nil {
+				r.Route("/configuration-templates", func(r chi.Router) {
+					r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbList)).Get("/", deps.DeliveryConfigurationTemplates.List)
+					r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbCreate), idempotency).Post("/", deps.DeliveryConfigurationTemplates.Create)
+					r.With(requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbRead)).Get("/{id}/", deps.DeliveryConfigurationTemplates.Get)
+					r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbUpdate), idempotency).Put("/{id}/", deps.DeliveryConfigurationTemplates.Update)
+					r.With(writeProjects, requirePermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceDeliveryConfigurationTemplates, rbac.VerbDelete), idempotency).Delete("/{id}/", deps.DeliveryConfigurationTemplates.Delete)
+				})
+			}
 
 			if deps.DeliverySources != nil {
 				r.Route("/sources", func(r chi.Router) {

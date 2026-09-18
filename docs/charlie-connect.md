@@ -13,4 +13,6 @@ Charlie surfaces on. It does not store a durable Charlie API key and does not
 call Charlie central. An air-gapped package file remains available under the
 same settings page.
 
-See Charlie's [connect-token.md](../../charlie/docs/connect-token.md).
+The Charlie operator documentation describes how to issue and revoke the
+one-time connect token; no Charlie source checkout is required to install this
+Astronomer release.

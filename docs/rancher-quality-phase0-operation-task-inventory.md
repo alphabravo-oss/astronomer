@@ -9,8 +9,8 @@ This inventory supports the Phase 0 durability work: every high-risk background 
 ## Scan Scope
 
 - Worker Go files scanned: 97
-- Handler Go files scanned: 175
-- Production source files scanned: 305
+- Handler Go files scanned: 177
+- Production source files scanned: 308
 - Task constants resolved: 153
 - Worker handler registrations: 85
 - Periodic schedules: 58
@@ -177,7 +177,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/admin_queues.go:294`](internal/handler/admin_queues.go:294) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/alerting.go:536`](internal/handler/alerting.go:536) - `_, enqueueErr := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/apiserver_allowlist.go:517`](internal/handler/apiserver_allowlist.go:517) - `_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/catalog.go:846`](internal/handler/catalog.go:846) - `outbox, mutationErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
+- [`internal/handler/catalog.go:926`](internal/handler/catalog.go:926) - `outbox, mutationErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/cloud_credentials.go:83`](internal/handler/cloud_credentials.go:83) - `UpsertCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.UpsertCloudCredentialMaterializationWithTaskOutboxParams) (sqlc.CloudCredentialMaterialization, error)`
 - [`internal/handler/cloud_credentials.go:84`](internal/handler/cloud_credentials.go:84) - `DeleteCloudCredentialMaterializationWithTaskOutbox(ctx context.Context, arg sqlc.DeleteCloudCredentialMaterializationWithTaskOutboxParams) error`
 - [`internal/handler/cloud_credentials.go:1026`](internal/handler/cloud_credentials.go:1026) - `if h.upsertMaterializationWithTaskOutbox(ctx, cred, ref, op) {`
@@ -212,7 +212,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/platform_default_template.go:396`](internal/handler/platform_default_template.go:396) - `app, persisted, txErr = upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), q, q, sqlc.UpsertClusterTemplateApplicationParams{`
 - [`internal/handler/projects.go:1888`](internal/handler/projects.go:1888) - `_, err := tasks.EnqueueTaskOutbox(ctx, h.taskOutbox, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/resource_operations.go:202`](internal/handler/resource_operations.go:202) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/workloads.go:1070`](internal/handler/workloads.go:1070) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
+- [`internal/handler/workloads.go:1076`](internal/handler/workloads.go:1076) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/worker/tasks/gitops_sync.go:550`](internal/worker/tasks/gitops_sync.go:550) - `if _, err := EnqueueTaskOutbox(ctx, runtime.Deps.TaskOutbox, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/security_scan.go:255`](internal/worker/tasks/security_scan.go:255) - `_, err = EnqueueTaskOutbox(ctx, runtime.Deps.Outbox, task, TaskOutboxOptions{`
 - [`internal/worker/tasks/task_outbox_enqueue.go:14`](internal/worker/tasks/task_outbox_enqueue.go:14) - `UpsertTaskOutbox(ctx context.Context, arg sqlc.UpsertTaskOutboxParams) (sqlc.TaskOutbox, error)`
@@ -264,8 +264,8 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `agent_lifecycle` |1 |[`internal/handler/cluster_agents.go:861`](internal/handler/cluster_agents.go:861) |
 | `agent_token_rotation` |1 |[`internal/handler/clusters.go:1804`](internal/handler/clusters.go:1804) |
 | `apiserver_allowlist_reconcile` |1 |[`internal/handler/apiserver_allowlist.go:451`](internal/handler/apiserver_allowlist.go:451) |
-| `catalog` |4 |[`internal/handler/catalog.go:1462`](internal/handler/catalog.go:1462)<br>[`internal/handler/catalog.go:1537`](internal/handler/catalog.go:1537)<br>[`internal/handler/catalog.go:1761`](internal/handler/catalog.go:1761)<br>[`internal/handler/catalog.go:1849`](internal/handler/catalog.go:1849) |
-| `catalog_repository_sync` |1 |[`internal/handler/catalog.go:813`](internal/handler/catalog.go:813) |
+| `catalog` |4 |[`internal/handler/catalog.go:2147`](internal/handler/catalog.go:2147)<br>[`internal/handler/catalog.go:2222`](internal/handler/catalog.go:2222)<br>[`internal/handler/catalog.go:2524`](internal/handler/catalog.go:2524)<br>[`internal/handler/catalog.go:2612`](internal/handler/catalog.go:2612) |
+| `catalog_repository_sync` |1 |[`internal/handler/catalog.go:893`](internal/handler/catalog.go:893) |
 | `cluster_template_apply` |1 |[`internal/handler/cluster_templates.go:801`](internal/handler/cluster_templates.go:801) |
 | `cluster_template_reapply` |1 |[`internal/handler/cluster_templates.go:929`](internal/handler/cluster_templates.go:929) |
 | `cluster-snapshot` |1 |[`internal/handler/cluster_snapshots.go:551`](internal/handler/cluster_snapshots.go:551) |
@@ -281,10 +281,10 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `monitoring_operation_retry` |1 |[`internal/handler/monitoring_operations.go:154`](internal/handler/monitoring_operations.go:154) |
 | `network_policy_apply` |1 |[`internal/handler/network_policies.go:614`](internal/handler/network_policies.go:614) |
 | `network_policy_reapply` |1 |[`internal/handler/network_policies.go:849`](internal/handler/network_policies.go:849) |
-| `pod-deletes` |1 |[`internal/handler/workloads.go:1027`](internal/handler/workloads.go:1027) |
+| `pod-deletes` |1 |[`internal/handler/workloads.go:1033`](internal/handler/workloads.go:1033) |
 | `restore` |1 |[`internal/handler/backups.go:1280`](internal/handler/backups.go:1280) |
 | `tools` |1 |[`internal/handler/tools.go:1308`](internal/handler/tools.go:1308) |
-| `workloads` |1 |[`internal/handler/workloads.go:1542`](internal/handler/workloads.go:1542) |
+| `workloads` |1 |[`internal/handler/workloads.go:1540`](internal/handler/workloads.go:1540) |
 
 ## Definition Of Done For Durability Review
 

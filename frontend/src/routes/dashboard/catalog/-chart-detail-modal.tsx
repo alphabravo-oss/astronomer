@@ -3,8 +3,17 @@ import { ActionButton } from "@/components/ui/action-button";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { Select } from "@/components/ui/select";
 import { useHelmChartVersions } from "@/lib/hooks/catalog";
+import type { CuratedHelmChart } from "@/lib/catalogs/astronomer";
 import type { HelmChart, HelmChartVersion } from "@/types";
-import { Download, Package } from "lucide-react";
+import {
+  Box,
+  CheckCircle2,
+  Database,
+  Download,
+  ExternalLink,
+  Package,
+  ShieldCheck,
+} from "lucide-react";
 import { CategoryChip } from "./-category";
 
 export function ChartDetailModal({
@@ -14,13 +23,14 @@ export function ChartDetailModal({
   onInstall,
 }: {
   projectId: string;
-  chart: HelmChart;
+  chart: CuratedHelmChart;
   onClose: () => void;
   onInstall: (chart: HelmChart, version: HelmChartVersion) => void;
 }) {
   const { data: versions, isLoading: versionsLoading } = useHelmChartVersions(
     projectId,
     chart.id,
+    "project",
   );
   const [selectedVersionId, setSelectedVersionId] = useState<string>("");
 
@@ -33,7 +43,11 @@ export function ChartDetailModal({
       <ActionButton
         intent="primary"
         icon={<Download className="h-4 w-4" />}
-        disabled={!selectedVersion}
+        disabled={
+          !selectedVersion ||
+          chart.catalogPresentation?.revoked ||
+          chart.catalogPresentation?.lifecycle.install === false
+        }
         onClick={() => {
           if (selectedVersion) {
             onInstall(chart, selectedVersion);
@@ -89,6 +103,64 @@ export function ChartDetailModal({
       </div>
 
       <p className="text-sm text-muted-foreground">{chart.description}</p>
+
+      {chart.catalogPresentation && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-status-success/25 bg-status-success/5 px-3 py-2">
+            <CheckCircle2 className="h-4 w-4 text-status-success" />
+            <span className="text-xs font-medium text-foreground">
+              Immutable catalog verified
+            </span>
+            <span className="font-mono text-2xs text-table-secondary">
+              {chart.catalogPresentation.catalogDigest.slice(0, 19)}
+            </span>
+            {chart.catalogPresentation.documentationUrl && (
+              <a
+                href={chart.catalogPresentation.documentationUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              >
+                Documentation <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <p className="flex items-center gap-1.5 text-xs text-table-secondary">
+              <ShieldCheck className="h-3.5 w-3.5" /> Support
+            </p>
+            <p className="mt-1 text-sm font-medium text-foreground">
+              {chart.catalogPresentation.supportTier}
+            </p>
+          </div>
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <p className="flex items-center gap-1.5 text-xs text-table-secondary">
+              <Box className="h-3.5 w-3.5" /> Resource profile
+            </p>
+            <p className="mt-1 text-sm font-medium text-foreground">
+              {chart.catalogPresentation.resourceProfile}
+            </p>
+          </div>
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <p className="flex items-center gap-1.5 text-xs text-table-secondary">
+              <Database className="h-3.5 w-3.5" /> Storage
+            </p>
+            <p className="mt-1 text-sm font-medium text-foreground">
+              {chart.catalogPresentation.storage}
+            </p>
+          </div>
+          <div className="rounded-md border border-border bg-muted/20 p-3">
+            <p className="text-xs text-table-secondary">Access</p>
+            <p className="mt-1 text-sm font-medium text-foreground">
+              {chart.catalogPresentation.privileged
+                ? "Cluster-scoped review"
+                : "Namespace scoped"}
+            </p>
+          </div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <label

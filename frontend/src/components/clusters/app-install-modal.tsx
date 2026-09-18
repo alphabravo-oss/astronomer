@@ -62,7 +62,6 @@ type Mode =
     };
 
 interface AppInstallModalProps {
-  projectId: string;
   clusterId: string;
   mode: Mode;
   onClose: () => void;
@@ -97,7 +96,6 @@ const HAS_CRDS = new Set([
 ]);
 
 export function AppInstallModal({
-  projectId,
   clusterId,
   mode,
   onClose,
@@ -133,9 +131,9 @@ export function AppInstallModal({
 
   // Versions
   const versions = useQuery({
-    queryKey: queryKeys.catalog.installChartVersions(projectId, mode.chartId),
-    queryFn: () => listChartVersions(projectId, mode.chartId),
-    enabled: !!projectId,
+    queryKey: queryKeys.catalog.installChartVersions(clusterId, mode.chartId),
+    queryFn: () => listChartVersions(clusterId, mode.chartId),
+    enabled: !!clusterId,
   });
 
   // Default the version select to the first (latest by row order) once
@@ -159,13 +157,13 @@ export function AppInstallModal({
   // customisation. Show a "Reset to chart defaults" button instead.
   const defaultValues = useQuery({
     queryKey: queryKeys.catalog.installChartValues(
-      projectId,
+      clusterId,
       mode.chartId,
       selectedVersion?.version,
     ),
     queryFn: () =>
-      getChartDefaultValues(projectId, mode.chartId, selectedVersion?.version),
-    enabled: !!projectId && !!selectedVersion?.version,
+      getChartDefaultValues(clusterId, mode.chartId, selectedVersion?.version),
+    enabled: !!clusterId && !!selectedVersion?.version,
   });
 
   useEffect(() => {
@@ -183,7 +181,6 @@ export function AppInstallModal({
       const value = form.state.values;
       if (mode.kind === "install") {
         return installChartOnCluster({
-          projectId,
           clusterId,
           chartVersionId: value.selectedVersionId,
           releaseName: value.releaseName.trim(),

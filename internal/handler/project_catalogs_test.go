@@ -730,6 +730,21 @@ func (m *minimalCatalogQuerier) ListInstalledChartsWithMetadataByCluster(_ conte
 	return nil, nil
 }
 
+type clusterCatalogQuerier struct{ *minimalCatalogQuerier }
+
+func (m *clusterCatalogQuerier) ListProjectsByCluster(_ context.Context, arg sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error) {
+	out := make([]sqlc.Project, 0)
+	for _, project := range m.projects {
+		if project.ClusterID == arg.ClusterID {
+			out = append(out, project)
+		}
+	}
+	return out, nil
+}
+func (m *clusterCatalogQuerier) GetProjectNamespaceByClusterAndNamespace(_ context.Context, _ sqlc.GetProjectNamespaceByClusterAndNamespaceParams) (sqlc.ProjectNamespace, error) {
+	return sqlc.ProjectNamespace{}, pgx.ErrNoRows
+}
+
 func TestCatalogBrowse_ProjectScopedFilter(t *testing.T) {
 	q := newFakeProjectCatalogQuerier()
 	projectA := uuid.New()
@@ -779,6 +794,37 @@ func TestCatalogBrowse_AdminView_Unchanged(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"name":"g"`) {
 		t.Errorf("admin view must return all charts; got %s", rec.Body.String())
+	}
+}
+
+func TestCatalogBrowse_ClusterScopeIncludesGlobalAndClusterOwnedSources(t *testing.T) {
+	q := newFakeProjectCatalogQuerier()
+	clusterID := uuid.New()
+	otherClusterID := uuid.New()
+	projectID := uuid.New()
+	otherProjectID := uuid.New()
+	q.projects[projectID] = sqlc.Project{ID: projectID, ClusterID: clusterID}
+	q.projects[otherProjectID] = sqlc.Project{ID: otherProjectID, ClusterID: otherClusterID}
+	globalID := seedGlobal(q, "global")
+	ownedID := seedOwned(q, "cluster-private", projectID)
+	foreignID := seedOwned(q, "foreign-private", otherProjectID)
+	q.chartsByRepo[globalID] = []sqlc.HelmChart{{ID: uuid.New(), RepositoryID: globalID, Name: "global-chart"}}
+	q.chartsByRepo[ownedID] = []sqlc.HelmChart{{ID: uuid.New(), RepositoryID: ownedID, Name: "cluster-chart"}}
+	q.chartsByRepo[foreignID] = []sqlc.HelmChart{{ID: uuid.New(), RepositoryID: foreignID, Name: "foreign-chart"}}
+
+	h := NewCatalogHandler(&clusterCatalogQuerier{minimalCatalogQuerier: &minimalCatalogQuerier{fakeProjectCatalogQuerier: q}})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/catalog/charts/?cluster_id="+clusterID.String(), nil)
+	h.ListCharts(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"name":"global-chart"`) || !strings.Contains(body, `"name":"cluster-chart"`) {
+		t.Fatalf("cluster catalog union is incomplete: %s", body)
+	}
+	if strings.Contains(body, `"name":"foreign-chart"`) {
+		t.Fatalf("foreign cluster catalog leaked: %s", body)
 	}
 }
 

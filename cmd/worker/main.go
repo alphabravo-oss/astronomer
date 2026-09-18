@@ -29,6 +29,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/maintenance"
 	"github.com/alphabravocompany/astronomer-go/internal/notify"
 	"github.com/alphabravocompany/astronomer-go/internal/observability"
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/alphabravocompany/astronomer-go/internal/webhook"
 	"github.com/alphabravocompany/astronomer-go/internal/worker"
 	"github.com/alphabravocompany/astronomer-go/internal/worker/leader"
@@ -179,7 +180,7 @@ func main() {
 	// evaluator handing notification:send tasks to the notification
 	// dispatcher). This is the worker process that runs HandleAlertEvaluation,
 	// so it must be able to enqueue.
-	runtimeRedisOpt, redisOptErr := asynq.ParseRedisURI(cfg.RedisURL)
+	runtimeRedisOpt, redisOptErr := redisconn.Parse(cfg.RedisURL)
 	if redisOptErr != nil {
 		log.Error("failed to parse redis uri for runtime enqueuer", "error", redisOptErr)
 		os.Exit(1)

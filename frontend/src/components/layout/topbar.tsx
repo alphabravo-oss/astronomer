@@ -400,7 +400,7 @@ export function Topbar() {
             className="flex items-center gap-2 h-8 pl-1 pr-2 rounded-md hover:bg-accent transition-colors"
           >
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center">
-              <User className="h-3 w-3 text-zinc-300" />
+              <User className="h-3 w-3 text-muted-foreground" />
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </button>

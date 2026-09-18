@@ -95,8 +95,12 @@ func TestAstronomerChartArchiveRendersOffline(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("helm", "template", "astronomer", archive,
+		"--kube-version", "1.35.0",
 		"--set", "bootstrap.existingSecret=bootstrap-credentials",
-		"--set", "secrets.existingSecret=core-credentials")
+		"--set", "secrets.existingSecret=core-credentials",
+		"--set", "postgres.bundled.enabled=false",
+		"--set", "postgres.external.dsnSecretRef.name=database-credentials",
+		"--set", "postgres.external.dsnSecretRef.key=dsn")
 	cmd.Env = append(os.Environ(), "HELM_REPOSITORY_CACHE="+t.TempDir(), "HELM_REPOSITORY_CONFIG="+filepath.Join(t.TempDir(), "repositories.yaml"))
 	var output bytes.Buffer
 	cmd.Stdout = &output

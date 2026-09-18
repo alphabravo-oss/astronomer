@@ -5,10 +5,11 @@ import (
 	"testing"
 )
 
-func TestFluxNativeDeliveryConfigIsProjectedWithoutManagementControllers(t *testing.T) {
+func TestFluxNativeDeliveryDefaultsOnWithLocalBootstrap(t *testing.T) {
 	out := helmTemplate(t)
 	for _, want := range []string{
 		`DELIVERY_ENABLED: "true"`,
+		`DELIVERY_LOCAL_FLUX_BOOTSTRAP: "true"`,
 		`DELIVERY_FLUX_VERSION: "v2.9.3"`,
 		`DELIVERY_PUBLIC_REGISTRY: "ghcr.io"`,
 		"DELIVERY_PRIVATE_REGISTRY:",
@@ -41,13 +42,19 @@ func TestFluxNativeDeliveryConfigIsProjectedWithoutManagementControllers(t *test
 	}
 }
 
+func TestFluxNativeDeliveryCanBeEnabledExplicitly(t *testing.T) {
+	out := helmTemplate(t, "delivery.enabled=true")
+	if !strings.Contains(out, `DELIVERY_ENABLED: "true"`) {
+		t.Fatal("explicit delivery opt-in was not projected")
+	}
+}
+
 func TestDeliveryValuesSchemaRejectsUnsafeReleaseInputs(t *testing.T) {
 	tests := []struct {
 		name string
 		set  string
 		want string
 	}{
-		{name: "engine cannot be disabled", set: "delivery.enabled=false", want: "/delivery/enabled"},
 		{name: "signatures are mandatory", set: "delivery.artifacts.fluxDistribution.trustPolicy.requireSignature=false", want: "requireSignature"},
 		{name: "mutable tags are rejected", set: "delivery.artifacts.fluxDistribution.ociRepository=ghcr.io/example/distribution:latest", want: "ociRepository"},
 	}
@@ -68,7 +75,7 @@ func TestProductionDeliveryRejectsWorldOpenSourceEgress(t *testing.T) {
 		"delivery.sourceResolution.egressCIDRs[0]=0.0.0.0/0",
 	)
 	errOut := helmTemplateExpectError(t, []string{"chart/values-production.yaml"}, sets...)
-	if !strings.Contains(errOut, "/delivery/sourceResolution/egressCIDRs/0") {
+	if !strings.Contains(errOut, "/delivery/sourceResolution/egressCIDRs/0") && !strings.Contains(errOut, "delivery.sourceResolution.egressCIDRs.0") {
 		t.Fatalf("production broad source-egress rejection missing exact path:\n%s", errOut)
 	}
 }

@@ -9,6 +9,8 @@ import {
   Layers,
   Radio,
   Route as RouteIcon,
+  ServerCog,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useCluster } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -26,6 +28,18 @@ const tabs = [
   { key: "sources", label: "Sources", icon: GitBranch, segment: "/sources" },
   { key: "bundles", label: "Bundles", icon: Boxes, segment: "/bundles" },
   { key: "targets", label: "Targets", icon: Crosshair, segment: "/targets" },
+  {
+    key: "configuration-templates",
+    label: "Templates",
+    icon: SlidersHorizontal,
+    segment: "/configuration-templates",
+  },
+  {
+    key: "system-components",
+    label: "System Components",
+    icon: ServerCog,
+    segment: "/system-components",
+  },
 ] as const;
 
 function ClusterDeliveryLayout() {

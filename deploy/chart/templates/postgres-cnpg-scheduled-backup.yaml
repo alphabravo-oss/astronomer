@@ -1,0 +1,16 @@
+{{- if and (eq (include "astronomer.postgresMode" .) "cloudNativePG") .Values.postgres.cloudNativePG.barmanCloud.enabled .Values.postgres.cloudNativePG.barmanCloud.scheduledBackup.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ include "astronomer.cnpgClusterName" . }}
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "postgres") | nindent 4 }}
+spec:
+  schedule: {{ .Values.postgres.cloudNativePG.barmanCloud.scheduledBackup.schedule | quote }}
+  backupOwnerReference: {{ .Values.postgres.cloudNativePG.barmanCloud.scheduledBackup.backupOwnerReference }}
+  cluster:
+    name: {{ include "astronomer.cnpgClusterName" . }}
+  method: plugin
+  pluginConfiguration:
+    name: {{ .Values.postgres.cloudNativePG.barmanCloud.pluginName | quote }}
+{{- end }}

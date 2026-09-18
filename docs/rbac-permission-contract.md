@@ -53,6 +53,7 @@ server through this resource/action contract.
 | `delivery_rollbacks` | Explicit rollback requests and rollback status. |
 | `delivery_orphans` | Orphan discovery and operator-approved orphan handling. |
 | `delivery_platform` | Platform-owned Flux distribution and system-release lifecycle. |
+| `delivery_configuration_templates` | Project-scoped reusable, secret-safe Helm values and Kustomize patch templates. |
 | `cluster_templates` | Cluster template CRUD and template catalog management. |
 | `network_policies` | Global network policy template CRUD and policy-template management. |
 | `custom_resources` | k8s-proxy access to custom resources (CRDs / non-core apigroups under `apis/<group>/<version>/...`). Lets operators grant or withhold CRD access deliberately instead of having it collapse into the generic `clusters` permission. |

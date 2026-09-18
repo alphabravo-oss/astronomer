@@ -389,6 +389,24 @@ export interface OpenAPIComponents {
           "allowed_cidrs"?: string;
           "last_seen_remote_ip"?: string;
         };
+    ApplicationCatalogSource: {
+          "id": string;
+          "name": string;
+          "display_name": string;
+          "description": string;
+          "channel": string;
+          "source_url": string;
+          "source_revision": string;
+          "index_digest": string;
+          "verification_status": "verified" | "digest-verified" | "unsigned" | "failed" | "revoked";
+          "verification_identity": string;
+          "trust_policy": Record<string, unknown>;
+          "last_sync_attempted_at": string;
+          "last_synced_at": string;
+          "last_sync_error": string;
+          "created_at": string;
+          "updated_at": string;
+        };
     ApplyClusterTemplateRequest: {
           "template_id": string;
         };
@@ -624,11 +642,46 @@ export interface OpenAPIComponents {
     CISScanListEnvelope: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
           "data"?: OpenAPIComponents['schemas']['CISScan'][];
         };
+    CatalogApplicationPresentation: {
+          "id": string;
+          "slug": string;
+          "repo_name": string;
+          "repo_url": string;
+          "chart_name": string;
+          "display_name": string;
+          "description"?: string;
+          "category": string;
+          "icon_url"?: string;
+          "support_tier": "astronomer" | "upstream" | "experimental";
+          "featured": boolean;
+          "privileged": boolean;
+          "default_enabled": boolean;
+          "documentation_url"?: string;
+          "presentation": Record<string, unknown>;
+          "artifact": Record<string, unknown>;
+          "compatibility": Record<string, unknown>;
+          "resources": Record<string, unknown>;
+          "storage": Record<string, unknown>;
+          "lifecycle": Record<string, boolean>;
+          "catalog_digest": string;
+          "verification_status": "verified" | "digest-verified" | "unsigned" | "failed" | "revoked";
+          "verification_identity": string;
+          "revoked": boolean;
+          "updated_at": string;
+        };
     CatalogInstallationAcceptedEnvelope: {
           "data": {
             "installation": OpenAPIComponents['schemas']['InstalledChart'];
             "operation": OpenAPIComponents['schemas']['CatalogOperation'];
           };
+        };
+    CatalogInstallationPreview: {
+          "allowed": boolean;
+          "checks": OpenAPIComponents['schemas']['CatalogPrerequisiteCheck'][];
+          "application": string;
+          "artifact_digest": string;
+          "values_digest": string;
+          "catalog_digest": string;
         };
     CatalogOperation: {
           "id"?: string;
@@ -654,6 +707,12 @@ export interface OpenAPIComponents {
           "detail"?: Record<string, unknown>;
           "createdAt"?: string;
         };
+    CatalogPrerequisiteCheck: {
+          "code": string;
+          "status": "ready" | "advisory" | "approval" | "blocking";
+          "title": string;
+          "description": string;
+        };
     CatalogRepositorySyncReceipt: {
           "repository_id": string;
           "task_id": string;
@@ -661,6 +720,13 @@ export interface OpenAPIComponents {
         };
     CatalogRepositorySyncReceiptEnvelope: {
           "data": OpenAPIComponents['schemas']['CatalogRepositorySyncReceipt'];
+        };
+    CatalogUserDiscovery: {
+          "chart_id": string;
+          "favorite": boolean;
+          "favorite_at"?: string | null;
+          "last_viewed_at"?: string | null;
+          "view_count": number;
         };
     CharlieAbortRequest: {
           "request_id": string;
@@ -881,7 +947,6 @@ export interface OpenAPIComponents {
           "grace_period_seconds": number;
           "flap_window_seconds": number;
           "flap_count": number;
-          "estate_threshold_percent"?: number;
           "fleet_threshold_percent": number;
           "minimum_agent_version"?: string;
           "suppressed": boolean;
@@ -1332,7 +1397,7 @@ export interface OpenAPIComponents {
           "source_name": string;
           "reconciler_kind": string;
           "reconciler_name": string;
-          "inventory": Record<string, unknown>;
+          "inventory": OpenAPIComponents['schemas']['DeliveryResourceInventory'];
           "agent_session_id": string;
           "agent_sequence": number;
           "last_error_code": string;
@@ -2035,11 +2100,50 @@ export interface OpenAPIComponents {
           "observed_generation": number;
           "last_transition_time": string;
         };
+    DeliveryConfigurationSecretRef: {
+          "name": string;
+          "key": string;
+          "value_path": string;
+        };
+    DeliveryConfigurationTemplate: {
+          "id": string;
+          "project_id": string;
+          "name": string;
+          "description": string;
+          "renderer": "helm" | "kustomize";
+          "values": Record<string, unknown>;
+          "patches": string[];
+          "secret_refs": OpenAPIComponents['schemas']['DeliveryConfigurationSecretRef'][];
+          "generation": number;
+          "created_at": string;
+          "updated_at": string;
+        };
+    DeliveryConfigurationTemplateEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryConfigurationTemplate'];
+        };
+    DeliveryConfigurationTemplatePage: {
+          "data": OpenAPIComponents['schemas']['DeliveryConfigurationTemplate'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliveryConfigurationTemplateWrite: {
+          "project_id"?: string;
+          "name": string;
+          "description"?: string;
+          "renderer": "helm" | "kustomize";
+          "values": Record<string, unknown>;
+          "patches"?: string[];
+          "secret_refs"?: OpenAPIComponents['schemas']['DeliveryConfigurationSecretRef'][];
+          "generation"?: number;
+        };
     DeliveryControllerInventory: {
           "cluster_id": string;
           "agent_version": string;
           "flux_version": string;
           "components": Record<string, string>;
+          "system_components": OpenAPIComponents['schemas']['DeliverySystemComponent'][];
           "api_versions": string[];
           "distribution_digest": string;
           "kubernetes_version": string;
@@ -2049,20 +2153,34 @@ export interface OpenAPIComponents {
           "observed_at"?: string | null;
           "updated_at": string;
         };
-    DeliveryEstate: {
-          "summary": OpenAPIComponents['schemas']['DeliveryEstateSummary'];
-          "clusters": OpenAPIComponents['schemas']['DeliveryEstateCluster'][];
-          "attention": OpenAPIComponents['schemas']['DeliveryEstateAttention'][];
-          "distributions": OpenAPIComponents['schemas']['DeliveryEstateDistributions'];
+    DeliveryEffectiveConfiguration: {
+          "values": Record<string, unknown>;
+          "patches": string[];
+          "applied_layers": string[];
+          "digest": string;
         };
-    DeliveryEstateAttention: {
+    DeliveryEffectiveConfigurationEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryEffectiveConfiguration'];
+        };
+    DeliveryEffectiveConfigurationRequest: {
+          "project_id"?: string;
+          "base_values": Record<string, unknown>;
+          "override_ids": string[];
+        };
+    DeliveryFleet: {
+          "summary": OpenAPIComponents['schemas']['DeliveryFleetSummary'];
+          "clusters": OpenAPIComponents['schemas']['DeliveryFleetCluster'][];
+          "attention": OpenAPIComponents['schemas']['DeliveryFleetAttention'][];
+          "distributions": OpenAPIComponents['schemas']['DeliveryFleetDistributions'];
+        };
+    DeliveryFleetAttention: {
           "cluster_id": string;
           "cluster_name": string;
           "severity": "error" | "warning";
           "reason": string;
           "detail": string;
         };
-    DeliveryEstateCluster: {
+    DeliveryFleetCluster: {
           "id": string;
           "name": string;
           "display_name": string;
@@ -2085,20 +2203,20 @@ export interface OpenAPIComponents {
           "inventory_observed_at": string | null;
           "last_observed_at": string | null;
         };
-    DeliveryEstateCount: {
+    DeliveryFleetCount: {
           "key": string;
           "count": number;
         };
-    DeliveryEstateDistributions: {
-          "compatibility": OpenAPIComponents['schemas']['DeliveryEstateCount'][];
-          "privilege": OpenAPIComponents['schemas']['DeliveryEstateCount'][];
-          "assignment_phases": OpenAPIComponents['schemas']['DeliveryEstateCount'][];
+    DeliveryFleetDistributions: {
+          "compatibility": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
+          "privilege": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
+          "assignment_phases": OpenAPIComponents['schemas']['DeliveryFleetCount'][];
         };
-    DeliveryEstateEnvelope: {
-          "data": OpenAPIComponents['schemas']['DeliveryEstate'];
+    DeliveryFleetEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryFleet'];
         };
-    DeliveryEstateSummary: {
-          "adopted_clusters": number;
+    DeliveryFleetSummary: {
+          "managed_clusters": number;
           "flux_ready": number;
           "incompatible": number;
           "disconnected": number;
@@ -2155,6 +2273,34 @@ export interface OpenAPIComponents {
           "key": string;
           "operator": "In" | "NotIn" | "Exists" | "DoesNotExist";
           "values"?: string[];
+        };
+    DeliveryOverrideSet: OpenAPIComponents['schemas']['DeliveryOverrideSetWrite'] & {
+          "id": string;
+          "project_id": string;
+          "generation": number;
+          "created_at": string;
+          "updated_at": string;
+        };
+    DeliveryOverrideSetEnvelope: {
+          "data": OpenAPIComponents['schemas']['DeliveryOverrideSet'];
+        };
+    DeliveryOverrideSetPage: {
+          "data": OpenAPIComponents['schemas']['DeliveryOverrideSet'][];
+          "count": number;
+          "next": string | null;
+          "previous": string | null;
+          "total_known": boolean;
+        };
+    DeliveryOverrideSetWrite: {
+          "project_id"?: string;
+          "template_id"?: string | null;
+          "name": string;
+          "scope": "organization" | "project" | "environment" | "group" | "cluster" | "rollout";
+          "scope_id"?: string | null;
+          "precedence": number;
+          "values": Record<string, unknown>;
+          "patches"?: string[];
+          "enabled"?: boolean;
         };
     DeliveryPlacement: {
           "project_ids"?: string[];
@@ -2222,6 +2368,18 @@ export interface OpenAPIComponents {
           "auth_mode": "none" | "basic" | "bearer" | "ssh" | "workload_identity";
           "trust_policy": OpenAPIComponents['schemas']['DeliveryTrustPolicy'];
           "revision": OpenAPIComponents['schemas']['DeliveryImmutableRevision'];
+        };
+    DeliveryResourceIdentity: {
+          "api_version": string;
+          "kind": string;
+          "namespace"?: string;
+          "name": string;
+        };
+    DeliveryResourceInventory: {
+          "entries": number;
+          "ready": number;
+          "failed": number;
+          "resources"?: OpenAPIComponents['schemas']['DeliveryResourceIdentity'][];
         };
     DeliveryRollout: {
           "id": string;
@@ -2484,6 +2642,38 @@ export interface OpenAPIComponents {
     DeliverySystemCompatibilityEnvelope: {
           "data": OpenAPIComponents['schemas']['DeliverySystemCompatibility'];
         };
+    DeliverySystemComponent: {
+          "id": string;
+          "name": string;
+          "category": string;
+          "owner": "astronomer" | "flux" | "cluster" | "external";
+          "management_method": string;
+          "namespace"?: string;
+          "kind": string;
+          "version"?: string;
+          "health": "healthy" | "degraded" | "unavailable" | "unknown";
+          "compatibility"?: "compatible" | "incompatible" | "unknown";
+          "update_state"?: "current" | "update_available" | "unknown";
+          "created_at"?: string;
+          "desired_replicas"?: number;
+          "ready_replicas"?: number;
+          "high_availability": boolean;
+          "images"?: string[];
+          "cpu_request"?: string;
+          "memory_request"?: string;
+          "cpu_limit"?: string;
+          "memory_limit"?: string;
+          "storage_class"?: string;
+          "storage_driver"?: string;
+          "default_storage"?: boolean;
+          "storage_provisioned_bytes"?: number;
+          "storage_used_bytes"?: number;
+          "storage_replica_count"?: number;
+          "volumes"?: OpenAPIComponents['schemas']['DeliverySystemVolume'][];
+          "resources"?: OpenAPIComponents['schemas']['DeliverySystemResource'][];
+          "supported_actions"?: string[];
+          "detail"?: string;
+        };
     DeliverySystemRelease: {
           "id"?: string;
           "release_sequence"?: number;
@@ -2509,6 +2699,16 @@ export interface OpenAPIComponents {
           "created_by"?: string | null;
           "created_at"?: string;
         };
+    DeliverySystemResource: {
+          "name": string;
+          "namespace"?: string;
+          "group"?: string;
+          "version": string;
+          "plural": string;
+          "kind": string;
+          "health"?: string;
+          "detail"?: string;
+        };
     DeliverySystemRollout: {
           "id"?: string;
           "release_id"?: string;
@@ -2528,6 +2728,21 @@ export interface OpenAPIComponents {
           "created_at"?: string;
           "updated_at"?: string;
         };
+    DeliverySystemVolume: {
+          "name": string;
+          "namespace": string;
+          "phase": string;
+          "storage_class"?: string;
+          "storage_driver"?: string;
+          "requested_bytes"?: number;
+          "capacity_bytes"?: number;
+          "volume_name"?: string;
+          "volume_mode"?: string;
+          "access_modes"?: string[];
+          "expansion_allowed": boolean;
+          "snapshot_count"?: number;
+          "created_at"?: string;
+        };
     DeliveryTarget: {
           "id": string;
           "project_id": string;
@@ -2538,10 +2753,13 @@ export interface OpenAPIComponents {
           "rollout_policy": OpenAPIComponents['schemas']['DeliveryRolloutPolicy'];
           "reconciliation_policy": OpenAPIComponents['schemas']['DeliveryReconciliationPolicy'];
           "maintenance_window_policy": Record<string, unknown>;
+          "configuration_template_id"?: string | null;
+          "override_set_ids": string[];
           "suspended": boolean;
           "generation": number;
           "resource_version": number;
           "deletion_state": "active" | "deleting" | "deleted";
+          "last_actor_id"?: string | null;
           "created_at": string;
           "updated_at": string;
         };
@@ -2572,6 +2790,8 @@ export interface OpenAPIComponents {
           "rollout_policy"?: OpenAPIComponents['schemas']['DeliveryRolloutPolicyInput'];
           "reconciliation_policy"?: OpenAPIComponents['schemas']['DeliveryReconciliationPolicyInput'];
           "maintenance_window_policy"?: Record<string, unknown>;
+          "configuration_template_id"?: string | null;
+          "override_set_ids"?: string[];
           "suspended"?: boolean;
         };
     DeliveryTargetPreview: {
@@ -2602,6 +2822,8 @@ export interface OpenAPIComponents {
           "rollout_policy": OpenAPIComponents['schemas']['DeliveryRolloutPolicyInput'];
           "reconciliation_policy": OpenAPIComponents['schemas']['DeliveryReconciliationPolicyInput'];
           "maintenance_window_policy"?: Record<string, unknown>;
+          "configuration_template_id"?: string | null;
+          "override_set_ids"?: string[];
           "suspended"?: boolean;
         };
     DeliveryTrustPolicy: {
@@ -2615,6 +2837,8 @@ export interface OpenAPIComponents {
           "bundle_version_id": string;
           "spec_digest": string;
           "source": OpenAPIComponents['schemas']['DeliveryResolvedSource'];
+          "renderer"?: OpenAPIComponents['schemas']['DeliveryRendererSpec'];
+          "configuration_digest"?: string;
         };
     DexConnector: {
           "id": string;
@@ -3198,6 +3422,7 @@ export interface OpenAPIComponents {
     InstalledChart: {
           "id"?: string;
           "cluster_id"?: string;
+          "project_id"?: string | null;
           "chart_version_id"?: string | null;
           "release_name"?: string;
           "namespace"?: string;
@@ -8428,6 +8653,156 @@ export interface OpenAPIOperations {
         "data"?: OpenAPIComponents['schemas']['ClusterTool'];
       };
   };
+  "getDeliveryConfigurationTemplates": {
+    method: "GET";
+    path: "/api/v1/delivery/configuration-templates/";
+    arguments: {
+        "query": {
+          "project_id": string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryConfigurationTemplatePage'];
+  };
+  "postDeliveryConfigurationTemplates": {
+    method: "POST";
+    path: "/api/v1/delivery/configuration-templates/";
+    arguments: {
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryConfigurationTemplateWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryConfigurationTemplateEnvelope'];
+  };
+  "getDeliveryConfigurationTemplatesById": {
+    method: "GET";
+    path: "/api/v1/delivery/configuration-templates/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryConfigurationTemplateEnvelope'];
+  };
+  "putDeliveryConfigurationTemplatesById": {
+    method: "PUT";
+    path: "/api/v1/delivery/configuration-templates/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryConfigurationTemplateWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryConfigurationTemplateEnvelope'];
+  };
+  "deleteDeliveryConfigurationTemplatesById": {
+    method: "DELETE";
+    path: "/api/v1/delivery/configuration-templates/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key"?: string;
+        };
+      };
+    response: void;
+  };
+  "getDeliveryOverrideSets": {
+    method: "GET";
+    path: "/api/v1/delivery/override-sets/";
+    arguments: {
+        "query": {
+          "project_id": string;
+          "limit"?: number;
+          "offset"?: number;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryOverrideSetPage'];
+  };
+  "postDeliveryOverrideSets": {
+    method: "POST";
+    path: "/api/v1/delivery/override-sets/";
+    arguments: {
+        "headerParams"?: {
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryOverrideSetWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryOverrideSetEnvelope'];
+  };
+  "postDeliveryOverrideSetsEffective": {
+    method: "POST";
+    path: "/api/v1/delivery/override-sets/effective/";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['DeliveryEffectiveConfigurationRequest'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryEffectiveConfigurationEnvelope'];
+  };
+  "getDeliveryOverrideSetsById": {
+    method: "GET";
+    path: "/api/v1/delivery/override-sets/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DeliveryOverrideSetEnvelope'];
+  };
+  "putDeliveryOverrideSetsById": {
+    method: "PUT";
+    path: "/api/v1/delivery/override-sets/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key"?: string;
+        };
+        "body": OpenAPIComponents['schemas']['DeliveryOverrideSetWrite'];
+      };
+    response: OpenAPIComponents['schemas']['DeliveryOverrideSetEnvelope'];
+  };
+  "deleteDeliveryOverrideSetsById": {
+    method: "DELETE";
+    path: "/api/v1/delivery/override-sets/{id}/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query": {
+          "project_id": string;
+        };
+        "headerParams": {
+          "If-Match": string;
+          "Idempotency-Key"?: string;
+        };
+      };
+    response: void;
+  };
   "getDeliverySources": {
     method: "GET";
     path: "/api/v1/delivery/sources/";
@@ -8760,6 +9135,7 @@ export interface OpenAPIOperations {
     arguments: {
         "query": {
           "project_id": string;
+          "target_id"?: string;
           "state"?: string;
           "limit"?: number;
           "offset"?: number;
@@ -8908,6 +9284,7 @@ export interface OpenAPIOperations {
           "limit"?: number;
           "offset"?: number;
           "project_id": string;
+          "target_id"?: string;
           "cluster_id"?: string;
           "phase"?: string;
         };
@@ -9006,17 +9383,11 @@ export interface OpenAPIOperations {
     arguments: Record<string, never>;
     response: OpenAPIComponents['schemas']['DeliverySystemCompatibilityEnvelope'];
   };
-  "getDeliveryFleetLegacy": {
+  "getDeliveryFleet": {
     method: "GET";
     path: "/api/v1/delivery/fleet/";
     arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['DeliveryEstateEnvelope'];
-  };
-  "getDeliveryEstate": {
-    method: "GET";
-    path: "/api/v1/delivery/estate/";
-    arguments: Record<string, never>;
-    response: OpenAPIComponents['schemas']['DeliveryEstateEnvelope'];
+    response: OpenAPIComponents['schemas']['DeliveryFleetEnvelope'];
   };
   "postScimUsers": {
     method: "POST";
@@ -11492,6 +11863,37 @@ export interface OpenAPIOperations {
         "data"?: OpenAPIComponents['schemas']['StorageTestResult'];
       };
   };
+  "getCatalogApplications": {
+    method: "GET";
+    path: "/api/v1/catalog/applications/";
+    arguments: Record<string, never>;
+    response: {
+        "data": OpenAPIComponents['schemas']['CatalogApplicationPresentation'][];
+        "count": number;
+      };
+  };
+  "getCatalogApplicationSources": {
+    method: "GET";
+    path: "/api/v1/catalog/application-sources/";
+    arguments: Record<string, never>;
+    response: {
+        "data": OpenAPIComponents['schemas']['ApplicationCatalogSource'][];
+        "count": number;
+      };
+  };
+  "postCatalogApplicationsPreview": {
+    method: "POST";
+    path: "/api/v1/catalog/applications/preview/";
+    arguments: {
+        "body": {
+          "cluster_id": string;
+          "chart_version_id": string;
+          "namespace": string;
+          "values_override"?: string;
+        };
+      };
+    response: OpenAPIComponents['schemas']['CatalogInstallationPreview'];
+  };
   "getCatalogCharts": {
     method: "GET";
     path: "/api/v1/catalog/charts/";
@@ -11501,6 +11903,7 @@ export interface OpenAPIOperations {
           "offset"?: number;
           "tag"?: string;
           "project_id"?: string;
+          "cluster_id"?: string;
         };
       };
     response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
@@ -11516,10 +11919,30 @@ export interface OpenAPIOperations {
         };
         "query"?: {
           "project_id"?: string;
+          "cluster_id"?: string;
         };
       };
     response: OpenAPIComponents['schemas']['DataEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['HelmChart'];
+      };
+  };
+  "putCatalogChartsByIdFavorite": {
+    method: "PUT";
+    path: "/api/v1/catalog/charts/{id}/favorite/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+        "query"?: {
+          "project_id"?: string;
+          "cluster_id"?: string;
+        };
+        "body": {
+          "favorite": boolean;
+        };
+      };
+    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+        "data"?: OpenAPIComponents['schemas']['CatalogUserDiscovery'];
       };
   };
   "getCatalogChartsByIdReadme": {
@@ -11531,6 +11954,7 @@ export interface OpenAPIOperations {
         };
         "query"?: {
           "project_id"?: string;
+          "cluster_id"?: string;
           "version"?: string;
         };
       };
@@ -11549,6 +11973,7 @@ export interface OpenAPIOperations {
         };
         "query"?: {
           "project_id"?: string;
+          "cluster_id"?: string;
           "version"?: string;
         };
       };
@@ -11568,6 +11993,7 @@ export interface OpenAPIOperations {
         };
         "query"?: {
           "project_id"?: string;
+          "cluster_id"?: string;
           "limit"?: number;
           "offset"?: number;
         };
@@ -11642,7 +12068,7 @@ export interface OpenAPIOperations {
         };
         "body": {
           "cluster_id": string;
-          "project_id": string;
+          "project_id"?: string;
           "chart_version_id": string;
           "release_name": string;
           "namespace": string;
@@ -11666,6 +12092,28 @@ export interface OpenAPIOperations {
         };
       };
     response: OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
+  };
+  "getCatalogInstalledByIdUpgradeVersions": {
+    method: "GET";
+    path: "/api/v1/catalog/installed/{id}/upgrade-versions/";
+    arguments: {
+        "path": {
+          "id": string;
+        };
+      };
+    response: {
+        "data": OpenAPIComponents['schemas']['HelmChartVersion'][];
+        "count": number;
+      };
+  };
+  "getCatalogDiscovery": {
+    method: "GET";
+    path: "/api/v1/catalog/discovery/";
+    arguments: Record<string, never>;
+    response: {
+        "data": OpenAPIComponents['schemas']['CatalogUserDiscovery'][];
+        "count": number;
+      };
   };
   "postCatalogInstalledByIdRollback": {
     method: "POST";
@@ -11764,6 +12212,7 @@ export interface OpenAPIOperations {
           "offset"?: number;
           "include_project_owned"?: boolean;
           "project_id"?: string;
+          "cluster_id"?: string;
         };
       };
     response: OpenAPIComponents['schemas']['PaginatedEnvelope'] & {
@@ -15481,6 +15930,7 @@ export type AnomalyBaselineEnvelope = OpenAPIComponents['schemas']['AnomalyBasel
 export type AnomalyBaselinePage = OpenAPIComponents['schemas']['AnomalyBaselinePage'];
 export type ApiTokenCreated = OpenAPIComponents['schemas']['ApiTokenCreated'];
 export type ApiTokenListItem = OpenAPIComponents['schemas']['ApiTokenListItem'];
+export type ApplicationCatalogSource = OpenAPIComponents['schemas']['ApplicationCatalogSource'];
 export type ApplyClusterTemplateRequest = OpenAPIComponents['schemas']['ApplyClusterTemplateRequest'];
 export type ApplyNetworkPolicyRequest = OpenAPIComponents['schemas']['ApplyNetworkPolicyRequest'];
 export type AuditLogEntry = OpenAPIComponents['schemas']['AuditLogEntry'];
@@ -15503,12 +15953,16 @@ export type CISScan = OpenAPIComponents['schemas']['CISScan'];
 export type CISScanCreateRequest = OpenAPIComponents['schemas']['CISScanCreateRequest'];
 export type CISScanEnvelope = OpenAPIComponents['schemas']['CISScanEnvelope'];
 export type CISScanListEnvelope = OpenAPIComponents['schemas']['CISScanListEnvelope'];
+export type CatalogApplicationPresentation = OpenAPIComponents['schemas']['CatalogApplicationPresentation'];
 export type CatalogInstallationAcceptedEnvelope = OpenAPIComponents['schemas']['CatalogInstallationAcceptedEnvelope'];
+export type CatalogInstallationPreview = OpenAPIComponents['schemas']['CatalogInstallationPreview'];
 export type CatalogOperation = OpenAPIComponents['schemas']['CatalogOperation'];
 export type CatalogOperationEnvelope = OpenAPIComponents['schemas']['CatalogOperationEnvelope'];
 export type CatalogOperationEvent = OpenAPIComponents['schemas']['CatalogOperationEvent'];
+export type CatalogPrerequisiteCheck = OpenAPIComponents['schemas']['CatalogPrerequisiteCheck'];
 export type CatalogRepositorySyncReceipt = OpenAPIComponents['schemas']['CatalogRepositorySyncReceipt'];
 export type CatalogRepositorySyncReceiptEnvelope = OpenAPIComponents['schemas']['CatalogRepositorySyncReceiptEnvelope'];
+export type CatalogUserDiscovery = OpenAPIComponents['schemas']['CatalogUserDiscovery'];
 export type CharlieAbortRequest = OpenAPIComponents['schemas']['CharlieAbortRequest'];
 export type CharlieAccessRequest = OpenAPIComponents['schemas']['CharlieAccessRequest'];
 export type CharlieAdminAccess = OpenAPIComponents['schemas']['CharlieAdminAccess'];
@@ -15669,20 +16123,32 @@ export type DeliveryClusterInventoryEnvelope = OpenAPIComponents['schemas']['Del
 export type DeliveryCompatibilityContract = OpenAPIComponents['schemas']['DeliveryCompatibilityContract'];
 export type DeliveryCompatibilityCount = OpenAPIComponents['schemas']['DeliveryCompatibilityCount'];
 export type DeliveryCondition = OpenAPIComponents['schemas']['DeliveryCondition'];
+export type DeliveryConfigurationSecretRef = OpenAPIComponents['schemas']['DeliveryConfigurationSecretRef'];
+export type DeliveryConfigurationTemplate = OpenAPIComponents['schemas']['DeliveryConfigurationTemplate'];
+export type DeliveryConfigurationTemplateEnvelope = OpenAPIComponents['schemas']['DeliveryConfigurationTemplateEnvelope'];
+export type DeliveryConfigurationTemplatePage = OpenAPIComponents['schemas']['DeliveryConfigurationTemplatePage'];
+export type DeliveryConfigurationTemplateWrite = OpenAPIComponents['schemas']['DeliveryConfigurationTemplateWrite'];
 export type DeliveryControllerInventory = OpenAPIComponents['schemas']['DeliveryControllerInventory'];
-export type DeliveryEstate = OpenAPIComponents['schemas']['DeliveryEstate'];
-export type DeliveryEstateAttention = OpenAPIComponents['schemas']['DeliveryEstateAttention'];
-export type DeliveryEstateCluster = OpenAPIComponents['schemas']['DeliveryEstateCluster'];
-export type DeliveryEstateCount = OpenAPIComponents['schemas']['DeliveryEstateCount'];
-export type DeliveryEstateDistributions = OpenAPIComponents['schemas']['DeliveryEstateDistributions'];
-export type DeliveryEstateEnvelope = OpenAPIComponents['schemas']['DeliveryEstateEnvelope'];
-export type DeliveryEstateSummary = OpenAPIComponents['schemas']['DeliveryEstateSummary'];
+export type DeliveryEffectiveConfiguration = OpenAPIComponents['schemas']['DeliveryEffectiveConfiguration'];
+export type DeliveryEffectiveConfigurationEnvelope = OpenAPIComponents['schemas']['DeliveryEffectiveConfigurationEnvelope'];
+export type DeliveryEffectiveConfigurationRequest = OpenAPIComponents['schemas']['DeliveryEffectiveConfigurationRequest'];
+export type DeliveryFleet = OpenAPIComponents['schemas']['DeliveryFleet'];
+export type DeliveryFleetAttention = OpenAPIComponents['schemas']['DeliveryFleetAttention'];
+export type DeliveryFleetCluster = OpenAPIComponents['schemas']['DeliveryFleetCluster'];
+export type DeliveryFleetCount = OpenAPIComponents['schemas']['DeliveryFleetCount'];
+export type DeliveryFleetDistributions = OpenAPIComponents['schemas']['DeliveryFleetDistributions'];
+export type DeliveryFleetEnvelope = OpenAPIComponents['schemas']['DeliveryFleetEnvelope'];
+export type DeliveryFleetSummary = OpenAPIComponents['schemas']['DeliveryFleetSummary'];
 export type DeliveryFrozenRollout = OpenAPIComponents['schemas']['DeliveryFrozenRollout'];
 export type DeliveryFrozenRolloutEnvelope = OpenAPIComponents['schemas']['DeliveryFrozenRolloutEnvelope'];
 export type DeliveryHelmRenderer = OpenAPIComponents['schemas']['DeliveryHelmRenderer'];
 export type DeliveryImmutableRevision = OpenAPIComponents['schemas']['DeliveryImmutableRevision'];
 export type DeliveryKustomizeRenderer = OpenAPIComponents['schemas']['DeliveryKustomizeRenderer'];
 export type DeliveryLabelExpression = OpenAPIComponents['schemas']['DeliveryLabelExpression'];
+export type DeliveryOverrideSet = OpenAPIComponents['schemas']['DeliveryOverrideSet'];
+export type DeliveryOverrideSetEnvelope = OpenAPIComponents['schemas']['DeliveryOverrideSetEnvelope'];
+export type DeliveryOverrideSetPage = OpenAPIComponents['schemas']['DeliveryOverrideSetPage'];
+export type DeliveryOverrideSetWrite = OpenAPIComponents['schemas']['DeliveryOverrideSetWrite'];
 export type DeliveryPlacement = OpenAPIComponents['schemas']['DeliveryPlacement'];
 export type DeliveryPlacementInput = OpenAPIComponents['schemas']['DeliveryPlacementInput'];
 export type DeliveryPlannedCluster = OpenAPIComponents['schemas']['DeliveryPlannedCluster'];
@@ -15692,6 +16158,8 @@ export type DeliveryReconciliationPolicy = OpenAPIComponents['schemas']['Deliver
 export type DeliveryReconciliationPolicyInput = OpenAPIComponents['schemas']['DeliveryReconciliationPolicyInput'];
 export type DeliveryRendererSpec = OpenAPIComponents['schemas']['DeliveryRendererSpec'];
 export type DeliveryResolvedSource = OpenAPIComponents['schemas']['DeliveryResolvedSource'];
+export type DeliveryResourceIdentity = OpenAPIComponents['schemas']['DeliveryResourceIdentity'];
+export type DeliveryResourceInventory = OpenAPIComponents['schemas']['DeliveryResourceInventory'];
 export type DeliveryRollout = OpenAPIComponents['schemas']['DeliveryRollout'];
 export type DeliveryRolloutAction = OpenAPIComponents['schemas']['DeliveryRolloutAction'];
 export type DeliveryRolloutApproval = OpenAPIComponents['schemas']['DeliveryRolloutApproval'];
@@ -15724,8 +16192,11 @@ export type DeliverySourceVerify = OpenAPIComponents['schemas']['DeliverySourceV
 export type DeliverySourceWrite = OpenAPIComponents['schemas']['DeliverySourceWrite'];
 export type DeliverySystemCompatibility = OpenAPIComponents['schemas']['DeliverySystemCompatibility'];
 export type DeliverySystemCompatibilityEnvelope = OpenAPIComponents['schemas']['DeliverySystemCompatibilityEnvelope'];
+export type DeliverySystemComponent = OpenAPIComponents['schemas']['DeliverySystemComponent'];
 export type DeliverySystemRelease = OpenAPIComponents['schemas']['DeliverySystemRelease'];
+export type DeliverySystemResource = OpenAPIComponents['schemas']['DeliverySystemResource'];
 export type DeliverySystemRollout = OpenAPIComponents['schemas']['DeliverySystemRollout'];
+export type DeliverySystemVolume = OpenAPIComponents['schemas']['DeliverySystemVolume'];
 export type DeliveryTarget = OpenAPIComponents['schemas']['DeliveryTarget'];
 export type DeliveryTargetDeletion = OpenAPIComponents['schemas']['DeliveryTargetDeletion'];
 export type DeliveryTargetDeletionEnvelope = OpenAPIComponents['schemas']['DeliveryTargetDeletionEnvelope'];

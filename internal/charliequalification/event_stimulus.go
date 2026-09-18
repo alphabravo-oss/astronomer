@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/alphabravocompany/astronomer-go/internal/redisconn"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 )
@@ -18,7 +19,7 @@ type EventStimulus interface {
 type AsynqEventStimulus struct{ client *asynq.Client }
 
 func NewAsynqEventStimulus(redisURL string) (*AsynqEventStimulus, error) {
-	options, err := asynq.ParseRedisURI(redisURL)
+	options, err := redisconn.Parse(redisURL)
 	if err != nil {
 		return nil, fmt.Errorf("qualification queue transport is invalid")
 	}

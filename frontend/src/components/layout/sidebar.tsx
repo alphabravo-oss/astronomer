@@ -52,6 +52,7 @@ import {
   Waypoints,
   Rocket,
   Sparkles,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn, formatK8sVersion } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/env";
@@ -191,11 +192,17 @@ const globalNavGroups: NavGroup[] = [
     label: "Continuous Delivery",
     items: [
       {
-        label: "Estate",
+        label: "Delivery Fleet",
         href: "/dashboard/delivery",
         icon: Rocket,
         permission: { resource: "delivery_targets", verb: "list" },
         exact: true,
+      },
+      {
+        label: "Configuration Overrides",
+        href: "/dashboard/delivery/override-sets",
+        icon: SlidersHorizontal,
+        permission: { resource: "delivery_configuration_templates", verb: "read" },
       },
     ],
   },
@@ -210,7 +217,7 @@ const globalNavGroups: NavGroup[] = [
         featureFlag: "feature.catalog",
       },
       // Helm marketplace lives on the cluster (Apps), matching Rancher Apps.
-      // Estate-wide repos stay reachable from Apps → Repositories.
+      // Fleet-wide repos stay reachable from Apps → Repositories.
       {
         label: "Extensions",
         href: "/dashboard/extensions",
@@ -355,7 +362,6 @@ function getClusterNavGroups(
         // driven by recent Warning count) is the better end state.
         { label: "Events", href: `${base}/events`, icon: Activity },
         { label: "Tools", href: `${base}/tools`, icon: Wrench },
-        { label: "Apps", href: `${base}/apps`, icon: Package },
         {
           label: "Delivery",
           href: `${base}/delivery`,
@@ -370,6 +376,35 @@ function getClusterNavGroups(
           icon: Waypoints,
         },
         ...agentRequiredItems,
+      ],
+    },
+    {
+      label: "Apps",
+      items: [
+        {
+          label: "Charts",
+          href: `${base}/apps/charts`,
+          icon: Package,
+          permission: { resource: "catalog", verb: "read" as const },
+        },
+        {
+          label: "Installed Apps",
+          href: `${base}/apps/installed`,
+          icon: Box,
+          permission: { resource: "catalog", verb: "read" as const },
+        },
+        {
+          label: "Operations",
+          href: `${base}/apps/operations`,
+          icon: Activity,
+          permission: { resource: "catalog", verb: "read" as const },
+        },
+        {
+          label: "Repositories",
+          href: `${base}/apps/repositories`,
+          icon: Globe,
+          permission: { resource: "catalog", verb: "read" as const },
+        },
       ],
     },
     {
@@ -1030,11 +1065,9 @@ export function Sidebar() {
     ],
   );
 
-  // Multiple groups may stay open at once (the cluster nav has 7 groups; a
-  // single-open accordion collapses your context every time you expand another).
-  // Seed from each group's `defaultOpen` flag.
+  // Accordion navigation: keep at most one group expanded.
   const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () => new Set(navGroups.filter((g) => g.defaultOpen).map((g) => g.label)),
+    () => new Set(navGroups.find((g) => g.defaultOpen)?.label ? [navGroups.find((g) => g.defaultOpen)!.label] : []),
   );
 
   // Fetch resource counts when in cluster context — only for groups that are
@@ -1044,29 +1077,14 @@ export function Sidebar() {
     openGroups,
   );
 
-  // Keep `defaultOpen` groups open and auto-expand the group containing the
-  // active route (e.g. after a context switch) without collapsing the rest.
+  // Navigation always opens the active route's group and closes the previous one.
   useEffect(() => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const g of navGroups) {
-        if (g.defaultOpen && !next.has(g.label)) {
-          next.add(g.label);
-          changed = true;
-        }
-      }
-      const activeGroup = navGroups.find((g) =>
-        g.items.some((item) =>
-          item.exact ? pathname === item.href : pathname.startsWith(item.href),
-        ),
-      );
-      if (activeGroup && !next.has(activeGroup.label)) {
-        next.add(activeGroup.label);
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
+    const activeGroup = navGroups.find((g) =>
+      g.items.some((item) =>
+        item.exact ? pathname === item.href : pathname.startsWith(item.href),
+      ),
+    );
+    if (activeGroup) setOpenGroups(new Set([activeGroup.label]));
   }, [navGroups, pathname]);
 
   return (
@@ -1158,10 +1176,9 @@ export function Sidebar() {
             isOpen={openGroups.has(group.label)}
             onToggle={() =>
               setOpenGroups((prev) => {
-                const next = new Set(prev);
-                if (next.has(group.label)) next.delete(group.label);
-                else next.add(group.label);
-                return next;
+                return prev.has(group.label)
+                  ? new Set<string>()
+                  : new Set([group.label]);
               })
             }
           />

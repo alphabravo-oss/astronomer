@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
@@ -22,9 +24,10 @@ import (
 // Operator-supplied values beat the defaults. The password var matches
 // Rancher's CATTLE_BOOTSTRAP_PASSWORD convention.
 const (
-	bootstrapPasswordEnv = "ASTRONOMER_BOOTSTRAP_PASSWORD"
-	bootstrapUsernameEnv = "ASTRONOMER_BOOTSTRAP_USERNAME"
-	bootstrapEmailEnv    = "ASTRONOMER_BOOTSTRAP_EMAIL"
+	bootstrapPasswordEnv            = "ASTRONOMER_BOOTSTRAP_PASSWORD"
+	bootstrapForcePasswordChangeEnv = "ASTRONOMER_BOOTSTRAP_FORCE_PASSWORD_CHANGE"
+	bootstrapUsernameEnv            = "ASTRONOMER_BOOTSTRAP_USERNAME"
+	bootstrapEmailEnv               = "ASTRONOMER_BOOTSTRAP_EMAIL"
 )
 
 // EnsurePlatformConfigQuerier is the slice of sqlc Queries that the
@@ -95,6 +98,7 @@ func EnsurePlatformConfig(ctx context.Context, q EnsurePlatformConfigQuerier, se
 type EnsureAdminQuerier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	CreateBootstrapAdmin(ctx context.Context, arg sqlc.CreateBootstrapAdminParams) (sqlc.User, error)
+	SetMustChangePassword(ctx context.Context, id uuid.UUID) error
 }
 
 // EnsureBootstrapAdmin creates an admin user the first time the server boots
@@ -144,6 +148,15 @@ func EnsureBootstrapAdmin(ctx context.Context, q EnsureAdminQuerier, logger *slo
 	})
 	if err != nil {
 		return fmt.Errorf("create bootstrap admin: %w", err)
+	}
+	forcePasswordChange, err := strconv.ParseBool(strutil.FirstNonBlankTrimmed(os.Getenv(bootstrapForcePasswordChangeEnv), "false"))
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", bootstrapForcePasswordChangeEnv, err)
+	}
+	if forcePasswordChange {
+		if err := q.SetMustChangePassword(ctx, user.ID); err != nil {
+			return fmt.Errorf("set bootstrap password-change requirement: %w", err)
+		}
 	}
 
 	// Surface the credentials prominently. The log line is intentionally

@@ -164,6 +164,21 @@ spec:
                     # the restore contract when operators use custom key names.
                     find /var/run/astronomer-keys -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
                     cp -aL /var/run/astronomer-keys-source/. /var/run/astronomer-keys/
+                    {{- if .Values.catalog.ca.existingSecret }}
+                    # Catalog trust roots are public material, but they are
+                    # operationally required to verify a private catalog after
+                    # disaster recovery. Keep them in the same wrapped bundle
+                    # so DB trust policy and its referenced CA restore together.
+                    mkdir -p /var/run/astronomer-keys/catalog-ca
+                    cp -aL /var/run/catalog-ca/. /var/run/astronomer-keys/catalog-ca/
+                    {{- end }}
+                    {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+                    # Offline Fulcio/Rekor roots and public verification keys
+                    # are required to re-establish the catalog publisher trust
+                    # boundary after recovery.
+                    mkdir -p /var/run/astronomer-keys/catalog-signature-trust
+                    cp -aL /var/run/catalog-signature-trust/. /var/run/astronomer-keys/catalog-signature-trust/
+                    {{- end }}
                     {{- if .Values.managementBackup.encryptionKeyBackup.secretName }}
                     # An independent BYO backup bundle is a separate contract:
                     # it already exposes the canonical restore filenames.
@@ -216,12 +231,12 @@ spec:
                 - name: KEYBACKUP_KEEP
                   value: {{ .Values.managementBackup.encryptionKeyBackup.retention | default 30 | quote }}
                 {{- end }}
-                {{- if .Values.postgres.external.dsnSecretRef.name }}
+                {{- if include "astronomer.databaseSecretName" . }}
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:
-                      name: {{ .Values.postgres.external.dsnSecretRef.name | quote }}
-                      key: {{ .Values.postgres.external.dsnSecretRef.key | quote }}
+                      name: {{ include "astronomer.databaseSecretName" . | quote }}
+                      key: {{ include "astronomer.databaseSecretKey" . | quote }}
                 {{- else }}
                 - name: DATABASE_URL
                   valueFrom:
@@ -244,6 +259,16 @@ spec:
                 - name: wrapping-passphrase
                   mountPath: /var/run/astronomer-wrap
                   readOnly: true
+                {{- if .Values.catalog.ca.existingSecret }}
+                - name: catalog-ca
+                  mountPath: /var/run/catalog-ca
+                  readOnly: true
+                {{- end }}
+                {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+                - name: catalog-signature-trust
+                  mountPath: /var/run/catalog-signature-trust
+                  readOnly: true
+                {{- end }}
                 {{- end }}
               resources:
                 {{- toYaml .Values.managementBackup.resources | nindent 16 }}
@@ -274,5 +299,15 @@ spec:
                 items:
                   - key: {{ .Values.managementBackup.encryptionKeyBackup.wrappingSecretRef.key | default "passphrase" | quote }}
                     path: passphrase
+            {{- if .Values.catalog.ca.existingSecret }}
+            - name: catalog-ca
+              secret:
+                secretName: {{ .Values.catalog.ca.existingSecret | quote }}
+            {{- end }}
+            {{- if .Values.catalog.signature.trustKeys.existingSecret }}
+            - name: catalog-signature-trust
+              secret:
+                secretName: {{ .Values.catalog.signature.trustKeys.existingSecret | quote }}
+            {{- end }}
             {{- end }}
 {{- end }}

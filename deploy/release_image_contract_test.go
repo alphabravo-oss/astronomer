@@ -45,8 +45,8 @@ var expectedFirstPartyReleaseImages = map[string]struct {
 }
 
 const (
-	releaseVersion      = "1.1.0"
-	chartReleaseVersion = "1.1.0"
+	releaseVersion      = "1.2.0"
+	chartReleaseVersion = "1.2.0"
 )
 
 func TestReleaseIdentityIsConsistent(t *testing.T) {
@@ -182,7 +182,10 @@ func TestReleaseQualifiesExactArtifactsBeforePromotion(t *testing.T) {
 		"needs: [preflight, qualify]",
 		"publish immutable GitHub Release",
 		"Refuse to overwrite an existing exact tag",
-		"existing tag ${image} is unsigned or has the wrong identity; rebuilding",
+		"refusing to overwrite existing exact tag ${image}: signature identity is invalid",
+		"cosign verify-attestation",
+		"provenance does not bind source ${source_uri}",
+		"published chart contents differ from this commit",
 		"--certificate-oidc-issuer https://token.actions.githubusercontent.com",
 		"RELEASE_IMAGES",
 		"Load immutable image references",

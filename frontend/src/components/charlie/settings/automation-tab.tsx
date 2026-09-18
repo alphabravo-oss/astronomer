@@ -49,7 +49,7 @@ const newAutomationRule = (): CharlieTriggerRule => ({
   gracePeriodSeconds: 300,
   flapWindowSeconds: 900,
   flapCount: 3,
-  estateThresholdPercent: 25,
+  fleetThresholdPercent: 25,
   minimumAgentVersion: "",
   suppressed: false,
   maximumAttempts: 3,
@@ -490,10 +490,10 @@ export function AutomationTab() {
               />
               <NumberField
                 label="Cluster coverage threshold %"
-                value={r.estateThresholdPercent}
+                value={r.fleetThresholdPercent}
                 min={0}
                 max={100}
-                set={(v) => update(i, { estateThresholdPercent: v })}
+                set={(v) => update(i, { fleetThresholdPercent: v })}
               />
               <NumberField
                 label="Maximum attempts"

@@ -1,12 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 /**
  * /dashboard/settings/cluster-groups — operator-defined folder hierarchy
  * over clusters (migration 066).
@@ -26,27 +18,23 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { useAppForm, useStore } from "@/lib/form";
-import {
-  Plus,
-  Loader2,
-  Trash2,
-  Pencil,
-  AlertCircle,
-  Folder,
-} from "lucide-react";
+import { Plus, Trash2, Pencil, Folder, Server } from "lucide-react";
 import * as api from "@/lib/api";
-import { queryKeys } from "@/lib/hooks";
+import { queryKeys, useClusters } from "@/lib/hooks";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { PageHeader, PageShell } from "@/components/ui/page";
+import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import {
   CLUSTER_GROUP_COLORS,
   CLUSTER_GROUP_ICONS,
   type ClusterGroupTreeNode,
   type ClusterGroupWriteRequest,
+  listClustersInGroup,
+  moveClustersToGroup,
 } from "@/lib/api/cluster-groups";
 
 const MAX_DEPTH = 2;
@@ -109,6 +97,7 @@ function ClusterGroupsPage() {
 
   const [editing, setEditing] = useState<ClusterGroupTreeNode | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [selected, setSelected] = useState<ClusterGroupTreeNode | null>(null);
 
   const tree = useMemo(() => data ?? [], [data]);
 
@@ -135,6 +124,87 @@ function ClusterGroupsPage() {
     walk("__root__");
     return out;
   }, [tree]);
+  const columns: Column<ClusterGroupTreeNode>[] = [
+    {
+      key: "name",
+      header: "Name",
+      accessor: (group) => (
+        <div
+          className="flex items-center gap-2"
+          style={{ paddingLeft: `${group.depth * 16}px` }}
+        >
+          <span
+            className="inline-flex h-5 w-5 items-center justify-center rounded"
+            style={{ background: group.color + "33", color: group.color }}
+            aria-label={group.icon}
+          >
+            <Folder className="h-3 w-3" />
+          </span>
+          <span className="font-medium text-foreground">{group.name}</span>
+        </div>
+      ),
+      sortAccessor: (group) => group.name,
+    },
+    {
+      key: "slug",
+      header: "Slug",
+      accessor: (group) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {group.slug}
+        </span>
+      ),
+    },
+    {
+      key: "clusters",
+      header: "Clusters",
+      accessor: (group) => group.clusterCount,
+      sortAccessor: (group) => group.clusterCount,
+    },
+    {
+      key: "subtree",
+      header: "Subtree",
+      accessor: (group) => group.clusterCountTree,
+      sortAccessor: (group) => group.clusterCountTree,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      accessor: (group) => (
+        <div className="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setEditing(group);
+              setShowForm(true);
+            }}
+            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="Edit"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (
+                confirm(
+                  `Delete "${group.name}"? This will remove the entire subtree. Clusters in the deleted tree will be unassigned (not deleted).`,
+                )
+              ) {
+                deleteMut.mutate(group.id);
+                if (selected?.id === group.id) setSelected(null);
+              }
+            }}
+            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-status-error/10 hover:text-status-error"
+            title="Delete"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <PageShell>
@@ -156,107 +226,16 @@ function ClusterGroupsPage() {
         }
       />
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : flattened.length === 0 ? (
-        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-          <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <p>
-            No cluster groups yet — create one to start organizing your
-            clusters.
-          </p>
-        </div>
-      ) : (
-        <div className="border border-border rounded-lg overflow-hidden">
-          <Table className="w-full text-sm">
-            <TableHeader className="bg-muted/50 border-b border-border">
-              <TableRow>
-                <TableHead className="text-left px-4 py-2 font-medium text-muted-foreground">
-                  Name
-                </TableHead>
-                <TableHead className="text-left px-4 py-2 font-medium text-muted-foreground">
-                  Slug
-                </TableHead>
-                <TableHead className="text-right px-4 py-2 font-medium text-muted-foreground">
-                  Clusters
-                </TableHead>
-                <TableHead className="text-right px-4 py-2 font-medium text-muted-foreground">
-                  Subtree
-                </TableHead>
-                <TableHead className="px-4 py-2"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {flattened.map((g) => (
-                <TableRow
-                  key={g.id}
-                  className="border-b border-border last:border-b-0"
-                >
-                  <TableCell className="px-4 py-2">
-                    <div
-                      className="flex items-center gap-2"
-                      style={{ paddingLeft: `${g.depth * 16}px` }}
-                    >
-                      <span
-                        className="inline-flex items-center justify-center h-5 w-5 rounded"
-                        style={{ background: g.color + "33", color: g.color }}
-                        aria-label={g.icon}
-                      >
-                        <Folder className="h-3 w-3" />
-                      </span>
-                      <span className="font-medium text-foreground">
-                        {g.name}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-4 py-2 text-xs font-mono text-muted-foreground">
-                    {g.slug}
-                  </TableCell>
-                  <TableCell className="px-4 py-2 text-right tabular-nums">
-                    {g.clusterCount}
-                  </TableCell>
-                  <TableCell className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                    {g.clusterCountTree}
-                  </TableCell>
-                  <TableCell className="px-4 py-2">
-                    <div className="flex items-center gap-1 justify-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditing(g);
-                          setShowForm(true);
-                        }}
-                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `Delete "${g.name}"? This will remove the entire subtree. Clusters in the deleted tree will be unassigned (not deleted).`,
-                            )
-                          ) {
-                            deleteMut.mutate(g.id);
-                          }
-                        }}
-                        className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <DataTable
+        data={flattened}
+        columns={columns}
+        keyExtractor={(group) => group.id}
+        loading={isLoading}
+        emptyMessage="No cluster groups yet — create one to start organizing your clusters."
+        onRowClick={setSelected}
+      />
+
+      {selected && <ClusterGroupDetails group={selected} />}
 
       {showForm && (
         <ClusterGroupForm
@@ -278,6 +257,165 @@ function ClusterGroupsPage() {
         />
       )}
     </PageShell>
+  );
+}
+
+function ClusterGroupDetails({ group }: { group: ClusterGroupTreeNode }) {
+  const [assigning, setAssigning] = useState(false);
+  const members = useQuery({
+    queryKey: queryKeys.clusterGroups.members(group.id),
+    queryFn: ({ signal }) => listClustersInGroup(group.id, { signal }),
+  });
+  const columns: Column<{ id: string; name: string }>[] = [
+    {
+      key: "name",
+      header: "Cluster",
+      accessor: (cluster) => (
+        <div className="flex items-center gap-2">
+          <Server className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{cluster.name}</span>
+        </div>
+      ),
+      sortAccessor: (cluster) => cluster.name,
+    },
+    {
+      key: "id",
+      header: "Cluster ID",
+      accessor: (cluster) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {cluster.id}
+        </span>
+      ),
+    },
+  ];
+  return (
+    <PageSection
+      title={group.name}
+      description={
+        group.description ||
+        "Direct membership for this group. Subtree totals include child groups."
+      }
+      actions={
+        <ActionButton
+          type="button"
+          intent="primary"
+          icon={<Plus className="h-4 w-4" />}
+          onClick={() => setAssigning(true)}
+        >
+          Assign clusters
+        </ActionButton>
+      }
+    >
+      <div className="mb-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
+        <span>{group.clusterCount} direct members</span>
+        <span>{group.clusterCountTree} members in subtree</span>
+        <span className="font-mono">{group.slug}</span>
+      </div>
+      <DataTable
+        data={members.data ?? []}
+        columns={columns}
+        keyExtractor={(cluster) => cluster.id}
+        loading={members.isLoading}
+        isError={members.isError}
+        onRetry={() => void members.refetch()}
+        emptyMessage="No clusters are directly assigned to this group"
+      />
+      {assigning && (
+        <ClusterMembershipDialog
+          group={group}
+          memberIds={new Set((members.data ?? []).map((member) => member.id))}
+          onClose={() => setAssigning(false)}
+        />
+      )}
+    </PageSection>
+  );
+}
+
+function ClusterMembershipDialog({
+  group,
+  memberIds,
+  onClose,
+}: {
+  group: ClusterGroupTreeNode;
+  memberIds: Set<string>;
+  onClose: () => void;
+}) {
+  const client = useQueryClient();
+  const clusters = useClusters({ pageSize: 200 });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const mutation = useMutation({
+    mutationFn: () => moveClustersToGroup(group.id, [...selected]),
+    onSuccess: (result) => {
+      client.invalidateQueries({ queryKey: queryKeys.clusterGroups.all });
+      client.invalidateQueries({
+        queryKey: queryKeys.clusterGroups.members(group.id),
+      });
+      toastSuccess(
+        `${result.moved} cluster${result.moved === 1 ? "" : "s"} assigned`,
+      );
+      onClose();
+    },
+    onError: (error: Error) =>
+      toastApiError("Failed to assign clusters", error),
+  });
+  const available = (clusters.data?.data ?? []).filter(
+    (cluster) => !memberIds.has(cluster.id),
+  );
+  return (
+    <ModalShell
+      title={`Assign clusters to ${group.name}`}
+      subtitle="Moving a cluster updates its direct group membership. Rollout previews explain the resulting placement before launch."
+      size="lg"
+      onClose={onClose}
+      footer={
+        <div className="flex justify-end gap-2">
+          <ActionButton type="button" intent="ghost" onClick={onClose}>
+            Cancel
+          </ActionButton>
+          <ActionButton
+            type="button"
+            intent="primary"
+            disabled={selected.size === 0 || mutation.isPending}
+            onClick={() => mutation.mutate()}
+          >
+            Assign {selected.size || "selected"}
+          </ActionButton>
+        </div>
+      }
+    >
+      <div className="max-h-96 space-y-1 overflow-auto rounded-md border border-border p-2">
+        {available.map((cluster) => (
+          <label
+            key={cluster.id}
+            className="flex cursor-pointer items-center gap-3 rounded px-3 py-2 hover:bg-muted"
+          >
+            <input
+              type="checkbox"
+              checked={selected.has(cluster.id)}
+              onChange={(event) => {
+                setSelected((current) => {
+                  const next = new Set(current);
+                  if (event.target.checked) next.add(cluster.id);
+                  else next.delete(cluster.id);
+                  return next;
+                });
+              }}
+            />
+            <span className="font-medium">
+              {cluster.displayName || cluster.name}
+            </span>
+            <span className="ml-auto font-mono text-xs text-muted-foreground">
+              {cluster.id}
+            </span>
+          </label>
+        ))}
+        {!clusters.isLoading && available.length === 0 && (
+          <p className="p-4 text-center text-sm text-muted-foreground">
+            Every visible cluster is already assigned directly to this group.
+          </p>
+        )}
+      </div>
+    </ModalShell>
   );
 }
 
@@ -475,7 +613,9 @@ function ClusterGroupForm({
                       style={{
                         background: c,
                         borderColor:
-                          field.state.value === c ? "#fff" : "transparent",
+                          field.state.value === c
+                            ? "hsl(var(--primary-foreground))"
+                            : "transparent",
                         outline:
                           field.state.value === c ? `2px solid ${c}` : "none",
                       }}

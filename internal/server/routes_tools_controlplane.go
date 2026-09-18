@@ -155,7 +155,12 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			// handler can bind ?project_id to the exact tenant before returning.
 			catalogBrowse := requireCollectionPermission(deps.RBACEngine, deps.RBACQueries, rbac.ResourceCatalog, rbac.VerbRead)
 			r.With(catalogBrowse).Get("/charts/", deps.Catalog.ListCharts)
+			r.With(catalogBrowse).Get("/discovery/", deps.Catalog.ListCatalogUserDiscovery)
+			r.With(catalogBrowse).Get("/applications/", deps.Catalog.ListCatalogApplications)
+			r.With(catalogRead).Get("/application-sources/", deps.Catalog.ListApplicationCatalogSources)
+			r.With(catalogBrowse).Post("/applications/preview/", deps.Catalog.PreviewCatalogInstallation)
 			r.With(catalogBrowse).Get("/charts/{id}/", deps.Catalog.GetChart)
+			r.With(catalogBrowse).Put("/charts/{id}/favorite/", deps.Catalog.SetCatalogChartFavorite)
 			r.With(catalogBrowse).Get("/charts/{id}/versions/", deps.Catalog.ListChartVersions)
 			r.With(catalogBrowse).Get("/charts/{id}/readme/", deps.Catalog.GetChartReadme)
 			r.With(catalogBrowse).Get("/charts/{id}/values/", deps.Catalog.GetChartValues)
@@ -169,6 +174,7 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			// empty-scope tokens pass through; RBAC stays primary underneath).
 			r.With(mutationWriteScope).Post("/installed/", deps.Catalog.CreateInstalledChart)
 			r.With(mutationWriteScope).Put("/installed/{id}/upgrade/", deps.Catalog.UpgradeInstalledChart)
+			r.Get("/installed/{id}/upgrade-versions/", deps.Catalog.ListInstalledChartUpgradeVersions)
 			r.With(mutationWriteScope).Post("/installed/{id}/rollback/", deps.Catalog.RollbackInstalledChart)
 			r.With(mutationWriteScope).Delete("/installed/{id}/", deps.Catalog.DeleteInstalledChart)
 			r.Get("/installed/{id}/values/", deps.Catalog.GetInstalledChartValues)

@@ -86,6 +86,7 @@ type Config struct {
 	// point the repositories at their verified internal mirror while preserving
 	// the release digests and signing policy.
 	DeliveryEnabled                             bool   `mapstructure:"delivery_enabled"`
+	DeliveryLocalFluxBootstrap                  bool   `mapstructure:"delivery_local_flux_bootstrap"`
 	DeliveryKubernetesMinMinor                  string `mapstructure:"delivery_kubernetes_min_minor"`
 	DeliveryKubernetesMaxMinor                  string `mapstructure:"delivery_kubernetes_max_minor"`
 	DeliveryFluxVersion                         string `mapstructure:"delivery_flux_version"`
@@ -212,7 +213,18 @@ type Config struct {
 	// HTTPS). On boot the server fetches it and reconciles the platform-default
 	// helm_repositories + catalog_blessed_charts overlays. Empty = skip (keep
 	// whatever defaults are already seeded). Fetch failures are non-fatal.
-	CatalogURL string `mapstructure:"astronomer_catalog_url"`
+	CatalogURL                 string `mapstructure:"astronomer_catalog_url"`
+	CatalogDigest              string `mapstructure:"astronomer_catalog_digest"`
+	CatalogMirrors             string `mapstructure:"astronomer_catalog_mirrors"`
+	CatalogProxyURL            string `mapstructure:"astronomer_catalog_proxy_url"`
+	CatalogCAFile              string `mapstructure:"astronomer_catalog_ca_file"`
+	CatalogAllowPrivateMirrors bool   `mapstructure:"astronomer_catalog_allow_private_mirrors"`
+	CatalogSignatureRequired   bool   `mapstructure:"astronomer_catalog_signature_required"`
+	CatalogSignatureProvider   string `mapstructure:"astronomer_catalog_signature_provider"`
+	CatalogSignatureIdentity   string `mapstructure:"astronomer_catalog_signature_identity"`
+	CatalogSignatureIssuer     string `mapstructure:"astronomer_catalog_signature_issuer"`
+	CatalogSignatureKeyRef     string `mapstructure:"astronomer_catalog_signature_key_ref"`
+	CatalogTrustDirectory      string `mapstructure:"astronomer_catalog_trust_directory"`
 
 	// A4 — tunnel connect rate-limit + replay defense. The connect limiter is a
 	// FAILURE-keyed fixed-window counter (per source IP): an IP is throttled only
@@ -268,6 +280,7 @@ func Load() (*Config, error) {
 		"release_manifest_path",
 		"release_mirror_mapping_path",
 		"delivery_enabled",
+		"delivery_local_flux_bootstrap",
 		"delivery_kubernetes_min_minor",
 		"delivery_kubernetes_max_minor",
 		"delivery_flux_version",
@@ -330,6 +343,11 @@ func Load() (*Config, error) {
 		"dex_bundled_enabled",
 		"auth_local_password_only",
 		"astronomer_catalog_url",
+		"astronomer_catalog_digest",
+		"astronomer_catalog_mirrors",
+		"astronomer_catalog_proxy_url",
+		"astronomer_catalog_ca_file",
+		"astronomer_catalog_allow_private_mirrors",
 		"tunnel_connect_auth_failure_limit",
 		"tunnel_connect_auth_failure_window_minutes",
 		"tunnel_connect_clock_skew_minutes",
@@ -351,6 +369,7 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "session_timeout_minutes", Value: sessionpolicy.DefaultMinutes},
 		envconfig.Default{Key: "registration_token_ttl_hours", Value: 1},
 		envconfig.Default{Key: "delivery_enabled", Value: true},
+		envconfig.Default{Key: "delivery_local_flux_bootstrap", Value: true},
 		envconfig.Default{Key: "delivery_kubernetes_min_minor", Value: "1.33"},
 		envconfig.Default{Key: "delivery_kubernetes_max_minor", Value: "1.35"},
 		envconfig.Default{Key: "delivery_flux_version", Value: "v2.9.3"},
@@ -383,6 +402,8 @@ func Load() (*Config, error) {
 		envconfig.Default{Key: "worker_metrics_addr", Value: ":9090"},
 		envconfig.Default{Key: "dex_bundled_enabled", Value: false},
 		envconfig.Default{Key: "auth_local_password_only", Value: false},
+		envconfig.Default{Key: "astronomer_catalog_mirrors", Value: "{}"},
+		envconfig.Default{Key: "astronomer_catalog_allow_private_mirrors", Value: false},
 		// A4 — generous tunnel-connect failure limiter + lenient replay window.
 		envconfig.Default{Key: "tunnel_connect_auth_failure_limit", Value: 50},
 		envconfig.Default{Key: "tunnel_connect_auth_failure_window_minutes", Value: 5},

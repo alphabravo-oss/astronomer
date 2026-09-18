@@ -440,18 +440,36 @@ type BackupStorageConfig struct {
 }
 
 type CatalogBlessedChart struct {
-	ID            uuid.UUID `json:"id"`
-	RepoUrl       string    `json:"repo_url"`
-	ChartName     string    `json:"chart_name"`
-	DisplayName   string    `json:"display_name"`
-	Description   string    `json:"description"`
-	Category      string    `json:"category"`
-	IconUrl       string    `json:"icon_url"`
-	MgmtSafe      bool      `json:"mgmt_safe"`
-	VersionPolicy string    `json:"version_policy"`
-	Source        string    `json:"source"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID                   uuid.UUID       `json:"id"`
+	RepoUrl              string          `json:"repo_url"`
+	ChartName            string          `json:"chart_name"`
+	DisplayName          string          `json:"display_name"`
+	Description          string          `json:"description"`
+	Category             string          `json:"category"`
+	IconUrl              string          `json:"icon_url"`
+	MgmtSafe             bool            `json:"mgmt_safe"`
+	VersionPolicy        string          `json:"version_policy"`
+	Source               string          `json:"source"`
+	CreatedAt            time.Time       `json:"created_at"`
+	UpdatedAt            time.Time       `json:"updated_at"`
+	Slug                 string          `json:"slug"`
+	RepoName             string          `json:"repo_name"`
+	SupportTier          string          `json:"support_tier"`
+	Featured             bool            `json:"featured"`
+	Privileged           bool            `json:"privileged"`
+	DefaultEnabled       bool            `json:"default_enabled"`
+	DocumentationUrl     string          `json:"documentation_url"`
+	Presentation         json.RawMessage `json:"presentation"`
+	Artifact             json.RawMessage `json:"artifact"`
+	Compatibility        json.RawMessage `json:"compatibility"`
+	Resources            json.RawMessage `json:"resources"`
+	Storage              json.RawMessage `json:"storage"`
+	Lifecycle            json.RawMessage `json:"lifecycle"`
+	RawEntry             json.RawMessage `json:"raw_entry"`
+	CatalogDigest        string          `json:"catalog_digest"`
+	VerificationStatus   string          `json:"verification_status"`
+	VerificationIdentity string          `json:"verification_identity"`
+	Revoked              bool            `json:"revoked"`
 }
 
 type CatalogOperation struct {
@@ -478,6 +496,17 @@ type CatalogOperationEvent struct {
 	Message     string          `json:"message"`
 	Detail      json.RawMessage `json:"detail"`
 	CreatedAt   time.Time       `json:"created_at"`
+}
+
+type CatalogUserDiscovery struct {
+	UserID       uuid.UUID          `json:"user_id"`
+	ChartID      uuid.UUID          `json:"chart_id"`
+	Favorite     bool               `json:"favorite"`
+	FavoriteAt   pgtype.Timestamptz `json:"favorite_at"`
+	LastViewedAt pgtype.Timestamptz `json:"last_viewed_at"`
+	ViewCount    int32              `json:"view_count"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
 }
 
 type CharlieActionApproval struct {
@@ -1014,6 +1043,9 @@ type ClusterDeployment struct {
 	LastObservedAt          pgtype.Timestamptz `json:"last_observed_at"`
 	CreatedAt               time.Time          `json:"created_at"`
 	UpdatedAt               time.Time          `json:"updated_at"`
+	// Frozen effective renderer spec for the desired rollout; null means use the immutable bundle version renderer.
+	DesiredRendererSpec        []byte      `json:"desired_renderer_spec"`
+	DesiredConfigurationDigest pgtype.Text `json:"desired_configuration_digest"`
 }
 
 // Coalesced state transitions and warnings only; never raw Flux objects, values, manifests, or credentials.
@@ -1446,6 +1478,19 @@ type DeferredOperation struct {
 	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
+type DeliveryApplicationVersion struct {
+	ID                 uuid.UUID   `json:"id"`
+	InstallationID     uuid.UUID   `json:"installation_id"`
+	ChartVersionID     uuid.UUID   `json:"chart_version_id"`
+	BundleVersionID    pgtype.UUID `json:"bundle_version_id"`
+	CatalogSlug        string      `json:"catalog_slug"`
+	Version            string      `json:"version"`
+	ArtifactDigest     string      `json:"artifact_digest"`
+	ValuesDigest       string      `json:"values_digest"`
+	VerificationStatus string      `json:"verification_status"`
+	CreatedAt          time.Time   `json:"created_at"`
+}
+
 type DeliveryAssignmentReceipt struct {
 	ClusterID                      uuid.UUID          `json:"cluster_id"`
 	DesiredSnapshotGeneration      int64              `json:"desired_snapshot_generation"`
@@ -1462,6 +1507,41 @@ type DeliveryAssignmentReceipt struct {
 	UpdatedAt                      time.Time          `json:"updated_at"`
 }
 
+type DeliveryCatalog struct {
+	ID                   uuid.UUID       `json:"id"`
+	Name                 string          `json:"name"`
+	DisplayName          string          `json:"display_name"`
+	Description          string          `json:"description"`
+	Channel              string          `json:"channel"`
+	SourceUrl            string          `json:"source_url"`
+	SourceRevision       string          `json:"source_revision"`
+	IndexDigest          string          `json:"index_digest"`
+	VerificationStatus   string          `json:"verification_status"`
+	VerificationIdentity string          `json:"verification_identity"`
+	TrustPolicy          json.RawMessage `json:"trust_policy"`
+	LastSyncAttemptedAt  time.Time       `json:"last_sync_attempted_at"`
+	LastSyncedAt         time.Time       `json:"last_synced_at"`
+	LastSyncError        string          `json:"last_sync_error"`
+	CreatedAt            time.Time       `json:"created_at"`
+	UpdatedAt            time.Time       `json:"updated_at"`
+}
+
+type DeliveryConfigurationTemplate struct {
+	ID             uuid.UUID       `json:"id"`
+	ProjectID      uuid.UUID       `json:"project_id"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	Renderer       string          `json:"renderer"`
+	ValuesDocument json.RawMessage `json:"values_document"`
+	Patches        json.RawMessage `json:"patches"`
+	SecretRefs     json.RawMessage `json:"secret_refs"`
+	Generation     int64           `json:"generation"`
+	CreatedBy      pgtype.UUID     `json:"created_by"`
+	UpdatedBy      pgtype.UUID     `json:"updated_by"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
 type DeliveryControllerInventory struct {
 	ClusterID           uuid.UUID          `json:"cluster_id"`
 	AgentVersion        string             `json:"agent_version"`
@@ -1475,6 +1555,25 @@ type DeliveryControllerInventory struct {
 	ErrorCode           string             `json:"error_code"`
 	ObservedAt          pgtype.Timestamptz `json:"observed_at"`
 	UpdatedAt           time.Time          `json:"updated_at"`
+	SystemComponents    json.RawMessage    `json:"system_components"`
+}
+
+type DeliveryOverrideSet struct {
+	ID             uuid.UUID       `json:"id"`
+	ProjectID      uuid.UUID       `json:"project_id"`
+	TemplateID     pgtype.UUID     `json:"template_id"`
+	Name           string          `json:"name"`
+	ScopeType      string          `json:"scope_type"`
+	ScopeID        pgtype.UUID     `json:"scope_id"`
+	Precedence     int32           `json:"precedence"`
+	ValuesDocument json.RawMessage `json:"values_document"`
+	Patches        json.RawMessage `json:"patches"`
+	Enabled        bool            `json:"enabled"`
+	Generation     int64           `json:"generation"`
+	CreatedBy      pgtype.UUID     `json:"created_by"`
+	UpdatedBy      pgtype.UUID     `json:"updated_by"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
 type DeliveryRollout struct {
@@ -1714,6 +1813,8 @@ type DeliveryTarget struct {
 	UpdatedBy               pgtype.UUID     `json:"updated_by"`
 	CreatedAt               time.Time       `json:"created_at"`
 	UpdatedAt               time.Time       `json:"updated_at"`
+	ConfigurationTemplateID pgtype.UUID     `json:"configuration_template_id"`
+	OverrideSetIds          []uuid.UUID     `json:"override_set_ids"`
 }
 
 type DexConnector struct {
@@ -1998,6 +2099,7 @@ type InstalledChart struct {
 	DriftDetected  bool               `json:"drift_detected"`
 	DriftDetail    string             `json:"drift_detail"`
 	DriftCheckedAt pgtype.Timestamptz `json:"drift_checked_at"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
 }
 
 type JwtRevocation struct {

@@ -5,9 +5,43 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	deliveryconfig "github.com/alphabravocompany/astronomer-go/internal/delivery/configuration"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/placement"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
+
+func TestOverrideAppliesUsesExactFrozenCandidateScope(t *testing.T) {
+	targetID := uuid.MustParse("10000000-0000-4000-8000-000000000001")
+	clusterID := uuid.MustParse("20000000-0000-4000-8000-000000000002")
+	groupID := uuid.MustParse("30000000-0000-4000-8000-000000000003")
+	candidate := &placement.Candidate{ID: clusterID, GroupIDs: []uuid.UUID{groupID}}
+	tests := []struct {
+		scope deliveryconfig.Scope
+		id    uuid.UUID
+		want  bool
+	}{
+		{deliveryconfig.ScopeOrganization, uuid.Nil, true},
+		{deliveryconfig.ScopeProject, uuid.Nil, true},
+		{deliveryconfig.ScopeCluster, clusterID, true},
+		{deliveryconfig.ScopeCluster, targetID, false},
+		{deliveryconfig.ScopeGroup, groupID, true},
+		{deliveryconfig.ScopeEnvironment, groupID, true},
+		{deliveryconfig.ScopeRollout, targetID, true},
+		{deliveryconfig.ScopeRollout, clusterID, false},
+	}
+	for _, test := range tests {
+		override := sqlc.DeliveryOverrideSet{ScopeType: string(test.scope)}
+		if test.id != uuid.Nil {
+			override.ScopeID = pgtype.UUID{Bytes: test.id, Valid: true}
+		}
+		if got := overrideApplies(targetID, override, candidate); got != test.want {
+			t.Errorf("scope %s id %s applies = %v, want %v", test.scope, test.id, got, test.want)
+		}
+	}
+}
 
 func TestPostgresStoreStrictMetadataDecoding(t *testing.T) {
 	t.Parallel()

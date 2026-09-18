@@ -172,17 +172,22 @@ func (h *RolloutHandler) List(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
 		return
 	}
+	targetID, err := optionalUUIDFilter(r, "target_id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		return
+	}
 	if h == nil || h.queries == nil {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery rollout persistence is unavailable")
 		return
 	}
-	params := sqlc.ListDeliveryRolloutsParams{ProjectID: projectID, State: state, QueryLimit: limit, QueryOffset: offset}
+	params := sqlc.ListDeliveryRolloutsParams{ProjectID: projectID, TargetID: targetID, State: state, QueryLimit: limit, QueryOffset: offset}
 	rows, err := h.queries.ListDeliveryRollouts(r.Context(), params)
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
 	}
-	total, err := h.queries.CountDeliveryRollouts(r.Context(), sqlc.CountDeliveryRolloutsParams{ProjectID: projectID, State: state})
+	total, err := h.queries.CountDeliveryRollouts(r.Context(), sqlc.CountDeliveryRolloutsParams{ProjectID: projectID, TargetID: targetID, State: state})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return

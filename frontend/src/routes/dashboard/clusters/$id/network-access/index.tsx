@@ -66,7 +66,7 @@ function ModeBadge({
 }) {
   if (mode === "disabled") {
     return (
-      <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs bg-gray-100 text-gray-700">
+      <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs text-foreground">
         Apiserver: open
       </span>
     );

@@ -4830,7 +4830,7 @@ metadata:
   name: helm-controller
   namespace: astronomer-delivery-system
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: helm-controller
@@ -4888,11 +4888,11 @@ spec:
             port: healthz
         resources:
           limits:
-            cpu: 1000m
+            cpu: "2"
             memory: 1Gi
           requests:
             cpu: 100m
-            memory: 64Mi
+            memory: 128Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -4918,7 +4918,7 @@ spec:
             app: helm-controller
         maxSkew: 1
         topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: ScheduleAnyway
+        whenUnsatisfiable: DoNotSchedule
       volumes:
       - emptyDir: {}
         name: temp
@@ -4935,7 +4935,7 @@ metadata:
   name: kustomize-controller
   namespace: astronomer-delivery-system
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: kustomize-controller
@@ -4995,11 +4995,11 @@ spec:
             port: healthz
         resources:
           limits:
-            cpu: 1000m
+            cpu: "2"
             memory: 1Gi
           requests:
             cpu: 100m
-            memory: 64Mi
+            memory: 128Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -5025,7 +5025,7 @@ spec:
             app: kustomize-controller
         maxSkew: 1
         topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: ScheduleAnyway
+        whenUnsatisfiable: DoNotSchedule
       volumes:
       - emptyDir: {}
         name: temp
@@ -5042,7 +5042,7 @@ metadata:
   name: source-controller
   namespace: astronomer-delivery-system
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: source-controller
@@ -5107,11 +5107,11 @@ spec:
             port: http
         resources:
           limits:
-            cpu: 1000m
+            cpu: "2"
             memory: 1Gi
           requests:
-            cpu: 50m
-            memory: 64Mi
+            cpu: 100m
+            memory: 128Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -5139,7 +5139,7 @@ spec:
             app: source-controller
         maxSkew: 1
         topologyKey: kubernetes.io/hostname
-        whenUnsatisfiable: ScheduleAnyway
+        whenUnsatisfiable: DoNotSchedule
       volumes:
       - emptyDir: {}
         name: data

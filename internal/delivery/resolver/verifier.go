@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,38 @@ import (
 
 	"github.com/alphabravocompany/astronomer-go/internal/delivery/model"
 )
+
+// VerifyPinnedOCI verifies the cosign signature attached to an already
+// digest-pinned OCI manifest. It is shared by the delivery resolver and the
+// application-catalog loader so both trust boundaries use identical offline
+// Sigstore policy and key handling.
+func VerifyPinnedOCI(ctx context.Context, client *http.Client, repositoryName, subjectDigest string, policy model.TrustPolicy, trustDirectory string) (Verification, error) {
+	if client == nil || strings.TrimSpace(repositoryName) == "" {
+		return Verification{}, errors.New("OCI signature verification inputs are incomplete")
+	}
+	if err := policy.Validate(); err != nil || policy.AllowUnsigned {
+		return Verification{}, errors.New("OCI signature trust policy is invalid")
+	}
+	parsedDigest, err := model.ParseDigest(subjectDigest)
+	if err != nil {
+		return Verification{}, errors.New("OCI signature subject digest is invalid")
+	}
+	source := model.Source{Type: model.SourceOCIArtifact, AuthMode: model.AuthNone, Trust: policy}
+	evidence, err := fetchCosignEvidence(ctx, repositoryName, subjectDigest, Request{Source: source}, client)
+	if err != nil {
+		return Verification{}, err
+	}
+	defer clearSignatureEvidence(evidence)
+	verifier, err := NewExecVerifier(trustDirectory)
+	if err != nil {
+		return Verification{}, err
+	}
+	return verifier.Verify(ctx, VerificationInput{
+		Source:   source,
+		Revision: model.ImmutableRevision{Kind: model.RevisionOCIDigest, Value: subjectDigest, ArtifactDigest: parsedDigest},
+		Evidence: evidence,
+	})
+}
 
 const (
 	defaultTrustDir        = "/etc/astronomer/delivery-trust"

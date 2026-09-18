@@ -91,11 +91,15 @@ func (c *productionComposition) initializeCoreHandlers(ctx context.Context, cfg 
 	monitoringHandler.SetUserLookup(queries)
 	monitoringHandler.SetServerURL(cfg.ServerURL)
 	monitoringHandler.SetGrafanaProxyImage(os.Getenv("ASTRONOMER_SERVER_IMAGE"))
+	platformGatewayNamespace := os.Getenv("ASTRONOMER_GATEWAY_NAMESPACE")
+	if platformGatewayNamespace == "" {
+		platformGatewayNamespace = os.Getenv("POD_NAMESPACE")
+	}
 	monitoringHandler.SetGrafanaExpose(handler.GrafanaExpose{
 		GatewayClass:      os.Getenv("ASTRONOMER_GATEWAY_CLASS"),
 		IngressClass:      os.Getenv("ASTRONOMER_INGRESS_CLASS"),
 		GatewayName:       os.Getenv("ASTRONOMER_GATEWAY_NAME"),
-		PlatformNamespace: os.Getenv("POD_NAMESPACE"),
+		PlatformNamespace: platformGatewayNamespace,
 		TLSIssuerName:     os.Getenv("ASTRONOMER_TLS_ISSUER"),
 		TLSIssuerKind:     os.Getenv("ASTRONOMER_TLS_ISSUER_KIND"),
 	})

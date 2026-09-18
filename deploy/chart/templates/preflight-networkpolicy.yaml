@@ -24,7 +24,7 @@
     {{- $apiCIDRs = append $apiCIDRs $cidr }}
   {{- end }}
 {{- end }}
-{{- $externalPostgres := eq (include "astronomer.postgresBundledEnabled" .) "false" }}
+{{- $externalPostgres := eq (include "astronomer.postgresMode" .) "external" }}
 {{- $postgresCIDRs := list }}
 {{- if $externalPostgres }}
   {{- range $cidr := .Values.networkPolicy.externalPostgresEgressCIDRs | default (list) }}

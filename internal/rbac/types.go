@@ -31,16 +31,17 @@ const (
 	// Delivery sources and bundles are separate project-scoped authority
 	// boundaries: holding project metadata access must not implicitly reveal
 	// source locations or permit credential rotation/version publication.
-	ResourceDeliverySources     Resource = "delivery_sources"
-	ResourceDeliveryBundles     Resource = "delivery_bundles"
-	ResourceDeliveryTargets     Resource = "delivery_targets"
-	ResourceDeliveryRollouts    Resource = "delivery_rollouts"
-	ResourceDeliveryDeployments Resource = "delivery_deployments"
-	ResourceDeliveryInventory   Resource = "delivery_inventory"
-	ResourceDeliveryApprovals   Resource = "delivery_approvals"
-	ResourceDeliveryRollbacks   Resource = "delivery_rollbacks"
-	ResourceDeliveryOrphans     Resource = "delivery_orphans"
-	ResourceDeliveryPlatform    Resource = "delivery_platform"
+	ResourceDeliverySources                Resource = "delivery_sources"
+	ResourceDeliveryBundles                Resource = "delivery_bundles"
+	ResourceDeliveryTargets                Resource = "delivery_targets"
+	ResourceDeliveryRollouts               Resource = "delivery_rollouts"
+	ResourceDeliveryDeployments            Resource = "delivery_deployments"
+	ResourceDeliveryInventory              Resource = "delivery_inventory"
+	ResourceDeliveryApprovals              Resource = "delivery_approvals"
+	ResourceDeliveryRollbacks              Resource = "delivery_rollbacks"
+	ResourceDeliveryOrphans                Resource = "delivery_orphans"
+	ResourceDeliveryPlatform               Resource = "delivery_platform"
+	ResourceDeliveryConfigurationTemplates Resource = "delivery_configuration_templates"
 	// ResourceClusterTemplates gates the /api/v1/cluster-templates/* CRUD
 	// (migration 049). The cluster bind/detach endpoints reuse
 	// ResourceClusters + VerbUpdate so an operator who can already update a
@@ -107,6 +108,7 @@ var canonicalResources = []Resource{
 	ResourceDeliveryRollbacks,
 	ResourceDeliveryOrphans,
 	ResourceDeliveryPlatform,
+	ResourceDeliveryConfigurationTemplates,
 	ResourceClusterTemplates,
 	ResourceNetworkPolicies,
 	ResourceCustomResources,

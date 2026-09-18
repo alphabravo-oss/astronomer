@@ -506,9 +506,9 @@ func TestProductionNetworkPolicyUsesGranularExternalDependencyCIDRs(t *testing.T
 	}
 
 	docs := parseRenderedDocs(t, out)
-	for _, absent := range []string{"astronomer-postgres", "astronomer-redis"} {
-		if renderedDocExists(docs, "NetworkPolicy", absent) {
-			t.Fatalf("production render should not include bundled %s NetworkPolicy when bundled Postgres/Redis are disabled", absent)
+	for _, required := range []string{"astronomer-postgres", "astronomer-redis", "astronomer-redis-sentinel"} {
+		if !renderedDocExists(docs, "NetworkPolicy", required) {
+			t.Fatalf("production render missing managed HA data-plane NetworkPolicy/%s", required)
 		}
 	}
 }

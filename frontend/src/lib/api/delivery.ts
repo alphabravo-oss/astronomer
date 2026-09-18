@@ -229,6 +229,26 @@ export interface RendererSpecRequest {
   };
 }
 
+export type DeliveryConfigurationTemplate = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryConfigurationTemplate"]
+>;
+
+export type DeliveryConfigurationTemplateWrite =
+  OpenAPIComponents["schemas"]["DeliveryConfigurationTemplateWrite"] & {
+    project_id: string;
+  };
+
+export type DeliveryOverrideSet = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryOverrideSet"]
+>;
+export type DeliveryEffectiveConfiguration = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryEffectiveConfiguration"]
+>;
+export type DeliveryOverrideSetWrite =
+  OpenAPIComponents["schemas"]["DeliveryOverrideSetWrite"] & {
+    project_id: string;
+  };
+
 export interface CreateBundleVersionRequest {
   project_id: string;
   version: string;
@@ -310,6 +330,8 @@ export interface DeliveryTargetRequest {
     drift: DriftPolicy;
   };
   maintenance_window_policy?: Record<string, unknown>;
+  configuration_template_id?: string | null;
+  override_set_ids?: string[];
   suspended: boolean;
 }
 
@@ -523,6 +545,18 @@ export type DeliveryControllerInventory = CamelizeKeys<
   OpenAPIComponents["schemas"]["DeliveryControllerInventory"]
 >;
 
+export type DeliverySystemComponent = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliverySystemComponent"]
+>;
+
+export type DeliverySystemVolume = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliverySystemVolume"]
+>;
+
+export type DeliverySystemResource = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliverySystemResource"]
+>;
+
 export type ClusterDeliveryInventory = Omit<
   CamelizeKeys<OpenAPIComponents["schemas"]["DeliveryClusterInventory"]>,
   "deployments"
@@ -532,28 +566,28 @@ export type DeliverySystemCompatibility = CamelizeKeys<
   OpenAPIComponents["schemas"]["DeliverySystemCompatibility"]
 >;
 
-export type DeliveryEstateCount = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateCount"]
+export type DeliveryFleetCount = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryFleetCount"]
 >;
 
-export type DeliveryEstateSummary = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateSummary"]
+export type DeliveryFleetSummary = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryFleetSummary"]
 >;
 
-export type DeliveryEstateCluster = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateCluster"]
+export type DeliveryFleetCluster = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryFleetCluster"]
 >;
 
-export type DeliveryEstateAttention = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateAttention"]
+export type DeliveryFleetAttention = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryFleetAttention"]
 >;
 
-export type DeliveryEstateDistributions = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstateDistributions"]
+export type DeliveryFleetDistributions = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryFleetDistributions"]
 >;
 
-export type DeliveryEstate = CamelizeKeys<
-  OpenAPIComponents["schemas"]["DeliveryEstate"]
+export type DeliveryFleet = CamelizeKeys<
+  OpenAPIComponents["schemas"]["DeliveryFleet"]
 >;
 
 export interface PageParams {
@@ -566,7 +600,9 @@ function quotedETag(etag: string | number): string {
   return etag.startsWith('"') ? etag : `"${etag}"`;
 }
 
-function optionalIdempotencyHeader(key?: string): { "Idempotency-Key": string } {
+function optionalIdempotencyHeader(key?: string): {
+  "Idempotency-Key": string;
+} {
   return { "Idempotency-Key": key ?? createIdempotencyKey() };
 }
 
@@ -609,6 +645,16 @@ function mapBundleVersion(
   wire: DeliveryContracts["DeliveryBundleVersion"],
 ): ComponentBundleVersion {
   return camelizeKeys(wire) as unknown as ComponentBundleVersion;
+}
+function mapConfigurationTemplate(
+  wire: DeliveryContracts["DeliveryConfigurationTemplate"],
+): DeliveryConfigurationTemplate {
+  return camelizeKeys(wire) as unknown as DeliveryConfigurationTemplate;
+}
+function mapOverrideSet(
+  wire: DeliveryContracts["DeliveryOverrideSet"],
+): DeliveryOverrideSet {
+  return camelizeKeys(wire) as unknown as DeliveryOverrideSet;
 }
 function mapTarget(wire: DeliveryContracts["DeliveryTarget"]): DeliveryTarget {
   return camelizeKeys(wire) as unknown as DeliveryTarget;
@@ -693,8 +739,8 @@ function mapCompatibility(
 ): DeliverySystemCompatibility {
   return camelizeKeys(wire) as unknown as DeliverySystemCompatibility;
 }
-function mapEstate(wire: DeliveryContracts["DeliveryEstate"]): DeliveryEstate {
-  return camelizeKeys(wire) as unknown as DeliveryEstate;
+function mapFleet(wire: DeliveryContracts["DeliveryFleet"]): DeliveryFleet {
+  return camelizeKeys(wire) as unknown as DeliveryFleet;
 }
 
 function entityFromResponse<TWire, TView>(
@@ -870,6 +916,117 @@ export async function getComponentBundleVersion(
     signal,
   });
   return mapBundleVersion(requiredEnvelopeData(wire));
+}
+
+export async function listDeliveryConfigurationTemplates(
+  projectId: string,
+  params: PageParams = {},
+  signal?: AbortSignal,
+) {
+  const wire = await generated.getDeliveryConfigurationTemplates({
+    query: { project_id: projectId, ...params },
+    signal,
+  });
+  return mapPage(wire, mapConfigurationTemplate);
+}
+
+export async function createDeliveryConfigurationTemplate(
+  body: DeliveryConfigurationTemplateWrite,
+  key?: string,
+  signal?: AbortSignal,
+) {
+  const wire = await generated.postDeliveryConfigurationTemplates({
+    body,
+    headerParams: optionalIdempotencyHeader(key),
+    signal,
+  });
+  return mapConfigurationTemplate(requiredEnvelopeData(wire));
+}
+
+export async function updateDeliveryConfigurationTemplate(
+  projectId: string,
+  id: string,
+  generation: number,
+  body: DeliveryConfigurationTemplateWrite,
+  key?: string,
+  signal?: AbortSignal,
+) {
+  const wire = await generated.putDeliveryConfigurationTemplatesById({
+    path: { id },
+    query: { project_id: projectId },
+    body,
+    headerParams: {
+      "If-Match": quotedETag(generation),
+      ...optionalIdempotencyHeader(key),
+    },
+    signal,
+  });
+  return mapConfigurationTemplate(requiredEnvelopeData(wire));
+}
+
+export async function deleteDeliveryConfigurationTemplate(
+  projectId: string,
+  id: string,
+  generation: number,
+  key?: string,
+  signal?: AbortSignal,
+) {
+  return generated.deleteDeliveryConfigurationTemplatesById({
+    path: { id },
+    query: { project_id: projectId },
+    headerParams: {
+      "If-Match": quotedETag(generation),
+      ...optionalIdempotencyHeader(key),
+    },
+    signal,
+  });
+}
+
+export async function listDeliveryOverrideSets(
+  projectId: string,
+  params: PageParams = {},
+  signal?: AbortSignal,
+) {
+  const wire = await generated.getDeliveryOverrideSets({
+    query: { project_id: projectId, ...params }, signal,
+  });
+  return mapPage(wire, mapOverrideSet);
+}
+
+export async function createDeliveryOverrideSet(
+  body: DeliveryOverrideSetWrite, key?: string, signal?: AbortSignal,
+) {
+  const wire = await generated.postDeliveryOverrideSets({body, headerParams: optionalIdempotencyHeader(key), signal});
+  return mapOverrideSet(requiredEnvelopeData(wire));
+}
+
+export async function updateDeliveryOverrideSet(
+  projectId: string, id: string, generation: number,
+  body: DeliveryOverrideSetWrite, key?: string, signal?: AbortSignal,
+) {
+  const wire = await generated.putDeliveryOverrideSetsById({
+    path: {id}, query: {project_id: projectId}, body,
+    headerParams: {"If-Match": quotedETag(generation), ...optionalIdempotencyHeader(key)}, signal,
+  });
+  return mapOverrideSet(requiredEnvelopeData(wire));
+}
+
+export async function deleteDeliveryOverrideSet(
+  projectId: string, id: string, generation: number, key?: string, signal?: AbortSignal,
+) {
+  return generated.deleteDeliveryOverrideSetsById({
+    path: {id}, query: {project_id: projectId},
+    headerParams: {"If-Match": quotedETag(generation), ...optionalIdempotencyHeader(key)}, signal,
+  });
+}
+
+export async function resolveDeliveryEffectiveConfiguration(
+  projectId: string, baseValues: Record<string, unknown>, overrideIds: string[], signal?: AbortSignal,
+): Promise<DeliveryEffectiveConfiguration> {
+  const wire = await generated.postDeliveryOverrideSetsEffective({
+    body: {project_id: projectId, base_values: baseValues, override_ids: overrideIds}, signal,
+  });
+  return camelizeKeys(requiredEnvelopeData(wire)) as unknown as DeliveryEffectiveConfiguration;
 }
 
 export async function createComponentBundleVersion(
@@ -1049,7 +1206,7 @@ export async function startDeliveryRollout(
 
 export async function listDeliveryRollouts(
   projectId: string,
-  params: PageParams & { state?: RolloutState } = {},
+  params: PageParams & { state?: RolloutState; target_id?: string } = {},
   signal?: AbortSignal,
 ) {
   const wire = await generated.getDeliveryRollouts({
@@ -1206,7 +1363,11 @@ export async function approveDeliveryRollout(
 
 export async function listClusterDeployments(
   projectId: string,
-  params: PageParams & { cluster_id?: string; phase?: DeploymentPhase } = {},
+  params: PageParams & {
+    target_id?: string;
+    cluster_id?: string;
+    phase?: DeploymentPhase;
+  } = {},
   signal?: AbortSignal,
 ) {
   const wire = await generated.getDeliveryDeployments({
@@ -1249,7 +1410,7 @@ export async function listClusterDeploymentEvents(
 export async function actOnClusterDeployment(
   projectId: string,
   id: string,
-  action: "reconcile" | "suspend",
+  action: "reconcile" | "suspend" | "resume",
   etag: string | number,
   reasonCode: string,
   key?: string,
@@ -1270,10 +1431,15 @@ export async function actOnClusterDeployment(
           "postDeliveryDeploymentsByIdReconcile",
           args,
         )
-      : await generated.executeOpenAPIOperationWithResponse(
-          "postDeliveryDeploymentsByIdSuspend",
-          args,
-        );
+      : action === "suspend"
+        ? await generated.executeOpenAPIOperationWithResponse(
+            "postDeliveryDeploymentsByIdSuspend",
+            args,
+          )
+        : await generated.executeOpenAPIOperationWithResponse(
+            "postDeliveryDeploymentsByIdResume",
+            args,
+          );
   return camelizeKeys(requiredEnvelopeData(response.data));
 }
 
@@ -1295,9 +1461,9 @@ export async function getDeliverySystemCompatibility(signal?: AbortSignal) {
   return mapCompatibility(requiredEnvelopeData(wire));
 }
 
-export async function getDeliveryEstate(signal?: AbortSignal) {
-  const wire = await generated.getDeliveryEstate({ signal });
-  return mapEstate(requiredEnvelopeData(wire));
+export async function getDeliveryFleet(signal?: AbortSignal) {
+  const wire = await generated.getDeliveryFleet({ signal });
+  return mapFleet(requiredEnvelopeData(wire));
 }
 
 export function rolloutIsTerminal(state: RolloutState): boolean {
@@ -1363,8 +1529,8 @@ const systemCompatibilityMatchesWire: AssertNoPhantomWireKeys<
   DeliveryContracts["DeliverySystemCompatibility"]
 > = true;
 const deliveryFleetMatchesWire: AssertNoPhantomWireKeys<
-  DeliveryEstate,
-  DeliveryContracts["DeliveryEstate"]
+  DeliveryFleet,
+  DeliveryContracts["DeliveryFleet"]
 > = true;
 
 void [

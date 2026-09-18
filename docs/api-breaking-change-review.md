@@ -8,6 +8,21 @@ authorize changing runtime behavior. The catalog sync entry records the
 intentional move to durable asynchronous acceptance (`202`) so a request is
 never reported complete before its committed worker intent runs.
 
+Reviewed 2026-08-26 as intentional pre-adoption terminology cleanup. The
+Delivery surface has no external consumers yet, and product direction
+explicitly rejected a compatibility alias: "estate" became the clearer
+"fleet" concept, the old route was removed, and Charlie trigger vocabulary
+was updated at the same time. The fleet summary now reports current lifecycle
+posture rather than retaining the obsolete adopted-cluster counter:
+
+- GET /api/v1/admin/charlie/trigger-rules/ removed the optional property `rules/items/estate_threshold_percent` from the response with the `200` status
+- POST /api/v1/admin/charlie/trigger-rules/ removed the request property `estate_threshold_percent`
+- POST /api/v1/admin/charlie/trigger-rules/ removed the optional property `estate_threshold_percent` from the response with the `201` status
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the request property `estate_threshold_percent`
+- PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}/ removed the optional property `estate_threshold_percent` from the response with the `200` status
+- GET /api/v1/delivery/estate/ api path removed without deprecation
+- GET /api/v1/delivery/fleet/ removed the required property `data/summary/adopted_clusters` from the response with the `200` status
+
 Reviewed 2026-08-23 for the v1 contract hardening release:
 
 - POST /api/v1/alerting/channels/ added required request body

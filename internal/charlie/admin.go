@@ -97,27 +97,23 @@ type AdminStatusView struct {
 
 // openapi:request CharlieAdminTriggerRule
 type AdminTriggerRule struct {
-	ID                     string   `json:"id"`
-	Name                   string   `json:"name"`
-	SourceType             string   `json:"source_type"`
-	Enabled                bool     `json:"enabled"`
-	Severities             []string `json:"severities"`
-	Scopes                 []string `json:"scopes"`
-	CooldownSeconds        int32    `json:"cooldown_seconds"`
-	GracePeriodSeconds     int32    `json:"grace_period_seconds"`
-	FlapWindowSeconds      int32    `json:"flap_window_seconds"`
-	FlapCount              int32    `json:"flap_count"`
-	EstateThresholdPercent int32    `json:"estate_threshold_percent"`
-	// FleetThresholdPercent is the deprecated v1 wire alias retained until the
-	// published API sunset. It is always emitted with the same value and is
-	// accepted when an older client has not learned estate_threshold_percent.
-	FleetThresholdPercent int32  `json:"fleet_threshold_percent"`
-	MinimumAgentVersion   string `json:"minimum_agent_version,omitempty"`
-	Suppressed            bool   `json:"suppressed"`
-	MaximumAttempts       int32  `json:"maximum_attempts"`
-	DeadLetterEnabled     bool   `json:"dead_letter_enabled"`
-	ServiceIdentity       string `json:"service_identity"`
-	ModeCeiling           string `json:"mode_ceiling"`
+	ID                    string   `json:"id"`
+	Name                  string   `json:"name"`
+	SourceType            string   `json:"source_type"`
+	Enabled               bool     `json:"enabled"`
+	Severities            []string `json:"severities"`
+	Scopes                []string `json:"scopes"`
+	CooldownSeconds       int32    `json:"cooldown_seconds"`
+	GracePeriodSeconds    int32    `json:"grace_period_seconds"`
+	FlapWindowSeconds     int32    `json:"flap_window_seconds"`
+	FlapCount             int32    `json:"flap_count"`
+	FleetThresholdPercent int32    `json:"fleet_threshold_percent"`
+	MinimumAgentVersion   string   `json:"minimum_agent_version,omitempty"`
+	Suppressed            bool     `json:"suppressed"`
+	MaximumAttempts       int32    `json:"maximum_attempts"`
+	DeadLetterEnabled     bool     `json:"dead_letter_enabled"`
+	ServiceIdentity       string   `json:"service_identity"`
+	ModeCeiling           string   `json:"mode_ceiling"`
 }
 
 type AdminAutomationView struct {
@@ -982,16 +978,14 @@ func safeAdminTrigger(rule sqlc.CharlieTriggerRule) AdminTriggerRule {
 		ID: rule.ID.String(), Name: rule.Name, Enabled: rule.Enabled, SourceType: rule.RuleType,
 		Severities: []string{rule.MinimumSeverity}, Scopes: scopes, CooldownSeconds: rule.CooldownSeconds,
 		GracePeriodSeconds: integer("grace_period_seconds", rule.WindowSeconds), FlapWindowSeconds: integer("flap_window_seconds", rule.WindowSeconds),
-		FlapCount: integer("flap_count", integer("count", 1)), EstateThresholdPercent: integer("estate_threshold_percent", integer("fleet_threshold_percent", 0)),
-		FleetThresholdPercent: integer("estate_threshold_percent", integer("fleet_threshold_percent", 0)),
-		MinimumAgentVersion:   selectors.MinimumAgentVersion, Suppressed: selectors.Suppressed,
+		FlapCount: integer("flap_count", integer("count", 1)), FleetThresholdPercent: integer("fleet_threshold_percent", 0),
+		MinimumAgentVersion: selectors.MinimumAgentVersion, Suppressed: selectors.Suppressed,
 		MaximumAttempts: integer("maximum_attempts", MaxTriggerDispatchAttempts), DeadLetterEnabled: boolean("dead_letter_enabled", true),
 		ServiceIdentity: AutomationUsername, ModeCeiling: rule.ModeCeiling,
 	}
 }
 
 func (s *AdminService) UpdateTrigger(ctx context.Context, id uuid.UUID, input AdminTriggerRule) (AdminTriggerRule, error) {
-	input.normalizeThresholdAlias()
 	connection, err := s.connection(ctx)
 	if err != nil {
 		return AdminTriggerRule{}, err
@@ -1017,7 +1011,7 @@ func (s *AdminService) UpdateTrigger(ctx context.Context, id uuid.UUID, input Ad
 	thresholds, _ := json.Marshal(map[string]any{
 		"count": input.FlapCount, "grace_period_seconds": input.GracePeriodSeconds,
 		"flap_window_seconds": input.FlapWindowSeconds, "flap_count": input.FlapCount,
-		"estate_threshold_percent": input.EstateThresholdPercent, "maximum_attempts": input.MaximumAttempts,
+		"fleet_threshold_percent": input.FleetThresholdPercent, "maximum_attempts": input.MaximumAttempts,
 		"dead_letter_enabled": input.DeadLetterEnabled,
 	})
 	severity := input.Severities[0]
@@ -1034,7 +1028,6 @@ func (s *AdminService) UpdateTrigger(ctx context.Context, id uuid.UUID, input Ad
 }
 
 func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input AdminTriggerRule) (AdminTriggerRule, error) {
-	input.normalizeThresholdAlias()
 	connection, err := s.connection(ctx)
 	if err != nil {
 		return AdminTriggerRule{}, err
@@ -1057,7 +1050,7 @@ func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input
 	thresholds, _ := json.Marshal(map[string]any{
 		"count": input.FlapCount, "grace_period_seconds": input.GracePeriodSeconds,
 		"flap_window_seconds": input.FlapWindowSeconds, "flap_count": input.FlapCount,
-		"estate_threshold_percent": input.EstateThresholdPercent, "maximum_attempts": input.MaximumAttempts,
+		"fleet_threshold_percent": input.FleetThresholdPercent, "maximum_attempts": input.MaximumAttempts,
 		"dead_letter_enabled": input.DeadLetterEnabled,
 	})
 	created, err := s.queries.CreateCharlieTriggerRule(ctx, sqlc.CreateCharlieTriggerRuleParams{
@@ -1071,13 +1064,6 @@ func (s *AdminService) CreateTrigger(ctx context.Context, actor uuid.UUID, input
 		return AdminTriggerRule{}, ErrAdminConflict
 	}
 	return safeAdminTrigger(created), nil
-}
-
-func (r *AdminTriggerRule) normalizeThresholdAlias() {
-	if r.EstateThresholdPercent == 0 && r.FleetThresholdPercent != 0 {
-		r.EstateThresholdPercent = r.FleetThresholdPercent
-	}
-	r.FleetThresholdPercent = r.EstateThresholdPercent
 }
 
 func (s *AdminService) DeleteTrigger(ctx context.Context, id uuid.UUID) error {
@@ -1109,7 +1095,7 @@ func validateAdminTrigger(input AdminTriggerRule) error {
 	}
 	if input.CooldownSeconds < 0 || input.CooldownSeconds > 604800 || input.GracePeriodSeconds < 1 || input.GracePeriodSeconds > 86400 ||
 		input.FlapWindowSeconds < 1 || input.FlapWindowSeconds > 86400 || input.FlapCount < 1 || input.FlapCount > 100 ||
-		input.EstateThresholdPercent < 0 || input.EstateThresholdPercent > 100 || input.MaximumAttempts < 1 || input.MaximumAttempts > 20 || len(input.Scopes) > 32 {
+		input.FleetThresholdPercent < 0 || input.FleetThresholdPercent > 100 || input.MaximumAttempts < 1 || input.MaximumAttempts > 20 || len(input.Scopes) > 32 {
 		return fmt.Errorf("%w: trigger bounds are invalid", ErrAdminConflict)
 	}
 	for _, scope := range input.Scopes {

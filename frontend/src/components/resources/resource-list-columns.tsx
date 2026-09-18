@@ -1,4 +1,10 @@
 import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  TableCodeText,
+  TableNumericText,
+  TablePrimaryText,
+  TableSecondaryText,
+} from "@/components/ui/table-text";
 import type { Column } from "@/components/ui/data-table";
 import { cn, formatBytes, formatCPU, formatRelativeTime } from "@/lib/utils";
 import {
@@ -25,11 +31,7 @@ const nodeColumns: Column<ClusterNode>[] = [
   {
     key: "name",
     header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
+    accessor: (row) => <TablePrimaryText>{row.name}</TablePrimaryText>,
   },
   {
     key: "status",
@@ -263,24 +265,26 @@ const podColumns: Column<Pod>[] = [
   {
     key: "namespace",
     header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
+    accessor: (row) => <TableCodeText>{row.namespace}</TableCodeText>,
+    sortAccessor: (row) => row.namespace,
+    filter: { label: "Namespaces" },
   },
   {
     key: "status",
     header: "Status",
     accessor: (row) => <StatusBadge status={row.status} />,
+    sortAccessor: (row) => row.status,
   },
   {
     key: "ready",
     header: "Ready",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.ready}</span>
-    ),
-    align: "center",
+    accessor: (row) => <TableNumericText>{row.ready}</TableNumericText>,
+    sortAccessor: (row) => {
+      const [ready = "0", total = "0"] = row.ready.split("/");
+      return Number(ready) * 1_000_000 + Number(total);
+    },
+    align: "right",
+    numeric: true,
   },
   {
     key: "restarts",
@@ -306,6 +310,7 @@ const podColumns: Column<Pod>[] = [
         {row.node}
       </span>
     ),
+    sortAccessor: (row) => row.node,
   },
   {
     key: "age",
@@ -313,6 +318,7 @@ const podColumns: Column<Pod>[] = [
     accessor: (row) => (
       <span className="text-xs text-muted-foreground">{row.age}</span>
     ),
+    sortAccessor: (row) => Date.parse(row.createdAt) || 0,
   },
 ];
 
@@ -320,50 +326,44 @@ const workloadColumns: Column<Workload>[] = [
   {
     key: "name",
     header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
+    accessor: (row) => <TablePrimaryText>{row.name}</TablePrimaryText>,
   },
   {
     key: "namespace",
     header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
+    accessor: (row) => <TableCodeText>{row.namespace}</TableCodeText>,
+    sortAccessor: (row) => row.namespace,
+    filter: { label: "Namespaces" },
   },
   {
     key: "ready",
     header: "Ready",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.ready}</span>
-    ),
-    align: "center",
+    accessor: (row) => <TableNumericText>{row.ready}</TableNumericText>,
+    sortAccessor: (row) => {
+      const [ready = "0", total = "0"] = row.ready.split("/");
+      return Number(ready) * 1_000_000 + Number(total);
+    },
+    align: "right",
+    numeric: true,
   },
   {
     key: "status",
     header: "Status",
     accessor: (row) => <StatusBadge status={row.status} />,
+    sortAccessor: (row) => row.status,
   },
   {
     key: "images",
     header: "Image",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px] block">
-        {row.images?.[0] || "-"}
-      </span>
-    ),
+    accessor: (row) => <TableCodeText className="block max-w-[240px] truncate" title={row.images?.[0]}>{row.images?.[0] || "—"}</TableCodeText>,
     sortable: false,
+    code: true,
   },
   {
     key: "age",
     header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">{row.age}</span>
-    ),
+    accessor: (row) => <TableSecondaryText>{row.age}</TableSecondaryText>,
+    sortAccessor: (row) => Date.parse(row.createdAt) || 0,
   },
 ];
 

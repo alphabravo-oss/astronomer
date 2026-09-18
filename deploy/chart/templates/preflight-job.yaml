@@ -39,7 +39,7 @@ spec:
       # against an unreachable / mis-configured external DB; that path
       # is preserved here.
       initContainers:
-        {{- if eq (include "astronomer.postgresBundledEnabled" .) "false" }}
+        {{- if eq (include "astronomer.postgresMode" .) "external" }}
         - name: db-preflight
           {{- with .Values.preflight.securityContext }}
           securityContext:

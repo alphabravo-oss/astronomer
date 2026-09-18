@@ -24,11 +24,11 @@ interface MetricsChartProps {
 }
 
 const CHART_COLORS = [
-  { stroke: "#3b82f6", fill: "#3b82f6" }, // blue
-  { stroke: "#6366f1", fill: "#6366f1" }, // indigo
-  { stroke: "#10b981", fill: "#10b981" }, // green
-  { stroke: "#f59e0b", fill: "#f59e0b" }, // amber
-  { stroke: "#ef4444", fill: "#ef4444" }, // red
+  { stroke: "hsl(var(--status-info))", fill: "hsl(var(--status-info))" },
+  { stroke: "hsl(var(--status-pending))", fill: "hsl(var(--status-pending))" },
+  { stroke: "hsl(var(--status-success))", fill: "hsl(var(--status-success))" },
+  { stroke: "hsl(var(--status-warning))", fill: "hsl(var(--status-warning))" },
+  { stroke: "hsl(var(--status-error))", fill: "hsl(var(--status-error))" },
 ];
 
 export function MetricsChart({

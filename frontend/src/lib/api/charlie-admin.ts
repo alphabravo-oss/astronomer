@@ -146,7 +146,7 @@ export interface CharlieTriggerRule {
   gracePeriodSeconds: number;
   flapWindowSeconds: number;
   flapCount: number;
-  estateThresholdPercent: number;
+  fleetThresholdPercent: number;
   minimumAgentVersion?: string;
   suppressed: boolean;
   maximumAttempts: number;
@@ -569,8 +569,7 @@ function triggerRuleWire(rule: CharlieTriggerRule) {
     grace_period_seconds: rule.gracePeriodSeconds,
     flap_window_seconds: rule.flapWindowSeconds,
     flap_count: rule.flapCount,
-    estate_threshold_percent: rule.estateThresholdPercent,
-    fleet_threshold_percent: rule.estateThresholdPercent,
+    fleet_threshold_percent: rule.fleetThresholdPercent,
     minimum_agent_version: rule.minimumAgentVersion,
     suppressed: rule.suppressed,
     maximum_attempts: rule.maximumAttempts,

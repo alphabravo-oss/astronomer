@@ -98,6 +98,7 @@ type DeliveryControllerInventory struct {
 	AgentVersion         string            `json:"agent_version,omitempty"`
 	FluxVersion          string            `json:"flux_version,omitempty"`
 	Components           map[string]string `json:"components,omitempty"`
+	SystemComponents     []SystemComponent `json:"system_components,omitempty"`
 	APIVersions          []string          `json:"api_versions,omitempty"`
 	KubernetesVersion    string            `json:"kubernetes_version,omitempty"`
 	DistributionDigest   string            `json:"distribution_digest,omitempty"`
@@ -105,18 +106,83 @@ type DeliveryControllerInventory struct {
 	CompatibilityMessage string            `json:"compatibility_message,omitempty"`
 }
 
+// SystemComponent is a bounded, secret-free observation of software that is
+// important to operating a cluster. Ownership and management method are kept
+// separate so the control plane never implies that Flux owns infrastructure
+// installed by the Kubernetes distribution or an external operator.
+type SystemComponent struct {
+	ID                      string                      `json:"id"`
+	Name                    string                      `json:"name"`
+	Category                string                      `json:"category"`
+	Owner                   string                      `json:"owner"`
+	ManagementMethod        string                      `json:"management_method"`
+	Namespace               string                      `json:"namespace,omitempty"`
+	Kind                    string                      `json:"kind"`
+	Version                 string                      `json:"version,omitempty"`
+	Health                  string                      `json:"health"`
+	Compatibility           string                      `json:"compatibility,omitempty"`
+	UpdateState             string                      `json:"update_state,omitempty"`
+	CreatedAt               string                      `json:"created_at,omitempty"`
+	DesiredReplicas         int32                       `json:"desired_replicas,omitempty"`
+	ReadyReplicas           int32                       `json:"ready_replicas,omitempty"`
+	HighAvailability        bool                        `json:"high_availability"`
+	Images                  []string                    `json:"images,omitempty"`
+	CPURequest              string                      `json:"cpu_request,omitempty"`
+	MemoryRequest           string                      `json:"memory_request,omitempty"`
+	CPULimit                string                      `json:"cpu_limit,omitempty"`
+	MemoryLimit             string                      `json:"memory_limit,omitempty"`
+	StorageClass            string                      `json:"storage_class,omitempty"`
+	StorageDriver           string                      `json:"storage_driver,omitempty"`
+	DefaultStorage          bool                        `json:"default_storage,omitempty"`
+	StorageProvisionedBytes int64                       `json:"storage_provisioned_bytes,omitempty"`
+	StorageUsedBytes        int64                       `json:"storage_used_bytes,omitempty"`
+	StorageReplicaCount     int32                       `json:"storage_replica_count,omitempty"`
+	Volumes                 []SystemVolumeObservation   `json:"volumes,omitempty"`
+	Resources               []SystemResourceObservation `json:"resources,omitempty"`
+	SupportedActions        []string                    `json:"supported_actions,omitempty"`
+	Detail                  string                      `json:"detail,omitempty"`
+}
+
+type SystemResourceObservation struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Group     string `json:"group,omitempty"`
+	Version   string `json:"version"`
+	Plural    string `json:"plural"`
+	Kind      string `json:"kind"`
+	Health    string `json:"health,omitempty"`
+	Detail    string `json:"detail,omitempty"`
+}
+
+type SystemVolumeObservation struct {
+	Name             string   `json:"name"`
+	Namespace        string   `json:"namespace"`
+	Phase            string   `json:"phase"`
+	StorageClass     string   `json:"storage_class,omitempty"`
+	StorageDriver    string   `json:"storage_driver,omitempty"`
+	RequestedBytes   int64    `json:"requested_bytes,omitempty"`
+	CapacityBytes    int64    `json:"capacity_bytes,omitempty"`
+	VolumeName       string   `json:"volume_name,omitempty"`
+	VolumeMode       string   `json:"volume_mode,omitempty"`
+	AccessModes      []string `json:"access_modes,omitempty"`
+	ExpansionAllowed bool     `json:"expansion_allowed"`
+	SnapshotCount    int32    `json:"snapshot_count,omitempty"`
+	CreatedAt        string   `json:"created_at,omitempty"`
+}
+
 type DeliveryAssignmentV2 struct {
-	DeploymentID string                       `json:"deployment_id"`
-	TargetID     string                       `json:"target_id"`
-	ProjectID    string                       `json:"project_id"`
-	Generation   int64                        `json:"generation"`
-	SpecDigest   string                       `json:"spec_digest"`
-	Action       DeliveryAction               `json:"action"`
-	Scope        DeliveryScope                `json:"scope"`
-	Source       DeliverySourceV2             `json:"source"`
-	Renderer     DeliveryRendererV2           `json:"renderer"`
-	Policy       DeliveryReconciliationPolicy `json:"policy"`
-	Credential   *DeliveryCredentialMaterial  `json:"credential,omitempty"`
+	DeploymentID        string                       `json:"deployment_id"`
+	TargetID            string                       `json:"target_id"`
+	ProjectID           string                       `json:"project_id"`
+	Generation          int64                        `json:"generation"`
+	SpecDigest          string                       `json:"spec_digest"`
+	ConfigurationDigest string                       `json:"configuration_digest,omitempty"`
+	Action              DeliveryAction               `json:"action"`
+	Scope               DeliveryScope                `json:"scope"`
+	Source              DeliverySourceV2             `json:"source"`
+	Renderer            DeliveryRendererV2           `json:"renderer"`
+	Policy              DeliveryReconciliationPolicy `json:"policy"`
+	Credential          *DeliveryCredentialMaterial  `json:"credential,omitempty"`
 }
 
 // DeliveryCredentialMaterial is write-only transport material. JSON encodes
@@ -170,18 +236,25 @@ type DeliveryKustomizeRenderer struct {
 }
 
 type DeliveryHelmRenderer struct {
-	Chart              string          `json:"chart"`
-	Version            string          `json:"version"`
-	ReleaseName        string          `json:"release_name"`
-	TargetNamespace    string          `json:"target_namespace"`
-	ServiceAccount     string          `json:"service_account"`
-	Values             json.RawMessage `json:"values,omitempty"`
-	InstallRetries     int             `json:"install_retries"`
-	UpgradeRetries     int             `json:"upgrade_retries"`
-	UpgradeRemediation string          `json:"upgrade_remediation"`
-	EnableTests        bool            `json:"enable_tests"`
-	DriftMode          string          `json:"drift_mode"`
-	DependencyNames    []string        `json:"dependency_names,omitempty"`
+	Chart              string                       `json:"chart"`
+	Version            string                       `json:"version"`
+	ReleaseName        string                       `json:"release_name"`
+	TargetNamespace    string                       `json:"target_namespace"`
+	ServiceAccount     string                       `json:"service_account"`
+	Values             json.RawMessage              `json:"values,omitempty"`
+	ValueSecretRefs    []DeliveryHelmValueSecretRef `json:"value_secret_refs,omitempty"`
+	InstallRetries     int                          `json:"install_retries"`
+	UpgradeRetries     int                          `json:"upgrade_retries"`
+	UpgradeRemediation string                       `json:"upgrade_remediation"`
+	EnableTests        bool                         `json:"enable_tests"`
+	DriftMode          string                       `json:"drift_mode"`
+	DependencyNames    []string                     `json:"dependency_names,omitempty"`
+}
+
+type DeliveryHelmValueSecretRef struct {
+	Name       string `json:"name"`
+	Key        string `json:"key"`
+	TargetPath string `json:"target_path"`
 }
 
 type DeliveryHealthCheck struct {
@@ -246,9 +319,20 @@ type DeliveryCondition struct {
 }
 
 type DeliveryInventory struct {
-	Entries int `json:"entries"`
-	Ready   int `json:"ready"`
-	Failed  int `json:"failed"`
+	Entries   int                        `json:"entries"`
+	Ready     int                        `json:"ready"`
+	Failed    int                        `json:"failed"`
+	Resources []DeliveryResourceIdentity `json:"resources,omitempty"`
+}
+
+// DeliveryResourceIdentity is the bounded, non-sensitive identity Flux
+// publishes in a Kustomization inventory. Specs, status payloads, annotations,
+// labels, and Secret data are deliberately excluded.
+type DeliveryResourceIdentity struct {
+	APIVersion string `json:"api_version"`
+	Kind       string `json:"kind"`
+	Namespace  string `json:"namespace,omitempty"`
+	Name       string `json:"name"`
 }
 
 var (
@@ -284,7 +368,7 @@ func (i DeliveryControllerInventory) Validate() error {
 	if i.DistributionDigest != "" && !validDigest(i.DistributionDigest) {
 		return errors.New("controller distribution digest must be a sha256 digest")
 	}
-	if len(i.Components) > MaxDeliveryInventoryEntries || len(i.APIVersions) > MaxDeliveryInventoryEntries {
+	if len(i.Components) > MaxDeliveryInventoryEntries || len(i.APIVersions) > MaxDeliveryInventoryEntries || len(i.SystemComponents) > MaxDeliveryInventoryEntries {
 		return errors.New("controller inventory exceeds entry limit")
 	}
 	for name, version := range i.Components {
@@ -295,6 +379,33 @@ func (i DeliveryControllerInventory) Validate() error {
 	for _, apiVersion := range i.APIVersions {
 		if apiVersion == "" || len(apiVersion) > 128 || strings.ContainsAny(apiVersion, "\r\n\x00") {
 			return errors.New("controller inventory API version is invalid")
+		}
+	}
+	for _, component := range i.SystemComponents {
+		if component.ID == "" || len(component.ID) > 192 || component.Name == "" || len(component.Name) > 128 ||
+			len(component.Category) > 64 || len(component.Owner) > 64 || len(component.ManagementMethod) > 64 ||
+			len(component.Namespace) > 253 || len(component.Kind) > 64 || len(component.Version) > 128 ||
+			len(component.Health) > 32 || len(component.Compatibility) > 32 || len(component.UpdateState) > 32 ||
+			len(component.CreatedAt) > 64 || len(component.Detail) > 512 || strings.ContainsAny(component.ID+component.Name+component.Detail, "\r\n\x00") {
+			return errors.New("system component inventory contains an invalid field")
+		}
+		if component.DesiredReplicas < 0 || component.ReadyReplicas < 0 || component.StorageProvisionedBytes < 0 || component.StorageUsedBytes < 0 || component.StorageReplicaCount < 0 || len(component.Images) > 32 || len(component.Volumes) > 128 || len(component.Resources) > 128 || len(component.SupportedActions) > 16 {
+			return errors.New("system component inventory contains invalid bounds")
+		}
+		for _, value := range append(append([]string(nil), component.Images...), component.SupportedActions...) {
+			if len(value) > 512 || strings.ContainsAny(value, "\r\n\x00") {
+				return errors.New("system component inventory contains an invalid value")
+			}
+		}
+		for _, volume := range component.Volumes {
+			if volume.Name == "" || len(volume.Name) > 253 || len(volume.Namespace) > 253 || len(volume.Phase) > 32 || len(volume.StorageClass) > 253 || len(volume.StorageDriver) > 253 || len(volume.VolumeName) > 253 || len(volume.VolumeMode) > 32 || len(volume.CreatedAt) > 64 || volume.RequestedBytes < 0 || volume.CapacityBytes < 0 || volume.SnapshotCount < 0 || len(volume.AccessModes) > 8 || strings.ContainsAny(volume.Name+volume.Namespace+volume.VolumeName, "\r\n\x00") {
+				return errors.New("system volume inventory contains an invalid field")
+			}
+		}
+		for _, resource := range component.Resources {
+			if resource.Name == "" || len(resource.Name) > 253 || len(resource.Namespace) > 253 || len(resource.Group) > 253 || resource.Version == "" || len(resource.Version) > 64 || resource.Plural == "" || len(resource.Plural) > 128 || resource.Kind == "" || len(resource.Kind) > 128 || len(resource.Health) > 32 || len(resource.Detail) > 512 || strings.ContainsAny(resource.Name+resource.Namespace+resource.Detail, "\r\n\x00") {
+				return errors.New("system resource inventory contains an invalid field")
+			}
 		}
 	}
 	return nil
@@ -347,8 +458,18 @@ func (s DeliveryStatusV2) Validate() error {
 		}
 		if deployment.ObservedAt.IsZero() || len(deployment.Conditions) > MaxDeliveryConditions ||
 			deployment.Inventory.Entries < 0 || deployment.Inventory.Ready < 0 || deployment.Inventory.Failed < 0 ||
-			deployment.Inventory.Ready+deployment.Inventory.Failed > deployment.Inventory.Entries {
+			deployment.Inventory.Ready+deployment.Inventory.Failed > deployment.Inventory.Entries ||
+			len(deployment.Inventory.Resources) > MaxDeliveryInventoryEntries {
 			return fmt.Errorf("deployment status %d has invalid observation data", index)
+		}
+		for resourceIndex, resource := range deployment.Inventory.Resources {
+			if len(resource.APIVersion) == 0 || len(resource.APIVersion) > 253 ||
+				len(resource.Kind) == 0 || len(resource.Kind) > 128 ||
+				len(resource.Name) == 0 || len(resource.Name) > 253 ||
+				len(resource.Namespace) > 253 ||
+				strings.ContainsAny(resource.APIVersion+resource.Kind+resource.Namespace+resource.Name, "\x00\r\n\t") {
+				return fmt.Errorf("deployment status %d resource %d is invalid", index, resourceIndex)
+			}
 		}
 		for conditionIndex := range deployment.Conditions {
 			condition := deployment.Conditions[conditionIndex]
@@ -437,6 +558,9 @@ func (a DeliveryAssignmentV2) Validate() error {
 	}
 	if a.Generation < 1 || !validDigest(a.SpecDigest) {
 		return errors.New("generation and spec digest are required")
+	}
+	if a.ConfigurationDigest != "" && !validDigest(a.ConfigurationDigest) {
+		return errors.New("configuration digest is invalid")
 	}
 	if a.Action != DeliveryActionApply && a.Action != DeliveryActionSuspend {
 		return fmt.Errorf("unsupported action %q", a.Action)
@@ -555,6 +679,20 @@ func (r DeliveryRendererV2) Validate() error {
 		}
 		if len(r.Helm.Values) > MaxDeliveryValuesBytes || (len(r.Helm.Values) > 0 && !json.Valid(r.Helm.Values)) {
 			return errors.New("helm values must be valid bounded JSON")
+		}
+		if len(r.Helm.ValueSecretRefs) > 64 {
+			return errors.New("helm value Secret references exceed count limit")
+		}
+		seenRefs := make(map[string]struct{}, len(r.Helm.ValueSecretRefs))
+		for _, ref := range r.Helm.ValueSecretRefs {
+			if !validDNSLabel(ref.Name) || !validSecretKey(ref.Key) || strings.TrimSpace(ref.TargetPath) == "" || len(ref.TargetPath) > 1024 {
+				return errors.New("helm value Secret reference is invalid")
+			}
+			identity := ref.Name + "\x00" + ref.Key + "\x00" + ref.TargetPath
+			if _, duplicate := seenRefs[identity]; duplicate {
+				return errors.New("helm value Secret references must be unique")
+			}
+			seenRefs[identity] = struct{}{}
 		}
 	default:
 		return fmt.Errorf("unsupported renderer kind %q", r.Kind)

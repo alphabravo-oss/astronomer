@@ -74,7 +74,13 @@ function renderTable() {
 }
 
 function rowFor(name: string): HTMLElement {
-  const row = screen.getByText(name).closest("tr");
+  const row = screen
+    .getAllByText(name)
+    .map((element) => element.closest("tr"))
+    .find(
+      (element): element is HTMLTableRowElement =>
+        element instanceof HTMLTableRowElement,
+    );
   if (!row) throw new Error(`no table row for repository ${name}`);
   return row;
 }

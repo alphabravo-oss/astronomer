@@ -122,6 +122,32 @@ GROUP BY repository_id;
 
 -- Helm Charts
 
+-- name: ListCatalogUserDiscovery :many
+SELECT chart_id, favorite, favorite_at, last_viewed_at, view_count
+FROM catalog_user_discovery
+WHERE user_id = $1
+ORDER BY favorite DESC, favorite_at DESC NULLS LAST, last_viewed_at DESC NULLS LAST;
+
+-- name: RecordCatalogChartView :exec
+INSERT INTO catalog_user_discovery (
+    user_id, chart_id, last_viewed_at, view_count
+) VALUES ($1, $2, now(), 1)
+ON CONFLICT (user_id, chart_id) DO UPDATE SET
+    last_viewed_at = now(),
+    view_count = catalog_user_discovery.view_count + 1;
+
+-- name: SetCatalogChartFavorite :one
+INSERT INTO catalog_user_discovery (
+    user_id, chart_id, favorite, favorite_at
+) VALUES ($1, $2, $3, CASE WHEN $3 THEN now() ELSE NULL END)
+ON CONFLICT (user_id, chart_id) DO UPDATE SET
+    favorite = EXCLUDED.favorite,
+    favorite_at = CASE
+        WHEN EXCLUDED.favorite THEN COALESCE(catalog_user_discovery.favorite_at, now())
+        ELSE NULL
+    END
+RETURNING chart_id, favorite, favorite_at, last_viewed_at, view_count;
+
 -- name: GetHelmChartByID :one
 SELECT * FROM helm_charts WHERE id = $1;
 
@@ -194,6 +220,24 @@ WHERE chart_id = $1
 ORDER BY created_at_upstream DESC NULLS LAST, created_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: ListUpgradeVersionsForInstalledChart :many
+SELECT candidate.*
+FROM installed_charts installation
+JOIN helm_chart_versions current_version ON current_version.id=installation.chart_version_id
+JOIN helm_chart_versions candidate ON candidate.chart_id=current_version.chart_id
+JOIN helm_charts chart ON chart.id=candidate.chart_id
+JOIN helm_repositories repository ON repository.id=chart.repository_id
+JOIN catalog_blessed_charts catalog_entry
+  ON catalog_entry.repo_url=repository.url
+ AND catalog_entry.chart_name=chart.name
+ AND catalog_entry.source='catalog-v1'
+WHERE installation.id=$1
+  AND catalog_entry.revoked=false
+  AND catalog_entry.verification_status IN ('verified','digest-verified')
+  AND catalog_entry.artifact->>'version'=candidate.version
+ORDER BY candidate.created_at_upstream DESC NULLS LAST, candidate.created_at DESC
+LIMIT 100;
+
 -- name: CreateHelmChartVersion :one
 INSERT INTO helm_chart_versions (chart_id, version, app_version, digest, urls, values_schema, default_values, readme, created_at_upstream)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -263,8 +307,8 @@ LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
 SELECT * FROM installed_charts WHERE cluster_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
 -- name: CreateInstalledChart :one
-INSERT INTO installed_charts (cluster_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO installed_charts (cluster_id, project_id, chart_version_id, release_name, namespace, values_override, status, revision, notes, installed_by_id, request_id, tool_slug, preset_used)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING *;
 
 -- name: UpdateInstalledChartStatus :exec

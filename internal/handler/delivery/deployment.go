@@ -55,6 +55,11 @@ func (h *DeploymentHandler) List(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
 		return
 	}
+	targetID, err := optionalUUIDFilter(r, "target_id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
+		return
+	}
 	phase, err := deploymentPhaseFilter(r)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid_filter", err.Error())
@@ -64,13 +69,13 @@ func (h *DeploymentHandler) List(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusServiceUnavailable, "service_unavailable", "delivery deployment persistence is unavailable")
 		return
 	}
-	params := sqlc.ListClusterDeploymentsParams{ProjectID: projectID, ClusterID: clusterID, Phase: phase, QueryLimit: limit, QueryOffset: offset}
+	params := sqlc.ListClusterDeploymentsParams{ProjectID: projectID, TargetID: targetID, ClusterID: clusterID, Phase: phase, QueryLimit: limit, QueryOffset: offset}
 	rows, err := h.queries.ListClusterDeployments(r.Context(), params)
 	if err != nil {
 		respondDatabaseError(w, err)
 		return
 	}
-	total, err := h.queries.CountClusterDeployments(r.Context(), sqlc.CountClusterDeploymentsParams{ProjectID: projectID, ClusterID: clusterID, Phase: phase})
+	total, err := h.queries.CountClusterDeployments(r.Context(), sqlc.CountClusterDeploymentsParams{ProjectID: projectID, TargetID: targetID, ClusterID: clusterID, Phase: phase})
 	if err != nil {
 		respondDatabaseError(w, err)
 		return

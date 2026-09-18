@@ -377,7 +377,31 @@ func observedInventory(reconciler *unstructured.Unstructured) protocol.DeliveryI
 	if !found {
 		return protocol.DeliveryInventory{}
 	}
-	return protocol.DeliveryInventory{Entries: len(entries)}
+	inventory := protocol.DeliveryInventory{Entries: len(entries)}
+	for _, raw := range entries {
+		id, ok := raw.(string)
+		if !ok {
+			continue
+		}
+		parts := strings.Split(id, "_")
+		if len(parts) != 5 || parts[1] == "" || parts[2] == "" || parts[4] == "" {
+			continue
+		}
+		apiVersion := parts[1]
+		if parts[0] != "" {
+			apiVersion = parts[0] + "/" + parts[1]
+		}
+		inventory.Resources = append(inventory.Resources, protocol.DeliveryResourceIdentity{
+			APIVersion: apiVersion,
+			Kind:       parts[2],
+			Namespace:  parts[3],
+			Name:       parts[4],
+		})
+		if len(inventory.Resources) == protocol.MaxDeliveryInventoryEntries {
+			break
+		}
+	}
+	return inventory
 }
 
 func sanitizeStatusText(value string, limit int) string {

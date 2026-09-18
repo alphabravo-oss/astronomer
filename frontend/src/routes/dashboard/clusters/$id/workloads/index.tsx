@@ -1,12 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 /**
  * Unified Workloads tab — aggregates every workload kind into one
  * filterable table.
@@ -33,7 +25,7 @@ import {
 import { useMemo, useState } from "react";
 import { Link } from "@/lib/link";
 import { useParams, useRouter } from "@/lib/navigation";
-import { eq, ilike, useLiveQuery } from "@tanstack/react-db";
+import { ilike, useLiveQuery } from "@tanstack/react-db";
 import { useStore } from "@tanstack/react-store";
 import {
   Boxes,
@@ -45,10 +37,12 @@ import {
   AlertCircle,
   CircleHelp,
   Search,
+  Filter,
 } from "lucide-react";
 
 import { k8sCollection, type K8sWatchStatus } from "@/lib/db/collections";
 import { formatRelativeTime } from "@/lib/utils";
+import { DataTable, type Column } from "@/components/ui/data-table";
 
 // ---------------------------------------------------------------------
 // Types — narrow shapes over k8s objects, only fields we render.
@@ -118,7 +112,6 @@ type Workload =
 
 interface KindFilters {
   search: string;
-  namespace: string;
   kind: Workload["kind"] | "";
 }
 
@@ -160,8 +153,6 @@ function useWorkloadKind<T extends WorkloadObj>(
     (q) => {
       if (!clusterId || (filters.kind && filters.kind !== kind)) return null;
       let qb = q.from({ w: handle.collection });
-      if (filters.namespace)
-        qb = qb.where(({ w }) => eq(w.metadata.namespace, filters.namespace));
       if (needle)
         qb = qb.where(({ w }) => ilike(w.metadata.name, `%${needle}%`));
       return qb;
@@ -171,7 +162,6 @@ function useWorkloadKind<T extends WorkloadObj>(
       clusterId,
       kind,
       filters.kind,
-      filters.namespace,
       needle,
     ],
   );
@@ -190,17 +180,19 @@ function useWorkloadKind<T extends WorkloadObj>(
 
 function WorkloadsPage() {
   const params = useParams();
+  const router = useRouter();
   const clusterId = params.id as string;
 
   const [search, setSearch] = useState("");
-  const [namespace, setNamespace] = useState<string>("");
+  const [selectedNamespaces, setSelectedNamespaces] = useState<string[]>([]);
+  const [namespaceMenuOpen, setNamespaceMenuOpen] = useState(false);
   const [kindFilter, setKindFilter] = useState<Workload["kind"] | "">("");
 
   // One live collection per kind (seed list + `?watch=true` stream folded by
   // lib/db/collections.ts). Each kind has its own collection and status; a
   // missing apiVersion (e.g. batch/v1 disabled) doesn't take the others down
   // with it, and a stream that can't open self-heals with backoff re-seeds.
-  const filters: KindFilters = { search, namespace, kind: kindFilter };
+  const filters: KindFilters = { search, kind: kindFilter };
   const deployments = useWorkloadKind<DeploymentLike>(
     clusterId,
     "apis/apps/v1/deployments",
@@ -279,13 +271,18 @@ function WorkloadsPage() {
       .filter(unownedJob)
       .forEach((i) => out.push({ kind: "Job", item: i }));
     cronjobs.filtered.forEach((i) => out.push({ kind: "CronJob", item: i }));
-    return out;
+    return selectedNamespaces.length === 0
+      ? out
+      : out.filter((row) =>
+          selectedNamespaces.includes(row.item.metadata.namespace),
+        );
   }, [
     deployments.filtered,
     statefulsets.filtered,
     daemonsets.filtered,
     jobs.filtered,
     cronjobs.filtered,
+    selectedNamespaces,
   ]);
 
   const isLoading =
@@ -302,6 +299,52 @@ function WorkloadsPage() {
     jobs.status === "error" && "Jobs",
     cronjobs.status === "error" && "CronJobs",
   ].filter(Boolean) as string[];
+
+  const columns = useMemo<Column<Workload>[]>(
+    () => [
+      {
+        key: "kind",
+        header: "Kind",
+        accessor: (row) => {
+          const meta = KIND_META[row.kind];
+          return <span className="inline-flex items-center gap-1.5"><meta.icon className="h-3.5 w-3.5 text-muted-foreground" />{row.kind}</span>;
+        },
+        sortAccessor: (row) => row.kind,
+      },
+      {
+        key: "name",
+        header: "Name",
+        accessor: (row) => {
+          const meta = KIND_META[row.kind];
+          const href = `/dashboard/clusters/${clusterId}/workloads/${meta.urlSegment}/${row.item.metadata.namespace}/${row.item.metadata.name}`;
+          return <Link href={href} onClick={(event) => event.stopPropagation()} className="font-mono text-xs font-medium hover:underline">{row.item.metadata.name}</Link>;
+        },
+        sortAccessor: (row) => row.item.metadata.name,
+      },
+      {
+        key: "namespace",
+        header: "Namespace",
+        accessor: (row) => <span className="font-mono text-xs text-muted-foreground">{row.item.metadata.namespace}</span>,
+        sortAccessor: (row) => row.item.metadata.namespace,
+      },
+      {
+        key: "status",
+        header: "Status",
+        accessor: (row) => {
+          const status = computeStatus(row);
+          return <span className={`inline-flex items-center gap-1 ${status.tone}`}>{status.icon}{status.label}</span>;
+        },
+        sortAccessor: (row) => computeStatus(row).label,
+      },
+      {
+        key: "age",
+        header: "Age",
+        accessor: (row) => row.item.metadata.creationTimestamp ? formatRelativeTime(row.item.metadata.creationTimestamp) : "—",
+        sortAccessor: (row) => Date.parse(row.item.metadata.creationTimestamp ?? "") || 0,
+      },
+    ],
+    [clusterId],
+  );
 
   return (
     <div className="space-y-4">
@@ -332,19 +375,55 @@ function WorkloadsPage() {
               className="h-8 rounded-md border border-border bg-background pl-7 pr-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-          <select
-            aria-label="Filter workloads by namespace"
-            value={namespace}
-            onChange={(e) => setNamespace(e.target.value)}
-            className="h-8 rounded-md border border-border bg-background px-2 text-sm"
-          >
-            <option value="">all namespaces</option>
-            {namespaces.map((ns) => (
-              <option key={ns} value={ns}>
-                {ns}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              type="button"
+              aria-label="Filter workloads by namespace"
+              aria-expanded={namespaceMenuOpen}
+              onClick={() => setNamespaceMenuOpen((open) => !open)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-sm"
+            >
+              <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+              {selectedNamespaces.length === 0
+                ? "All namespaces"
+                : selectedNamespaces.length === 1
+                  ? selectedNamespaces[0]
+                  : `${selectedNamespaces.length} namespaces`}
+            </button>
+            {namespaceMenuOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 max-h-72 w-56 overflow-auto rounded-md border border-border bg-popover p-1 shadow-lg">
+                {namespaces.map((ns) => (
+                  <label
+                    key={ns}
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedNamespaces.includes(ns)}
+                      onChange={() =>
+                        setSelectedNamespaces((current) =>
+                          current.includes(ns)
+                            ? current.filter((value) => value !== ns)
+                            : [...current, ns],
+                        )
+                      }
+                      className="rounded border-border text-primary focus:ring-ring"
+                    />
+                    {ns}
+                  </label>
+                ))}
+                {selectedNamespaces.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedNamespaces([])}
+                    className="mt-1 w-full rounded px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    All namespaces
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           <select
             aria-label="Filter workloads by kind"
             value={kindFilter}
@@ -370,142 +449,24 @@ function WorkloadsPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border overflow-hidden">
-        <Table className="w-full text-sm">
-          <TableHeader className="bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
-            <TableRow>
-              <TableHead className="px-3 py-2 text-left font-medium w-32">
-                Kind
-              </TableHead>
-              <TableHead className="px-3 py-2 text-left font-medium">
-                Name
-              </TableHead>
-              <TableHead className="px-3 py-2 text-left font-medium w-48">
-                Namespace
-              </TableHead>
-              <TableHead className="px-3 py-2 text-left font-medium w-32">
-                Status
-              </TableHead>
-              <TableHead className="px-3 py-2 text-left font-medium w-28">
-                Age
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className="divide-y divide-border">
-            {isLoading && rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  Loading…
-                </TableCell>
-              </TableRow>
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  {search || namespace || kindFilter ? (
-                    <>No workloads match the filters.</>
-                  ) : (
-                    <div className="space-y-3">
-                      <p>No workloads in this cluster yet.</p>
-                      <p className="text-xs">
-                        Install a chart from the{" "}
-                        <a
-                          href={`/dashboard/catalog?cluster_id=${clusterId}`}
-                          className="underline"
-                        >
-                          catalog
-                        </a>{" "}
-                        or open the{" "}
-                        <a
-                          href={`/dashboard/clusters/${clusterId}/shell`}
-                          className="underline"
-                        >
-                          kubectl shell
-                        </a>{" "}
-                        to apply a manifest directly.
-                      </p>
-                    </div>
-                  )}
-                </TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((r) => (
-                <WorkloadRow
-                  key={`${r.kind}/${r.item.metadata.namespace}/${r.item.metadata.name}`}
-                  clusterId={clusterId}
-                  workload={r}
-                />
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        data={filtered}
+        columns={columns}
+        keyExtractor={(row) => `${row.kind}/${row.item.metadata.namespace}/${row.item.metadata.name}`}
+        searchable={false}
+        loading={isLoading && rows.length === 0}
+        emptyMessage={search || selectedNamespaces.length > 0 || kindFilter ? "No workloads match the filters." : "No workloads in this cluster yet."}
+        persistKey="cluster-workloads"
+        onRowClick={(row) => {
+          const meta = KIND_META[row.kind];
+          router.push(`/dashboard/clusters/${clusterId}/workloads/${meta.urlSegment}/${row.item.metadata.namespace}/${row.item.metadata.name}`);
+        }}
+      />
 
       <p className="text-xs text-muted-foreground">
         {filtered.length} of {rows.length} workloads
       </p>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Row
-// ---------------------------------------------------------------------
-
-function WorkloadRow({
-  clusterId,
-  workload,
-}: {
-  clusterId: string;
-  workload: Workload;
-}) {
-  const router = useRouter();
-  const status = computeStatus(workload);
-  const kindMeta = KIND_META[workload.kind];
-  const href = `/dashboard/clusters/${clusterId}/workloads/${kindMeta.urlSegment}/${workload.item.metadata.namespace}/${workload.item.metadata.name}`;
-  // ponytail: this list page is un-gated today (no permission hooks; the detail
-  // route does its own read-gating). Make the whole row drill in for parity
-  // with the resource tables; the name stays a real <Link> for open-in-new-tab.
-  return (
-    <TableRow
-      className="hover:bg-muted/30 cursor-pointer"
-      onClick={() => router.push(href)}
-    >
-      <TableCell className="px-3 py-2">
-        <span className="inline-flex items-center gap-1.5 text-foreground">
-          <kindMeta.icon className="h-3.5 w-3.5 text-muted-foreground" />
-          {workload.kind}
-        </span>
-      </TableCell>
-      <TableCell className="px-3 py-2">
-        <Link
-          href={href}
-          onClick={(e) => e.stopPropagation()}
-          className="text-foreground hover:underline"
-        >
-          {workload.item.metadata.name}
-        </Link>
-      </TableCell>
-      <TableCell className="px-3 py-2 text-muted-foreground">
-        {workload.item.metadata.namespace}
-      </TableCell>
-      <TableCell className="px-3 py-2">
-        <span className={`inline-flex items-center gap-1 ${status.tone}`}>
-          {status.icon}
-          {status.label}
-        </span>
-      </TableCell>
-      <TableCell className="px-3 py-2 text-muted-foreground">
-        {workload.item.metadata.creationTimestamp
-          ? formatRelativeTime(workload.item.metadata.creationTimestamp)
-          : "—"}
-      </TableCell>
-    </TableRow>
   );
 }
 

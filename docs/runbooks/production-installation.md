@@ -8,8 +8,9 @@ existing Kubernetes clusters and does not provision them.
 
 - Platform engineering owns the Helm release, Gateway, NetworkPolicy, and
   capacity decision.
-- Database and cache owners provide HA PostgreSQL and Redis endpoints, TLS,
-  backup/PITR policy, and tested credentials.
+- Database and cache owners provide either HA external endpoints or operate the
+  chart's CloudNativePG and Sentinel-backed Valkey profiles, including
+  backup/PITR policy and tested credentials.
 - Security owns signing-key and Fernet-key custody, release verification,
   identity integration, and break-glass access.
 - The application owner supplies DNS, TLS, external identity, object storage,
@@ -29,10 +30,11 @@ cannot be verified and pulled from the management environment.
 2. Confirm the management cluster Kubernetes minor is supported and that the
    release-qualified Gateway API CRDs and GatewayClass are installed and
    Accepted.
-3. Provide HA external PostgreSQL and Redis for production. Confirm TLS,
-   network reachability, connection limits, storage alerts, PostgreSQL PITR,
-   and Redis recovery behavior. Bundled data services are development and
-   smoke-test profiles, not an enterprise topology.
+3. Choose external PostgreSQL/Valkey or the production profile's managed
+   CloudNativePG/Sentinel modes. Managed CNPG requires its operator to be
+   installed first. Confirm network reachability, connection limits, Longhorn
+   capacity/alerts, PostgreSQL PITR, and Sentinel failover behavior. The
+   single-node bundled modes are development and smoke-test profiles only.
 4. Reserve at least three schedulable nodes across failure domains, then size
    replicas, requests, limits, connection pools, queue concurrency, and PDBs
    from a retained scale report. Do not copy example sizing into production
@@ -50,7 +52,7 @@ Download the exact tag into a private directory and verify checksums and the
 release manifest before using any digest from it:
 
 ```bash
-export ASTRONOMER_RELEASE=v1.1.0
+export ASTRONOMER_RELEASE=v1.2.0
 mkdir "astronomer-${ASTRONOMER_RELEASE}"
 cd "astronomer-${ASTRONOMER_RELEASE}"
 gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer
@@ -93,7 +95,7 @@ kubectl -n astronomer get secret astronomer-core astronomer-bootstrap \
 
 Start from the matching tag's `deploy/chart/values-production.yaml` and keep
 site-specific overrides in a protected configuration repository. Set external
-PostgreSQL/Redis TLS inputs, Gateway hostname/TLS, replicas, topology, resource
+data-service mode and credentials, Gateway hostname/TLS, replicas, topology, resource
 budgets, backup destination, key backup, restore drill, identity, and egress
 policy. Use only Secret references for credentials.
 
@@ -127,7 +129,7 @@ validation.
 ```bash
 helm upgrade --install astronomer \
   oci://ghcr.io/alphabravo-oss/charts/astronomer \
-  --version 1.1.0 \
+  --version 1.2.0 \
   --namespace astronomer \
   --create-namespace \
   -f ./deploy/chart/values-production.yaml \
@@ -155,6 +157,14 @@ Then validate login, password rotation, SSO and group mapping, least-privilege
 RBAC denial, API token scope, audit persistence, management backup destination
 and on-demand backup, restore-drill scheduling, SMTP/webhook/SIEM delivery,
 logging/monitoring connectivity, and a redacted support bundle.
+
+Verify the Apps catalog separately: confirm its pinned digest and last sync,
+open one application detail page, and run a prerequisite preview without
+installing. `catalog.enabled=false` is the supported safe-off state; it stops
+curated synchronization while leaving installed releases and custom Helm
+repositories manageable. Disconnected installations must complete the
+[application catalog export/import](../airgapped-install.md#8-export-and-import-the-application-catalog)
+before this check.
 
 Adopt one canary cluster with a scoped agent profile. Apply its manifest using
 server-side apply, verify agent/Flux compatibility, publish one immutable

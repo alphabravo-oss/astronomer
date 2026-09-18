@@ -763,6 +763,83 @@ func TestGlobalImageRegistryAndPullPolicyApplyToCoreImages(t *testing.T) {
 	assertContainerImage(t, docs, "StatefulSet", "astronomer-redis", "containers", "redis", "registry.example.com/platform/valkey/valkey:8-alpine", "Always")
 }
 
+func TestSharedGatewayRoutesWithoutOwningGatewayOrTLS(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"gateway.create=false",
+		"gateway.name=public",
+		"gateway.namespace=platform-gateway",
+		"gateway.sectionName=https",
+		"gateway.hosts[0]=astronomer.dev.alphabravo.io",
+		"tls.source=externalGateway",
+	))
+
+	for _, doc := range docs {
+		if stringValue(doc["kind"]) == "Gateway" {
+			t.Fatalf("shared-Gateway mode unexpectedly rendered Gateway/%s", stringAt(doc, "metadata", "name"))
+		}
+	}
+	for _, name := range []string{"astronomer-ui", "astronomer-api"} {
+		route := findRenderedDoc(t, docs, "HTTPRoute", name)
+		parentRefs, _ := nestedMap(route, "spec")["parentRefs"].([]any)
+		if len(parentRefs) != 1 {
+			t.Fatalf("HTTPRoute/%s parentRefs = %#v, want one", name, parentRefs)
+		}
+		parent, _ := parentRefs[0].(map[string]any)
+		if got := stringValue(parent["name"]); got != "public" {
+			t.Fatalf("HTTPRoute/%s parent name = %q, want public", name, got)
+		}
+		if got := stringValue(parent["namespace"]); got != "platform-gateway" {
+			t.Fatalf("HTTPRoute/%s parent namespace = %q, want platform-gateway", name, got)
+		}
+		if got := stringValue(parent["sectionName"]); got != "https" {
+			t.Fatalf("HTTPRoute/%s parent sectionName = %q, want https", name, got)
+		}
+	}
+
+	config := nestedMap(findRenderedDoc(t, docs, "ConfigMap", "astronomer-config"), "data")
+	if got := stringValue(config["ASTRONOMER_GATEWAY_NAME"]); got != "public" {
+		t.Fatalf("ASTRONOMER_GATEWAY_NAME = %q, want public", got)
+	}
+	if got := stringValue(config["ASTRONOMER_GATEWAY_NAMESPACE"]); got != "platform-gateway" {
+		t.Fatalf("ASTRONOMER_GATEWAY_NAMESPACE = %q, want platform-gateway", got)
+	}
+}
+
+func TestProductionCoreWorkloadsHaveNodeLevelHAContracts(t *testing.T) {
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets, "managementBackup.enabled=false")
+	docs := parseRenderedDocs(t, helmTemplateWithValueFiles(t, []string{"chart/values-production.yaml"}, sets...))
+
+	for _, workload := range []string{"astronomer-server", "astronomer-worker", "astronomer-frontend", "astronomer-dex"} {
+		deployment := findRenderedDoc(t, docs, "Deployment", workload)
+		constraints, _ := podSpecFor(deployment)["topologySpreadConstraints"].([]any)
+		if len(constraints) != 1 {
+			t.Fatalf("Deployment/%s topologySpreadConstraints = %#v, want one", workload, constraints)
+		}
+		constraint, _ := constraints[0].(map[string]any)
+		if got := stringValue(constraint["topologyKey"]); got != "kubernetes.io/hostname" {
+			t.Fatalf("Deployment/%s topologyKey = %q, want kubernetes.io/hostname", workload, got)
+		}
+		if got := stringValue(constraint["whenUnsatisfiable"]); got != "DoNotSchedule" {
+			t.Fatalf("Deployment/%s whenUnsatisfiable = %q, want DoNotSchedule", workload, got)
+		}
+		matchLabelKeys, _ := constraint["matchLabelKeys"].([]any)
+		if len(matchLabelKeys) != 1 || stringValue(matchLabelKeys[0]) != "pod-template-hash" {
+			t.Fatalf("Deployment/%s matchLabelKeys = %#v, want pod-template-hash", workload, matchLabelKeys)
+		}
+
+		pdb := findRenderedDoc(t, docs, "PodDisruptionBudget", workload)
+		minAvailable := nestedMap(pdb, "spec")["minAvailable"]
+		want := "2"
+		if workload == "astronomer-dex" {
+			want = "1"
+		}
+		if got := fmt.Sprint(minAvailable); got != want {
+			t.Fatalf("PodDisruptionBudget/%s minAvailable = %q, want %s", workload, got, want)
+		}
+	}
+}
+
 func assertContainerImage(t *testing.T, docs []renderedDoc, kind, name, field, containerName, wantImage, wantPullPolicy string) {
 	t.Helper()
 	doc := findRenderedDoc(t, docs, kind, name)
@@ -796,6 +873,39 @@ func podSpecFor(doc renderedDoc) map[string]any {
 		return nestedMap(doc, "spec", "jobTemplate", "spec", "template", "spec")
 	default:
 		return nil
+	}
+}
+
+func TestEveryRenderedContainerHasCPUAndMemoryBounds(t *testing.T) {
+	renders := map[string]string{
+		"default": helmTemplate(t),
+		"ha-datastores": helmTemplate(t,
+			"postgres.mode=cloudNativePG",
+			"postgres.cloudNativePG.instances=3",
+			"redis.mode=sentinel",
+		),
+	}
+	for profile, out := range renders {
+		for _, doc := range parseRenderedDocs(t, out) {
+			podSpec := podSpecFor(doc)
+			if podSpec == nil {
+				continue
+			}
+			for _, field := range []string{"initContainers", "containers"} {
+				for _, container := range containerList(podSpec, field) {
+					resources := nestedMap(container, "resources")
+					requests := nestedMap(resources, "requests")
+					limits := nestedMap(resources, "limits")
+					for _, resource := range []string{"cpu", "memory"} {
+						if stringValue(requests[resource]) == "" || stringValue(limits[resource]) == "" {
+							t.Errorf("%s: %s/%s %s/%s has no %s request and limit", profile,
+								stringValue(doc["kind"]), stringAt(doc, "metadata", "name"), field,
+								stringValue(container["name"]), resource)
+						}
+					}
+				}
+			}
+		}
 	}
 }
 

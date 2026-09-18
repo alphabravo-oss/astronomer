@@ -853,11 +853,27 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/catalog/application-sources"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/applications"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/catalog/applications/preview"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/catalog/charts"
   },
   {
     "method": "GET",
     "pattern": "/api/v1/catalog/charts/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/catalog/charts/{id}/favorite"
   },
   {
     "method": "GET",
@@ -874,6 +890,10 @@
   {
     "method": "GET",
     "pattern": "/api/v1/catalog/controller/status"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/discovery"
   },
   {
     "method": "GET",
@@ -898,6 +918,10 @@
   {
     "method": "PUT",
     "pattern": "/api/v1/catalog/installed/{id}/upgrade"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/catalog/installed/{id}/upgrade-versions"
   },
   {
     "method": "GET",
@@ -1937,6 +1961,26 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/delivery/configuration-templates"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/configuration-templates"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/delivery/configuration-templates/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/configuration-templates/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/delivery/configuration-templates/{id}"
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/delivery/deployments"
   },
   {
@@ -1961,11 +2005,31 @@
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/delivery/estate"
+    "pattern": "/api/v1/delivery/fleet"
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/delivery/fleet"
+    "pattern": "/api/v1/delivery/override-sets"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/override-sets"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/delivery/override-sets/effective"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/delivery/override-sets/{id}"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/delivery/override-sets/{id}"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/delivery/override-sets/{id}"
   },
   {
     "method": "GET",

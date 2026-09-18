@@ -1,6 +1,7 @@
 // Route files are the eslint-exempted surface for direct router imports.
 import { createFileRoute } from "@tanstack/react-router";
 import { ResourceDetail } from "@/components/resources/resource-detail";
+import { NamespaceDetailPage } from "@/components/resources/namespace-detail-page";
 import {
   resolveDetailSlug,
   k8sResourcePath,
@@ -27,6 +28,10 @@ function ResourceDetailPage() {
   }
 
   const k8sPath = k8sResourcePath(resourceType, name, namespace);
+
+  if (resourceType === "namespaces") {
+    return <NamespaceDetailPage clusterId={clusterId} namespace={name} />;
+  }
 
   return (
     <ResourceDetail

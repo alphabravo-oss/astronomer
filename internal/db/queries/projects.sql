@@ -11,6 +11,13 @@ SELECT * FROM projects WHERE id = $1 FOR UPDATE;
 -- name: GetProjectByNameAndCluster :one
 SELECT * FROM projects WHERE name = $1 AND cluster_id = $2;
 
+-- name: GetProjectNamespaceByClusterAndNamespace :one
+-- Resolve optional project ownership from the Kubernetes deployment target.
+-- The partial unique index on (cluster_id, namespace) guarantees at most one
+-- owning project, so callers never need a user-selected project discriminator.
+SELECT * FROM project_namespaces
+WHERE cluster_id = $1 AND namespace = $2;
+
 -- name: ListProjects :many
 SELECT * FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2;
 

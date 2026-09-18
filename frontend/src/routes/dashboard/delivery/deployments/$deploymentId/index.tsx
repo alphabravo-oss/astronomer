@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Eye, Pause, RefreshCw } from "lucide-react";
+import { ArrowLeft, Eye, Pause, Play, RefreshCw } from "lucide-react";
 import { Link } from "@/lib/link";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
@@ -27,6 +27,7 @@ import {
   getClusterDeployment,
   listClusterDeploymentEvents,
   type ClusterDeploymentEvent,
+  type ClusterDeployment,
   type DeliveryConditionView,
 } from "@/lib/api/delivery";
 import { queryKeys } from "@/lib/query-keys";
@@ -46,7 +47,9 @@ export function DeploymentDetailPage() {
   const scope = { type: "project" as const, id: projectId };
   const allowed = can(user, "delivery_deployments", "read", scope);
   const canUpdate = can(user, "delivery_deployments", "update", scope);
-  const [action, setAction] = useState<"reconcile" | "suspend" | null>(null);
+  const [action, setAction] = useState<
+    "reconcile" | "suspend" | "resume" | null
+  >(null);
   const [diagnostics, setDiagnostics] = useState(false);
   const [eventPage, setEventPage] = useDeliveryPageIndex();
   const pageSize = 20;
@@ -153,18 +156,37 @@ export function DeploymentDetailPage() {
                   >
                     <Eye className="h-4 w-4" /> Advanced diagnostics
                   </button>
-                  <button
-                    type="button"
-                    className={secondaryButton}
-                    disabled={!canUpdate}
-                    onClick={() => setAction("suspend")}
-                  >
-                    <Pause className="h-4 w-4" /> Suspend
-                  </button>
+                  {deployment.phase === "suspended" ? (
+                    <button
+                      type="button"
+                      className={secondaryButton}
+                      disabled={!canUpdate}
+                      onClick={() => setAction("resume")}
+                    >
+                      <Play className="h-4 w-4" /> Resume
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={secondaryButton}
+                      disabled={
+                        !canUpdate ||
+                        deployment.phase === "removed" ||
+                        deployment.phase === "deleting"
+                      }
+                      onClick={() => setAction("suspend")}
+                    >
+                      <Pause className="h-4 w-4" /> Suspend
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={primaryButton}
-                    disabled={!canUpdate}
+                    disabled={
+                      !canUpdate ||
+                      deployment.phase === "removed" ||
+                      deployment.phase === "deleting"
+                    }
                     onClick={() => setAction("reconcile")}
                   >
                     <RefreshCw className="h-4 w-4" /> Reconcile
@@ -223,6 +245,11 @@ export function DeploymentDetailPage() {
                   <p className="mt-1">{deployment.lastMessage}</p>
                 </div>
               )}
+              <DeploymentPosture deployment={deployment} />
+              <DriftRemediationHistory
+                deployment={deployment}
+                events={detail.data?.data.events ?? []}
+              />
               <PageSection title="Normalized conditions">
                 <DataTable
                   data={deployment.conditions}
@@ -279,6 +306,224 @@ export function DeploymentDetailPage() {
   );
 }
 
+function DriftRemediationHistory({
+  deployment,
+  events,
+}: {
+  deployment: ClusterDeployment;
+  events: ClusterDeploymentEvent[];
+}) {
+  const drift = deployment.conditions.find(
+    (condition) => condition.type === "Drifted",
+  );
+  const remediationEvents = events.filter((event) => {
+    const evidence = `${event.eventType} ${event.reasonCode} ${event.message}`.toLowerCase();
+    return ["drift", "reconcile", "repair", "resume", "suspend"].some(
+      (term) => evidence.includes(term),
+    );
+  });
+  const generationMatches =
+    deployment.observedGeneration === deployment.desiredGeneration;
+  const revisionMatches =
+    Boolean(deployment.observedRevision) &&
+    deployment.observedRevision === deployment.desiredRevision;
+  return (
+    <PageSection
+      title="Drift detail and remediation history"
+      description="Current agent evidence plus durable delivery events. Reconcile requests are generation-fenced; Astronomer never edits an unowned live object directly."
+    >
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Detail
+          label="Drift state"
+          value={
+            <DeliveryPhaseBadge
+              value={drift?.status === "True" ? "drifted" : "in_sync"}
+            />
+          }
+        />
+        <Detail
+          label="Generation"
+          value={generationMatches ? "Converged" : "Pending convergence"}
+        />
+        <Detail
+          label="Revision"
+          value={revisionMatches ? "Converged" : "Pending convergence"}
+        />
+        <Detail
+          label="Policy outcome"
+          value={
+            drift?.status === "True"
+              ? drift.reason || "Drift reported"
+              : "No active drift"
+          }
+        />
+      </div>
+      {drift?.message && (
+        <p className="mt-3 rounded-md border border-border bg-muted/20 p-3 text-sm">
+          {drift.message}
+        </p>
+      )}
+      <div className="mt-4">
+        <DataTable
+          data={remediationEvents}
+          columns={eventColumns}
+          keyExtractor={(row) => row.id}
+          searchable={false}
+          emptyMessage="No drift detection or remediation events have been recorded."
+        />
+      </div>
+    </PageSection>
+  );
+}
+
+function DeploymentPosture({ deployment }: { deployment: ClusterDeployment }) {
+  const [namespace, setNamespace] = useState("");
+  const [kind, setKind] = useState("");
+  const inventory = deployment.inventory;
+  const resources = inventory.resources ?? [];
+  const namespaces = [
+    ...new Set(
+      resources.map((resource) => resource.namespace || "Cluster scoped"),
+    ),
+  ].sort();
+  const kinds = [...new Set(resources.map((resource) => resource.kind))].sort();
+  const filteredResources = resources.filter(
+    (resource) =>
+      (!namespace || (resource.namespace || "Cluster scoped") === namespace) &&
+      (!kind || resource.kind === kind),
+  );
+  const drift = deployment.conditions.find(
+    (condition) => condition.type === "Drifted",
+  );
+  const revisionMatches =
+    Boolean(deployment.observedRevision) &&
+    deployment.observedRevision === deployment.desiredRevision;
+  const generationMatches =
+    deployment.observedGeneration === deployment.desiredGeneration;
+  return (
+    <PageSection
+      title="Resource and drift posture"
+      description="Bounded inventory and revision evidence reported by the cluster agent; Secret data and rendered manifests are never returned."
+    >
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Detail label="Resources observed" value={inventory.entries} />
+        <Detail label="Resources ready" value={inventory.ready} />
+        <Detail label="Resources failed" value={inventory.failed} />
+        <Detail
+          label="Desired state"
+          value={
+            <DeliveryPhaseBadge
+              value={
+                generationMatches && revisionMatches && drift?.status !== "True"
+                  ? "in_sync"
+                  : drift?.status === "True"
+                    ? "drifted"
+                    : "pending"
+              }
+            />
+          }
+        />
+      </div>
+      <div className="mt-3 rounded-md border border-border bg-muted/20 p-3 text-sm">
+        <p className="font-medium">
+          {drift?.status === "True"
+            ? drift.reason || "Drift detected"
+            : generationMatches && revisionMatches
+              ? "Observed generation and revision match the desired state."
+              : "Waiting for the observed generation and revision to converge."}
+        </p>
+        {drift?.message && (
+          <p className="mt-1 text-muted-foreground">{drift.message}</p>
+        )}
+      </div>
+      <div className="mt-4">
+        <DataTable
+          data={filteredResources}
+          columns={resourceColumns}
+          keyExtractor={(resource) =>
+            `${resource.apiVersion}/${resource.kind}/${resource.namespace}/${resource.name}`
+          }
+          searchable
+          searchPlaceholder="Search resource names…"
+          emptyMessage={
+            inventory.entries > 0 && resources.length === 0
+              ? "Flux reports aggregate Helm inventory counts, but resource identities are not available for this deployment."
+              : "No resources match these filters"
+          }
+          toolbar={
+            resources.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                <select
+                  aria-label="Resource namespace"
+                  value={namespace}
+                  onChange={(event) => setNamespace(event.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">All namespaces</option>
+                  {namespaces.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Resource kind"
+                  value={kind}
+                  onChange={(event) => setKind(event.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">All kinds</option>
+                  {kinds.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : undefined
+          }
+        />
+      </div>
+    </PageSection>
+  );
+}
+
+type DeploymentResource = NonNullable<
+  ClusterDeployment["inventory"]["resources"]
+>[number];
+
+const resourceColumns: Column<DeploymentResource>[] = [
+  {
+    key: "name",
+    header: "Resource",
+    accessor: (resource) => (
+      <span className="font-medium">{resource.name}</span>
+    ),
+    sortAccessor: (resource) => resource.name,
+  },
+  {
+    key: "kind",
+    header: "Kind",
+    accessor: (resource) => resource.kind,
+    sortAccessor: (resource) => resource.kind,
+  },
+  {
+    key: "namespace",
+    header: "Namespace",
+    accessor: (resource) => resource.namespace || "Cluster scoped",
+    sortAccessor: (resource) => resource.namespace || "",
+  },
+  {
+    key: "apiVersion",
+    header: "API version",
+    accessor: (resource) => (
+      <span className="font-mono text-xs text-muted-foreground">
+        {resource.apiVersion}
+      </span>
+    ),
+  },
+];
+
 function DeploymentActionDialog({
   projectId,
   deploymentId,
@@ -288,7 +533,7 @@ function DeploymentActionDialog({
 }: {
   projectId: string;
   deploymentId: string;
-  action: "reconcile" | "suspend";
+  action: "reconcile" | "suspend" | "resume";
   etag: string | number;
   onClose: () => void;
 }) {
@@ -316,7 +561,7 @@ function DeploymentActionDialog({
   });
   return (
     <ModalShell
-      title={`${action === "reconcile" ? "Reconcile" : "Suspend"} deployment`}
+      title={`${action.charAt(0).toUpperCase()}${action.slice(1)} deployment`}
       onClose={onClose}
       subtitle="The request is generation-fenced and does not expose or edit downstream objects."
     >

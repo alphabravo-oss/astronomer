@@ -83,8 +83,22 @@ func TestChartRendersKeylessWithExistingSecret(t *testing.T) {
 		"secrets.existingSecret=core-credentials",
 		"secrets.secretKey=",
 		"secrets.encryptionKey=",
+		"postgres.bundled.enabled=false",
+		"postgres.external.dsnSecretRef.name=postgres-credentials",
+		"postgres.external.dsnSecretRef.key=dsn",
 	)
 	if !strings.Contains(out, "core-credentials") {
 		t.Fatalf("existingSecret render did not reference the pre-created Secret:\n%s", out)
+	}
+}
+
+func TestChartRejectsExistingSecretWithBundledPostgres(t *testing.T) {
+	errOut := helmTemplateExpectError(t, nil,
+		"secrets.existingSecret=core-credentials",
+		"secrets.secretKey=",
+		"secrets.encryptionKey=",
+	)
+	if !strings.Contains(errOut, "secrets.existingSecret cannot be combined with postgres.bundled.enabled=true") {
+		t.Fatalf("unsafe bundled database Secret posture was not rejected:\n%s", errOut)
 	}
 }

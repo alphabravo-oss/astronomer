@@ -355,6 +355,11 @@ const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch"]
+  # Storage ownership and default-class posture are part of the read-only
+  # system inventory. Volume contents and credentials are never requested.
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "csidrivers", "csinodes", "csistoragecapacities", "volumeattachments"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["get", "list", "watch"]
@@ -372,6 +377,20 @@ const viewerRBACRulesYAML = `  # Read-only inventory, logs, and health endpoints
     verbs: ["get", "list", "watch"]
   - apiGroups: ["aquasecurity.github.io"]
     resources: ["vulnerabilityreports"]
+    verbs: ["get", "list", "watch"]
+  # Optional service-mesh inventory. These are read-only discovery grants;
+  # absent CRDs still return NotFound and do not broaden workload authority.
+  - apiGroups: ["networking.istio.io"]
+    resources: ["gateways", "virtualservices", "destinationrules", "sidecars", "serviceentries"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["security.istio.io"]
+    resources: ["authorizationpolicies", "peerauthentications"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["linkerd.io"]
+    resources: ["serviceprofiles"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["policy.linkerd.io"]
+    resources: ["servers"]
     verbs: ["get", "list", "watch"]
   - nonResourceURLs: ["/healthz", "/livez", "/readyz", "/metrics", "/version"]
     verbs: ["get"]`

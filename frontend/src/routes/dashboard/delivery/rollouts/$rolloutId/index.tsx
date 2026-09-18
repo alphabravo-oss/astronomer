@@ -36,7 +36,7 @@ import {
   type DeliveryRolloutEvent,
 } from "@/lib/api/delivery";
 import { queryKeys } from "@/lib/query-keys";
-import { useCurrentUser } from "@/lib/hooks";
+import { useClusters, useCurrentUser } from "@/lib/hooks";
 import { can } from "@/lib/permissions";
 import { useParams } from "@/lib/navigation";
 import { formatRelativeTime } from "@/lib/utils";
@@ -62,7 +62,14 @@ export function RolloutDetailPage() {
     cohort: number;
     digest: string;
   } | null>(null);
-  const pageSize = 50;
+  const pageSize = 200;
+  const clusterDirectory = useClusters({ pageSize: 200 });
+  const clusterNames = new Map(
+    (clusterDirectory.data?.data ?? []).map((cluster) => [
+      cluster.id,
+      cluster.displayName || cluster.name,
+    ]),
+  );
   const detail = useQuery({
     queryKey: queryKeys.delivery.rollout(projectId, rolloutId),
     queryFn: ({ signal }) => getDeliveryRollout(projectId, rolloutId, signal),
@@ -144,7 +151,19 @@ export function RolloutDetailPage() {
     {
       key: "cluster",
       header: "Cluster",
-      accessor: (row) => <code className="text-xs">{row.clusterId}</code>,
+      accessor: (row) => (
+        <div>
+          <p className="font-medium">
+            {clusterNames.get(row.clusterId) || row.clusterId}
+          </p>
+          {clusterNames.has(row.clusterId) && (
+            <p className="font-mono text-xs text-muted-foreground">
+              {row.clusterId}
+            </p>
+          )}
+        </div>
+      ),
+      sortAccessor: (row) => clusterNames.get(row.clusterId) || row.clusterId,
     },
     {
       key: "cohort",
@@ -297,6 +316,12 @@ export function RolloutDetailPage() {
               </div>
             </PageSection>
           )}
+          {plan && (
+            <CohortProgress
+              cohorts={plan.cohorts}
+              assignments={clusters.data?.data ?? []}
+            />
+          )}
           <PageSection
             title="Per-cluster progress"
             description="Clusters are server-paginated; state reflects durable assignment and normalized downstream readiness."
@@ -345,6 +370,88 @@ export function RolloutDetailPage() {
         />
       )}
     </DeliveryShell>
+  );
+}
+
+function CohortProgress({
+  cohorts,
+  assignments,
+}: {
+  cohorts: Array<{
+    index: number;
+    name: string;
+    clusterIds: string[];
+    approvalRequired: boolean;
+    soakAfter: string;
+  }>;
+  assignments: DeliveryRolloutCluster[];
+}) {
+  return (
+    <PageSection
+      title="Rollout cohorts"
+      description="The immutable release order, approval boundary, soak period, and live completion of each cohort."
+    >
+      <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        {cohorts.map((cohort) => {
+          const rows = assignments.filter((row) => row.cohort === cohort.index);
+          const ready = rows.filter((row) => row.state === "ready").length;
+          const failed = rows.filter(
+            (row) => row.state === "failed" || row.state.includes("blocked"),
+          ).length;
+          const total = cohort.clusterIds.length;
+          const percent = total > 0 ? Math.round((ready / total) * 100) : 0;
+          const state =
+            ready === total && total > 0
+              ? "ready"
+              : failed > 0
+                ? "failed"
+                : rows.some((row) => row.state !== "pending")
+                  ? "applying"
+                  : "pending";
+          return (
+            <article
+              key={cohort.index}
+              className="rounded-lg border border-border bg-card p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Cohort {cohort.index + 1}
+                  </p>
+                  <h3 className="mt-1 font-semibold text-foreground">
+                    {cohort.name}
+                  </h3>
+                </div>
+                <DeliveryPhaseBadge value={state} />
+              </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{ width: `${percent}%` }}
+                  role="progressbar"
+                  aria-label={`${cohort.name} rollout progress`}
+                  aria-valuemin={0}
+                  aria-valuemax={total}
+                  aria-valuenow={ready}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  {ready} / {total} ready
+                </span>
+                <span>{failed} failed or blocked</span>
+                <span>Soak {cohort.soakAfter || "none"}</span>
+                <span>
+                  {cohort.approvalRequired
+                    ? "Approval required"
+                    : "Automatic release"}
+                </span>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </PageSection>
   );
 }
 

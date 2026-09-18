@@ -725,18 +725,25 @@ SELECT count(*)
 FROM cluster_deployments d
 JOIN delivery_targets t ON t.id = d.target_id
 WHERE t.project_id = $1
-  AND ($2::uuid IS NULL OR d.cluster_id = $2::uuid)
-  AND ($3::text IS NULL OR d.phase = $3::text)
+  AND ($2::uuid IS NULL OR d.target_id = $2::uuid)
+  AND ($3::uuid IS NULL OR d.cluster_id = $3::uuid)
+  AND ($4::text IS NULL OR d.phase = $4::text)
 `
 
 type CountClusterDeploymentsParams struct {
 	ProjectID uuid.UUID   `json:"project_id"`
+	TargetID  pgtype.UUID `json:"target_id"`
 	ClusterID pgtype.UUID `json:"cluster_id"`
 	Phase     pgtype.Text `json:"phase"`
 }
 
 func (q *Queries) CountClusterDeployments(ctx context.Context, arg CountClusterDeploymentsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countClusterDeployments, arg.ProjectID, arg.ClusterID, arg.Phase)
+	row := q.db.QueryRow(ctx, countClusterDeployments,
+		arg.ProjectID,
+		arg.TargetID,
+		arg.ClusterID,
+		arg.Phase,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -830,16 +837,18 @@ SELECT count(*)
 FROM delivery_rollouts r
 JOIN delivery_targets t ON t.id = r.target_id
 WHERE t.project_id = $1
-  AND ($2::text IS NULL OR r.state = $2::text)
+  AND ($2::uuid IS NULL OR r.target_id = $2::uuid)
+  AND ($3::text IS NULL OR r.state = $3::text)
 `
 
 type CountDeliveryRolloutsParams struct {
 	ProjectID uuid.UUID   `json:"project_id"`
+	TargetID  pgtype.UUID `json:"target_id"`
 	State     pgtype.Text `json:"state"`
 }
 
 func (q *Queries) CountDeliveryRollouts(ctx context.Context, arg CountDeliveryRolloutsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countDeliveryRollouts, arg.ProjectID, arg.State)
+	row := q.db.QueryRow(ctx, countDeliveryRollouts, arg.ProjectID, arg.TargetID, arg.State)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1487,14 +1496,16 @@ func (q *Queries) CreateDeliverySourceResolutionAndOutbox(ctx context.Context, a
 const createDeliveryTarget = `-- name: CreateDeliveryTarget :one
 INSERT INTO delivery_targets (
     project_id, name, description, bundle_version_id, placement, rollout_policy,
-    reconciliation_policy, maintenance_window_policy, suspended, created_by, updated_by
+    reconciliation_policy, maintenance_window_policy, configuration_template_id,
+    override_set_ids, suspended, created_by, updated_by
 ) VALUES (
     $1, $2, $3,
     $4, $5, $6,
     $7, $8,
-    $9, $10, $11
+    $9, $10,
+    $11, $12, $13
 )
-RETURNING id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at
+RETURNING id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at, configuration_template_id, override_set_ids
 `
 
 type CreateDeliveryTargetParams struct {
@@ -1506,6 +1517,8 @@ type CreateDeliveryTargetParams struct {
 	RolloutPolicy           json.RawMessage `json:"rollout_policy"`
 	ReconciliationPolicy    json.RawMessage `json:"reconciliation_policy"`
 	MaintenanceWindowPolicy json.RawMessage `json:"maintenance_window_policy"`
+	ConfigurationTemplateID pgtype.UUID     `json:"configuration_template_id"`
+	OverrideSetIds          []uuid.UUID     `json:"override_set_ids"`
 	Suspended               bool            `json:"suspended"`
 	CreatedBy               pgtype.UUID     `json:"created_by"`
 	UpdatedBy               pgtype.UUID     `json:"updated_by"`
@@ -1521,6 +1534,8 @@ func (q *Queries) CreateDeliveryTarget(ctx context.Context, arg CreateDeliveryTa
 		arg.RolloutPolicy,
 		arg.ReconciliationPolicy,
 		arg.MaintenanceWindowPolicy,
+		arg.ConfigurationTemplateID,
+		arg.OverrideSetIds,
 		arg.Suspended,
 		arg.CreatedBy,
 		arg.UpdatedBy,
@@ -1544,6 +1559,8 @@ func (q *Queries) CreateDeliveryTarget(ctx context.Context, arg CreateDeliveryTa
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigurationTemplateID,
+		&i.OverrideSetIds,
 	)
 	return i, err
 }
@@ -1750,7 +1767,7 @@ WHERE t.id = $1 AND t.deletion_state = 'deleting'
       SELECT 1 FROM cluster_deployments d
       WHERE d.target_id = t.id AND d.phase <> 'removed'
   )
-RETURNING t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at
+RETURNING t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at, t.configuration_template_id, t.override_set_ids
 `
 
 func (q *Queries) FinalizeDeliveryTargetDeletionIfComplete(ctx context.Context, targetID uuid.UUID) (DeliveryTarget, error) {
@@ -1774,6 +1791,8 @@ func (q *Queries) FinalizeDeliveryTargetDeletionIfComplete(ctx context.Context, 
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigurationTemplateID,
+		&i.OverrideSetIds,
 	)
 	return i, err
 }
@@ -1832,7 +1851,7 @@ func (q *Queries) GetClaimedDeliveryRolloutForUpdate(ctx context.Context, arg Ge
 }
 
 const getClusterDeployment = `-- name: GetClusterDeployment :one
-SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at
+SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at, d.desired_renderer_spec, d.desired_configuration_digest
 FROM cluster_deployments d
 JOIN delivery_targets t ON t.id = d.target_id
 WHERE d.id = $1 AND t.project_id = $2
@@ -1874,12 +1893,14 @@ func (q *Queries) GetClusterDeployment(ctx context.Context, arg GetClusterDeploy
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredRendererSpec,
+		&i.DesiredConfigurationDigest,
 	)
 	return i, err
 }
 
 const getClusterDeploymentForAction = `-- name: GetClusterDeploymentForAction :one
-SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at
+SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at, d.desired_renderer_spec, d.desired_configuration_digest
 FROM cluster_deployments d
 JOIN delivery_targets t ON t.id = d.target_id
 WHERE d.id = $1 AND t.project_id = $2
@@ -1922,12 +1943,14 @@ func (q *Queries) GetClusterDeploymentForAction(ctx context.Context, arg GetClus
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredRendererSpec,
+		&i.DesiredConfigurationDigest,
 	)
 	return i, err
 }
 
 const getClusterDeploymentForDeliveryStatus = `-- name: GetClusterDeploymentForDeliveryStatus :one
-SELECT id, target_id, cluster_id, current_rollout_id, desired_bundle_version_id, previous_bundle_version_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, last_observed_at, created_at, updated_at FROM cluster_deployments
+SELECT id, target_id, cluster_id, current_rollout_id, desired_bundle_version_id, previous_bundle_version_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, last_observed_at, created_at, updated_at, desired_renderer_spec, desired_configuration_digest FROM cluster_deployments
 WHERE id = $1 AND cluster_id = $2
 FOR UPDATE
 `
@@ -1968,6 +1991,8 @@ func (q *Queries) GetClusterDeploymentForDeliveryStatus(ctx context.Context, arg
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredRendererSpec,
+		&i.DesiredConfigurationDigest,
 	)
 	return i, err
 }
@@ -2077,7 +2102,7 @@ func (q *Queries) GetCurrentDeliverySystemRollout(ctx context.Context) (Delivery
 }
 
 const getDeliveryControllerInventory = `-- name: GetDeliveryControllerInventory :one
-SELECT i.cluster_id, i.agent_version, i.flux_version, i.components, i.api_versions, i.distribution_digest, i.kubernetes_version, i.ready, i.compatibility_status, i.error_code, i.observed_at, i.updated_at
+SELECT i.cluster_id, i.agent_version, i.flux_version, i.components, i.api_versions, i.distribution_digest, i.kubernetes_version, i.ready, i.compatibility_status, i.error_code, i.observed_at, i.updated_at, i.system_components
 FROM delivery_controller_inventory i
 JOIN projects p ON p.cluster_id = i.cluster_id
 WHERE i.cluster_id = $1 AND p.id = $2
@@ -2104,6 +2129,7 @@ func (q *Queries) GetDeliveryControllerInventory(ctx context.Context, arg GetDel
 		&i.ErrorCode,
 		&i.ObservedAt,
 		&i.UpdatedAt,
+		&i.SystemComponents,
 	)
 	return i, err
 }
@@ -2111,8 +2137,9 @@ func (q *Queries) GetDeliveryControllerInventory(ctx context.Context, arg GetDel
 const getDeliveryPlanningSnapshot = `-- name: GetDeliveryPlanningSnapshot :one
 SELECT t.id AS target_id, t.project_id, t.bundle_version_id, t.placement,
        t.rollout_policy, t.maintenance_window_policy, t.generation,
+       t.configuration_template_id, t.override_set_ids,
        t.suspended, t.deletion_state, p.cluster_id AS owner_cluster_id,
-       bv.spec_digest, bv.source_spec, bv.requirements, bv.state AS bundle_state
+       bv.spec_digest, bv.source_spec, bv.renderer_spec, bv.requirements, bv.state AS bundle_state
 FROM delivery_targets t
 JOIN projects p ON p.id = t.project_id
 JOIN component_bundle_versions bv ON bv.id = t.bundle_version_id
@@ -2128,11 +2155,14 @@ type GetDeliveryPlanningSnapshotRow struct {
 	RolloutPolicy           json.RawMessage `json:"rollout_policy"`
 	MaintenanceWindowPolicy json.RawMessage `json:"maintenance_window_policy"`
 	Generation              int64           `json:"generation"`
+	ConfigurationTemplateID pgtype.UUID     `json:"configuration_template_id"`
+	OverrideSetIds          []uuid.UUID     `json:"override_set_ids"`
 	Suspended               bool            `json:"suspended"`
 	DeletionState           string          `json:"deletion_state"`
 	OwnerClusterID          uuid.UUID       `json:"owner_cluster_id"`
 	SpecDigest              string          `json:"spec_digest"`
 	SourceSpec              json.RawMessage `json:"source_spec"`
+	RendererSpec            json.RawMessage `json:"renderer_spec"`
 	Requirements            json.RawMessage `json:"requirements"`
 	BundleState             string          `json:"bundle_state"`
 }
@@ -2148,11 +2178,14 @@ func (q *Queries) GetDeliveryPlanningSnapshot(ctx context.Context, targetID uuid
 		&i.RolloutPolicy,
 		&i.MaintenanceWindowPolicy,
 		&i.Generation,
+		&i.ConfigurationTemplateID,
+		&i.OverrideSetIds,
 		&i.Suspended,
 		&i.DeletionState,
 		&i.OwnerClusterID,
 		&i.SpecDigest,
 		&i.SourceSpec,
+		&i.RendererSpec,
 		&i.Requirements,
 		&i.BundleState,
 	)
@@ -2476,7 +2509,7 @@ func (q *Queries) GetDeliverySourceResolutionWork(ctx context.Context, arg GetDe
 }
 
 const getDeliveryTarget = `-- name: GetDeliveryTarget :one
-SELECT id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at FROM delivery_targets
+SELECT id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at, configuration_template_id, override_set_ids FROM delivery_targets
 WHERE id = $1 AND project_id = $2
 `
 
@@ -2506,12 +2539,14 @@ func (q *Queries) GetDeliveryTarget(ctx context.Context, arg GetDeliveryTargetPa
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigurationTemplateID,
+		&i.OverrideSetIds,
 	)
 	return i, err
 }
 
 const getDeliveryTargetByName = `-- name: GetDeliveryTargetByName :one
-SELECT id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at FROM delivery_targets
+SELECT id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at, configuration_template_id, override_set_ids FROM delivery_targets
 WHERE project_id = $1 AND name = $2
 `
 
@@ -2541,14 +2576,16 @@ func (q *Queries) GetDeliveryTargetByName(ctx context.Context, arg GetDeliveryTa
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigurationTemplateID,
+		&i.OverrideSetIds,
 	)
 	return i, err
 }
 
 const listClusterDeliveryAssignments = `-- name: ListClusterDeliveryAssignments :many
-SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at, t.project_id, bv.source_id, bv.renderer, bv.scope,
+SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at, d.desired_renderer_spec, d.desired_configuration_digest, t.project_id, bv.source_id, bv.renderer, bv.scope,
        bv.resolved_revision, bv.artifact_digest, bv.source_spec,
-       bv.renderer_spec, bv.reconciliation_policy,
+       COALESCE(d.desired_renderer_spec, bv.renderer_spec) AS renderer_spec, bv.reconciliation_policy,
        s.source_type, s.url, s.auth_mode, s.credential_epoch,
        s.credential_encrypted, s.ca_bundle_encrypted,
        s.trust_policy, s.proxy_ref
@@ -2562,50 +2599,52 @@ ORDER BY d.id
 `
 
 type ListClusterDeliveryAssignmentsRow struct {
-	ID                      uuid.UUID          `json:"id"`
-	TargetID                uuid.UUID          `json:"target_id"`
-	ClusterID               uuid.UUID          `json:"cluster_id"`
-	CurrentRolloutID        pgtype.UUID        `json:"current_rollout_id"`
-	DesiredBundleVersionID  pgtype.UUID        `json:"desired_bundle_version_id"`
-	PreviousBundleVersionID pgtype.UUID        `json:"previous_bundle_version_id"`
-	DesiredGeneration       int64              `json:"desired_generation"`
-	ObservedGeneration      int64              `json:"observed_generation"`
-	DesiredSpecDigest       string             `json:"desired_spec_digest"`
-	ObservedSpecDigest      string             `json:"observed_spec_digest"`
-	DesiredRevision         string             `json:"desired_revision"`
-	ObservedRevision        string             `json:"observed_revision"`
-	Action                  string             `json:"action"`
-	Phase                   string             `json:"phase"`
-	Conditions              json.RawMessage    `json:"conditions"`
-	SourceKind              string             `json:"source_kind"`
-	SourceName              string             `json:"source_name"`
-	ReconcilerKind          string             `json:"reconciler_kind"`
-	ReconcilerName          string             `json:"reconciler_name"`
-	Inventory               json.RawMessage    `json:"inventory"`
-	AgentSessionID          string             `json:"agent_session_id"`
-	AgentSequence           int64              `json:"agent_sequence"`
-	LastErrorCode           string             `json:"last_error_code"`
-	LastMessage             string             `json:"last_message"`
-	LastObservedAt          pgtype.Timestamptz `json:"last_observed_at"`
-	CreatedAt               time.Time          `json:"created_at"`
-	UpdatedAt               time.Time          `json:"updated_at"`
-	ProjectID               uuid.UUID          `json:"project_id"`
-	SourceID                uuid.UUID          `json:"source_id"`
-	Renderer                string             `json:"renderer"`
-	Scope                   string             `json:"scope"`
-	ResolvedRevision        string             `json:"resolved_revision"`
-	ArtifactDigest          string             `json:"artifact_digest"`
-	SourceSpec              json.RawMessage    `json:"source_spec"`
-	RendererSpec            json.RawMessage    `json:"renderer_spec"`
-	ReconciliationPolicy    json.RawMessage    `json:"reconciliation_policy"`
-	SourceType              string             `json:"source_type"`
-	Url                     string             `json:"url"`
-	AuthMode                string             `json:"auth_mode"`
-	CredentialEpoch         int64              `json:"credential_epoch"`
-	CredentialEncrypted     string             `json:"credential_encrypted"`
-	CaBundleEncrypted       string             `json:"ca_bundle_encrypted"`
-	TrustPolicy             json.RawMessage    `json:"trust_policy"`
-	ProxyRef                string             `json:"proxy_ref"`
+	ID                         uuid.UUID          `json:"id"`
+	TargetID                   uuid.UUID          `json:"target_id"`
+	ClusterID                  uuid.UUID          `json:"cluster_id"`
+	CurrentRolloutID           pgtype.UUID        `json:"current_rollout_id"`
+	DesiredBundleVersionID     pgtype.UUID        `json:"desired_bundle_version_id"`
+	PreviousBundleVersionID    pgtype.UUID        `json:"previous_bundle_version_id"`
+	DesiredGeneration          int64              `json:"desired_generation"`
+	ObservedGeneration         int64              `json:"observed_generation"`
+	DesiredSpecDigest          string             `json:"desired_spec_digest"`
+	ObservedSpecDigest         string             `json:"observed_spec_digest"`
+	DesiredRevision            string             `json:"desired_revision"`
+	ObservedRevision           string             `json:"observed_revision"`
+	Action                     string             `json:"action"`
+	Phase                      string             `json:"phase"`
+	Conditions                 json.RawMessage    `json:"conditions"`
+	SourceKind                 string             `json:"source_kind"`
+	SourceName                 string             `json:"source_name"`
+	ReconcilerKind             string             `json:"reconciler_kind"`
+	ReconcilerName             string             `json:"reconciler_name"`
+	Inventory                  json.RawMessage    `json:"inventory"`
+	AgentSessionID             string             `json:"agent_session_id"`
+	AgentSequence              int64              `json:"agent_sequence"`
+	LastErrorCode              string             `json:"last_error_code"`
+	LastMessage                string             `json:"last_message"`
+	LastObservedAt             pgtype.Timestamptz `json:"last_observed_at"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
+	DesiredRendererSpec        []byte             `json:"desired_renderer_spec"`
+	DesiredConfigurationDigest pgtype.Text        `json:"desired_configuration_digest"`
+	ProjectID                  uuid.UUID          `json:"project_id"`
+	SourceID                   uuid.UUID          `json:"source_id"`
+	Renderer                   string             `json:"renderer"`
+	Scope                      string             `json:"scope"`
+	ResolvedRevision           string             `json:"resolved_revision"`
+	ArtifactDigest             string             `json:"artifact_digest"`
+	SourceSpec                 json.RawMessage    `json:"source_spec"`
+	RendererSpec               json.RawMessage    `json:"renderer_spec"`
+	ReconciliationPolicy       json.RawMessage    `json:"reconciliation_policy"`
+	SourceType                 string             `json:"source_type"`
+	Url                        string             `json:"url"`
+	AuthMode                   string             `json:"auth_mode"`
+	CredentialEpoch            int64              `json:"credential_epoch"`
+	CredentialEncrypted        string             `json:"credential_encrypted"`
+	CaBundleEncrypted          string             `json:"ca_bundle_encrypted"`
+	TrustPolicy                json.RawMessage    `json:"trust_policy"`
+	ProxyRef                   string             `json:"proxy_ref"`
 }
 
 func (q *Queries) ListClusterDeliveryAssignments(ctx context.Context, clusterID uuid.UUID) ([]ListClusterDeliveryAssignmentsRow, error) {
@@ -2645,6 +2684,8 @@ func (q *Queries) ListClusterDeliveryAssignments(ctx context.Context, clusterID 
 			&i.LastObservedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DesiredRendererSpec,
+			&i.DesiredConfigurationDigest,
 			&i.ProjectID,
 			&i.SourceID,
 			&i.Renderer,
@@ -2729,18 +2770,20 @@ func (q *Queries) ListClusterDeploymentEvents(ctx context.Context, arg ListClust
 }
 
 const listClusterDeployments = `-- name: ListClusterDeployments :many
-SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at
+SELECT d.id, d.target_id, d.cluster_id, d.current_rollout_id, d.desired_bundle_version_id, d.previous_bundle_version_id, d.desired_generation, d.observed_generation, d.desired_spec_digest, d.observed_spec_digest, d.desired_revision, d.observed_revision, d.action, d.phase, d.conditions, d.source_kind, d.source_name, d.reconciler_kind, d.reconciler_name, d.inventory, d.agent_session_id, d.agent_sequence, d.last_error_code, d.last_message, d.last_observed_at, d.created_at, d.updated_at, d.desired_renderer_spec, d.desired_configuration_digest
 FROM cluster_deployments d
 JOIN delivery_targets t ON t.id = d.target_id
 WHERE t.project_id = $1
-  AND ($2::uuid IS NULL OR d.cluster_id = $2::uuid)
-  AND ($3::text IS NULL OR d.phase = $3::text)
+  AND ($2::uuid IS NULL OR d.target_id = $2::uuid)
+  AND ($3::uuid IS NULL OR d.cluster_id = $3::uuid)
+  AND ($4::text IS NULL OR d.phase = $4::text)
 ORDER BY d.updated_at DESC, d.id DESC
-LIMIT $5 OFFSET $4
+LIMIT $6 OFFSET $5
 `
 
 type ListClusterDeploymentsParams struct {
 	ProjectID   uuid.UUID   `json:"project_id"`
+	TargetID    pgtype.UUID `json:"target_id"`
 	ClusterID   pgtype.UUID `json:"cluster_id"`
 	Phase       pgtype.Text `json:"phase"`
 	QueryOffset int32       `json:"query_offset"`
@@ -2750,6 +2793,7 @@ type ListClusterDeploymentsParams struct {
 func (q *Queries) ListClusterDeployments(ctx context.Context, arg ListClusterDeploymentsParams) ([]ClusterDeployment, error) {
 	rows, err := q.db.Query(ctx, listClusterDeployments,
 		arg.ProjectID,
+		arg.TargetID,
 		arg.ClusterID,
 		arg.Phase,
 		arg.QueryOffset,
@@ -2790,6 +2834,8 @@ func (q *Queries) ListClusterDeployments(ctx context.Context, arg ListClusterDep
 			&i.LastObservedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DesiredRendererSpec,
+			&i.DesiredConfigurationDigest,
 		); err != nil {
 			return nil, err
 		}
@@ -2899,7 +2945,7 @@ func (q *Queries) ListComponentBundles(ctx context.Context, arg ListComponentBun
 	return items, nil
 }
 
-const listDeliveryEstateClusters = `-- name: ListDeliveryEstateClusters :many
+const listDeliveryFleetClusters = `-- name: ListDeliveryFleetClusters :many
 SELECT
     c.id,
     c.name,
@@ -2956,7 +3002,7 @@ WHERE c.decommissioned_at IS NULL
 ORDER BY c.is_local ASC, c.display_name ASC, c.name ASC, c.id ASC
 `
 
-type ListDeliveryEstateClustersRow struct {
+type ListDeliveryFleetClustersRow struct {
 	ID                  uuid.UUID          `json:"id"`
 	Name                string             `json:"name"`
 	DisplayName         string             `json:"display_name"`
@@ -2986,19 +3032,19 @@ type ListDeliveryEstateClustersRow struct {
 	LastObservedAt      interface{}        `json:"last_observed_at"`
 }
 
-// Estate scoreboard: one row per live cluster. Local host-only clusters stay
-// in the table so operators can see them, but the handler excludes is_local
-// from Flux-managed tiles. Removed assignments are omitted; Drifted is the
+// Delivery Fleet scoreboard: one row per live cluster, including the local
+// management cluster as a first-class Flux target. Removed assignments are
+// omitted; Drifted is the
 // normalized condition the observer persists.
-func (q *Queries) ListDeliveryEstateClusters(ctx context.Context) ([]ListDeliveryEstateClustersRow, error) {
-	rows, err := q.db.Query(ctx, listDeliveryEstateClusters)
+func (q *Queries) ListDeliveryFleetClusters(ctx context.Context) ([]ListDeliveryFleetClustersRow, error) {
+	rows, err := q.db.Query(ctx, listDeliveryFleetClusters)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListDeliveryEstateClustersRow{}
+	items := []ListDeliveryFleetClustersRow{}
 	for rows.Next() {
-		var i ListDeliveryEstateClustersRow
+		var i ListDeliveryFleetClustersRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -3054,7 +3100,9 @@ SELECT DISTINCT ON (c.id)
        d.desired_bundle_version_id AS previous_bundle_version_id,
        d.desired_generation AS previous_generation,
        previous.spec_digest AS previous_spec_digest,
-       previous.source_spec AS previous_source_spec
+       previous.source_spec AS previous_source_spec,
+       d.desired_renderer_spec AS previous_renderer_spec,
+       d.desired_configuration_digest AS previous_configuration_digest
 FROM projects p
 JOIN clusters c ON c.id = p.cluster_id
 LEFT JOIN delivery_controller_inventory i ON i.cluster_id = c.id
@@ -3073,22 +3121,24 @@ type ListDeliveryPlanningCandidatesParams struct {
 }
 
 type ListDeliveryPlanningCandidatesRow struct {
-	ClusterID               uuid.UUID          `json:"cluster_id"`
-	ProjectID               uuid.UUID          `json:"project_id"`
-	ClusterName             string             `json:"cluster_name"`
-	Labels                  json.RawMessage    `json:"labels"`
-	GroupID                 pgtype.UUID        `json:"group_id"`
-	Status                  string             `json:"status"`
-	DecommissionedAt        pgtype.Timestamptz `json:"decommissioned_at"`
-	Connected               bool               `json:"connected"`
-	CompatibilityStatus     string             `json:"compatibility_status"`
-	CompatibilityReason     string             `json:"compatibility_reason"`
-	FluxVersion             string             `json:"flux_version"`
-	Components              json.RawMessage    `json:"components"`
-	PreviousBundleVersionID pgtype.UUID        `json:"previous_bundle_version_id"`
-	PreviousGeneration      pgtype.Int8        `json:"previous_generation"`
-	PreviousSpecDigest      pgtype.Text        `json:"previous_spec_digest"`
-	PreviousSourceSpec      []byte             `json:"previous_source_spec"`
+	ClusterID                   uuid.UUID          `json:"cluster_id"`
+	ProjectID                   uuid.UUID          `json:"project_id"`
+	ClusterName                 string             `json:"cluster_name"`
+	Labels                      json.RawMessage    `json:"labels"`
+	GroupID                     pgtype.UUID        `json:"group_id"`
+	Status                      string             `json:"status"`
+	DecommissionedAt            pgtype.Timestamptz `json:"decommissioned_at"`
+	Connected                   bool               `json:"connected"`
+	CompatibilityStatus         string             `json:"compatibility_status"`
+	CompatibilityReason         string             `json:"compatibility_reason"`
+	FluxVersion                 string             `json:"flux_version"`
+	Components                  json.RawMessage    `json:"components"`
+	PreviousBundleVersionID     pgtype.UUID        `json:"previous_bundle_version_id"`
+	PreviousGeneration          pgtype.Int8        `json:"previous_generation"`
+	PreviousSpecDigest          pgtype.Text        `json:"previous_spec_digest"`
+	PreviousSourceSpec          []byte             `json:"previous_source_spec"`
+	PreviousRendererSpec        []byte             `json:"previous_renderer_spec"`
+	PreviousConfigurationDigest pgtype.Text        `json:"previous_configuration_digest"`
 }
 
 func (q *Queries) ListDeliveryPlanningCandidates(ctx context.Context, arg ListDeliveryPlanningCandidatesParams) ([]ListDeliveryPlanningCandidatesRow, error) {
@@ -3117,6 +3167,8 @@ func (q *Queries) ListDeliveryPlanningCandidates(ctx context.Context, arg ListDe
 			&i.PreviousGeneration,
 			&i.PreviousSpecDigest,
 			&i.PreviousSourceSpec,
+			&i.PreviousRendererSpec,
+			&i.PreviousConfigurationDigest,
 		); err != nil {
 			return nil, err
 		}
@@ -3380,13 +3432,15 @@ SELECT r.id, r.target_id, r.target_generation, r.from_bundle_version_id, r.to_bu
 FROM delivery_rollouts r
 JOIN delivery_targets t ON t.id = r.target_id
 WHERE t.project_id = $1
-  AND ($2::text IS NULL OR r.state = $2::text)
+  AND ($2::uuid IS NULL OR r.target_id = $2::uuid)
+  AND ($3::text IS NULL OR r.state = $3::text)
 ORDER BY r.created_at DESC, r.id DESC
-LIMIT $4 OFFSET $3
+LIMIT $5 OFFSET $4
 `
 
 type ListDeliveryRolloutsParams struct {
 	ProjectID   uuid.UUID   `json:"project_id"`
+	TargetID    pgtype.UUID `json:"target_id"`
 	State       pgtype.Text `json:"state"`
 	QueryOffset int32       `json:"query_offset"`
 	QueryLimit  int32       `json:"query_limit"`
@@ -3395,6 +3449,7 @@ type ListDeliveryRolloutsParams struct {
 func (q *Queries) ListDeliveryRollouts(ctx context.Context, arg ListDeliveryRolloutsParams) ([]DeliveryRollout, error) {
 	rows, err := q.db.Query(ctx, listDeliveryRollouts,
 		arg.ProjectID,
+		arg.TargetID,
 		arg.State,
 		arg.QueryOffset,
 		arg.QueryLimit,
@@ -3534,7 +3589,7 @@ func (q *Queries) ListDeliverySources(ctx context.Context, arg ListDeliverySourc
 }
 
 const listDeliveryTargets = `-- name: ListDeliveryTargets :many
-SELECT id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at FROM delivery_targets
+SELECT id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at, configuration_template_id, override_set_ids FROM delivery_targets
 WHERE project_id = $1
   AND deletion_state <> 'deleted'
 ORDER BY created_at DESC, id DESC
@@ -3574,6 +3629,8 @@ func (q *Queries) ListDeliveryTargets(ctx context.Context, arg ListDeliveryTarge
 			&i.UpdatedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ConfigurationTemplateID,
+			&i.OverrideSetIds,
 		); err != nil {
 			return nil, err
 		}
@@ -3593,7 +3650,7 @@ WITH orphaned AS (
     WHERE t.id = $2 AND t.project_id = $3
       AND t.resource_version = $4
       AND t.deletion_state = 'deleting'
-    RETURNING t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at
+    RETURNING t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at, t.configuration_template_id, t.override_set_ids
 ), retained AS (
     UPDATE cluster_deployments d
     SET phase = 'removed', last_error_code = 'orphaned_by_operator',
@@ -3602,7 +3659,7 @@ WITH orphaned AS (
     WHERE d.target_id = t.id AND d.phase <> 'removed'
     RETURNING d.id
 )
-SELECT t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at FROM orphaned t
+SELECT t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at, t.configuration_template_id, t.override_set_ids FROM orphaned t
 `
 
 type MarkDeliveryTargetOrphanedParams struct {
@@ -3630,6 +3687,8 @@ type MarkDeliveryTargetOrphanedRow struct {
 	UpdatedBy               pgtype.UUID     `json:"updated_by"`
 	CreatedAt               time.Time       `json:"created_at"`
 	UpdatedAt               time.Time       `json:"updated_at"`
+	ConfigurationTemplateID pgtype.UUID     `json:"configuration_template_id"`
+	OverrideSetIds          []uuid.UUID     `json:"override_set_ids"`
 }
 
 func (q *Queries) MarkDeliveryTargetOrphaned(ctx context.Context, arg MarkDeliveryTargetOrphanedParams) (MarkDeliveryTargetOrphanedRow, error) {
@@ -3658,6 +3717,8 @@ func (q *Queries) MarkDeliveryTargetOrphaned(ctx context.Context, arg MarkDelive
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigurationTemplateID,
+		&i.OverrideSetIds,
 	)
 	return i, err
 }
@@ -3853,7 +3914,7 @@ WITH changed_target AS (
     WHERE t.id = $2 AND t.project_id = $3
       AND t.resource_version = $4
       AND t.deletion_state = 'active'
-    RETURNING t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at
+    RETURNING t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at, t.configuration_template_id, t.override_set_ids
 ), changed_deployments AS (
     UPDATE cluster_deployments d
     SET action = 'delete', phase = 'pending', desired_generation = desired_generation + 1,
@@ -3862,7 +3923,7 @@ WITH changed_target AS (
     WHERE d.target_id = t.id AND d.phase <> 'removed'
     RETURNING d.id
 )
-SELECT t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at, (SELECT count(*) FROM changed_deployments)::bigint AS deployment_count
+SELECT t.id, t.project_id, t.name, t.description, t.bundle_version_id, t.placement, t.rollout_policy, t.reconciliation_policy, t.maintenance_window_policy, t.suspended, t.generation, t.resource_version, t.deletion_state, t.created_by, t.updated_by, t.created_at, t.updated_at, t.configuration_template_id, t.override_set_ids, (SELECT count(*) FROM changed_deployments)::bigint AS deployment_count
 FROM changed_target t
 `
 
@@ -3891,6 +3952,8 @@ type RequestDeliveryTargetDeletionCASRow struct {
 	UpdatedBy               pgtype.UUID     `json:"updated_by"`
 	CreatedAt               time.Time       `json:"created_at"`
 	UpdatedAt               time.Time       `json:"updated_at"`
+	ConfigurationTemplateID pgtype.UUID     `json:"configuration_template_id"`
+	OverrideSetIds          []uuid.UUID     `json:"override_set_ids"`
 	DeploymentCount         int64           `json:"deployment_count"`
 }
 
@@ -3920,6 +3983,8 @@ func (q *Queries) RequestDeliveryTargetDeletionCAS(ctx context.Context, arg Requ
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigurationTemplateID,
+		&i.OverrideSetIds,
 		&i.DeploymentCount,
 	)
 	return i, err
@@ -4205,7 +4270,7 @@ SET action = $1, phase = 'pending',
     agent_session_id = '', agent_sequence = 0,
     last_error_code = '', last_message = ''
 WHERE id = $2 AND desired_generation = $3
-RETURNING id, target_id, cluster_id, current_rollout_id, desired_bundle_version_id, previous_bundle_version_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, last_observed_at, created_at, updated_at
+RETURNING id, target_id, cluster_id, current_rollout_id, desired_bundle_version_id, previous_bundle_version_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, last_observed_at, created_at, updated_at, desired_renderer_spec, desired_configuration_digest
 `
 
 type TransitionClusterDeploymentCASParams struct {
@@ -4245,6 +4310,8 @@ func (q *Queries) TransitionClusterDeploymentCAS(ctx context.Context, arg Transi
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredRendererSpec,
+		&i.DesiredConfigurationDigest,
 	)
 	return i, err
 }
@@ -4330,7 +4397,7 @@ WHERE id = $16
   AND desired_generation = $1
   AND desired_spec_digest = $2
   AND (agent_session_id <> $11 OR agent_sequence < $12)
-RETURNING id, target_id, cluster_id, current_rollout_id, desired_bundle_version_id, previous_bundle_version_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, last_observed_at, created_at, updated_at
+RETURNING id, target_id, cluster_id, current_rollout_id, desired_bundle_version_id, previous_bundle_version_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, last_observed_at, created_at, updated_at, desired_renderer_spec, desired_configuration_digest
 `
 
 type UpdateClusterDeploymentObservedCASParams struct {
@@ -4400,6 +4467,8 @@ func (q *Queries) UpdateClusterDeploymentObservedCAS(ctx context.Context, arg Up
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredRendererSpec,
+		&i.DesiredConfigurationDigest,
 	)
 	return i, err
 }
@@ -4606,14 +4675,16 @@ SET description = $1,
     rollout_policy = $4,
     reconciliation_policy = $5,
     maintenance_window_policy = $6,
-    suspended = $7,
+    configuration_template_id = $7,
+    override_set_ids = $8,
+    suspended = $9,
     generation = generation + 1,
     resource_version = resource_version + 1,
-    updated_by = $8
-WHERE id = $9 AND project_id = $10
-  AND resource_version = $11
+    updated_by = $10
+WHERE id = $11 AND project_id = $12
+  AND resource_version = $13
   AND deletion_state = 'active'
-RETURNING id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at
+RETURNING id, project_id, name, description, bundle_version_id, placement, rollout_policy, reconciliation_policy, maintenance_window_policy, suspended, generation, resource_version, deletion_state, created_by, updated_by, created_at, updated_at, configuration_template_id, override_set_ids
 `
 
 type UpdateDeliveryTargetCASParams struct {
@@ -4623,6 +4694,8 @@ type UpdateDeliveryTargetCASParams struct {
 	RolloutPolicy           json.RawMessage `json:"rollout_policy"`
 	ReconciliationPolicy    json.RawMessage `json:"reconciliation_policy"`
 	MaintenanceWindowPolicy json.RawMessage `json:"maintenance_window_policy"`
+	ConfigurationTemplateID pgtype.UUID     `json:"configuration_template_id"`
+	OverrideSetIds          []uuid.UUID     `json:"override_set_ids"`
 	Suspended               bool            `json:"suspended"`
 	UpdatedBy               pgtype.UUID     `json:"updated_by"`
 	ID                      uuid.UUID       `json:"id"`
@@ -4638,6 +4711,8 @@ func (q *Queries) UpdateDeliveryTargetCAS(ctx context.Context, arg UpdateDeliver
 		arg.RolloutPolicy,
 		arg.ReconciliationPolicy,
 		arg.MaintenanceWindowPolicy,
+		arg.ConfigurationTemplateID,
+		arg.OverrideSetIds,
 		arg.Suspended,
 		arg.UpdatedBy,
 		arg.ID,
@@ -4663,6 +4738,8 @@ func (q *Queries) UpdateDeliveryTargetCAS(ctx context.Context, arg UpdateDeliver
 		&i.UpdatedBy,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ConfigurationTemplateID,
+		&i.OverrideSetIds,
 	)
 	return i, err
 }
@@ -4671,12 +4748,12 @@ const upsertClusterDeploymentDesired = `-- name: UpsertClusterDeploymentDesired 
 INSERT INTO cluster_deployments (
     target_id, cluster_id, current_rollout_id, desired_bundle_version_id,
     previous_bundle_version_id, desired_generation, desired_spec_digest,
-    desired_revision, action, phase
+    desired_revision, desired_renderer_spec, desired_configuration_digest, action, phase
 ) VALUES (
     $1, $2, $3,
     $4, $5,
     $6, $7,
-    $8, $9, $10
+    $8, $9, $10, $11, $12
 )
 ON CONFLICT (target_id, cluster_id) DO UPDATE
 SET current_rollout_id = EXCLUDED.current_rollout_id,
@@ -4685,24 +4762,28 @@ SET current_rollout_id = EXCLUDED.current_rollout_id,
     desired_generation = EXCLUDED.desired_generation,
     desired_spec_digest = EXCLUDED.desired_spec_digest,
     desired_revision = EXCLUDED.desired_revision,
+    desired_renderer_spec = EXCLUDED.desired_renderer_spec,
+    desired_configuration_digest = EXCLUDED.desired_configuration_digest,
     action = EXCLUDED.action,
     phase = EXCLUDED.phase,
     last_error_code = '', last_message = ''
 WHERE EXCLUDED.desired_generation > cluster_deployments.desired_generation
-RETURNING id, target_id, cluster_id, current_rollout_id, desired_bundle_version_id, previous_bundle_version_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, last_observed_at, created_at, updated_at
+RETURNING id, target_id, cluster_id, current_rollout_id, desired_bundle_version_id, previous_bundle_version_id, desired_generation, observed_generation, desired_spec_digest, observed_spec_digest, desired_revision, observed_revision, action, phase, conditions, source_kind, source_name, reconciler_kind, reconciler_name, inventory, agent_session_id, agent_sequence, last_error_code, last_message, last_observed_at, created_at, updated_at, desired_renderer_spec, desired_configuration_digest
 `
 
 type UpsertClusterDeploymentDesiredParams struct {
-	TargetID                uuid.UUID   `json:"target_id"`
-	ClusterID               uuid.UUID   `json:"cluster_id"`
-	CurrentRolloutID        pgtype.UUID `json:"current_rollout_id"`
-	DesiredBundleVersionID  pgtype.UUID `json:"desired_bundle_version_id"`
-	PreviousBundleVersionID pgtype.UUID `json:"previous_bundle_version_id"`
-	DesiredGeneration       int64       `json:"desired_generation"`
-	DesiredSpecDigest       string      `json:"desired_spec_digest"`
-	DesiredRevision         string      `json:"desired_revision"`
-	Action                  string      `json:"action"`
-	Phase                   string      `json:"phase"`
+	TargetID                   uuid.UUID   `json:"target_id"`
+	ClusterID                  uuid.UUID   `json:"cluster_id"`
+	CurrentRolloutID           pgtype.UUID `json:"current_rollout_id"`
+	DesiredBundleVersionID     pgtype.UUID `json:"desired_bundle_version_id"`
+	PreviousBundleVersionID    pgtype.UUID `json:"previous_bundle_version_id"`
+	DesiredGeneration          int64       `json:"desired_generation"`
+	DesiredSpecDigest          string      `json:"desired_spec_digest"`
+	DesiredRevision            string      `json:"desired_revision"`
+	DesiredRendererSpec        []byte      `json:"desired_renderer_spec"`
+	DesiredConfigurationDigest pgtype.Text `json:"desired_configuration_digest"`
+	Action                     string      `json:"action"`
+	Phase                      string      `json:"phase"`
 }
 
 func (q *Queries) UpsertClusterDeploymentDesired(ctx context.Context, arg UpsertClusterDeploymentDesiredParams) (ClusterDeployment, error) {
@@ -4715,6 +4796,8 @@ func (q *Queries) UpsertClusterDeploymentDesired(ctx context.Context, arg Upsert
 		arg.DesiredGeneration,
 		arg.DesiredSpecDigest,
 		arg.DesiredRevision,
+		arg.DesiredRendererSpec,
+		arg.DesiredConfigurationDigest,
 		arg.Action,
 		arg.Phase,
 	)
@@ -4747,27 +4830,29 @@ func (q *Queries) UpsertClusterDeploymentDesired(ctx context.Context, arg Upsert
 		&i.LastObservedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DesiredRendererSpec,
+		&i.DesiredConfigurationDigest,
 	)
 	return i, err
 }
 
 const upsertDeliveryControllerInventory = `-- name: UpsertDeliveryControllerInventory :one
 INSERT INTO delivery_controller_inventory (
-    cluster_id, agent_version, flux_version, components, api_versions, distribution_digest,
+    cluster_id, agent_version, flux_version, components, system_components, api_versions, distribution_digest,
     kubernetes_version, ready, compatibility_status, error_code, observed_at
 ) VALUES (
     $1, $2, $3, $4,
-    $5, $6,
-    $7, $8,
-    $9, $10, $11
+    $5, $6, $7,
+    $8, $9,
+    $10, $11, $12
 )
 ON CONFLICT (cluster_id) DO UPDATE
 SET agent_version = EXCLUDED.agent_version, flux_version = EXCLUDED.flux_version, components = EXCLUDED.components,
-    api_versions = EXCLUDED.api_versions, distribution_digest = EXCLUDED.distribution_digest,
+    system_components = EXCLUDED.system_components, api_versions = EXCLUDED.api_versions, distribution_digest = EXCLUDED.distribution_digest,
     kubernetes_version = EXCLUDED.kubernetes_version, ready = EXCLUDED.ready,
     compatibility_status = EXCLUDED.compatibility_status,
     error_code = EXCLUDED.error_code, observed_at = EXCLUDED.observed_at
-RETURNING cluster_id, agent_version, flux_version, components, api_versions, distribution_digest, kubernetes_version, ready, compatibility_status, error_code, observed_at, updated_at
+RETURNING cluster_id, agent_version, flux_version, components, api_versions, distribution_digest, kubernetes_version, ready, compatibility_status, error_code, observed_at, updated_at, system_components
 `
 
 type UpsertDeliveryControllerInventoryParams struct {
@@ -4775,6 +4860,7 @@ type UpsertDeliveryControllerInventoryParams struct {
 	AgentVersion        string             `json:"agent_version"`
 	FluxVersion         string             `json:"flux_version"`
 	Components          json.RawMessage    `json:"components"`
+	SystemComponents    json.RawMessage    `json:"system_components"`
 	ApiVersions         json.RawMessage    `json:"api_versions"`
 	DistributionDigest  string             `json:"distribution_digest"`
 	KubernetesVersion   string             `json:"kubernetes_version"`
@@ -4790,6 +4876,7 @@ func (q *Queries) UpsertDeliveryControllerInventory(ctx context.Context, arg Ups
 		arg.AgentVersion,
 		arg.FluxVersion,
 		arg.Components,
+		arg.SystemComponents,
 		arg.ApiVersions,
 		arg.DistributionDigest,
 		arg.KubernetesVersion,
@@ -4812,6 +4899,7 @@ func (q *Queries) UpsertDeliveryControllerInventory(ctx context.Context, arg Ups
 		&i.ErrorCode,
 		&i.ObservedAt,
 		&i.UpdatedAt,
+		&i.SystemComponents,
 	)
 	return i, err
 }

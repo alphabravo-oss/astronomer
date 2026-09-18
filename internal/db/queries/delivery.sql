@@ -278,11 +278,13 @@ WHERE r.id = sqlc.arg(id) AND r.status = 'running'
 -- name: CreateDeliveryTarget :one
 INSERT INTO delivery_targets (
     project_id, name, description, bundle_version_id, placement, rollout_policy,
-    reconciliation_policy, maintenance_window_policy, suspended, created_by, updated_by
+    reconciliation_policy, maintenance_window_policy, configuration_template_id,
+    override_set_ids, suspended, created_by, updated_by
 ) VALUES (
     sqlc.arg(project_id), sqlc.arg(name), sqlc.arg(description),
     sqlc.arg(bundle_version_id), sqlc.arg(placement), sqlc.arg(rollout_policy),
     sqlc.arg(reconciliation_policy), sqlc.arg(maintenance_window_policy),
+    sqlc.narg(configuration_template_id), sqlc.arg(override_set_ids),
     sqlc.arg(suspended), sqlc.narg(created_by), sqlc.narg(updated_by)
 )
 RETURNING *;
@@ -314,6 +316,8 @@ SET description = sqlc.arg(description),
     rollout_policy = sqlc.arg(rollout_policy),
     reconciliation_policy = sqlc.arg(reconciliation_policy),
     maintenance_window_policy = sqlc.arg(maintenance_window_policy),
+    configuration_template_id = sqlc.narg(configuration_template_id),
+    override_set_ids = sqlc.arg(override_set_ids),
     suspended = sqlc.arg(suspended),
     generation = generation + 1,
     resource_version = resource_version + 1,
@@ -395,8 +399,9 @@ WHERE target_id = sqlc.arg(target_id) AND idempotency_key = sqlc.arg(idempotency
 -- name: GetDeliveryPlanningSnapshot :one
 SELECT t.id AS target_id, t.project_id, t.bundle_version_id, t.placement,
        t.rollout_policy, t.maintenance_window_policy, t.generation,
+       t.configuration_template_id, t.override_set_ids,
        t.suspended, t.deletion_state, p.cluster_id AS owner_cluster_id,
-       bv.spec_digest, bv.source_spec, bv.requirements, bv.state AS bundle_state
+       bv.spec_digest, bv.source_spec, bv.renderer_spec, bv.requirements, bv.state AS bundle_state
 FROM delivery_targets t
 JOIN projects p ON p.id = t.project_id
 JOIN component_bundle_versions bv ON bv.id = t.bundle_version_id
@@ -419,7 +424,9 @@ SELECT DISTINCT ON (c.id)
        d.desired_bundle_version_id AS previous_bundle_version_id,
        d.desired_generation AS previous_generation,
        previous.spec_digest AS previous_spec_digest,
-       previous.source_spec AS previous_source_spec
+       previous.source_spec AS previous_source_spec,
+       d.desired_renderer_spec AS previous_renderer_spec,
+       d.desired_configuration_digest AS previous_configuration_digest
 FROM projects p
 JOIN clusters c ON c.id = p.cluster_id
 LEFT JOIN delivery_controller_inventory i ON i.cluster_id = c.id
@@ -441,6 +448,7 @@ SELECT r.*
 FROM delivery_rollouts r
 JOIN delivery_targets t ON t.id = r.target_id
 WHERE t.project_id = sqlc.arg(project_id)
+  AND (sqlc.narg(target_id)::uuid IS NULL OR r.target_id = sqlc.narg(target_id)::uuid)
   AND (sqlc.narg(state)::text IS NULL OR r.state = sqlc.narg(state)::text)
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT sqlc.arg(query_limit) OFFSET sqlc.arg(query_offset);
@@ -450,6 +458,7 @@ SELECT count(*)
 FROM delivery_rollouts r
 JOIN delivery_targets t ON t.id = r.target_id
 WHERE t.project_id = sqlc.arg(project_id)
+  AND (sqlc.narg(target_id)::uuid IS NULL OR r.target_id = sqlc.narg(target_id)::uuid)
   AND (sqlc.narg(state)::text IS NULL OR r.state = sqlc.narg(state)::text);
 
 -- name: GetDeliveryRolloutForAction :one
@@ -676,12 +685,12 @@ RETURNING r.*;
 INSERT INTO cluster_deployments (
     target_id, cluster_id, current_rollout_id, desired_bundle_version_id,
     previous_bundle_version_id, desired_generation, desired_spec_digest,
-    desired_revision, action, phase
+    desired_revision, desired_renderer_spec, desired_configuration_digest, action, phase
 ) VALUES (
     sqlc.arg(target_id), sqlc.arg(cluster_id), sqlc.arg(current_rollout_id),
     sqlc.arg(desired_bundle_version_id), sqlc.narg(previous_bundle_version_id),
     sqlc.arg(desired_generation), sqlc.arg(desired_spec_digest),
-    sqlc.arg(desired_revision), sqlc.arg(action), sqlc.arg(phase)
+    sqlc.arg(desired_revision), sqlc.arg(desired_renderer_spec), sqlc.arg(desired_configuration_digest), sqlc.arg(action), sqlc.arg(phase)
 )
 ON CONFLICT (target_id, cluster_id) DO UPDATE
 SET current_rollout_id = EXCLUDED.current_rollout_id,
@@ -690,6 +699,8 @@ SET current_rollout_id = EXCLUDED.current_rollout_id,
     desired_generation = EXCLUDED.desired_generation,
     desired_spec_digest = EXCLUDED.desired_spec_digest,
     desired_revision = EXCLUDED.desired_revision,
+    desired_renderer_spec = EXCLUDED.desired_renderer_spec,
+    desired_configuration_digest = EXCLUDED.desired_configuration_digest,
     action = EXCLUDED.action,
     phase = EXCLUDED.phase,
     last_error_code = '', last_message = ''
@@ -699,7 +710,7 @@ RETURNING *;
 -- name: ListClusterDeliveryAssignments :many
 SELECT d.*, t.project_id, bv.source_id, bv.renderer, bv.scope,
        bv.resolved_revision, bv.artifact_digest, bv.source_spec,
-       bv.renderer_spec, bv.reconciliation_policy,
+       COALESCE(d.desired_renderer_spec, bv.renderer_spec) AS renderer_spec, bv.reconciliation_policy,
        s.source_type, s.url, s.auth_mode, s.credential_epoch,
        s.credential_encrypted, s.ca_bundle_encrypted,
        s.trust_policy, s.proxy_ref
@@ -733,6 +744,7 @@ SELECT d.*
 FROM cluster_deployments d
 JOIN delivery_targets t ON t.id = d.target_id
 WHERE t.project_id = sqlc.arg(project_id)
+  AND (sqlc.narg(target_id)::uuid IS NULL OR d.target_id = sqlc.narg(target_id)::uuid)
   AND (sqlc.narg(cluster_id)::uuid IS NULL OR d.cluster_id = sqlc.narg(cluster_id)::uuid)
   AND (sqlc.narg(phase)::text IS NULL OR d.phase = sqlc.narg(phase)::text)
 ORDER BY d.updated_at DESC, d.id DESC
@@ -743,6 +755,7 @@ SELECT count(*)
 FROM cluster_deployments d
 JOIN delivery_targets t ON t.id = d.target_id
 WHERE t.project_id = sqlc.arg(project_id)
+  AND (sqlc.narg(target_id)::uuid IS NULL OR d.target_id = sqlc.narg(target_id)::uuid)
   AND (sqlc.narg(cluster_id)::uuid IS NULL OR d.cluster_id = sqlc.narg(cluster_id)::uuid)
   AND (sqlc.narg(phase)::text IS NULL OR d.phase = sqlc.narg(phase)::text);
 
@@ -909,17 +922,17 @@ RETURNING *;
 
 -- name: UpsertDeliveryControllerInventory :one
 INSERT INTO delivery_controller_inventory (
-    cluster_id, agent_version, flux_version, components, api_versions, distribution_digest,
+    cluster_id, agent_version, flux_version, components, system_components, api_versions, distribution_digest,
     kubernetes_version, ready, compatibility_status, error_code, observed_at
 ) VALUES (
     sqlc.arg(cluster_id), sqlc.arg(agent_version), sqlc.arg(flux_version), sqlc.arg(components),
-    sqlc.arg(api_versions), sqlc.arg(distribution_digest),
+    sqlc.arg(system_components), sqlc.arg(api_versions), sqlc.arg(distribution_digest),
     sqlc.arg(kubernetes_version), sqlc.arg(ready),
     sqlc.arg(compatibility_status), sqlc.arg(error_code), sqlc.narg(observed_at)
 )
 ON CONFLICT (cluster_id) DO UPDATE
 SET agent_version = EXCLUDED.agent_version, flux_version = EXCLUDED.flux_version, components = EXCLUDED.components,
-    api_versions = EXCLUDED.api_versions, distribution_digest = EXCLUDED.distribution_digest,
+    system_components = EXCLUDED.system_components, api_versions = EXCLUDED.api_versions, distribution_digest = EXCLUDED.distribution_digest,
     kubernetes_version = EXCLUDED.kubernetes_version, ready = EXCLUDED.ready,
     compatibility_status = EXCLUDED.compatibility_status,
     error_code = EXCLUDED.error_code, observed_at = EXCLUDED.observed_at
@@ -937,11 +950,11 @@ FROM delivery_controller_inventory
 GROUP BY compatibility_status
 ORDER BY compatibility_status;
 
--- Estate scoreboard: one row per live cluster. Local host-only clusters stay
--- in the table so operators can see them, but the handler excludes is_local
--- from Flux-managed tiles. Removed assignments are omitted; Drifted is the
+-- Delivery Fleet scoreboard: one row per live cluster, including the local
+-- management cluster as a first-class Flux target. Removed assignments are
+-- omitted; Drifted is the
 -- normalized condition the observer persists.
--- name: ListDeliveryEstateClusters :many
+-- name: ListDeliveryFleetClusters :many
 SELECT
     c.id,
     c.name,

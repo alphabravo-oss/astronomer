@@ -19,6 +19,8 @@ Anything with a `runbook_url` on a PrometheusRule in
 
 | Alert | Runbook |
 |---|---|
+| `AstronomerCatalogSynchronizationFailed` | [catalog-and-applications.md](catalog-and-applications.md) |
+| `AstronomerCatalogSynchronizationStale` | [catalog-and-applications.md](catalog-and-applications.md) |
 | `AstronomerHighHTTPErrorRate` | [high-http-error-rate.md](high-http-error-rate.md) |
 | `AstronomerWorkerQueueBacklog` | [worker-queue-backlog.md](worker-queue-backlog.md) |
 | `AstronomerWorkerDLQGrowing` | [worker-dlq-growing.md](worker-dlq-growing.md) |

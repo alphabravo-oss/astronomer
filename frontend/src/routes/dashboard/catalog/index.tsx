@@ -1,6 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "@/lib/navigation";
+import {
+  buildCatalogPresentationIndex,
+  decorateCatalogChart,
+  type CuratedHelmChart,
+} from "@/lib/catalogs/astronomer";
 import { useTabParam } from "@/lib/use-tab-param";
 import {
   useClusters,
@@ -8,6 +13,8 @@ import {
 } from "@/lib/hooks";
 import {
   useHelmRepositories,
+  useCatalogApplications,
+  useApplicationCatalogSources,
   useSyncHelmRepository,
   useDeleteHelmRepository,
   useHelmCharts,
@@ -20,12 +27,13 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
 import { TabStrip, Tabs, TabsContent } from "@/components/ui/tabs";
 import type { HelmChart, HelmChartCategory, HelmChartVersion } from "@/types";
-import { Package, Plus } from "lucide-react";
+import { AlertTriangle, Package, Plus } from "lucide-react";
 import { AddRepositoryModal } from "./-add-repository-modal";
 import { BrowseTab } from "./-browse-tab";
 import { ChartDetailModal } from "./-chart-detail-modal";
 import { InstallChartModal } from "./-install-chart-modal";
 import { InstalledTab } from "./-installed-tab";
+import { UpgradeChartModal } from "./-upgrade-chart-modal";
 import { RepositoriesTab } from "./-repositories-tab";
 
 type TabKey = "browse" | "installed" | "repositories";
@@ -69,21 +77,41 @@ function CatalogPage() {
     initialSearchParams?.get("search") ?? "",
   );
   const presetClusterIdPage = initialSearchParams?.get("cluster_id") ?? "";
-  const [selectedChart, setSelectedChart] = useState<HelmChart | null>(null);
+  const [selectedChart, setSelectedChart] = useState<CuratedHelmChart | null>(null);
   const [showRepoModal, setShowRepoModal] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
+  const [upgradeInstallation, setUpgradeInstallation] =
+    useState<import("@/types").InstalledChart | null>(null);
   const [installChart, setInstallChart] = useState<{
     chart: HelmChart;
     version: HelmChartVersion;
   } | null>(null);
 
-  const { data: charts, isLoading: chartsLoading } = useHelmCharts({
+  const {
+    data: charts,
+    isLoading: chartsLoading,
+    isError: chartsUnavailable,
+  } = useHelmCharts({
     projectId,
     category: selectedCategory !== "all" ? selectedCategory : undefined,
     search: searchQuery || undefined,
   });
   const { data: installed, isLoading: installedLoading } = useInstalledCharts();
-  const { data: repos, isLoading: reposLoading } = useHelmRepositories();
+  const {
+    data: repos,
+    isLoading: reposLoading,
+    isError: repositoriesUnavailable,
+  } = useHelmRepositories();
+  const {
+    data: catalogApplications,
+    isError: curatedCatalogUnavailable,
+    isLoading: curatedCatalogLoading,
+  } = useCatalogApplications();
+  const {
+    data: applicationCatalogSources,
+    isError: applicationCatalogSourcesUnavailable,
+    isLoading: applicationCatalogSourcesLoading,
+  } = useApplicationCatalogSources();
   const { data: presetClusterData } = useClusters({ pageSize: 100 });
   const clusterNames = useMemo(
     () =>
@@ -95,18 +123,36 @@ function CatalogPage() {
       ),
     [presetClusterData],
   );
-  const repositoryNames = useMemo(
-    () => new Map((repos || []).map((repo) => [repo.id, repo.name])),
+  const repositoriesById = useMemo(
+    () => new Map((repos || []).map((repo) => [repo.id, repo])),
     [repos],
   );
-  const catalogCharts = useMemo(
-    () =>
-      charts?.map((chart) => ({
-        ...chart,
-        repositoryName: repositoryNames.get(chart.repositoryId),
-      })),
-    [charts, repositoryNames],
+  const catalogCharts = useMemo(() => {
+    const presentations = buildCatalogPresentationIndex(catalogApplications);
+    return charts?.map((chart) =>
+      decorateCatalogChart(
+        {
+          ...chart,
+          repositoryName: repositoriesById.get(chart.repositoryId)?.name,
+        },
+        presentations,
+        repositoriesById.get(chart.repositoryId),
+      ),
+    );
+  }, [catalogApplications, charts, repositoriesById]);
+  const failingRepositories = (repos || []).filter(
+    (repository) => repository.enabled && repository.lastSyncError,
   );
+  const failingApplicationSources = (applicationCatalogSources || []).filter(
+    (source) => Boolean(source.last_sync_error),
+  );
+  const noApplicationCatalogAvailable =
+    !curatedCatalogUnavailable &&
+    !applicationCatalogSourcesUnavailable &&
+    !curatedCatalogLoading &&
+    !applicationCatalogSourcesLoading &&
+    (applicationCatalogSources?.length ?? 0) === 0 &&
+    (catalogApplications?.length ?? 0) === 0;
   const presetCluster = useMemo(
     () =>
       presetClusterIdPage
@@ -156,12 +202,13 @@ function CatalogPage() {
     <PageShell>
       <div>
         <PageHeader
-          title="Catalog"
-          description="Shared Helm repositories. Browse and install charts from a cluster's Apps page."
+          eyebrow="Apps"
+          title="Application Catalog"
+          description="Discover curated upstream applications and deploy them to project clusters. Astronomer resolves versions and tracks lifecycle; local Flux performs convergence."
           actions={
             <>
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                Project visibility
+                Project
                 <Select
                   aria-label="Catalog project"
                   value={projectId}
@@ -183,7 +230,7 @@ function CatalogPage() {
                   icon={<Plus className="h-4 w-4" />}
                   onClick={() => setShowRepoModal(true)}
                 >
-                  Add Repository
+                  Add Catalog Source
                 </ActionButton>
               )}
             </>
@@ -201,6 +248,53 @@ function CatalogPage() {
           </div>
         )}
       </div>
+
+      {(chartsUnavailable ||
+        repositoriesUnavailable ||
+        curatedCatalogUnavailable ||
+        applicationCatalogSourcesUnavailable ||
+        noApplicationCatalogAvailable) && (
+        <div className="flex items-start gap-3 rounded-lg border border-status-warning/35 bg-status-warning/10 p-3 text-sm text-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-status-warning" />
+          <div>
+            <p className="font-medium">Catalog source is unavailable</p>
+            <p className="mt-0.5 text-xs text-table-secondary">
+              Installed applications remain manageable. Astronomer will show
+              the last verified catalog when one is cached and will retry the
+              source without affecting cluster operations.
+            </p>
+          </div>
+        </div>
+      )}
+      {failingRepositories.length > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-status-warning/35 bg-status-warning/10 p-3 text-sm text-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-status-warning" />
+          <div>
+            <p className="font-medium">
+              {failingRepositories.length} catalog source
+              {failingRepositories.length === 1 ? " is" : "s are"} using
+              cached metadata
+            </p>
+            <p className="mt-0.5 text-xs text-table-secondary">
+              {failingRepositories.map((repository) => repository.name).join(", ")}
+            </p>
+          </div>
+        </div>
+      )}
+      {failingApplicationSources.length > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-status-warning/35 bg-status-warning/10 p-3 text-sm text-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none text-status-warning" />
+          <div>
+            <p className="font-medium">Using a last-known-good application catalog</p>
+            <p className="mt-0.5 text-xs text-table-secondary">
+              {failingApplicationSources
+                .map((source) => source.display_name || source.name)
+                .join(", ")} could not be refreshed. Verified cached metadata
+              remains available; installed applications are unaffected.
+            </p>
+          </div>
+        </div>
+      )}
 
       <Tabs>
         <TabStrip
@@ -230,6 +324,7 @@ function CatalogPage() {
               loading={installedLoading}
               clusterNames={clusterNames}
               onRollback={(id, revision) => rollback.mutate({ id, revision })}
+              onUpgrade={setUpgradeInstallation}
               onUninstall={(id) => uninstall.mutate(id)}
             />
           )}
@@ -269,6 +364,12 @@ function CatalogPage() {
             setShowInstallModal(false);
             setInstallChart(null);
           }}
+        />
+      )}
+      {upgradeInstallation && (
+        <UpgradeChartModal
+          installation={upgradeInstallation}
+          onClose={() => setUpgradeInstallation(null)}
         />
       )}
 

@@ -132,6 +132,15 @@ const (
 	AllowlistUpdateRequestModeMonitor  AllowlistUpdateRequestMode = "monitor"
 )
 
+// Defines values for ApplicationCatalogSourceVerificationStatus.
+const (
+	ApplicationCatalogSourceVerificationStatusDigestVerified ApplicationCatalogSourceVerificationStatus = "digest-verified"
+	ApplicationCatalogSourceVerificationStatusFailed         ApplicationCatalogSourceVerificationStatus = "failed"
+	ApplicationCatalogSourceVerificationStatusRevoked        ApplicationCatalogSourceVerificationStatus = "revoked"
+	ApplicationCatalogSourceVerificationStatusUnsigned       ApplicationCatalogSourceVerificationStatus = "unsigned"
+	ApplicationCatalogSourceVerificationStatusVerified       ApplicationCatalogSourceVerificationStatus = "verified"
+)
+
 // Defines values for BackupControllerStatusHealth.
 const (
 	BackupControllerStatusHealthDegraded BackupControllerStatusHealth = "degraded"
@@ -177,6 +186,30 @@ const (
 	CISScanStatusFailed    CISScanStatus = "failed"
 	CISScanStatusPending   CISScanStatus = "pending"
 	CISScanStatusRunning   CISScanStatus = "running"
+)
+
+// Defines values for CatalogApplicationPresentationSupportTier.
+const (
+	CatalogApplicationPresentationSupportTierAstronomer   CatalogApplicationPresentationSupportTier = "astronomer"
+	CatalogApplicationPresentationSupportTierExperimental CatalogApplicationPresentationSupportTier = "experimental"
+	CatalogApplicationPresentationSupportTierUpstream     CatalogApplicationPresentationSupportTier = "upstream"
+)
+
+// Defines values for CatalogApplicationPresentationVerificationStatus.
+const (
+	CatalogApplicationPresentationVerificationStatusDigestVerified CatalogApplicationPresentationVerificationStatus = "digest-verified"
+	CatalogApplicationPresentationVerificationStatusFailed         CatalogApplicationPresentationVerificationStatus = "failed"
+	CatalogApplicationPresentationVerificationStatusRevoked        CatalogApplicationPresentationVerificationStatus = "revoked"
+	CatalogApplicationPresentationVerificationStatusUnsigned       CatalogApplicationPresentationVerificationStatus = "unsigned"
+	CatalogApplicationPresentationVerificationStatusVerified       CatalogApplicationPresentationVerificationStatus = "verified"
+)
+
+// Defines values for CatalogPrerequisiteCheckStatus.
+const (
+	CatalogPrerequisiteCheckStatusAdvisory CatalogPrerequisiteCheckStatus = "advisory"
+	CatalogPrerequisiteCheckStatusApproval CatalogPrerequisiteCheckStatus = "approval"
+	CatalogPrerequisiteCheckStatusBlocking CatalogPrerequisiteCheckStatus = "blocking"
+	CatalogPrerequisiteCheckStatusReady    CatalogPrerequisiteCheckStatus = "ready"
 )
 
 // Defines values for CatalogRepositorySyncReceiptStatus.
@@ -958,6 +991,18 @@ const (
 	DeliveryConditionTypeStalled     DeliveryConditionType = "Stalled"
 )
 
+// Defines values for DeliveryConfigurationTemplateRenderer.
+const (
+	DeliveryConfigurationTemplateRendererHelm      DeliveryConfigurationTemplateRenderer = "helm"
+	DeliveryConfigurationTemplateRendererKustomize DeliveryConfigurationTemplateRenderer = "kustomize"
+)
+
+// Defines values for DeliveryConfigurationTemplateWriteRenderer.
+const (
+	DeliveryConfigurationTemplateWriteRendererHelm      DeliveryConfigurationTemplateWriteRenderer = "helm"
+	DeliveryConfigurationTemplateWriteRendererKustomize DeliveryConfigurationTemplateWriteRenderer = "kustomize"
+)
+
 // Defines values for DeliveryControllerInventoryCompatibilityStatus.
 const (
 	DeliveryControllerInventoryCompatibilityStatusCompatible      DeliveryControllerInventoryCompatibilityStatus = "compatible"
@@ -966,10 +1011,10 @@ const (
 	DeliveryControllerInventoryCompatibilityStatusUpgradeRequired DeliveryControllerInventoryCompatibilityStatus = "upgrade_required"
 )
 
-// Defines values for DeliveryEstateAttentionSeverity.
+// Defines values for DeliveryFleetAttentionSeverity.
 const (
-	DeliveryEstateAttentionSeverityError   DeliveryEstateAttentionSeverity = "error"
-	DeliveryEstateAttentionSeverityWarning DeliveryEstateAttentionSeverity = "warning"
+	DeliveryFleetAttentionSeverityError   DeliveryFleetAttentionSeverity = "error"
+	DeliveryFleetAttentionSeverityWarning DeliveryFleetAttentionSeverity = "warning"
 )
 
 // Defines values for DeliveryImmutableRevisionKind.
@@ -985,6 +1030,26 @@ const (
 	DeliveryLabelExpressionOperatorExists       DeliveryLabelExpressionOperator = "Exists"
 	DeliveryLabelExpressionOperatorIn           DeliveryLabelExpressionOperator = "In"
 	DeliveryLabelExpressionOperatorNotIn        DeliveryLabelExpressionOperator = "NotIn"
+)
+
+// Defines values for DeliveryOverrideSetScope.
+const (
+	DeliveryOverrideSetScopeCluster      DeliveryOverrideSetScope = "cluster"
+	DeliveryOverrideSetScopeEnvironment  DeliveryOverrideSetScope = "environment"
+	DeliveryOverrideSetScopeGroup        DeliveryOverrideSetScope = "group"
+	DeliveryOverrideSetScopeOrganization DeliveryOverrideSetScope = "organization"
+	DeliveryOverrideSetScopeProject      DeliveryOverrideSetScope = "project"
+	DeliveryOverrideSetScopeRollout      DeliveryOverrideSetScope = "rollout"
+)
+
+// Defines values for DeliveryOverrideSetWriteScope.
+const (
+	DeliveryOverrideSetWriteScopeCluster      DeliveryOverrideSetWriteScope = "cluster"
+	DeliveryOverrideSetWriteScopeEnvironment  DeliveryOverrideSetWriteScope = "environment"
+	DeliveryOverrideSetWriteScopeGroup        DeliveryOverrideSetWriteScope = "group"
+	DeliveryOverrideSetWriteScopeOrganization DeliveryOverrideSetWriteScope = "organization"
+	DeliveryOverrideSetWriteScopeProject      DeliveryOverrideSetWriteScope = "project"
+	DeliveryOverrideSetWriteScopeRollout      DeliveryOverrideSetWriteScope = "rollout"
 )
 
 // Defines values for DeliveryPreviewDecisionMatchReasons.
@@ -1148,6 +1213,36 @@ const (
 	DeliverySourceWriteTypeHelmHttp    DeliverySourceWriteType = "helm_http"
 	DeliverySourceWriteTypeHelmOci     DeliverySourceWriteType = "helm_oci"
 	DeliverySourceWriteTypeOciArtifact DeliverySourceWriteType = "oci_artifact"
+)
+
+// Defines values for DeliverySystemComponentCompatibility.
+const (
+	DeliverySystemComponentCompatibilityCompatible   DeliverySystemComponentCompatibility = "compatible"
+	DeliverySystemComponentCompatibilityIncompatible DeliverySystemComponentCompatibility = "incompatible"
+	DeliverySystemComponentCompatibilityUnknown      DeliverySystemComponentCompatibility = "unknown"
+)
+
+// Defines values for DeliverySystemComponentHealth.
+const (
+	DeliverySystemComponentHealthDegraded    DeliverySystemComponentHealth = "degraded"
+	DeliverySystemComponentHealthHealthy     DeliverySystemComponentHealth = "healthy"
+	DeliverySystemComponentHealthUnavailable DeliverySystemComponentHealth = "unavailable"
+	DeliverySystemComponentHealthUnknown     DeliverySystemComponentHealth = "unknown"
+)
+
+// Defines values for DeliverySystemComponentOwner.
+const (
+	DeliverySystemComponentOwnerAstronomer DeliverySystemComponentOwner = "astronomer"
+	DeliverySystemComponentOwnerCluster    DeliverySystemComponentOwner = "cluster"
+	DeliverySystemComponentOwnerExternal   DeliverySystemComponentOwner = "external"
+	DeliverySystemComponentOwnerFlux       DeliverySystemComponentOwner = "flux"
+)
+
+// Defines values for DeliverySystemComponentUpdateState.
+const (
+	DeliverySystemComponentUpdateStateCurrent         DeliverySystemComponentUpdateState = "current"
+	DeliverySystemComponentUpdateStateUnknown         DeliverySystemComponentUpdateState = "unknown"
+	DeliverySystemComponentUpdateStateUpdateAvailable DeliverySystemComponentUpdateState = "update_available"
 )
 
 // Defines values for DeliveryTargetDeletionState.
@@ -2727,6 +2822,29 @@ type ApiTokenListItem struct {
 	Scopes           *[]string           `json:"scopes,omitempty"`
 }
 
+// ApplicationCatalogSource defines model for ApplicationCatalogSource.
+type ApplicationCatalogSource struct {
+	Channel              string                                     `json:"channel"`
+	CreatedAt            time.Time                                  `json:"created_at"`
+	Description          string                                     `json:"description"`
+	DisplayName          string                                     `json:"display_name"`
+	Id                   openapi_types.UUID                         `json:"id"`
+	IndexDigest          string                                     `json:"index_digest"`
+	LastSyncAttemptedAt  time.Time                                  `json:"last_sync_attempted_at"`
+	LastSyncError        string                                     `json:"last_sync_error"`
+	LastSyncedAt         time.Time                                  `json:"last_synced_at"`
+	Name                 string                                     `json:"name"`
+	SourceRevision       string                                     `json:"source_revision"`
+	SourceUrl            string                                     `json:"source_url"`
+	TrustPolicy          map[string]interface{}                     `json:"trust_policy"`
+	UpdatedAt            time.Time                                  `json:"updated_at"`
+	VerificationIdentity string                                     `json:"verification_identity"`
+	VerificationStatus   ApplicationCatalogSourceVerificationStatus `json:"verification_status"`
+}
+
+// ApplicationCatalogSourceVerificationStatus defines model for ApplicationCatalogSource.VerificationStatus.
+type ApplicationCatalogSourceVerificationStatus string
+
 // ApplyClusterTemplateRequest defines model for ApplyClusterTemplateRequest.
 type ApplyClusterTemplateRequest struct {
 	TemplateId openapi_types.UUID `json:"template_id"`
@@ -3052,12 +3170,57 @@ type CISScanListEnvelope struct {
 	Previous *string `json:"previous"`
 }
 
+// CatalogApplicationPresentation defines model for CatalogApplicationPresentation.
+type CatalogApplicationPresentation struct {
+	Artifact             map[string]interface{}                           `json:"artifact"`
+	CatalogDigest        string                                           `json:"catalog_digest"`
+	Category             string                                           `json:"category"`
+	ChartName            string                                           `json:"chart_name"`
+	Compatibility        map[string]interface{}                           `json:"compatibility"`
+	DefaultEnabled       bool                                             `json:"default_enabled"`
+	Description          *string                                          `json:"description,omitempty"`
+	DisplayName          string                                           `json:"display_name"`
+	DocumentationUrl     *string                                          `json:"documentation_url,omitempty"`
+	Featured             bool                                             `json:"featured"`
+	IconUrl              *string                                          `json:"icon_url,omitempty"`
+	Id                   openapi_types.UUID                               `json:"id"`
+	Lifecycle            map[string]bool                                  `json:"lifecycle"`
+	Presentation         map[string]interface{}                           `json:"presentation"`
+	Privileged           bool                                             `json:"privileged"`
+	RepoName             string                                           `json:"repo_name"`
+	RepoUrl              string                                           `json:"repo_url"`
+	Resources            map[string]interface{}                           `json:"resources"`
+	Revoked              bool                                             `json:"revoked"`
+	Slug                 string                                           `json:"slug"`
+	Storage              map[string]interface{}                           `json:"storage"`
+	SupportTier          CatalogApplicationPresentationSupportTier        `json:"support_tier"`
+	UpdatedAt            time.Time                                        `json:"updated_at"`
+	VerificationIdentity string                                           `json:"verification_identity"`
+	VerificationStatus   CatalogApplicationPresentationVerificationStatus `json:"verification_status"`
+}
+
+// CatalogApplicationPresentationSupportTier defines model for CatalogApplicationPresentation.SupportTier.
+type CatalogApplicationPresentationSupportTier string
+
+// CatalogApplicationPresentationVerificationStatus defines model for CatalogApplicationPresentation.VerificationStatus.
+type CatalogApplicationPresentationVerificationStatus string
+
 // CatalogInstallationAcceptedEnvelope defines model for CatalogInstallationAcceptedEnvelope.
 type CatalogInstallationAcceptedEnvelope struct {
 	Data struct {
 		Installation InstalledChart   `json:"installation"`
 		Operation    CatalogOperation `json:"operation"`
 	} `json:"data"`
+}
+
+// CatalogInstallationPreview defines model for CatalogInstallationPreview.
+type CatalogInstallationPreview struct {
+	Allowed        bool                       `json:"allowed"`
+	Application    string                     `json:"application"`
+	ArtifactDigest string                     `json:"artifact_digest"`
+	CatalogDigest  string                     `json:"catalog_digest"`
+	Checks         []CatalogPrerequisiteCheck `json:"checks"`
+	ValuesDigest   string                     `json:"values_digest"`
 }
 
 // CatalogOperation defines model for CatalogOperation.
@@ -3092,6 +3255,17 @@ type CatalogOperationEvent struct {
 	Stage     *string                 `json:"stage,omitempty"`
 }
 
+// CatalogPrerequisiteCheck defines model for CatalogPrerequisiteCheck.
+type CatalogPrerequisiteCheck struct {
+	Code        string                         `json:"code"`
+	Description string                         `json:"description"`
+	Status      CatalogPrerequisiteCheckStatus `json:"status"`
+	Title       string                         `json:"title"`
+}
+
+// CatalogPrerequisiteCheckStatus defines model for CatalogPrerequisiteCheck.Status.
+type CatalogPrerequisiteCheckStatus string
+
 // CatalogRepositorySyncReceipt defines model for CatalogRepositorySyncReceipt.
 type CatalogRepositorySyncReceipt struct {
 	RepositoryId openapi_types.UUID                 `json:"repository_id"`
@@ -3105,6 +3279,15 @@ type CatalogRepositorySyncReceiptStatus string
 // CatalogRepositorySyncReceiptEnvelope defines model for CatalogRepositorySyncReceiptEnvelope.
 type CatalogRepositorySyncReceiptEnvelope struct {
 	Data CatalogRepositorySyncReceipt `json:"data"`
+}
+
+// CatalogUserDiscovery defines model for CatalogUserDiscovery.
+type CatalogUserDiscovery struct {
+	ChartId      openapi_types.UUID `json:"chart_id"`
+	Favorite     bool               `json:"favorite"`
+	FavoriteAt   *time.Time         `json:"favorite_at"`
+	LastViewedAt *time.Time         `json:"last_viewed_at"`
+	ViewCount    int                `json:"view_count"`
 }
 
 // CharlieAbortRequest defines model for CharlieAbortRequest.
@@ -3437,15 +3620,11 @@ type CharlieAdminTriggerEventState string
 
 // CharlieAdminTriggerRule defines model for CharlieAdminTriggerRule.
 type CharlieAdminTriggerRule struct {
-	CooldownSeconds        int32  `json:"cooldown_seconds"`
-	DeadLetterEnabled      bool   `json:"dead_letter_enabled"`
-	Enabled                bool   `json:"enabled"`
-	EstateThresholdPercent *int32 `json:"estate_threshold_percent,omitempty"`
-	FlapCount              int32  `json:"flap_count"`
-	FlapWindowSeconds      int32  `json:"flap_window_seconds"`
-
-	// FleetThresholdPercent Deprecated compatibility alias for estate_threshold_percent.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	CooldownSeconds       int32                               `json:"cooldown_seconds"`
+	DeadLetterEnabled     bool                                `json:"dead_letter_enabled"`
+	Enabled               bool                                `json:"enabled"`
+	FlapCount             int32                               `json:"flap_count"`
+	FlapWindowSeconds     int32                               `json:"flap_window_seconds"`
 	FleetThresholdPercent int32                               `json:"fleet_threshold_percent"`
 	GracePeriodSeconds    int32                               `json:"grace_period_seconds"`
 	Id                    *openapi_types.UUID                 `json:"id,omitempty"`
@@ -4183,33 +4362,33 @@ type ClusterConditionResponseStatus string
 
 // ClusterDeployment defines model for ClusterDeployment.
 type ClusterDeployment struct {
-	Action                  ClusterDeploymentAction `json:"action"`
-	AgentSequence           int64                   `json:"agent_sequence"`
-	AgentSessionId          string                  `json:"agent_session_id"`
-	ClusterId               openapi_types.UUID      `json:"cluster_id"`
-	Conditions              []DeliveryCondition     `json:"conditions"`
-	CreatedAt               time.Time               `json:"created_at"`
-	CurrentRolloutId        *openapi_types.UUID     `json:"current_rollout_id"`
-	DesiredBundleVersionId  *openapi_types.UUID     `json:"desired_bundle_version_id"`
-	DesiredGeneration       int64                   `json:"desired_generation"`
-	DesiredRevision         string                  `json:"desired_revision"`
-	DesiredSpecDigest       string                  `json:"desired_spec_digest"`
-	Id                      openapi_types.UUID      `json:"id"`
-	Inventory               map[string]interface{}  `json:"inventory"`
-	LastErrorCode           string                  `json:"last_error_code"`
-	LastMessage             string                  `json:"last_message"`
-	LastObservedAt          *time.Time              `json:"last_observed_at"`
-	ObservedGeneration      int64                   `json:"observed_generation"`
-	ObservedRevision        string                  `json:"observed_revision"`
-	ObservedSpecDigest      string                  `json:"observed_spec_digest"`
-	Phase                   ClusterDeploymentPhase  `json:"phase"`
-	PreviousBundleVersionId *openapi_types.UUID     `json:"previous_bundle_version_id"`
-	ReconcilerKind          string                  `json:"reconciler_kind"`
-	ReconcilerName          string                  `json:"reconciler_name"`
-	SourceKind              string                  `json:"source_kind"`
-	SourceName              string                  `json:"source_name"`
-	TargetId                openapi_types.UUID      `json:"target_id"`
-	UpdatedAt               time.Time               `json:"updated_at"`
+	Action                  ClusterDeploymentAction   `json:"action"`
+	AgentSequence           int64                     `json:"agent_sequence"`
+	AgentSessionId          string                    `json:"agent_session_id"`
+	ClusterId               openapi_types.UUID        `json:"cluster_id"`
+	Conditions              []DeliveryCondition       `json:"conditions"`
+	CreatedAt               time.Time                 `json:"created_at"`
+	CurrentRolloutId        *openapi_types.UUID       `json:"current_rollout_id"`
+	DesiredBundleVersionId  *openapi_types.UUID       `json:"desired_bundle_version_id"`
+	DesiredGeneration       int64                     `json:"desired_generation"`
+	DesiredRevision         string                    `json:"desired_revision"`
+	DesiredSpecDigest       string                    `json:"desired_spec_digest"`
+	Id                      openapi_types.UUID        `json:"id"`
+	Inventory               DeliveryResourceInventory `json:"inventory"`
+	LastErrorCode           string                    `json:"last_error_code"`
+	LastMessage             string                    `json:"last_message"`
+	LastObservedAt          *time.Time                `json:"last_observed_at"`
+	ObservedGeneration      int64                     `json:"observed_generation"`
+	ObservedRevision        string                    `json:"observed_revision"`
+	ObservedSpecDigest      string                    `json:"observed_spec_digest"`
+	Phase                   ClusterDeploymentPhase    `json:"phase"`
+	PreviousBundleVersionId *openapi_types.UUID       `json:"previous_bundle_version_id"`
+	ReconcilerKind          string                    `json:"reconciler_kind"`
+	ReconcilerName          string                    `json:"reconciler_name"`
+	SourceKind              string                    `json:"source_kind"`
+	SourceName              string                    `json:"source_name"`
+	TargetId                openapi_types.UUID        `json:"target_id"`
+	UpdatedAt               time.Time                 `json:"updated_at"`
 }
 
 // ClusterDeploymentAction defines model for ClusterDeployment.Action.
@@ -5192,6 +5371,60 @@ type DeliveryConditionStatus string
 // DeliveryConditionType defines model for DeliveryCondition.Type.
 type DeliveryConditionType string
 
+// DeliveryConfigurationSecretRef defines model for DeliveryConfigurationSecretRef.
+type DeliveryConfigurationSecretRef struct {
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	ValuePath string `json:"value_path"`
+}
+
+// DeliveryConfigurationTemplate defines model for DeliveryConfigurationTemplate.
+type DeliveryConfigurationTemplate struct {
+	CreatedAt   time.Time                             `json:"created_at"`
+	Description string                                `json:"description"`
+	Generation  int64                                 `json:"generation"`
+	Id          openapi_types.UUID                    `json:"id"`
+	Name        string                                `json:"name"`
+	Patches     []string                              `json:"patches"`
+	ProjectId   openapi_types.UUID                    `json:"project_id"`
+	Renderer    DeliveryConfigurationTemplateRenderer `json:"renderer"`
+	SecretRefs  []DeliveryConfigurationSecretRef      `json:"secret_refs"`
+	UpdatedAt   time.Time                             `json:"updated_at"`
+	Values      map[string]interface{}                `json:"values"`
+}
+
+// DeliveryConfigurationTemplateRenderer defines model for DeliveryConfigurationTemplate.Renderer.
+type DeliveryConfigurationTemplateRenderer string
+
+// DeliveryConfigurationTemplateEnvelope defines model for DeliveryConfigurationTemplateEnvelope.
+type DeliveryConfigurationTemplateEnvelope struct {
+	Data DeliveryConfigurationTemplate `json:"data"`
+}
+
+// DeliveryConfigurationTemplatePage defines model for DeliveryConfigurationTemplatePage.
+type DeliveryConfigurationTemplatePage struct {
+	Count      int64                           `json:"count"`
+	Data       []DeliveryConfigurationTemplate `json:"data"`
+	Next       *string                         `json:"next"`
+	Previous   *string                         `json:"previous"`
+	TotalKnown bool                            `json:"total_known"`
+}
+
+// DeliveryConfigurationTemplateWrite defines model for DeliveryConfigurationTemplateWrite.
+type DeliveryConfigurationTemplateWrite struct {
+	Description *string                                    `json:"description,omitempty"`
+	Generation  *int64                                     `json:"generation,omitempty"`
+	Name        string                                     `json:"name"`
+	Patches     *[]string                                  `json:"patches,omitempty"`
+	ProjectId   *openapi_types.UUID                        `json:"project_id,omitempty"`
+	Renderer    DeliveryConfigurationTemplateWriteRenderer `json:"renderer"`
+	SecretRefs  *[]DeliveryConfigurationSecretRef          `json:"secret_refs,omitempty"`
+	Values      map[string]interface{}                     `json:"values"`
+}
+
+// DeliveryConfigurationTemplateWriteRenderer defines model for DeliveryConfigurationTemplateWrite.Renderer.
+type DeliveryConfigurationTemplateWriteRenderer string
+
 // DeliveryControllerInventory defines model for DeliveryControllerInventory.
 type DeliveryControllerInventory struct {
 	AgentVersion        string                                         `json:"agent_version"`
@@ -5205,34 +5438,55 @@ type DeliveryControllerInventory struct {
 	KubernetesVersion   string                                         `json:"kubernetes_version"`
 	ObservedAt          *time.Time                                     `json:"observed_at"`
 	Ready               bool                                           `json:"ready"`
+	SystemComponents    []DeliverySystemComponent                      `json:"system_components"`
 	UpdatedAt           time.Time                                      `json:"updated_at"`
 }
 
 // DeliveryControllerInventoryCompatibilityStatus defines model for DeliveryControllerInventory.CompatibilityStatus.
 type DeliveryControllerInventoryCompatibilityStatus string
 
-// DeliveryEstate defines model for DeliveryEstate.
-type DeliveryEstate struct {
-	Attention     []DeliveryEstateAttention   `json:"attention"`
-	Clusters      []DeliveryEstateCluster     `json:"clusters"`
-	Distributions DeliveryEstateDistributions `json:"distributions"`
-	Summary       DeliveryEstateSummary       `json:"summary"`
+// DeliveryEffectiveConfiguration defines model for DeliveryEffectiveConfiguration.
+type DeliveryEffectiveConfiguration struct {
+	AppliedLayers []openapi_types.UUID   `json:"applied_layers"`
+	Digest        string                 `json:"digest"`
+	Patches       []string               `json:"patches"`
+	Values        map[string]interface{} `json:"values"`
 }
 
-// DeliveryEstateAttention defines model for DeliveryEstateAttention.
-type DeliveryEstateAttention struct {
-	ClusterId   openapi_types.UUID              `json:"cluster_id"`
-	ClusterName string                          `json:"cluster_name"`
-	Detail      string                          `json:"detail"`
-	Reason      string                          `json:"reason"`
-	Severity    DeliveryEstateAttentionSeverity `json:"severity"`
+// DeliveryEffectiveConfigurationEnvelope defines model for DeliveryEffectiveConfigurationEnvelope.
+type DeliveryEffectiveConfigurationEnvelope struct {
+	Data DeliveryEffectiveConfiguration `json:"data"`
 }
 
-// DeliveryEstateAttentionSeverity defines model for DeliveryEstateAttention.Severity.
-type DeliveryEstateAttentionSeverity string
+// DeliveryEffectiveConfigurationRequest defines model for DeliveryEffectiveConfigurationRequest.
+type DeliveryEffectiveConfigurationRequest struct {
+	BaseValues  map[string]interface{} `json:"base_values"`
+	OverrideIds []openapi_types.UUID   `json:"override_ids"`
+	ProjectId   *openapi_types.UUID    `json:"project_id,omitempty"`
+}
 
-// DeliveryEstateCluster defines model for DeliveryEstateCluster.
-type DeliveryEstateCluster struct {
+// DeliveryFleet defines model for DeliveryFleet.
+type DeliveryFleet struct {
+	Attention     []DeliveryFleetAttention   `json:"attention"`
+	Clusters      []DeliveryFleetCluster     `json:"clusters"`
+	Distributions DeliveryFleetDistributions `json:"distributions"`
+	Summary       DeliveryFleetSummary       `json:"summary"`
+}
+
+// DeliveryFleetAttention defines model for DeliveryFleetAttention.
+type DeliveryFleetAttention struct {
+	ClusterId   openapi_types.UUID             `json:"cluster_id"`
+	ClusterName string                         `json:"cluster_name"`
+	Detail      string                         `json:"detail"`
+	Reason      string                         `json:"reason"`
+	Severity    DeliveryFleetAttentionSeverity `json:"severity"`
+}
+
+// DeliveryFleetAttentionSeverity defines model for DeliveryFleetAttention.Severity.
+type DeliveryFleetAttentionSeverity string
+
+// DeliveryFleetCluster defines model for DeliveryFleetCluster.
+type DeliveryFleetCluster struct {
 	AgentVersion        string             `json:"agent_version"`
 	AssignmentCount     int64              `json:"assignment_count"`
 	CompatibilityStatus string             `json:"compatibility_status"`
@@ -5256,28 +5510,27 @@ type DeliveryEstateCluster struct {
 	Stale               bool               `json:"stale"`
 }
 
-// DeliveryEstateCount defines model for DeliveryEstateCount.
-type DeliveryEstateCount struct {
+// DeliveryFleetCount defines model for DeliveryFleetCount.
+type DeliveryFleetCount struct {
 	Count int64  `json:"count"`
 	Key   string `json:"key"`
 }
 
-// DeliveryEstateDistributions defines model for DeliveryEstateDistributions.
-type DeliveryEstateDistributions struct {
-	AssignmentPhases []DeliveryEstateCount `json:"assignment_phases"`
-	Compatibility    []DeliveryEstateCount `json:"compatibility"`
-	Privilege        []DeliveryEstateCount `json:"privilege"`
+// DeliveryFleetDistributions defines model for DeliveryFleetDistributions.
+type DeliveryFleetDistributions struct {
+	AssignmentPhases []DeliveryFleetCount `json:"assignment_phases"`
+	Compatibility    []DeliveryFleetCount `json:"compatibility"`
+	Privilege        []DeliveryFleetCount `json:"privilege"`
 }
 
-// DeliveryEstateEnvelope defines model for DeliveryEstateEnvelope.
-type DeliveryEstateEnvelope struct {
-	Data DeliveryEstate `json:"data"`
+// DeliveryFleetEnvelope defines model for DeliveryFleetEnvelope.
+type DeliveryFleetEnvelope struct {
+	Data DeliveryFleet `json:"data"`
 }
 
-// DeliveryEstateSummary defines model for DeliveryEstateSummary.
-type DeliveryEstateSummary struct {
+// DeliveryFleetSummary defines model for DeliveryFleetSummary.
+type DeliveryFleetSummary struct {
 	ActiveRollouts  int64 `json:"active_rollouts"`
-	AdoptedClusters int64 `json:"adopted_clusters"`
 	Assignments     int64 `json:"assignments"`
 	Degraded        int64 `json:"degraded"`
 	Disconnected    int64 `json:"disconnected"`
@@ -5285,6 +5538,7 @@ type DeliveryEstateSummary struct {
 	Failed          int64 `json:"failed"`
 	FluxReady       int64 `json:"flux_ready"`
 	Incompatible    int64 `json:"incompatible"`
+	ManagedClusters int64 `json:"managed_clusters"`
 	Stale           int64 `json:"stale"`
 }
 
@@ -5352,6 +5606,56 @@ type DeliveryLabelExpression struct {
 
 // DeliveryLabelExpressionOperator defines model for DeliveryLabelExpression.Operator.
 type DeliveryLabelExpressionOperator string
+
+// DeliveryOverrideSet defines model for DeliveryOverrideSet.
+type DeliveryOverrideSet struct {
+	CreatedAt  time.Time                `json:"created_at"`
+	Enabled    bool                     `json:"enabled"`
+	Generation int64                    `json:"generation"`
+	Id         openapi_types.UUID       `json:"id"`
+	Name       string                   `json:"name"`
+	Patches    *[]string                `json:"patches,omitempty"`
+	Precedence int32                    `json:"precedence"`
+	ProjectId  openapi_types.UUID       `json:"project_id"`
+	Scope      DeliveryOverrideSetScope `json:"scope"`
+	ScopeId    *openapi_types.UUID      `json:"scope_id"`
+	TemplateId *openapi_types.UUID      `json:"template_id"`
+	UpdatedAt  time.Time                `json:"updated_at"`
+	Values     map[string]interface{}   `json:"values"`
+}
+
+// DeliveryOverrideSetScope defines model for DeliveryOverrideSet.Scope.
+type DeliveryOverrideSetScope string
+
+// DeliveryOverrideSetEnvelope defines model for DeliveryOverrideSetEnvelope.
+type DeliveryOverrideSetEnvelope struct {
+	Data DeliveryOverrideSet `json:"data"`
+}
+
+// DeliveryOverrideSetPage defines model for DeliveryOverrideSetPage.
+type DeliveryOverrideSetPage struct {
+	Count      int64                 `json:"count"`
+	Data       []DeliveryOverrideSet `json:"data"`
+	Next       *string               `json:"next"`
+	Previous   *string               `json:"previous"`
+	TotalKnown bool                  `json:"total_known"`
+}
+
+// DeliveryOverrideSetWrite defines model for DeliveryOverrideSetWrite.
+type DeliveryOverrideSetWrite struct {
+	Enabled    *bool                         `json:"enabled,omitempty"`
+	Name       string                        `json:"name"`
+	Patches    *[]string                     `json:"patches,omitempty"`
+	Precedence int32                         `json:"precedence"`
+	ProjectId  *openapi_types.UUID           `json:"project_id,omitempty"`
+	Scope      DeliveryOverrideSetWriteScope `json:"scope"`
+	ScopeId    *openapi_types.UUID           `json:"scope_id"`
+	TemplateId *openapi_types.UUID           `json:"template_id"`
+	Values     map[string]interface{}        `json:"values"`
+}
+
+// DeliveryOverrideSetWriteScope defines model for DeliveryOverrideSetWrite.Scope.
+type DeliveryOverrideSetWriteScope string
 
 // DeliveryPlacement defines model for DeliveryPlacement.
 type DeliveryPlacement struct {
@@ -5458,6 +5762,22 @@ type DeliveryResolvedSourceAuthMode string
 
 // DeliveryResolvedSourceType defines model for DeliveryResolvedSource.Type.
 type DeliveryResolvedSourceType string
+
+// DeliveryResourceIdentity Bounded, secret-free identity reported by Flux inventory.
+type DeliveryResourceIdentity struct {
+	ApiVersion string  `json:"api_version"`
+	Kind       string  `json:"kind"`
+	Name       string  `json:"name"`
+	Namespace  *string `json:"namespace,omitempty"`
+}
+
+// DeliveryResourceInventory defines model for DeliveryResourceInventory.
+type DeliveryResourceInventory struct {
+	Entries   int                         `json:"entries"`
+	Failed    int                         `json:"failed"`
+	Ready     int                         `json:"ready"`
+	Resources *[]DeliveryResourceIdentity `json:"resources,omitempty"`
+}
 
 // DeliveryRollout defines model for DeliveryRollout.
 type DeliveryRollout struct {
@@ -5830,6 +6150,52 @@ type DeliverySystemCompatibilityEnvelope struct {
 	Data DeliverySystemCompatibility `json:"data"`
 }
 
+// DeliverySystemComponent defines model for DeliverySystemComponent.
+type DeliverySystemComponent struct {
+	Category                string                                `json:"category"`
+	Compatibility           *DeliverySystemComponentCompatibility `json:"compatibility,omitempty"`
+	CpuLimit                *string                               `json:"cpu_limit,omitempty"`
+	CpuRequest              *string                               `json:"cpu_request,omitempty"`
+	CreatedAt               *time.Time                            `json:"created_at,omitempty"`
+	DefaultStorage          *bool                                 `json:"default_storage,omitempty"`
+	DesiredReplicas         *int32                                `json:"desired_replicas,omitempty"`
+	Detail                  *string                               `json:"detail,omitempty"`
+	Health                  DeliverySystemComponentHealth         `json:"health"`
+	HighAvailability        bool                                  `json:"high_availability"`
+	Id                      string                                `json:"id"`
+	Images                  *[]string                             `json:"images,omitempty"`
+	Kind                    string                                `json:"kind"`
+	ManagementMethod        string                                `json:"management_method"`
+	MemoryLimit             *string                               `json:"memory_limit,omitempty"`
+	MemoryRequest           *string                               `json:"memory_request,omitempty"`
+	Name                    string                                `json:"name"`
+	Namespace               *string                               `json:"namespace,omitempty"`
+	Owner                   DeliverySystemComponentOwner          `json:"owner"`
+	ReadyReplicas           *int32                                `json:"ready_replicas,omitempty"`
+	Resources               *[]DeliverySystemResource             `json:"resources,omitempty"`
+	StorageClass            *string                               `json:"storage_class,omitempty"`
+	StorageDriver           *string                               `json:"storage_driver,omitempty"`
+	StorageProvisionedBytes *int64                                `json:"storage_provisioned_bytes,omitempty"`
+	StorageReplicaCount     *int32                                `json:"storage_replica_count,omitempty"`
+	StorageUsedBytes        *int64                                `json:"storage_used_bytes,omitempty"`
+	SupportedActions        *[]string                             `json:"supported_actions,omitempty"`
+	UpdateState             *DeliverySystemComponentUpdateState   `json:"update_state,omitempty"`
+	Version                 *string                               `json:"version,omitempty"`
+	Volumes                 *[]DeliverySystemVolume               `json:"volumes,omitempty"`
+}
+
+// DeliverySystemComponentCompatibility defines model for DeliverySystemComponent.Compatibility.
+type DeliverySystemComponentCompatibility string
+
+// DeliverySystemComponentHealth defines model for DeliverySystemComponent.Health.
+type DeliverySystemComponentHealth string
+
+// DeliverySystemComponentOwner defines model for DeliverySystemComponent.Owner.
+type DeliverySystemComponentOwner string
+
+// DeliverySystemComponentUpdateState defines model for DeliverySystemComponent.UpdateState.
+type DeliverySystemComponentUpdateState string
+
 // DeliverySystemRelease defines model for DeliverySystemRelease.
 type DeliverySystemRelease struct {
 	AgentImage             *string                 `json:"agent_image,omitempty"`
@@ -5857,6 +6223,18 @@ type DeliverySystemRelease struct {
 	Version                *string                 `json:"version,omitempty"`
 }
 
+// DeliverySystemResource defines model for DeliverySystemResource.
+type DeliverySystemResource struct {
+	Detail    *string `json:"detail,omitempty"`
+	Group     *string `json:"group,omitempty"`
+	Health    *string `json:"health,omitempty"`
+	Kind      string  `json:"kind"`
+	Name      string  `json:"name"`
+	Namespace *string `json:"namespace,omitempty"`
+	Plural    string  `json:"plural"`
+	Version   string  `json:"version"`
+}
+
 // DeliverySystemRollout defines model for DeliverySystemRollout.
 type DeliverySystemRollout struct {
 	CompletedAt       *time.Time              `json:"completed_at"`
@@ -5878,16 +6256,36 @@ type DeliverySystemRollout struct {
 	UpdatedAt         *time.Time              `json:"updated_at,omitempty"`
 }
 
+// DeliverySystemVolume defines model for DeliverySystemVolume.
+type DeliverySystemVolume struct {
+	AccessModes      *[]string  `json:"access_modes,omitempty"`
+	CapacityBytes    *int64     `json:"capacity_bytes,omitempty"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
+	ExpansionAllowed bool       `json:"expansion_allowed"`
+	Name             string     `json:"name"`
+	Namespace        string     `json:"namespace"`
+	Phase            string     `json:"phase"`
+	RequestedBytes   *int64     `json:"requested_bytes,omitempty"`
+	SnapshotCount    *int32     `json:"snapshot_count,omitempty"`
+	StorageClass     *string    `json:"storage_class,omitempty"`
+	StorageDriver    *string    `json:"storage_driver,omitempty"`
+	VolumeMode       *string    `json:"volume_mode,omitempty"`
+	VolumeName       *string    `json:"volume_name,omitempty"`
+}
+
 // DeliveryTarget defines model for DeliveryTarget.
 type DeliveryTarget struct {
 	BundleVersionId         openapi_types.UUID           `json:"bundle_version_id"`
+	ConfigurationTemplateId *openapi_types.UUID          `json:"configuration_template_id"`
 	CreatedAt               time.Time                    `json:"created_at"`
 	DeletionState           DeliveryTargetDeletionState  `json:"deletion_state"`
 	Description             *string                      `json:"description,omitempty"`
 	Generation              int64                        `json:"generation"`
 	Id                      openapi_types.UUID           `json:"id"`
+	LastActorId             *openapi_types.UUID          `json:"last_actor_id"`
 	MaintenanceWindowPolicy map[string]interface{}       `json:"maintenance_window_policy"`
 	Name                    string                       `json:"name"`
+	OverrideSetIds          []openapi_types.UUID         `json:"override_set_ids"`
 	Placement               DeliveryPlacement            `json:"placement"`
 	ProjectId               openapi_types.UUID           `json:"project_id"`
 	ReconciliationPolicy    DeliveryReconciliationPolicy `json:"reconciliation_policy"`
@@ -5933,8 +6331,10 @@ type DeliveryTargetPage struct {
 // DeliveryTargetPatch defines model for DeliveryTargetPatch.
 type DeliveryTargetPatch struct {
 	BundleVersionId         *openapi_types.UUID                `json:"bundle_version_id,omitempty"`
+	ConfigurationTemplateId *openapi_types.UUID                `json:"configuration_template_id"`
 	Description             *string                            `json:"description,omitempty"`
 	MaintenanceWindowPolicy *map[string]interface{}            `json:"maintenance_window_policy,omitempty"`
+	OverrideSetIds          *[]openapi_types.UUID              `json:"override_set_ids,omitempty"`
 	Placement               *DeliveryPlacementInput            `json:"placement,omitempty"`
 	ProjectId               *openapi_types.UUID                `json:"project_id,omitempty"`
 	ReconciliationPolicy    *DeliveryReconciliationPolicyInput `json:"reconciliation_policy,omitempty"`
@@ -5970,9 +6370,11 @@ type DeliveryTargetPreviewEnvelope struct {
 // DeliveryTargetWrite defines model for DeliveryTargetWrite.
 type DeliveryTargetWrite struct {
 	BundleVersionId         openapi_types.UUID                `json:"bundle_version_id"`
+	ConfigurationTemplateId *openapi_types.UUID               `json:"configuration_template_id"`
 	Description             *string                           `json:"description,omitempty"`
 	MaintenanceWindowPolicy *map[string]interface{}           `json:"maintenance_window_policy,omitempty"`
 	Name                    string                            `json:"name"`
+	OverrideSetIds          *[]openapi_types.UUID             `json:"override_set_ids,omitempty"`
 	Placement               DeliveryPlacementInput            `json:"placement"`
 	ProjectId               *openapi_types.UUID               `json:"project_id,omitempty"`
 	ReconciliationPolicy    DeliveryReconciliationPolicyInput `json:"reconciliation_policy"`
@@ -5994,9 +6396,11 @@ type DeliveryTrustPolicyProvider string
 
 // DeliveryVersionIdentity defines model for DeliveryVersionIdentity.
 type DeliveryVersionIdentity struct {
-	BundleVersionId openapi_types.UUID     `json:"bundle_version_id"`
-	Source          DeliveryResolvedSource `json:"source"`
-	SpecDigest      string                 `json:"spec_digest"`
+	BundleVersionId     openapi_types.UUID     `json:"bundle_version_id"`
+	ConfigurationDigest *string                `json:"configuration_digest,omitempty"`
+	Renderer            *DeliveryRendererSpec  `json:"renderer,omitempty"`
+	Source              DeliveryResolvedSource `json:"source"`
+	SpecDigest          string                 `json:"spec_digest"`
 }
 
 // DexConnector defines model for DexConnector.
@@ -6853,6 +7257,7 @@ type InstalledChart struct {
 	Namespace      *string             `json:"namespace,omitempty"`
 	Notes          *string             `json:"notes,omitempty"`
 	PresetUsed     *string             `json:"preset_used"`
+	ProjectId      *openapi_types.UUID `json:"project_id"`
 	ReleaseName    *string             `json:"release_name,omitempty"`
 	RequestId      *openapi_types.UUID `json:"request_id"`
 	Revision       *int                `json:"revision,omitempty"`
@@ -11018,6 +11423,14 @@ type GetBackupsStorageConfigsParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// PostCatalogApplicationsPreviewJSONBody defines parameters for PostCatalogApplicationsPreview.
+type PostCatalogApplicationsPreviewJSONBody struct {
+	ChartVersionId openapi_types.UUID `json:"chart_version_id"`
+	ClusterId      openapi_types.UUID `json:"cluster_id"`
+	Namespace      string             `json:"namespace"`
+	ValuesOverride *string            `json:"values_override,omitempty"`
+}
+
 // GetCatalogChartsParams defines parameters for GetCatalogCharts.
 type GetCatalogChartsParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
@@ -11028,18 +11441,34 @@ type GetCatalogChartsParams struct {
 
 	// ProjectId Select the project-scoped catalog union. Omit only for the globally managed catalog view.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+
+	// ClusterId Select the caller-visible catalog union for a cluster. Preferred by cluster Apps pages.
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 }
 
 // GetCatalogChartsByIdParams defines parameters for GetCatalogChartsById.
 type GetCatalogChartsByIdParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
+}
+
+// PutCatalogChartsByIdFavoriteJSONBody defines parameters for PutCatalogChartsByIdFavorite.
+type PutCatalogChartsByIdFavoriteJSONBody struct {
+	Favorite bool `json:"favorite"`
+}
+
+// PutCatalogChartsByIdFavoriteParams defines parameters for PutCatalogChartsByIdFavorite.
+type PutCatalogChartsByIdFavoriteParams struct {
+	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 }
 
 // GetCatalogChartsByIdReadmeParams defines parameters for GetCatalogChartsByIdReadme.
 type GetCatalogChartsByIdReadmeParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 
 	// Version Specific chart version; defaults to latest.
 	Version *string `form:"version,omitempty" json:"version,omitempty"`
@@ -11049,6 +11478,7 @@ type GetCatalogChartsByIdReadmeParams struct {
 type GetCatalogChartsByIdValuesParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 	Version   *string             `form:"version,omitempty" json:"version,omitempty"`
 }
 
@@ -11056,6 +11486,7 @@ type GetCatalogChartsByIdValuesParams struct {
 type GetCatalogChartsByIdVersionsParams struct {
 	// ProjectId Select the project's catalog visibility. Omit only for a globally managed chart.
 	ProjectId *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 	Limit     *int                `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset    *int                `form:"offset,omitempty" json:"offset,omitempty"`
 }
@@ -11074,10 +11505,12 @@ type PostCatalogInstalledJSONBody struct {
 	Namespace      string             `json:"namespace"`
 	Notes          *string            `json:"notes,omitempty"`
 	PresetUsed     *string            `json:"preset_used,omitempty"`
-	ProjectId      openapi_types.UUID `json:"project_id"`
-	ReleaseName    string             `json:"release_name"`
-	ToolSlug       *string            `json:"tool_slug,omitempty"`
-	ValuesOverride *string            `json:"values_override,omitempty"`
+
+	// ProjectId Deprecated compatibility field. The server derives project ownership from cluster_id and namespace.
+	ProjectId      *openapi_types.UUID `json:"project_id,omitempty"`
+	ReleaseName    string              `json:"release_name"`
+	ToolSlug       *string             `json:"tool_slug,omitempty"`
+	ValuesOverride *string             `json:"values_override,omitempty"`
 }
 
 // PostCatalogInstalledParams defines parameters for PostCatalogInstalled.
@@ -11148,6 +11581,7 @@ type GetCatalogRepositoriesParams struct {
 	Offset              *int                `form:"offset,omitempty" json:"offset,omitempty"`
 	IncludeProjectOwned *bool               `form:"include_project_owned,omitempty" json:"include_project_owned,omitempty"`
 	ProjectId           *openapi_types.UUID `form:"project_id,omitempty" json:"project_id,omitempty"`
+	ClusterId           *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 }
 
 // PostCatalogRepositoriesJSONBody defines parameters for PostCatalogRepositories.
@@ -11833,6 +12267,37 @@ type GetDeliveryClustersByClusterIdInventoryParams struct {
 	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
 }
 
+// GetDeliveryConfigurationTemplatesParams defines parameters for GetDeliveryConfigurationTemplates.
+type GetDeliveryConfigurationTemplatesParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// PostDeliveryConfigurationTemplatesParams defines parameters for PostDeliveryConfigurationTemplates.
+type PostDeliveryConfigurationTemplatesParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteDeliveryConfigurationTemplatesByIdParams defines parameters for DeleteDeliveryConfigurationTemplatesById.
+type DeleteDeliveryConfigurationTemplatesByIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// GetDeliveryConfigurationTemplatesByIdParams defines parameters for GetDeliveryConfigurationTemplatesById.
+type GetDeliveryConfigurationTemplatesByIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PutDeliveryConfigurationTemplatesByIdParams defines parameters for PutDeliveryConfigurationTemplatesById.
+type PutDeliveryConfigurationTemplatesByIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
 // GetDeliveryDeploymentsParams defines parameters for GetDeliveryDeployments.
 type GetDeliveryDeploymentsParams struct {
 	// Limit Bounded page size; the server clamps ordinary lists to at most 200.
@@ -11841,6 +12306,7 @@ type GetDeliveryDeploymentsParams struct {
 	// Offset Zero-based offset into the authorized, filtered result.
 	Offset    *Offset             `form:"offset,omitempty" json:"offset,omitempty"`
 	ProjectId openapi_types.UUID  `form:"project_id" json:"project_id"`
+	TargetId  *openapi_types.UUID `form:"target_id,omitempty" json:"target_id,omitempty"`
 	ClusterId *openapi_types.UUID `form:"cluster_id,omitempty" json:"cluster_id,omitempty"`
 	Phase     *string             `form:"phase,omitempty" json:"phase,omitempty"`
 }
@@ -11878,12 +12344,44 @@ type PostDeliveryDeploymentsByIdSuspendParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
-// GetDeliveryRolloutsParams defines parameters for GetDeliveryRollouts.
-type GetDeliveryRolloutsParams struct {
+// GetDeliveryOverrideSetsParams defines parameters for GetDeliveryOverrideSets.
+type GetDeliveryOverrideSetsParams struct {
 	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
-	State     *string            `form:"state,omitempty" json:"state,omitempty"`
 	Limit     *int               `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset    *int               `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// PostDeliveryOverrideSetsParams defines parameters for PostDeliveryOverrideSets.
+type PostDeliveryOverrideSetsParams struct {
+	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// DeleteDeliveryOverrideSetsByIdParams defines parameters for DeleteDeliveryOverrideSetsById.
+type DeleteDeliveryOverrideSetsByIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// GetDeliveryOverrideSetsByIdParams defines parameters for GetDeliveryOverrideSetsById.
+type GetDeliveryOverrideSetsByIdParams struct {
+	ProjectId openapi_types.UUID `form:"project_id" json:"project_id"`
+}
+
+// PutDeliveryOverrideSetsByIdParams defines parameters for PutDeliveryOverrideSetsById.
+type PutDeliveryOverrideSetsByIdParams struct {
+	ProjectId      openapi_types.UUID `form:"project_id" json:"project_id"`
+	IfMatch        string             `json:"If-Match"`
+	IdempotencyKey *string            `json:"Idempotency-Key,omitempty"`
+}
+
+// GetDeliveryRolloutsParams defines parameters for GetDeliveryRollouts.
+type GetDeliveryRolloutsParams struct {
+	ProjectId openapi_types.UUID  `form:"project_id" json:"project_id"`
+	TargetId  *openapi_types.UUID `form:"target_id,omitempty" json:"target_id,omitempty"`
+	State     *string             `form:"state,omitempty" json:"state,omitempty"`
+	Limit     *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset    *int                `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // GetDeliveryRolloutsByIdParams defines parameters for GetDeliveryRolloutsById.
@@ -13169,6 +13667,12 @@ type PutBackupsStorageByIdJSONRequestBody = BackupStorageConfigRequest
 // PostBackupsByIdRestoreJSONRequestBody defines body for PostBackupsByIdRestore for application/json ContentType.
 type PostBackupsByIdRestoreJSONRequestBody = BackupRestoreRequest
 
+// PostCatalogApplicationsPreviewJSONRequestBody defines body for PostCatalogApplicationsPreview for application/json ContentType.
+type PostCatalogApplicationsPreviewJSONRequestBody PostCatalogApplicationsPreviewJSONBody
+
+// PutCatalogChartsByIdFavoriteJSONRequestBody defines body for PutCatalogChartsByIdFavorite for application/json ContentType.
+type PutCatalogChartsByIdFavoriteJSONRequestBody PutCatalogChartsByIdFavoriteJSONBody
+
 // PostCatalogInstalledJSONRequestBody defines body for PostCatalogInstalled for application/json ContentType.
 type PostCatalogInstalledJSONRequestBody PostCatalogInstalledJSONBody
 
@@ -13430,6 +13934,12 @@ type PatchDeliveryBundlesByIdJSONRequestBody = DeliveryBundleWrite
 // PostDeliveryBundlesByIdVersionsJSONRequestBody defines body for PostDeliveryBundlesByIdVersions for application/json ContentType.
 type PostDeliveryBundlesByIdVersionsJSONRequestBody = DeliveryBundleVersionWrite
 
+// PostDeliveryConfigurationTemplatesJSONRequestBody defines body for PostDeliveryConfigurationTemplates for application/json ContentType.
+type PostDeliveryConfigurationTemplatesJSONRequestBody = DeliveryConfigurationTemplateWrite
+
+// PutDeliveryConfigurationTemplatesByIdJSONRequestBody defines body for PutDeliveryConfigurationTemplatesById for application/json ContentType.
+type PutDeliveryConfigurationTemplatesByIdJSONRequestBody = DeliveryConfigurationTemplateWrite
+
 // PostDeliveryDeploymentsByIdReconcileJSONRequestBody defines body for PostDeliveryDeploymentsByIdReconcile for application/json ContentType.
 type PostDeliveryDeploymentsByIdReconcileJSONRequestBody = DeliveryRolloutAction
 
@@ -13438,6 +13948,15 @@ type PostDeliveryDeploymentsByIdResumeJSONRequestBody = DeliveryRolloutAction
 
 // PostDeliveryDeploymentsByIdSuspendJSONRequestBody defines body for PostDeliveryDeploymentsByIdSuspend for application/json ContentType.
 type PostDeliveryDeploymentsByIdSuspendJSONRequestBody = DeliveryRolloutAction
+
+// PostDeliveryOverrideSetsJSONRequestBody defines body for PostDeliveryOverrideSets for application/json ContentType.
+type PostDeliveryOverrideSetsJSONRequestBody = DeliveryOverrideSetWrite
+
+// PostDeliveryOverrideSetsEffectiveJSONRequestBody defines body for PostDeliveryOverrideSetsEffective for application/json ContentType.
+type PostDeliveryOverrideSetsEffectiveJSONRequestBody = DeliveryEffectiveConfigurationRequest
+
+// PutDeliveryOverrideSetsByIdJSONRequestBody defines body for PutDeliveryOverrideSetsById for application/json ContentType.
+type PutDeliveryOverrideSetsByIdJSONRequestBody = DeliveryOverrideSetWrite
 
 // PostDeliveryRolloutsByIdAbortJSONRequestBody defines body for PostDeliveryRolloutsByIdAbort for application/json ContentType.
 type PostDeliveryRolloutsByIdAbortJSONRequestBody = DeliveryRolloutAction
@@ -19584,11 +20103,27 @@ type ClientInterface interface {
 
 	PostBackupsByIdRestore(ctx context.Context, id openapi_types.UUID, body PostBackupsByIdRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCatalogApplicationSources request
+	GetCatalogApplicationSources(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCatalogApplications request
+	GetCatalogApplications(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostCatalogApplicationsPreviewWithBody request with any body
+	PostCatalogApplicationsPreviewWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostCatalogApplicationsPreview(ctx context.Context, body PostCatalogApplicationsPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetCatalogCharts request
 	GetCatalogCharts(ctx context.Context, params *GetCatalogChartsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCatalogChartsById request
 	GetCatalogChartsById(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutCatalogChartsByIdFavoriteWithBody request with any body
+	PutCatalogChartsByIdFavoriteWithBody(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutCatalogChartsByIdFavorite(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCatalogChartsByIdReadme request
 	GetCatalogChartsByIdReadme(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdReadmeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19601,6 +20136,9 @@ type ClientInterface interface {
 
 	// GetCatalogControllerStatus request
 	GetCatalogControllerStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCatalogDiscovery request
+	GetCatalogDiscovery(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCatalogInstalled request
 	GetCatalogInstalled(ctx context.Context, params *GetCatalogInstalledParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -19620,6 +20158,9 @@ type ClientInterface interface {
 	PostCatalogInstalledByIdRollbackWithBody(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostCatalogInstalledByIdRollback(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, body PostCatalogInstalledByIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetCatalogInstalledByIdUpgradeVersions request
+	GetCatalogInstalledByIdUpgradeVersions(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutCatalogInstalledByIdUpgradeWithBody request with any body
 	PutCatalogInstalledByIdUpgradeWithBody(ctx context.Context, id openapi_types.UUID, params *PutCatalogInstalledByIdUpgradeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -20613,6 +21154,25 @@ type ClientInterface interface {
 	// GetDeliveryClustersByClusterIdInventory request
 	GetDeliveryClustersByClusterIdInventory(ctx context.Context, clusterId openapi_types.UUID, params *GetDeliveryClustersByClusterIdInventoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetDeliveryConfigurationTemplates request
+	GetDeliveryConfigurationTemplates(ctx context.Context, params *GetDeliveryConfigurationTemplatesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDeliveryConfigurationTemplatesWithBody request with any body
+	PostDeliveryConfigurationTemplatesWithBody(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostDeliveryConfigurationTemplates(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteDeliveryConfigurationTemplatesById request
+	DeleteDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDeliveryConfigurationTemplatesById request
+	GetDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutDeliveryConfigurationTemplatesByIdWithBody request with any body
+	PutDeliveryConfigurationTemplatesByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetDeliveryDeployments request
 	GetDeliveryDeployments(ctx context.Context, params *GetDeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -20637,11 +21197,32 @@ type ClientInterface interface {
 
 	PostDeliveryDeploymentsByIdSuspend(ctx context.Context, id openapi_types.UUID, params *PostDeliveryDeploymentsByIdSuspendParams, body PostDeliveryDeploymentsByIdSuspendJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetDeliveryEstate request
-	GetDeliveryEstate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetDeliveryFleet request
+	GetDeliveryFleet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetDeliveryFleetLegacy request
-	GetDeliveryFleetLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetDeliveryOverrideSets request
+	GetDeliveryOverrideSets(ctx context.Context, params *GetDeliveryOverrideSetsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDeliveryOverrideSetsWithBody request with any body
+	PostDeliveryOverrideSetsWithBody(ctx context.Context, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostDeliveryOverrideSets(ctx context.Context, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostDeliveryOverrideSetsEffectiveWithBody request with any body
+	PostDeliveryOverrideSetsEffectiveWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostDeliveryOverrideSetsEffective(ctx context.Context, body PostDeliveryOverrideSetsEffectiveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteDeliveryOverrideSetsById request
+	DeleteDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDeliveryOverrideSetsById request
+	GetDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutDeliveryOverrideSetsByIdWithBody request with any body
+	PutDeliveryOverrideSetsByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetDeliveryRollouts request
 	GetDeliveryRollouts(ctx context.Context, params *GetDeliveryRolloutsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -25287,6 +25868,54 @@ func (c *Client) PostBackupsByIdRestore(ctx context.Context, id openapi_types.UU
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetCatalogApplicationSources(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogApplicationSourcesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCatalogApplications(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogApplicationsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostCatalogApplicationsPreviewWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostCatalogApplicationsPreviewRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostCatalogApplicationsPreview(ctx context.Context, body PostCatalogApplicationsPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostCatalogApplicationsPreviewRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetCatalogCharts(ctx context.Context, params *GetCatalogChartsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCatalogChartsRequest(c.Server, params)
 	if err != nil {
@@ -25301,6 +25930,30 @@ func (c *Client) GetCatalogCharts(ctx context.Context, params *GetCatalogChartsP
 
 func (c *Client) GetCatalogChartsById(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCatalogChartsByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutCatalogChartsByIdFavoriteWithBody(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutCatalogChartsByIdFavoriteRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutCatalogChartsByIdFavorite(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutCatalogChartsByIdFavoriteRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -25349,6 +26002,18 @@ func (c *Client) GetCatalogChartsByIdVersions(ctx context.Context, id openapi_ty
 
 func (c *Client) GetCatalogControllerStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCatalogControllerStatusRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCatalogDiscovery(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogDiscoveryRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -25433,6 +26098,18 @@ func (c *Client) PostCatalogInstalledByIdRollbackWithBody(ctx context.Context, i
 
 func (c *Client) PostCatalogInstalledByIdRollback(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, body PostCatalogInstalledByIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostCatalogInstalledByIdRollbackRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCatalogInstalledByIdUpgradeVersions(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCatalogInstalledByIdUpgradeVersionsRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -29751,6 +30428,90 @@ func (c *Client) GetDeliveryClustersByClusterIdInventory(ctx context.Context, cl
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetDeliveryConfigurationTemplates(ctx context.Context, params *GetDeliveryConfigurationTemplatesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryConfigurationTemplatesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryConfigurationTemplatesWithBody(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryConfigurationTemplatesRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryConfigurationTemplates(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryConfigurationTemplatesRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteDeliveryConfigurationTemplatesByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryConfigurationTemplatesByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutDeliveryConfigurationTemplatesByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDeliveryConfigurationTemplatesByIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutDeliveryConfigurationTemplatesById(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDeliveryConfigurationTemplatesByIdRequest(c.Server, id, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetDeliveryDeployments(ctx context.Context, params *GetDeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetDeliveryDeploymentsRequest(c.Server, params)
 	if err != nil {
@@ -29859,8 +30620,8 @@ func (c *Client) PostDeliveryDeploymentsByIdSuspend(ctx context.Context, id open
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetDeliveryEstate(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetDeliveryEstateRequest(c.Server)
+func (c *Client) GetDeliveryFleet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryFleetRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -29871,8 +30632,104 @@ func (c *Client) GetDeliveryEstate(ctx context.Context, reqEditors ...RequestEdi
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetDeliveryFleetLegacy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetDeliveryFleetLegacyRequest(c.Server)
+func (c *Client) GetDeliveryOverrideSets(ctx context.Context, params *GetDeliveryOverrideSetsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryOverrideSetsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryOverrideSetsWithBody(ctx context.Context, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryOverrideSetsRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryOverrideSets(ctx context.Context, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryOverrideSetsRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryOverrideSetsEffectiveWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryOverrideSetsEffectiveRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostDeliveryOverrideSetsEffective(ctx context.Context, body PostDeliveryOverrideSetsEffectiveJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostDeliveryOverrideSetsEffectiveRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteDeliveryOverrideSetsByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDeliveryOverrideSetsByIdRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutDeliveryOverrideSetsByIdWithBody(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDeliveryOverrideSetsByIdRequestWithBody(c.Server, id, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutDeliveryOverrideSetsById(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutDeliveryOverrideSetsByIdRequest(c.Server, id, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -44351,6 +45208,100 @@ func NewPostBackupsByIdRestoreRequestWithBody(server string, id openapi_types.UU
 	return req, nil
 }
 
+// NewGetCatalogApplicationSourcesRequest generates requests for GetCatalogApplicationSources
+func NewGetCatalogApplicationSourcesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/application-sources/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCatalogApplicationsRequest generates requests for GetCatalogApplications
+func NewGetCatalogApplicationsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/applications/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostCatalogApplicationsPreviewRequest calls the generic PostCatalogApplicationsPreview builder with application/json body
+func NewPostCatalogApplicationsPreviewRequest(server string, body PostCatalogApplicationsPreviewJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostCatalogApplicationsPreviewRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostCatalogApplicationsPreviewRequestWithBody generates requests for PostCatalogApplicationsPreview with any type of body
+func NewPostCatalogApplicationsPreviewRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/applications/preview/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetCatalogChartsRequest generates requests for GetCatalogCharts
 func NewGetCatalogChartsRequest(server string, params *GetCatalogChartsParams) (*http.Request, error) {
 	var err error
@@ -44437,6 +45388,22 @@ func NewGetCatalogChartsRequest(server string, params *GetCatalogChartsParams) (
 
 		}
 
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -44493,6 +45460,22 @@ func NewGetCatalogChartsByIdRequest(server string, id openapi_types.UUID, params
 
 		}
 
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -44500,6 +45483,91 @@ func NewGetCatalogChartsByIdRequest(server string, id openapi_types.UUID, params
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewPutCatalogChartsByIdFavoriteRequest calls the generic PutCatalogChartsByIdFavorite builder with application/json body
+func NewPutCatalogChartsByIdFavoriteRequest(server string, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutCatalogChartsByIdFavoriteRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPutCatalogChartsByIdFavoriteRequestWithBody generates requests for PutCatalogChartsByIdFavorite with any type of body
+func NewPutCatalogChartsByIdFavoriteRequestWithBody(server string, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/charts/%s/favorite/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ProjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -44536,6 +45604,22 @@ func NewGetCatalogChartsByIdReadmeRequest(server string, id openapi_types.UUID, 
 		if params.ProjectId != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -44621,6 +45705,22 @@ func NewGetCatalogChartsByIdValuesRequest(server string, id openapi_types.UUID, 
 
 		}
 
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Version != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "version", runtime.ParamLocationQuery, *params.Version); err != nil {
@@ -44693,6 +45793,22 @@ func NewGetCatalogChartsByIdVersionsRequest(server string, id openapi_types.UUID
 
 		}
 
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Limit != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
@@ -44746,6 +45862,33 @@ func NewGetCatalogControllerStatusRequest(server string) (*http.Request, error) 
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/catalog/controller/status/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetCatalogDiscoveryRequest generates requests for GetCatalogDiscovery
+func NewGetCatalogDiscoveryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/discovery/")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -45033,6 +46176,40 @@ func NewPostCatalogInstalledByIdRollbackRequestWithBody(server string, id openap
 
 		req.Header.Set("Idempotency-Key", headerParam0)
 
+	}
+
+	return req, nil
+}
+
+// NewGetCatalogInstalledByIdUpgradeVersionsRequest generates requests for GetCatalogInstalledByIdUpgradeVersions
+func NewGetCatalogInstalledByIdUpgradeVersionsRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/catalog/installed/%s/upgrade-versions/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -45536,6 +46713,22 @@ func NewGetCatalogRepositoriesRequest(server string, params *GetCatalogRepositor
 		if params.ProjectId != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, *params.ProjectId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_id", runtime.ParamLocationQuery, *params.ClusterId); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -58539,6 +59732,355 @@ func NewGetDeliveryClustersByClusterIdInventoryRequest(server string, clusterId 
 	return req, nil
 }
 
+// NewGetDeliveryConfigurationTemplatesRequest generates requests for GetDeliveryConfigurationTemplates
+func NewGetDeliveryConfigurationTemplatesRequest(server string, params *GetDeliveryConfigurationTemplatesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostDeliveryConfigurationTemplatesRequest calls the generic PostDeliveryConfigurationTemplates builder with application/json body
+func NewPostDeliveryConfigurationTemplatesRequest(server string, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDeliveryConfigurationTemplatesRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostDeliveryConfigurationTemplatesRequestWithBody generates requests for PostDeliveryConfigurationTemplates with any type of body
+func NewPostDeliveryConfigurationTemplatesRequestWithBody(server string, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewDeleteDeliveryConfigurationTemplatesByIdRequest generates requests for DeleteDeliveryConfigurationTemplatesById
+func NewDeleteDeliveryConfigurationTemplatesByIdRequest(server string, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetDeliveryConfigurationTemplatesByIdRequest generates requests for GetDeliveryConfigurationTemplatesById
+func NewGetDeliveryConfigurationTemplatesByIdRequest(server string, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutDeliveryConfigurationTemplatesByIdRequest calls the generic PutDeliveryConfigurationTemplatesById builder with application/json body
+func NewPutDeliveryConfigurationTemplatesByIdRequest(server string, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutDeliveryConfigurationTemplatesByIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPutDeliveryConfigurationTemplatesByIdRequestWithBody generates requests for PutDeliveryConfigurationTemplatesById with any type of body
+func NewPutDeliveryConfigurationTemplatesByIdRequestWithBody(server string, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/configuration-templates/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
 // NewGetDeliveryDeploymentsRequest generates requests for GetDeliveryDeployments
 func NewGetDeliveryDeploymentsRequest(server string, params *GetDeliveryDeploymentsParams) (*http.Request, error) {
 	var err error
@@ -58603,6 +60145,22 @@ func NewGetDeliveryDeploymentsRequest(server string, params *GetDeliveryDeployme
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		if params.TargetId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "target_id", runtime.ParamLocationQuery, *params.TargetId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		if params.ClusterId != nil {
@@ -58991,35 +60549,8 @@ func NewPostDeliveryDeploymentsByIdSuspendRequestWithBody(server string, id open
 	return req, nil
 }
 
-// NewGetDeliveryEstateRequest generates requests for GetDeliveryEstate
-func NewGetDeliveryEstateRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/delivery/estate/")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetDeliveryFleetLegacyRequest generates requests for GetDeliveryFleetLegacy
-func NewGetDeliveryFleetLegacyRequest(server string) (*http.Request, error) {
+// NewGetDeliveryFleetRequest generates requests for GetDeliveryFleet
+func NewGetDeliveryFleetRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -59040,6 +60571,395 @@ func NewGetDeliveryFleetLegacyRequest(server string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetDeliveryOverrideSetsRequest generates requests for GetDeliveryOverrideSets
+func NewGetDeliveryOverrideSetsRequest(server string, params *GetDeliveryOverrideSetsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostDeliveryOverrideSetsRequest calls the generic PostDeliveryOverrideSets builder with application/json body
+func NewPostDeliveryOverrideSetsRequest(server string, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDeliveryOverrideSetsRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPostDeliveryOverrideSetsRequestWithBody generates requests for PostDeliveryOverrideSets with any type of body
+func NewPostDeliveryOverrideSetsRequestWithBody(server string, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		if params.IdempotencyKey != nil {
+			var headerParam0 string
+
+			headerParam0, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam0)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewPostDeliveryOverrideSetsEffectiveRequest calls the generic PostDeliveryOverrideSetsEffective builder with application/json body
+func NewPostDeliveryOverrideSetsEffectiveRequest(server string, body PostDeliveryOverrideSetsEffectiveJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostDeliveryOverrideSetsEffectiveRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostDeliveryOverrideSetsEffectiveRequestWithBody generates requests for PostDeliveryOverrideSetsEffective with any type of body
+func NewPostDeliveryOverrideSetsEffectiveRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/effective/")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteDeliveryOverrideSetsByIdRequest generates requests for DeleteDeliveryOverrideSetsById
+func NewDeleteDeliveryOverrideSetsByIdRequest(server string, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
+	}
+
+	return req, nil
+}
+
+// NewGetDeliveryOverrideSetsByIdRequest generates requests for GetDeliveryOverrideSetsById
+func NewGetDeliveryOverrideSetsByIdRequest(server string, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutDeliveryOverrideSetsByIdRequest calls the generic PutDeliveryOverrideSetsById builder with application/json body
+func NewPutDeliveryOverrideSetsByIdRequest(server string, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutDeliveryOverrideSetsByIdRequestWithBody(server, id, params, "application/json", bodyReader)
+}
+
+// NewPutDeliveryOverrideSetsByIdRequestWithBody generates requests for PutDeliveryOverrideSetsById with any type of body
+func NewPutDeliveryOverrideSetsByIdRequestWithBody(server string, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/delivery/override-sets/%s/", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "project_id", runtime.ParamLocationQuery, params.ProjectId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		if params.IdempotencyKey != nil {
+			var headerParam1 string
+
+			headerParam1, err = runtime.StyleParamWithLocation("simple", false, "Idempotency-Key", runtime.ParamLocationHeader, *params.IdempotencyKey)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Idempotency-Key", headerParam1)
+		}
+
 	}
 
 	return req, nil
@@ -59077,6 +60997,22 @@ func NewGetDeliveryRolloutsRequest(server string, params *GetDeliveryRolloutsPar
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		if params.TargetId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "target_id", runtime.ParamLocationQuery, *params.TargetId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		if params.State != nil {
@@ -73717,11 +75653,27 @@ type ClientWithResponsesInterface interface {
 
 	PostBackupsByIdRestoreWithResponse(ctx context.Context, id openapi_types.UUID, body PostBackupsByIdRestoreJSONRequestBody, reqEditors ...RequestEditorFn) (*PostBackupsByIdRestoreResponse, error)
 
+	// GetCatalogApplicationSourcesWithResponse request
+	GetCatalogApplicationSourcesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogApplicationSourcesResponse, error)
+
+	// GetCatalogApplicationsWithResponse request
+	GetCatalogApplicationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogApplicationsResponse, error)
+
+	// PostCatalogApplicationsPreviewWithBodyWithResponse request with any body
+	PostCatalogApplicationsPreviewWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostCatalogApplicationsPreviewResponse, error)
+
+	PostCatalogApplicationsPreviewWithResponse(ctx context.Context, body PostCatalogApplicationsPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostCatalogApplicationsPreviewResponse, error)
+
 	// GetCatalogChartsWithResponse request
 	GetCatalogChartsWithResponse(ctx context.Context, params *GetCatalogChartsParams, reqEditors ...RequestEditorFn) (*GetCatalogChartsResponse, error)
 
 	// GetCatalogChartsByIdWithResponse request
 	GetCatalogChartsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdParams, reqEditors ...RequestEditorFn) (*GetCatalogChartsByIdResponse, error)
+
+	// PutCatalogChartsByIdFavoriteWithBodyWithResponse request with any body
+	PutCatalogChartsByIdFavoriteWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCatalogChartsByIdFavoriteResponse, error)
+
+	PutCatalogChartsByIdFavoriteWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCatalogChartsByIdFavoriteResponse, error)
 
 	// GetCatalogChartsByIdReadmeWithResponse request
 	GetCatalogChartsByIdReadmeWithResponse(ctx context.Context, id openapi_types.UUID, params *GetCatalogChartsByIdReadmeParams, reqEditors ...RequestEditorFn) (*GetCatalogChartsByIdReadmeResponse, error)
@@ -73734,6 +75686,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetCatalogControllerStatusWithResponse request
 	GetCatalogControllerStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogControllerStatusResponse, error)
+
+	// GetCatalogDiscoveryWithResponse request
+	GetCatalogDiscoveryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogDiscoveryResponse, error)
 
 	// GetCatalogInstalledWithResponse request
 	GetCatalogInstalledWithResponse(ctx context.Context, params *GetCatalogInstalledParams, reqEditors ...RequestEditorFn) (*GetCatalogInstalledResponse, error)
@@ -73753,6 +75708,9 @@ type ClientWithResponsesInterface interface {
 	PostCatalogInstalledByIdRollbackWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostCatalogInstalledByIdRollbackResponse, error)
 
 	PostCatalogInstalledByIdRollbackWithResponse(ctx context.Context, id openapi_types.UUID, params *PostCatalogInstalledByIdRollbackParams, body PostCatalogInstalledByIdRollbackJSONRequestBody, reqEditors ...RequestEditorFn) (*PostCatalogInstalledByIdRollbackResponse, error)
+
+	// GetCatalogInstalledByIdUpgradeVersionsWithResponse request
+	GetCatalogInstalledByIdUpgradeVersionsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdUpgradeVersionsResponse, error)
 
 	// PutCatalogInstalledByIdUpgradeWithBodyWithResponse request with any body
 	PutCatalogInstalledByIdUpgradeWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogInstalledByIdUpgradeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCatalogInstalledByIdUpgradeResponse, error)
@@ -74746,6 +76704,25 @@ type ClientWithResponsesInterface interface {
 	// GetDeliveryClustersByClusterIdInventoryWithResponse request
 	GetDeliveryClustersByClusterIdInventoryWithResponse(ctx context.Context, clusterId openapi_types.UUID, params *GetDeliveryClustersByClusterIdInventoryParams, reqEditors ...RequestEditorFn) (*GetDeliveryClustersByClusterIdInventoryResponse, error)
 
+	// GetDeliveryConfigurationTemplatesWithResponse request
+	GetDeliveryConfigurationTemplatesWithResponse(ctx context.Context, params *GetDeliveryConfigurationTemplatesParams, reqEditors ...RequestEditorFn) (*GetDeliveryConfigurationTemplatesResponse, error)
+
+	// PostDeliveryConfigurationTemplatesWithBodyWithResponse request with any body
+	PostDeliveryConfigurationTemplatesWithBodyWithResponse(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryConfigurationTemplatesResponse, error)
+
+	PostDeliveryConfigurationTemplatesWithResponse(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryConfigurationTemplatesResponse, error)
+
+	// DeleteDeliveryConfigurationTemplatesByIdWithResponse request
+	DeleteDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*DeleteDeliveryConfigurationTemplatesByIdResponse, error)
+
+	// GetDeliveryConfigurationTemplatesByIdWithResponse request
+	GetDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*GetDeliveryConfigurationTemplatesByIdResponse, error)
+
+	// PutDeliveryConfigurationTemplatesByIdWithBodyWithResponse request with any body
+	PutDeliveryConfigurationTemplatesByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDeliveryConfigurationTemplatesByIdResponse, error)
+
+	PutDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDeliveryConfigurationTemplatesByIdResponse, error)
+
 	// GetDeliveryDeploymentsWithResponse request
 	GetDeliveryDeploymentsWithResponse(ctx context.Context, params *GetDeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*GetDeliveryDeploymentsResponse, error)
 
@@ -74770,11 +76747,32 @@ type ClientWithResponsesInterface interface {
 
 	PostDeliveryDeploymentsByIdSuspendWithResponse(ctx context.Context, id openapi_types.UUID, params *PostDeliveryDeploymentsByIdSuspendParams, body PostDeliveryDeploymentsByIdSuspendJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryDeploymentsByIdSuspendResponse, error)
 
-	// GetDeliveryEstateWithResponse request
-	GetDeliveryEstateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryEstateResponse, error)
+	// GetDeliveryFleetWithResponse request
+	GetDeliveryFleetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryFleetResponse, error)
 
-	// GetDeliveryFleetLegacyWithResponse request
-	GetDeliveryFleetLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryFleetLegacyResponse, error)
+	// GetDeliveryOverrideSetsWithResponse request
+	GetDeliveryOverrideSetsWithResponse(ctx context.Context, params *GetDeliveryOverrideSetsParams, reqEditors ...RequestEditorFn) (*GetDeliveryOverrideSetsResponse, error)
+
+	// PostDeliveryOverrideSetsWithBodyWithResponse request with any body
+	PostDeliveryOverrideSetsWithBodyWithResponse(ctx context.Context, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsResponse, error)
+
+	PostDeliveryOverrideSetsWithResponse(ctx context.Context, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsResponse, error)
+
+	// PostDeliveryOverrideSetsEffectiveWithBodyWithResponse request with any body
+	PostDeliveryOverrideSetsEffectiveWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsEffectiveResponse, error)
+
+	PostDeliveryOverrideSetsEffectiveWithResponse(ctx context.Context, body PostDeliveryOverrideSetsEffectiveJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsEffectiveResponse, error)
+
+	// DeleteDeliveryOverrideSetsByIdWithResponse request
+	DeleteDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*DeleteDeliveryOverrideSetsByIdResponse, error)
+
+	// GetDeliveryOverrideSetsByIdWithResponse request
+	GetDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*GetDeliveryOverrideSetsByIdResponse, error)
+
+	// PutDeliveryOverrideSetsByIdWithBodyWithResponse request with any body
+	PutDeliveryOverrideSetsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDeliveryOverrideSetsByIdResponse, error)
+
+	PutDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDeliveryOverrideSetsByIdResponse, error)
 
 	// GetDeliveryRolloutsWithResponse request
 	GetDeliveryRolloutsWithResponse(ctx context.Context, params *GetDeliveryRolloutsParams, reqEditors ...RequestEditorFn) (*GetDeliveryRolloutsResponse, error)
@@ -82088,6 +84086,84 @@ func (r PostBackupsByIdRestoreResponse) StatusCode() int {
 	return 0
 }
 
+type GetCatalogApplicationSourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Count int                        `json:"count"`
+		Data  []ApplicationCatalogSource `json:"data"`
+	}
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogApplicationSourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogApplicationSourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCatalogApplicationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Count int                              `json:"count"`
+		Data  []CatalogApplicationPresentation `json:"data"`
+	}
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogApplicationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogApplicationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostCatalogApplicationsPreviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CatalogInstallationPreview
+	JSON400      *ErrorResponse
+	JSON403      *ErrorResponse
+	JSON404      *ErrorResponse
+	JSON409      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PostCatalogApplicationsPreviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostCatalogApplicationsPreviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetCatalogChartsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -82142,6 +84218,32 @@ func (r GetCatalogChartsByIdResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetCatalogChartsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutCatalogChartsByIdFavoriteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Data CatalogUserDiscovery `json:"data"`
+	}
+	JSON400 *ErrorResponse
+	JSON404 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PutCatalogChartsByIdFavoriteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutCatalogChartsByIdFavoriteResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -82260,6 +84362,32 @@ func (r GetCatalogControllerStatusResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetCatalogControllerStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCatalogDiscoveryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Count int                    `json:"count"`
+		Data  []CatalogUserDiscovery `json:"data"`
+	}
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogDiscoveryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogDiscoveryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -82400,6 +84528,35 @@ func (r PostCatalogInstalledByIdRollbackResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostCatalogInstalledByIdRollbackResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCatalogInstalledByIdUpgradeVersionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *struct {
+		Count int                `json:"count"`
+		Data  []HelmChartVersion `json:"data"`
+	}
+	JSON400 *ErrorResponse
+	JSON403 *ErrorResponse
+	JSON404 *ErrorResponse
+	JSON500 *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCatalogInstalledByIdUpgradeVersionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCatalogInstalledByIdUpgradeVersionsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -89604,6 +91761,115 @@ func (r GetDeliveryClustersByClusterIdInventoryResponse) StatusCode() int {
 	return 0
 }
 
+type GetDeliveryConfigurationTemplatesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryConfigurationTemplatePage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeliveryConfigurationTemplatesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeliveryConfigurationTemplatesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostDeliveryConfigurationTemplatesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *DeliveryConfigurationTemplateEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDeliveryConfigurationTemplatesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDeliveryConfigurationTemplatesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteDeliveryConfigurationTemplatesByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteDeliveryConfigurationTemplatesByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteDeliveryConfigurationTemplatesByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetDeliveryConfigurationTemplatesByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryConfigurationTemplateEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeliveryConfigurationTemplatesByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeliveryConfigurationTemplatesByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutDeliveryConfigurationTemplatesByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryConfigurationTemplateEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PutDeliveryConfigurationTemplatesByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutDeliveryConfigurationTemplatesByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetDeliveryDeploymentsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -89736,17 +92002,17 @@ func (r PostDeliveryDeploymentsByIdSuspendResponse) StatusCode() int {
 	return 0
 }
 
-type GetDeliveryEstateResponse struct {
+type GetDeliveryFleetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *DeliveryEstateEnvelope
+	JSON200      *DeliveryFleetEnvelope
 	JSON401      *Unauthorized
 	JSON403      *Forbidden
 	JSON503      *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
-func (r GetDeliveryEstateResponse) Status() string {
+func (r GetDeliveryFleetResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -89754,24 +92020,21 @@ func (r GetDeliveryEstateResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetDeliveryEstateResponse) StatusCode() int {
+func (r GetDeliveryFleetResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-type GetDeliveryFleetLegacyResponse struct {
+type GetDeliveryOverrideSetsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *DeliveryEstateEnvelope
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON503      *ServiceUnavailable
+	JSON200      *DeliveryOverrideSetPage
 }
 
 // Status returns HTTPResponse.Status
-func (r GetDeliveryFleetLegacyResponse) Status() string {
+func (r GetDeliveryOverrideSetsResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -89779,7 +92042,116 @@ func (r GetDeliveryFleetLegacyResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetDeliveryFleetLegacyResponse) StatusCode() int {
+func (r GetDeliveryOverrideSetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostDeliveryOverrideSetsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *DeliveryOverrideSetEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDeliveryOverrideSetsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDeliveryOverrideSetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostDeliveryOverrideSetsEffectiveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryEffectiveConfigurationEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PostDeliveryOverrideSetsEffectiveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostDeliveryOverrideSetsEffectiveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteDeliveryOverrideSetsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteDeliveryOverrideSetsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteDeliveryOverrideSetsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetDeliveryOverrideSetsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryOverrideSetEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDeliveryOverrideSetsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDeliveryOverrideSetsByIdResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutDeliveryOverrideSetsByIdResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *DeliveryOverrideSetEnvelope
+}
+
+// Status returns HTTPResponse.Status
+func (r PutDeliveryOverrideSetsByIdResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutDeliveryOverrideSetsByIdResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -99663,6 +102035,41 @@ func (c *ClientWithResponses) PostBackupsByIdRestoreWithResponse(ctx context.Con
 	return ParsePostBackupsByIdRestoreResponse(rsp)
 }
 
+// GetCatalogApplicationSourcesWithResponse request returning *GetCatalogApplicationSourcesResponse
+func (c *ClientWithResponses) GetCatalogApplicationSourcesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogApplicationSourcesResponse, error) {
+	rsp, err := c.GetCatalogApplicationSources(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogApplicationSourcesResponse(rsp)
+}
+
+// GetCatalogApplicationsWithResponse request returning *GetCatalogApplicationsResponse
+func (c *ClientWithResponses) GetCatalogApplicationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogApplicationsResponse, error) {
+	rsp, err := c.GetCatalogApplications(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogApplicationsResponse(rsp)
+}
+
+// PostCatalogApplicationsPreviewWithBodyWithResponse request with arbitrary body returning *PostCatalogApplicationsPreviewResponse
+func (c *ClientWithResponses) PostCatalogApplicationsPreviewWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostCatalogApplicationsPreviewResponse, error) {
+	rsp, err := c.PostCatalogApplicationsPreviewWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostCatalogApplicationsPreviewResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostCatalogApplicationsPreviewWithResponse(ctx context.Context, body PostCatalogApplicationsPreviewJSONRequestBody, reqEditors ...RequestEditorFn) (*PostCatalogApplicationsPreviewResponse, error) {
+	rsp, err := c.PostCatalogApplicationsPreview(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostCatalogApplicationsPreviewResponse(rsp)
+}
+
 // GetCatalogChartsWithResponse request returning *GetCatalogChartsResponse
 func (c *ClientWithResponses) GetCatalogChartsWithResponse(ctx context.Context, params *GetCatalogChartsParams, reqEditors ...RequestEditorFn) (*GetCatalogChartsResponse, error) {
 	rsp, err := c.GetCatalogCharts(ctx, params, reqEditors...)
@@ -99679,6 +102086,23 @@ func (c *ClientWithResponses) GetCatalogChartsByIdWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseGetCatalogChartsByIdResponse(rsp)
+}
+
+// PutCatalogChartsByIdFavoriteWithBodyWithResponse request with arbitrary body returning *PutCatalogChartsByIdFavoriteResponse
+func (c *ClientWithResponses) PutCatalogChartsByIdFavoriteWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutCatalogChartsByIdFavoriteResponse, error) {
+	rsp, err := c.PutCatalogChartsByIdFavoriteWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutCatalogChartsByIdFavoriteResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutCatalogChartsByIdFavoriteWithResponse(ctx context.Context, id openapi_types.UUID, params *PutCatalogChartsByIdFavoriteParams, body PutCatalogChartsByIdFavoriteJSONRequestBody, reqEditors ...RequestEditorFn) (*PutCatalogChartsByIdFavoriteResponse, error) {
+	rsp, err := c.PutCatalogChartsByIdFavorite(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutCatalogChartsByIdFavoriteResponse(rsp)
 }
 
 // GetCatalogChartsByIdReadmeWithResponse request returning *GetCatalogChartsByIdReadmeResponse
@@ -99715,6 +102139,15 @@ func (c *ClientWithResponses) GetCatalogControllerStatusWithResponse(ctx context
 		return nil, err
 	}
 	return ParseGetCatalogControllerStatusResponse(rsp)
+}
+
+// GetCatalogDiscoveryWithResponse request returning *GetCatalogDiscoveryResponse
+func (c *ClientWithResponses) GetCatalogDiscoveryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCatalogDiscoveryResponse, error) {
+	rsp, err := c.GetCatalogDiscovery(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogDiscoveryResponse(rsp)
 }
 
 // GetCatalogInstalledWithResponse request returning *GetCatalogInstalledResponse
@@ -99776,6 +102209,15 @@ func (c *ClientWithResponses) PostCatalogInstalledByIdRollbackWithResponse(ctx c
 		return nil, err
 	}
 	return ParsePostCatalogInstalledByIdRollbackResponse(rsp)
+}
+
+// GetCatalogInstalledByIdUpgradeVersionsWithResponse request returning *GetCatalogInstalledByIdUpgradeVersionsResponse
+func (c *ClientWithResponses) GetCatalogInstalledByIdUpgradeVersionsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCatalogInstalledByIdUpgradeVersionsResponse, error) {
+	rsp, err := c.GetCatalogInstalledByIdUpgradeVersions(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCatalogInstalledByIdUpgradeVersionsResponse(rsp)
 }
 
 // PutCatalogInstalledByIdUpgradeWithBodyWithResponse request with arbitrary body returning *PutCatalogInstalledByIdUpgradeResponse
@@ -102924,6 +105366,67 @@ func (c *ClientWithResponses) GetDeliveryClustersByClusterIdInventoryWithRespons
 	return ParseGetDeliveryClustersByClusterIdInventoryResponse(rsp)
 }
 
+// GetDeliveryConfigurationTemplatesWithResponse request returning *GetDeliveryConfigurationTemplatesResponse
+func (c *ClientWithResponses) GetDeliveryConfigurationTemplatesWithResponse(ctx context.Context, params *GetDeliveryConfigurationTemplatesParams, reqEditors ...RequestEditorFn) (*GetDeliveryConfigurationTemplatesResponse, error) {
+	rsp, err := c.GetDeliveryConfigurationTemplates(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeliveryConfigurationTemplatesResponse(rsp)
+}
+
+// PostDeliveryConfigurationTemplatesWithBodyWithResponse request with arbitrary body returning *PostDeliveryConfigurationTemplatesResponse
+func (c *ClientWithResponses) PostDeliveryConfigurationTemplatesWithBodyWithResponse(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryConfigurationTemplatesResponse, error) {
+	rsp, err := c.PostDeliveryConfigurationTemplatesWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryConfigurationTemplatesResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostDeliveryConfigurationTemplatesWithResponse(ctx context.Context, params *PostDeliveryConfigurationTemplatesParams, body PostDeliveryConfigurationTemplatesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryConfigurationTemplatesResponse, error) {
+	rsp, err := c.PostDeliveryConfigurationTemplates(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryConfigurationTemplatesResponse(rsp)
+}
+
+// DeleteDeliveryConfigurationTemplatesByIdWithResponse request returning *DeleteDeliveryConfigurationTemplatesByIdResponse
+func (c *ClientWithResponses) DeleteDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*DeleteDeliveryConfigurationTemplatesByIdResponse, error) {
+	rsp, err := c.DeleteDeliveryConfigurationTemplatesById(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteDeliveryConfigurationTemplatesByIdResponse(rsp)
+}
+
+// GetDeliveryConfigurationTemplatesByIdWithResponse request returning *GetDeliveryConfigurationTemplatesByIdResponse
+func (c *ClientWithResponses) GetDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetDeliveryConfigurationTemplatesByIdParams, reqEditors ...RequestEditorFn) (*GetDeliveryConfigurationTemplatesByIdResponse, error) {
+	rsp, err := c.GetDeliveryConfigurationTemplatesById(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeliveryConfigurationTemplatesByIdResponse(rsp)
+}
+
+// PutDeliveryConfigurationTemplatesByIdWithBodyWithResponse request with arbitrary body returning *PutDeliveryConfigurationTemplatesByIdResponse
+func (c *ClientWithResponses) PutDeliveryConfigurationTemplatesByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDeliveryConfigurationTemplatesByIdResponse, error) {
+	rsp, err := c.PutDeliveryConfigurationTemplatesByIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDeliveryConfigurationTemplatesByIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutDeliveryConfigurationTemplatesByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryConfigurationTemplatesByIdParams, body PutDeliveryConfigurationTemplatesByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDeliveryConfigurationTemplatesByIdResponse, error) {
+	rsp, err := c.PutDeliveryConfigurationTemplatesById(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDeliveryConfigurationTemplatesByIdResponse(rsp)
+}
+
 // GetDeliveryDeploymentsWithResponse request returning *GetDeliveryDeploymentsResponse
 func (c *ClientWithResponses) GetDeliveryDeploymentsWithResponse(ctx context.Context, params *GetDeliveryDeploymentsParams, reqEditors ...RequestEditorFn) (*GetDeliveryDeploymentsResponse, error) {
 	rsp, err := c.GetDeliveryDeployments(ctx, params, reqEditors...)
@@ -103002,22 +105505,91 @@ func (c *ClientWithResponses) PostDeliveryDeploymentsByIdSuspendWithResponse(ctx
 	return ParsePostDeliveryDeploymentsByIdSuspendResponse(rsp)
 }
 
-// GetDeliveryEstateWithResponse request returning *GetDeliveryEstateResponse
-func (c *ClientWithResponses) GetDeliveryEstateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryEstateResponse, error) {
-	rsp, err := c.GetDeliveryEstate(ctx, reqEditors...)
+// GetDeliveryFleetWithResponse request returning *GetDeliveryFleetResponse
+func (c *ClientWithResponses) GetDeliveryFleetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryFleetResponse, error) {
+	rsp, err := c.GetDeliveryFleet(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetDeliveryEstateResponse(rsp)
+	return ParseGetDeliveryFleetResponse(rsp)
 }
 
-// GetDeliveryFleetLegacyWithResponse request returning *GetDeliveryFleetLegacyResponse
-func (c *ClientWithResponses) GetDeliveryFleetLegacyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDeliveryFleetLegacyResponse, error) {
-	rsp, err := c.GetDeliveryFleetLegacy(ctx, reqEditors...)
+// GetDeliveryOverrideSetsWithResponse request returning *GetDeliveryOverrideSetsResponse
+func (c *ClientWithResponses) GetDeliveryOverrideSetsWithResponse(ctx context.Context, params *GetDeliveryOverrideSetsParams, reqEditors ...RequestEditorFn) (*GetDeliveryOverrideSetsResponse, error) {
+	rsp, err := c.GetDeliveryOverrideSets(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetDeliveryFleetLegacyResponse(rsp)
+	return ParseGetDeliveryOverrideSetsResponse(rsp)
+}
+
+// PostDeliveryOverrideSetsWithBodyWithResponse request with arbitrary body returning *PostDeliveryOverrideSetsResponse
+func (c *ClientWithResponses) PostDeliveryOverrideSetsWithBodyWithResponse(ctx context.Context, params *PostDeliveryOverrideSetsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsResponse, error) {
+	rsp, err := c.PostDeliveryOverrideSetsWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryOverrideSetsResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostDeliveryOverrideSetsWithResponse(ctx context.Context, params *PostDeliveryOverrideSetsParams, body PostDeliveryOverrideSetsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsResponse, error) {
+	rsp, err := c.PostDeliveryOverrideSets(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryOverrideSetsResponse(rsp)
+}
+
+// PostDeliveryOverrideSetsEffectiveWithBodyWithResponse request with arbitrary body returning *PostDeliveryOverrideSetsEffectiveResponse
+func (c *ClientWithResponses) PostDeliveryOverrideSetsEffectiveWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsEffectiveResponse, error) {
+	rsp, err := c.PostDeliveryOverrideSetsEffectiveWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryOverrideSetsEffectiveResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostDeliveryOverrideSetsEffectiveWithResponse(ctx context.Context, body PostDeliveryOverrideSetsEffectiveJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDeliveryOverrideSetsEffectiveResponse, error) {
+	rsp, err := c.PostDeliveryOverrideSetsEffective(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostDeliveryOverrideSetsEffectiveResponse(rsp)
+}
+
+// DeleteDeliveryOverrideSetsByIdWithResponse request returning *DeleteDeliveryOverrideSetsByIdResponse
+func (c *ClientWithResponses) DeleteDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *DeleteDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*DeleteDeliveryOverrideSetsByIdResponse, error) {
+	rsp, err := c.DeleteDeliveryOverrideSetsById(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteDeliveryOverrideSetsByIdResponse(rsp)
+}
+
+// GetDeliveryOverrideSetsByIdWithResponse request returning *GetDeliveryOverrideSetsByIdResponse
+func (c *ClientWithResponses) GetDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *GetDeliveryOverrideSetsByIdParams, reqEditors ...RequestEditorFn) (*GetDeliveryOverrideSetsByIdResponse, error) {
+	rsp, err := c.GetDeliveryOverrideSetsById(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDeliveryOverrideSetsByIdResponse(rsp)
+}
+
+// PutDeliveryOverrideSetsByIdWithBodyWithResponse request with arbitrary body returning *PutDeliveryOverrideSetsByIdResponse
+func (c *ClientWithResponses) PutDeliveryOverrideSetsByIdWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutDeliveryOverrideSetsByIdResponse, error) {
+	rsp, err := c.PutDeliveryOverrideSetsByIdWithBody(ctx, id, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDeliveryOverrideSetsByIdResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutDeliveryOverrideSetsByIdWithResponse(ctx context.Context, id openapi_types.UUID, params *PutDeliveryOverrideSetsByIdParams, body PutDeliveryOverrideSetsByIdJSONRequestBody, reqEditors ...RequestEditorFn) (*PutDeliveryOverrideSetsByIdResponse, error) {
+	rsp, err := c.PutDeliveryOverrideSetsById(ctx, id, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutDeliveryOverrideSetsByIdResponse(rsp)
 }
 
 // GetDeliveryRolloutsWithResponse request returning *GetDeliveryRolloutsResponse
@@ -118211,6 +120783,132 @@ func ParsePostBackupsByIdRestoreResponse(rsp *http.Response) (*PostBackupsByIdRe
 	return response, nil
 }
 
+// ParseGetCatalogApplicationSourcesResponse parses an HTTP response from a GetCatalogApplicationSourcesWithResponse call
+func ParseGetCatalogApplicationSourcesResponse(rsp *http.Response) (*GetCatalogApplicationSourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogApplicationSourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Count int                        `json:"count"`
+			Data  []ApplicationCatalogSource `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCatalogApplicationsResponse parses an HTTP response from a GetCatalogApplicationsWithResponse call
+func ParseGetCatalogApplicationsResponse(rsp *http.Response) (*GetCatalogApplicationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogApplicationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Count int                              `json:"count"`
+			Data  []CatalogApplicationPresentation `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostCatalogApplicationsPreviewResponse parses an HTTP response from a PostCatalogApplicationsPreviewWithResponse call
+func ParsePostCatalogApplicationsPreviewResponse(rsp *http.Response) (*PostCatalogApplicationsPreviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostCatalogApplicationsPreviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CatalogInstallationPreview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetCatalogChartsResponse parses an HTTP response from a GetCatalogChartsWithResponse call
 func ParseGetCatalogChartsResponse(rsp *http.Response) (*GetCatalogChartsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -118293,6 +120991,48 @@ func ParseGetCatalogChartsByIdResponse(rsp *http.Response) (*GetCatalogChartsByI
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutCatalogChartsByIdFavoriteResponse parses an HTTP response from a PutCatalogChartsByIdFavoriteWithResponse call
+func ParsePutCatalogChartsByIdFavoriteResponse(rsp *http.Response) (*PutCatalogChartsByIdFavoriteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutCatalogChartsByIdFavoriteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Data CatalogUserDiscovery `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -118469,6 +121209,42 @@ func ParseGetCatalogControllerStatusResponse(rsp *http.Response) (*GetCatalogCon
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCatalogDiscoveryResponse parses an HTTP response from a GetCatalogDiscoveryWithResponse call
+func ParseGetCatalogDiscoveryResponse(rsp *http.Response) (*GetCatalogDiscoveryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogDiscoveryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Count int                    `json:"count"`
+			Data  []CatalogUserDiscovery `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -118749,6 +121525,63 @@ func ParsePostCatalogInstalledByIdRollbackResponse(rsp *http.Response) (*PostCat
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest ErrorEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCatalogInstalledByIdUpgradeVersionsResponse parses an HTTP response from a GetCatalogInstalledByIdUpgradeVersionsWithResponse call
+func ParseGetCatalogInstalledByIdUpgradeVersionsResponse(rsp *http.Response) (*GetCatalogInstalledByIdUpgradeVersionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCatalogInstalledByIdUpgradeVersionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			Count int                `json:"count"`
+			Data  []HelmChartVersion `json:"data"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -131680,6 +134513,126 @@ func ParseGetDeliveryClustersByClusterIdInventoryResponse(rsp *http.Response) (*
 	return response, nil
 }
 
+// ParseGetDeliveryConfigurationTemplatesResponse parses an HTTP response from a GetDeliveryConfigurationTemplatesWithResponse call
+func ParseGetDeliveryConfigurationTemplatesResponse(rsp *http.Response) (*GetDeliveryConfigurationTemplatesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeliveryConfigurationTemplatesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryConfigurationTemplatePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostDeliveryConfigurationTemplatesResponse parses an HTTP response from a PostDeliveryConfigurationTemplatesWithResponse call
+func ParsePostDeliveryConfigurationTemplatesResponse(rsp *http.Response) (*PostDeliveryConfigurationTemplatesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDeliveryConfigurationTemplatesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DeliveryConfigurationTemplateEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteDeliveryConfigurationTemplatesByIdResponse parses an HTTP response from a DeleteDeliveryConfigurationTemplatesByIdWithResponse call
+func ParseDeleteDeliveryConfigurationTemplatesByIdResponse(rsp *http.Response) (*DeleteDeliveryConfigurationTemplatesByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteDeliveryConfigurationTemplatesByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetDeliveryConfigurationTemplatesByIdResponse parses an HTTP response from a GetDeliveryConfigurationTemplatesByIdWithResponse call
+func ParseGetDeliveryConfigurationTemplatesByIdResponse(rsp *http.Response) (*GetDeliveryConfigurationTemplatesByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeliveryConfigurationTemplatesByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryConfigurationTemplateEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutDeliveryConfigurationTemplatesByIdResponse parses an HTTP response from a PutDeliveryConfigurationTemplatesByIdWithResponse call
+func ParsePutDeliveryConfigurationTemplatesByIdResponse(rsp *http.Response) (*PutDeliveryConfigurationTemplatesByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutDeliveryConfigurationTemplatesByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryConfigurationTemplateEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetDeliveryDeploymentsResponse parses an HTTP response from a GetDeliveryDeploymentsWithResponse call
 func ParseGetDeliveryDeploymentsResponse(rsp *http.Response) (*GetDeliveryDeploymentsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -131836,22 +134789,22 @@ func ParsePostDeliveryDeploymentsByIdSuspendResponse(rsp *http.Response) (*PostD
 	return response, nil
 }
 
-// ParseGetDeliveryEstateResponse parses an HTTP response from a GetDeliveryEstateWithResponse call
-func ParseGetDeliveryEstateResponse(rsp *http.Response) (*GetDeliveryEstateResponse, error) {
+// ParseGetDeliveryFleetResponse parses an HTTP response from a GetDeliveryFleetWithResponse call
+func ParseGetDeliveryFleetResponse(rsp *http.Response) (*GetDeliveryFleetResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetDeliveryEstateResponse{
+	response := &GetDeliveryFleetResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest DeliveryEstateEnvelope
+		var dest DeliveryFleetEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -131883,47 +134836,146 @@ func ParseGetDeliveryEstateResponse(rsp *http.Response) (*GetDeliveryEstateRespo
 	return response, nil
 }
 
-// ParseGetDeliveryFleetLegacyResponse parses an HTTP response from a GetDeliveryFleetLegacyWithResponse call
-func ParseGetDeliveryFleetLegacyResponse(rsp *http.Response) (*GetDeliveryFleetLegacyResponse, error) {
+// ParseGetDeliveryOverrideSetsResponse parses an HTTP response from a GetDeliveryOverrideSetsWithResponse call
+func ParseGetDeliveryOverrideSetsResponse(rsp *http.Response) (*GetDeliveryOverrideSetsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetDeliveryFleetLegacyResponse{
+	response := &GetDeliveryOverrideSetsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest DeliveryEstateEnvelope
+		var dest DeliveryOverrideSetPage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
+	}
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
+	return response, nil
+}
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
-		var dest ServiceUnavailable
+// ParsePostDeliveryOverrideSetsResponse parses an HTTP response from a PostDeliveryOverrideSetsWithResponse call
+func ParsePostDeliveryOverrideSetsResponse(rsp *http.Response) (*PostDeliveryOverrideSetsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDeliveryOverrideSetsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest DeliveryOverrideSetEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
-		response.JSON503 = &dest
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostDeliveryOverrideSetsEffectiveResponse parses an HTTP response from a PostDeliveryOverrideSetsEffectiveWithResponse call
+func ParsePostDeliveryOverrideSetsEffectiveResponse(rsp *http.Response) (*PostDeliveryOverrideSetsEffectiveResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostDeliveryOverrideSetsEffectiveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryEffectiveConfigurationEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteDeliveryOverrideSetsByIdResponse parses an HTTP response from a DeleteDeliveryOverrideSetsByIdWithResponse call
+func ParseDeleteDeliveryOverrideSetsByIdResponse(rsp *http.Response) (*DeleteDeliveryOverrideSetsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteDeliveryOverrideSetsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetDeliveryOverrideSetsByIdResponse parses an HTTP response from a GetDeliveryOverrideSetsByIdWithResponse call
+func ParseGetDeliveryOverrideSetsByIdResponse(rsp *http.Response) (*GetDeliveryOverrideSetsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDeliveryOverrideSetsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryOverrideSetEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutDeliveryOverrideSetsByIdResponse parses an HTTP response from a PutDeliveryOverrideSetsByIdWithResponse call
+func ParsePutDeliveryOverrideSetsByIdResponse(rsp *http.Response) (*PutDeliveryOverrideSetsByIdResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutDeliveryOverrideSetsByIdResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest DeliveryOverrideSetEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 

@@ -150,6 +150,9 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		if !cfg.DeliveryEnabled {
 			errs = append(errs, "delivery_enabled must be true")
 		}
+		if !cfg.DeliveryLocalFluxBootstrap {
+			errs = append(errs, "delivery_local_flux_bootstrap must be true")
+		}
 		validateSignedArtifact := func(name, repository, digest, identity, issuer string) {
 			repository = strings.TrimSpace(repository)
 			if repository == "" {

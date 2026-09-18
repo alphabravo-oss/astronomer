@@ -17,6 +17,7 @@ func prodBase() *Config {
 		AuthLocalPasswordOnly:              false,
 		ServerURL:                          "https://astronomer.example.com",
 		DeliveryEnabled:                    true,
+		DeliveryLocalFluxBootstrap:         true,
 		AgentImageRepository:               "registry.example.test/astronomer-agent@sha256:" + strings.Repeat("a", 64),
 		DeliveryFluxDistributionRepository: "registry.example.test/astronomer/system",
 		DeliveryFluxDistributionDigest:     "sha256:" + strings.Repeat("b", 64),

@@ -32,17 +32,17 @@ import {
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
 import {
-  getDeliveryEstate,
+  getDeliveryFleet,
   getDeliverySystemCompatibility,
   listClusterDeployments,
   listComponentBundles,
   listDeliveryRollouts,
   listDeliverySources,
   listDeliveryTargets,
-  type DeliveryEstate,
-  type DeliveryEstateAttention,
-  type DeliveryEstateCluster,
-  type DeliveryEstateCount,
+  type DeliveryFleet,
+  type DeliveryFleetAttention,
+  type DeliveryFleetCluster,
+  type DeliveryFleetCount,
 } from "@/lib/api/delivery";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusters, useCurrentUser } from "@/lib/hooks";
@@ -65,9 +65,9 @@ function DeliveryOverviewPage() {
     useDeliveryProjectScope();
   const { data: user } = useCurrentUser();
   const canReadFleet = can(user, "delivery_inventory", "read");
-  const estate = useQuery({
-    queryKey: queryKeys.delivery.estate,
-    queryFn: ({ signal }) => getDeliveryEstate(signal),
+  const fleet = useQuery({
+    queryKey: queryKeys.delivery.fleet,
+    queryFn: ({ signal }) => getDeliveryFleet(signal),
     enabled: canReadFleet,
     refetchInterval: liveFallback(15_000),
     retry: (failureCount, error) =>
@@ -83,11 +83,11 @@ function DeliveryOverviewPage() {
       "delivery_rollout.changed",
       "cluster_deployment.changed",
     ],
-    [queryKeys.delivery.estate],
+    [queryKeys.delivery.fleet],
   );
-  const showFleet = canReadFleet && !isForbiddenError(estate.error);
+  const showFleet = canReadFleet && !isForbiddenError(fleet.error);
   if (showFleet) {
-    return <FleetDeliveryOverview query={estate} />;
+    return <FleetDeliveryOverview query={fleet} />;
   }
   return (
     <DeliveryShell
@@ -105,7 +105,7 @@ function DeliveryOverviewPage() {
 }
 
 const fleetFocusLabels: Record<string, string> = {
-  adopted: "Adopted clusters",
+  managed: "Managed clusters",
   flux_ready: "Flux-ready clusters",
   incompatible: "Incompatible clusters",
   disconnected: "Disconnected clusters",
@@ -119,28 +119,26 @@ function clusterHref(clusterId: string): string {
 }
 
 function clusterMatchesFocus(
-  cluster: DeliveryEstateCluster,
+  cluster: DeliveryFleetCluster,
   focus: string,
 ): boolean {
   switch (focus) {
-    case "adopted":
-      return !cluster.isLocal;
+    case "managed":
+      return true;
     case "flux_ready":
       return (
-        !cluster.isLocal &&
         cluster.connected &&
         cluster.inventoryReady &&
         cluster.compatibilityStatus === "compatible"
       );
     case "incompatible":
       return (
-        !cluster.isLocal &&
         ["incompatible", "upgrade_required", "degraded"].includes(
           cluster.compatibilityStatus,
         )
       );
     case "disconnected":
-      return !cluster.isLocal && !cluster.connected;
+      return !cluster.connected;
     case "assignments":
       return cluster.assignmentCount > 0;
     case "failed":
@@ -150,13 +148,11 @@ function clusterMatchesFocus(
     default:
       if (focus.startsWith("compatibility:")) {
         return (
-          !cluster.isLocal &&
           cluster.compatibilityStatus === focus.slice("compatibility:".length)
         );
       }
       if (focus.startsWith("privilege:")) {
         return (
-          !cluster.isLocal &&
           cluster.privilegeProfile === focus.slice("privilege:".length)
         );
       }
@@ -174,15 +170,15 @@ function clusterMatchesFocus(
 function FleetDeliveryOverview({
   query,
 }: {
-  query: UseQueryResult<DeliveryEstate>;
+  query: UseQueryResult<DeliveryFleet>;
 }) {
-  const estate = query.data;
-  const summary = estate?.summary;
+  const fleet = query.data;
+  const summary = fleet?.summary;
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
   const focus = search.get("focus") ?? "";
-  const clusters = estate?.clusters ?? [];
+  const clusters = fleet?.clusters ?? [];
   const clusterList = useClusters({ pageSize: 200 });
   const environmentById = useMemo(() => {
     const map = new Map<string, string>();
@@ -209,12 +205,12 @@ function FleetDeliveryOverview({
     router.replace(`${pathname}${params.size ? `?${params.toString()}` : ""}`);
     requestAnimationFrame(() => {
       document
-        .getElementById("estate-clusters")
+        .getElementById("fleet-clusters")
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
-  const columns: Column<DeliveryEstateCluster>[] = [
+  const columns: Column<DeliveryFleetCluster>[] = [
     {
       key: "cluster",
       header: "Cluster",
@@ -243,7 +239,9 @@ function FleetDeliveryOverview({
       header: "Role",
       accessor: (row) =>
         row.isLocal ? (
-          <span className="text-xs text-muted-foreground">Local host-only</span>
+          <span className="inline-flex items-center gap-1 text-xs">
+            <Shield className="h-3 w-3" /> Management / admin
+          </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs">
             <Shield className="h-3 w-3" />
@@ -305,7 +303,7 @@ function FleetDeliveryOverview({
     <PageShell>
       <PageHeader
         eyebrow="Continuous Delivery"
-        title="Estate"
+        title="Delivery Fleet"
         description="All environments. Click a cluster to open its Flux workspace — Sources, Bundles, Targets, Rollouts, and Deployments live there."
       />
       {query.isError && !isForbiddenError(query.error) && (
@@ -319,10 +317,10 @@ function FleetDeliveryOverview({
           <div className="grid grid-cols-2 gap-3">
             <FleetTile
               icon={<Radio className="h-4 w-4" />}
-              title="Adopted"
-              value={summary?.adoptedClusters ?? "—"}
-              active={focus === "adopted"}
-              onClick={() => setFocus("adopted")}
+              title="Managed"
+              value={summary?.managedClusters ?? "—"}
+              active={focus === "managed"}
+              onClick={() => setFocus("managed")}
             />
             <FleetTile
               icon={<ServerCog className="h-4 w-4" />}
@@ -386,18 +384,18 @@ function FleetDeliveryOverview({
         description="Disconnected agents, failed assignments, incompatible controllers, drift, and stale inventory."
       >
         <AttentionList
-          items={estate?.attention ?? []}
+          items={fleet?.attention ?? []}
           loading={query.isLoading}
         />
       </PageSection>
       <PageSection
         title="Distributions"
-        description="Adopted clusters only. Click a value to filter the table."
+        description="All managed clusters, including local. Click a value to filter the table."
       >
         <div className="grid gap-4 md:grid-cols-3">
           <DistributionList
             title="Compatibility"
-            items={estate?.distributions.compatibility ?? []}
+            items={fleet?.distributions.compatibility ?? []}
             activeKey={
               focus.startsWith("compatibility:")
                 ? focus.slice("compatibility:".length)
@@ -407,7 +405,7 @@ function FleetDeliveryOverview({
           />
           <DistributionList
             title="Privilege"
-            items={estate?.distributions.privilege ?? []}
+            items={fleet?.distributions.privilege ?? []}
             activeKey={
               focus.startsWith("privilege:")
                 ? focus.slice("privilege:".length)
@@ -417,7 +415,7 @@ function FleetDeliveryOverview({
           />
           <DistributionList
             title="Assignment phases"
-            items={estate?.distributions.assignmentPhases ?? []}
+            items={fleet?.distributions.assignmentPhases ?? []}
             activeKey={
               focus.startsWith("phase:") ? focus.slice("phase:".length) : ""
             }
@@ -425,7 +423,7 @@ function FleetDeliveryOverview({
           />
         </div>
       </PageSection>
-      <div id="estate-clusters">
+      <div id="fleet-clusters">
         <PageSection
           title="Clusters"
           description="Click a row to open that cluster's Flux workspace."
@@ -501,13 +499,13 @@ function AttentionList({
   items,
   loading,
 }: {
-  items: DeliveryEstateAttention[];
+  items: DeliveryFleetAttention[];
   loading: boolean;
 }) {
   if (!loading && items.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-        No adopted clusters need attention.
+        No managed clusters need attention.
       </div>
     );
   }
@@ -549,7 +547,7 @@ function DistributionList({
   onSelect,
 }: {
   title: string;
-  items: DeliveryEstateCount[];
+  items: DeliveryFleetCount[];
   activeKey: string;
   onSelect: (key: string) => void;
 }) {
@@ -558,7 +556,7 @@ function DistributionList({
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
       {items.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
-          No adopted clusters.
+          No managed clusters.
         </p>
       ) : (
         <ul className="mt-3 space-y-2" aria-label={title}>

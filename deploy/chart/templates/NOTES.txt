@@ -41,13 +41,16 @@ Note    : HTTP-01 solver — make sure your hostnames resolve to this cluster's
 Mode    : secret (BYO)
 Secret  : {{ include "astronomer.tls.secretName" . }}
 Note    : Pre-create this Secret with keys tls.crt + tls.key in namespace {{ .Release.Namespace }}.
+{{- else if eq $tlsSrc "externalGateway" }}
+Mode    : externalGateway (TLS terminates on the referenced shared Gateway)
+Gateway : {{ include "astronomer.gateway.parentName" . }} in {{ default .Release.Namespace .Values.gateway.namespace }}
 {{- end }}
 
 {{- if .Values.gateway.enabled }}
 
 Access the platform at:
 {{- range .Values.gateway.hosts }}
-  http{{ if include "astronomer.tls.enabled" $ }}s{{ end }}://{{ . }}
+  http{{ if or (eq $tlsSrc "externalGateway") (include "astronomer.tls.enabled" $) }}s{{ end }}://{{ . }}
 {{- end }}
 
 For local k3d clusters, ensure your loadbalancer maps :80/:443:
@@ -55,7 +58,7 @@ For local k3d clusters, ensure your loadbalancer maps :80/:443:
     --port "8080:80@loadbalancer" --port "8443:443@loadbalancer"
 
 Smoke test (replace the host below with one of the entries above):
-  curl http{{ if include "astronomer.tls.enabled" . }}s{{ end }}://{{ index .Values.gateway.hosts 0 }}/readyz
+  curl http{{ if or (eq $tlsSrc "externalGateway") (include "astronomer.tls.enabled" .) }}s{{ end }}://{{ index .Values.gateway.hosts 0 }}/readyz
 {{- else if .Values.ingress.enabled }}
 
 Access the platform at:

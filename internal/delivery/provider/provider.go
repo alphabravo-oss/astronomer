@@ -297,6 +297,9 @@ func (p *Provider) assignmentMetadata(row sqlc.ListClusterDeliveryAssignmentsRow
 			Timeout: time.Duration(policy.Timeout).String(), Drift: string(policy.Drift), Prune: policy.Prune,
 		},
 	}
+	if row.DesiredConfigurationDigest.Valid {
+		assignment.ConfigurationDigest = row.DesiredConfigurationDigest.String
+	}
 	switch renderer.Kind {
 	case model.RendererKustomize:
 		assignment.Source.Path = strings.TrimPrefix(renderer.Kustomize.Path, "./")
@@ -306,11 +309,16 @@ func (p *Provider) assignmentMetadata(row sqlc.ListClusterDeliveryAssignmentsRow
 		}}
 	case model.RendererHelm:
 		assignment.Source.Chart = renderer.Helm.Chart
+		valueSecretRefs := make([]protocol.DeliveryHelmValueSecretRef, 0, len(renderer.Helm.ValueSecretRefs))
+		for _, ref := range renderer.Helm.ValueSecretRefs {
+			valueSecretRefs = append(valueSecretRefs, protocol.DeliveryHelmValueSecretRef{Name: ref.Name, Key: ref.Key, TargetPath: ref.TargetPath})
+		}
 		assignment.Renderer = protocol.DeliveryRendererV2{Kind: protocol.DeliveryRendererHelm, Helm: &protocol.DeliveryHelmRenderer{
 			Chart: renderer.Helm.Chart, Version: renderer.Helm.ChartVersion, ReleaseName: renderer.Helm.ReleaseName,
 			TargetNamespace: renderer.Helm.TargetNamespace, ServiceAccount: names.Applier,
 			Values: append(json.RawMessage(nil), renderer.Helm.Values...), InstallRetries: int(renderer.Helm.InstallRetries),
-			UpgradeRetries: int(renderer.Helm.UpgradeRetries), UpgradeRemediation: "rollback", EnableTests: renderer.Helm.Test,
+			ValueSecretRefs: valueSecretRefs,
+			UpgradeRetries:  int(renderer.Helm.UpgradeRetries), UpgradeRemediation: "rollback", EnableTests: renderer.Helm.Test,
 			DriftMode: driftMode(policy.Drift),
 		}}
 	}

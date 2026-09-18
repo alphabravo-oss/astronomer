@@ -3,15 +3,16 @@ package delivery
 import "github.com/alphabravocompany/astronomer-go/pkg/protocol"
 
 const (
-	ManagedByLabel          = "app.kubernetes.io/managed-by"
-	ManagedByValue          = "astronomer-agent"
-	DeploymentIDLabel       = "delivery.astronomer.io/deployment-id"
-	ProjectIDHashLabel      = "delivery.astronomer.io/project-id-hash"
-	SpecDigestAnnotation    = "delivery.astronomer.io/spec-digest"
-	GenerationAnnotation    = "delivery.astronomer.io/generation"
-	DeliverySystemNamespace = "astronomer-delivery-system"
-	ProjectNamespacePrefix  = protocol.DeliveryProjectNamespacePrefix
-	PlatformClusterRole     = "astronomer-delivery-platform-applier"
+	ManagedByLabel                = "app.kubernetes.io/managed-by"
+	ManagedByValue                = "astronomer-agent"
+	DeploymentIDLabel             = "delivery.astronomer.io/deployment-id"
+	ProjectIDHashLabel            = "delivery.astronomer.io/project-id-hash"
+	SpecDigestAnnotation          = "delivery.astronomer.io/spec-digest"
+	ConfigurationDigestAnnotation = "delivery.astronomer.io/configuration-digest"
+	GenerationAnnotation          = "delivery.astronomer.io/generation"
+	DeliverySystemNamespace       = "astronomer-delivery-system"
+	ProjectNamespacePrefix        = protocol.DeliveryProjectNamespacePrefix
+	PlatformClusterRole           = "astronomer-delivery-platform-applier"
 )
 
 // ObjectNames contains every user-independent name derived from an assignment.

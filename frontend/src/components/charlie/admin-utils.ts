@@ -74,7 +74,7 @@ export function automationValidationIssues(input: {
     gracePeriodSeconds: number;
     flapWindowSeconds: number;
     flapCount: number;
-    estateThresholdPercent: number;
+    fleetThresholdPercent: number;
     maximumAttempts: number;
     serviceIdentity: string;
     modeCeiling: string;
@@ -104,9 +104,9 @@ export function automationValidationIssues(input: {
         `${label} timing, flap count, and attempts must be positive integers.`,
       );
     if (
-      !Number.isInteger(rule.estateThresholdPercent) ||
-      rule.estateThresholdPercent < 0 ||
-      rule.estateThresholdPercent > 100
+      !Number.isInteger(rule.fleetThresholdPercent) ||
+      rule.fleetThresholdPercent < 0 ||
+      rule.fleetThresholdPercent > 100
     )
       issues.push(
         `${label} cluster coverage threshold must be between 0 and 100.`,

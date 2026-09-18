@@ -1,5 +1,5 @@
 .PHONY: help build test test-postgres-integration test-worker-runtime-integration test-redis-outage-recovery test-process-restart-qualification test-postgres-outage-qualification test-postgres-failover-certification test-postgres-failover-static test-live-browser test-live-browser-static lint fmt vet run verify verify-enterprise check-build-capacity release-contract-check airgap-plan sqlc sqlc-generate sqlc-check sdk sdk-check error-codes error-codes-check charlie-contract-generate charlie-contract-check \
-        docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
+        validate-image-version docker-build docker-build-server docker-build-agent docker-build-worker docker-build-migrate docker-build-frontend docker-build-shell docker-build-all \
         migrate-up migrate-down migrate-create clean dev dev-down dev-clean \
         k3d-load k3d-import-all k3d-bootstrap helm-install helm-uninstall k8s-apply k8s-delete \
         validate-live-b6 validate-live-delivery validate-live-dex validate-live-dex-oidc validate-live-generic-oidc validate-live-velero validate-live-cis validate-live-oci validate-live-projects verify-agent-identity-live
@@ -223,13 +223,21 @@ migrate-create: ## Create a new migration (NAME=<name>)
 
 # ── Docker images ────────────────────────────────────────────────────────────
 
-docker-build-server: ## Build server image
+validate-image-version:
+	@version='$(VERSION)'; version="$${version#v}"; \
+	if ! printf '%s\n' "$$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$$'; then \
+		echo "VERSION=$(VERSION) is not strict semantic versioning; agent connections would be rejected" >&2; \
+		echo "use a value such as 1.2.0-local.1 (IMG_TAG may be set independently)" >&2; \
+		exit 1; \
+	fi
+
+docker-build-server: validate-image-version ## Build server image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.server -t $(IMG_SERVER) .
 
-docker-build-agent: ## Build agent image
+docker-build-agent: validate-image-version ## Build agent image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.agent  -t $(IMG_AGENT)  .
 
-docker-build-worker: ## Build worker image
+docker-build-worker: validate-image-version ## Build worker image
 	docker build $(DOCKER_BUILD_ARGS) -f deploy/docker/Dockerfile.worker -t $(IMG_WORKER) .
 
 docker-build-migrate: ## Build migrate (golang-migrate + SQL files) image

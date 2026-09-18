@@ -71,6 +71,21 @@
       "type": "timeseries",
       "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
       "targets": [{"expr": "sum by (worker,result) (rate(astronomer_delivery_worker_events_total[5m]))", "legendFormat": "{{worker}}/{{result}}", "refId": "A"}]
+    },
+    {
+      "title": "Catalog entries / last successful sync age",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 28, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "astronomer_catalog_entries", "legendFormat": "entries", "refId": "A"},
+        {"expr": "time() - astronomer_catalog_last_success_timestamp_seconds", "legendFormat": "sync age seconds", "refId": "B"}
+      ]
+    },
+    {
+      "title": "Catalog synchronization outcomes",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 28, "w": 12, "h": 8},
+      "targets": [{"expr": "sum by (transport,result) (rate(astronomer_catalog_sync_total[5m]))", "legendFormat": "{{transport}}/{{result}}", "refId": "A"}]
     }
   ]
 }

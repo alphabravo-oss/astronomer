@@ -1,0 +1,13 @@
+{{- if and .Values.dex.enabled .Values.dex.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "astronomer.fullname" . }}-dex
+  labels:
+    {{- include "astronomer.componentLabels" (dict "context" . "component" "dex") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.dex.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "astronomer.componentSelectorLabels" (dict "context" . "component" "dex") | nindent 6 }}
+{{- end }}

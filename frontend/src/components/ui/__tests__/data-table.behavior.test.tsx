@@ -27,6 +27,18 @@ const bodyRowText = () =>
     .map((r) => r.textContent ?? "");
 
 describe("DataTable behavior (TanStack Table engine)", () => {
+  it("applies the shared readable table and visible-link treatment", () => {
+    const { container } = render(
+      <DataTable
+        data={rows.slice(0, 1)}
+        columns={[{ key: "name", header: "Name", accessor: (row) => <a href={`/items/${row.id}`}>{row.name}</a> }]}
+        keyExtractor={(row) => row.id}
+      />,
+    );
+    expect(container.querySelector(".app-data-table")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Banana" })).toBeInTheDocument();
+  });
+
   it("keeps source order until a column is sorted", () => {
     render(
       <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />,
@@ -49,6 +61,24 @@ describe("DataTable behavior (TanStack Table engine)", () => {
 
     fireEvent.click(sizeHeader); // desc: 30, 20, 10
     expect(bodyRowText()[0]).toContain("Banana");
+  });
+
+  it("sorts JSX cells by the primitive row field matching the column key", () => {
+    render(
+      <DataTable
+        data={rows}
+        columns={[
+          {
+            key: "name",
+            header: "Name",
+            accessor: (row) => <span>{row.name}</span>,
+          },
+        ]}
+        keyExtractor={(row) => row.id}
+      />,
+    );
+    fireEvent.click(screen.getByRole("columnheader", { name: /name/i }));
+    expect(bodyRowText()).toEqual(["Apple", "Banana", "Cherry"]);
   });
 
   it("filters rows with the global search box across visible columns (200ms debounce)", async () => {
@@ -154,6 +184,39 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     expect(body.join(" ")).toContain("Alpha");
     expect(body.join(" ")).toContain("Charlie");
     expect(body.join(" ")).not.toContain("Bravo");
+  });
+
+  it("automatically provides multi-select filtering for namespace columns", () => {
+    const namespaceRows = [
+      { id: "1", name: "API", namespace: "prod" },
+      { id: "2", name: "Worker", namespace: "jobs" },
+      { id: "3", name: "Web", namespace: "prod" },
+    ];
+    render(
+      <DataTable
+        data={namespaceRows}
+        columns={[
+          { key: "name", header: "Name", accessor: (row) => row.name },
+          {
+            key: "namespace",
+            header: "Namespace",
+            accessor: (row) => row.namespace,
+          },
+        ]}
+        keyExtractor={(row) => row.id}
+        searchable={false}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /all namespaces/i }),
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "prod" }));
+    expect(bodyRowText()).toHaveLength(2);
+    expect(bodyRowText().join(" ")).not.toContain("Worker");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "jobs" }));
+    expect(bodyRowText()).toHaveLength(3);
   });
 
   it("server-side mode uses rowCount for paging and reports page changes without client slicing", () => {

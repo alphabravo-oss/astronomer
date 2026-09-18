@@ -42,6 +42,7 @@ import {
   Search,
   SlidersHorizontal,
   Filter,
+  Check,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,9 @@ export interface Column<T> {
   hidden?: boolean;
   width?: string;
   align?: "left" | "center" | "right";
+  /** Render machine-readable identifiers and measurements with tabular mono type. */
+  code?: boolean;
+  numeric?: boolean;
   /**
    * When set, renders a faceted multi-select filter for this column in the
    * toolbar. The facet options are derived automatically from the column's
@@ -190,8 +194,23 @@ function readPersistedSizing(
 // sortAccessor sorted on `accessor(row)?.toString()`).
 function sortValue<T>(col: Column<T>, row: T): string | number {
   if (col.sortAccessor) return col.sortAccessor(row);
+  // Most resource rows expose a primitive field matching the column key even
+  // when the visible accessor renders a badge/link. Prefer that field so JSX
+  // cells sort by their underlying value instead of "[object Object]".
+  if (row && typeof row === "object") {
+    const value = (row as Record<string, unknown>)[col.key];
+    if (typeof value === "string" || typeof value === "number") return value;
+  }
   const val = col.accessor(row);
   return val?.toString() ?? "";
+}
+
+// Namespace is the common scope boundary across Kubernetes resource tables.
+// Give every namespace column the Rancher-style multi-select automatically so
+// new namespaced resource pages do not have to remember bespoke filter wiring.
+function columnFilter<T>(col: Column<T>): Column<T>["filter"] {
+  return col.filter ??
+    (col.key === "namespace" ? { label: "Namespaces" } : undefined);
 }
 
 // ============================================================
@@ -279,7 +298,7 @@ export function DataTable<T>({
         accessorFn: (row: T) => sortValue(col, row),
         enableSorting: col.sortable !== false,
         enableHiding: true,
-        enableColumnFilter: !!col.filter,
+        enableColumnFilter: !!columnFilter(col),
         // Faceted multi-select: keep the row when nothing is selected, otherwise
         // when its (stringified) value is among the selected facet values.
         filterFn: (row, columnId, value) => {
@@ -438,7 +457,7 @@ export function DataTable<T>({
   );
 
   // Faceted filters render for visible columns that opted in via `filter`.
-  const facetColumns = activeColumns.filter((c) => c.filter);
+  const facetColumns = activeColumns.filter((c) => columnFilter(c));
 
   const rows = table.getRowModel().rows;
   // Header objects keyed by column id — needed to wire each resizable column's
@@ -494,7 +513,7 @@ export function DataTable<T>({
   };
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("app-data-table space-y-3", className)}>
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-1">
@@ -526,7 +545,7 @@ export function DataTable<T>({
               <FacetedFilter
                 key={col.key}
                 column={column}
-                label={col.filter?.label ?? col.header}
+                label={columnFilter(col)?.label ?? col.header}
                 onChange={() => table.setPageIndex(0)}
               />
             );
@@ -638,10 +657,11 @@ export function DataTable<T>({
                         key={col.key}
                         className={cn(
                           cellPadding,
-                          "font-medium text-muted-foreground whitespace-nowrap",
+                          "font-semibold whitespace-nowrap",
                           resizable && "relative",
                           col.align === "center" && "text-center",
                           col.align === "right" && "text-right",
+                          col.numeric && "app-table-numeric",
                           col.sortable !== false &&
                             "cursor-pointer select-none hover:text-foreground",
                         )}
@@ -769,7 +789,7 @@ export function DataTable<T>({
                       {activeColumns.map((col) => (
                         <TableCell
                           key={col.key}
-                          className={cellPadding}
+                          className={cn(cellPadding, col.code && "app-table-code", col.numeric && "app-table-numeric")}
                           style={
                             resizable
                               ? { width: table.getColumn(col.key)?.getSize() }
@@ -804,10 +824,10 @@ export function DataTable<T>({
                     return (
                       <TableRow
                         key={key}
+                        data-selected={isSelected || undefined}
                         className={cn(
                           "border-b border-border last:border-0 transition-colors",
-                          onRowClick && "cursor-pointer hover:bg-muted/50",
-                          isSelected && "bg-muted/30",
+                          onRowClick && "app-data-table-row-clickable cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         )}
                         tabIndex={onRowClick ? 0 : undefined}
                         onKeyDown={(event) => {
@@ -841,6 +861,8 @@ export function DataTable<T>({
                             key={col.key}
                             className={cn(
                               cellPadding,
+                              col.code && "app-table-code",
+                              col.numeric && "app-table-numeric",
                               col.align === "center" && "text-center",
                               col.align === "right" && "text-right",
                             )}
@@ -998,6 +1020,8 @@ function VirtualizedGrid<T>({
 
   const alignClass = (col: Column<T>) =>
     cn(
+      col.code && "app-table-code",
+      col.numeric && "app-table-numeric",
       col.align === "center" && "text-center justify-center",
       col.align === "right" && "text-right justify-end",
     );
@@ -1186,6 +1210,7 @@ function VirtualizedGrid<T>({
                   ref={rowVirtualizer.measureElement}
                   data-index={virtualRow.index}
                   data-row-index={virtualRow.index}
+                  data-selected={isSelected || undefined}
                   role="row"
                   // 1-based, and +1 again because the sticky header is row 1.
                   aria-rowindex={virtualRow.index + 2}
@@ -1217,9 +1242,9 @@ function VirtualizedGrid<T>({
                   }}
                   className={cn(
                     "absolute left-0 top-0 flex w-full border-b border-border transition-colors",
+                    onRowClick && "app-data-table-row-clickable cursor-pointer",
                     "focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring",
-                    onRowClick && "cursor-pointer hover:bg-muted/50",
-                    isSelected && "bg-muted/30",
+                    onRowClick && "cursor-pointer",
                   )}
                   style={{ transform: `translateY(${virtualRow.start}px)` }}
                 >
@@ -1276,6 +1301,7 @@ function FacetedFilter<T>({
   onChange?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const selected = (column.getFilterValue() as string[] | undefined) ?? [];
   const options = Array.from(column.getFacetedUniqueValues().keys())
     .map((v) => String(v))
@@ -1293,8 +1319,24 @@ function FacetedFilter<T>({
         : [...selected, value],
     );
 
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div ref={menuRef} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
@@ -1305,7 +1347,11 @@ function FacetedFilter<T>({
         )}
       >
         <Filter className="h-3.5 w-3.5" />
-        {label}
+        {selected.length === 0
+          ? `All ${label.toLowerCase()}`
+          : selected.length === 1
+            ? selected[0]
+            : label}
         {selected.length > 0 && (
           <span className="ml-0.5 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-primary text-primary-foreground text-2xs">
             {selected.length}
@@ -1329,8 +1375,19 @@ function FacetedFilter<T>({
                   type="checkbox"
                   checked={selected.includes(opt)}
                   onChange={() => toggle(opt)}
-                  className="rounded border-border text-primary focus:ring-ring"
+                  className="peer sr-only"
                 />
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-1",
+                    selected.includes(opt)
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background",
+                  )}
+                >
+                  {selected.includes(opt) && <Check className="h-3 w-3" />}
+                </span>
                 {opt}
               </label>
             ))

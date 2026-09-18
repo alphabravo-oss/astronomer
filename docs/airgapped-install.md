@@ -47,7 +47,7 @@ scripts. It does **not** include container image blobs (GitHub's 2 GiB asset
 limit). Default save is `linux/amd64` only.
 
 ```bash
-export ASTRONOMER_RELEASE=v1.1.0
+export ASTRONOMER_RELEASE=v1.2.0
 gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer \
   --pattern "astronomer-airgap-${ASTRONOMER_RELEASE}.tar.gz" \
   --pattern SHA256SUMS
@@ -90,7 +90,7 @@ Registry-to-registry copy without a USB stick is the rest of this document
 Set an exact release; there is no `latest` release channel.
 
 ```bash
-export ASTRONOMER_RELEASE=v1.1.0
+export ASTRONOMER_RELEASE=v1.2.0
 mkdir "astronomer-${ASTRONOMER_RELEASE}"
 cd "astronomer-${ASTRONOMER_RELEASE}"
 gh release download "$ASTRONOMER_RELEASE" --repo alphabravo-oss/astronomer
@@ -245,7 +245,7 @@ Render with the local packaged chart and the exact release contracts. The
 example assumes application and bootstrap secrets already exist:
 
 ```bash
-helm template astronomer ./astronomer-1.1.0.tgz \
+helm template astronomer ./astronomer-1.2.0.tgz \
   --namespace astronomer \
   -f values-production.yaml \
   -f airgap-values.json \
@@ -272,7 +272,7 @@ test ! -s rendered-images || ! grep -Ev '@sha256:[a-f0-9]{64}$' rendered-images
 `comm -23` and `grep -Ev` must print nothing. Then install atomically:
 
 ```bash
-helm upgrade --install astronomer ./astronomer-1.1.0.tgz \
+helm upgrade --install astronomer ./astronomer-1.2.0.tgz \
   --namespace astronomer --create-namespace \
   -f values-production.yaml \
   -f airgap-values.json \
@@ -315,6 +315,42 @@ helm get values astronomer -n astronomer -o yaml
 Use firewall, DNS, or flow logs during acceptance to prove there are no public
 registry or GitHub requests. A successful cached pull alone is not evidence of
 an air-gapped installation.
+
+## 8. Export and import the application catalog
+
+The release kit contains Astronomer's runtime and built-in platform artifacts.
+The optional Apps catalog has its own bundle because it contains pinned
+third-party charts and a separate image inventory.
+
+On a connected workstation, check out the catalog revision pinned by
+`catalog.sourceURL`, verify `catalog.digest`, and export it:
+
+```bash
+./scripts/application-catalog-airgap.sh export \
+  ../astronomer-catalog/catalog.json application-catalog.tar.gz
+```
+
+The exporter downloads every exact chart version, creates static Helm indexes,
+records checksums, and derives an `images.txt` inventory from default rendered
+values. Mirror those images with the same digest-preserving process used for
+the product release. Charts with conditional images may require additional
+references for the values you enable; the final rendered-manifest image check
+remains authoritative.
+
+Transfer the bundle and import it into a document root served by your internal
+HTTPS service:
+
+```bash
+./scripts/application-catalog-airgap.sh import application-catalog.tar.gz \
+  /srv/www/astronomer-catalog https://catalog.internal.example/astronomer
+```
+
+The importer verifies the original bundle, rewrites all catalog and Helm index
+URLs, regenerates checksums, and prints the exact `catalog.sourceURL` and
+`catalog.digest` Helm values. Set `catalog.allowPrivateMirrors=true` for a
+private address and configure `catalog.ca.existingSecret` when the HTTPS
+service uses a private CA. If the catalog host is unavailable, Astronomer keeps
+the last verified catalog and installed-app operations remain available.
 
 ## Clean upgrades and rollback
 

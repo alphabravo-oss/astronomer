@@ -47,6 +47,9 @@ import {
   ExternalLink,
   Wrench,
   Star,
+  Clock3,
+  ShieldCheck,
+  ShieldAlert,
   AlertTriangle,
   Box,
   ArrowUpCircle,
@@ -58,16 +61,28 @@ import { Link } from "@/lib/link";
 import {
   queryKeys,
   useCluster,
-  useProjects,
 } from "@/lib/hooks";
 import {
   useHelmRepositories,
+  useCatalogApplications,
+  useApplicationCatalogSources,
+  useCatalogUserDiscovery,
+  useSetCatalogChartFavorite,
   useSyncHelmRepository,
   useDeleteHelmRepository,
 } from "@/lib/hooks/catalog";
 import { AddRepositoryModal } from "../../../catalog/-add-repository-modal";
 import { RepositoriesTab } from "../../../catalog/-repositories-tab";
+import { CatalogIcon } from "@/components/catalog/catalog-icon";
+import { CatalogSourceBadge } from "@/components/catalog/catalog-source-badge";
+import { buildCatalogPresentationIndex } from "@/lib/catalogs/astronomer";
+import {
+  catalogSourcePresentation,
+  type CatalogSourceFamily,
+} from "@/lib/catalogs/source";
 import { liveFallback } from "@/lib/live/status-store";
+import { cn } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/utils";
 import {
   usePermissionDecision,
   permissionDeniedReason,
@@ -77,9 +92,8 @@ import type { PermissionDecision } from "@/lib/permissions";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import {
-  listClusterApps,
+  listAllClusterApps,
   listCatalogCharts,
-  listRecommendedCharts,
   uninstallCatalogRelease,
   deleteFailedClusterApps,
   type ClusterAppRow,
@@ -89,7 +103,7 @@ import {
   AppUninstallModal,
 } from "@/components/clusters/app-install-modal";
 
-type Section = "installed" | "browse" | "recommended" | "repositories";
+type Section = "installed" | "browse" | "repositories";
 
 // Coarse status → tone mapping. We don't try to enumerate every
 // helm-release state; just bucket into the four colors operators
@@ -106,7 +120,7 @@ function statusTone(status: string): string {
     s === "pending_install" ||
     s === "pending_upgrade"
   ) {
-    return "bg-sky-500/10 text-sky-600 border-sky-500/30";
+    return "bg-status-info/10 text-status-info border-status-info/30";
   }
   if (s.startsWith("uninstalling") || s === "pending_uninstall") {
     return "bg-status-warning/10 text-status-warning border-status-warning/30";
@@ -176,7 +190,11 @@ type ModalState =
       namespace: string;
     };
 
-function ClusterAppsPage() {
+export function ClusterAppsPage({
+  initialSection = "installed",
+}: {
+  initialSection?: Section;
+} = {}) {
   const params = useParams();
   const clusterId = params.id as string;
   const { data: cluster } = useCluster(clusterId);
@@ -187,51 +205,11 @@ function ClusterAppsPage() {
   // resolves the chart on browse-data arrival.
   const searchParams = useSearchParams();
   const router = useRouter();
-  const projectsQuery = useProjects({ pageSize: 200 });
-  const clusterProjects = useMemo(
-    () =>
-      (projectsQuery.data?.data ?? []).filter(
-        (project) =>
-          project.clusterId === clusterId ||
-          project.clusterIds?.includes(clusterId),
-      ),
-    [clusterId, projectsQuery.data?.data],
-  );
-  const requestedProjectId = searchParams?.get("project") ?? "";
-  const projectId = clusterProjects.some(
-    (project) => project.id === requestedProjectId,
-  )
-    ? requestedProjectId
-    : clusterProjects.length === 1
-      ? clusterProjects[0].id
-      : "";
-  const setProjectId = (nextProjectId: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (nextProjectId) next.set("project", nextProjectId);
-    else next.delete("project");
-    router.replace(
-      `/dashboard/clusters/${clusterId}/apps${next.size ? `?${next.toString()}` : ""}`,
-    );
-    setModal({ kind: "none" });
-  };
   const requestedInstall = searchParams?.get("install") ?? "";
-  const requestedSection = searchParams?.get("section") as Section | null;
-
-  // Default to Browse when a deep-link asks for an install — we
-  // need the browse query to populate so the auto-open effect can
-  // find the chart id by name.
-  const [section, setSection] = useState<Section>(
-    requestedSection ?? (requestedInstall ? "browse" : "installed"),
-  );
+  const section = initialSection;
   const [searchQ, setSearchQ] = useState(requestedInstall || "");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const catalogScope = { type: "cluster" as const, id: clusterId };
-  const catalogProjectScope = { type: "project" as const, id: projectId };
-  const catalogCreateDecision = usePermissionDecision(
-    "catalog",
-    "create",
-    catalogProjectScope,
-  );
   const catalogUpdateDecision = usePermissionDecision(
     "catalog",
     "update",
@@ -245,7 +223,7 @@ function ClusterAppsPage() {
 
   const installed = useQuery({
     queryKey: queryKeys.clusterPages.appsInstalled(clusterId),
-    queryFn: () => listClusterApps(clusterId, { limit: 100 }),
+    queryFn: () => listAllClusterApps(clusterId),
     // `catalog_release.changed` (server writes) + the Helm-Secret k8s route
     // (cluster-side churn) refresh this while the stream is open.
     refetchInterval: liveFallback(30_000),
@@ -281,7 +259,11 @@ function ClusterAppsPage() {
   });
   const [showDeleteFailed, setShowDeleteFailed] = useState(false);
   const [showRepoModal, setShowRepoModal] = useState(false);
-  const { data: repos, isLoading: reposLoading } = useHelmRepositories();
+  const { data: repos, isLoading: reposLoading } = useHelmRepositories(clusterId);
+  const { data: catalogApplications } = useCatalogApplications();
+  const applicationSources = useApplicationCatalogSources();
+  const discovery = useCatalogUserDiscovery();
+  const setFavorite = useSetCatalogChartFavorite();
   const syncRepo = useSyncHelmRepository();
   const deleteRepo = useDeleteHelmRepository();
 
@@ -291,65 +273,40 @@ function ClusterAppsPage() {
   const [debouncedSearchQ] = useDebouncedValue(searchQ, { wait: 200 });
   const browse = useQuery({
     queryKey: queryKeys.clusterPages.appCatalogBrowse(
-      projectId,
+      clusterId,
       debouncedSearchQ,
     ),
     queryFn: () =>
       listCatalogCharts({
-        projectId,
-        limit: 60,
+        clusterId,
+        limit: 200,
         search: debouncedSearchQ || undefined,
       }),
-    enabled: section === "browse" && !!projectId,
+    enabled: section === "browse" && !!clusterId,
   });
 
-  const recommended = useQuery({
-    queryKey: queryKeys.clusterPages.appCatalogRecommended(projectId),
-    queryFn: () => listRecommendedCharts(projectId, 12),
-    enabled: section === "recommended" && !!projectId,
-  });
-
-  // Deep-link auto-open: when ?install=<chartName> is present and we
-  // haven't already opened a modal (so refreshes/re-navigations don't
-  // re-trigger), look up the chart in browse results and pop the
-  // install modal. Strips the query param after consuming so a manual
-  // refresh doesn't replay the auto-open.
+  // Deep links resolve to the full chart page instead of opening a modal.
   useEffect(() => {
     if (!requestedInstall) return;
-    if (modal.kind !== "none") return;
     if (browse.isLoading || !browse.data) return;
     const match = browse.data.items.find((c) => c.name === requestedInstall);
     if (match) {
-      if (!catalogCreateDecision.allowed) {
-        toastPermissionDenied(catalogCreateDecision);
-        router.replace(
-          `/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`,
-        );
-        return;
-      }
-      setModal({ kind: "install", chartId: match.id, chartName: match.name });
-      // Drop the query param so a back-button + re-navigate doesn't loop.
       router.replace(
-        `/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`,
+        `/dashboard/clusters/${clusterId}/apps/charts/${match.id}`,
       );
     }
   }, [
     requestedInstall,
     browse.data,
     browse.isLoading,
-    modal.kind,
     router,
     clusterId,
-    projectId,
-    catalogCreateDecision,
   ]);
 
-  const openInstall = (chartId: string, chartName: string) => {
-    if (!catalogCreateDecision.allowed) {
-      toastPermissionDenied(catalogCreateDecision);
-      return;
-    }
-    setModal({ kind: "install", chartId, chartName });
+  const openInstall = (chartId: string, _chartName: string) => {
+    router.push(
+      `/dashboard/clusters/${clusterId}/apps/charts/${chartId}`,
+    );
   };
 
   const openUpgrade = (row: ClusterAppRow) => {
@@ -421,71 +378,17 @@ function ClusterAppsPage() {
           </p>
         </div>
         <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          {section !== "repositories" && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Project visibility
-              <select
-                aria-label="Catalog project"
-                value={projectId}
-                onChange={(event) => setProjectId(event.target.value)}
-                className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                disabled={projectsQuery.isLoading}
-              >
-                <option value="">Select a project</option>
-                {clusterProjects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.displayName || project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
           {section === "repositories" && (
             <ActionButton
               intent="primary"
               icon={<Plus className="h-4 w-4" />}
               onClick={() => setShowRepoModal(true)}
             >
-              Add Repository
+              Add Catalog Source
             </ActionButton>
           )}
         </div>
       </header>
-
-      <nav className="flex items-center gap-1 border-b border-border">
-        {(
-          ["installed", "browse", "recommended", "repositories"] as Section[]
-        ).map((s) => {
-          const active = section === s;
-          const count =
-            s === "installed"
-              ? installed.data?.total
-              : s === "browse"
-                ? browse.data?.total
-                : s === "recommended"
-                  ? recommended.data?.length
-                  : repos?.length;
-          return (
-            <button
-              key={s}
-              onClick={() => setSection(s)}
-              className={
-                "px-3 py-2 text-sm border-b-2 -mb-px transition-colors " +
-                (active
-                  ? "border-primary text-foreground font-medium"
-                  : "border-transparent text-muted-foreground hover:text-foreground")
-              }
-            >
-              {s[0].toUpperCase() + s.slice(1)}
-              {count != null && (
-                <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
-                  ({count})
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
 
       {section === "installed" && (
         <InstalledView
@@ -498,25 +401,22 @@ function ClusterAppsPage() {
           onDeleteFailed={openDeleteFailed}
         />
       )}
-      {(section === "browse" || section === "recommended") && !projectId && (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
-          <Package className="mx-auto h-7 w-7 text-muted-foreground" />
-          <p className="mt-3 text-sm font-medium text-foreground">
-            Select a project
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Chart visibility and install authorization are isolated by project.
-          </p>
-        </div>
-      )}
-      {section === "browse" && projectId && (
+      {section === "browse" && (
         <BrowseView
+          clusterId={clusterId}
           q={browse}
           search={searchQ}
           setSearch={setSearchQ}
           installed={installed.data?.items ?? []}
-          installDecision={catalogCreateDecision}
           onInstall={openInstall}
+          repositories={repos ?? []}
+          catalogApplications={catalogApplications}
+          applicationSources={applicationSources.data}
+          discovery={discovery.data}
+          favoritePending={setFavorite.isPending}
+          onFavorite={(chartId, favorite) =>
+            setFavorite.mutate({ clusterId, chartId, favorite })
+          }
         />
       )}
       {section === "repositories" && (
@@ -534,32 +434,9 @@ function ClusterAppsPage() {
           />
         </div>
       )}
-      {section === "recommended" && projectId && (
-        <RecommendedView
-          q={recommended}
-          installed={installed.data?.items ?? []}
-          installDecision={catalogCreateDecision}
-          onInstall={openInstall}
-        />
-      )}
-
       {/* Modal layer */}
-      {modal.kind === "install" && (
-        <AppInstallModal
-          projectId={projectId}
-          clusterId={clusterId}
-          mode={{
-            kind: "install",
-            chartId: modal.chartId,
-            chartName: modal.chartName,
-          }}
-          submitDecision={catalogCreateDecision}
-          onClose={() => setModal({ kind: "none" })}
-        />
-      )}
       {modal.kind === "upgrade" && (
         <AppInstallModal
-          projectId={projectId}
           clusterId={clusterId}
           mode={{
             kind: "upgrade",
@@ -972,13 +849,20 @@ function InstalledRow({
 // Browse view
 // ---------------------------------------------------------------------
 function BrowseView({
+  clusterId,
   q,
   search,
   setSearch,
   installed,
-  installDecision,
   onInstall,
+  repositories,
+  catalogApplications,
+  applicationSources,
+  discovery,
+  favoritePending,
+  onFavorite,
 }: {
+  clusterId: string;
   q: ReturnType<
     typeof useQuery<{
       items: import("@/lib/api/cluster-detail").CatalogChartSummary[];
@@ -988,38 +872,294 @@ function BrowseView({
   search: string;
   setSearch: (s: string) => void;
   installed: ClusterAppRow[];
-  installDecision: PermissionDecision;
   onInstall: (chartId: string, chartName: string) => void;
+  repositories: import("@/types").HelmRepository[];
+  catalogApplications:
+    | import("@/lib/api/catalog").CatalogApplicationPresentation[]
+    | undefined;
+  applicationSources:
+    | import("@/lib/api/catalog").ApplicationCatalogSource[]
+    | undefined;
+  discovery: import("@/lib/api/catalog").CatalogUserDiscovery[] | undefined;
+  favoritePending: boolean;
+  onFavorite: (chartId: string, favorite: boolean) => void;
 }) {
+  const [sourceFamily, setSourceFamily] = useState<
+    "all" | CatalogSourceFamily
+  >("all");
+  const [repositoryId, setRepositoryId] = useState("all");
+  const [category, setCategory] = useState("all");
+  const [featuredOnly, setFeaturedOnly] = useState(false);
+  const [personalView, setPersonalView] = useState<"all" | "favorites" | "recent">("all");
+  const [sortBy, setSortBy] = useState<"recommended" | "name" | "source">("recommended");
+  const repositoriesById = useMemo(
+    () => new Map(repositories.map((repository) => [repository.id, repository])),
+    [repositories],
+  );
+  const presentations = useMemo(
+    () => buildCatalogPresentationIndex(catalogApplications),
+    [catalogApplications],
+  );
+  const discoveryByChart = useMemo(
+    () => new Map((discovery ?? []).map((item) => [item.chartId, item])),
+    [discovery],
+  );
+  const visibleCharts = useMemo(() => {
+    return (q.data?.items ?? [])
+      .map((chart) => {
+        const repository = repositoriesById.get(chart.repositoryId);
+        const presentation = presentations.get(
+          `${repository?.name || ""}/${chart.name}`,
+        );
+        return {
+          ...chart,
+          displayName: presentation?.displayName || chart.displayName,
+          description: presentation?.description || chart.description,
+          iconUrl: presentation?.iconUrl || chart.iconUrl,
+          category: presentation?.category || chart.category,
+          featured: presentation?.featured ?? false,
+          catalogSource: catalogSourcePresentation(
+            repository,
+            Boolean(presentation),
+            {
+              repositoryId: chart.repositoryId,
+              repositoryName: repository?.name,
+            },
+            presentation?.supportTier === "Astronomer" &&
+              presentation.slug === "constellation",
+          ),
+        };
+      })
+      .filter(
+        (chart) =>
+          (sourceFamily === "all" ||
+            chart.catalogSource.family === sourceFamily) &&
+          (repositoryId === "all" ||
+            chart.catalogSource.repositoryId === repositoryId) &&
+          (category === "all" || chart.category === category) &&
+          (!featuredOnly || chart.featured) &&
+          (personalView === "all" ||
+            (personalView === "favorites" &&
+              discoveryByChart.get(chart.id)?.favorite) ||
+            (personalView === "recent" &&
+              discoveryByChart.get(chart.id)?.lastViewedAt)),
+      )
+      .sort((left, right) => {
+        if (personalView === "recent") {
+          return Date.parse(discoveryByChart.get(right.id)?.lastViewedAt ?? "") -
+            Date.parse(discoveryByChart.get(left.id)?.lastViewedAt ?? "");
+        }
+        if (sortBy === "name") return left.displayName.localeCompare(right.displayName);
+        if (sortBy === "source") return left.catalogSource.label.localeCompare(right.catalogSource.label) || left.displayName.localeCompare(right.displayName);
+        return Number(right.featured) - Number(left.featured) ||
+          (left.catalogSource.family === "first-party" ? -1 : right.catalogSource.family === "first-party" ? 1 : 0) ||
+          left.displayName.localeCompare(right.displayName);
+      });
+  }, [category, discoveryByChart, featuredOnly, personalView, presentations, q.data?.items, repositoriesById, repositoryId, sortBy, sourceFamily]);
+  const sourceCounts = useMemo(() => {
+    const counts = {
+      all: 0,
+      "first-party": 0,
+      curated: 0,
+      community: 0,
+      custom: 0,
+    };
+    for (const chart of q.data?.items ?? []) {
+      const repository = repositoriesById.get(chart.repositoryId);
+      const curated = presentations.has(
+        `${repository?.name || ""}/${chart.name}`,
+      );
+      const presentation = presentations.get(
+        `${repository?.name || ""}/${chart.name}`,
+      );
+      const source = catalogSourcePresentation(
+        repository,
+        curated,
+        {
+          repositoryId: chart.repositoryId,
+          repositoryName: repository?.name,
+        },
+        presentation?.supportTier === "Astronomer" &&
+          presentation.slug === "constellation",
+      );
+      counts.all += 1;
+      counts[source.family] += 1;
+    }
+    return counts;
+  }, [presentations, q.data?.items, repositoriesById]);
   // Build a name→releases index so each Browse card knows whether
   // it's already on this cluster (and via what install path). This
   // is the cheap version of "drift detection" — we don't reconcile
   // helm releases, we just notice when the catalog browse offers
   // something the cluster already has.
-  const installedByChart = new Map<string, ClusterAppRow>();
+  const installedByChart = new Map<string, ClusterAppRow[]>();
   for (const r of installed) {
-    if (r.chartName) installedByChart.set(r.chartName, r);
-    else if (r.toolSlug) installedByChart.set(r.toolSlug, r);
+    const name = r.chartName || r.toolSlug;
+    if (!name) continue;
+    installedByChart.set(name, [...(installedByChart.get(name) ?? []), r]);
   }
+
+  const favoritesCount = [...discoveryByChart.values()].filter(
+    (item) => item.favorite,
+  ).length;
+  const recentCount = [...discoveryByChart.values()].filter(
+    (item) => item.lastViewedAt,
+  ).length;
+  const sourceFailures = (applicationSources ?? []).filter(
+    (source) => Boolean(source.last_sync_error),
+  );
+  const repositoryFailures = repositories.filter(
+    (repository) =>
+      repository.enabled &&
+      (Boolean(repository.lastSyncError) || !repository.lastSyncedAt),
+  );
+  const catalogIssueCount = sourceFailures.length + repositoryFailures.length;
+  const verifiedSources = (applicationSources ?? []).filter((source) =>
+    ["verified", "digest-verified"].includes(source.verification_status),
+  );
+  const latestCatalogSync = applicationSources
+    ?.map((source) => source.last_synced_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
 
   return (
     <div className="space-y-3">
-      <div className="relative max-w-md">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search charts (kube-prometheus, loki, …)"
-          className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm
-            placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5",
+          catalogIssueCount
+            ? "border-status-warning/40 bg-status-warning/5"
+            : "border-status-success/30 bg-status-success/5",
+        )}
+      >
+        <div className="flex items-center gap-2">
+          {catalogIssueCount ? (
+            <ShieldAlert className="h-4 w-4 text-status-warning" />
+          ) : (
+            <ShieldCheck className="h-4 w-4 text-status-success" />
+          )}
+          <div>
+            <p className="text-xs font-semibold text-foreground">
+              {catalogIssueCount
+                ? `${catalogIssueCount} catalog source refresh ${catalogIssueCount === 1 ? "issue" : "issues"}`
+                : `${verifiedSources.length} verified catalog ${verifiedSources.length === 1 ? "source" : "sources"}`}
+            </p>
+            <p className="text-2xs text-table-secondary">
+              {catalogIssueCount
+                ? "Verified cached content remains available. Open Repositories for remediation details."
+                : latestCatalogSync
+                  ? `Last synchronized ${formatRelativeTime(latestCatalogSync)}`
+                  : "Catalog synchronization has not completed yet."}
+            </p>
+          </div>
+        </div>
+        <Link
+          href={`/dashboard/clusters/${clusterId}/apps/repositories`}
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          View trust &amp; sync →
+        </Link>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-64 max-w-md flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search charts (kube-prometheus, loki, …)"
+            className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm
+              placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
+        <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+          {(["first-party", "curated", "community", "custom", "all"] as const).map(
+            (family) => (
+              <button
+                key={family}
+                type="button"
+                aria-pressed={sourceFamily === family}
+                onClick={() => {
+                  setSourceFamily(family);
+                  setRepositoryId("all");
+                }}
+                className={cn(
+                  "rounded px-2 py-1.5 text-xs font-medium transition-colors",
+                  sourceFamily === family
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {family === "first-party"
+                  ? "First Party"
+                  : family === "curated"
+                  ? "Curated"
+                  : family === "community"
+                    ? "Community"
+                    : family === "custom"
+                      ? "Custom"
+                      : "All"}{" "}
+                ({sourceCounts[family]})
+              </button>
+            ),
+          )}
+        </div>
+        <select
+          aria-label="Filter by repository"
+          value={repositoryId}
+          onChange={(event) => setRepositoryId(event.target.value)}
+          className="h-9 max-w-52 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+        >
+          <option value="all">All sources</option>
+          {repositories.map((repository) => (
+            <option key={repository.id} value={repository.id}>
+              {repository.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Filter by category" value={category} onChange={(event) => setCategory(event.target.value)} className="h-9 max-w-44 rounded-md border border-border bg-background px-2 text-xs text-foreground">
+          <option value="all">All categories</option>
+          {[...new Set((q.data?.items ?? []).map((chart) => chart.category))].sort().map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <select aria-label="Sort charts" value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)} className="h-9 max-w-44 rounded-md border border-border bg-background px-2 text-xs text-foreground">
+          <option value="recommended">Recommended first</option>
+          <option value="name">Name</option>
+          <option value="source">Source</option>
+        </select>
+        <label className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground">
+          <input type="checkbox" checked={featuredOnly} onChange={(event) => setFeaturedOnly(event.target.checked)} className="h-4 w-4 rounded border-border" /> Featured
+        </label>
+        <div className="inline-flex h-9 items-center rounded-md border border-border bg-background p-0.5">
+          {([
+            ["all", "All", q.data?.total ?? 0],
+            ["favorites", "Favorites", favoritesCount],
+            ["recent", "Recent", recentCount],
+          ] as const).map(([value, label, count]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={personalView === value}
+              onClick={() => setPersonalView(value)}
+              className={cn(
+                "inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-medium",
+                personalView === value
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {value === "favorites" && <Star className="h-3 w-3" />}
+              {value === "recent" && <Clock3 className="h-3 w-3" />}
+              {label} ({count})
+            </button>
+          ))}
+        </div>
       </div>
       {q.isLoading ? (
         <div className="flex items-center justify-center h-32 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading catalog…
         </div>
-      ) : (q.data?.items.length ?? 0) === 0 ? (
+      ) : visibleCharts.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-6 text-center">
           <p className="text-sm font-medium text-foreground">
             No matching charts
@@ -1030,24 +1170,22 @@ function BrowseView({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {q.data!.items.map((c) => {
-            const existing = installedByChart.get(c.name);
+          {visibleCharts.map((c) => {
+            const existing = installedByChart.get(c.name) ?? [];
+            const discoveryEntry = discoveryByChart.get(c.id);
+            const installedVersions = [...new Set(existing.map((row) => row.chartVersion).filter(Boolean))];
+            const installedTargets = new Set(existing.map((row) => row.clusterId)).size;
             return (
               <article
                 key={c.id}
                 className="border border-border rounded-lg p-3 flex gap-3 bg-card hover:border-muted-foreground/40 transition-colors"
               >
-                <div className="h-10 w-10 flex-shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                  {c.iconUrl ? (
-                    <img
-                      src={c.iconUrl}
-                      alt=""
-                      className="h-10 w-10 object-contain"
-                    />
-                  ) : (
-                    <Box className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
+                <CatalogIcon
+                  src={c.iconUrl}
+                  label={c.displayName || c.name}
+                  className="h-10 w-10 rounded-md"
+                  imageClassName="h-9 w-9"
+                />
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-medium text-sm text-foreground truncate">
@@ -1058,34 +1196,47 @@ function BrowseView({
                         deprecated
                       </span>
                     )}
+                    <button
+                      type="button"
+                      aria-label={discoveryEntry?.favorite ? `Remove ${c.displayName} from favorites` : `Add ${c.displayName} to favorites`}
+                      aria-pressed={Boolean(discoveryEntry?.favorite)}
+                      disabled={favoritePending}
+                      onClick={() => onFavorite(c.id, !discoveryEntry?.favorite)}
+                      className={cn(
+                        "rounded p-1 transition-colors hover:bg-muted disabled:opacity-50",
+                        discoveryEntry?.favorite
+                          ? "text-status-warning"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <Star className={cn("h-4 w-4", discoveryEntry?.favorite && "fill-current")} />
+                    </button>
                   </div>
                   {c.description && (
                     <p className="text-xs text-muted-foreground line-clamp-2">
                       {c.description}
                     </p>
                   )}
+                  <CatalogSourceBadge source={c.catalogSource} compact />
                   <div className="flex items-center justify-between gap-2 pt-1">
-                    {existing ? (
-                      <span className="text-[11px] text-status-success font-medium inline-flex items-center gap-1">
-                        Installed
-                        {existing.sourceKind === "tool" && (
+                    {existing.length ? (
+                      <span className="text-[11px] text-status-success font-medium">
+                        {installedTargets} target{installedTargets === 1 ? "" : "s"}
+                        {` · ${existing.length} release${existing.length === 1 ? "" : "s"}`}
+                        {installedVersions.length ? ` · ${installedVersions.join(", ")}` : ""}
+                        {existing.some((row) => row.sourceKind === "tool") && (
                           <span className="text-muted-foreground font-normal">
-                            (via Tools)
+                            {" "}(via Tools)
                           </span>
                         )}
                       </span>
                     ) : (
                       <button
-                        className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                        disabled={!installDecision.allowed}
-                        title={
-                          !installDecision.allowed
-                            ? permissionDeniedReason(installDecision)
-                            : "Install chart"
-                        }
+                        className="inline-flex h-9 items-center gap-1 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                        title="View details and install this chart"
                         onClick={() => onInstall(c.id, c.name)}
                       >
-                        Install →
+                        View &amp; install →
                       </button>
                     )}
                     {c.homeUrl && (
@@ -1112,7 +1263,7 @@ function BrowseView({
 // ---------------------------------------------------------------------
 // Recommended view
 // ---------------------------------------------------------------------
-function RecommendedView({
+function _RecommendedView({
   q,
   installed,
   installDecision,

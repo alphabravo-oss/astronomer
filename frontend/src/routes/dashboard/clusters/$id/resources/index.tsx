@@ -204,7 +204,7 @@ function AcceptedBadge({ status }: { status: string }) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
       <CircleHelp className="h-3 w-3" /> Unknown
     </span>
   );
@@ -276,7 +276,7 @@ function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
               {(r.policyTypes ?? []).map((t) => (
                 <span
                   key={t}
-                  className="mr-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs"
+                  className="mr-1 rounded-full bg-muted px-2 py-0.5 text-xs"
                 >
                   {t}
                 </span>
@@ -284,11 +284,11 @@ function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
             </TableCell>
             <TableCell className="py-2">
               {r.isManaged ? (
-                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
                   astronomer
                 </span>
               ) : (
-                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                   operator
                 </span>
               )}
@@ -320,7 +320,7 @@ function QuotaProgressRow({
       : null;
   const barColor =
     pct == null
-      ? "bg-zinc-400"
+      ? "bg-muted-foreground"
       : pct > 90
         ? "bg-status-error"
         : pct > 75

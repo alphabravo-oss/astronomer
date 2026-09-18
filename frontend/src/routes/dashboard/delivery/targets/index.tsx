@@ -19,11 +19,15 @@ import {
 } from "@/components/delivery/shared";
 import {
   createDeliveryTarget,
+  listDeliveryConfigurationTemplates,
+  listDeliveryOverrideSets,
+  listClusterDeployments,
   listComponentBundles,
   listComponentBundleVersions,
   listDeliveryTargets,
   type DeliveryTarget,
   type DeliveryTargetRequest,
+  type ClusterDeployment,
   type DriftPolicy,
 } from "@/lib/api/delivery";
 import {
@@ -60,6 +64,19 @@ export function TargetsPage() {
     enabled: Boolean(projectId && allowed),
     refetchInterval: liveFallback(20_000),
   });
+  const deploymentQuery = useQuery({
+    queryKey: queryKeys.delivery.deployments(projectId, { limit: 200 }),
+    queryFn: ({ signal }) =>
+      listClusterDeployments(projectId, { limit: 200 }, signal),
+    enabled: Boolean(projectId && allowed),
+    refetchInterval: liveFallback(10_000),
+  });
+  const deploymentsByTarget = new Map<string, ClusterDeployment[]>();
+  for (const deployment of deploymentQuery.data?.data ?? []) {
+    const rows = deploymentsByTarget.get(deployment.targetId) ?? [];
+    rows.push(deployment);
+    deploymentsByTarget.set(deployment.targetId, rows);
+  }
   useLiveQueryInvalidation(
     "delivery_target.changed",
     projectId
@@ -98,6 +115,59 @@ export function TargetsPage() {
         ),
     },
     {
+      key: "clusters",
+      header: "Ready / desired",
+      accessor: (row) => {
+        const deployments = deploymentsByTarget.get(row.id) ?? [];
+        return `${deployments.filter((item) => item.phase === "ready").length} / ${deployments.length}`;
+      },
+    },
+    {
+      key: "revision",
+      header: "Revision",
+      accessor: (row) => {
+        const revisions = [
+          ...new Set(
+            (deploymentsByTarget.get(row.id) ?? [])
+              .map((item) => item.observedRevision || item.desiredRevision)
+              .filter(Boolean),
+          ),
+        ];
+        return (
+          <span className="font-mono text-xs">
+            {revisions.length === 0
+              ? "Not observed"
+              : revisions.length === 1
+                ? revisions[0]
+                : `${revisions.length} revisions`}
+          </span>
+        );
+      },
+    },
+    {
+      key: "source",
+      header: "Source",
+      accessor: (row) => {
+        const deployment = (deploymentsByTarget.get(row.id) ?? [])[0];
+        return deployment
+          ? `${deployment.sourceKind} ${deployment.sourceName}`
+          : "Pending assignment";
+      },
+    },
+    {
+      key: "drift",
+      header: "Drift",
+      accessor: (row) => {
+        const count = (deploymentsByTarget.get(row.id) ?? []).filter((item) =>
+          item.conditions.some(
+            (condition) =>
+              condition.type === "Drifted" && condition.status === "True",
+          ),
+        ).length;
+        return count > 0 ? <DeliveryPhaseBadge value="drifted" /> : "In sync";
+      },
+    },
+    {
       key: "approval",
       header: "Approval",
       accessor: (row) =>
@@ -120,8 +190,17 @@ export function TargetsPage() {
     },
     {
       key: "updated",
-      header: "Updated",
+      header: "Age",
       accessor: (row) => formatRelativeTime(row.updatedAt),
+    },
+    {
+      key: "actor",
+      header: "Last actor",
+      accessor: (row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.lastActorId?.slice(0, 12) || "system"}
+        </span>
+      ),
     },
   ];
   return (
@@ -206,6 +285,20 @@ function CreateTargetDialog({
       listComponentBundleVersions(projectId, bundleId, { limit: 200 }, signal),
     enabled: Boolean(bundleId),
   });
+  const templates = useQuery({
+    queryKey: queryKeys.delivery.configurationTemplates(projectId, {
+      limit: 200,
+    }),
+    queryFn: ({ signal }) =>
+      listDeliveryConfigurationTemplates(projectId, { limit: 200 }, signal),
+    enabled: Boolean(projectId),
+  });
+  const overrides = useQuery({
+    queryKey: queryKeys.delivery.overrideSets(projectId, { limit: 200 }),
+    queryFn: ({ signal }) =>
+      listDeliveryOverrideSets(projectId, { limit: 200 }, signal),
+    enabled: Boolean(projectId),
+  });
   const mutation = useMutation({
     mutationFn: (body: DeliveryTargetRequest) =>
       createDeliveryTarget(body, crypto.randomUUID()),
@@ -250,6 +343,11 @@ function CreateTargetDialog({
           drift,
         },
         maintenance_window_policy: maintenance,
+        configuration_template_id:
+          String(form.get("configuration_template_id") ?? "") || undefined,
+        override_set_ids: form
+          .getAll("override_set_ids")
+          .map((value) => String(value)),
         suspended: form.get("suspended") === "on",
       });
     } catch (error) {
@@ -315,6 +413,55 @@ function CreateTargetDialog({
             </select>
           </Field>
         </div>
+        <fieldset className="space-y-4 rounded-md border border-border p-4">
+          <legend className="px-1 text-sm font-medium">
+            Effective configuration
+          </legend>
+          <p className="text-sm text-muted-foreground">
+            The selected template and enabled override layers are resolved,
+            conflict-checked, and frozen into the rollout digest.
+          </p>
+          <Field label="Base configuration template">
+            <select name="configuration_template_id" className={inputClass}>
+              <option value="">Use bundle defaults</option>
+              {templates.data?.data.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} · {template.renderer}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(overrides.data?.data ?? [])
+              .filter((item) => item.enabled)
+              .map((item) => (
+                <label
+                  key={item.id}
+                  className="flex items-start gap-2 rounded-md border border-border p-3 text-sm"
+                >
+                  <input
+                    name="override_set_ids"
+                    type="checkbox"
+                    value={item.id}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="block font-medium">{item.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {item.scope} · precedence {item.precedence}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            {!overrides.isLoading &&
+              (overrides.data?.data ?? []).filter((item) => item.enabled)
+                .length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No enabled override sets are available.
+                </p>
+              )}
+          </div>
+        </fieldset>
         <fieldset className="space-y-4 rounded-md border border-border p-4">
           <legend className="px-1 text-sm font-medium">
             Placement selector

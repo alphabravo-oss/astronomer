@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,8 +16,10 @@ import (
 	"sync"
 	"time"
 
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"sigs.k8s.io/yaml"
 
@@ -24,6 +27,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/catalog"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
+	"github.com/alphabravocompany/astronomer-go/internal/delivery/catalogapp"
 	"github.com/alphabravocompany/astronomer-go/internal/events"
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/httpclient"
@@ -132,6 +136,34 @@ type catalogOperationPager interface {
 	CountCatalogOperationsForScopes(ctx context.Context, arg sqlc.CountCatalogOperationsForScopesParams) (int64, error)
 }
 
+type applicationCatalogQuerier interface {
+	ListApplicationCatalogPresentations(ctx context.Context) ([]sqlc.ListApplicationCatalogPresentationsRow, error)
+	GetApplicationCatalogPresentationByChartVersion(ctx context.Context, id uuid.UUID) (sqlc.CatalogBlessedChart, error)
+}
+
+type catalogProjectNamespaceLister interface {
+	ListProjectNamespaces(ctx context.Context, projectID uuid.UUID) ([]sqlc.ProjectNamespace, error)
+}
+
+type catalogClusterProjectResolver interface {
+	ListProjectsByCluster(ctx context.Context, arg sqlc.ListProjectsByClusterParams) ([]sqlc.Project, error)
+	GetProjectNamespaceByClusterAndNamespace(ctx context.Context, arg sqlc.GetProjectNamespaceByClusterAndNamespaceParams) (sqlc.ProjectNamespace, error)
+}
+
+type applicationCatalogSourceQuerier interface {
+	ListApplicationCatalogSources(ctx context.Context) ([]sqlc.DeliveryCatalog, error)
+}
+
+type catalogUserDiscoveryQuerier interface {
+	ListCatalogUserDiscovery(ctx context.Context, userID uuid.UUID) ([]sqlc.ListCatalogUserDiscoveryRow, error)
+	RecordCatalogChartView(ctx context.Context, arg sqlc.RecordCatalogChartViewParams) error
+	SetCatalogChartFavorite(ctx context.Context, arg sqlc.SetCatalogChartFavoriteParams) (sqlc.SetCatalogChartFavoriteRow, error)
+}
+
+type catalogUpgradeVersionQuerier interface {
+	ListUpgradeVersionsForInstalledChart(ctx context.Context, id uuid.UUID) ([]sqlc.HelmChartVersion, error)
+}
+
 // CatalogMutationTx is the transaction-bound write surface for repository and
 // installed-chart lifecycle changes. Production supplies sqlc.New(tx), so the
 // domain row, durable operation intent, and mandatory audit intent share one
@@ -160,12 +192,13 @@ type catalogMutationResult[T any] struct {
 
 // CatalogHandler handles catalog endpoints (helm repositories, charts, installations).
 type CatalogHandler struct {
-	queries CatalogQuerier
-	helm    HelmRequester
-	log     *slog.Logger
-	authz   authorizationSupport
-	mu      sync.Mutex
-	trigger chan struct{}
+	queries  CatalogQuerier
+	helm     HelmRequester
+	delivery CatalogApplicationDelivery
+	log      *slog.Logger
+	authz    authorizationSupport
+	mu       sync.Mutex
+	trigger  chan struct{}
 	// helmConcurrency caps the number of executeOperation goroutines
 	// dispatched per reconciler tick. Zero falls back to the package
 	// default (see effectiveHelmConcurrency).
@@ -185,6 +218,23 @@ type CatalogHandler struct {
 	// credential-bearing write fails closed when this dependency is absent.
 	encryptor *auth.Encryptor
 	runTx     catalogRunTxFunc
+}
+
+// CatalogApplicationDelivery is the Flux-native lifecycle seam. Production
+// wires catalogapp.Service; keeping the interface narrow leaves handler tests
+// independent of PostgreSQL and the rollout planner.
+type CatalogApplicationDelivery interface {
+	Install(context.Context, catalogapp.InstallRequest) (catalogapp.InstallResult, error)
+	Upgrade(context.Context, catalogapp.InstallRequest) (catalogapp.InstallResult, error)
+	Uninstall(context.Context, uuid.UUID, pgtype.UUID) error
+	Rollback(context.Context, uuid.UUID, pgtype.UUID, string) (catalogapp.InstallResult, error)
+	Status(context.Context, uuid.UUID) (catalogapp.Status, error)
+}
+
+func (h *CatalogHandler) SetApplicationDelivery(delivery CatalogApplicationDelivery) {
+	if h != nil {
+		h.delivery = delivery
+	}
 }
 
 // SetRunTx wires the production transaction boundary used for catalog state,
@@ -388,6 +438,36 @@ func (h *CatalogHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
 		// ListCatalogsForProject returns the full authorized set.
 		RespondList(w, helmRepositoriesToResponse(h.redactHelmRepositories(rows), h.chartCountsFor(r.Context(), rows)),
 			NewPagination(len(rows), len(rows), 0, len(rows)))
+		return
+	}
+
+	if clusterRaw := strings.TrimSpace(r.URL.Query().Get("cluster_id")); clusterRaw != "" {
+		clusterID, err := uuid.Parse(clusterRaw)
+		if err != nil {
+			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster_id query param")
+			return
+		}
+		ids, err := h.visibleCatalogRepositoryIDs(r.Context(), clusterID)
+		if err != nil {
+			if errors.Is(err, errCatalogClusterAccessDenied) {
+				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have catalog access on this cluster")
+			} else {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve cluster catalogs")
+			}
+			return
+		}
+		start := min(int(offset), len(ids))
+		end := min(start+int(limit), len(ids))
+		repositories := make([]sqlc.HelmRepository, 0, end-start)
+		for _, id := range ids[start:end] {
+			repository, getErr := h.queries.GetHelmRepositoryByID(r.Context(), id)
+			if getErr != nil {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to load cluster catalog")
+				return
+			}
+			repositories = append(repositories, repository)
+		}
+		RespondList(w, helmRepositoriesToResponse(h.redactHelmRepositories(repositories), h.chartCountsFor(r.Context(), repositories)), NewPagination(len(ids), len(repositories), int(offset), int(limit)))
 		return
 	}
 
@@ -1105,6 +1185,135 @@ func catalogProjectQuery(w http.ResponseWriter, r *http.Request) (uuid.UUID, boo
 	return projectID, true, true
 }
 
+func catalogClusterQuery(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("cluster_id"))
+	if raw == "" {
+		return uuid.Nil, false, true
+	}
+	clusterID, err := uuid.Parse(raw)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster_id query param")
+		return uuid.Nil, false, false
+	}
+	return clusterID, true, true
+}
+
+// catalogCallerAllowsTarget evaluates catalog RBAC at the deployment target.
+// Project membership remains meaningful, but the namespace is the user-facing
+// target and the project is inferred from it rather than supplied by the UI.
+func (h *CatalogHandler) catalogCallerAllowsTarget(ctx context.Context, clusterID uuid.UUID, projectID uuid.UUID, namespace string, verb rbac.Verb) (bool, error) {
+	bindings, restricted, err := h.authz.bindingsForContext(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !restricted {
+		return true, nil
+	}
+	if h.authz.engine == nil {
+		return false, nil
+	}
+	return h.authz.engine.CheckPermission(bindings, rbac.ResourceCatalog, verb, clusterID, projectID, namespace), nil
+}
+
+func (h *CatalogHandler) resolveCatalogTargetProject(ctx context.Context, clusterID uuid.UUID, namespace string) (uuid.UUID, bool, error) {
+	resolver, ok := h.queries.(catalogClusterProjectResolver)
+	if !ok {
+		return uuid.Nil, false, errCatalogProjectResolverUnavailable
+	}
+	row, err := resolver.GetProjectNamespaceByClusterAndNamespace(ctx, sqlc.GetProjectNamespaceByClusterAndNamespaceParams{
+		ClusterID: clusterID,
+		Namespace: namespace,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	return row.ProjectID, true, nil
+}
+
+// visibleCatalogRepositoryIDs resolves the cluster's catalog union for the
+// caller: global sources plus private sources owned by a project the caller can
+// read. A cluster-wide catalog grant sees all project sources on that cluster;
+// a project/namespace grant sees only its own project sources.
+func (h *CatalogHandler) visibleCatalogRepositoryIDs(ctx context.Context, clusterID uuid.UUID) ([]uuid.UUID, error) {
+	resolver, ok := h.queries.(catalogClusterProjectResolver)
+	if !ok {
+		return nil, errors.New("cluster project resolver is unavailable")
+	}
+	projects, err := resolver.ListProjectsByCluster(ctx, sqlc.ListProjectsByClusterParams{
+		ClusterID: clusterID,
+		Limit:     10_000,
+		Offset:    0,
+	})
+	if err != nil {
+		return nil, err
+	}
+	bindings, restricted, err := h.authz.bindingsForContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	allows := func(projectID uuid.UUID, namespace string) bool {
+		if !restricted {
+			return true
+		}
+		return h.authz.engine != nil && h.authz.engine.CheckPermission(bindings, rbac.ResourceCatalog, rbac.VerbRead, clusterID, projectID, namespace)
+	}
+	clusterWide := allows(uuid.Nil, "")
+	allowedProjects := make([]uuid.UUID, 0, len(projects))
+	for _, project := range projects {
+		allowed := clusterWide || allows(project.ID, "")
+		if !allowed {
+			if lister, ok := h.queries.(catalogProjectNamespaceLister); ok {
+				namespaces, listErr := lister.ListProjectNamespaces(ctx, project.ID)
+				if listErr != nil {
+					return nil, listErr
+				}
+				for _, item := range namespaces {
+					if item.ClusterID == clusterID && allows(project.ID, item.Namespace) {
+						allowed = true
+						break
+					}
+				}
+			}
+		}
+		if allowed {
+			allowedProjects = append(allowedProjects, project.ID)
+		}
+	}
+	if !clusterWide && len(allowedProjects) == 0 {
+		return nil, errCatalogClusterAccessDenied
+	}
+
+	repositorySet := make(map[uuid.UUID]struct{})
+	globals, err := h.queries.ListGlobalHelmRepositories(ctx, sqlc.ListGlobalHelmRepositoriesParams{Limit: 10_000, Offset: 0})
+	if err != nil {
+		return nil, err
+	}
+	for _, repository := range globals {
+		repositorySet[repository.ID] = struct{}{}
+	}
+	for _, projectID := range allowedProjects {
+		repositories, listErr := h.queries.ListCatalogsForProject(ctx, projectID)
+		if listErr != nil {
+			return nil, listErr
+		}
+		for _, repository := range repositories {
+			repositorySet[repository.ID] = struct{}{}
+		}
+	}
+	ids := make([]uuid.UUID, 0, len(repositorySet))
+	for id := range repositorySet {
+		ids = append(ids, id)
+	}
+	slices.SortFunc(ids, func(left, right uuid.UUID) int { return strings.Compare(left.String(), right.String()) })
+	return ids, nil
+}
+
+var errCatalogClusterAccessDenied = errors.New("catalog access denied for cluster")
+var errCatalogProjectResolverUnavailable = errors.New("project namespace resolver is unavailable")
+
 func catalogVisibilityAllowsRead(visibility sqlc.CatalogVisibility) bool {
 	switch visibility {
 	case sqlc.CatalogVisibilityOwn, sqlc.CatalogVisibilitySubscribedPublic, sqlc.CatalogVisibilityPublic:
@@ -1119,10 +1328,30 @@ func (h *CatalogHandler) authorizeChartRead(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return false
 	}
+	clusterID, clusterScoped, ok := catalogClusterQuery(w, r)
+	if !ok {
+		return false
+	}
 	repository, err := h.queries.GetHelmRepositoryByID(r.Context(), chart.RepositoryID)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart repository not found")
 		return false
+	}
+	if clusterScoped && !projectScoped {
+		visible, visibilityErr := h.visibleCatalogRepositoryIDs(r.Context(), clusterID)
+		if visibilityErr != nil {
+			if errors.Is(visibilityErr, errCatalogClusterAccessDenied) {
+				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have catalog access on this cluster")
+			} else {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to resolve cluster catalog visibility")
+			}
+			return false
+		}
+		if !slices.Contains(visible, repository.ID) {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+			return false
+		}
+		return true
 	}
 	if !projectScoped {
 		if repository.OwnerProjectID.Valid {
@@ -1165,10 +1394,14 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	clusterID, clusterScoped, ok := catalogClusterQuery(w, r)
+	if !ok {
+		return
+	}
 	if projectScoped && !h.authz.authorizeProjectAction(w, r, pid, rbac.ResourceCatalog, rbac.VerbRead) {
 		return
 	}
-	if !projectScoped && !h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead) {
+	if !projectScoped && !clusterScoped && !h.authz.authorizeGlobalAction(w, r, rbac.ResourceCatalog, rbac.VerbRead) {
 		return
 	}
 
@@ -1231,6 +1464,38 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if clusterScoped {
+		repoIDs, visibilityErr := h.visibleCatalogRepositoryIDs(r.Context(), clusterID)
+		if visibilityErr != nil {
+			if errors.Is(visibilityErr, errCatalogClusterAccessDenied) {
+				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have catalog access on this cluster")
+			} else {
+				RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to resolve cluster catalogs")
+			}
+			return
+		}
+		if len(repoIDs) == 0 {
+			RespondPaginated(w, r, []sqlc.HelmChart{}, 0)
+			return
+		}
+		charts, listErr := h.queries.ListChartsByRepositoryIDs(r.Context(), sqlc.ListChartsByRepositoryIDsParams{
+			RepositoryIds: repoIDs,
+			QueryLimit:    limit,
+			QueryOffset:   offset,
+		})
+		if listErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list cluster charts")
+			return
+		}
+		total, countErr := h.queries.CountChartsByRepositoryIDs(r.Context(), repoIDs)
+		if countErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count cluster charts")
+			return
+		}
+		RespondPaginated(w, r, charts, total)
+		return
+	}
+
 	charts, err := h.queries.ListHelmCharts(r.Context(), sqlc.ListHelmChartsParams{
 		Limit:  limit,
 		Offset: offset,
@@ -1249,6 +1514,232 @@ func (h *CatalogHandler) ListCharts(w http.ResponseWriter, r *http.Request) {
 	RespondPaginated(w, r, charts, total)
 }
 
+// ListCatalogApplications returns the server-owned presentation and trust
+// overlay synchronized from the immutable astronomer-catalog index. Helm chart
+// discovery remains repository-backed; clients join this small curated list by
+// repository name + chart name.
+func (h *CatalogHandler) ListCatalogApplications(w http.ResponseWriter, r *http.Request) {
+	store, ok := h.queries.(applicationCatalogQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Application catalog persistence is unavailable")
+		return
+	}
+	applications, err := store.ListApplicationCatalogPresentations(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalog applications")
+		return
+	}
+	// The OpenAPI contract for collection endpoints is the pagination object
+	// itself. Do not pass it through RespondJSON, which would add a second
+	// {"data": ...} envelope and break generated clients.
+	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{"data": applications, "count": len(applications)})
+}
+
+// ListApplicationCatalogSources exposes source identity, trust, freshness, and
+// bounded failure state independently from Helm repositories. The catalog UI
+// can therefore remain useful in disconnected environments and explain when
+// it is rendering a last-known-good snapshot.
+func (h *CatalogHandler) ListApplicationCatalogSources(w http.ResponseWriter, r *http.Request) {
+	store, ok := h.queries.(applicationCatalogSourceQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Application catalog source persistence is unavailable")
+		return
+	}
+	sources, err := store.ListApplicationCatalogSources(r.Context())
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list application catalog sources")
+		return
+	}
+	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{"data": sources, "count": len(sources)})
+}
+
+// openapi:request Operation_postCatalogApplicationsPreview
+type catalogInstallationPreviewRequest struct {
+	ClusterID      string `json:"cluster_id"`
+	ChartVersionID string `json:"chart_version_id"`
+	Namespace      string `json:"namespace"`
+	ValuesOverride string `json:"values_override"`
+}
+
+// openapi:request Operation_putCatalogChartsByIdFavorite
+type catalogFavoriteRequest struct {
+	Favorite bool `json:"favorite"`
+}
+
+type catalogPrerequisiteCheck struct {
+	Code        string `json:"code"`
+	Status      string `json:"status"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+// PreviewCatalogInstallation performs the bounded, side-effect-free checks
+// that can be answered from the server's synchronized catalog and cluster
+// inventory. Flux performs the final server-side reconciliation/dry-run after
+// acceptance; this preview prevents known-bad requests from being submitted.
+func (h *CatalogHandler) PreviewCatalogInstallation(w http.ResponseWriter, r *http.Request) {
+	var request catalogInstallationPreviewRequest
+	if !decodeAndValidate(w, r, &request) {
+		return
+	}
+	clusterID, err := uuid.Parse(request.ClusterID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid cluster_id is required")
+		return
+	}
+	versionID, err := uuid.Parse(request.ChartVersionID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid chart_version_id is required")
+		return
+	}
+	if strings.TrimSpace(request.Namespace) == "" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidRequest, "A namespace is required")
+		return
+	}
+	projectID, _, err := h.resolveCatalogTargetProject(r.Context(), clusterID, request.Namespace)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to resolve namespace ownership")
+		return
+	}
+	allowedTarget, err := h.catalogCallerAllowsTarget(r.Context(), clusterID, projectID, request.Namespace, rbac.VerbCreate)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+		return
+	}
+	if !allowedTarget {
+		RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to install applications in this namespace")
+		return
+	}
+	cluster, err := h.queries.GetClusterByID(r.Context(), clusterID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+		return
+	}
+	version, err := h.queries.GetHelmChartVersionByID(r.Context(), versionID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart version not found")
+		return
+	}
+	store, ok := h.queries.(applicationCatalogQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Application catalog persistence is unavailable")
+		return
+	}
+	presentation, err := store.GetApplicationCatalogPresentationByChartVersion(r.Context(), versionID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "Chart version is not present in the verified application catalog")
+		return
+	}
+	checks, allowed := catalogInstallChecks(cluster, version, presentation, request.ValuesOverride)
+	valuesDigest := sha256Hex([]byte(request.ValuesOverride))
+	RespondJSON(w, http.StatusOK, map[string]any{
+		"allowed": allowed, "checks": checks, "application": presentation.Slug,
+		"artifact_digest": version.Digest, "values_digest": valuesDigest,
+		"catalog_digest": presentation.CatalogDigest,
+	})
+}
+
+func catalogInstallChecks(cluster sqlc.Cluster, version sqlc.HelmChartVersion, presentation sqlc.CatalogBlessedChart, values string) ([]catalogPrerequisiteCheck, bool) {
+	checks := make([]catalogPrerequisiteCheck, 0, 6)
+	allowed := true
+	add := func(code, status, title, description string) {
+		checks = append(checks, catalogPrerequisiteCheck{Code: code, Status: status, Title: title, Description: description})
+		if status == "blocking" {
+			allowed = false
+		}
+	}
+	if presentation.Revoked || (presentation.VerificationStatus != "verified" && presentation.VerificationStatus != "digest-verified") {
+		add("catalog_trust", "blocking", "Catalog trust", "The catalog entry is revoked or its immutable source was not verified.")
+	} else {
+		add("catalog_trust", "ready", "Catalog trust", "Catalog index identity and digest are verified.")
+	}
+	var artifact struct {
+		Version string `json:"version"`
+	}
+	_ = json.Unmarshal(presentation.Artifact, &artifact)
+	if artifact.Version == "" || artifact.Version != version.Version || !validSHA256Digest(version.Digest) {
+		add("artifact_identity", "blocking", "Immutable artifact", "The selected chart version does not match the catalog pin or lacks a SHA-256 digest.")
+	} else {
+		add("artifact_identity", "ready", "Immutable artifact", "The selected chart version and SHA-256 digest match the catalog entry.")
+	}
+	var compatibility struct {
+		Kubernetes string `json:"kubernetes"`
+	}
+	_ = json.Unmarshal(presentation.Compatibility, &compatibility)
+	if compatibility.Kubernetes != "" {
+		constraint, constraintErr := semver.NewConstraint(compatibility.Kubernetes)
+		current, versionErr := semver.NewVersion(strings.TrimPrefix(cluster.KubernetesVersion, "v"))
+		if constraintErr != nil || versionErr != nil || !constraint.Check(current) {
+			add("kubernetes_version", "blocking", "Kubernetes compatibility", fmt.Sprintf("Cluster %s does not satisfy %s.", cluster.KubernetesVersion, compatibility.Kubernetes))
+		} else {
+			add("kubernetes_version", "ready", "Kubernetes compatibility", fmt.Sprintf("Cluster %s satisfies %s.", cluster.KubernetesVersion, compatibility.Kubernetes))
+		}
+	}
+	if cluster.Status != "connected" && cluster.Status != "active" && cluster.Status != "ready" {
+		add("cluster_connectivity", "blocking", "Cluster connectivity", "The target cluster is not currently connected.")
+	} else {
+		add("cluster_connectivity", "ready", "Cluster connectivity", "The target cluster is connected.")
+	}
+	if presentation.Privileged {
+		add("cluster_access", "approval", "Cluster-scoped access", "This application creates cluster-scoped or privileged resources; review is required.")
+	}
+	var storage struct {
+		Required    bool   `json:"required"`
+		Recommended string `json:"recommended"`
+	}
+	_ = json.Unmarshal(presentation.Storage, &storage)
+	if storage.Required {
+		detail := "Persistent storage is required; Flux will confirm the target StorageClass during reconciliation."
+		if storage.Recommended != "" {
+			detail = "Persistent storage is required (recommended " + storage.Recommended + "); Flux will confirm the target StorageClass during reconciliation."
+		}
+		add("persistent_storage", "advisory", "Persistent storage", detail)
+	}
+	if _, err := valuesJSONForPreview(values); err != nil {
+		add("values", "blocking", "Configuration", err.Error())
+	} else {
+		add("values", "ready", "Configuration", "Values are valid bounded YAML and contain no persisted vault placeholders.")
+	}
+	return checks, allowed
+}
+
+const vaultReferencePrefix = "${vault://"
+
+func valuesJSONForPreview(raw string) (map[string]any, error) {
+	if strings.Contains(raw, vaultReferencePrefix) {
+		return nil, errors.New("Use Kubernetes Secret references; vault placeholders cannot be persisted in a Flux bundle.")
+	}
+	if len(raw) > 1<<20 {
+		return nil, errors.New("Values exceed the 1 MiB preview limit.")
+	}
+	if strings.TrimSpace(raw) == "" {
+		return map[string]any{}, nil
+	}
+	var values map[string]any
+	if err := yaml.Unmarshal([]byte(raw), &values); err != nil {
+		return nil, fmt.Errorf("Values YAML is invalid: %w", err)
+	}
+	return values, nil
+}
+
+func validSHA256Digest(value string) bool {
+	value = strings.TrimPrefix(value, "sha256:")
+	if len(value) != 64 {
+		return false
+	}
+	for _, char := range value {
+		if !strings.ContainsRune("0123456789abcdef", char) {
+			return false
+		}
+	}
+	return true
+}
+
+func sha256Hex(value []byte) string {
+	digest := sha256.Sum256(value)
+	return fmt.Sprintf("sha256:%x", digest)
+}
+
 // GetChart handles GET /api/v1/catalog/charts/{id}/.
 func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -1265,8 +1756,108 @@ func (h *CatalogHandler) GetChart(w http.ResponseWriter, r *http.Request) {
 	if !h.authorizeChartRead(w, r, chart) {
 		return
 	}
+	if user := currentUserUUID(r); user.Valid {
+		if store, ok := h.queries.(catalogUserDiscoveryQuerier); ok {
+			// Viewing a chart is best-effort product telemetry. A write failure
+			// must never make an otherwise authorized catalog detail unavailable.
+			_ = store.RecordCatalogChartView(r.Context(), sqlc.RecordCatalogChartViewParams{
+				UserID: uuid.UUID(user.Bytes), ChartID: chart.ID,
+			})
+		}
+	}
 
 	RespondJSON(w, http.StatusOK, chart)
+}
+
+// ListCatalogUserDiscovery returns the authenticated user's durable favorites
+// and recent chart views. Chart visibility remains enforced by the normal
+// chart list/detail APIs; clients intersect this identity-only list with the
+// project-visible chart collection before rendering it.
+func (h *CatalogHandler) ListCatalogUserDiscovery(w http.ResponseWriter, r *http.Request) {
+	user := currentUserUUID(r)
+	if !user.Valid {
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		return
+	}
+	store, ok := h.queries.(catalogUserDiscoveryQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Catalog discovery persistence is unavailable")
+		return
+	}
+	rows, err := store.ListCatalogUserDiscovery(r.Context(), uuid.UUID(user.Bytes))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list catalog discovery state")
+		return
+	}
+	data := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		item := map[string]any{
+			"chart_id":       row.ChartID.String(),
+			"favorite":       row.Favorite,
+			"view_count":     row.ViewCount,
+			"favorite_at":    nil,
+			"last_viewed_at": nil,
+		}
+		if row.FavoriteAt.Valid {
+			item["favorite_at"] = row.FavoriteAt.Time.UTC().Format(time.RFC3339)
+		}
+		if row.LastViewedAt.Valid {
+			item["last_viewed_at"] = row.LastViewedAt.Time.UTC().Format(time.RFC3339)
+		}
+		data = append(data, item)
+	}
+	RespondJSONUnwrapped(w, http.StatusOK, map[string]any{"data": data, "count": len(data)})
+}
+
+// SetCatalogChartFavorite updates one authenticated user's favorite state.
+// It deliberately retains recent-view history when a favorite is removed.
+func (h *CatalogHandler) SetCatalogChartFavorite(w http.ResponseWriter, r *http.Request) {
+	chartID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid chart ID")
+		return
+	}
+	chart, err := h.queries.GetHelmChartByID(r.Context(), chartID)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Chart not found")
+		return
+	}
+	if !h.authorizeChartRead(w, r, chart) {
+		return
+	}
+	var request catalogFavoriteRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidBody, "Invalid JSON body")
+		return
+	}
+	user := currentUserUUID(r)
+	if !user.Valid {
+		RespondRequestError(w, r, http.StatusUnauthorized, apierror.AuthenticationRequired, "Authentication required")
+		return
+	}
+	store, ok := h.queries.(catalogUserDiscoveryQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Catalog discovery persistence is unavailable")
+		return
+	}
+	row, err := store.SetCatalogChartFavorite(r.Context(), sqlc.SetCatalogChartFavoriteParams{
+		UserID: uuid.UUID(user.Bytes), ChartID: chartID, Favorite: request.Favorite,
+	})
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.UpdateError, "Failed to update favorite")
+		return
+	}
+	response := map[string]any{
+		"chart_id": row.ChartID.String(), "favorite": row.Favorite,
+		"favorite_at": nil, "last_viewed_at": nil, "view_count": row.ViewCount,
+	}
+	if row.FavoriteAt.Valid {
+		response["favorite_at"] = row.FavoriteAt.Time.UTC().Format(time.RFC3339)
+	}
+	if row.LastViewedAt.Valid {
+		response["last_viewed_at"] = row.LastViewedAt.Time.UTC().Format(time.RFC3339)
+	}
+	RespondJSON(w, http.StatusOK, response)
 }
 
 // ListChartVersions handles GET /api/v1/catalog/charts/{id}/versions/.
@@ -1297,6 +1888,33 @@ func (h *CatalogHandler) ListChartVersions(w http.ResponseWriter, r *http.Reques
 	}
 	// No exact total is available; infer has_more from a full SQL page.
 	RespondList(w, versions, NewPaginationFromPage(limit, offset, len(versions)))
+}
+
+func (h *CatalogHandler) ListInstalledChartUpgradeVersions(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid installed chart ID")
+		return
+	}
+	installed, err := h.queries.GetInstalledChartByID(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Installed chart not found")
+		return
+	}
+	if !h.authz.authorizeClusterAction(w, r, installed.ClusterID, rbac.ResourceCatalog, rbac.VerbRead) {
+		return
+	}
+	store, ok := h.queries.(catalogUpgradeVersionQuerier)
+	if !ok {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.Unavailable, "Catalog upgrade discovery is unavailable")
+		return
+	}
+	versions, err := store.ListUpgradeVersionsForInstalledChart(r.Context(), id)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ListError, "Failed to list upgrade versions")
+		return
+	}
+	RespondJSON(w, http.StatusOK, map[string]any{"data": versions, "count": len(versions)})
 }
 
 // --- Installed Charts (Installations) ---
@@ -1333,6 +1951,9 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.CountError, "Failed to count installations")
 		return
 	}
+	for index := range installations {
+		installations[index] = h.refreshInstalledChartStatus(r.Context(), installations[index])
+	}
 
 	RespondPaginated(w, r, installations, total)
 }
@@ -1340,7 +1961,7 @@ func (h *CatalogHandler) ListInstallations(w http.ResponseWriter, r *http.Reques
 // CreateInstallationRequest represents the request body for creating an installation.
 type CreateInstallationRequest struct {
 	ChartVersionID string `json:"chart_version_id" validate:"required,uuid"`
-	ProjectID      string `json:"project_id" validate:"required,uuid"`
+	ProjectID      string `json:"project_id,omitempty"`
 	ReleaseName    string `json:"release_name" validate:"required"`
 	Namespace      string `json:"namespace" validate:"required"`
 	ValuesOverride string `json:"values_override"`
@@ -1351,6 +1972,7 @@ type CreateInstallationRequest struct {
 
 type catalogOperationEnvelope struct {
 	InstalledChartID string `json:"installedChartId"`
+	ProjectID        string `json:"projectId,omitempty"`
 	ClusterID        string `json:"clusterId"`
 	ReleaseName      string `json:"releaseName"`
 	Namespace        string `json:"namespace"`
@@ -1358,6 +1980,7 @@ type catalogOperationEnvelope struct {
 	ChartName        string `json:"chartName,omitempty"`
 	RepoURL          string `json:"repoUrl,omitempty"`
 	Version          string `json:"version,omitempty"`
+	ChartDigest      string `json:"chartDigest,omitempty"`
 	ValuesOverride   string `json:"valuesOverride,omitempty"`
 	Notes            string `json:"notes,omitempty"`
 	RollbackRevision int    `json:"rollbackRevision,omitempty"`
@@ -1370,10 +1993,6 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "Invalid cluster ID")
 		return
 	}
-	if !h.authz.authorizeClusterAction(w, r, clusterID, rbac.ResourceCatalog, rbac.VerbCreate) {
-		return
-	}
-
 	// Migration 057: maintenance window gate.
 	if blocked := h.checkCatalogMaintenanceWindow(w, r, clusterID, "helm.install"); blocked {
 		return
@@ -1398,19 +2017,56 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	var version sqlc.HelmChartVersion
 	var chart sqlc.HelmChart
 	var repo sqlc.HelmRepository
+	var targetProjectID uuid.UUID
+	var targetHasProject bool
 	if req.ChartVersionID != "" {
-		projectID, parseErr := uuid.Parse(req.ProjectID)
-		if parseErr != nil {
-			RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidID, "A valid project_id is required for catalog installation")
+		targetProjectID, targetHasProject, err = h.resolveCatalogTargetProject(r.Context(), clusterID, req.Namespace)
+		resolverUnavailable := errors.Is(err, errCatalogProjectResolverUnavailable)
+		if (resolverUnavailable || (!targetHasProject && err == nil)) && req.ProjectID != "" {
+			legacyProjectID, parseErr := uuid.Parse(req.ProjectID)
+			if parseErr == nil {
+				project, projectErr := h.queries.GetProjectByID(r.Context(), legacyProjectID)
+				if projectErr == nil && project.ClusterID == clusterID {
+					namespaceOwned := resolverUnavailable
+					if lister, ok := h.queries.(catalogProjectNamespaceLister); ok {
+						rows, listErr := lister.ListProjectNamespaces(r.Context(), legacyProjectID)
+						if listErr == nil {
+							for _, row := range rows {
+								if row.ClusterID == clusterID && row.Namespace == req.Namespace {
+									namespaceOwned = true
+									break
+								}
+							}
+						}
+					}
+					if namespaceOwned {
+						targetProjectID, targetHasProject, err = legacyProjectID, true, nil
+					}
+				}
+			}
+		}
+		if err != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to resolve namespace ownership")
 			return
 		}
-		project, projectErr := h.queries.GetProjectByID(r.Context(), projectID)
-		if projectErr != nil || project.ClusterID != clusterID {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Project is not assigned to the target cluster")
+		if req.ProjectID != "" {
+			legacyProjectID, parseErr := uuid.Parse(req.ProjectID)
+			if parseErr != nil || !targetHasProject || legacyProjectID != targetProjectID {
+				RespondRequestError(w, r, http.StatusConflict, apierror.Conflict, "project_id does not match the target namespace")
+				return
+			}
+		}
+		allowedTarget, authErr := h.catalogCallerAllowsTarget(r.Context(), clusterID, targetProjectID, req.Namespace, rbac.VerbCreate)
+		if authErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 			return
 		}
-		if !h.authz.authorizeProjectAction(w, r, projectID, rbac.ResourceCatalog, rbac.VerbCreate) {
+		if !allowedTarget {
+			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "You do not have permission to install applications in this namespace")
 			return
+		}
+		if targetHasProject {
+			params.ProjectID = pgtype.UUID{Bytes: targetProjectID, Valid: true}
 		}
 		cvID, err := uuid.Parse(req.ChartVersionID)
 		if err != nil {
@@ -1433,8 +2089,33 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Repository not found")
 			return
 		}
-		if !catalogVisibleToProject(r.Context(), h.queries, projectID, repo.ID) {
-			RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Chart repository is not visible to this project")
+		if repo.OwnerProjectID.Valid {
+			if !targetHasProject || !catalogVisibleToProject(r.Context(), h.queries, targetProjectID, repo.ID) {
+				RespondRequestError(w, r, http.StatusForbidden, apierror.Forbidden, "Chart repository is not visible from the target namespace")
+				return
+			}
+		}
+		catalogStore, catalogStoreAvailable := h.queries.(applicationCatalogQuerier)
+		var presentation sqlc.CatalogBlessedChart
+		presentationErr := error(pgx.ErrNoRows)
+		if catalogStoreAvailable {
+			presentation, presentationErr = catalogStore.GetApplicationCatalogPresentationByChartVersion(r.Context(), cvID)
+		}
+		if presentationErr == nil {
+			cluster, clusterErr := h.queries.GetClusterByID(r.Context(), clusterID)
+			if clusterErr != nil {
+				RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+				return
+			}
+			checks, allowed := catalogInstallChecks(cluster, version, presentation, req.ValuesOverride)
+			if !allowed {
+				RespondJSON(w, http.StatusConflict, map[string]any{
+					"error": map[string]any{"code": apierror.Conflict, "message": "Catalog installation prerequisites failed", "checks": checks},
+				})
+				return
+			}
+		} else if !errors.Is(presentationErr, pgx.ErrNoRows) {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to verify catalog application trust")
 			return
 		}
 	}
@@ -1444,6 +2125,10 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 	}
 	if req.PresetUsed != "" {
 		params.PresetUsed = pgtype.Text{String: req.PresetUsed, Valid: true}
+	}
+	resolvedProjectID := ""
+	if targetHasProject {
+		resolvedProjectID = targetProjectID.String()
 	}
 
 	// Migration 067 — the values blob keeps its ${vault://...} markers in
@@ -1468,8 +2153,8 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 			}
 			op, mutationErr := createCatalogOperation(opCtx, q, "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
 				InstalledChartID: installation.ID.String(), ClusterID: clusterID.String(), ReleaseName: installation.ReleaseName,
-				Namespace: installation.Namespace, ChartVersionID: req.ChartVersionID, ChartName: chart.Name, RepoURL: repo.Url,
-				Version: version.Version, ValuesOverride: installation.ValuesOverride, Notes: installation.Notes,
+				ProjectID: resolvedProjectID, Namespace: installation.Namespace, ChartVersionID: req.ChartVersionID, ChartName: chart.Name, RepoURL: repo.Url,
+				Version: version.Version, ChartDigest: version.Digest, ValuesOverride: installation.ValuesOverride, Notes: installation.Notes,
 			}, currentUserUUID(r))
 			return catalogMutationResult[sqlc.InstalledChart]{row: installation, op: op}, mutationErr
 		},
@@ -1480,8 +2165,8 @@ func (h *CatalogHandler) CreateInstallation(w http.ResponseWriter, r *http.Reque
 			}
 			op, mutationErr := h.enqueueOperation(opCtx, "installed_chart", installation.ID.String(), "install", catalogOperationEnvelope{
 				InstalledChartID: installation.ID.String(), ClusterID: clusterID.String(), ReleaseName: installation.ReleaseName,
-				Namespace: installation.Namespace, ChartVersionID: req.ChartVersionID, ChartName: chart.Name, RepoURL: repo.Url,
-				Version: version.Version, ValuesOverride: installation.ValuesOverride, Notes: installation.Notes,
+				ProjectID: resolvedProjectID, Namespace: installation.Namespace, ChartVersionID: req.ChartVersionID, ChartName: chart.Name, RepoURL: repo.Url,
+				Version: version.Version, ChartDigest: version.Digest, ValuesOverride: installation.ValuesOverride, Notes: installation.Notes,
 			}, currentUserUUID(r))
 			return catalogMutationResult[sqlc.InstalledChart]{row: installation, op: op}, mutationErr
 		},
@@ -1613,9 +2298,57 @@ func (h *CatalogHandler) ListInstalledCharts(w http.ResponseWriter, r *http.Requ
 	}
 	items := make([]map[string]any, 0, len(rows))
 	for _, ic := range rows {
+		ic = h.refreshInstalledChartStatus(r.Context(), ic)
 		items = append(items, installedChartListItem(ic))
 	}
 	RespondList(w, items, NewPagination(int(total), limit, offset, len(rows)))
+}
+
+func (h *CatalogHandler) refreshInstalledChartStatus(ctx context.Context, installed sqlc.InstalledChart) sqlc.InstalledChart {
+	if h == nil || h.delivery == nil || !installed.RequestID.Valid {
+		return installed
+	}
+	status, err := h.delivery.Status(ctx, uuid.UUID(installed.RequestID.Bytes))
+	if err != nil {
+		return installed
+	}
+	next := installed.Status
+	switch status.Phase {
+	case "pending", "blocked", "applying":
+		switch installed.Status {
+		case "rolling_back", "pending_rollback":
+			next = "rolling_back"
+		case "upgrading", "pending_upgrade":
+			next = "upgrading"
+		default:
+			next = "installing"
+		}
+	case "ready":
+		next = "installed"
+	case "degraded":
+		next = "degraded"
+	case "failed", "timed_out", "rollback_failed":
+		next = "failed_install"
+	case "suspended":
+		next = "suspended"
+	case "deleting":
+		next = "uninstalling"
+	case "removed":
+		next = "uninstalled"
+	}
+	if next != installed.Status {
+		if next == "uninstalled" {
+			_ = h.queries.DeleteInstalledChart(ctx, installed.ID)
+			installed.Status = next
+			return installed
+		}
+		if err := h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{
+			ID: installed.ID, Status: next, Revision: installed.Revision,
+		}); err == nil {
+			installed.Status = next
+		}
+	}
+	return installed
 }
 
 // installedChartListItem projects an installed_charts row for the fleet list.
@@ -1732,6 +2465,35 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		version = requestedVersion
 		targetVersionID = pgtype.UUID{Bytes: requestedID, Valid: true}
 	}
+	catalogStore, catalogStoreAvailable := h.queries.(applicationCatalogQuerier)
+	var presentation sqlc.CatalogBlessedChart
+	presentationErr := error(pgx.ErrNoRows)
+	if catalogStoreAvailable {
+		presentation, presentationErr = catalogStore.GetApplicationCatalogPresentationByChartVersion(r.Context(), version.ID)
+	}
+	if presentationErr == nil {
+		cluster, clusterErr := h.queries.GetClusterByID(r.Context(), installed.ClusterID)
+		if clusterErr != nil {
+			RespondRequestError(w, r, http.StatusNotFound, apierror.NotFound, "Cluster not found")
+			return
+		}
+		checks, allowed := catalogInstallChecks(cluster, version, presentation, valuesOverride)
+		var lifecycle map[string]bool
+		_ = json.Unmarshal(presentation.Lifecycle, &lifecycle)
+		if !lifecycle["upgrade"] {
+			allowed = false
+			checks = append(checks, catalogPrerequisiteCheck{Code: "lifecycle", Status: "blocking", Title: "Upgrade support", Description: "This catalog entry does not allow upgrades."})
+		}
+		if !allowed {
+			RespondJSON(w, http.StatusConflict, map[string]any{"error": map[string]any{
+				"code": apierror.Conflict, "message": "Catalog upgrade prerequisites failed", "checks": checks,
+			}})
+			return
+		}
+	} else if !errors.Is(presentationErr, pgx.ErrNoRows) {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.ReadError, "Failed to verify catalog application trust")
+		return
+	}
 	updateParams := sqlc.UpdateInstalledChartValuesParams{
 		ID:             id,
 		ChartVersionID: targetVersionID,
@@ -1752,6 +2514,7 @@ func (h *CatalogHandler) UpgradeInstalledChart(w http.ResponseWriter, r *http.Re
 		ChartName:        chart.Name,
 		RepoURL:          repo.Url,
 		Version:          version.Version,
+		ChartDigest:      version.Digest,
 		ValuesOverride:   valuesOverride,
 		Notes:            installed.Notes,
 	}
@@ -2362,7 +3125,71 @@ func (h *CatalogHandler) GetOperation(w http.ResponseWriter, r *http.Request) {
 	if events, err := h.queries.ListCatalogOperationEvents(r.Context(), op.ID); err == nil {
 		resp["events"] = catalogOperationEventsResponse(events)
 	}
+	h.enrichCatalogOperationDeliveryStatus(r.Context(), op, resp)
 	RespondJSON(w, http.StatusOK, resp)
+}
+
+// enrichCatalogOperationDeliveryStatus keeps the user-facing operation open
+// until Flux reports the workload outcome. The durable catalog operation is
+// the handoff transaction, so it can complete once the immutable rollout is
+// queued; the delivery deployment remains the authoritative convergence state.
+// Projecting it here avoids pretending that "queued" means "installed"
+// without holding a worker claim open for the rollout's full deadline.
+func (h *CatalogHandler) enrichCatalogOperationDeliveryStatus(ctx context.Context, op sqlc.CatalogOperation, resp map[string]any) {
+	if h.delivery == nil || op.TargetType != "installed_chart" {
+		return
+	}
+	installationID, err := uuid.Parse(op.TargetKey)
+	if err != nil {
+		return
+	}
+	installation, err := h.queries.GetInstalledChartByID(ctx, installationID)
+	if err != nil || !installation.RequestID.Valid {
+		return
+	}
+	status, err := h.delivery.Status(ctx, uuid.UUID(installation.RequestID.Bytes))
+	if err != nil {
+		return
+	}
+	phase := strings.TrimSpace(status.Phase)
+	if phase == "" {
+		phase = "pending"
+	}
+	resp["deliveryPhase"] = phase
+	events, _ := resp["events"].([]map[string]any)
+	level := "info"
+	message := "Flux is reconciling the application"
+	terminal := false
+	switch phase {
+	case "ready":
+		resp["status"] = "completed"
+		message = "Flux reports the application workloads ready"
+		terminal = true
+	case "removed":
+		resp["status"] = "completed"
+		message = "Flux reports the application removed"
+		terminal = true
+	case "failed", "timed_out", "rollback_failed":
+		resp["status"] = "failed"
+		level = "error"
+		message = "Flux could not converge the application"
+		terminal = true
+	case "degraded":
+		resp["status"] = "running"
+		level = "warn"
+		message = "Flux reports degraded workloads and is continuing remediation"
+	default:
+		resp["status"] = "running"
+	}
+	events = append(events, map[string]any{
+		"id":        "delivery-" + phase,
+		"level":     level,
+		"stage":     "workloads",
+		"message":   message,
+		"detail":    map[string]any{"phase": phase, "errorCode": status.LastErrorCode, "terminal": terminal},
+		"createdAt": time.Now().UTC().Format(time.RFC3339),
+	})
+	resp["events"] = events
 }
 
 func (h *CatalogHandler) RetryOperation(w http.ResponseWriter, r *http.Request) {
@@ -2670,8 +3497,8 @@ func (h *CatalogHandler) claimPendingCatalogOperations(ctx context.Context) []cl
 }
 
 func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOperation) error {
-	if h.helm == nil {
-		return errors.New("helm requester not configured")
+	if h.delivery == nil {
+		return errors.New("Flux catalog application delivery is not configured")
 	}
 	var env catalogOperationEnvelope
 	if err := json.Unmarshal(op.Payload, &env); err != nil {
@@ -2686,11 +3513,42 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 		return err
 	}
 	clusterID := installation.ClusterID.String()
+	if op.OperationType != "install" && !installation.RequestID.Valid {
+		return errors.New("catalog application has no Flux delivery ownership; direct Helm compatibility is disabled")
+	}
 	// Every path below writes a terminal installed-chart status (success or
 	// failed_*), so one deferred publish covers them all (P4.9).
 	defer h.publishCatalogReleaseChanged(clusterID, installation.ID.String())
 	switch op.OperationType {
 	case "install":
+		if h.delivery != nil {
+			projectID, parseErr := uuid.Parse(env.ProjectID)
+			if parseErr != nil {
+				return fmt.Errorf("parse catalog project identity: %w", parseErr)
+			}
+			chartVersionID, parseErr := uuid.Parse(env.ChartVersionID)
+			if parseErr != nil {
+				return fmt.Errorf("parse catalog chart version identity: %w", parseErr)
+			}
+			h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "creating Flux-managed catalog application", map[string]any{
+				"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
+			})
+			result, deliveryErr := h.delivery.Install(ctx, catalogapp.InstallRequest{
+				InstallationID: installation.ID, ProjectID: projectID, ClusterID: installation.ClusterID,
+				ChartVersionID: chartVersionID, ChartName: env.ChartName, ChartVersion: env.Version,
+				ChartDigest: env.ChartDigest, RepositoryURL: env.RepoURL, ReleaseName: installation.ReleaseName,
+				Namespace: installation.Namespace, ValuesYAML: env.ValuesOverride, Description: env.Notes,
+				ActorID: op.CreatedByID, IdempotencyKey: op.ID.String(),
+			})
+			if deliveryErr != nil {
+				_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_install", Revision: installation.Revision})
+				return deliveryErr
+			}
+			h.recordCatalogOperationEvent(ctx, op.ID, "info", "rollout", "Flux rollout queued", map[string]any{
+				"targetId": result.TargetID.String(), "rolloutId": result.RolloutID.String(),
+			})
+			return nil
+		}
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "install", "installing catalog release", map[string]any{
 			"clusterId":   clusterID,
 			"releaseName": installation.ReleaseName,
@@ -2707,6 +3565,30 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 			Revision: int32(result.Revision),
 		})
 	case "upgrade":
+		if h.delivery != nil {
+			chartVersionID, parseErr := uuid.Parse(env.ChartVersionID)
+			if parseErr != nil {
+				return fmt.Errorf("parse catalog chart version identity: %w", parseErr)
+			}
+			h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "advancing Flux-managed catalog application", map[string]any{
+				"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
+			})
+			result, deliveryErr := h.delivery.Upgrade(ctx, catalogapp.InstallRequest{
+				InstallationID: installation.ID, ClusterID: installation.ClusterID,
+				ChartVersionID: chartVersionID, ChartName: env.ChartName, ChartVersion: env.Version,
+				ChartDigest: env.ChartDigest, RepositoryURL: env.RepoURL, ReleaseName: installation.ReleaseName,
+				Namespace: installation.Namespace, ValuesYAML: env.ValuesOverride, Description: env.Notes,
+				ActorID: op.CreatedByID, IdempotencyKey: op.ID.String(),
+			})
+			if deliveryErr != nil {
+				_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_upgrade", Revision: installation.Revision})
+				return deliveryErr
+			}
+			h.recordCatalogOperationEvent(ctx, op.ID, "info", "rollout", "Flux upgrade rollout queued", map[string]any{
+				"targetId": result.TargetID.String(), "rolloutId": result.RolloutID.String(),
+			})
+			return nil
+		}
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "upgrade", "upgrading catalog release", map[string]any{
 			"clusterId":   clusterID,
 			"releaseName": installation.ReleaseName,
@@ -2725,6 +3607,20 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 		})
 		return err
 	case "rollback":
+		if h.delivery != nil && installation.RequestID.Valid {
+			h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "rolling back Flux application to its previous immutable version", map[string]any{
+				"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
+			})
+			result, deliveryErr := h.delivery.Rollback(ctx, installation.ID, op.CreatedByID, op.ID.String())
+			if deliveryErr != nil {
+				_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_rollback", Revision: installation.Revision})
+				return deliveryErr
+			}
+			h.recordCatalogOperationEvent(ctx, op.ID, "info", "rollout", "Flux rollback rollout queued", map[string]any{
+				"targetId": result.TargetID.String(), "rolloutId": result.RolloutID.String(),
+			})
+			return nil
+		}
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "rollback", "rolling back catalog release", map[string]any{
 			"clusterId":        clusterID,
 			"releaseName":      installation.ReleaseName,
@@ -2746,6 +3642,16 @@ func (h *CatalogHandler) executeOperation(ctx context.Context, op sqlc.CatalogOp
 			Revision: int32(result.Revision),
 		})
 	case "uninstall":
+		if h.delivery != nil && installation.RequestID.Valid {
+			h.recordCatalogOperationEvent(ctx, op.ID, "info", "delivery", "requesting fenced Flux application deletion", map[string]any{
+				"clusterId": clusterID, "releaseName": installation.ReleaseName, "namespace": installation.Namespace,
+			})
+			if deliveryErr := h.delivery.Uninstall(ctx, installation.ID, op.CreatedByID); deliveryErr != nil {
+				_ = h.queries.UpdateInstalledChartStatus(ctx, sqlc.UpdateInstalledChartStatusParams{ID: installation.ID, Status: "failed_uninstall", Revision: installation.Revision})
+				return deliveryErr
+			}
+			return nil
+		}
 		h.recordCatalogOperationEvent(ctx, op.ID, "info", "uninstall", "uninstalling catalog release", map[string]any{
 			"clusterId":   clusterID,
 			"releaseName": installation.ReleaseName,

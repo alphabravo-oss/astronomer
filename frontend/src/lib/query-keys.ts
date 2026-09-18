@@ -233,8 +233,7 @@ export const queryKeys = {
     rulesAll: ["alerting", "rules"] as const,
     rules: (clusterId?: string) =>
       ["alerting", "rules", clusterId ?? "all"] as const,
-    events: (params?: object) =>
-      ["alerting", "events", params] as const,
+    events: (params?: object) => ["alerting", "events", params] as const,
     // Prefix matching every `events(params)` variant — used by the live
     // routing table on `alerting.changed` (kind: event).
     eventsAll: ["alerting", "events"] as const,
@@ -304,6 +303,7 @@ export const queryKeys = {
   },
   clusterGroups: {
     all: ["cluster-groups"] as const,
+    members: (id: string) => ["cluster-groups", id, "clusters"] as const,
   },
   vault: {
     connections: ["vault-connections"] as const,
@@ -320,7 +320,7 @@ export const queryKeys = {
   delivery: {
     all: ["delivery"] as const,
     system: ["delivery", "system"] as const,
-    estate: ["delivery", "estate"] as const,
+    fleet: ["delivery", "fleet"] as const,
     sources: (projectId: string, params?: Record<string, unknown>) =>
       ["delivery", projectId, "sources", params] as const,
     sourcesAll: (projectId: string) =>
@@ -340,6 +340,16 @@ export const queryKeys = {
     ) => ["delivery", projectId, "bundles", id, "versions", params] as const,
     bundleVersion: (projectId: string, id: string, versionId: string) =>
       ["delivery", projectId, "bundles", id, "versions", versionId] as const,
+    configurationTemplates: (
+      projectId: string,
+      params?: Record<string, unknown>,
+    ) => ["delivery", projectId, "configuration-templates", params] as const,
+    configurationTemplatesAll: (projectId: string) =>
+      ["delivery", projectId, "configuration-templates"] as const,
+    overrideSets: (projectId: string, params?: Record<string, unknown>) =>
+      ["delivery", projectId, "override-sets", params] as const,
+    overrideSetsAll: (projectId: string) =>
+      ["delivery", projectId, "override-sets"] as const,
     targets: (projectId: string, params?: Record<string, unknown>) =>
       ["delivery", projectId, "targets", params] as const,
     targetsAll: (projectId: string) =>
@@ -442,16 +452,26 @@ export const queryKeys = {
   },
   catalog: {
     all: ["catalog"] as const,
+    applications: ["catalog", "applications"] as const,
+    applicationSources: ["catalog", "application-sources"] as const,
+    discovery: ["catalog", "discovery"] as const,
     repositories: ["catalog", "repositories"] as const,
+    repositoriesFor: (scopeId?: string) =>
+      ["catalog", "repositories", scopeId ?? "global"] as const,
     charts: (params?: Record<string, unknown>) =>
       ["catalog", "charts", params] as const,
-    chartVersions: (projectId: string, chartId: string) =>
-      ["catalog", projectId, "charts", chartId, "versions"] as const,
+    chartVersions: (
+      scopeId: string,
+      chartId: string,
+      scope: "cluster" | "project" = "cluster",
+    ) => ["catalog", scope, scopeId, "charts", chartId, "versions"] as const,
     installed: (params?: Record<string, unknown>) =>
       ["catalog", "installed", params] as const,
     // Prefix matching every `installed(params)` variant — used by the live
     // routing table on `catalog_release.changed` + Helm-Secret k8s events.
     installedAll: ["catalog", "installed"] as const,
+    upgradeVersions: (installationId: string) =>
+      ["catalog", "installed", installationId, "upgrade-versions"] as const,
     // App-install/upgrade modal — distinct endpoints from `chartVersions` above
     // (note the different array shapes), kept verbatim to preserve cache identity.
     installChartVersions: (projectId: string, chartId: string) =>
@@ -461,6 +481,13 @@ export const queryKeys = {
       chartId: string,
       version?: string,
     ) => ["catalog", projectId, "chart-values", chartId, version] as const,
+    chart: (projectId: string, chartId: string) =>
+      ["catalog", projectId, "chart", chartId] as const,
+    chartReadme: (projectId: string, chartId: string, version?: string) =>
+      ["catalog", projectId, "chart", chartId, "readme", version] as const,
+    operations: ["catalog", "operations"] as const,
+    operation: (operationId: string) =>
+      ["catalog", "operations", operationId] as const,
   },
   backups: {
     all: ["backups"] as const,

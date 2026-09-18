@@ -42,6 +42,53 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: stage-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          image: {{ include "astronomer.thirdPartyImage" (dict "repository" .Values.utilities.busybox.repository "tag" .Values.utilities.busybox.tag "digest" .Values.utilities.busybox.digest "registry" .Values.utilities.busybox.registry "fallback" .Values.image.registry) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              if [ -s /var/run/dex-config-source/config.yaml ]; then
+                cp /var/run/dex-config-source/config.yaml /var/run/dex-config/config.yaml
+              else
+                # A fresh production install must become Ready before an
+                # operator can configure its first connector. This credential-
+                # free bootstrap config is replaced on the first Dex Apply;
+                # DexHandler remains the sole writer of runtime Secret data.
+                cat > /var/run/dex-config/config.yaml <<'EOF'
+              issuer: {{ include "astronomer.dex.issuerURL" . | quote }}
+              storage:
+                type: kubernetes
+                config:
+                  inCluster: true
+              web:
+                http: 0.0.0.0:5556
+              oauth2:
+                skipApprovalScreen: true
+              # Dex refuses to start without an authentication mechanism.
+              # The password DB with zero static users satisfies that invariant
+              # without creating a usable bootstrap identity or credential.
+              enablePasswordDB: true
+              connectors: []
+              EOF
+              fi
+              chmod 0600 /var/run/dex-config/config.yaml
+          volumeMounts:
+            - name: config-source
+              mountPath: /var/run/dex-config-source
+              readOnly: true
+            - name: config
+              mountPath: /var/run/dex-config
+          resources:
+            {{- toYaml .Values.dex.resources | nindent 12 }}
       containers:
         - name: dex
           {{- with .Values.dex.securityContext }}
@@ -72,7 +119,7 @@ spec:
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /dex/healthz
               port: http
             initialDelaySeconds: 15
             periodSeconds: 30
@@ -82,6 +129,8 @@ spec:
             {{- toYaml .Values.dex.resources | nindent 12 }}
       volumes:
         - name: config
+          emptyDir: {}
+        - name: config-source
           {{- if eq .Values.dex.migration.phase "prepare" }}
           configMap:
             name: {{ printf "%s-dex-config-retained" (include "astronomer.fullname" .) }}
@@ -91,6 +140,7 @@ spec:
           {{- else }}
           secret:
             secretName: {{ default (printf "%s-dex-runtime" (include "astronomer.fullname" .)) .Values.dex.runtimeSecretName | quote }}
+            optional: true
             items:
               - key: config.yaml
                 path: config.yaml
@@ -102,5 +152,13 @@ spec:
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dex.affinity.enabled }}
+      affinity:
+        {{- include "astronomer.componentAffinity" (dict "context" . "component" "dex" "enabled" .Values.dex.affinity.enabled) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dex.topologySpread.enabled }}
+      topologySpreadConstraints:
+        {{- include "astronomer.componentTopologySpread" (dict "context" . "component" "dex" "enabled" .Values.dex.topologySpread.enabled "maxSkew" .Values.dex.topologySpread.maxSkew "whenUnsatisfiable" .Values.dex.topologySpread.whenUnsatisfiable) | nindent 8 }}
       {{- end }}
 {{- end }}

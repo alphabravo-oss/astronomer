@@ -223,7 +223,9 @@ type Querier interface {
 	CountComponentBundles(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountControlPlaneSnapshotsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	CountDeferredOperations(ctx context.Context) (int64, error)
+	CountDeliveryConfigurationTemplates(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountDeliveryControllerCompatibility(ctx context.Context) ([]CountDeliveryControllerCompatibilityRow, error)
+	CountDeliveryOverrideSets(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountDeliveryRolloutClusters(ctx context.Context, arg CountDeliveryRolloutClustersParams) (int64, error)
 	CountDeliveryRolloutEvents(ctx context.Context, arg CountDeliveryRolloutEventsParams) (int64, error)
 	CountDeliveryRollouts(ctx context.Context, arg CountDeliveryRolloutsParams) (int64, error)
@@ -371,6 +373,8 @@ type Querier interface {
 	CreateDashboardWidget(ctx context.Context, arg CreateDashboardWidgetParams) (DashboardWidget, error)
 	// Deferred operations --------------------------------------------------
 	CreateDeferredOperation(ctx context.Context, arg CreateDeferredOperationParams) (DeferredOperation, error)
+	CreateDeliveryConfigurationTemplate(ctx context.Context, arg CreateDeliveryConfigurationTemplateParams) (DeliveryConfigurationTemplate, error)
+	CreateDeliveryOverrideSet(ctx context.Context, arg CreateDeliveryOverrideSetParams) (DeliveryOverrideSet, error)
 	CreateDeliveryRollout(ctx context.Context, arg CreateDeliveryRolloutParams) (DeliveryRollout, error)
 	CreateDeliveryRolloutApproval(ctx context.Context, arg CreateDeliveryRolloutApprovalParams) (DeliveryRolloutApproval, error)
 	CreateDeliveryRolloutCluster(ctx context.Context, arg CreateDeliveryRolloutClusterParams) (DeliveryRolloutCluster, error)
@@ -559,6 +563,8 @@ type Querier interface {
 	DeleteDefaultMonitoringBackendIfUnused(ctx context.Context, id uuid.UUID) (MonitoringBackend, error)
 	DeleteDeferredOperationsByCluster(ctx context.Context, clusterID uuid.UUID) (int64, error)
 	DeleteDeliveredAuditOutboxBefore(ctx context.Context, cutoff pgtype.Timestamptz) (int64, error)
+	DeleteDeliveryConfigurationTemplate(ctx context.Context, arg DeleteDeliveryConfigurationTemplateParams) (uuid.UUID, error)
+	DeleteDeliveryOverrideSet(ctx context.Context, arg DeleteDeliveryOverrideSetParams) (uuid.UUID, error)
 	DeleteDeliverySource(ctx context.Context, arg DeleteDeliverySourceParams) (int64, error)
 	// Retention sweep, runs daily. Returns the row count so the task can
 	// emit a "rows deleted" log line for the operator.
@@ -737,6 +743,7 @@ type Querier interface {
 	// type-safe arguments around these queries.
 	GetApiserverAllowlistByClusterID(ctx context.Context, clusterID uuid.UUID) (ApiserverAllowlist, error)
 	GetApiserverAllowlistForUpdate(ctx context.Context, clusterID uuid.UUID) (ApiserverAllowlist, error)
+	GetApplicationCatalogPresentationByChartVersion(ctx context.Context, id uuid.UUID) (CatalogBlessedChart, error)
 	GetAuditOutboxHealth(ctx context.Context) (GetAuditOutboxHealthRow, error)
 	GetAuthoredConstraintByName(ctx context.Context, arg GetAuthoredConstraintByNameParams) (AuthoredConstraint, error)
 	GetAuthoredConstraintByNameForUpdate(ctx context.Context, arg GetAuthoredConstraintByNameForUpdateParams) (AuthoredConstraint, error)
@@ -838,7 +845,9 @@ type Querier interface {
 	GetDefaultPodSecurityTemplate(ctx context.Context) (PodSecurityTemplate, error)
 	GetDeferredOperation(ctx context.Context, id uuid.UUID) (DeferredOperation, error)
 	GetDeferredOperationForUpdate(ctx context.Context, id uuid.UUID) (DeferredOperation, error)
+	GetDeliveryConfigurationTemplate(ctx context.Context, arg GetDeliveryConfigurationTemplateParams) (DeliveryConfigurationTemplate, error)
 	GetDeliveryControllerInventory(ctx context.Context, arg GetDeliveryControllerInventoryParams) (DeliveryControllerInventory, error)
+	GetDeliveryOverrideSet(ctx context.Context, arg GetDeliveryOverrideSetParams) (DeliveryOverrideSet, error)
 	GetDeliveryPlanningSnapshot(ctx context.Context, targetID uuid.UUID) (GetDeliveryPlanningSnapshotRow, error)
 	GetDeliveryRollout(ctx context.Context, arg GetDeliveryRolloutParams) (DeliveryRollout, error)
 	GetDeliveryRolloutByIdempotency(ctx context.Context, arg GetDeliveryRolloutByIdempotencyParams) (DeliveryRollout, error)
@@ -867,7 +876,6 @@ type Querier interface {
 	// Global Roles
 	GetGlobalRoleByID(ctx context.Context, id uuid.UUID) (GlobalRole, error)
 	GetGroupMappingByID(ctx context.Context, id uuid.UUID) (IdentityGroupMapping, error)
-	// Helm Charts
 	GetHelmChartByID(ctx context.Context, id uuid.UUID) (HelmChart, error)
 	GetHelmChartByRepoAndName(ctx context.Context, arg GetHelmChartByRepoAndNameParams) (HelmChart, error)
 	GetHelmChartVersion(ctx context.Context, arg GetHelmChartVersionParams) (HelmChartVersion, error)
@@ -967,6 +975,10 @@ type Querier interface {
 	// Returns the (possibly NULL) default_vault_connection_id pointer. Caller
 	// decides whether to chase the FK; this just answers "is a default set?".
 	GetProjectDefaultVaultConnection(ctx context.Context, id uuid.UUID) (pgtype.UUID, error)
+	// Resolve optional project ownership from the Kubernetes deployment target.
+	// The partial unique index on (cluster_id, namespace) guarantees at most one
+	// owning project, so callers never need a user-selected project discriminator.
+	GetProjectNamespaceByClusterAndNamespace(ctx context.Context, arg GetProjectNamespaceByClusterAndNamespaceParams) (ProjectNamespace, error)
 	GetProjectOwnership(ctx context.Context, id uuid.UUID) (GetProjectOwnershipRow, error)
 	// Project Role Bindings
 	GetProjectRoleBindingByID(ctx context.Context, id uuid.UUID) (ProjectRoleBinding, error)
@@ -1177,6 +1189,8 @@ type Querier interface {
 	ListAnomalyBaselinesForScopes(ctx context.Context, arg ListAnomalyBaselinesForScopesParams) ([]AnomalyBaseline, error)
 	ListApiserverAllowlistSnapshots(ctx context.Context, arg ListApiserverAllowlistSnapshotsParams) ([]ApiserverAllowlistSnapshot, error)
 	ListApiserverAuditEventsByCluster(ctx context.Context, arg ListApiserverAuditEventsByClusterParams) ([]ApiserverAuditEvent, error)
+	ListApplicationCatalogPresentations(ctx context.Context) ([]ListApplicationCatalogPresentationsRow, error)
+	ListApplicationCatalogSources(ctx context.Context) ([]DeliveryCatalog, error)
 	ListApplicationsForCluster(ctx context.Context, clusterID uuid.UUID) ([]NetworkPolicyApplication, error)
 	ListApplicationsForTemplate(ctx context.Context, templateID uuid.UUID) ([]NetworkPolicyApplication, error)
 	// For the drift sweep: walks only 'applied' rows, GETs the in-cluster
@@ -1207,6 +1221,8 @@ type Querier interface {
 	ListCatalogOperationEvents(ctx context.Context, operationID uuid.UUID) ([]CatalogOperationEvent, error)
 	ListCatalogOperations(ctx context.Context, arg ListCatalogOperationsParams) ([]CatalogOperation, error)
 	ListCatalogOperationsForScopes(ctx context.Context, arg ListCatalogOperationsForScopesParams) ([]CatalogOperation, error)
+	// Helm Charts
+	ListCatalogUserDiscovery(ctx context.Context, userID uuid.UUID) ([]ListCatalogUserDiscoveryRow, error)
 	// Per-project catalog queries — migration 061.
 	//
 	// The hot path is ListCatalogsForProject which UNIONs three buckets:
@@ -1394,11 +1410,14 @@ type Querier interface {
 	// a future `sqlc generate` picks them up by name.
 	ListDashboardWidgets(ctx context.Context) ([]DashboardWidget, error)
 	ListDeferredOperations(ctx context.Context, arg ListDeferredOperationsParams) ([]DeferredOperation, error)
-	// Estate scoreboard: one row per live cluster. Local host-only clusters stay
-	// in the table so operators can see them, but the handler excludes is_local
-	// from Flux-managed tiles. Removed assignments are omitted; Drifted is the
+	ListDeliveryConfigurationTemplates(ctx context.Context, arg ListDeliveryConfigurationTemplatesParams) ([]DeliveryConfigurationTemplate, error)
+	// Delivery Fleet scoreboard: one row per live cluster, including the local
+	// management cluster as a first-class Flux target. Removed assignments are
+	// omitted; Drifted is the
 	// normalized condition the observer persists.
-	ListDeliveryEstateClusters(ctx context.Context) ([]ListDeliveryEstateClustersRow, error)
+	ListDeliveryFleetClusters(ctx context.Context) ([]ListDeliveryFleetClustersRow, error)
+	ListDeliveryOverrideSets(ctx context.Context, arg ListDeliveryOverrideSetsParams) ([]DeliveryOverrideSet, error)
+	ListDeliveryOverrideSetsByIDs(ctx context.Context, arg ListDeliveryOverrideSetsByIDsParams) ([]DeliveryOverrideSet, error)
 	ListDeliveryPlanningCandidates(ctx context.Context, arg ListDeliveryPlanningCandidatesParams) ([]ListDeliveryPlanningCandidatesRow, error)
 	ListDeliveryRolloutApprovals(ctx context.Context, rolloutID uuid.UUID) ([]DeliveryRolloutApproval, error)
 	ListDeliveryRolloutClusters(ctx context.Context, arg ListDeliveryRolloutClustersParams) ([]DeliveryRolloutCluster, error)
@@ -1758,6 +1777,7 @@ type Querier interface {
 	// Drives the "N codes remaining" indicator on the account page. Used
 	// by the audit summary too.
 	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]UserTotpRecoveryCode, error)
+	ListUpgradeVersionsForInstalledChart(ctx context.Context, id uuid.UUID) ([]HelmChartVersion, error)
 	// One round-trip alternative to the per-scope ListBindings + per-binding
 	// GetRoleByID fan-out used by the RBAC middleware. The scope discriminator
 	// ('global' | 'cluster' | 'project') tells the Go side which scope columns
@@ -1959,7 +1979,14 @@ type Querier interface {
 	PurgeExpiredSSOSessions(ctx context.Context) (int64, error)
 	QueueDexOperation(ctx context.Context, arg QueueDexOperationParams) (QueueDexOperationRow, error)
 	RecomputeDeliveryRolloutCounters(ctx context.Context, id uuid.UUID) (DeliveryRollout, error)
+	// A single statement owns the complete catalog snapshot: malformed input is
+	// rejected in Go before this runs, and any SQL failure rolls back catalog,
+	// repository, entry upserts, and stale-entry deletion together. This gives us
+	// last-known-good behavior without an application-managed transaction.
+	ReconcileApplicationCatalogV1(ctx context.Context, arg ReconcileApplicationCatalogV1Params) (int64, error)
 	RecordAgentConnectionEvent(ctx context.Context, arg RecordAgentConnectionEventParams) (AgentConnectionEvent, error)
+	RecordApplicationCatalogSyncFailure(ctx context.Context, arg RecordApplicationCatalogSyncFailureParams) error
+	RecordCatalogChartView(ctx context.Context, arg RecordCatalogChartViewParams) error
 	// Race-safe lockout transition. The increment and threshold decision run
 	// against the row-locked current count, so concurrent bad passwords cannot
 	// both observe the same stale pre-increment value and evade the threshold.
@@ -2051,6 +2078,7 @@ type Querier interface {
 	// freshly-sealed envelope with a re-encryption of the document it read before
 	// the winner stripped it.
 	SealMonitoringBackendAuthConfig(ctx context.Context, arg SealMonitoringBackendAuthConfigParams) error
+	SetCatalogChartFavorite(ctx context.Context, arg SetCatalogChartFavoriteParams) (SetCatalogChartFavoriteRow, error)
 	SetCharlieInteractiveThreadSession(ctx context.Context, arg SetCharlieInteractiveThreadSessionParams) (CharlieInteractiveThread, error)
 	// Trigger a rotation. Does NOT touch the live token — the NEXT CONNECT mints
 	// the fresh one. No-op (0 rows) when the cluster has no (non-revoked) token OR
@@ -2212,6 +2240,8 @@ type Querier interface {
 	UpdateClusterTemplate(ctx context.Context, arg UpdateClusterTemplateParams) (ClusterTemplate, error)
 	UpdateComponentBundle(ctx context.Context, arg UpdateComponentBundleParams) (ComponentBundle, error)
 	UpdateDashboardWidget(ctx context.Context, arg UpdateDashboardWidgetParams) (DashboardWidget, error)
+	UpdateDeliveryConfigurationTemplate(ctx context.Context, arg UpdateDeliveryConfigurationTemplateParams) (DeliveryConfigurationTemplate, error)
+	UpdateDeliveryOverrideSet(ctx context.Context, arg UpdateDeliveryOverrideSetParams) (DeliveryOverrideSet, error)
 	UpdateDeliverySource(ctx context.Context, arg UpdateDeliverySourceParams) (UpdateDeliverySourceRow, error)
 	UpdateDeliverySourceStatus(ctx context.Context, arg UpdateDeliverySourceStatusParams) (UpdateDeliverySourceStatusRow, error)
 	UpdateDeliveryTargetCAS(ctx context.Context, arg UpdateDeliveryTargetCASParams) (DeliveryTarget, error)

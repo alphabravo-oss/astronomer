@@ -43,6 +43,10 @@ func TestNormalizeObservationReadyAndRedacted(t *testing.T) {
 		status.SourceKind != "GitRepository" || status.ReconcilerKind != "Kustomization" {
 		t.Fatalf("normalized status = %#v", status)
 	}
+	if len(status.Inventory.Resources) != 2 || status.Inventory.Resources[0].Kind != "Deployment" ||
+		status.Inventory.Resources[0].Namespace != "workload" || status.Inventory.Resources[1].APIVersion != "v1" {
+		t.Fatalf("normalized inventory resources = %#v", status.Inventory.Resources)
+	}
 	if !status.ObservedAt.Equal(time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC)) {
 		t.Errorf("observation not normalized to UTC: %v", status.ObservedAt)
 	}

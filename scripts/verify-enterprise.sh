@@ -84,7 +84,7 @@ initialize_evidence() {
   : >"$TOOLS_FILE"
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   local tree_json
-  tree_json="$(python3 scripts/hash-source-tree.py --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
+  tree_json="$(python3 "$ROOT_DIR/scripts/hash-source-tree.py" --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
   read -r SOURCE_TREE_SHA256 SOURCE_FILE_COUNT < <(
     python3 -c 'import json,sys; value=json.load(sys.stdin); print(value["source_tree_sha256"], value["source_file_count"])' <<<"$tree_json"
   )
@@ -149,7 +149,7 @@ finalize_evidence() {
   local status="passed"
   (( exit_code == 0 )) || status="failed"
   local finished_tree_json finished_tree_sha256 finished_file_count tree_stable="true"
-  finished_tree_json="$(python3 scripts/hash-source-tree.py --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
+  finished_tree_json="$(python3 "$ROOT_DIR/scripts/hash-source-tree.py" --root "$ROOT_DIR" --exclude "$ARTIFACT_DIR")"
   read -r finished_tree_sha256 finished_file_count < <(
     python3 -c 'import json,sys; value=json.load(sys.stdin); print(value["source_tree_sha256"], value["source_file_count"])' <<<"$finished_tree_json"
   )
@@ -465,6 +465,7 @@ verify_helm() {
 
   step "Development Helm render"
   render_helm helm-development helm template astronomer deploy/chart \
+    --kube-version 1.35.0 \
     "${render_keys[@]}" \
     --set frontend.enabled=true \
     --set dex.enabled=true \
@@ -472,6 +473,7 @@ verify_helm() {
 
   step "Fully wired production Helm render"
   render_helm helm-production helm template astronomer deploy/chart \
+    --kube-version 1.35.0 \
     -f deploy/chart/values-production.yaml \
     --set config.serverURL=https://astronomer.example.com \
     --set 'gateway.hosts={astronomer.example.com}' \

@@ -7,7 +7,11 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppForm, useStore } from "@/lib/form";
 import { useClusters } from "@/lib/hooks";
-import { useInstallHelmChart } from "@/lib/hooks/catalog";
+import {
+  useInstallHelmChart,
+  usePreviewCatalogInstallation,
+} from "@/lib/hooks/catalog";
+import type { CatalogInstallationPreview } from "@/lib/api/catalog";
 import { useSearchParams } from "@/lib/navigation";
 import {
   dumpHelmValuesYAML,
@@ -20,7 +24,15 @@ import {
 } from "@/lib/helm-values-schema";
 import { cn } from "@/lib/utils";
 import type { HelmChart, HelmChartVersion } from "@/types";
-import { AlertTriangle, Braces, FileCode2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Braces,
+  CheckCircle2,
+  FileCode2,
+  Info,
+  ShieldAlert,
+  XCircle,
+} from "lucide-react";
 
 export function InstallChartModal({
   projectId,
@@ -36,6 +48,9 @@ export function InstallChartModal({
   onClose: () => void;
 }) {
   const installChart = useInstallHelmChart();
+  const previewInstallation = usePreviewCatalogInstallation();
+  const [preview, setPreview] =
+    useState<CatalogInstallationPreview | null>(null);
   const { data: clustersData } = useClusters({ pageSize: 100 });
   const clusters = (clustersData?.data || []).filter((cluster) =>
     allowedClusterIds.includes(cluster.id),
@@ -94,6 +109,10 @@ export function InstallChartModal({
   const clusterId = useStore(form.store, (s) => s.values.clusterId);
   const releaseName = useStore(form.store, (s) => s.values.releaseName);
   const namespace = useStore(form.store, (s) => s.values.namespace);
+  const valuesOverride = useStore(
+    form.store,
+    (s) => s.values.valuesOverride,
+  );
 
   useEffect(() => {
     const parsed = parseHelmValuesYAML(version.defaultValues || "") || {};
@@ -112,10 +131,12 @@ export function InstallChartModal({
     setSchemaValues(next);
     form.setFieldValue("valuesOverride", dumpHelmValuesYAML(next));
     setYamlError(null);
+    setPreview(null);
   };
 
   const handleYAMLChange = (nextYAML: string) => {
     form.setFieldValue("valuesOverride", nextYAML);
+    setPreview(null);
     if (!schema) return;
     const parsed = parseHelmValuesYAML(nextYAML);
     if (parsed == null) {
@@ -133,11 +154,25 @@ export function InstallChartModal({
       <ActionButton onClick={onClose}>Cancel</ActionButton>
       <ActionButton
         intent="primary"
-        loading={installChart.isPending}
-        disabled={!clusterId || !releaseName || !namespace}
-        onClick={() => void form.handleSubmit()}
+        loading={installChart.isPending || previewInstallation.isPending}
+        disabled={!clusterId || !releaseName || !namespace || Boolean(yamlError)}
+        onClick={() => {
+          if (preview?.allowed) {
+            void form.handleSubmit();
+            return;
+          }
+          void previewInstallation
+            .mutateAsync({
+              project_id: projectId,
+              cluster_id: clusterId,
+              chart_version_id: version.id,
+              namespace,
+              values_override: valuesOverride || undefined,
+            })
+            .then(setPreview);
+        }}
       >
-        Install Chart
+        {preview?.allowed ? "Confirm & Install" : "Review prerequisites"}
       </ActionButton>
     </>
   );
@@ -164,7 +199,10 @@ export function InstallChartModal({
               id="field-60f181fe-140"
               aria-label="Target Cluster"
               value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
+              onChange={(e) => {
+                field.handleChange(e.target.value);
+                setPreview(null);
+              }}
               onBlur={field.handleBlur}
             >
               <option value="">Select a cluster...</option>
@@ -177,6 +215,67 @@ export function InstallChartModal({
           )}
         </form.Field>
       </div>
+
+      {preview && (
+        <div className="space-y-2 rounded-lg border border-border bg-muted/15 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-foreground">
+              Installation readiness
+            </p>
+            <span
+              className={cn(
+                "rounded px-2 py-0.5 text-xs font-medium",
+                preview.allowed
+                  ? "bg-status-success/10 text-status-success"
+                  : "bg-status-error/10 text-status-error",
+              )}
+            >
+              {preview.allowed ? "Ready to install" : "Blocked"}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {preview.checks.map((check) => {
+              const Icon =
+                check.status === "ready"
+                  ? CheckCircle2
+                  : check.status === "blocking"
+                    ? XCircle
+                    : check.status === "approval"
+                      ? ShieldAlert
+                      : Info;
+              return (
+                <div
+                  key={check.code}
+                  className="flex items-start gap-2 rounded-md border border-border/70 bg-background/60 px-3 py-2"
+                >
+                  <Icon
+                    className={cn(
+                      "mt-0.5 h-4 w-4 flex-none",
+                      check.status === "ready"
+                        ? "text-status-success"
+                        : check.status === "blocking"
+                          ? "text-status-error"
+                          : "text-status-warning",
+                    )}
+                  />
+                  <div>
+                    <p className="text-xs font-medium text-foreground">
+                      {check.title}
+                    </p>
+                    <p className="text-xs text-table-secondary">
+                      {check.description}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="font-mono text-2xs text-table-secondary">
+            Catalog {preview.catalog_digest.slice(0, 19)} · Artifact{" "}
+            {preview.artifact_digest.slice(0, 19)}
+          </p>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <label

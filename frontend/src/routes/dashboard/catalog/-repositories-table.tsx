@@ -3,6 +3,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import type { HelmRepository } from "@/types";
 import { Globe, RefreshCw, Trash2 } from "lucide-react";
+import { CatalogSourceBadge } from "@/components/catalog/catalog-source-badge";
+import { catalogSourcePresentation } from "@/lib/catalogs/source";
 
 /**
  * The catalog Repositories table.
@@ -44,6 +46,22 @@ export function RepositoriesTable({
           )}
         </div>
       ),
+    },
+    {
+      key: "source",
+      header: "Source",
+      accessor: (row) => (
+        <CatalogSourceBadge
+          source={catalogSourcePresentation(row, false, {
+            repositoryId: row.id,
+            repositoryName: row.name,
+          })}
+          compact
+        />
+      ),
+      sortAccessor: (row) =>
+        `${row.isDefault ? "0" : "1"}-${row.name.toLocaleLowerCase()}`,
+      filter: { label: "Sources" },
     },
     {
       key: "url",
@@ -128,8 +146,13 @@ export function RepositoriesTable({
                 onDelete(row.id);
               }
             }}
-            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Delete repository"
+            disabled={row.isDefault}
+            className="p-1.5 rounded text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            title={
+              row.isDefault
+                ? "Platform catalog sources cannot be deleted"
+                : "Delete repository"
+            }
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

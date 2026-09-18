@@ -38,6 +38,7 @@ import {
 } from "@/lib/api/cluster-detail";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
 // RegisterClusterModal removed in sprint 22 — the "show install command"
 // action now opens wizard step 2 for this cluster.
 import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
@@ -246,35 +247,26 @@ function ClusterDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="relative inline-flex">
-            <button
+            <ActionButton
               onClick={downloadProxyKubeconfigFile}
-              disabled={downloadProxyKubeconfig.isPending}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border
-                text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent
-                transition-colors disabled:opacity-50"
+              loading={downloadProxyKubeconfig.isPending}
+              icon={<Download className="h-4 w-4" />}
               title="Download a one-hour, read-only kubeconfig routed and audited through Astronomer"
             >
-              {downloadProxyKubeconfig.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
               Proxy kubeconfig
-            </button>
+            </ActionButton>
           </div>
           <div className="relative inline-flex">
-            <button
+            <ActionButton
               onClick={downloadDirectKubeconfigFile}
+              loading={downloadDirectKubeconfig.isPending}
+              icon={<Download className="h-4 w-4" />}
               disabled={
-                downloadDirectKubeconfig.isPending ||
                 !directPermission.canWrite ||
                 !cluster.apiServerUrl ||
                 cluster.isLocal
               }
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border
-                text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent
-                transition-colors disabled:opacity-50"
-              title={
+              disabledReason={
                 cluster.isLocal
                   ? "Direct access is for adopted clusters"
                   : !directPermission.canWrite
@@ -284,13 +276,8 @@ function ClusterDetailPage() {
                       : "Download a separately scoped, read-only direct kubeconfig valid for 15 minutes"
               }
             >
-              {downloadDirectKubeconfig.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4" />
-              )}
               Direct kubeconfig
-            </button>
+            </ActionButton>
           </div>
           <ActionMenu
             items={[

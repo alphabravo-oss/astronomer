@@ -63,7 +63,7 @@ describe("Charlie administration boundaries", () => {
             gracePeriodSeconds: 1,
             flapWindowSeconds: 1,
             flapCount: 1,
-            estateThresholdPercent: 101,
+            fleetThresholdPercent: 101,
             maximumAttempts: 1,
             serviceIdentity: "",
             modeCeiling: "invalid",

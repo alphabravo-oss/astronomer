@@ -1626,6 +1626,46 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/catalog/application-sources/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/catalog/applications/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/catalog/applications/preview/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/catalog/charts/",
     "handler_owner": "handler.CatalogHandler",
     "surface": "catalog and application API",
@@ -1648,6 +1688,20 @@
     "audit": "read-side audit when policy matches; no request/response secrets recorded",
     "tests": [
       "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/catalog/charts/{id}/favorite/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
     ]
   },
   {
@@ -1692,6 +1746,19 @@
   {
     "method": "GET",
     "pattern": "/api/v1/*/catalog/controller/status/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/catalog/discovery/",
     "handler_owner": "handler.CatalogHandler",
     "surface": "catalog and application API",
     "auth": "bearer/session auth through route middleware or handler-specific gate",
@@ -1771,6 +1838,19 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "catalog-installed-rollback"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/catalog/installed/{id}/upgrade-versions/",
+    "handler_owner": "handler.CatalogHandler",
+    "surface": "catalog and application API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
   },
   {
     "method": "PUT",
@@ -5204,6 +5284,80 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/delivery/configuration-templates/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/*/delivery/configuration-templates/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/*/delivery/configuration-templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/delivery/configuration-templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/*/delivery/configuration-templates/{id}/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific write permission documented in high-risk registry",
+    "csrf": "required for browser cookie mutation by authenticated router",
+    "audit": "mutating request audit middleware or explicit handler audit",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture",
+      "TestMutatingRoutesHaveSecurityClassification"
+    ],
+    "risk_classification": "covered-rbac-project-scoped",
+    "risk_reason": "Flux-native delivery mutations are authenticated, require the projects:write API-token scope, and authorize a dedicated delivery resource and verb against one normalized project. Middleware rejects conflicting query, header, and body scopes before RBAC or persistence; target, rollout, and deployment updates additionally use strong If-Match compare-and-swap tokens. Replay-safe operations run behind authorization and credential plaintext is accepted only by the write-only encrypted source boundary."
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/delivery/deployments/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "management API",
@@ -5286,19 +5440,6 @@
       "TestDeliveryRoutesEnforceDedicatedProjectScopedRBAC"
     ],
     "security_registry_id": "delivery-deployment-suspend"
-  },
-  {
-    "method": "GET",
-    "pattern": "/api/v1/*/delivery/estate/",
-    "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "management API",
-    "auth": "bearer/session auth through route middleware or handler-specific gate",
-    "rbac": "route-specific read/list permission or handler-domain gate",
-    "csrf": "not applicable: safe HTTP method",
-    "audit": "read-side audit when policy matches; no request/response secrets recorded",
-    "tests": [
-      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
-    ]
   },
   {
     "method": "GET",

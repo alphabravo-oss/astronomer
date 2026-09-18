@@ -2,19 +2,21 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime } from "@/lib/utils";
 import type { InstalledChart } from "@/types";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { ArrowUpCircle, GitBranch, RotateCcw, Trash2 } from "lucide-react";
 
 export function InstalledTab({
   installed,
   loading,
   clusterNames,
   onRollback,
+  onUpgrade,
   onUninstall,
 }: {
   installed: InstalledChart[] | undefined;
   loading: boolean;
   clusterNames: Readonly<Record<string, string>>;
   onRollback: (id: string, revision: number) => void;
+  onUpgrade: (installation: InstalledChart) => void;
   onUninstall: (id: string) => void;
 }) {
   const installedColumns: Column<InstalledChart>[] = [
@@ -75,12 +77,16 @@ export function InstalledTab({
     },
     {
       key: "source",
-      header: "Source",
+      header: "Managed by",
       accessor: (row) => (
-        <span className="text-xs text-muted-foreground">
-          {row.toolSlug ? `Tool: ${row.toolSlug}` : "Catalog chart"}
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+          {row.requestId ? <GitBranch className="h-3.5 w-3.5 text-primary" /> : null}
+          {row.requestId ? "Flux" : row.toolSlug ? `Tool: ${row.toolSlug}` : "Unmanaged"}
         </span>
       ),
+      sortAccessor: (row) =>
+        row.requestId ? "Flux" : row.toolSlug ? `Tool: ${row.toolSlug}` : "Unmanaged",
+      filter: { label: "Ownership" },
     },
     {
       key: "date",
@@ -96,7 +102,13 @@ export function InstalledTab({
       header: "",
       accessor: (row) => (
         <div className="flex items-center gap-1">
-          {/* UX-06: hide Upgrade until an upgrade modal / version picker is wired. */}
+          <button
+            onClick={() => onUpgrade(row)}
+            className="p-1.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+            title="Upgrade"
+          >
+            <ArrowUpCircle className="h-3.5 w-3.5" />
+          </button>
           <button
             onClick={() => {
               if (row.revision > 1) {
@@ -134,6 +146,8 @@ export function InstalledTab({
       searchPlaceholder="Search installed releases..."
       loading={loading}
       emptyMessage="No charts installed"
+      persistKey="catalog-installed"
+      resizable
     />
   );
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/alphabravocompany/astronomer-go/internal/handler/clustermetrics"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
@@ -108,6 +109,26 @@ func TestListNodes_HonoursLimitOffset(t *testing.T) {
 	}
 	if second.Pagination.HasMore || second.Pagination.NextOffset != nil {
 		t.Fatalf("page 2 is last, should not advertise next: %+v", second.Pagination)
+	}
+}
+
+func TestLayerNodeSummaryUsage(t *testing.T) {
+	items := []map[string]any{
+		{"name": "node-1", "cpuUsage": 0, "memoryUsage": 0},
+		{"name": "node-without-metrics", "cpuUsage": 0, "memoryUsage": 0},
+	}
+	layerNodeSummaryUsage(items, clustermetrics.Snapshot{Nodes: map[string]clustermetrics.NodeMetrics{
+		"node-1": {Name: "node-1", CPUUsageMillicores: 725, MemoryUsageBytes: 4 << 30},
+	}})
+
+	if got := items[0]["cpuUsage"]; got != 725 {
+		t.Fatalf("cpuUsage = %v, want 725", got)
+	}
+	if got := items[0]["memoryUsage"]; got != 4<<30 {
+		t.Fatalf("memoryUsage = %v, want %d", got, 4<<30)
+	}
+	if got := items[1]["cpuUsage"]; got != 0 {
+		t.Fatalf("missing node cpuUsage = %v, want zero fallback", got)
 	}
 }
 

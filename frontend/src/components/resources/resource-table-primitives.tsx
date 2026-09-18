@@ -33,7 +33,7 @@ export function NameLink({
     <Link
       href={detailHref(clusterId, resourceType, namespace, name)}
       onClick={(event) => event.stopPropagation()}
-      className="font-medium text-foreground font-mono text-xs hover:underline"
+      className="app-table-entity-link app-table-primary"
     >
       {name}
     </Link>

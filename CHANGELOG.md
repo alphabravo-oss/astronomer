@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### Added
+
+- Rancher-style, cluster-scoped Apps discovery with curated, Astronomer
+  first-party, community, and operator-added catalog sources; enriched app
+  details; schema-guided install/upgrade flows; immutable values review; and
+  Flux-owned lifecycle operations.
+- Multi-cluster Applications and System Components views with rollout cohorts,
+  per-cluster history, resource/drift evidence, cluster groups, and normalized
+  ownership, compatibility, storage, HA, and update posture.
+- Catalog/delivery metrics, alerts, dashboards, support diagnostics, DR table
+  validation, wrapped private-catalog CA backup, and a static HTTPS
+  application-catalog air-gap export/import workflow.
+
+### Changed
+
+- Curated catalog synchronization can be disabled with `catalog.enabled=false`
+  without disabling management of installed applications or custom Helm
+  repositories.
+
+## 1.2.0 - 2026-08-25
+
+### Fixed
+
+- A fresh evaluation install now starts with delivery disabled until signed
+  release artifacts are configured, avoiding an otherwise non-runnable default.
+- The chart rejects an externally owned core Secret with bundled PostgreSQL,
+  a combination Kubernetes cannot safely interpolate into the application DSN.
+- Astronomer can attach its HTTPRoutes to an existing cross-namespace Gateway,
+  allowing it to share one load balancer and externally terminated certificate.
+- Production server, worker, frontend, and Dex workloads now enforce node-level
+  topology spreading; Dex also has a disruption budget.
+- Helm verification renders against the chart's supported Kubernetes 1.35 API
+  target instead of Helm's older implicit default.
+- Release retries refuse to reuse exact image tags unless signed provenance
+  binds every image to the release commit, and refuse mismatched chart content.
+
 ## 1.1.0 - 2026-08-21
 
 ### Added

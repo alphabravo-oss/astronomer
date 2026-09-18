@@ -6,17 +6,22 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"github.com/alphabravocompany/astronomer-go/internal/agent"
+	agentdelivery "github.com/alphabravocompany/astronomer-go/internal/agent/delivery"
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
 	"github.com/alphabravocompany/astronomer-go/internal/db/sqlc"
 	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
@@ -29,6 +34,8 @@ import (
 // dependency on the in-cluster service mesh / DNS.
 const localAgentDialURL = "ws://127.0.0.1:8000"
 
+const localAgentLeaderLease = "astronomer-local-agent"
+
 // localClusterName is the canonical name for the management cluster row,
 // matching Rancher's convention. The user-visible UI surfaces this directly.
 const localClusterName = "local"
@@ -38,6 +45,53 @@ const localClusterName = "local"
 // outlive any plausible reconnect backoff window. 30 days is generous; the
 // token never leaves this pod.
 const localRegistrationTokenTTL = 30 * 24 * time.Hour
+
+// StartLocalAgentLeaderElection ensures exactly one HA server replica owns the
+// singleton local-cluster tunnel. Kubernetes Lease failover moves ownership to
+// a healthy replica without allowing superseded sessions to publish status.
+func StartLocalAgentLeaderElection(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID, deliveryEnabled, bootstrapFlux bool) error {
+	restCfg, err := rest.InClusterConfig()
+	if err != nil {
+		logger.Warn("local agent disabled: not running in-cluster", "error", err)
+		return nil
+	}
+	client, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return fmt.Errorf("create local agent leader-election client: %w", err)
+	}
+	namespace := strings.TrimSpace(os.Getenv("POD_NAMESPACE"))
+	if namespace == "" {
+		namespace = "astronomer"
+	}
+	identity, err := os.Hostname()
+	if err != nil || strings.TrimSpace(identity) == "" {
+		identity = uuid.NewString()
+	}
+	lock, err := resourcelock.New(resourcelock.LeasesResourceLock, namespace, localAgentLeaderLease,
+		client.CoreV1(), client.CoordinationV1(), resourcelock.ResourceLockConfig{Identity: identity})
+	if err != nil {
+		return fmt.Errorf("create local agent leader lease: %w", err)
+	}
+	go leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
+		Lock: lock, LeaseDuration: 15 * time.Second, RenewDeadline: 10 * time.Second,
+		RetryPeriod: 2 * time.Second, ReleaseOnCancel: true, Name: localAgentLeaderLease,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(leaderCtx context.Context) {
+				logger.Info("local agent leadership acquired", "identity", identity)
+				if err := StartLocalAgent(leaderCtx, logger, queries, clusterID, deliveryEnabled, bootstrapFlux); err != nil {
+					logger.Error("local agent leader failed to start", "error", err)
+				}
+			},
+			OnStoppedLeading: func() { logger.Warn("local agent leadership lost", "identity", identity) },
+			OnNewLeader: func(newIdentity string) {
+				if newIdentity != identity {
+					logger.Info("local agent leader elected", "identity", newIdentity)
+				}
+			},
+		},
+	})
+	return nil
+}
 
 // EnsureLocalCluster idempotently creates (or fetches) the singleton local
 // cluster row and refreshes its k8s-derived metadata fields (kubernetes
@@ -132,7 +186,7 @@ func EnsureLocalCluster(ctx context.Context, queries *sqlc.Queries, k8sClient *k
 // fails (running outside a cluster, e.g. tests or local dev), this function
 // logs a warning and returns nil — the server still comes up, just without
 // the local cluster's data plane.
-func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID) error {
+func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Queries, clusterID uuid.UUID, deliveryEnabled, bootstrapFlux bool) error {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -143,6 +197,14 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	if err != nil {
 		logger.Warn("local agent disabled: not running in-cluster", "error", err)
 		return nil
+	}
+	if deliveryEnabled && bootstrapFlux {
+		if err := EnsureLocalFlux(ctx, restCfg); err != nil {
+			logger.Warn("local Flux bootstrap failed; retrying in background", "error", err)
+			go retryLocalFluxBootstrap(ctx, logger, restCfg)
+		} else {
+			logger.Info("local Flux distribution reconciled")
+		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(restCfg)
@@ -217,6 +279,45 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	tunnelClient.RegisterHandler(protocol.MsgHelmRollback, helm.HandleRollback)
 	tunnelClient.RegisterHandler(protocol.MsgHelmStatus, helm.HandleStatus)
 	tunnelClient.RegisterHandler(protocol.MsgHelmHistory, helm.HandleHistory)
+
+	if deliveryEnabled {
+		deliveryDynamic, err := dynamic.NewForConfig(restCfg)
+		if err != nil {
+			return fmt.Errorf("initialize local delivery dynamic client: %w", err)
+		}
+		deliveryExecutor, err := agentdelivery.NewExecutor(deliveryDynamic)
+		if err != nil {
+			return fmt.Errorf("initialize local delivery executor: %w", err)
+		}
+		checkpointNamespace := strings.TrimSpace(os.Getenv("POD_NAMESPACE"))
+		if checkpointNamespace == "" {
+			checkpointNamespace = "astronomer"
+		}
+		deliveryStore, err := agentdelivery.NewKubernetesCheckpointStore(clientset, checkpointNamespace)
+		if err != nil {
+			return fmt.Errorf("initialize local delivery checkpoint: %w", err)
+		}
+		deliveryProbe, err := agentdelivery.NewClusterProbe(clientset, clientset.Discovery(), true)
+		if err != nil {
+			return fmt.Errorf("initialize local delivery capability probe: %w", err)
+		}
+		deliveryProbe.WithDynamicClient(deliveryDynamic)
+		deliveryRuntime, err := agentdelivery.NewRuntime(agentdelivery.RuntimeConfig{
+			ClusterID: clusterID.String(), AgentVersion: version.Version,
+			ValidationPolicy: agentdelivery.ValidationPolicy{AllowPlatformScope: true},
+			Connected:        tunnelClient.IsConnected, Logger: logger.With("component", "local-delivery"),
+		}, deliveryExecutor, deliveryStore, deliveryProbe)
+		if err != nil {
+			return fmt.Errorf("initialize local delivery runtime: %w", err)
+		}
+		tunnelClient.RegisterHandler(protocol.MsgDeliveryStateResponse, deliveryRuntime.HandleStateResponse)
+		tunnelClient.RegisterHandler(protocol.MsgDeliveryReconcile, deliveryRuntime.HandleReconcile)
+		go func() {
+			if err := deliveryRuntime.Run(ctx, tunnelClient.SendFunc(ctx)); err != nil && ctx.Err() == nil {
+				logger.Error("local delivery runtime stopped", "error", err)
+			}
+		}()
+	}
 
 	// Health reporter — drives the heartbeat / metrics tickers that update the
 	// cluster row's last_heartbeat / agent_version / k8s_version columns.
@@ -296,6 +397,24 @@ func StartLocalAgent(ctx context.Context, logger *slog.Logger, queries *sqlc.Que
 	}()
 
 	return nil
+}
+
+func retryLocalFluxBootstrap(ctx context.Context, logger *slog.Logger, config *rest.Config) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := EnsureLocalFlux(ctx, config); err != nil {
+				logger.Warn("local Flux bootstrap retry failed", "error", err)
+				continue
+			}
+			logger.Info("local Flux distribution reconciled after retry")
+			return
+		}
+	}
 }
 
 // generateLocalAgentToken returns a 32-byte cryptographically random URL-safe

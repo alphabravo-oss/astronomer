@@ -47,7 +47,7 @@ import {
 function KindBadge({ kind }: { kind: "builtin" | "custom" }) {
   const palette =
     kind === "builtin"
-      ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30"
+      ? "bg-status-info/10 text-status-info border-status-info/30"
       : "bg-status-success/10 text-status-success border-status-success/30";
   return (
     <span

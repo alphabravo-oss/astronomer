@@ -35,7 +35,7 @@ export function UsersTab({
       accessor: (row) => (
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-800 flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-medium text-zinc-300">
+            <span className="text-xs font-medium text-foreground">
               {(row.displayName || row.username || "?").charAt(0).toUpperCase()}
             </span>
           </div>

@@ -10,6 +10,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
@@ -29,7 +30,15 @@ var expectedFluxAPIs = []string{
 type ClusterProbe struct {
 	client        kubernetes.Interface
 	discovery     discovery.DiscoveryInterface
+	dynamic       dynamic.Interface
 	platformScope bool
+}
+
+func (p *ClusterProbe) WithDynamicClient(client dynamic.Interface) *ClusterProbe {
+	if p != nil {
+		p.dynamic = client
+	}
+	return p
 }
 
 func NewClusterProbe(client kubernetes.Interface, discoveryClient discovery.DiscoveryInterface, platformScope bool) (*ClusterProbe, error) {
@@ -78,7 +87,6 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 	controllerReady := true
 	hardeningReady := true
 	images := make([]string, 0, len(expectedControllerImages))
-	fluxVersion := ""
 	for _, name := range []string{"source-controller", "kustomize-controller", "helm-controller"} {
 		deployment, err := p.client.AppsV1().Deployments(DeliverySystemNamespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
@@ -89,7 +97,7 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 			}
 			continue
 		}
-		if !deploymentReady(deployment) {
+		if !deploymentReady(deployment, name) {
 			controllerReady = false
 		}
 		image, args := controllerImageAndArgs(deployment, name)
@@ -104,10 +112,7 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 		} else {
 			inventory.Components[name] = expected.Version
 		}
-		version := deployment.Labels["app.kubernetes.io/version"]
-		if fluxVersion == "" {
-			fluxVersion = version
-		} else if version != fluxVersion {
+		if deployment.Labels["app.kubernetes.io/version"] != fluxdistribution.Version() {
 			controllerReady = false
 		}
 		// source-controller has no cross-namespace-refs flag. Helm and
@@ -119,7 +124,8 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 			hardeningReady = false
 		}
 	}
-	inventory.FluxVersion = fluxVersion
+	inventory.FluxVersion = fluxdistribution.Version()
+	inventory.SystemComponents = p.inspectSystemComponents(ctx, inventory.KubernetesVersion)
 	if len(images) == len(expectedControllerImages) {
 		inventory.DistributionDigest, err = fluxdistribution.ControllerSetDigest()
 		if err != nil {
@@ -135,9 +141,17 @@ func (p *ClusterProbe) Inspect(ctx context.Context) (protocol.DeliveryController
 	return inventory, capabilities, nil
 }
 
-func deploymentReady(deployment *appsv1.Deployment) bool {
+func deploymentReady(deployment *appsv1.Deployment, name string) bool {
 	if deployment == nil || deployment.Generation < 1 || deployment.Status.ObservedGeneration < deployment.Generation || deployment.Status.AvailableReplicas < 1 {
 		return false
+	}
+	// Only the elected source-controller serves artifacts and passes its
+	// artifact-port readiness probe. A second leader-election replica is a warm
+	// standby, so one available replica is the healthy steady state for this
+	// controller. Other controllers must satisfy their Deployment availability
+	// condition normally.
+	if name == "source-controller" {
+		return true
 	}
 	for _, condition := range deployment.Status.Conditions {
 		if condition.Type == appsv1.DeploymentAvailable && condition.Status == "True" {

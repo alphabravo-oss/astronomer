@@ -8,13 +8,13 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 627
-- Frontend source lines: 169299
-- Go source files under `internal/` excluding generated sqlc and tests: 710
-- Go source files scanned for sqlc query references excluding generated sqlc: 1633
-- sqlc query declarations: 1145
-- Component files scanned: 164
-- Helm top-level values scanned: 34
+- Frontend source files: 653
+- Frontend source lines: 176335
+- Go source files under `internal/` excluding generated sqlc and tests: 720
+- Go source files scanned for sqlc query references excluding generated sqlc: 1649
+- sqlc query declarations: 1168
+- Component files scanned: 169
+- Helm top-level values scanned: 35
 
 ## Hard Gates
 
@@ -99,32 +99,32 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `canonicalCandidates` in [`internal/delivery/placement/placement.go:412`](internal/delivery/placement/placement.go:412), [`internal/delivery/rollout/cohorts.go:85`](internal/delivery/rollout/cohorts.go:85)
 - `cloneStringMap` in [`internal/delivery/model/placement.go:193`](internal/delivery/model/placement.go:193), [`internal/delivery/placement/placement.go:557`](internal/delivery/placement/placement.go:557)
 - `contains` in [`internal/delivery/placement/placement.go:565`](internal/delivery/placement/placement.go:565), [`internal/server/vault_observer.go:108`](internal/server/vault_observer.go:108)
-- `containsControl` in [`internal/delivery/model/types.go:618`](internal/delivery/model/types.go:618), [`internal/handler/delivery/common.go:347`](internal/handler/delivery/common.go:347)
+- `containsControl` in [`internal/delivery/model/types.go:641`](internal/delivery/model/types.go:641), [`internal/handler/delivery/common.go:347`](internal/handler/delivery/common.go:347)
 - `containsString` in [`internal/agent/delivery/validator.go:454`](internal/agent/delivery/validator.go:454), [`internal/charlie/capability_schema.go:357`](internal/charlie/capability_schema.go:357)
-- `decisionDigest` in [`internal/delivery/rollout/scheduler.go:558`](internal/delivery/rollout/scheduler.go:558), [`internal/delivery/systemrollout/service.go:735`](internal/delivery/systemrollout/service.go:735)
+- `decisionDigest` in [`internal/delivery/rollout/scheduler.go:562`](internal/delivery/rollout/scheduler.go:562), [`internal/delivery/systemrollout/service.go:735`](internal/delivery/systemrollout/service.go:735)
 - `decodeJSON` in [`internal/charlie/contract/fakebridge/fake.go:298`](internal/charlie/contract/fakebridge/fake.go:298), [`internal/scanner/image_vuln_ingest.go:400`](internal/scanner/image_vuln_ingest.go:400)
 - `decodeRoleRules` in [`internal/handler/rbac.go:1326`](internal/handler/rbac.go:1326), [`internal/server/middleware/rbac_queries.go:238`](internal/server/middleware/rbac_queries.go:238)
-- `decodeStrict` in [`internal/delivery/provider/provider.go:456`](internal/delivery/provider/provider.go:456), [`internal/delivery/rollout/postgres_store.go:310`](internal/delivery/rollout/postgres_store.go:310)
+- `decodeStrict` in [`internal/delivery/provider/provider.go:464`](internal/delivery/provider/provider.go:464), [`internal/delivery/rollout/postgres_store.go:486`](internal/delivery/rollout/postgres_store.go:486)
 - `denied` in [`internal/charlie/action_guard.go:806`](internal/charlie/action_guard.go:806), [`internal/delivery/resolver/network.go:186`](internal/delivery/resolver/network.go:186)
 - `digestBytes` in [`internal/charlie/action_guard.go:801`](internal/charlie/action_guard.go:801), [`internal/delivery/resolver/service.go:171`](internal/delivery/resolver/service.go:171)
 - `ensureJSONEOF` in [`internal/handler/charlie_onboarding.go:134`](internal/handler/charlie_onboarding.go:134), [`internal/sessionpolicy/session_timeout.go:80`](internal/sessionpolicy/session_timeout.go:80)
 - `isEmpty` in [`internal/dexconfig/validate.go:504`](internal/dexconfig/validate.go:504), [`internal/notify/render.go:147`](internal/notify/render.go:147)
 - `missingCapabilities` in [`internal/agentcompat/compat.go:119`](internal/agentcompat/compat.go:119), [`internal/delivery/placement/placement.go:392`](internal/delivery/placement/placement.go:392)
+- `normalizeDigest` in [`internal/charlie/admin_diagnostics.go:198`](internal/charlie/admin_diagnostics.go:198), [`internal/delivery/catalogapp/service.go:433`](internal/delivery/catalogapp/service.go:433)
 - `nullableTime` in [`internal/charlie/cluster_agent_capability_adapter.go:192`](internal/charlie/cluster_agent_capability_adapter.go:192), [`internal/handler/alerting.go:2456`](internal/handler/alerting.go:2456)
-- `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:530`](internal/charlie/delivery_capability_adapter.go:530), [`internal/handler/alerting.go:2442`](internal/handler/alerting.go:2442)
+- `nullableUUID` in [`internal/charlie/delivery_capability_adapter.go:530`](internal/charlie/delivery_capability_adapter.go:530), [`internal/handler/alerting.go:2442`](internal/handler/alerting.go:2442), [`internal/handler/delivery/override_set.go:327`](internal/handler/delivery/override_set.go:327)
 - `percentile` in [`internal/anomaly/stats.go:184`](internal/anomaly/stats.go:184), [`internal/delivery/qualification/report.go:134`](internal/delivery/qualification/report.go:134)
-- `podReady` in [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations.go:1070`](internal/handler/monitoring_operations.go:1070)
+- `podReady` in [`internal/agent/delivery/system_inventory.go:406`](internal/agent/delivery/system_inventory.go:406), [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations.go:1070`](internal/handler/monitoring_operations.go:1070)
 - `recordAudit` in [`internal/handler/audit_helpers.go:38`](internal/handler/audit_helpers.go:38), [`internal/handler/delivery/common.go:105`](internal/handler/delivery/common.go:105)
 - `recordAuditOutbox` in [`internal/handler/audit_helpers.go:105`](internal/handler/audit_helpers.go:105), [`internal/handler/delivery/common.go:134`](internal/handler/delivery/common.go:134)
 - `requireSuperuser` in [`internal/handler/authorization.go:88`](internal/handler/authorization.go:88), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
 - `retryAfter` in [`internal/apisvr/allowlist/providers/errors.go:51`](internal/apisvr/allowlist/providers/errors.go:51), [`internal/delivery/builtin/provisioner.go:558`](internal/delivery/builtin/provisioner.go:558)
 - `sortedUUIDs` in [`internal/delivery/model/placement.go:187`](internal/delivery/model/placement.go:187), [`internal/handler/authorization.go:220`](internal/handler/authorization.go:220)
+- `stableID` in [`internal/delivery/builtin/provisioner.go:562`](internal/delivery/builtin/provisioner.go:562), [`internal/delivery/catalogapp/service.go:429`](internal/delivery/catalogapp/service.go:429)
 - `strictJSON` in [`internal/agent/delivery/checkpoint.go:276`](internal/agent/delivery/checkpoint.go:276), [`internal/delivery/resolver/postgres_worker.go:381`](internal/delivery/resolver/postgres_worker.go:381)
-- `stringValue` in [`internal/agent/delivery/observer.go:440`](internal/agent/delivery/observer.go:440), [`internal/handler/resource_presenters.go:566`](internal/handler/resource_presenters.go:566)
+- `stringValue` in [`internal/agent/delivery/observer.go:464`](internal/agent/delivery/observer.go:464), [`internal/handler/resource_presenters.go:566`](internal/handler/resource_presenters.go:566)
 - `stripHopByHop` in [`internal/grafanaproxy/proxy.go:303`](internal/grafanaproxy/proxy.go:303), [`internal/lokiauth/auth.go:389`](internal/lokiauth/auth.go:389)
-- `timestamptz` in [`internal/delivery/rollout/postgres_store.go:396`](internal/delivery/rollout/postgres_store.go:396), [`internal/worker/tasks/security_scan.go:320`](internal/worker/tasks/security_scan.go:320)
-- `verbMatches` in [`internal/rbac/native.go:152`](internal/rbac/native.go:152), [`internal/server/middleware/read_audit.go:166`](internal/server/middleware/read_audit.go:166)
-- ... 2 more
+- ... 4 more
 
 ### Dead-Code Candidates
 
@@ -143,7 +143,7 @@ Owner: deployment/platform. Classification rule: keep if consumed by tests, docs
 ## Summary
 
 - Hard failures: 0
-- Duplicate-code candidates: 32
+- Duplicate-code candidates: 34
 - Dead-code candidates: 0
 
 ## Definition Of Done For Each Candidate

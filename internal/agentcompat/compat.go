@@ -97,7 +97,7 @@ func EvaluateConnect(payload protocol.ConnectPayload) Status {
 
 func strictVersion(value string) (*semver.Version, error) {
 	value = strings.TrimPrefix(strings.TrimSpace(value), "v")
-	if value == "" || strings.Count(value, ".") != 2 {
+	if value == "" {
 		return nil, fmt.Errorf("strict semantic version required")
 	}
 	return semver.StrictNewVersion(value)

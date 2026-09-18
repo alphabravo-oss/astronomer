@@ -18,6 +18,7 @@ func renderDexRuntimeContract(t *testing.T) []renderedDoc {
 	t.Helper()
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	cmd := exec.Command("helm", "template", "astronomer", chart,
+		"--kube-version", "1.35.0",
 		"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 		"--set", "dex.enabled=true",
 		"--set", "dex.runtimeSecretName=dex-runtime-contract")
@@ -86,7 +87,7 @@ func TestDexRuntimeSecretChartOwnsMetadataOnlyAndRBACIsExactName(t *testing.T) {
 
 func TestDexBundledIdentityTracksCustomReleaseNamespaceAndRuntimeName(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
-	cmd := exec.Command("helm", "template", "elite", chart, "--namespace", "platform-auth", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", "dex.runtimeSecretName=company-dex-runtime")
+	cmd := exec.Command("helm", "template", "elite", chart, "--kube-version", "1.35.0", "--namespace", "platform-auth", "--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet, "--set", "dex.enabled=true", "--set", "dex.runtimeSecretName=company-dex-runtime")
 	raw, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("render: %v\n%s", err, raw)
@@ -148,6 +149,7 @@ func TestDexRuntimeSecretThreeWayUpgradePreservesRuntimeOwnedData(t *testing.T) 
 func TestDexRuntimeCutoverIsGatedOrderedAndZeroUnavailable(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	cmd := exec.Command("helm", "template", "astronomer", chart,
+		"--kube-version", "1.35.0",
 		"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 		"--set", "dex.enabled=true",
 		"--set", "dex.runtimeSecretName=dex-runtime-contract",
@@ -223,6 +225,62 @@ func TestDexFreshInstallNeverRendersLegacyConfigMap(t *testing.T) {
 	}
 }
 
+func TestDexFreshInstallStagesCredentialFreeBootstrapConfig(t *testing.T) {
+	deployment := findRenderedDoc(t, renderDexRuntimeContract(t), "Deployment", "astronomer-dex")
+	podSpec := podSpecFor(deployment)
+	dex := findContainer(t, podSpec, "containers", "dex")
+	if got := stringValue(nestedMap(dex, "livenessProbe", "httpGet")["path"]); got != "/dex/healthz" {
+		t.Fatalf("Dex liveness path = %q, want /dex/healthz", got)
+	}
+	init := findContainer(t, podSpec, "initContainers", "stage-config")
+	initJSON, _ := json.Marshal(init)
+	for _, required := range []string{"/var/run/dex-config-source/config.yaml", "connectors: []", "enablePasswordDB: true", "type: kubernetes"} {
+		if !bytes.Contains(initJSON, []byte(required)) {
+			t.Fatalf("Dex staging init missing %q: %s", required, initJSON)
+		}
+	}
+	for _, forbidden := range []string{"clientSecret", "bindPW", "staticPasswords"} {
+		if bytes.Contains(initJSON, []byte(forbidden)) {
+			t.Fatalf("Dex bootstrap config contains credential field %q: %s", forbidden, initJSON)
+		}
+	}
+	volumes, _ := podSpec["volumes"].([]any)
+	volumeJSON, _ := json.Marshal(volumes)
+	if !bytes.Contains(volumeJSON, []byte(`"emptyDir":{}`)) ||
+		!bytes.Contains(volumeJSON, []byte(`"secretName":"dex-runtime-contract"`)) ||
+		!bytes.Contains(volumeJSON, []byte(`"optional":true`)) {
+		t.Fatalf("Dex config staging volumes are not optional Secret -> emptyDir: %s", volumeJSON)
+	}
+}
+
+func TestDexCRDInstallerUsesClusterScopedRBAC(t *testing.T) {
+	docs := renderDexRuntimeContract(t)
+	clusterRole := findRenderedDoc(t, docs, "ClusterRole", "astronomer-dex-crd")
+	binding := findRenderedDoc(t, docs, "ClusterRoleBinding", "astronomer-dex-crd")
+	rules, _ := clusterRole["rules"].([]any)
+	if len(rules) != 1 {
+		t.Fatalf("Dex CRD ClusterRole rules = %#v, want one narrow rule", rules)
+	}
+	rule, _ := rules[0].(map[string]any)
+	ruleJSON, _ := json.Marshal(rule)
+	for _, required := range []string{"apiextensions.k8s.io", "customresourcedefinitions", "create", "get", "list"} {
+		if !bytes.Contains(ruleJSON, []byte(required)) {
+			t.Fatalf("Dex CRD ClusterRole missing %q: %s", required, ruleJSON)
+		}
+	}
+	if bytes.Contains(ruleJSON, []byte(`"*"`)) {
+		t.Fatalf("Dex CRD ClusterRole contains wildcard access: %s", ruleJSON)
+	}
+	if got := stringValue(nestedMap(binding, "roleRef")["kind"]); got != "ClusterRole" {
+		t.Fatalf("Dex CRD binding roleRef kind = %q, want ClusterRole", got)
+	}
+	subjects, _ := binding["subjects"].([]any)
+	subjectJSON, _ := json.Marshal(subjects)
+	if !bytes.Contains(subjectJSON, []byte(`"name":"astronomer-dex"`)) {
+		t.Fatalf("Dex CRD binding does not target Dex ServiceAccount: %s", subjectJSON)
+	}
+}
+
 func TestDexPrepareTemplatePreservesLiveDataAndOldMount(t *testing.T) {
 	root := repoRoot(t)
 	configTemplate, _ := os.ReadFile(filepath.Join(root, "deploy", "chart", "templates", "dex-legacy-prepare.yaml"))
@@ -284,6 +342,7 @@ func TestDexRenderedReleaseNeverArchivesCredentialCanaries(t *testing.T) {
 	chart := filepath.Join(repoRoot(t), "deploy", "chart")
 	for _, phase := range []string{"fresh", "cutover"} {
 		cmd := exec.Command("helm", "template", "astronomer", chart,
+			"--kube-version", "1.35.0",
 			"--set", testRenderSecretKeySet, "--set", testRenderEncryptionKeySet,
 			"--set", "dex.enabled=true", "--set", "dex.migration.phase="+phase,
 			"--set-string", "dex.runtimeSecretName=dex-runtime-contract")

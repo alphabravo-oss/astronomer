@@ -316,7 +316,7 @@ export function PodLogsViewer({
             <span className="text-xs">Loading logs...</span>
           </div>
         ) : filteredLogs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-zinc-600 text-xs">
+          <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
             {searchQuery ? "No matching log lines" : "No logs available"}
           </div>
         ) : (
