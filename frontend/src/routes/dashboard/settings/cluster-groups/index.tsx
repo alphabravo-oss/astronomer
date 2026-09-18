@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/operator-table";
+import { ClusterGroupMembership } from "./-membership";
 /**
  * /dashboard/settings/cluster-groups — operator-defined folder hierarchy
  * over clusters (migration 066).
@@ -116,11 +117,13 @@ function ClusterGroupsPage() {
 
   const [editing, setEditing] = useState<ClusterGroupTreeNode | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ClusterGroupTreeNode | null>(
     null,
   );
 
   const tree = useMemo(() => data ?? [], [data]);
+  const selectedGroup = tree.find((group) => group.id === selectedGroupId);
 
   // Sort the flat tree by parent → depth → name so siblings cluster
   // together visually. The server already returns rows ordered by
@@ -210,7 +213,16 @@ function ClusterGroupsPage() {
               {flattened.map((g) => (
                 <TableRow
                   key={g.id}
-                  className="border-b border-border last:border-b-0"
+                  tabIndex={0}
+                  aria-selected={selectedGroupId === g.id}
+                  onClick={() => setSelectedGroupId(g.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedGroupId(g.id);
+                    }
+                  }}
+                  className="cursor-pointer border-b border-border transition-colors last:border-b-0 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring aria-selected:bg-muted/50"
                 >
                   <TableCell className="px-4 py-2">
                     <div
@@ -242,7 +254,8 @@ function ClusterGroupsPage() {
                     <div className="flex items-center gap-1 justify-end">
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(event) => {
+                          event.stopPropagation();
                           setEditing(g);
                           setShowForm(true);
                         }}
@@ -253,7 +266,10 @@ function ClusterGroupsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setDeleteTarget(g)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDeleteTarget(g);
+                        }}
                         className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
                         title="Delete"
                       >
@@ -267,6 +283,8 @@ function ClusterGroupsPage() {
           </Table>
         </div>
       )}
+
+      {selectedGroup && <ClusterGroupMembership group={selectedGroup} />}
 
       {showForm && (
         <ClusterGroupForm
@@ -293,7 +311,12 @@ function ClusterGroupsPage() {
         onConfirm={() => {
           if (!deleteTarget) return;
           deleteMut.mutate(deleteTarget.id, {
-            onSuccess: () => setDeleteTarget(null),
+            onSuccess: () => {
+              if (selectedGroupId === deleteTarget.id) {
+                setSelectedGroupId(null);
+              }
+              setDeleteTarget(null);
+            },
           });
         }}
         title="Delete cluster group subtree"

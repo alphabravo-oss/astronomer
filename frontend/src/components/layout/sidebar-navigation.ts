@@ -70,6 +70,39 @@ export type NavGroup = {
   defaultOpen?: boolean;
 };
 
+export const INSTALLED_TOOLS_NAV_GROUP = "Tool UIs";
+
+export function activeNavGroupLabel(
+  groups: readonly NavGroup[],
+  pathname: string,
+): string | null {
+  return (
+    groups.find((group) =>
+      group.items.some((item) =>
+        item.exact ? pathname === item.href : pathname.startsWith(item.href),
+      ),
+    )?.label ?? null
+  );
+}
+
+export function defaultOpenNavGroupLabel(
+  groups: readonly NavGroup[],
+  pathname: string,
+): string | null {
+  return (
+    activeNavGroupLabel(groups, pathname) ??
+    groups.find((group) => group.defaultOpen)?.label ??
+    null
+  );
+}
+
+export function toggleOpenNavGroupLabel(
+  current: string | null,
+  requested: string,
+): string | null {
+  return current === requested ? null : requested;
+}
+
 // Default (global) navigation groups
 export const globalNavGroups: NavGroup[] = [
   {

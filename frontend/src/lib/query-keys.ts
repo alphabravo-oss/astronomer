@@ -338,6 +338,8 @@ export const queryKeys = {
   },
   clusterGroups: {
     all: ["cluster-groups"] as const,
+    members: (groupId: string) =>
+      ["cluster-groups", groupId, "members"] as const,
   },
   vault: {
     connections: ["vault-connections"] as const,

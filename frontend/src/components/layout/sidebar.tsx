@@ -16,9 +16,12 @@ import {
   SidebarGroup,
 } from "@/components/layout/sidebar-navigation-view";
 import {
+  defaultOpenNavGroupLabel,
   filterNavGroups,
   getClusterNavGroups,
   globalNavGroups,
+  INSTALLED_TOOLS_NAV_GROUP,
+  toggleOpenNavGroupLabel,
   withFavoriteNavigation,
 } from "@/components/layout/sidebar-navigation";
 import { OverlayBackdrop } from "@/components/ui/overlay-shell";
@@ -108,22 +111,14 @@ export function Sidebar() {
     veleroStatus?.installed,
   ]);
 
-  // Preserve context by allowing multiple groups to remain open.
-  const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () =>
-      new Set(
-        navGroups
-          .filter(
-            (group) =>
-              group.defaultOpen ||
-              group.items.some((item) =>
-                item.exact
-                  ? pathname === item.href
-                  : pathname.startsWith(item.href),
-              ),
-          )
-          .map((group) => group.label),
-      ),
+  // Accordion navigation: every collapsible sidebar section, including the
+  // dynamically discovered Tool UIs section, shares one open-section key.
+  const [openGroup, setOpenGroup] = useState<string | null>(() =>
+    defaultOpenNavGroupLabel(navGroups, pathname),
+  );
+  const openGroups = useMemo(
+    () => new Set(openGroup ? [openGroup] : []),
+    [openGroup],
   );
 
   // Fetch resource counts when in cluster context — only for groups that are
@@ -133,31 +128,12 @@ export function Sidebar() {
     openGroups,
   );
 
-  // Keep `defaultOpen` groups open and auto-expand the group containing the
-  // active route (e.g. after a context switch) without collapsing the rest.
+  // Auto-expand the active group after route/context changes. Resolving to a
+  // single key preserves the accordion invariant across those transitions.
   const [groupScope, setGroupScope] = useState({ navGroups, pathname });
   if (groupScope.navGroups !== navGroups || groupScope.pathname !== pathname) {
     setGroupScope({ navGroups, pathname });
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const g of navGroups) {
-        if (g.defaultOpen && !next.has(g.label)) {
-          next.add(g.label);
-          changed = true;
-        }
-      }
-      const activeGroup = navGroups.find((g) =>
-        g.items.some((item) =>
-          item.exact ? pathname === item.href : pathname.startsWith(item.href),
-        ),
-      );
-      if (activeGroup && !next.has(activeGroup.label)) {
-        next.add(activeGroup.label);
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
+    setOpenGroup(defaultOpenNavGroupLabel(navGroups, pathname));
   }
 
   return (
@@ -261,19 +237,25 @@ export function Sidebar() {
               pathname={pathname}
               collapsed={collapsed}
               counts={isClusterContext ? counts : undefined}
-              isOpen={openGroups.has(group.label)}
+              isOpen={openGroup === group.label}
               onToggle={() =>
-                setOpenGroups((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(group.label)) next.delete(group.label);
-                  else next.add(group.label);
-                  return next;
-                })
+                setOpenGroup((current) =>
+                  toggleOpenNavGroupLabel(current, group.label),
+                )
               }
             />
           ))}
           {isClusterContext && (
-            <InstalledToolLinks clusterId={clusterId!} collapsed={collapsed} />
+            <InstalledToolLinks
+              clusterId={clusterId!}
+              collapsed={collapsed}
+              isOpen={openGroup === INSTALLED_TOOLS_NAV_GROUP}
+              onToggle={() =>
+                setOpenGroup((current) =>
+                  toggleOpenNavGroupLabel(current, INSTALLED_TOOLS_NAV_GROUP),
+                )
+              }
+            />
           )}
           {/* §HostMounts mount point 1 — enabled `sidebar` extensions append
             full-page nav links here (global context only; routes are

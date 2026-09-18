@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 
@@ -9,13 +8,16 @@ import type { NavGroup } from "@/components/layout/sidebar-navigation";
 export function InstalledToolLinks({
   clusterId,
   collapsed,
+  isOpen,
+  onToggle,
 }: {
   clusterId: string;
   collapsed: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
   const { data: tools } = useTools();
   const { data: statuses } = useClusterToolsStatus(clusterId);
-  const [isOpen, setIsOpen] = useState(true);
 
   if (!tools || !statuses) return null;
 
@@ -72,7 +74,7 @@ export function InstalledToolLinks({
   return (
     <div>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={onToggle}
         className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
       >
         <span>Tool UIs</span>
