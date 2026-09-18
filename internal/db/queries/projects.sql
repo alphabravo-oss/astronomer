@@ -182,8 +182,12 @@ WHERE project_id = $1
 ORDER BY cluster_id, namespace;
 
 -- name: ListAllProjectNamespaces :many
-SELECT * FROM project_namespaces
-ORDER BY project_id, cluster_id, namespace;
+SELECT pn.*
+FROM project_namespaces pn
+JOIN clusters c ON c.id = pn.cluster_id
+WHERE c.decommissioned_at IS NULL
+  AND c.status = 'active'
+ORDER BY pn.project_id, pn.cluster_id, pn.namespace;
 
 -- name: ClaimProjectNamespaceReconcile :one
 -- Atomically bump the lease so other workers SKIP this row for the given TTL.

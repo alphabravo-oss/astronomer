@@ -413,8 +413,12 @@ func (q *Queries) GetProjectNamespaceByClusterAndNamespace(ctx context.Context, 
 }
 
 const listAllProjectNamespaces = `-- name: ListAllProjectNamespaces :many
-SELECT project_id, cluster_id, namespace, last_reconciled_at, last_reconcile_error, locked_until, created_at, updated_at, reconcile_claim_token FROM project_namespaces
-ORDER BY project_id, cluster_id, namespace
+SELECT pn.project_id, pn.cluster_id, pn.namespace, pn.last_reconciled_at, pn.last_reconcile_error, pn.locked_until, pn.created_at, pn.updated_at, pn.reconcile_claim_token
+FROM project_namespaces pn
+JOIN clusters c ON c.id = pn.cluster_id
+WHERE c.decommissioned_at IS NULL
+  AND c.status = 'active'
+ORDER BY pn.project_id, pn.cluster_id, pn.namespace
 `
 
 func (q *Queries) ListAllProjectNamespaces(ctx context.Context) ([]ProjectNamespace, error) {
