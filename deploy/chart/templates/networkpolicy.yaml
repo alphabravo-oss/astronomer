@@ -224,6 +224,24 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # The worker's monitoring reconciler health-checks managed Prometheus and
+    # Alertmanager services directly. Stacks may live in any operator-selected
+    # namespace, so select the upstream workload identity across namespaces and
+    # expose only their API ports.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - prometheus
+                  - alertmanager
+      ports:
+        - protocol: TCP
+          port: 9090
+        - protocol: TCP
+          port: 9093
     {{- if ne (include "astronomer.postgresMode" .) "external" }}
     - to:
         - podSelector:

@@ -120,6 +120,47 @@ func TestNetworkPolicyRendersExpectedComponentPolicies(t *testing.T) {
 	}
 }
 
+func TestWorkerNetworkPolicyAllowsOnlyManagedMonitoringAPIs(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t))
+	worker := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-worker")
+	egress, _ := nestedMap(worker, "spec")["egress"].([]any)
+	found := false
+	for _, rawRule := range egress {
+		rule, _ := rawRule.(map[string]any)
+		ports, _ := rule["ports"].([]any)
+		portSet := map[string]bool{}
+		for _, rawPort := range ports {
+			port, _ := rawPort.(map[string]any)
+			portSet[fmt.Sprint(port["port"])] = true
+		}
+		if !portSet["9090"] || !portSet["9093"] {
+			continue
+		}
+		peers, _ := rule["to"].([]any)
+		if len(peers) != 1 {
+			t.Fatalf("monitoring egress peers = %#v, want one label-scoped peer", peers)
+		}
+		peer, _ := peers[0].(map[string]any)
+		if _, ok := peer["namespaceSelector"]; !ok {
+			t.Fatalf("monitoring egress peer is not namespace-aware: %#v", peer)
+		}
+		podSelector, _ := peer["podSelector"].(map[string]any)
+		expressions, _ := podSelector["matchExpressions"].([]any)
+		if len(expressions) != 1 {
+			t.Fatalf("monitoring pod selector = %#v, want one app identity expression", podSelector)
+		}
+		expression, _ := expressions[0].(map[string]any)
+		values, _ := expression["values"].([]any)
+		if stringValue(expression["key"]) != "app.kubernetes.io/name" || stringValue(expression["operator"]) != "In" || !reflect.DeepEqual(values, []any{"prometheus", "alertmanager"}) {
+			t.Fatalf("monitoring pod selector expression = %#v", expression)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("worker policy has no label-scoped Prometheus/Alertmanager egress on ports 9090/9093")
+	}
+}
+
 func TestDefaultDenySelectsOnlyAstronomerOwnedPlatformPods(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t, "dex.enabled=true"))
 	defaultDeny := findRenderedDoc(t, docs, "NetworkPolicy", "astronomer-default-deny")
