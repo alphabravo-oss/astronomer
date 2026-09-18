@@ -88,9 +88,19 @@ func TestOperationIdempotencySQLClaimsWithAtomicUpsert(t *testing.T) {
 	for _, fragment := range []string{
 		"INSERT INTO operation_idempotency_keys (scope, idempotency_key, operation_table, operation_id)",
 		"VALUES ($1, $2, $9, gen_random_uuid())",
+		"operation_idempotency_keys.operation_table",
+		"operation_idempotency_keys.operation_id",
 	} {
 		if !strings.Contains(operationIdempotencyClaimCTE, fragment) {
 			t.Fatalf("first idempotency claim does not initialize its operation pointer; missing %q:\n%s", fragment, operationIdempotencyClaimCTE)
+		}
+	}
+	for _, ambiguous := range []string{
+		"CASE WHEN operation_table = ''",
+		"COALESCE(operation_id, gen_random_uuid())",
+	} {
+		if strings.Contains(operationIdempotencyClaimCTE, ambiguous) {
+			t.Fatalf("idempotency conflict update contains ambiguous target-column reference %q:\n%s", ambiguous, operationIdempotencyClaimCTE)
 		}
 	}
 }
