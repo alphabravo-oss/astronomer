@@ -136,6 +136,21 @@ export const overrides: StubOverride[] = [
   },
   {
     method: "GET",
+    path: "/api/v1/clusters/summary",
+    body: {
+      data: {
+        clusters_total: 1,
+        clusters_active: 1,
+        clusters_warning: 0,
+        clusters_disconnected: 0,
+        nodes_total: 3,
+        pods_total: 42,
+        as_of: now,
+      },
+    },
+  },
+  {
+    method: "GET",
     path: `/api/v1/clusters/${SMOKE_CLUSTER_ID}`,
     body: { data: smokeCluster },
   },

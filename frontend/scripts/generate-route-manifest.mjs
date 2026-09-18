@@ -15,14 +15,17 @@
  *    dropped (or accidentally added) routes fail the smoke tier instead of
  *    shrinking it.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const frontendRoot = path.resolve(scriptDir, '..');
-const routesDir = path.join(frontendRoot, 'src/routes');
-const outputPath = path.join(frontendRoot, 'tests/e2e-smoke/route-manifest.generated.json');
+const frontendRoot = path.resolve(scriptDir, "..");
+const routesDir = path.join(frontendRoot, "src/routes");
+const outputPath = path.join(
+  frontendRoot,
+  "tests/e2e-smoke/route-manifest.generated.json",
+);
 
 // The current route inventory has one `[[...slug]]` optional catch-all
 // (custom-resources). Its TanStack port is an `index.tsx` + `$.tsx` pair, so
@@ -30,28 +33,30 @@ const outputPath = path.join(frontendRoot, 'tests/e2e-smoke/route-manifest.gener
 // Reviewed 2026-08-23 after adding resource discovery/schema and enterprise
 // operations surfaces. Keep this exact: a route addition needs a smoke fixture
 // and a route removal needs an explicit product decision.
-const EXPECTED_ROUTE_COUNT = 129; // 2026-09-11: install and progress are one stateful registration route.
+const EXPECTED_ROUTE_COUNT = 136; // 2026-09-18: delivery templates, overrides, bundle versions, and system-component routes added.
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to
 // be structurally valid for the page code (e.g. `resource` must be a key of
 // k8s-paths RESOURCE_DEFS or the drilldown renders its empty state).
 const PARAM_FIXTURES = {
-  id: 'c-smoke-1',
-  nodeName: 'node-smoke-1',
-  resource: 'deployments',
-  bundleId: 'bundle-smoke-1',
-  targetId: 'target-smoke-1',
-  rolloutId: 'rollout-smoke-1',
-  deploymentId: 'deployment-smoke-1',
-  restoreId: 'restore-smoke-1',
-  runId: 'run-smoke-1',
-  credId: 'cred-smoke-1',
-  kind: 'deployment',
-  namespace: 'default',
-  name: 'smoke-app',
-  scanId: 'scan-smoke-1',
-  key: 'smoke-template',
+  id: "c-smoke-1",
+  nodeName: "node-smoke-1",
+  resource: "deployments",
+  bundleId: "bundle-smoke-1",
+  versionId: "version-smoke-1",
+  targetId: "target-smoke-1",
+  rolloutId: "rollout-smoke-1",
+  deploymentId: "deployment-smoke-1",
+  componentId: "component-smoke-1",
+  restoreId: "restore-smoke-1",
+  runId: "run-smoke-1",
+  credId: "cred-smoke-1",
+  kind: "deployment",
+  namespace: "default",
+  name: "smoke-app",
+  scanId: "scan-smoke-1",
+  key: "smoke-template",
 };
 
 // Splat (`$.tsx`) fixtures, keyed by the route directory relative to
@@ -59,40 +64,42 @@ const PARAM_FIXTURES = {
 // `[[...slug]]` optional catch-all is the sibling `index.tsx` route.
 const SPLAT_FIXTURES = {
   // `[...path]` drilldown: [namespace, name] for a namespaced resource.
-  'dashboard/clusters/$id/$resource': 'default/smoke-app',
+  "dashboard/clusters/$id/$resource": "default/smoke-app",
   // `[[...slug]]` populated variant: [group, version, plural].
-  'dashboard/clusters/$id/custom-resources': 'cert-manager.io/v1/certificates',
+  "dashboard/clusters/$id/custom-resources": "cert-manager.io/v1/certificates",
 };
 
 // Deep-link search params a page needs to render its main content (e.g. the
 // reset form only renders with a token present).
 const SEARCH_FIXTURES = {
-  '/auth/login/reset-password': '?token=smoke-reset-token',
+  "/auth/login/reset-password": "?token=smoke-reset-token",
 };
 
 /** Recursively collect leaf route files (index.tsx / $.tsx). */
 function collectRouteFiles(dir) {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('-') || entry.name === '__tests__') continue;
+    if (entry.name.startsWith("-") || entry.name === "__tests__") continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...collectRouteFiles(full));
       continue;
     }
     if (/\.test\.(ts|tsx)$/.test(entry.name)) continue; // routeFileIgnorePattern
-    if (entry.name === '__root.tsx' || entry.name === 'route.tsx') continue; // layouts
-    if (entry.name === 'index.tsx' || entry.name === '$.tsx') out.push(full);
+    if (entry.name === "__root.tsx" || entry.name === "route.tsx") continue; // layouts
+    if (entry.name === "index.tsx" || entry.name === "$.tsx") out.push(full);
   }
   return out;
 }
 
 function substituteSegment(segment, file) {
-  if (!segment.startsWith('$')) return segment;
+  if (!segment.startsWith("$")) return segment;
   const param = segment.slice(1);
   const fixture = PARAM_FIXTURES[param];
   if (fixture === undefined) {
-    console.error(`route-manifest: no PARAM_FIXTURES entry for "$${param}" (needed by ${file})`);
+    console.error(
+      `route-manifest: no PARAM_FIXTURES entry for "$${param}" (needed by ${file})`,
+    );
     process.exit(1);
   }
   return fixture;
@@ -102,43 +109,51 @@ const files = collectRouteFiles(routesDir).sort();
 const manifest = files.map((file) => {
   const rel = path.relative(routesDir, file).split(path.sep);
   const base = rel.pop(); // index.tsx | $.tsx
-  const routeDir = rel.join('/');
-  const routeId = '/' + [...rel, base].join('/');
-  let url = '/' + rel.map((seg) => substituteSegment(seg, file)).join('/');
-  if (base === '$.tsx') {
+  const routeDir = rel.join("/");
+  const routeId = "/" + [...rel, base].join("/");
+  let url = "/" + rel.map((seg) => substituteSegment(seg, file)).join("/");
+  if (base === "$.tsx") {
     const splat = SPLAT_FIXTURES[routeDir];
     if (splat === undefined) {
-      console.error(`route-manifest: no SPLAT_FIXTURES entry for "${routeDir}" (needed by ${file})`);
+      console.error(
+        `route-manifest: no SPLAT_FIXTURES entry for "${routeDir}" (needed by ${file})`,
+      );
       process.exit(1);
     }
     url = `${url}/${splat}`;
   }
-  if (url === '/') url = '/'; // root index
-  const search = SEARCH_FIXTURES['/' + rel.join('/')] ?? '';
+  if (url === "/") url = "/"; // root index
+  const search = SEARCH_FIXTURES["/" + rel.join("/")] ?? "";
   return {
     routeId,
     url: url + search,
     // Auth pages run without the seeded session and assert their form
     // renders; everything else is crawled behind seedAuth.
-    kind: routeId.startsWith('/auth/') ? 'auth' : 'app',
+    kind: routeId.startsWith("/auth/") ? "auth" : "app",
   };
 });
 
 if (manifest.length !== EXPECTED_ROUTE_COUNT) {
   console.error(
     `route-manifest: expected ${EXPECTED_ROUTE_COUNT} routes but generated ${manifest.length}. ` +
-      'A route was added or dropped: update EXPECTED_ROUTE_COUNT and its dated review comment deliberately ' +
-      'instead of letting the smoke tier shrink silently.',
+      "A route was added or dropped: update EXPECTED_ROUTE_COUNT and its dated review comment deliberately " +
+      "instead of letting the smoke tier shrink silently.",
   );
   process.exit(1);
 }
 
-const dupes = manifest.map((m) => m.url).filter((u, i, all) => all.indexOf(u) !== i);
+const dupes = manifest
+  .map((m) => m.url)
+  .filter((u, i, all) => all.indexOf(u) !== i);
 if (dupes.length > 0) {
-  console.error(`route-manifest: duplicate URLs generated: ${[...new Set(dupes)].join(', ')}`);
+  console.error(
+    `route-manifest: duplicate URLs generated: ${[...new Set(dupes)].join(", ")}`,
+  );
   process.exit(1);
 }
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-fs.writeFileSync(outputPath, JSON.stringify(manifest, null, 2) + '\n');
-console.log(`route-manifest: ${manifest.length} routes -> ${path.relative(frontendRoot, outputPath)}`);
+fs.writeFileSync(outputPath, JSON.stringify(manifest, null, 2) + "\n");
+console.log(
+  `route-manifest: ${manifest.length} routes -> ${path.relative(frontendRoot, outputPath)}`,
+);

@@ -426,11 +426,11 @@ export function ClusterShell({
           {status === "idle" && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center max-w-sm pointer-events-auto">
-                <TerminalIcon className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+                <TerminalIcon className="h-8 w-8 mx-auto text-terminal-foreground mb-3" />
                 <p className="text-sm font-medium text-white">
                   No active session
                 </p>
-                <p className="text-xs text-muted-foreground mt-1.5 mb-4">
+                <p className="text-xs text-terminal-foreground mt-1.5 mb-4">
                   Clicking <strong>Connect</strong> spins up an ephemeral
                   kubectl pod in
                   <code className="mx-1 px-1 rounded-sm bg-muted text-foreground font-mono">
@@ -460,13 +460,13 @@ export function ClusterShell({
                       : "text-status-warning",
                   )}
                 />
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-sm font-medium text-white">
                   {status === "error"
                     ? "Connection failed"
                     : "Session disconnected"}
                 </p>
                 {errorMsg && (
-                  <p className="text-xs text-muted-foreground mt-1.5 font-mono break-words">
+                  <p className="text-xs text-terminal-foreground mt-1.5 font-mono break-words">
                     {errorMsg}
                   </p>
                 )}

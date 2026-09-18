@@ -282,7 +282,7 @@ async function mockApi(page: Page, user = adminUser) {
         },
       });
     }
-    if (path === "/delivery/fleet" && method === "GET") {
+    if (path === "/delivery/estate" && method === "GET") {
       return route.fulfill({
         json: apiResponse({
           summary: {
@@ -602,9 +602,7 @@ test("delivery overview renders the Flux-native system for authenticated users",
   await seedAuth(context, page, adminUser);
   await page.goto("/dashboard/delivery");
 
-  await expect(
-    page.getByRole("heading", { name: /^Delivery Fleet$/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Estate$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /flux ready/i })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Sources$/ })).toHaveCount(0);
 });
