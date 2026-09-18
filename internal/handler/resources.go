@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -15,6 +16,7 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/handler/apierror"
 	"github.com/alphabravocompany/astronomer-go/internal/kubeutil"
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
+	"github.com/alphabravocompany/astronomer-go/internal/rbac"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -341,34 +343,62 @@ func (h *ResourceHandler) ListNamedResources(w http.ResponseWriter, r *http.Requ
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "tunnel requester not configured")
 		return
 	}
-	// Bypass h.do so we can treat 404 as "CRD not installed" and return [].
-	// This matters for optional resources like the v1alpha2 Gateway API
-	// routes (TCPRoute / UDPRoute) that many clusters lack — the UI should
-	// show "No resources found", not surface a 503.
-	rawResp, err := h.requester.Do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	// Treat 404 as "CRD not installed" for optional Gateway API resources.
+	resp, installed, err := h.listKubernetesResourcePages(r.Context(), clusterID, path, true)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
-	if rawResp == nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, "empty response")
+	items := make([]map[string]any, 0)
+	if installed {
+		items = flattenNamedResources(clusterID, resourceType, resp)
+	}
+	def := resourceDefs[resourceType]
+	if def.namespaced {
+		resource, known := rbac.KubernetesResource(resourceType)
+		if !known {
+			resource = rbac.ResourceWorkloads
+		}
+		all, allowed, authErr := h.authz.authorizedNamespaces(r.Context(), clusterUUID, resource, rbac.VerbList)
+		if authErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+			return
+		}
+		if !all {
+			items = filterItemsByNamespaceKey(items, "namespace", allowed)
+		}
+	}
+	requestedNamespaces := commaSeparatedSet(r.URL.Query().Get("namespaces"))
+	if r.URL.Query().Has("namespaces") && def.namespaced {
+		if len(requestedNamespaces) == 0 {
+			items = nil
+		} else {
+			items = filterItemsByNamespaceKey(items, "namespace", requestedNamespaces)
+		}
+	}
+	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
+	if search != "" {
+		filtered := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			encoded, marshalErr := json.Marshal(item)
+			if marshalErr == nil && strings.Contains(strings.ToLower(string(encoded)), search) {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+	}
+	sortOrder := strings.TrimSpace(r.URL.Query().Get("sort"))
+	if sortOrder == "" {
+		sortOrder = "namespace_asc"
+	}
+	field, descending, ok := genericResourceSort(sortOrder)
+	if !ok {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid resource sort order")
 		return
 	}
-	if rawResp.StatusCode == http.StatusNotFound {
-		RespondJSON(w, http.StatusOK, []map[string]any{})
-		return
-	}
-	if err := ensureSuccess(rawResp); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
-		return
-	}
-	var resp map[string]any
-	if err := parseJSONResponse(rawResp, &resp); err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
-		return
-	}
-	items := flattenNamedResources(clusterID, resourceType, resp)
-	RespondJSON(w, http.StatusOK, items)
+	sortGenericResourceItems(items, field, descending)
+	page, metadata := pageWindow(r, items)
+	paging.Write(w, page, metadata)
 }
 
 func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Request) {
@@ -384,13 +414,200 @@ func (h *ResourceHandler) ListGenericResources(w http.ResponseWriter, r *http.Re
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.InvalidResource, err.Error())
 		return
 	}
-	resp, err := h.do(r.Context(), clusterID, http.MethodGet, path, nil, requestHeaders(""))
+	resp, _, err := h.listKubernetesResourcePages(r.Context(), clusterID, path, false)
 	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
 	items := flattenGenericResources(clusterID, resourceType, resp)
-	RespondJSON(w, http.StatusOK, items)
+
+	def := resourceDefs[resourceType]
+	if def.namespaced {
+		resource, known := rbac.KubernetesResource(resourceType)
+		if !known {
+			resource = rbac.ResourceWorkloads
+		}
+		all, allowed, authErr := h.authz.authorizedNamespaces(r.Context(), clusterUUID, resource, rbac.VerbList)
+		if authErr != nil {
+			RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
+			return
+		}
+		if !all {
+			items = filterItemsByNamespaceKey(items, "namespace", allowed)
+		}
+	}
+
+	requestedNamespaces := commaSeparatedSet(r.URL.Query().Get("namespaces"))
+	if r.URL.Query().Has("namespaces") && def.namespaced {
+		if len(requestedNamespaces) == 0 {
+			items = nil
+		} else {
+			items = filterItemsByNamespaceKey(items, "namespace", requestedNamespaces)
+		}
+	}
+	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
+	if search != "" {
+		filtered := make([]map[string]any, 0, len(items))
+		for _, item := range items {
+			encoded, marshalErr := json.Marshal(item)
+			if marshalErr == nil && strings.Contains(strings.ToLower(string(encoded)), search) {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+	}
+	sortOrder := strings.TrimSpace(r.URL.Query().Get("sort"))
+	if sortOrder == "" {
+		sortOrder = "namespace_asc"
+	}
+	field, descending, ok := genericResourceSort(sortOrder)
+	if !ok {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid resource sort order")
+		return
+	}
+	sortGenericResourceItems(items, field, descending)
+	page, metadata := pageWindow(r, items)
+	paging.Write(w, page, metadata)
+}
+
+const upstreamResourcePageLimit = 500
+
+// listKubernetesResourcePages prevents any one tunnel response from carrying
+// an unbounded Kubernetes List. Callers may still apply full-result search and
+// sorting after the bounded pages have been assembled.
+func (h *ResourceHandler) listKubernetesResourcePages(ctx context.Context, clusterID, path string, optional bool) (map[string]any, bool, error) {
+	if h.requester == nil {
+		return nil, false, fmt.Errorf("tunnel requester not configured")
+	}
+	combined := map[string]any{"items": []any{}}
+	continueToken := ""
+	previousToken := ""
+	for {
+		pageURL, err := url.Parse(path)
+		if err != nil {
+			return nil, false, err
+		}
+		query := pageURL.Query()
+		query.Set("limit", fmt.Sprintf("%d", upstreamResourcePageLimit))
+		if continueToken == "" {
+			query.Del("continue")
+		} else {
+			query.Set("continue", continueToken)
+		}
+		pageURL.RawQuery = query.Encode()
+		response, err := h.requester.Do(ctx, clusterID, http.MethodGet, pageURL.String(), nil, requestHeaders(""))
+		if err != nil {
+			return nil, false, err
+		}
+		if optional && response != nil && response.StatusCode == http.StatusNotFound {
+			return combined, false, nil
+		}
+		if err := ensureSuccess(response); err != nil {
+			return nil, false, err
+		}
+		var payload map[string]any
+		if err := parseJSONResponse(response, &payload); err != nil {
+			return nil, false, err
+		}
+		items, _ := combined["items"].([]any)
+		items = append(items, objectItemsAny(payload)...)
+		combined["items"] = items
+		continueToken = stringValue(payload, "metadata", "continue")
+		if continueToken == "" {
+			return combined, true, nil
+		}
+		if continueToken == previousToken {
+			return nil, false, fmt.Errorf("Kubernetes resource pagination continuation did not advance")
+		}
+		previousToken = continueToken
+	}
+}
+
+func objectItemsAny(payload map[string]any) []any {
+	raw, _ := payload["items"].([]any)
+	return raw
+}
+
+func commaSeparatedSet(raw string) map[string]struct{} {
+	values := map[string]struct{}{}
+	for _, item := range strings.Split(raw, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			values[item] = struct{}{}
+		}
+	}
+	return values
+}
+
+var genericResourceSortFields = map[string]string{
+	"name": "name", "namespace": "namespace", "age": "createdAt",
+	"status": "status", "type": "type", "schedule": "schedule",
+	"lastSchedule": "lastSchedule", "data": "dataCount", "target": "targetName",
+	"minmax": "minReplicas", "replicas": "currentReplicas", "active": "active",
+	"completions": "completions", "currentHealthy": "currentHealthy",
+	"minAvailable": "minAvailable", "maxUnavailable": "maxUnavailable",
+	"group": "group", "kind": "kind", "scope": "scope", "version": "version",
+	"secrets": "secretsCount", "rules": "rulesCount", "role": "roleName",
+	"subjects": "subjectsCount", "endpoints": "addressesCount", "ports": "ports",
+	"desired": "desired", "ready": "ready", "available": "available",
+	"accepted": "accepted", "addresses": "addresses", "capacity": "capacity",
+	"accessModes": "accessModes",
+	"claimRef":    "claimName", "class": "gatewayClassName", "clusterIP": "clusterIP",
+	"controllerName": "controllerName", "created": "createdAt", "egress": "egress",
+	"expansion": "allowVolumeExpansion", "from": "from", "hostnames": "hostnames",
+	"hosts": "hosts", "ingress": "ingress", "ip": "externalIP", "listeners": "listenerSummary",
+	"parents": "parentSummary", "policyTypes": "policyTypes", "programmed": "programmed",
+	"provisioner": "provisioner", "reclaimPolicy": "reclaimPolicy", "roles": "roles",
+	"storageClass": "storageClass", "tls": "tls", "to": "to",
+	"volumeBindingMode": "volumeBindingMode", "volumeName": "volumeName",
+}
+
+func genericResourceSort(order string) (field string, descending bool, ok bool) {
+	directionIndex := strings.LastIndex(order, "_")
+	if directionIndex < 1 {
+		return "", false, false
+	}
+	field, ok = genericResourceSortFields[order[:directionIndex]]
+	if !ok {
+		return "", false, false
+	}
+	switch order[directionIndex+1:] {
+	case "asc":
+		return field, false, true
+	case "desc":
+		return field, true, true
+	default:
+		return "", false, false
+	}
+}
+
+func sortGenericResourceItems(items []map[string]any, field string, descending bool) {
+	compare := func(left, right any) int {
+		leftNumber, leftOK := left.(float64)
+		rightNumber, rightOK := right.(float64)
+		if leftOK && rightOK {
+			switch {
+			case leftNumber < rightNumber:
+				return -1
+			case leftNumber > rightNumber:
+				return 1
+			default:
+				return 0
+			}
+		}
+		return strings.Compare(strings.ToLower(fmt.Sprint(left)), strings.ToLower(fmt.Sprint(right)))
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		comparison := compare(items[i][field], items[j][field])
+		if comparison != 0 {
+			if descending {
+				return comparison > 0
+			}
+			return comparison < 0
+		}
+		leftID := fmt.Sprint(items[i]["namespace"]) + "\x00" + fmt.Sprint(items[i]["name"])
+		rightID := fmt.Sprint(items[j]["namespace"]) + "\x00" + fmt.Sprint(items[j]["name"])
+		return leftID < rightID
+	})
 }
 
 func (h *ResourceHandler) CreateNamedResource(w http.ResponseWriter, r *http.Request) {

@@ -251,6 +251,9 @@ type workloadResource struct {
 }
 
 type workloadList struct {
+	Metadata struct {
+		Continue string `json:"continue"`
+	} `json:"metadata"`
 	Items []workloadResource `json:"items"`
 }
 
@@ -319,6 +322,10 @@ type podResource struct {
 }
 
 type podList struct {
+	Metadata struct {
+		Continue           string `json:"continue"`
+		RemainingItemCount *int64 `json:"remainingItemCount"`
+	} `json:"metadata"`
 	Items []podResource `json:"items"`
 }
 
@@ -326,6 +333,9 @@ type podList struct {
 // carry metadata.namespace). Used by callers that only need per-namespace or
 // per-node pod counts, so they don't pull every pod's spec+status.
 type podMetadataList struct {
+	Metadata struct {
+		Continue string `json:"continue"`
+	} `json:"metadata"`
 	Items []struct {
 		Metadata struct {
 			Name      string `json:"name"`
@@ -335,6 +345,9 @@ type podMetadataList struct {
 }
 
 type namespaceList struct {
+	Metadata struct {
+		Continue string `json:"continue"`
+	} `json:"metadata"`
 	Items []struct {
 		Metadata struct {
 			Name              string            `json:"name"`
@@ -349,6 +362,9 @@ type namespaceList struct {
 }
 
 type nodeList struct {
+	Metadata struct {
+		Continue string `json:"continue"`
+	} `json:"metadata"`
 	Items []struct {
 		Metadata struct {
 			Name              string            `json:"name"`

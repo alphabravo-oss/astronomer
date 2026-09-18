@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net/http"
 	"time"
 
 	iauth "github.com/alphabravocompany/astronomer-go/internal/auth"
@@ -207,11 +208,18 @@ func registerAPIUtilityEntryRoutes(r chi.Router, cfg *config.Config, deps Router
 		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Post("/streams/tickets/", deps.StreamingInternal.StreamTickets.Create)
 	}
 	if deps.ClusterResources.Monitoring != nil {
-		// Ticket bounce for fleet Grafana. Mint needs the session cookie
-		// (Astronomer origin). Redeem is called by grafana-proxy with the
-		// ticket as the only credential — no session, no Redis, no secret key.
-		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/observability/grafana-ticket", deps.ClusterResources.Monitoring.MintGrafanaTicket)
-		r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries)).Get("/observability/grafana-ticket/", deps.ClusterResources.Monitoring.MintGrafanaTicket)
+		// Shared Grafana stays private. The authenticated same-origin route
+		// forwards through the cluster tunnel and applies monitoring RBAC plus
+		// cluster-scoped query rewriting on every request.
+		grafanaAuthed := r.With(requireAuth(deps.CoreAuth.JWT, deps.CoreAuth.AuthQueries))
+		grafanaHandler := http.HandlerFunc(deps.ClusterResources.Monitoring.ProxyGrafana)
+		for _, path := range []string{"/observability/grafana", "/observability/grafana/", "/observability/grafana/*"} {
+			for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
+				grafanaAuthed.Method(method, path, grafanaHandler)
+			}
+		}
+		// The internal grafana-proxy redeems one-use tickets minted by the
+		// same-origin handler. The ticket is the only credential on this route.
 		r.Post("/observability/grafana-ticket/redeem", deps.ClusterResources.Monitoring.RedeemGrafanaTicket)
 		r.Post("/observability/grafana-ticket/redeem/", deps.ClusterResources.Monitoring.RedeemGrafanaTicket)
 	}

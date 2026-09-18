@@ -1,18 +1,12 @@
 import { useMemo, useState } from "react";
-import {
-  useDeletePV,
-  useDeletePVC,
-  usePersistentVolumeClaims,
-  usePersistentVolumes,
-  useStorageClasses,
-} from "@/lib/hooks/kubernetes-resources";
+import { useDeletePV, useDeletePVC } from "@/lib/hooks/kubernetes-resources";
 import { useNavigate } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import type { Column } from "@/components/ui/data-table";
-import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
+import { ServerResourceExplorerTable } from "@/components/resources/server-resource-explorer-table";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import {
   pvColumns,
@@ -40,7 +34,6 @@ import type {
 import { Code, Pencil, Plus, Trash2 } from "lucide-react";
 
 export function PVsTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = usePersistentVolumes(clusterId);
   const navigate = useNavigate();
   const deletePv = useDeletePV();
   const permissions = useClusterResourcePermissions(
@@ -110,10 +103,9 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<PersistentVolume>
         clusterId={clusterId}
         resourceType="persistentvolumes"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={makeRowClick(
@@ -123,7 +115,6 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search persistent volumes..."
-        loading={isLoading}
         emptyState={{
           title: "No persistent volumes found",
           description:
@@ -171,7 +162,6 @@ export function PVsTable({ clusterId }: { clusterId: string }) {
   );
 }
 export function PVCsTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = usePersistentVolumeClaims(clusterId);
   const navigate = useNavigate();
   const deletePvc = useDeletePVC();
   const permissions = useClusterResourcePermissions(
@@ -261,10 +251,9 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
           Create PVC
         </ActionButton>
       </div>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<PersistentVolumeClaim>
         clusterId={clusterId}
         resourceType="persistentvolumeclaims"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
@@ -274,7 +263,6 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search PVCs..."
-        loading={isLoading}
         emptyState={{
           title: "No persistent volume claims found",
           description:
@@ -335,7 +323,6 @@ export function PVCsTable({ clusterId }: { clusterId: string }) {
 }
 
 export function StorageClassesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useStorageClasses(clusterId);
   const navigate = useNavigate();
   const permissions = useClusterResourcePermissions(
     clusterId,
@@ -400,10 +387,9 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<StorageClass>
         clusterId={clusterId}
         resourceType="storageclasses"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={makeRowClick(
@@ -413,7 +399,6 @@ export function StorageClassesTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search storage classes..."
-        loading={isLoading}
         emptyState={{
           title: "No storage classes found",
           description:

@@ -3,19 +3,42 @@ import {
   listGenericClusterResources,
   searchResourcesAcrossClusters,
 } from "@/lib/api/generated/client";
-import type { GenericK8sResource } from "@/types";
+import { mapPage } from "@/lib/api/pagination";
+import type { GenericK8sResource, PaginatedResponse } from "@/types";
 import type { ResourceCounts } from "@/types/openapi.generated";
 
 export async function getGenericResources(
   clusterId: string,
   resourceType: string,
-  signal?: AbortSignal,
-): Promise<GenericK8sResource[]> {
+  params?: {
+    namespace?: string;
+    namespaces?: string;
+    limit?: number;
+    offset?: number;
+    search?: string;
+    sort?: string;
+    signal?: AbortSignal;
+  },
+): Promise<PaginatedResponse<GenericK8sResource>> {
   const response = await listGenericClusterResources({
     path: { cluster_id: clusterId, resource_type: resourceType },
-    signal,
+    query: {
+      namespace: params?.namespace,
+      namespaces: params?.namespaces,
+      limit: params?.limit,
+      offset: params?.offset,
+      search: params?.search,
+      sort: params?.sort,
+    },
+    signal: params?.signal,
   });
-  return (response.data ?? []) as GenericK8sResource[];
+  return mapPage(
+    {
+      data: (response.data ?? []) as GenericK8sResource[],
+      pagination: response.pagination,
+    },
+    (row) => row,
+  );
 }
 
 export async function getClusterResourceCounts(

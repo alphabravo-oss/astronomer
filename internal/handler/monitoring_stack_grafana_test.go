@@ -102,7 +102,7 @@ func TestSharedGrafanaReplacePrecheck412BelowFloor(t *testing.T) {
 	}
 }
 
-func TestSharedGrafanaPreviewIsClusterIPOnly(t *testing.T) {
+func TestSharedGrafanaPreviewIsClusterIPWithSameOriginProxy(t *testing.T) {
 	h, _ := newStackLifecycleHandler(t)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
 
@@ -136,7 +136,7 @@ func TestSharedGrafanaPreviewIsClusterIPOnly(t *testing.T) {
 	}
 	ing, _ := wrap.Data.Values["ingress"].(map[string]any)
 	if ing["enabled"] != false {
-		t.Fatalf("ingress.enabled = %v, want false (chart ingress stays off; extraObjects own the host)", ing["enabled"])
+		t.Fatalf("ingress.enabled = %v, want false (Grafana stays private)", ing["enabled"])
 	}
 	raw, _ := json.Marshal(wrap.Data.Values)
 	s := string(raw)
@@ -153,6 +153,10 @@ func TestSharedGrafanaPreviewIsClusterIPOnly(t *testing.T) {
 		t.Errorf("grafana-proxy must not mount Redis or ASTRONOMER_SECRET_KEY: %s", s)
 	}
 	ini, _ := wrap.Data.Values["grafana.ini"].(map[string]any)
+	server, _ := ini["server"].(map[string]any)
+	if server["root_url"] != "https://astronomer.example.com"+sharedGrafanaProxyPath || server["serve_from_sub_path"] != true {
+		t.Fatalf("grafana.ini.server = %+v, want same-origin subpath", server)
+	}
 	live, _ := ini["live"].(map[string]any)
 	if live["enabled"] != false {
 		t.Fatalf("live.enabled = %v, want false", live["enabled"])
@@ -170,32 +174,30 @@ func TestSharedGrafanaPreviewIsClusterIPOnly(t *testing.T) {
 	if strings.Contains(s, "astronomer-go-server:v1.0.0") {
 		t.Errorf("must not fall back to a registry-less v1.0.0 tag")
 	}
-	var sawProxyIngress, sawProxyBackend, sawGateway, sawHTTPRoute bool
+	security, _ := ini["security"].(map[string]any)
+	if security["allow_embedding"] != true {
+		t.Fatalf("security.allow_embedding = %v, want true for the in-console frame", security["allow_embedding"])
+	}
+	var sawProxyService, sawPublicRoute bool
 	extra, _ := wrap.Data.Values["extraObjects"].([]any)
 	for _, obj := range extra {
 		m, _ := obj.(map[string]any)
 		kind, _ := m["kind"].(string)
 		rawObj, _ := json.Marshal(m)
 		switch kind {
-		case "Ingress":
-			sawProxyIngress = true
+		case "Service":
 			if strings.Contains(string(rawObj), grafanaProxyServiceName(sharedGrafanaDefaultRelease)) {
-				sawProxyBackend = true
+				sawProxyService = true
 			}
-			if !strings.Contains(string(rawObj), `"tls"`) || !strings.Contains(string(rawObj), "grafana.astronomer.example.com") {
-				t.Errorf("Ingress missing tls hosts: %s", rawObj)
-			}
-		case "Gateway":
-			sawGateway = true
-		case "HTTPRoute":
-			sawHTTPRoute = true
+		case "Ingress", "Gateway", "HTTPRoute", "ReferenceGrant":
+			sawPublicRoute = true
 		}
 	}
-	if !sawProxyIngress || !sawProxyBackend {
-		t.Fatalf("expected Ingress backend=grafana-proxy, ingress=%v backend=%v", sawProxyIngress, sawProxyBackend)
+	if !sawProxyService {
+		t.Fatal("expected internal grafana-proxy Service")
 	}
-	if sawGateway || sawHTTPRoute {
-		t.Fatalf("default expose is Ingress only (no Gateway CRDs); gateway=%v httproute=%v", sawGateway, sawHTTPRoute)
+	if sawPublicRoute {
+		t.Fatal("same-origin Grafana must not render an Ingress, Gateway route, or cross-namespace grant")
 	}
 	if len(extra) < 8 {
 		t.Fatalf("extraObjects = %d, want at least 8 dashboard ConfigMaps plus proxy objects", len(extra))
@@ -250,8 +252,8 @@ func TestSharedGrafanaStatusProjectsRequiredFields(t *testing.T) {
 	if wrap.Data["authMode"] != sharedGrafanaAuthModeProxy {
 		t.Fatalf("authMode = %v, want proxy", wrap.Data["authMode"])
 	}
-	if wrap.Data["grafanaHost"] != "grafana.astronomer.example.com" {
-		t.Fatalf("grafanaHost = %v", wrap.Data["grafanaHost"])
+	if wrap.Data["proxyPath"] != sharedGrafanaProxyPath {
+		t.Fatalf("proxyPath = %v, want %s", wrap.Data["proxyPath"], sharedGrafanaProxyPath)
 	}
 	raw := rec.Body.String()
 	if strings.Contains(raw, "adminPassword") || strings.Contains(raw, "admin-password") {
@@ -541,7 +543,7 @@ func TestSharedGrafanaRejectsMultilineLogDatasourceURL(t *testing.T) {
 	}
 }
 
-func TestSharedGrafanaPreviewRequiresHostAndImage(t *testing.T) {
+func TestSharedGrafanaPreviewRequiresServerURLAndImage(t *testing.T) {
 	h, _ := newStackLifecycleHandler(t)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
 	h.SetServerURL("")
@@ -550,8 +552,8 @@ func TestSharedGrafanaPreviewRequiresHostAndImage(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("empty ServerURL status = %d, want 400: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "ingressHost") {
-		t.Fatalf("body = %s, want ingressHost required", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "ServerURL") {
+		t.Fatalf("body = %s, want ServerURL required", rec.Body.String())
 	}
 
 	h.SetServerURL("https://astronomer.example.com")
@@ -592,7 +594,7 @@ func TestSharedGrafanaUpstreamUsesFullnameOverrideForNonGrafanaRelease(t *testin
 	}
 }
 
-func TestSharedGrafanaGatewayExposeEmitsPlatformHTTPRoute(t *testing.T) {
+func TestSharedGrafanaNeverEmitsPublicRoute(t *testing.T) {
 	h, _ := newStackLifecycleHandler(t)
 	h.SetAuthorization(rbac.NewEngine(), stubMonitoringRBACQuerier{bindings: grantMonitoring()})
 	h.SetGrafanaExpose(GrafanaExpose{
@@ -610,34 +612,18 @@ func TestSharedGrafanaGatewayExposeEmitsPlatformHTTPRoute(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &wrap); err != nil {
 		t.Fatal(err)
 	}
-	var sawIngress, sawHTTPRoute, sawGrant, sawLocalGateway bool
+	var publicKinds []string
 	extra, _ := wrap.Data.Values["extraObjects"].([]any)
 	for _, obj := range extra {
 		m, _ := obj.(map[string]any)
 		kind, _ := m["kind"].(string)
-		raw, _ := json.Marshal(m)
 		switch kind {
-		case "Ingress":
-			sawIngress = true
-		case "Gateway":
-			sawLocalGateway = true
-		case "HTTPRoute":
-			sawHTTPRoute = true
-			if !strings.Contains(string(raw), `"namespace":"astronomer"`) {
-				t.Errorf("HTTPRoute should live in the platform namespace: %s", raw)
-			}
-			if !strings.Contains(string(raw), grafanaProxyServiceName(sharedGrafanaDefaultRelease)) {
-				t.Errorf("HTTPRoute backend missing proxy service: %s", raw)
-			}
-		case "ReferenceGrant":
-			sawGrant = true
+		case "Ingress", "Gateway", "HTTPRoute", "ReferenceGrant":
+			publicKinds = append(publicKinds, kind)
 		}
 	}
-	if sawIngress || sawLocalGateway {
-		t.Fatalf("gateway expose must not emit Ingress or a second Gateway, ingress=%v gw=%v", sawIngress, sawLocalGateway)
-	}
-	if !sawHTTPRoute || !sawGrant {
-		t.Fatalf("expected platform HTTPRoute + ReferenceGrant, route=%v grant=%v", sawHTTPRoute, sawGrant)
+	if len(publicKinds) != 0 {
+		t.Fatalf("same-origin Grafana rendered public resources: %v", publicKinds)
 	}
 }
 

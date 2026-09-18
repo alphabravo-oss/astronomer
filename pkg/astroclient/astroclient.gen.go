@@ -2218,6 +2218,29 @@ const (
 	ListCharlieFindingsParamsStatusResolved     ListCharlieFindingsParamsStatus = "resolved"
 )
 
+// Defines values for GetClustersByClusterIdPodsParamsSort.
+const (
+	GetClustersByClusterIdPodsParamsSortAgeAsc        GetClustersByClusterIdPodsParamsSort = "age_asc"
+	GetClustersByClusterIdPodsParamsSortAgeDesc       GetClustersByClusterIdPodsParamsSort = "age_desc"
+	GetClustersByClusterIdPodsParamsSortNameAsc       GetClustersByClusterIdPodsParamsSort = "name_asc"
+	GetClustersByClusterIdPodsParamsSortNameDesc      GetClustersByClusterIdPodsParamsSort = "name_desc"
+	GetClustersByClusterIdPodsParamsSortNamespaceAsc  GetClustersByClusterIdPodsParamsSort = "namespace_asc"
+	GetClustersByClusterIdPodsParamsSortNamespaceDesc GetClustersByClusterIdPodsParamsSort = "namespace_desc"
+	GetClustersByClusterIdPodsParamsSortNodeAsc       GetClustersByClusterIdPodsParamsSort = "node_asc"
+	GetClustersByClusterIdPodsParamsSortNodeDesc      GetClustersByClusterIdPodsParamsSort = "node_desc"
+	GetClustersByClusterIdPodsParamsSortRestartsAsc   GetClustersByClusterIdPodsParamsSort = "restarts_asc"
+	GetClustersByClusterIdPodsParamsSortRestartsDesc  GetClustersByClusterIdPodsParamsSort = "restarts_desc"
+	GetClustersByClusterIdPodsParamsSortStatusAsc     GetClustersByClusterIdPodsParamsSort = "status_asc"
+	GetClustersByClusterIdPodsParamsSortStatusDesc    GetClustersByClusterIdPodsParamsSort = "status_desc"
+)
+
+// Defines values for GetClustersByClusterIdPodsParamsHealth.
+const (
+	GetClustersByClusterIdPodsParamsHealthAll       GetClustersByClusterIdPodsParamsHealth = "all"
+	GetClustersByClusterIdPodsParamsHealthAttention GetClustersByClusterIdPodsParamsHealth = "attention"
+	GetClustersByClusterIdPodsParamsHealthRestarted GetClustersByClusterIdPodsParamsHealth = "restarted"
+)
+
 // Defines values for GetClustersByClusterIdResourcesSchemaParamsResourceType.
 const (
 	GetClustersByClusterIdResourcesSchemaParamsResourceTypeConfigmaps             GetClustersByClusterIdResourcesSchemaParamsResourceType = "configmaps"
@@ -8087,10 +8110,8 @@ type MonitoringStackStatus struct {
 	DesiredSpecHash         *string                    `json:"desiredSpecHash,omitempty"`
 	DriftReasons            *[]string                  `json:"driftReasons,omitempty"`
 	Drifted                 *bool                      `json:"drifted,omitempty"`
-	GrafanaHost             *string                    `json:"grafanaHost,omitempty"`
 	IngestHostname          *string                    `json:"ingestHostname,omitempty"`
 	IngestPublic            *bool                      `json:"ingestPublic,omitempty"`
-	IngressHost             *string                    `json:"ingressHost,omitempty"`
 	LastDriftDetectedAt     *time.Time                 `json:"lastDriftDetectedAt"`
 	LastHealthyAt           *time.Time                 `json:"lastHealthyAt"`
 	LastObservedAt          *time.Time                 `json:"lastObservedAt"`
@@ -8106,6 +8127,7 @@ type MonitoringStackStatus struct {
 	ObservedRelease         *MonitoringObservedRelease `json:"observedRelease,omitempty"`
 	Operation               *MonitoringOperation       `json:"operation,omitempty"`
 	Pods                    *int                       `json:"pods,omitempty"`
+	ProxyPath               *string                    `json:"proxyPath,omitempty"`
 	QueryReplicas           *int32                     `json:"queryReplicas,omitempty"`
 	QueryUrl                *string                    `json:"queryUrl,omitempty"`
 	ReleaseName             *string                    `json:"releaseName,omitempty"`
@@ -9856,16 +9878,19 @@ type SharedAlertmanagerStackRequest struct {
 
 // SharedGrafanaStackRequest managementClusterId may be supplied as the clusterId query parameter instead.
 type SharedGrafanaStackRequest struct {
-	AutoRollbackOnFailure *bool               `json:"autoRollbackOnFailure,omitempty"`
-	ChartVersion          *string             `json:"chartVersion,omitempty"`
-	IngressHost           *string             `json:"ingressHost,omitempty"`
-	LogDatasourceUrl      *string             `json:"logDatasourceUrl,omitempty"`
-	ManagementClusterId   *openapi_types.UUID `json:"managementClusterId,omitempty"`
-	Namespace             *string             `json:"namespace,omitempty"`
-	ReleaseName           *string             `json:"releaseName,omitempty"`
-	Replicas              *int32              `json:"replicas,omitempty"`
-	StorageClass          *string             `json:"storageClass,omitempty"`
-	StorageSize           *string             `json:"storageSize,omitempty"`
+	AutoRollbackOnFailure *bool   `json:"autoRollbackOnFailure,omitempty"`
+	ChartVersion          *string `json:"chartVersion,omitempty"`
+
+	// IngressHost Ignored compatibility field; shared Grafana is exposed only through the authenticated same-origin proxy.
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	IngressHost         *string             `json:"ingressHost,omitempty"`
+	LogDatasourceUrl    *string             `json:"logDatasourceUrl,omitempty"`
+	ManagementClusterId *openapi_types.UUID `json:"managementClusterId,omitempty"`
+	Namespace           *string             `json:"namespace,omitempty"`
+	ReleaseName         *string             `json:"releaseName,omitempty"`
+	Replicas            *int32              `json:"replicas,omitempty"`
+	StorageClass        *string             `json:"storageClass,omitempty"`
+	StorageSize         *string             `json:"storageSize,omitempty"`
 }
 
 // SharedLokiStackRequest managementClusterId may be supplied as the clusterId query parameter instead.
@@ -11950,7 +11975,28 @@ type GetClustersByClusterIdNodesParams struct {
 type GetClustersByClusterIdPodsParams struct {
 	// Namespace Restrict to a single namespace.
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// Limit Maximum pod summaries returned in this page (1-200).
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Zero-based offset into the authorized pod list.
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Search Case-insensitive search across pod identity, status, node, IP, and images.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// Sort Stable pod sort order.
+	Sort *GetClustersByClusterIdPodsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Health Operational pod filter.
+	Health *GetClustersByClusterIdPodsParamsHealth `form:"health,omitempty" json:"health,omitempty"`
 }
+
+// GetClustersByClusterIdPodsParamsSort defines parameters for GetClustersByClusterIdPods.
+type GetClustersByClusterIdPodsParamsSort string
+
+// GetClustersByClusterIdPodsParamsHealth defines parameters for GetClustersByClusterIdPods.
+type GetClustersByClusterIdPodsParamsHealth string
 
 // GetClustersByClusterIdPodsWatchParams defines parameters for GetClustersByClusterIdPodsWatch.
 type GetClustersByClusterIdPodsWatchParams struct {
@@ -12047,6 +12093,17 @@ type GetClustersByClusterIdResourceQuotasParams struct {
 type ListGenericClusterResourcesParams struct {
 	// Namespace Restrict the listing to a single namespace (ignored for cluster-scoped types).
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// Namespaces Comma-separated UI namespace scope, intersected with the caller's authorized namespaces.
+	Namespaces *string `form:"namespaces,omitempty" json:"namespaces,omitempty"`
+	Limit      *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int    `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Search Case-insensitive search over the flattened resource row.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// Sort Stable column sort in field_direction form.
+	Sort *string `form:"sort,omitempty" json:"sort,omitempty"`
 }
 
 // DeletePersistentVolumeParams defines parameters for DeletePersistentVolume.
@@ -12066,6 +12123,13 @@ type GetClustersByClusterIdResourcesSchemaParamsResourceType string
 type ListNamedClusterResourcesParams struct {
 	// Namespace Restrict the listing to a single namespace. Ignored for cluster-scoped types (persistentvolumes, storageclasses, gatewayclasses).
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
+
+	// Namespaces Comma-separated UI namespace scope, intersected with the caller's authorized namespaces.
+	Namespaces *string `form:"namespaces,omitempty" json:"namespaces,omitempty"`
+	Limit      *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int    `form:"offset,omitempty" json:"offset,omitempty"`
+	Search     *string `form:"search,omitempty" json:"search,omitempty"`
+	Sort       *string `form:"sort,omitempty" json:"sort,omitempty"`
 }
 
 // ListNamedClusterResourcesParamsResourceType defines parameters for ListNamedClusterResources.
@@ -14174,8 +14238,26 @@ type PostNodesByClusterIdByNodeNameTaintsJSONRequestBody = NodeTaintRequest
 // PostNodesByClusterIdByNodeNameTaintsRemoveJSONRequestBody defines body for PostNodesByClusterIdByNodeNameTaintsRemove for application/json ContentType.
 type PostNodesByClusterIdByNodeNameTaintsRemoveJSONRequestBody = NodeTaintRemoveRequest
 
+// PatchObservabilityGrafanaJSONRequestBody defines body for PatchObservabilityGrafana for application/json ContentType.
+type PatchObservabilityGrafanaJSONRequestBody = RouteMutationRequest
+
+// PostObservabilityGrafanaJSONRequestBody defines body for PostObservabilityGrafana for application/json ContentType.
+type PostObservabilityGrafanaJSONRequestBody = RouteMutationRequest
+
+// PutObservabilityGrafanaJSONRequestBody defines body for PutObservabilityGrafana for application/json ContentType.
+type PutObservabilityGrafanaJSONRequestBody = RouteMutationRequest
+
 // PostObservabilityGrafanaTicketRedeemJSONRequestBody defines body for PostObservabilityGrafanaTicketRedeem for application/json ContentType.
 type PostObservabilityGrafanaTicketRedeemJSONRequestBody = GrafanaTicketRedeemRequest
+
+// PatchObservabilityGrafanaProxyJSONRequestBody defines body for PatchObservabilityGrafanaProxy for application/json ContentType.
+type PatchObservabilityGrafanaProxyJSONRequestBody = RouteMutationRequest
+
+// PostObservabilityGrafanaProxyJSONRequestBody defines body for PostObservabilityGrafanaProxy for application/json ContentType.
+type PostObservabilityGrafanaProxyJSONRequestBody = RouteMutationRequest
+
+// PutObservabilityGrafanaProxyJSONRequestBody defines body for PutObservabilityGrafanaProxy for application/json ContentType.
+type PutObservabilityGrafanaProxyJSONRequestBody = RouteMutationRequest
 
 // PostProjectsJSONRequestBody defines body for PostProjects for application/json ContentType.
 type PostProjectsJSONRequestBody = CreateProjectRequest
@@ -21695,6 +21777,33 @@ type ClientInterface interface {
 	// PostNodesByClusterIdByNodeNameUncordon request
 	PostNodesByClusterIdByNodeNameUncordon(ctx context.Context, clusterId openapi_types.UUID, nodeName string, params *PostNodesByClusterIdByNodeNameUncordonParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteObservabilityGrafana request
+	DeleteObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetObservabilityGrafana request
+	GetObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadObservabilityGrafana request
+	HeadObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OptionsObservabilityGrafana request
+	OptionsObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchObservabilityGrafanaWithBody request with any body
+	PatchObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchObservabilityGrafana(ctx context.Context, body PatchObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostObservabilityGrafanaWithBody request with any body
+	PostObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostObservabilityGrafana(ctx context.Context, body PostObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutObservabilityGrafanaWithBody request with any body
+	PutObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutObservabilityGrafana(ctx context.Context, body PutObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetObservabilityGrafanaTicket request
 	GetObservabilityGrafanaTicket(ctx context.Context, params *GetObservabilityGrafanaTicketParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -21702,6 +21811,33 @@ type ClientInterface interface {
 	PostObservabilityGrafanaTicketRedeemWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PostObservabilityGrafanaTicketRedeem(ctx context.Context, body PostObservabilityGrafanaTicketRedeemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteObservabilityGrafanaProxy request
+	DeleteObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetObservabilityGrafanaProxy request
+	GetObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// HeadObservabilityGrafanaProxy request
+	HeadObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// OptionsObservabilityGrafanaProxy request
+	OptionsObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PatchObservabilityGrafanaProxyWithBody request with any body
+	PatchObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchObservabilityGrafanaProxy(ctx context.Context, body PatchObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostObservabilityGrafanaProxyWithBody request with any body
+	PostObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostObservabilityGrafanaProxy(ctx context.Context, body PostObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutObservabilityGrafanaProxyWithBody request with any body
+	PutObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutObservabilityGrafanaProxy(ctx context.Context, body PutObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetPlatformHealthSummary request
 	GetPlatformHealthSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -32086,6 +32222,126 @@ func (c *Client) PostNodesByClusterIdByNodeNameUncordon(ctx context.Context, clu
 	return c.Client.Do(req)
 }
 
+func (c *Client) DeleteObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteObservabilityGrafanaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetObservabilityGrafanaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadObservabilityGrafanaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) OptionsObservabilityGrafana(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOptionsObservabilityGrafanaRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchObservabilityGrafanaRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchObservabilityGrafana(ctx context.Context, body PatchObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchObservabilityGrafanaRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObservabilityGrafanaRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObservabilityGrafana(ctx context.Context, body PostObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObservabilityGrafanaRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutObservabilityGrafanaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutObservabilityGrafanaRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutObservabilityGrafana(ctx context.Context, body PutObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutObservabilityGrafanaRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetObservabilityGrafanaTicket(ctx context.Context, params *GetObservabilityGrafanaTicketParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetObservabilityGrafanaTicketRequest(c.Server, params)
 	if err != nil {
@@ -32112,6 +32368,126 @@ func (c *Client) PostObservabilityGrafanaTicketRedeemWithBody(ctx context.Contex
 
 func (c *Client) PostObservabilityGrafanaTicketRedeem(ctx context.Context, body PostObservabilityGrafanaTicketRedeemJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostObservabilityGrafanaTicketRedeemRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteObservabilityGrafanaProxyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetObservabilityGrafanaProxyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) HeadObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewHeadObservabilityGrafanaProxyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) OptionsObservabilityGrafanaProxy(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewOptionsObservabilityGrafanaProxyRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchObservabilityGrafanaProxyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PatchObservabilityGrafanaProxy(ctx context.Context, body PatchObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchObservabilityGrafanaProxyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObservabilityGrafanaProxyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObservabilityGrafanaProxy(ctx context.Context, body PostObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObservabilityGrafanaProxyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutObservabilityGrafanaProxyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutObservabilityGrafanaProxyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutObservabilityGrafanaProxy(ctx context.Context, body PutObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutObservabilityGrafanaProxyRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -52148,6 +52524,86 @@ func NewGetClustersByClusterIdPodsRequest(server string, clusterId openapi_types
 
 		}
 
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Health != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "health", runtime.ParamLocationQuery, *params.Health); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -54274,6 +54730,86 @@ func NewListGenericClusterResourcesRequest(server string, clusterId string, reso
 
 		}
 
+		if params.Namespaces != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespaces", runtime.ParamLocationQuery, *params.Namespaces); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -54471,6 +55007,86 @@ func NewListNamedClusterResourcesRequest(server string, clusterId string, resour
 		if params.Namespace != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespace", runtime.ParamLocationQuery, *params.Namespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Namespaces != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "namespaces", runtime.ParamLocationQuery, *params.Namespaces); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "search", runtime.ParamLocationQuery, *params.Search); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -65099,6 +65715,234 @@ func NewPostNodesByClusterIdByNodeNameUncordonRequest(server string, clusterId o
 	return req, nil
 }
 
+// NewDeleteObservabilityGrafanaRequest generates requests for DeleteObservabilityGrafana
+func NewDeleteObservabilityGrafanaRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetObservabilityGrafanaRequest generates requests for GetObservabilityGrafana
+func NewGetObservabilityGrafanaRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHeadObservabilityGrafanaRequest generates requests for HeadObservabilityGrafana
+func NewHeadObservabilityGrafanaRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOptionsObservabilityGrafanaRequest generates requests for OptionsObservabilityGrafana
+func NewOptionsObservabilityGrafanaRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchObservabilityGrafanaRequest calls the generic PatchObservabilityGrafana builder with application/json body
+func NewPatchObservabilityGrafanaRequest(server string, body PatchObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchObservabilityGrafanaRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPatchObservabilityGrafanaRequestWithBody generates requests for PatchObservabilityGrafana with any type of body
+func NewPatchObservabilityGrafanaRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostObservabilityGrafanaRequest calls the generic PostObservabilityGrafana builder with application/json body
+func NewPostObservabilityGrafanaRequest(server string, body PostObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostObservabilityGrafanaRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostObservabilityGrafanaRequestWithBody generates requests for PostObservabilityGrafana with any type of body
+func NewPostObservabilityGrafanaRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutObservabilityGrafanaRequest calls the generic PutObservabilityGrafana builder with application/json body
+func NewPutObservabilityGrafanaRequest(server string, body PutObservabilityGrafanaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutObservabilityGrafanaRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutObservabilityGrafanaRequestWithBody generates requests for PutObservabilityGrafana with any type of body
+func NewPutObservabilityGrafanaRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetObservabilityGrafanaTicketRequest generates requests for GetObservabilityGrafanaTicket
 func NewGetObservabilityGrafanaTicketRequest(server string, params *GetObservabilityGrafanaTicketParams) (*http.Request, error) {
 	var err error
@@ -65179,6 +66023,234 @@ func NewPostObservabilityGrafanaTicketRedeemRequestWithBody(server string, conte
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteObservabilityGrafanaProxyRequest generates requests for DeleteObservabilityGrafanaProxy
+func NewDeleteObservabilityGrafanaProxyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetObservabilityGrafanaProxyRequest generates requests for GetObservabilityGrafanaProxy
+func NewGetObservabilityGrafanaProxyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewHeadObservabilityGrafanaProxyRequest generates requests for HeadObservabilityGrafanaProxy
+func NewHeadObservabilityGrafanaProxyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("HEAD", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewOptionsObservabilityGrafanaProxyRequest generates requests for OptionsObservabilityGrafanaProxy
+func NewOptionsObservabilityGrafanaProxyRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("OPTIONS", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPatchObservabilityGrafanaProxyRequest calls the generic PatchObservabilityGrafanaProxy builder with application/json body
+func NewPatchObservabilityGrafanaProxyRequest(server string, body PatchObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchObservabilityGrafanaProxyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPatchObservabilityGrafanaProxyRequestWithBody generates requests for PatchObservabilityGrafanaProxy with any type of body
+func NewPatchObservabilityGrafanaProxyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPostObservabilityGrafanaProxyRequest calls the generic PostObservabilityGrafanaProxy builder with application/json body
+func NewPostObservabilityGrafanaProxyRequest(server string, body PostObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostObservabilityGrafanaProxyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostObservabilityGrafanaProxyRequestWithBody generates requests for PostObservabilityGrafanaProxy with any type of body
+func NewPostObservabilityGrafanaProxyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutObservabilityGrafanaProxyRequest calls the generic PutObservabilityGrafanaProxy builder with application/json body
+func NewPutObservabilityGrafanaProxyRequest(server string, body PutObservabilityGrafanaProxyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutObservabilityGrafanaProxyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutObservabilityGrafanaProxyRequestWithBody generates requests for PutObservabilityGrafanaProxy with any type of body
+func NewPutObservabilityGrafanaProxyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/observability/grafana/*")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -76908,6 +77980,33 @@ type ClientWithResponsesInterface interface {
 	// PostNodesByClusterIdByNodeNameUncordonWithResponse request
 	PostNodesByClusterIdByNodeNameUncordonWithResponse(ctx context.Context, clusterId openapi_types.UUID, nodeName string, params *PostNodesByClusterIdByNodeNameUncordonParams, reqEditors ...RequestEditorFn) (*PostNodesByClusterIdByNodeNameUncordonResponse, error)
 
+	// DeleteObservabilityGrafanaWithResponse request
+	DeleteObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteObservabilityGrafanaResponse, error)
+
+	// GetObservabilityGrafanaWithResponse request
+	GetObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaResponse, error)
+
+	// HeadObservabilityGrafanaWithResponse request
+	HeadObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HeadObservabilityGrafanaResponse, error)
+
+	// OptionsObservabilityGrafanaWithResponse request
+	OptionsObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsObservabilityGrafanaResponse, error)
+
+	// PatchObservabilityGrafanaWithBodyWithResponse request with any body
+	PatchObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaResponse, error)
+
+	PatchObservabilityGrafanaWithResponse(ctx context.Context, body PatchObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaResponse, error)
+
+	// PostObservabilityGrafanaWithBodyWithResponse request with any body
+	PostObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaResponse, error)
+
+	PostObservabilityGrafanaWithResponse(ctx context.Context, body PostObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaResponse, error)
+
+	// PutObservabilityGrafanaWithBodyWithResponse request with any body
+	PutObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaResponse, error)
+
+	PutObservabilityGrafanaWithResponse(ctx context.Context, body PutObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaResponse, error)
+
 	// GetObservabilityGrafanaTicketWithResponse request
 	GetObservabilityGrafanaTicketWithResponse(ctx context.Context, params *GetObservabilityGrafanaTicketParams, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaTicketResponse, error)
 
@@ -76915,6 +78014,33 @@ type ClientWithResponsesInterface interface {
 	PostObservabilityGrafanaTicketRedeemWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaTicketRedeemResponse, error)
 
 	PostObservabilityGrafanaTicketRedeemWithResponse(ctx context.Context, body PostObservabilityGrafanaTicketRedeemJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaTicketRedeemResponse, error)
+
+	// DeleteObservabilityGrafanaProxyWithResponse request
+	DeleteObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteObservabilityGrafanaProxyResponse, error)
+
+	// GetObservabilityGrafanaProxyWithResponse request
+	GetObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaProxyResponse, error)
+
+	// HeadObservabilityGrafanaProxyWithResponse request
+	HeadObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HeadObservabilityGrafanaProxyResponse, error)
+
+	// OptionsObservabilityGrafanaProxyWithResponse request
+	OptionsObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsObservabilityGrafanaProxyResponse, error)
+
+	// PatchObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PatchObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaProxyResponse, error)
+
+	PatchObservabilityGrafanaProxyWithResponse(ctx context.Context, body PatchObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaProxyResponse, error)
+
+	// PostObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PostObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaProxyResponse, error)
+
+	PostObservabilityGrafanaProxyWithResponse(ctx context.Context, body PostObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaProxyResponse, error)
+
+	// PutObservabilityGrafanaProxyWithBodyWithResponse request with any body
+	PutObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaProxyResponse, error)
+
+	PutObservabilityGrafanaProxyWithResponse(ctx context.Context, body PutObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaProxyResponse, error)
 
 	// GetPlatformHealthSummaryWithResponse request
 	GetPlatformHealthSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformHealthSummaryResponse, error)
@@ -87381,7 +88507,8 @@ type GetClustersByClusterIdPodsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []Pod `json:"data"`
+		Data       []Pod              `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
@@ -88314,7 +89441,8 @@ type ListGenericClusterResourcesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []ResourceRow `json:"data"`
+		Data       []ResourceRow      `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -88422,7 +89550,8 @@ type ListNamedClusterResourcesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Data []ResourceRow `json:"data"`
+		Data       []ResourceRow      `json:"data"`
+		Pagination PaginationMetadata `json:"pagination"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON401 *ErrorEnvelope
@@ -93587,6 +94716,194 @@ func (r PostNodesByClusterIdByNodeNameUncordonResponse) StatusCode() int {
 	return 0
 }
 
+type DeleteObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type OptionsObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r OptionsObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OptionsObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutObservabilityGrafanaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutObservabilityGrafanaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutObservabilityGrafanaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetObservabilityGrafanaTicketResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -93634,6 +94951,194 @@ func (r PostObservabilityGrafanaTicketRedeemResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PostObservabilityGrafanaTicketRedeemResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type HeadObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r HeadObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r HeadObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type OptionsObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r OptionsObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r OptionsObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PatchObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PostObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PostObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostObservabilityGrafanaProxyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutObservabilityGrafanaProxyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RouteResponseEnvelope
+	JSON400      *BadRequest
+	JSON401      *Unauthorized
+	JSON403      *Forbidden
+	JSON404      *NotFound
+	JSON503      *ServiceUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r PutObservabilityGrafanaProxyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutObservabilityGrafanaProxyResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -105980,6 +107485,93 @@ func (c *ClientWithResponses) PostNodesByClusterIdByNodeNameUncordonWithResponse
 	return ParsePostNodesByClusterIdByNodeNameUncordonResponse(rsp)
 }
 
+// DeleteObservabilityGrafanaWithResponse request returning *DeleteObservabilityGrafanaResponse
+func (c *ClientWithResponses) DeleteObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteObservabilityGrafanaResponse, error) {
+	rsp, err := c.DeleteObservabilityGrafana(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteObservabilityGrafanaResponse(rsp)
+}
+
+// GetObservabilityGrafanaWithResponse request returning *GetObservabilityGrafanaResponse
+func (c *ClientWithResponses) GetObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaResponse, error) {
+	rsp, err := c.GetObservabilityGrafana(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetObservabilityGrafanaResponse(rsp)
+}
+
+// HeadObservabilityGrafanaWithResponse request returning *HeadObservabilityGrafanaResponse
+func (c *ClientWithResponses) HeadObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HeadObservabilityGrafanaResponse, error) {
+	rsp, err := c.HeadObservabilityGrafana(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadObservabilityGrafanaResponse(rsp)
+}
+
+// OptionsObservabilityGrafanaWithResponse request returning *OptionsObservabilityGrafanaResponse
+func (c *ClientWithResponses) OptionsObservabilityGrafanaWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsObservabilityGrafanaResponse, error) {
+	rsp, err := c.OptionsObservabilityGrafana(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOptionsObservabilityGrafanaResponse(rsp)
+}
+
+// PatchObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PatchObservabilityGrafanaResponse
+func (c *ClientWithResponses) PatchObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaResponse, error) {
+	rsp, err := c.PatchObservabilityGrafanaWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchObservabilityGrafanaWithResponse(ctx context.Context, body PatchObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaResponse, error) {
+	rsp, err := c.PatchObservabilityGrafana(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchObservabilityGrafanaResponse(rsp)
+}
+
+// PostObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PostObservabilityGrafanaResponse
+func (c *ClientWithResponses) PostObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaResponse, error) {
+	rsp, err := c.PostObservabilityGrafanaWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostObservabilityGrafanaWithResponse(ctx context.Context, body PostObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaResponse, error) {
+	rsp, err := c.PostObservabilityGrafana(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObservabilityGrafanaResponse(rsp)
+}
+
+// PutObservabilityGrafanaWithBodyWithResponse request with arbitrary body returning *PutObservabilityGrafanaResponse
+func (c *ClientWithResponses) PutObservabilityGrafanaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaResponse, error) {
+	rsp, err := c.PutObservabilityGrafanaWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutObservabilityGrafanaResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutObservabilityGrafanaWithResponse(ctx context.Context, body PutObservabilityGrafanaJSONRequestBody, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaResponse, error) {
+	rsp, err := c.PutObservabilityGrafana(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutObservabilityGrafanaResponse(rsp)
+}
+
 // GetObservabilityGrafanaTicketWithResponse request returning *GetObservabilityGrafanaTicketResponse
 func (c *ClientWithResponses) GetObservabilityGrafanaTicketWithResponse(ctx context.Context, params *GetObservabilityGrafanaTicketParams, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaTicketResponse, error) {
 	rsp, err := c.GetObservabilityGrafanaTicket(ctx, params, reqEditors...)
@@ -106004,6 +107596,93 @@ func (c *ClientWithResponses) PostObservabilityGrafanaTicketRedeemWithResponse(c
 		return nil, err
 	}
 	return ParsePostObservabilityGrafanaTicketRedeemResponse(rsp)
+}
+
+// DeleteObservabilityGrafanaProxyWithResponse request returning *DeleteObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) DeleteObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.DeleteObservabilityGrafanaProxy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteObservabilityGrafanaProxyResponse(rsp)
+}
+
+// GetObservabilityGrafanaProxyWithResponse request returning *GetObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) GetObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.GetObservabilityGrafanaProxy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetObservabilityGrafanaProxyResponse(rsp)
+}
+
+// HeadObservabilityGrafanaProxyWithResponse request returning *HeadObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) HeadObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HeadObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.HeadObservabilityGrafanaProxy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseHeadObservabilityGrafanaProxyResponse(rsp)
+}
+
+// OptionsObservabilityGrafanaProxyWithResponse request returning *OptionsObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) OptionsObservabilityGrafanaProxyWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*OptionsObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.OptionsObservabilityGrafanaProxy(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseOptionsObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PatchObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PatchObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PatchObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PatchObservabilityGrafanaProxyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchObservabilityGrafanaProxyWithResponse(ctx context.Context, body PatchObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PatchObservabilityGrafanaProxy(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PostObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PostObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PostObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PostObservabilityGrafanaProxyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PostObservabilityGrafanaProxyWithResponse(ctx context.Context, body PostObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PostObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PostObservabilityGrafanaProxy(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObservabilityGrafanaProxyResponse(rsp)
+}
+
+// PutObservabilityGrafanaProxyWithBodyWithResponse request with arbitrary body returning *PutObservabilityGrafanaProxyResponse
+func (c *ClientWithResponses) PutObservabilityGrafanaProxyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PutObservabilityGrafanaProxyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutObservabilityGrafanaProxyResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutObservabilityGrafanaProxyWithResponse(ctx context.Context, body PutObservabilityGrafanaProxyJSONRequestBody, reqEditors ...RequestEditorFn) (*PutObservabilityGrafanaProxyResponse, error) {
+	rsp, err := c.PutObservabilityGrafanaProxy(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutObservabilityGrafanaProxyResponse(rsp)
 }
 
 // GetPlatformHealthSummaryWithResponse request returning *GetPlatformHealthSummaryResponse
@@ -126719,7 +128398,8 @@ func ParseGetClustersByClusterIdPodsResponse(rsp *http.Response) (*GetClustersBy
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []Pod `json:"data"`
+			Data       []Pod              `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -128576,7 +130256,8 @@ func ParseListGenericClusterResourcesResponse(rsp *http.Response) (*ListGenericC
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []ResourceRow `json:"data"`
+			Data       []ResourceRow      `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -128808,7 +130489,8 @@ func ParseListNamedClusterResourcesResponse(rsp *http.Response) (*ListNamedClust
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Data []ResourceRow `json:"data"`
+			Data       []ResourceRow      `json:"data"`
+			Pagination PaginationMetadata `json:"pagination"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -137956,6 +139638,426 @@ func ParsePostNodesByClusterIdByNodeNameUncordonResponse(rsp *http.Response) (*P
 	return response, nil
 }
 
+// ParseDeleteObservabilityGrafanaResponse parses an HTTP response from a DeleteObservabilityGrafanaWithResponse call
+func ParseDeleteObservabilityGrafanaResponse(rsp *http.Response) (*DeleteObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetObservabilityGrafanaResponse parses an HTTP response from a GetObservabilityGrafanaWithResponse call
+func ParseGetObservabilityGrafanaResponse(rsp *http.Response) (*GetObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadObservabilityGrafanaResponse parses an HTTP response from a HeadObservabilityGrafanaWithResponse call
+func ParseHeadObservabilityGrafanaResponse(rsp *http.Response) (*HeadObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseOptionsObservabilityGrafanaResponse parses an HTTP response from a OptionsObservabilityGrafanaWithResponse call
+func ParseOptionsObservabilityGrafanaResponse(rsp *http.Response) (*OptionsObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OptionsObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchObservabilityGrafanaResponse parses an HTTP response from a PatchObservabilityGrafanaWithResponse call
+func ParsePatchObservabilityGrafanaResponse(rsp *http.Response) (*PatchObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostObservabilityGrafanaResponse parses an HTTP response from a PostObservabilityGrafanaWithResponse call
+func ParsePostObservabilityGrafanaResponse(rsp *http.Response) (*PostObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutObservabilityGrafanaResponse parses an HTTP response from a PutObservabilityGrafanaWithResponse call
+func ParsePutObservabilityGrafanaResponse(rsp *http.Response) (*PutObservabilityGrafanaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutObservabilityGrafanaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetObservabilityGrafanaTicketResponse parses an HTTP response from a GetObservabilityGrafanaTicketWithResponse call
 func ParseGetObservabilityGrafanaTicketResponse(rsp *http.Response) (*GetObservabilityGrafanaTicketResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -138026,6 +140128,426 @@ func ParsePostObservabilityGrafanaTicketRedeemResponse(rsp *http.Response) (*Pos
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest GrafanaTicketIdentityEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteObservabilityGrafanaProxyResponse parses an HTTP response from a DeleteObservabilityGrafanaProxyWithResponse call
+func ParseDeleteObservabilityGrafanaProxyResponse(rsp *http.Response) (*DeleteObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetObservabilityGrafanaProxyResponse parses an HTTP response from a GetObservabilityGrafanaProxyWithResponse call
+func ParseGetObservabilityGrafanaProxyResponse(rsp *http.Response) (*GetObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseHeadObservabilityGrafanaProxyResponse parses an HTTP response from a HeadObservabilityGrafanaProxyWithResponse call
+func ParseHeadObservabilityGrafanaProxyResponse(rsp *http.Response) (*HeadObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &HeadObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseOptionsObservabilityGrafanaProxyResponse parses an HTTP response from a OptionsObservabilityGrafanaProxyWithResponse call
+func ParseOptionsObservabilityGrafanaProxyResponse(rsp *http.Response) (*OptionsObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &OptionsObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePatchObservabilityGrafanaProxyResponse parses an HTTP response from a PatchObservabilityGrafanaProxyWithResponse call
+func ParsePatchObservabilityGrafanaProxyResponse(rsp *http.Response) (*PatchObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostObservabilityGrafanaProxyResponse parses an HTTP response from a PostObservabilityGrafanaProxyWithResponse call
+func ParsePostObservabilityGrafanaProxyResponse(rsp *http.Response) (*PostObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Unauthorized
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutObservabilityGrafanaProxyResponse parses an HTTP response from a PutObservabilityGrafanaProxyWithResponse call
+func ParsePutObservabilityGrafanaProxyResponse(rsp *http.Response) (*PutObservabilityGrafanaProxyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutObservabilityGrafanaProxyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RouteResponseEnvelope
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

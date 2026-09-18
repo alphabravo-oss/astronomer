@@ -546,8 +546,16 @@ export const queryKeys = {
         [...resourceTypes].sort(),
         namespaces === null ? null : [...namespaces].sort(),
       ] as const,
-    resources: (clusterId: string, resourceType: string) =>
-      ["generic", clusterId, resourceType] as const,
+    resources: (
+      clusterId: string,
+      resourceType: string,
+      params?: Record<string, unknown>,
+    ) => ["generic", clusterId, resourceType, params] as const,
+    namedResources: (
+      clusterId: string,
+      resourceType: string,
+      params?: Record<string, unknown>,
+    ) => ["generic", "named", clusterId, resourceType, params] as const,
     discovery: (clusterId: string) =>
       ["generic", clusterId, "discovery"] as const,
     schema: (clusterId: string, resourceType: ResourceType) =>

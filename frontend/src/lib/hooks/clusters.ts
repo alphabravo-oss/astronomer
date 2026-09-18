@@ -165,7 +165,14 @@ export function useClusterEvents(
 
 export function useClusterPods(
   clusterId: string,
-  params?: { namespace?: string },
+  params?: {
+    namespace?: string;
+    limit?: number;
+    offset?: number;
+    search?: string;
+    sort?: import("@/lib/api/workloads").PodSort;
+    health?: "all" | "attention" | "restarted";
+  },
 ) {
   return useQuery({
     queryKey: queryKeys.clusters.pods(clusterId, params),

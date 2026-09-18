@@ -1,5 +1,9 @@
 import type { ReactNode } from "react";
-import { type RowData, type PaginationState } from "@tanstack/react-table";
+import {
+  type RowData,
+  type PaginationState,
+  type SortingState,
+} from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
 import type { TableEmptyState } from "@/components/ui/data-table-empty-state";
 
@@ -116,6 +120,11 @@ export interface DataTableProps<T> {
     search?: {
       value: string;
       onChange: (value: string) => void;
+    };
+    /** Controlled sorting over the full server dataset. */
+    sorting?: {
+      value: SortingState;
+      onChange: (next: SortingState) => void;
     };
   };
 }

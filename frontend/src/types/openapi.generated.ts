@@ -3907,9 +3907,8 @@ export interface OpenAPIComponents {
           "storeGatewayReplicas"?: number;
           "compactorReplicas"?: number;
           "replicas"?: number;
-          "ingressHost"?: string;
           "logDatasourceUrl"?: string;
-          "grafanaHost"?: string;
+          "proxyPath"?: string;
           "authMode"?: string;
           "autoRollbackOnFailure"?: boolean;
           "managedAssetHashes"?: Record<string, unknown>;
@@ -5872,6 +5871,102 @@ export interface OpenAPIComponents {
 }
 
 export interface OpenAPIOperations {
+  "deleteObservabilityGrafana": {
+    method: "DELETE";
+    path: "/api/v1/observability/grafana";
+    arguments: Record<string, never>;
+    response: void;
+  };
+  "getObservabilityGrafana": {
+    method: "GET";
+    path: "/api/v1/observability/grafana";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "headObservabilityGrafana": {
+    method: "HEAD";
+    path: "/api/v1/observability/grafana";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "optionsObservabilityGrafana": {
+    method: "OPTIONS";
+    path: "/api/v1/observability/grafana";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "patchObservabilityGrafana": {
+    method: "PATCH";
+    path: "/api/v1/observability/grafana";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RouteMutationRequest'];
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "postObservabilityGrafana": {
+    method: "POST";
+    path: "/api/v1/observability/grafana";
+    arguments: {
+        "body"?: OpenAPIComponents['schemas']['RouteMutationRequest'];
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "putObservabilityGrafana": {
+    method: "PUT";
+    path: "/api/v1/observability/grafana";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RouteMutationRequest'];
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "deleteObservabilityGrafanaProxy": {
+    method: "DELETE";
+    path: "/api/v1/observability/grafana/*";
+    arguments: Record<string, never>;
+    response: void;
+  };
+  "getObservabilityGrafanaProxy": {
+    method: "GET";
+    path: "/api/v1/observability/grafana/*";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "headObservabilityGrafanaProxy": {
+    method: "HEAD";
+    path: "/api/v1/observability/grafana/*";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "optionsObservabilityGrafanaProxy": {
+    method: "OPTIONS";
+    path: "/api/v1/observability/grafana/*";
+    arguments: Record<string, never>;
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "patchObservabilityGrafanaProxy": {
+    method: "PATCH";
+    path: "/api/v1/observability/grafana/*";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RouteMutationRequest'];
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "postObservabilityGrafanaProxy": {
+    method: "POST";
+    path: "/api/v1/observability/grafana/*";
+    arguments: {
+        "body"?: OpenAPIComponents['schemas']['RouteMutationRequest'];
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
+  "putObservabilityGrafanaProxy": {
+    method: "PUT";
+    path: "/api/v1/observability/grafana/*";
+    arguments: {
+        "body": OpenAPIComponents['schemas']['RouteMutationRequest'];
+      };
+    response: OpenAPIComponents['schemas']['RouteResponseEnvelope'];
+  };
   "internalTunnelK8sCapability": {
     method: "GET";
     path: "/internal/tunnel/k8s/{cluster_id}/capabilities/{capability}";
@@ -14835,9 +14930,14 @@ export interface OpenAPIOperations {
         };
         "query"?: {
           "namespace"?: string;
+          "limit"?: number;
+          "offset"?: number;
+          "search"?: string;
+          "sort"?: "namespace_asc" | "namespace_desc" | "name_asc" | "name_desc" | "status_asc" | "status_desc" | "restarts_asc" | "restarts_desc" | "node_asc" | "node_desc" | "age_asc" | "age_desc";
+          "health"?: "all" | "attention" | "restarted";
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['Pod'][];
       };
   };
@@ -15097,9 +15197,14 @@ export interface OpenAPIOperations {
         };
         "query"?: {
           "namespace"?: string;
+          "namespaces"?: string;
+          "limit"?: number;
+          "offset"?: number;
+          "search"?: string;
+          "sort"?: string;
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['ResourceRow'][];
       };
   };
@@ -15168,9 +15273,14 @@ export interface OpenAPIOperations {
         };
         "query"?: {
           "namespace"?: string;
+          "namespaces"?: string;
+          "limit"?: number;
+          "offset"?: number;
+          "search"?: string;
+          "sort"?: string;
         };
       };
-    response: OpenAPIComponents['schemas']['DataEnvelope'] & {
+    response: OpenAPIComponents['schemas']['PageEnvelope'] & {
         "data"?: OpenAPIComponents['schemas']['ResourceRow'][];
       };
   };

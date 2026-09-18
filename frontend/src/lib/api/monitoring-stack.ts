@@ -439,7 +439,7 @@ export async function uninstallSharedAlertmanager(
 
 // ─────────────────────────────────────────────────────────────────────
 // Shared Grafana — /settings/monitoring/grafana/*
-// authMode=proxy after grafana-proxy + ticket bounce. Open button is UI-only.
+// Grafana is available only through the authenticated same-origin proxy.
 // ─────────────────────────────────────────────────────────────────────
 
 export async function getSharedGrafanaStatus(): Promise<SharedGrafanaStatus> {

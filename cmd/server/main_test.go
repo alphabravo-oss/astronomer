@@ -48,7 +48,7 @@ func TestHandleCLIAllowsNormalStartupWithoutArguments(t *testing.T) {
 func TestHandleCLIGrafanaProxyRequiresEnv(t *testing.T) {
 	t.Setenv("GRAFANA_UPSTREAM", "")
 	t.Setenv("ASTRONOMER_URL", "")
-	t.Setenv("GRAFANA_HOST", "")
+	t.Setenv("GRAFANA_PUBLIC_PATH", "")
 	t.Setenv("GRAFANA_PROXY_KEY", "")
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

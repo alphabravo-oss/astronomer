@@ -176,6 +176,102 @@ func TestListEventsClampsUpstreamLimit(t *testing.T) {
 	}
 }
 
+func TestListPodsUsesBoundedKubernetesPage(t *testing.T) {
+	pods := make([]map[string]any, 20)
+	for i := range pods {
+		pods[i] = map[string]any{
+			"metadata": map[string]any{
+				"name":              fmt.Sprintf("pod-%02d", i),
+				"namespace":         "default",
+				"creationTimestamp": "2026-09-18T00:00:00Z",
+			},
+			"status": map[string]any{"phase": "Running"},
+		}
+	}
+	body, err := json.Marshal(map[string]any{
+		"metadata": map[string]any{"continue": "next", "remainingItemCount": 10592},
+		"items":    pods,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stub := &stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+		if req.Path != "/api/v1/pods?limit=20" {
+			t.Fatalf("upstream path = %q, want bounded first page", req.Path)
+		}
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64.StdEncoding.EncodeToString(body)}, nil
+	}}
+	h := NewWorkloadHandlerWithRequester(stub)
+	clusterID := uuid.NewString()
+	route := chi.NewRouteContext()
+	route.URLParams.Add("cluster_id", clusterID)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/pods/?limit=20&offset=0", nil)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+	rec := httptest.NewRecorder()
+
+	h.ListPods(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var envelope listEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(envelope.Data) != 20 || envelope.Pagination.Total == nil || *envelope.Pagination.Total != 10612 {
+		t.Fatalf("unexpected bounded page: rows=%d pagination=%+v", len(envelope.Data), envelope.Pagination)
+	}
+}
+
+func TestListGenericResourcesPagesSearchesAndSortsFullResult(t *testing.T) {
+	page := func(items []map[string]any, next string) *protocol.K8sResponsePayload {
+		body, err := json.Marshal(map[string]any{
+			"metadata": map[string]any{"continue": next},
+			"items":    items,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &protocol.K8sResponsePayload{StatusCode: http.StatusOK, Body: base64.StdEncoding.EncodeToString(body)}
+	}
+	stub := &stubK8sRequester{respFn: func(req stubReq) (*protocol.K8sResponsePayload, error) {
+		if !strings.Contains(req.Path, "limit=500") {
+			t.Fatalf("upstream path is unbounded: %q", req.Path)
+		}
+		if strings.Contains(req.Path, "continue=next") {
+			return page([]map[string]any{{"metadata": map[string]any{"name": "beta", "namespace": "team-a"}}}, ""), nil
+		}
+		return page([]map[string]any{
+			{"metadata": map[string]any{"name": "alpha", "namespace": "team-a"}},
+			{"metadata": map[string]any{"name": "unrelated", "namespace": "team-b"}},
+		}, "next"), nil
+	}}
+	h := &ResourceHandler{requester: stub}
+	clusterID := uuid.NewString()
+	route := chi.NewRouteContext()
+	route.URLParams.Add("cluster_id", clusterID)
+	route.URLParams.Add("resource_type", "configmaps")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/"+clusterID+"/resources/generic/configmaps/?limit=1&offset=1&search=team-a&sort=name_desc", nil)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+	rec := httptest.NewRecorder()
+
+	h.ListGenericResources(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var envelope listEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(envelope.Data) != 1 || envelope.Data[0]["name"] != "alpha" {
+		t.Fatalf("page = %+v, want second globally sorted match alpha", envelope.Data)
+	}
+	if envelope.Pagination.Total == nil || *envelope.Pagination.Total != 2 {
+		t.Fatalf("pagination = %+v, want total 2", envelope.Pagination)
+	}
+}
+
 func doListNodes(t *testing.T, h *WorkloadHandler, query string) listEnvelope {
 	t.Helper()
 	clusterID := uuid.NewString()

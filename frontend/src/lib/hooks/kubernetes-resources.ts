@@ -21,10 +21,26 @@ import {
   getTCPRoutes,
   getUDPRoutes,
   getReferenceGrants,
+  getNamedResources,
+  type NamedResourceListParams,
 } from "@/lib/api/kubernetes-resources";
 import { queryKeys } from "@/lib/query-keys";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import type { PersistentVolumeClaim } from "@/types";
+
+export function useNamedResources<T>(
+  clusterId: string,
+  resourceType: string,
+  params?: Omit<NamedResourceListParams, "signal">,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.generic.namedResources(clusterId, resourceType, params),
+    queryFn: ({ signal }) =>
+      getNamedResources<T>(clusterId, resourceType, { ...params, signal }),
+    enabled: enabled && !!clusterId && !!resourceType,
+  });
+}
 
 // ============================================================
 // Storage Hooks

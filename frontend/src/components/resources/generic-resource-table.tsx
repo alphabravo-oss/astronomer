@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 
 import { Code, Pencil, Plus, Trash2 } from "lucide-react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
+import type { SortingState } from "@tanstack/react-table";
 
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import { ConfigMapFormDialog } from "@/components/resources/configmap-form";
@@ -32,7 +34,42 @@ import {
   toastPermissionDenied,
 } from "@/lib/permission-hooks";
 import { toastError } from "@/lib/toast";
+import { pageRowCount } from "@/lib/api/pagination";
+import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import type { GenericK8sResource } from "@/types";
+
+const GENERIC_RESOURCE_PAGE_SIZE = 20;
+const SERVER_SORTABLE_GENERIC_COLUMNS = new Set([
+  "name",
+  "namespace",
+  "age",
+  "status",
+  "type",
+  "schedule",
+  "lastSchedule",
+  "data",
+  "target",
+  "minmax",
+  "replicas",
+  "active",
+  "completions",
+  "currentHealthy",
+  "minAvailable",
+  "maxUnavailable",
+  "group",
+  "kind",
+  "scope",
+  "version",
+  "secrets",
+  "rules",
+  "role",
+  "subjects",
+  "endpoints",
+  "ports",
+  "desired",
+  "ready",
+  "available",
+]);
 
 export interface GenericResourceTableProps {
   clusterId: string;
@@ -54,7 +91,38 @@ export function GenericResourceTable({
   title,
   baseColumns,
 }: GenericResourceTableProps) {
-  const query = useGenericResources(clusterId, resourceType);
+  const scope = useClusterNamespaceScope(clusterId);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "namespace", desc: false },
+  ]);
+  const sort = sorting[0]
+    ? `${sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
+    : "namespace_asc";
+  const namespaceSelection = scope.selectedNamespaces;
+  const namespaceKey =
+    namespaceSelection === null ? undefined : namespaceSelection?.join(",");
+  const pageContext = `${resourceType}\u0000${namespaceKey ?? "*"}`;
+  const [pageState, setPageState] = useState({
+    context: pageContext,
+    pageIndex: 0,
+  });
+  const pageIndex = pageState.context === pageContext ? pageState.pageIndex : 0;
+  const setPageIndex = (next: number) =>
+    setPageState({ context: pageContext, pageIndex: next });
+  const query = useGenericResources(
+    clusterId,
+    resourceType,
+    {
+      namespaces: namespaceKey,
+      limit: GENERIC_RESOURCE_PAGE_SIZE,
+      offset: pageIndex * GENERIC_RESOURCE_PAGE_SIZE,
+      search: debouncedSearch.trim() || undefined,
+      sort,
+    },
+    scope.ready,
+  );
   const navigate = useNavigate();
   const k8sDeleteMut = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, resourceType);
@@ -156,6 +224,13 @@ export function GenericResourceTable({
       title,
     ],
   );
+  const serverColumns = columns.map((column) => ({
+    ...column,
+    sortable:
+      column.key !== "actions" &&
+      SERVER_SORTABLE_GENERIC_COLUMNS.has(column.key),
+    filter: undefined,
+  }));
 
   return (
     <>
@@ -176,8 +251,8 @@ export function GenericResourceTable({
       <ExplorerDataTable
         clusterId={clusterId}
         resourceType={resourceType}
-        data={query.data || []}
-        columns={columns}
+        data={query.data?.data || []}
+        columns={serverColumns}
         keyExtractor={(row) =>
           row.namespace ? `${row.namespace}/${row.name}` : row.name
         }
@@ -188,9 +263,37 @@ export function GenericResourceTable({
           permissions.read,
         )}
         searchPlaceholder={`Search ${title.toLowerCase()}...`}
-        loading={query.isLoading}
+        pageSize={GENERIC_RESOURCE_PAGE_SIZE}
+        serverSide={{
+          rowCount: pageRowCount(query.data),
+          pagination: {
+            pageIndex,
+            pageSize: GENERIC_RESOURCE_PAGE_SIZE,
+          },
+          onPaginationChange: (next) => setPageIndex(next.pageIndex),
+          search: {
+            value: search,
+            onChange: (value) => {
+              setSearch(value);
+              setPageIndex(0);
+            },
+          },
+          sorting: {
+            value: sorting,
+            onChange: (next) => {
+              setSorting(next.slice(0, 1));
+              setPageIndex(0);
+            },
+          },
+        }}
+        filtersActive={search.trim() !== ""}
+        onClearFilters={() => {
+          setSearch("");
+          setPageIndex(0);
+        }}
+        loading={query.isLoading || !scope.ready}
         isError={query.isError}
-          error={query.error}
+        error={query.error}
         errorMessage={`Failed to load ${title.toLowerCase()}`}
         onRetry={() => void query.refetch()}
         emptyState={{

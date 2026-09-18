@@ -3,9 +3,6 @@ import {
   useDeleteIngress,
   useDeleteNetworkPolicy,
   useDeleteService,
-  useIngresses,
-  useNetworkPolicies,
-  useServices,
 } from "@/lib/hooks/kubernetes-resources";
 import { useNavigate } from "@tanstack/react-router";
 import { ActionButton } from "@/components/ui/action-button";
@@ -13,7 +10,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import type { Column } from "@/components/ui/data-table";
-import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
+import { ServerResourceExplorerTable } from "@/components/resources/server-resource-explorer-table";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import {
   ingressColumns,
@@ -36,7 +33,6 @@ import type { Ingress, K8sService, NetworkPolicy } from "@/types";
 import { Code, Pencil, Plus, Trash2 } from "lucide-react";
 
 export function ServicesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useServices(clusterId);
   const navigate = useNavigate();
   const deleteService = useDeleteService();
   const permissions = useClusterResourcePermissions(clusterId, "services");
@@ -122,10 +118,9 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
           Create Service
         </ActionButton>
       </div>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<K8sService>
         clusterId={clusterId}
         resourceType="services"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
@@ -135,7 +130,6 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search services..."
-        loading={isLoading}
         emptyState={{
           title: "No services found",
           description:
@@ -195,7 +189,6 @@ export function ServicesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function IngressesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useIngresses(clusterId);
   const navigate = useNavigate();
   const deleteIngress = useDeleteIngress();
   const permissions = useClusterResourcePermissions(clusterId, "ingresses");
@@ -281,10 +274,9 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
           Create Ingress
         </ActionButton>
       </div>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<Ingress>
         clusterId={clusterId}
         resourceType="ingresses"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
@@ -294,7 +286,6 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search ingresses..."
-        loading={isLoading}
         emptyState={{
           title: "No ingresses found",
           description:
@@ -354,7 +345,6 @@ export function IngressesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useNetworkPolicies(clusterId);
   const navigate = useNavigate();
   const deleteNp = useDeleteNetworkPolicy();
   const permissions = useClusterResourcePermissions(
@@ -443,10 +433,9 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
           Create Network Policy
         </ActionButton>
       </div>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<NetworkPolicy>
         clusterId={clusterId}
         resourceType="networkpolicies"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
@@ -456,7 +445,6 @@ export function NetworkPoliciesTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search network policies..."
-        loading={isLoading}
         emptyState={{
           title: "No network policies found",
           description:

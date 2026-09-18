@@ -70,6 +70,16 @@ func NewTunnelK8sRequesterWithBreaker(hub *tunnel.Hub, threshold int, openDurati
 }
 
 func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string) (resp *protocol.K8sResponsePayload, retErr error) {
+	return r.do(ctx, clusterID, method, path, body, headers, nil)
+}
+
+// DoWithGrafanaAuth sends server-minted Grafana proxy credentials over the
+// typed tunnel payload. They never enter the ordinary browser-header map.
+func (r *TunnelK8sRequester) DoWithGrafanaAuth(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string, auth protocol.GrafanaProxyAuth) (resp *protocol.K8sResponsePayload, retErr error) {
+	return r.do(ctx, clusterID, method, path, body, headers, &auth)
+}
+
+func (r *TunnelK8sRequester) do(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string, grafanaAuth *protocol.GrafanaProxyAuth) (resp *protocol.K8sResponsePayload, retErr error) {
 	if r == nil || r.hub == nil {
 		return nil, fmt.Errorf("tunnel requester not configured")
 	}
@@ -133,7 +143,7 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		// deployments — without this every server-internal tunnel call
 		// (shell open SA/Role/Pod create, project reconciler, etc.)
 		// 503s for the half of clusters whose WS landed on a sibling.
-		if resp, ok, ferr := r.forwardToOwner(ctx, clusterID, method, path, body, headers, identity); ok {
+		if resp, ok, ferr := r.forwardToOwner(ctx, clusterID, method, path, body, headers, identity, grafanaAuth); ok {
 			return resp, ferr
 		}
 		return nil, fmt.Errorf("cluster agent not connected")
@@ -150,6 +160,7 @@ func (r *TunnelK8sRequester) Do(ctx context.Context, clusterID, method, path str
 		Method:         method,
 		Path:           path,
 		Headers:        headers,
+		GrafanaAuth:    grafanaAuth,
 		CallerIdentity: identity,
 	}
 	if len(body) > 0 {
@@ -388,7 +399,7 @@ func ensureSuccess(resp *protocol.K8sResponsePayload) error {
 // here would resolve against the same ctx and happen to work today, but
 // clearing or omitting it — which is what this function did before — silently
 // drops identity for exactly half the traffic on a multi-replica install.
-func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string, identity protocol.CallerIdentity) (resp *protocol.K8sResponsePayload, ok bool, retErr error) {
+func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, method, path string, body []byte, headers map[string]string, identity protocol.CallerIdentity, grafanaAuth *protocol.GrafanaProxyAuth) (resp *protocol.K8sResponsePayload, ok bool, retErr error) {
 	if r == nil || r.hub == nil || r.psk == "" {
 		return nil, false, nil
 	}
@@ -401,7 +412,7 @@ func (r *TunnelK8sRequester) forwardToOwner(ctx context.Context, clusterID, meth
 		return nil, false, nil
 	}
 
-	payload := protocol.K8sRequestPayload{Method: method, Path: path, Headers: headers, CallerIdentity: identity}
+	payload := protocol.K8sRequestPayload{Method: method, Path: path, Headers: headers, GrafanaAuth: grafanaAuth, CallerIdentity: identity}
 	if len(body) > 0 {
 		payload.Body = base64.StdEncoding.EncodeToString(body)
 	}

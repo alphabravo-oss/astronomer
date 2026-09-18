@@ -35,7 +35,7 @@ func handleCLI(args []string, stdout, stderr io.Writer) (handled bool, exitCode 
 	}
 
 	if args[0] == "grafana-proxy" {
-		cfg, err := grafanaproxy.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("GRAFANA_UPSTREAM"), os.Getenv("ASTRONOMER_URL"), os.Getenv("GRAFANA_HOST"), os.Getenv("GRAFANA_PROXY_KEY"))
+		cfg, err := grafanaproxy.ParseConfig(os.Getenv("LISTEN_ADDR"), os.Getenv("GRAFANA_UPSTREAM"), os.Getenv("ASTRONOMER_URL"), os.Getenv("GRAFANA_PUBLIC_PATH"), os.Getenv("GRAFANA_PROXY_KEY"))
 		if err == nil {
 			err = grafanaproxy.Run(cfg)
 		}

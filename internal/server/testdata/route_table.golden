@@ -56,6 +56,8 @@ DELETE /api/v1/logging/pipelines/{id}
 DELETE /api/v1/logging/saved-searches/{id}
 DELETE /api/v1/monitoring/endpoints/{id}
 DELETE /api/v1/native-rbac-rules/{id}
+DELETE /api/v1/observability/grafana
+DELETE /api/v1/observability/grafana/*
 DELETE /api/v1/projects/{id}
 DELETE /api/v1/projects/{project_id}/catalogs/{catalog_id}
 DELETE /api/v1/projects/{project_id}/cloud-credentials/{id}
@@ -354,7 +356,8 @@ GET /api/v1/monitoring/metrics/node/{cluster_id}/{node}
 GET /api/v1/monitoring/metrics/workload/{cluster_id}/{namespace}/{workload}
 GET /api/v1/native-rbac-rules
 GET /api/v1/nodes/{cluster_id}/{node_name}/operations/{id}
-GET /api/v1/observability/grafana-ticket
+GET /api/v1/observability/grafana
+GET /api/v1/observability/grafana/*
 GET /api/v1/platform/health-summary
 GET /api/v1/projects
 GET /api/v1/projects/{id}
@@ -449,9 +452,13 @@ GET /scim/v2/Users/{id}
 HEAD /api/v1/clusters/{cluster_id}/k8s/*
 HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}
 HEAD /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*
+HEAD /api/v1/observability/grafana
+HEAD /api/v1/observability/grafana/*
 OPTIONS /api/v1/clusters/{cluster_id}/k8s/*
 OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}
 OPTIONS /api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*
+OPTIONS /api/v1/observability/grafana
+OPTIONS /api/v1/observability/grafana/*
 PATCH /api/v1/admin/charlie/mode
 PATCH /api/v1/admin/charlie/trigger-rules/{rule_id}
 PATCH /api/v1/auth/dex/connectors/{id}
@@ -465,6 +472,8 @@ PATCH /api/v1/clusters/{id}
 PATCH /api/v1/delivery/bundles/{id}
 PATCH /api/v1/delivery/sources/{id}
 PATCH /api/v1/delivery/targets/{id}
+PATCH /api/v1/observability/grafana
+PATCH /api/v1/observability/grafana/*
 PATCH /api/v1/projects/{id}
 PATCH /api/v1/projects/{id}/policy
 PATCH /api/v1/projects/{project_id}/cloud-credentials/{id}
@@ -658,7 +667,9 @@ POST /api/v1/nodes/{cluster_id}/{node_name}/labels/remove
 POST /api/v1/nodes/{cluster_id}/{node_name}/taints
 POST /api/v1/nodes/{cluster_id}/{node_name}/taints/remove
 POST /api/v1/nodes/{cluster_id}/{node_name}/uncordon
+POST /api/v1/observability/grafana
 POST /api/v1/observability/grafana-ticket/redeem
+POST /api/v1/observability/grafana/*
 POST /api/v1/projects
 POST /api/v1/projects/{id}/add-namespace
 POST /api/v1/projects/{id}/apply-rbac-template
@@ -759,6 +770,8 @@ PUT /api/v1/logging/outputs/{id}
 PUT /api/v1/logging/pipelines/{id}
 PUT /api/v1/logging/saved-searches/{id}
 PUT /api/v1/monitoring/endpoints/{id}
+PUT /api/v1/observability/grafana
+PUT /api/v1/observability/grafana/*
 PUT /api/v1/projects/{id}
 PUT /api/v1/projects/{id}/default-vault-connection
 PUT /api/v1/projects/{project_id}/cloud-credentials/{id}

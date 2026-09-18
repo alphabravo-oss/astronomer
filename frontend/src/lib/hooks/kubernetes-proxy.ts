@@ -28,12 +28,24 @@ import { toastApiError, toastSuccess } from "@/lib/toast";
 // Generic K8s Resource Hook
 // ============================================================
 
-export function useGenericResources(clusterId: string, resourceType: string) {
+export function useGenericResources(
+  clusterId: string,
+  resourceType: string,
+  params?: {
+    namespace?: string;
+    namespaces?: string;
+    limit?: number;
+    offset?: number;
+    search?: string;
+    sort?: string;
+  },
+  enabled = true,
+) {
   return useQuery({
-    queryKey: queryKeys.generic.resources(clusterId, resourceType),
+    queryKey: queryKeys.generic.resources(clusterId, resourceType, params),
     queryFn: ({ signal }) =>
-      getGenericResources(clusterId, resourceType, signal),
-    enabled: !!clusterId && !!resourceType,
+      getGenericResources(clusterId, resourceType, { ...params, signal }),
+    enabled: enabled && !!clusterId && !!resourceType,
     refetchInterval: liveFallback(30000),
   });
 }

@@ -28,6 +28,7 @@ import { Route as DashboardDeliveryIndexRouteImport } from './routes/dashboard/d
 import { Route as DashboardExtensionsIndexRouteImport } from './routes/dashboard/extensions/index'
 import { Route as DashboardLoggingIndexRouteImport } from './routes/dashboard/logging/index'
 import { Route as DashboardMonitoringIndexRouteImport } from './routes/dashboard/monitoring/index'
+import { Route as DashboardMonitoringGrafanaRouteImport } from './routes/dashboard/monitoring/grafana'
 import { Route as DashboardProjectsIndexRouteImport } from './routes/dashboard/projects/index'
 import { Route as DashboardProjectsIdRouteRouteImport } from './routes/dashboard/projects/$id/route'
 import { Route as DashboardRbacIndexRouteImport } from './routes/dashboard/rbac/index'
@@ -241,6 +242,12 @@ const DashboardMonitoringIndexRoute =
   DashboardMonitoringIndexRouteImport.update({
     id: '/monitoring/',
     path: '/monitoring/',
+    getParentRoute: () => DashboardRouteRoute,
+  } as any)
+const DashboardMonitoringGrafanaRoute =
+  DashboardMonitoringGrafanaRouteImport.update({
+    id: '/monitoring/grafana',
+    path: '/monitoring/grafana',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
 const DashboardProjectsIndexRoute = DashboardProjectsIndexRouteImport.update({
@@ -934,6 +941,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/clusters/$id': typeof DashboardClustersIdRouteRouteWithChildren
   '/dashboard/projects/$id': typeof DashboardProjectsIdRouteRouteWithChildren
+  '/dashboard/monitoring/grafana': typeof DashboardMonitoringGrafanaRoute
   '/auth/change-password/': typeof AuthChangePasswordIndexRoute
   '/auth/login/': typeof AuthLoginIndexRoute
   '/dashboard/agents/': typeof DashboardAgentsIndexRoute
@@ -1066,6 +1074,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/monitoring/grafana': typeof DashboardMonitoringGrafanaRoute
   '/auth/change-password': typeof AuthChangePasswordIndexRoute
   '/auth/login': typeof AuthLoginIndexRoute
   '/dashboard/agents': typeof DashboardAgentsIndexRoute
@@ -1202,6 +1211,7 @@ export interface FileRoutesById {
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/clusters/$id': typeof DashboardClustersIdRouteRouteWithChildren
   '/dashboard/projects/$id': typeof DashboardProjectsIdRouteRouteWithChildren
+  '/dashboard/monitoring/grafana': typeof DashboardMonitoringGrafanaRoute
   '/auth/change-password/': typeof AuthChangePasswordIndexRoute
   '/auth/login/': typeof AuthLoginIndexRoute
   '/dashboard/agents/': typeof DashboardAgentsIndexRoute
@@ -1340,6 +1350,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/dashboard/clusters/$id'
     | '/dashboard/projects/$id'
+    | '/dashboard/monitoring/grafana'
     | '/auth/change-password/'
     | '/auth/login/'
     | '/dashboard/agents/'
@@ -1472,6 +1483,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard'
+    | '/dashboard/monitoring/grafana'
     | '/auth/change-password'
     | '/auth/login'
     | '/dashboard/agents'
@@ -1607,6 +1619,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/dashboard/clusters/$id'
     | '/dashboard/projects/$id'
+    | '/dashboard/monitoring/grafana'
     | '/auth/change-password/'
     | '/auth/login/'
     | '/dashboard/agents/'
@@ -1879,6 +1892,13 @@ declare module '@tanstack/react-router' {
       path: '/monitoring'
       fullPath: '/dashboard/monitoring/'
       preLoaderRoute: typeof DashboardMonitoringIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
+    '/dashboard/monitoring/grafana': {
+      id: '/dashboard/monitoring/grafana'
+      path: '/monitoring/grafana'
+      fullPath: '/dashboard/monitoring/grafana'
+      preLoaderRoute: typeof DashboardMonitoringGrafanaRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/projects/': {
@@ -2961,6 +2981,7 @@ interface DashboardRouteRouteChildren {
   DashboardIndexRoute: typeof DashboardIndexRoute
   DashboardClustersIdRouteRoute: typeof DashboardClustersIdRouteRouteWithChildren
   DashboardProjectsIdRouteRoute: typeof DashboardProjectsIdRouteRouteWithChildren
+  DashboardMonitoringGrafanaRoute: typeof DashboardMonitoringGrafanaRoute
   DashboardAgentsIndexRoute: typeof DashboardAgentsIndexRoute
   DashboardAlertingIndexRoute: typeof DashboardAlertingIndexRoute
   DashboardAuditIndexRoute: typeof DashboardAuditIndexRoute
@@ -3010,6 +3031,7 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardIndexRoute: DashboardIndexRoute,
   DashboardClustersIdRouteRoute: DashboardClustersIdRouteRouteWithChildren,
   DashboardProjectsIdRouteRoute: DashboardProjectsIdRouteRouteWithChildren,
+  DashboardMonitoringGrafanaRoute: DashboardMonitoringGrafanaRoute,
   DashboardAgentsIndexRoute: DashboardAgentsIndexRoute,
   DashboardAlertingIndexRoute: DashboardAlertingIndexRoute,
   DashboardAuditIndexRoute: DashboardAuditIndexRoute,

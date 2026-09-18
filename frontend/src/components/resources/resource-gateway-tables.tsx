@@ -1,14 +1,4 @@
 import { useMemo, useState } from "react";
-import {
-  useGatewayClasses,
-  useGateways,
-  useGRPCRoutes,
-  useHTTPRoutes,
-  useReferenceGrants,
-  useTCPRoutes,
-  useTLSRoutes,
-  useUDPRoutes,
-} from "@/lib/hooks/kubernetes-resources";
 import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
 import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
@@ -18,7 +8,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import type { Column } from "@/components/ui/data-table";
 import type { TableEmptyState } from "@/components/ui/data-table-empty-state";
-import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
+import { ServerResourceExplorerTable } from "@/components/resources/server-resource-explorer-table";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import { resourceDeletionImpact } from "@/components/resources/resource-deletion-impact";
 import {
@@ -406,7 +396,6 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
 }
 
 export function GatewaysTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useGateways(clusterId);
   const navigate = useNavigate();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(clusterId, "gateways");
@@ -455,10 +444,9 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
           Create Gateway
         </ActionButton>
       </div>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<Gateway>
         clusterId={clusterId}
         resourceType="gateways"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
@@ -468,7 +456,6 @@ export function GatewaysTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search gateways..."
-        loading={isLoading}
         emptyState={{
           title: "No gateways found",
           description:
@@ -537,16 +524,12 @@ function RouteTable<T extends GatewayRoute>({
   clusterId,
   kindLabel,
   resourceType,
-  data,
-  isLoading,
   searchPlaceholder,
   emptyState,
 }: {
   clusterId: string;
   kindLabel: string;
   resourceType: string;
-  data: T[] | undefined;
-  isLoading: boolean;
   searchPlaceholder: string;
   emptyState: TableEmptyState;
 }) {
@@ -585,10 +568,9 @@ function RouteTable<T extends GatewayRoute>({
 
   return (
     <>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<T>
         clusterId={clusterId}
         resourceType={resourceType}
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
@@ -598,7 +580,6 @@ function RouteTable<T extends GatewayRoute>({
           permissions.read,
         )}
         searchPlaceholder={searchPlaceholder}
-        loading={isLoading}
         emptyState={emptyState}
         bulkDelete={{
           path: (row) => k8sResourcePath(resourceType, row.name, row.namespace),
@@ -650,14 +631,11 @@ function RouteTable<T extends GatewayRoute>({
 }
 
 export function HTTPRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useHTTPRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="HTTPRoute"
       resourceType="httproutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search HTTPRoutes..."
       emptyState={{
         title: "No HTTPRoutes found",
@@ -669,14 +647,11 @@ export function HTTPRoutesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function GRPCRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useGRPCRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="GRPCRoute"
       resourceType="grpcroutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search GRPCRoutes..."
       emptyState={{
         title: "No GRPCRoutes found",
@@ -688,14 +663,11 @@ export function GRPCRoutesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function TLSRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useTLSRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="TLSRoute"
       resourceType="tlsroutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search TLSRoutes..."
       emptyState={{
         title: "No TLSRoutes found",
@@ -707,14 +679,11 @@ export function TLSRoutesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function TCPRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useTCPRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="TCPRoute"
       resourceType="tcproutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search TCPRoutes..."
       emptyState={{
         title: "No TCPRoutes found",
@@ -726,14 +695,11 @@ export function TCPRoutesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function UDPRoutesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useUDPRoutes(clusterId);
   return (
-    <RouteTable
+    <RouteTable<GatewayRoute>
       clusterId={clusterId}
       kindLabel="UDPRoute"
       resourceType="udproutes"
-      data={data}
-      isLoading={isLoading}
       searchPlaceholder="Search UDPRoutes..."
       emptyState={{
         title: "No UDPRoutes found",
@@ -745,7 +711,6 @@ export function UDPRoutesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useGatewayClasses(clusterId);
   const navigate = useNavigate();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(
@@ -809,10 +774,9 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<GatewayClass>
         clusterId={clusterId}
         resourceType="gatewayclasses"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => r.name}
         onRowClick={makeRowClick(
@@ -822,7 +786,6 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search GatewayClasses..."
-        loading={isLoading}
         emptyState={{
           title: "No GatewayClasses found",
           description:
@@ -874,7 +837,6 @@ export function GatewayClassesTable({ clusterId }: { clusterId: string }) {
 }
 
 export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useReferenceGrants(clusterId);
   const navigate = useNavigate();
   const k8sDelete = useK8sDelete();
   const permissions = useClusterResourcePermissions(
@@ -913,10 +875,9 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
 
   return (
     <>
-      <ExplorerDataTable
+      <ServerResourceExplorerTable<ReferenceGrant>
         clusterId={clusterId}
         resourceType="referencegrants"
-        data={data || []}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         onRowClick={makeRowClick(
@@ -926,7 +887,6 @@ export function ReferenceGrantsTable({ clusterId }: { clusterId: string }) {
           permissions.read,
         )}
         searchPlaceholder="Search ReferenceGrants..."
-        loading={isLoading}
         emptyState={{
           title: "No ReferenceGrants found",
           description:

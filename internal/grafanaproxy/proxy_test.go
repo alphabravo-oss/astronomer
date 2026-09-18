@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 func testProxy(t *testing.T, upstream http.Handler, redeem func(string) (redeemResult, error)) (*proxy, []byte) {
@@ -30,7 +32,7 @@ func testProxy(t *testing.T, upstream http.Handler, redeem func(string) (redeemR
 		ListenAddr:    ":0",
 		Upstream:      upURL,
 		AstronomerURL: "https://astronomer.example.com",
-		GrafanaHost:   "grafana.example.com",
+		PublicPath:    "/api/v1/observability/grafana/",
 		HMACKey:       key,
 		Redeem:        redeem,
 		Now:           time.Now,
@@ -166,37 +168,33 @@ func TestViewerAdminAPIForbidden(t *testing.T) {
 	}
 }
 
-func TestMissingCookieRedirectsToMint(t *testing.T) {
+func TestMissingCookieAndTicketIsUnauthorized(t *testing.T) {
 	p, _ := testProxy(t, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	p.ServeHTTP(rec, req)
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want 302", rec.Code)
-	}
-	loc := rec.Header().Get("Location")
-	if !strings.Contains(loc, "/api/v1/observability/grafana-ticket?return=") {
-		t.Fatalf("location = %s", loc)
-	}
-	if strings.Contains(loc, "ticket=") {
-		t.Fatal("mint redirect must not include a ticket")
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
 	}
 }
 
-func TestCallbackCookieSecureFollowsAstronomerScheme(t *testing.T) {
+func TestTicketCookieSecureFollowsAstronomerScheme(t *testing.T) {
 	key := []byte("0123456789abcdef0123456789abcdef")
-	up, _ := url.Parse("http://127.0.0.1:9")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	t.Cleanup(upstream.Close)
+	up, _ := url.Parse(upstream.URL)
 	h := New(Config{
 		Upstream:      up,
 		AstronomerURL: "http://astronomer.example.com",
-		GrafanaHost:   "grafana.example.com",
+		PublicPath:    "/api/v1/observability/grafana/",
 		HMACKey:       key,
 		Redeem: func(string) (redeemResult, error) {
 			return redeemResult{Email: "a@example.com", Role: "Viewer", TTL: 60}, nil
 		},
 		Now: time.Now,
 	})
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?ticket=x", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(protocol.GrafanaProxyTicketHeader, "x")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	var cookie *http.Cookie
@@ -214,18 +212,24 @@ func TestCallbackCookieSecureFollowsAstronomerScheme(t *testing.T) {
 	}
 }
 
-func TestCallbackRedeemsAndSetsHostOnlyCookie(t *testing.T) {
-	p, key := testProxy(t, nil, func(ticket string) (redeemResult, error) {
+func TestTicketRedeemsAndSetsPathScopedCookie(t *testing.T) {
+	p, key := testProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(protocol.GrafanaProxyTicketHeader) != "" || r.Header.Get("Cookie") != "" {
+			t.Errorf("proxy credentials leaked upstream: ticket=%q cookie=%q", r.Header.Get(protocol.GrafanaProxyTicketHeader), r.Header.Get("Cookie"))
+		}
+		w.WriteHeader(http.StatusOK)
+	}), func(ticket string) (redeemResult, error) {
 		if ticket != "one-use" {
 			t.Fatalf("ticket = %q", ticket)
 		}
 		return redeemResult{Email: "a@example.com", Role: "Viewer", TTL: 3600}, nil
 	})
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?ticket=one-use", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(protocol.GrafanaProxyTicketHeader, "one-use")
 	rec := httptest.NewRecorder()
 	p.ServeHTTP(rec, req)
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want 302", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	var cookie *http.Cookie
 	for _, c := range rec.Result().Cookies() {
@@ -243,7 +247,7 @@ func TestCallbackRedeemsAndSetsHostOnlyCookie(t *testing.T) {
 	if cookie.Domain != "" {
 		t.Fatalf("grafana_auth Domain = %q, want host-only empty", cookie.Domain)
 	}
-	if !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteLaxMode || cookie.Path != "/" {
+	if !cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/api/v1/observability/grafana/" {
 		t.Fatalf("cookie attrs = %+v", cookie)
 	}
 	auth, err := verifyGrafanaAuth(key, cookie.Value)
@@ -252,12 +256,13 @@ func TestCallbackRedeemsAndSetsHostOnlyCookie(t *testing.T) {
 	}
 }
 
-func TestCallbackPersistsClusterIDs(t *testing.T) {
+func TestTicketPersistsClusterIDs(t *testing.T) {
 	ids := []string{testClusterA}
-	p, key := testProxy(t, nil, func(string) (redeemResult, error) {
+	p, key := testProxy(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }), func(string) (redeemResult, error) {
 		return redeemResult{Email: "scoped@example.com", Role: "Viewer", TTL: 60, Explore: true, ClusterIDs: ids}, nil
 	})
-	req := httptest.NewRequest(http.MethodGet, "/auth/callback?ticket=x", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(protocol.GrafanaProxyTicketHeader, "x")
 	rec := httptest.NewRecorder()
 	p.ServeHTTP(rec, req)
 	var cookie *http.Cookie

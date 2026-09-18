@@ -167,6 +167,8 @@ export const operationMetadata = {
   "deleteNamedClusterResource": { method: "DELETE", path: "/api/v1/clusters/{cluster_id}/resources/{resource_type}/{namespace}/{name}", pathParameters: ["cluster_id","resource_type","namespace","name"], responseType: "json" },
   "deleteNamedResourceREST": { method: "DELETE", path: "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}", pathParameters: ["cluster_id","type","namespace","name"], responseType: "json" },
   "deleteNativeRbacRulesById": { method: "DELETE", path: "/api/v1/native-rbac-rules/{id}", pathParameters: ["id"], responseType: "json" },
+  "deleteObservabilityGrafana": { method: "DELETE", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "deleteObservabilityGrafanaProxy": { method: "DELETE", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "deletePersistentVolume": { method: "DELETE", path: "/api/v1/clusters/{cluster_id}/resources/persistentvolumes/{name}", pathParameters: ["cluster_id","name"], responseType: "json" },
   "deleteProjectsById": { method: "DELETE", path: "/api/v1/projects/{id}/", pathParameters: ["id"], responseType: "json" },
   "deleteProjectsByProjectIdCatalogsByCatalogId": { method: "DELETE", path: "/api/v1/projects/{project_id}/catalogs/{catalog_id}/", pathParameters: ["project_id","catalog_id"], responseType: "json" },
@@ -423,6 +425,8 @@ export const operationMetadata = {
   "getNamedResource": { method: "GET", path: "/api/v1/resources/{cluster_id}/{type}/{namespace}/{name}", pathParameters: ["cluster_id","type","namespace","name"], responseType: "json" },
   "getNativeRbacRules": { method: "GET", path: "/api/v1/native-rbac-rules", pathParameters: [], responseType: "json" },
   "getNodeOperation": { method: "GET", path: "/api/v1/nodes/{cluster_id}/{node_name}/operations/{id}/", pathParameters: ["cluster_id","node_name","id"], responseType: "json" },
+  "getObservabilityGrafana": { method: "GET", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "getObservabilityGrafanaProxy": { method: "GET", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "getObservabilityGrafanaTicket": { method: "GET", path: "/api/v1/observability/grafana-ticket", pathParameters: [], responseType: "json" },
   "getPlatformHealthSummary": { method: "GET", path: "/api/v1/platform/health-summary", pathParameters: [], responseType: "json" },
   "getProjects": { method: "GET", path: "/api/v1/projects/", pathParameters: [], responseType: "json" },
@@ -509,6 +513,8 @@ export const operationMetadata = {
   "getWorkloadsPodsByClusterIdByNamespaceByPodLogs": { method: "GET", path: "/api/v1/workloads/pods/{cluster_id}/{namespace}/{pod}/logs/", pathParameters: ["cluster_id","namespace","pod"], responseType: "json" },
   "headClustersByClusterIdK8sProxy": { method: "HEAD", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
   "headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { method: "HEAD", path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", pathParameters: ["cluster_id","namespace","service_port"], responseType: "blob" },
+  "headObservabilityGrafana": { method: "HEAD", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "headObservabilityGrafanaProxy": { method: "HEAD", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "internalTunnelHelm": { method: "POST", path: "/internal/tunnel/helm/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
   "internalTunnelK8s": { method: "POST", path: "/internal/tunnel/k8s/{cluster_id}", pathParameters: ["cluster_id"], responseType: "json" },
   "internalTunnelK8sCapability": { method: "GET", path: "/internal/tunnel/k8s/{cluster_id}/capabilities/{capability}", pathParameters: ["cluster_id","capability"], responseType: "json" },
@@ -532,6 +538,8 @@ export const operationMetadata = {
   "listNamedClusterResources": { method: "GET", path: "/api/v1/clusters/{cluster_id}/resources/{resource_type}", pathParameters: ["cluster_id","resource_type"], responseType: "json" },
   "optionsClustersByClusterIdK8sProxy": { method: "OPTIONS", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
   "optionsClustersByClusterIdProxyServiceByNamespaceByServicePortProxy": { method: "OPTIONS", path: "/api/v1/clusters/{cluster_id}/proxy/service/{namespace}/{service_port}/*", pathParameters: ["cluster_id","namespace","service_port"], responseType: "blob" },
+  "optionsObservabilityGrafana": { method: "OPTIONS", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "optionsObservabilityGrafanaProxy": { method: "OPTIONS", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "patchAuthDexConnectorsById": { method: "PATCH", path: "/api/v1/auth/dex/connectors/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchClusterGroupsById": { method: "PATCH", path: "/api/v1/cluster-groups/{id}", pathParameters: ["id"], responseType: "json" },
   "patchClustersByClusterIdK8sProxy": { method: "PATCH", path: "/api/v1/clusters/{cluster_id}/k8s/*", pathParameters: ["cluster_id"], responseType: "json" },
@@ -542,6 +550,8 @@ export const operationMetadata = {
   "patchDeliveryBundlesById": { method: "PATCH", path: "/api/v1/delivery/bundles/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchDeliverySourcesById": { method: "PATCH", path: "/api/v1/delivery/sources/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchDeliveryTargetsById": { method: "PATCH", path: "/api/v1/delivery/targets/{id}/", pathParameters: ["id"], responseType: "json" },
+  "patchObservabilityGrafana": { method: "PATCH", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "patchObservabilityGrafanaProxy": { method: "PATCH", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "patchProjectsById": { method: "PATCH", path: "/api/v1/projects/{id}/", pathParameters: ["id"], responseType: "json" },
   "patchProjectsByIdPolicy": { method: "PATCH", path: "/api/v1/projects/{id}/policy/", pathParameters: ["id"], responseType: "json" },
   "patchProjectsByProjectIdCloudCredentialsById": { method: "PATCH", path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/", pathParameters: ["project_id","id"], responseType: "json" },
@@ -704,6 +714,8 @@ export const operationMetadata = {
   "postNodesByClusterIdByNodeNameTaints": { method: "POST", path: "/api/v1/nodes/{cluster_id}/{node_name}/taints/", pathParameters: ["cluster_id","node_name"], responseType: "json" },
   "postNodesByClusterIdByNodeNameTaintsRemove": { method: "POST", path: "/api/v1/nodes/{cluster_id}/{node_name}/taints/remove/", pathParameters: ["cluster_id","node_name"], responseType: "json" },
   "postNodesByClusterIdByNodeNameUncordon": { method: "POST", path: "/api/v1/nodes/{cluster_id}/{node_name}/uncordon/", pathParameters: ["cluster_id","node_name"], responseType: "json" },
+  "postObservabilityGrafana": { method: "POST", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "postObservabilityGrafanaProxy": { method: "POST", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "postObservabilityGrafanaTicketRedeem": { method: "POST", path: "/api/v1/observability/grafana-ticket/redeem", pathParameters: [], responseType: "json" },
   "postProjects": { method: "POST", path: "/api/v1/projects/", pathParameters: [], responseType: "json" },
   "postProjectsByIdAddNamespace": { method: "POST", path: "/api/v1/projects/{id}/add-namespace/", pathParameters: ["id"], responseType: "json" },
@@ -792,6 +804,8 @@ export const operationMetadata = {
   "putLoggingPipelinesById": { method: "PUT", path: "/api/v1/logging/pipelines/{id}", pathParameters: ["id"], responseType: "json" },
   "putLoggingSavedSearchesById": { method: "PUT", path: "/api/v1/logging/saved-searches/{id}", pathParameters: ["id"], responseType: "json" },
   "putMonitoringEndpointsById": { method: "PUT", path: "/api/v1/monitoring/endpoints/{id}", pathParameters: ["id"], responseType: "json" },
+  "putObservabilityGrafana": { method: "PUT", path: "/api/v1/observability/grafana", pathParameters: [], responseType: "json" },
+  "putObservabilityGrafanaProxy": { method: "PUT", path: "/api/v1/observability/grafana/*", pathParameters: [], responseType: "json" },
   "putProjectsById": { method: "PUT", path: "/api/v1/projects/{id}/", pathParameters: ["id"], responseType: "json" },
   "putProjectsByIdDefaultVaultConnection": { method: "PUT", path: "/api/v1/projects/{id}/default-vault-connection/", pathParameters: ["id"], responseType: "json" },
   "putProjectsByProjectIdCloudCredentialsById": { method: "PUT", path: "/api/v1/projects/{project_id}/cloud-credentials/{id}/", pathParameters: ["project_id","id"], responseType: "json" },
@@ -1535,6 +1549,16 @@ export function deleteNamedResourceREST(args: OpenAPIArguments<"deleteNamedResou
 export function deleteNativeRbacRulesById(args: OpenAPIArguments<"deleteNativeRbacRulesById">) {
   const operationId = "deleteNativeRbacRulesById" as const;
   return executeOpenAPIOperation(operationId, args);
+}
+
+export function deleteObservabilityGrafana(args?: OpenAPIArguments<"deleteObservabilityGrafana">) {
+  const operationId = "deleteObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function deleteObservabilityGrafanaProxy(args?: OpenAPIArguments<"deleteObservabilityGrafanaProxy">) {
+  const operationId = "deleteObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
 }
 
 export function deletePersistentVolume(args: OpenAPIArguments<"deletePersistentVolume">) {
@@ -2817,6 +2841,16 @@ export function getNodeOperation(args: OpenAPIArguments<"getNodeOperation">) {
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function getObservabilityGrafana(args?: OpenAPIArguments<"getObservabilityGrafana">) {
+  const operationId = "getObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function getObservabilityGrafanaProxy(args?: OpenAPIArguments<"getObservabilityGrafanaProxy">) {
+  const operationId = "getObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function getObservabilityGrafanaTicket(args?: OpenAPIArguments<"getObservabilityGrafanaTicket">) {
   const operationId = "getObservabilityGrafanaTicket" as const;
   return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
@@ -3247,6 +3281,16 @@ export function headClustersByClusterIdProxyServiceByNamespaceByServicePortProxy
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function headObservabilityGrafana(args?: OpenAPIArguments<"headObservabilityGrafana">) {
+  const operationId = "headObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function headObservabilityGrafanaProxy(args?: OpenAPIArguments<"headObservabilityGrafanaProxy">) {
+  const operationId = "headObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function internalTunnelHelm(args: OpenAPIArguments<"internalTunnelHelm">) {
   const operationId = "internalTunnelHelm" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3362,6 +3406,16 @@ export function optionsClustersByClusterIdProxyServiceByNamespaceByServicePortPr
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function optionsObservabilityGrafana(args?: OpenAPIArguments<"optionsObservabilityGrafana">) {
+  const operationId = "optionsObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function optionsObservabilityGrafanaProxy(args?: OpenAPIArguments<"optionsObservabilityGrafanaProxy">) {
+  const operationId = "optionsObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function patchAuthDexConnectorsById(args: OpenAPIArguments<"patchAuthDexConnectorsById">) {
   const operationId = "patchAuthDexConnectorsById" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -3409,6 +3463,16 @@ export function patchDeliverySourcesById(args: OpenAPIArguments<"patchDeliverySo
 
 export function patchDeliveryTargetsById(args: OpenAPIArguments<"patchDeliveryTargetsById">) {
   const operationId = "patchDeliveryTargetsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function patchObservabilityGrafana(args: OpenAPIArguments<"patchObservabilityGrafana">) {
+  const operationId = "patchObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function patchObservabilityGrafanaProxy(args: OpenAPIArguments<"patchObservabilityGrafanaProxy">) {
+  const operationId = "patchObservabilityGrafanaProxy" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 
@@ -4222,6 +4286,16 @@ export function postNodesByClusterIdByNodeNameUncordon(args: OpenAPIArguments<"p
   return executeOpenAPIOperation(operationId, args);
 }
 
+export function postObservabilityGrafana(args?: OpenAPIArguments<"postObservabilityGrafana">) {
+  const operationId = "postObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
+export function postObservabilityGrafanaProxy(args?: OpenAPIArguments<"postObservabilityGrafanaProxy">) {
+  const operationId = "postObservabilityGrafanaProxy" as const;
+  return executeOpenAPIOperation(operationId, args ?? ({} as OpenAPIArguments<typeof operationId>));
+}
+
 export function postObservabilityGrafanaTicketRedeem(args: OpenAPIArguments<"postObservabilityGrafanaTicketRedeem">) {
   const operationId = "postObservabilityGrafanaTicketRedeem" as const;
   return executeOpenAPIOperation(operationId, args);
@@ -4659,6 +4733,16 @@ export function putLoggingSavedSearchesById(args: OpenAPIArguments<"putLoggingSa
 
 export function putMonitoringEndpointsById(args: OpenAPIArguments<"putMonitoringEndpointsById">) {
   const operationId = "putMonitoringEndpointsById" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putObservabilityGrafana(args: OpenAPIArguments<"putObservabilityGrafana">) {
+  const operationId = "putObservabilityGrafana" as const;
+  return executeOpenAPIOperation(operationId, args);
+}
+
+export function putObservabilityGrafanaProxy(args: OpenAPIArguments<"putObservabilityGrafanaProxy">) {
+  const operationId = "putObservabilityGrafanaProxy" as const;
   return executeOpenAPIOperation(operationId, args);
 }
 

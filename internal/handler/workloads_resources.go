@@ -30,8 +30,8 @@ func (h *WorkloadHandler) ListNamespaces(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	clusterID := clusterUUID.String()
-	var namespaces namespaceList
-	if err := h.getJSON(r.Context(), clusterID, "/api/v1/namespaces", &namespaces); err != nil {
+	namespaces, err := h.listNamespaces(r.Context(), clusterID)
+	if err != nil {
 		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
 		return
 	}
@@ -161,9 +161,21 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 	}
 	clusterID := clusterUUID.String()
 	namespace := r.URL.Query().Get("namespace")
-	pods, err := h.listPods(r.Context(), clusterID, namespace, "")
-	if err != nil {
-		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
+	health := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("health")))
+	if health == "" {
+		health = "all"
+	}
+	if health != "all" && health != "attention" && health != "restarted" {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod health filter")
+		return
+	}
+	sortOrder := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("sort")))
+	if sortOrder == "" {
+		sortOrder = "namespace_asc"
+	}
+	if !validPodSort(sortOrder) {
+		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Invalid pod sort order")
 		return
 	}
 	all, names, err := h.authz.authorizedNamespaces(r.Context(), clusterUUID, rbac.ResourcePods, rbac.VerbList)
@@ -171,13 +183,160 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return
 	}
+	limit, offset := queryLimitOffset(r, 20)
+	// Kubernetes' native list order is namespace/name ascending. Keep that path
+	// fast and page directly at the apiserver. Search, health filters, and other
+	// sorts scan bounded continuation pages, flatten only pod summaries, then
+	// apply the operation over the complete authorized set.
+	if search != "" || health != "all" || sortOrder != "namespace_asc" {
+		var authorized []map[string]any
+		if all {
+			authorized, err = h.listPods(r.Context(), clusterID, namespace, "")
+		} else if namespace != "" {
+			if _, allowed := names[namespace]; allowed {
+				authorized, err = h.listPods(r.Context(), clusterID, namespace, "")
+			}
+		} else {
+			namespaceNames := make([]string, 0, len(names))
+			for allowedNamespace := range names {
+				namespaceNames = append(namespaceNames, allowedNamespace)
+			}
+			sort.Strings(namespaceNames)
+			for _, allowedNamespace := range namespaceNames {
+				var namespacePods []map[string]any
+				namespacePods, err = h.listPods(r.Context(), clusterID, allowedNamespace, "")
+				if err != nil {
+					break
+				}
+				authorized = append(authorized, namespacePods...)
+			}
+		}
+		if err != nil {
+			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+			return
+		}
+		filtered := make([]map[string]any, 0, len(authorized))
+		for _, pod := range authorized {
+			if !podMatchesSearch(pod, search) || !podMatchesHealth(pod, health) {
+				continue
+			}
+			filtered = append(filtered, pod)
+		}
+		sortPodItems(filtered, sortOrder)
+		page, metadata := pageWindow(r, filtered)
+		paging.Write(w, page, metadata)
+		return
+	}
+
+	var pods []map[string]any
+	var total *int64
+	var hasMore bool
+	if all {
+		pods, total, hasMore, err = h.listPodsPage(r.Context(), clusterID, namespace, limit, offset)
+	} else if namespace != "" {
+		if _, allowed := names[namespace]; !allowed {
+			emptyTotal := int64(0)
+			total = &emptyTotal
+		} else {
+			pods, total, hasMore, err = h.listPodsPage(r.Context(), clusterID, namespace, limit, offset)
+		}
+	} else {
+		var exactTotal int64
+		pods, exactTotal, hasMore, err = h.listPodsAcrossNamespacesPage(r.Context(), clusterID, names, limit, offset)
+		total = &exactTotal
+	}
+	if err != nil {
+		RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
+		return
+	}
 	if !all {
+		// Defense in depth: namespace-scoped Kubernetes URLs should already
+		// constrain the response, but never trust an agent/upstream response to
+		// enforce the management-plane caller's authorization boundary.
 		pods = filterItemsByNamespaceKey(pods, "namespace", names)
 	}
-	// Pods come straight from the cluster's API unpaginated; slice to the
-	// requested page so Total reflects the full set and Next advances correctly.
-	page, pagination := pageWindow(r, pods)
-	paging.Write(w, page, pagination)
+	pagination := paging.Uncounted(limit, offset, len(pods), hasMore)
+	if total != nil {
+		pagination = paging.Exact(*total, limit, offset, len(pods))
+	}
+	paging.Write(w, pods, pagination)
+}
+
+func validPodSort(order string) bool {
+	switch order {
+	case "namespace_asc", "namespace_desc", "name_asc", "name_desc", "status_asc", "status_desc", "restarts_asc", "restarts_desc", "node_asc", "node_desc", "age_asc", "age_desc":
+		return true
+	default:
+		return false
+	}
+}
+
+func podMatchesSearch(pod map[string]any, search string) bool {
+	if search == "" {
+		return true
+	}
+	parts := []string{"name", "namespace", "status", "phase", "node", "ip"}
+	for _, key := range parts {
+		if value, ok := pod[key].(string); ok && strings.Contains(strings.ToLower(value), search) {
+			return true
+		}
+	}
+	if images, ok := pod["images"].([]string); ok {
+		return strings.Contains(strings.ToLower(strings.Join(images, " ")), search)
+	}
+	return false
+}
+
+func podMatchesHealth(pod map[string]any, health string) bool {
+	restarts, _ := pod["restarts"].(int)
+	if health == "restarted" {
+		return restarts > 0
+	}
+	if health != "attention" {
+		return true
+	}
+	phase, _ := pod["phase"].(string)
+	status, _ := pod["status"].(string)
+	if phase != "Running" && phase != "Succeeded" || status != phase {
+		return true
+	}
+	ready, _ := pod["ready"].(string)
+	parts := strings.SplitN(ready, "/", 2)
+	return len(parts) == 2 && parts[0] != parts[1]
+}
+
+func sortPodItems(items []map[string]any, order string) {
+	parts := strings.SplitN(order, "_", 2)
+	field, descending := parts[0], len(parts) == 2 && parts[1] == "desc"
+	if field == "age" {
+		field = "createdAt"
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if field == "restarts" {
+			left, _ := items[i][field].(int)
+			right, _ := items[j][field].(int)
+			if left != right {
+				if descending {
+					return left > right
+				}
+				return left < right
+			}
+		} else {
+			left, _ := items[i][field].(string)
+			right, _ := items[j][field].(string)
+			if left != right {
+				if descending {
+					return left > right
+				}
+				return left < right
+			}
+		}
+		leftID, _ := items[i]["namespace"].(string)
+		leftName, _ := items[i]["name"].(string)
+		rightID, _ := items[j]["namespace"].(string)
+		rightName, _ := items[j]["name"].(string)
+		return leftID+"\x00"+leftName < rightID+"\x00"+rightName
+	})
 }
 
 func (h *WorkloadHandler) ListWorkloadPods(w http.ResponseWriter, r *http.Request) {

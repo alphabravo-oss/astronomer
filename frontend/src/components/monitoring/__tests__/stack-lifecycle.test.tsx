@@ -719,13 +719,12 @@ describe("per-cluster monitoring stack page", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("links to shared Grafana with var-cluster when the Open button exists", async () => {
+  it("links to in-console shared Grafana with var-cluster when available", async () => {
     grant(["read", "create", "update", "delete"]);
     statusPerTarget({ cluster: { status: "not_configured" } });
     vi.mocked(getSharedGrafanaStatus).mockResolvedValue({
       status: "healthy",
-      authMode: "proxy",
-      grafanaHost: "grafana.example.com",
+      authMode: "same_origin_proxy",
     });
     render(<ClusterMonitoringStackPage clusterId={CLUSTER_ID} />, {
       wrapper: Wrapper,
@@ -736,13 +735,13 @@ describe("per-cluster monitoring stack page", () => {
     });
     expect(open).toHaveAttribute(
       "href",
-      `https://grafana.example.com/?var-cluster=${CLUSTER_ID}`,
+      `/dashboard/monitoring/grafana?var-cluster=${CLUSTER_ID}`,
     );
   });
 });
 
 describe("shared monitoring stacks page", () => {
-  it("shows Open shared Grafana only when authMode is proxy", async () => {
+  it("shows Open shared Grafana only for the same-origin proxy", async () => {
     grant(["read", "update"]);
     statusPerTarget({
       grafana: {
@@ -752,7 +751,6 @@ describe("shared monitoring stacks page", () => {
         chartVersion: "8.12.1",
         managementClusterId: CLUSTER_ID,
         authMode: "clusterip",
-        grafanaHost: "grafana.example.com",
       } as MonitoringStackStatusBase,
     });
     const { unmount } = render(<SharedMonitoringStacksPage />, {
@@ -778,8 +776,7 @@ describe("shared monitoring stacks page", () => {
         releaseName: "astronomer-grafana",
         chartVersion: "8.12.1",
         managementClusterId: CLUSTER_ID,
-        authMode: "proxy",
-        grafanaHost: "grafana.example.com",
+        authMode: "same_origin_proxy",
       } as MonitoringStackStatusBase,
     });
     render(<SharedMonitoringStacksPage />, { wrapper: Wrapper });
@@ -792,7 +789,7 @@ describe("shared monitoring stacks page", () => {
     const open = within(proxyPanel).getByRole("link", {
       name: "Open shared Grafana",
     });
-    expect(open).toHaveAttribute("href", "https://grafana.example.com/");
+    expect(open).toHaveAttribute("href", "/dashboard/monitoring/grafana");
   });
 
   it("renders Thanos and Alertmanager as independent panels", async () => {

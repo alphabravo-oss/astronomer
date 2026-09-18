@@ -7,6 +7,7 @@ import {
   type PaginationState,
   type RowData,
   type RowSelectionState,
+  type SortingState,
   type TableOptions,
   type Updater,
 } from "@tanstack/react-table";
@@ -148,7 +149,7 @@ export function useDataTableController<T extends RowData>({
       getRowId: keyExtractor,
       state: {
         globalFilter,
-        sorting,
+        sorting: effectiveServerSide?.sorting?.value ?? sorting,
         columnFilters,
         rowSelection,
         columnVisibility,
@@ -168,6 +169,7 @@ export function useDataTableController<T extends RowData>({
           }
         : {}),
       manualPagination: !!effectiveServerSide || effectiveVirtualized,
+      manualSorting: !!effectiveServerSide?.sorting,
       onPaginationChange: setClientPagination,
       ...(effectiveServerSide
         ? {
@@ -200,7 +202,16 @@ export function useDataTableController<T extends RowData>({
         setSearchInput((prev) =>
           typeof updater === "function" ? updater(prev) : updater,
         ),
-      onSortingChange: setSorting,
+      onSortingChange: (updater: Updater<SortingState>) => {
+        if (effectiveServerSide?.sorting) {
+          const current = effectiveServerSide.sorting.value;
+          const next =
+            typeof updater === "function" ? updater(current) : updater;
+          effectiveServerSide.sorting.onChange(next);
+          return;
+        }
+        setSorting(updater);
+      },
       onColumnFiltersChange: setColumnFilters,
       onColumnVisibilityChange: (updater: Updater<ColumnVisibilityState>) => {
         const next =

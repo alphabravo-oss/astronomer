@@ -1,4 +1,3 @@
-
 /**
  * One monitoring-stack lifecycle surface: status, preview, install / upgrade /
  * replace / uninstall, and everything the operation tracker reports while the
@@ -229,8 +228,6 @@ export function StackLifecyclePanel({
           {grafanaOpenURL ? (
             <a
               href={grafanaOpenURL}
-              target="_blank"
-              rel="noreferrer"
               className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-accent"
             >
               <ExternalLink className="h-3.5 w-3.5" />

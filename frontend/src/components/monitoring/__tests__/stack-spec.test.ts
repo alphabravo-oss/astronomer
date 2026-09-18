@@ -93,44 +93,39 @@ describe("seedStackValues", () => {
     expect(values.chartVersion).toBe("1.24.0");
   });
 
-  it("exposes shared Grafana URL only when authMode is proxy", () => {
+  it("exposes shared Grafana only through the same-origin console route", () => {
     expect(
       fleetGrafanaOpenURL({
         status: "healthy",
         authMode: "clusterip",
-        grafanaHost: "grafana.example.com",
       }),
     ).toBeNull();
     expect(
       fleetGrafanaOpenURL({
         status: "healthy",
-        authMode: "proxy",
-        grafanaHost: "grafana.example.com",
+        authMode: "same_origin_proxy",
       }),
-    ).toBe("https://grafana.example.com/");
+    ).toBe("/dashboard/monitoring/grafana");
     expect(
       fleetGrafanaOpenURL({
         status: "not_configured",
-        authMode: "proxy",
-        grafanaHost: "grafana.example.com",
+        authMode: "same_origin_proxy",
       }),
     ).toBeNull();
     expect(
       fleetGrafanaClusterURL(
         {
           status: "healthy",
-          authMode: "proxy",
-          grafanaHost: "grafana.example.com",
+          authMode: "same_origin_proxy",
         },
         "cluster-1",
       ),
-    ).toBe("https://grafana.example.com/?var-cluster=cluster-1");
+    ).toBe("/dashboard/monitoring/grafana?var-cluster=cluster-1");
     expect(
       fleetGrafanaClusterURL(
         {
           status: "healthy",
           authMode: "clusterip",
-          grafanaHost: "grafana.example.com",
         },
         "cluster-1",
       ),

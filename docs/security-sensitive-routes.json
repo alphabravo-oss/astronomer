@@ -4104,19 +4104,35 @@
     ]
   },
   {
-    "id": "grafana-ticket-mint",
-    "route": "/api/v1/observability/grafana-ticket/",
-    "sample_path": "/api/v1/observability/grafana-ticket/",
-    "method": "GET",
+    "id": "grafana-same-origin-proxy-root",
+    "route": "/api/v1/observability/grafana/",
+    "sample_path": "/api/v1/observability/grafana/",
+    "method": "*",
     "expected_unauthenticated_status": 401,
-    "surface": "Grafana ticket bounce mint",
+    "surface": "same-origin shared Grafana proxy",
     "auth": "bearer/session auth",
-    "rbac": "monitoring:read at any scope",
-    "csrf": "not applicable: GET",
-    "audit": "do not log ticket or return",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestGrafanaTicketAllowListRejectsOpenRedirect"
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ]
+  },
+  {
+    "id": "grafana-same-origin-proxy-suffix",
+    "route": "/api/v1/observability/grafana/*",
+    "sample_path": "/api/v1/observability/grafana/api/health",
+    "method": "*",
+    "expected_unauthenticated_status": 401,
+    "surface": "same-origin shared Grafana proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaForwardsOnlySignedProxyCookie"
     ]
   },
   {
@@ -4125,7 +4141,7 @@
     "sample_path": "/api/v1/observability/grafana-ticket/redeem/",
     "method": "POST",
     "expected_unauthenticated_status": 401,
-    "surface": "Grafana ticket bounce redeem",
+    "surface": "Internal one-use Grafana ticket redeem",
     "auth": "ticket is the only credential",
     "rbac": "none; Take() of one-use ticket",
     "csrf": "not applicable: no session cookie",

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
+import type { SortingState } from "@tanstack/react-table";
 import { useCluster } from "@/lib/hooks/clusters";
 import {
   useWorkloads,
@@ -7,7 +8,7 @@ import {
   useRestartWorkload,
 } from "@/lib/hooks/workloads";
 import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
-import { getWorkloadPods } from "@/lib/api/workloads";
+import { getWorkloadPods, type WorkloadSort } from "@/lib/api/workloads";
 import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
@@ -219,10 +220,18 @@ function WorkloadsTable({
   const [pageIndex, setPageIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "namespace", desc: false },
+  ]);
+  const sort = (
+    sorting[0]
+      ? `${sorting[0].id === "age" ? "created" : sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
+      : "namespace_asc"
+  ) as WorkloadSort;
   const workloadQuery = useWorkloads(clusterId, {
     kind,
     search: debouncedSearch.trim() || undefined,
-    sort: "namespace_asc",
+    sort,
     page: pageIndex + 1,
     pageSize: WORKLOAD_RESOURCE_PAGE_SIZE,
   });
@@ -335,9 +344,11 @@ function WorkloadsTable({
       restartWorkload,
     ],
   );
+  const sortableKeys = new Set(["name", "namespace", "age"]);
   const serverColumns = columns.map((column) => ({
     ...column,
-    sortable: false,
+    sortable: sortableKeys.has(column.key),
+    filter: undefined,
   }));
 
   return (
@@ -396,6 +407,13 @@ function WorkloadsTable({
             value: search,
             onChange: (value) => {
               setSearch(value);
+              setPageIndex(0);
+            },
+          },
+          sorting: {
+            value: sorting,
+            onChange: (next) => {
+              setSorting(next.slice(0, 1));
               setPageIndex(0);
             },
           },

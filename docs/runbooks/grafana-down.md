@@ -9,11 +9,12 @@ survives an Astronomer outage.
 
 - PrometheusRule expr: shared Grafana Deployment `astronomer-grafana` has
   `spec.replicas > 0` but `status.replicas_available < 1` for 5m.
-- Open shared Grafana 502s or never leaves the ticket bounce.
+- Open shared Grafana returns 502 or does not load inside Astronomer.
 - `kubectl -n monitoring get deploy astronomer-grafana` shows `0/1`.
 
-Triage the Grafana process with `GET /api/health` on the ClusterIP Service
-(not the public host — that hits `grafana-proxy`).
+Triage the Grafana process with `GET /api/health` on the ClusterIP Service.
+There is intentionally no public Grafana hostname; browsers reach it only
+through Astronomer's authenticated same-origin proxy.
 
 ## Triage
 
@@ -27,8 +28,8 @@ Triage the Grafana process with `GET /api/health` on the ClusterIP Service
    kubectl -n monitoring logs deploy/astronomer-grafana --tail=100
    kubectl -n monitoring logs deploy/astronomer-grafana-grafana-proxy --tail=100
    ```
-   Proxy down: ticket bounce / `grafana_auth` fail, Grafana itself may still
-   be healthy on ClusterIP. Grafana down: `/api/health` fails.
+   Proxy down: the embedded panel fails while Grafana itself may still be
+   healthy on ClusterIP. Grafana down: `/api/health` fails.
 
 3. **Health endpoint (ClusterIP only):**
    ```
@@ -46,9 +47,9 @@ Triage the Grafana process with `GET /api/health` on the ClusterIP Service
   500m/512Mi. Do not raise them past the sizer leftover floor.
 - PVC bind fail (optional 1Gi): check StorageClass; Grafana can run
   stateless (`storageSize` empty).
-- Proxy HMAC / ticket mint: Grafana-family Secret
-  `astronomer-grafana-proxy-key`; Astronomer session + `monitoring:read` for
-  mint. Do not widen `astronomer_session` Domain.
+- Proxy HMAC / internal one-use ticket: Grafana-family Secret
+  `astronomer-grafana-proxy-key`; the Astronomer session must have
+  `monitoring:read`. Browser session cookies never cross the cluster tunnel.
 - Chart upgrade via Shared stacks (in-place). Namespace/release/storage
   class changes require replace.
 
@@ -56,4 +57,5 @@ Triage the Grafana process with `GET /api/health` on the ClusterIP Service
 
 - `kubectl -n monitoring get deploy astronomer-grafana` READY matches spec.
 - `GET /api/health` returns database ok.
-- Open shared Grafana from Shared stacks (only when `authMode=proxy`).
+- Open shared Grafana from Shared stacks. It should load under
+  `/api/v1/observability/grafana/` on the Astronomer origin.

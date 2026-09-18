@@ -406,16 +406,16 @@ export const SHARED_ALERTMANAGER_FAMILY: StackFamilySpec = {
 };
 
 // ─────────────────────────────────────────────────────────────────────
-// Shared Grafana (ticket bounce + grafana-proxy on grafana.<host>)
+// Shared Grafana (private ClusterIP + authenticated same-origin proxy)
 // ─────────────────────────────────────────────────────────────────────
 
 export const SHARED_GRAFANA_FAMILY: StackFamilySpec = {
   key: "grafana",
   title: "Shared Grafana",
   description:
-    "Shared Grafana on grafana.<platform-host> via grafana-proxy (ticket bounce, Explore-lock). Datasources are shared Thanos (when installed) and an optional BYO Loki URL. Open is shown only when authMode is proxy.",
+    "Shared Grafana through Astronomer's authenticated proxy. No public Grafana hostname is required; monitoring RBAC and cluster-scoped query filters apply to every request.",
   destroys:
-    "the Grafana Helm release on the management cluster, grafana-proxy, and its provisioned dashboard/datasource ConfigMaps. Per-cluster Grafana is not touched",
+    "the Grafana Helm release on the management cluster, its internal authentication proxy, and its provisioned dashboard/datasource ConfigMaps. Per-cluster Grafana is not touched",
   fields: [
     {
       name: "managementClusterId",
@@ -462,13 +462,6 @@ export const SHARED_GRAFANA_FAMILY: StackFamilySpec = {
       help: "Optional 1Gi PVC for stars and prefs. Leave empty to stay stateless. Dashboards and datasources stay sidecar ConfigMaps.",
     },
     {
-      name: "ingressHost",
-      label: "Grafana host",
-      kind: "text",
-      placeholder: "grafana.example.com",
-      help: "Defaults to grafana.<Astronomer ServerURL host>. Never taken from the Astronomer chart ingress.host.",
-    },
-    {
       name: "logDatasourceUrl",
       label: "BYO Loki URL",
       kind: "text",
@@ -490,7 +483,6 @@ export const SHARED_GRAFANA_FAMILY: StackFamilySpec = {
     replicas: "1",
     storageClass: "",
     storageSize: "",
-    ingressHost: "",
     logDatasourceUrl: "",
   },
 };
@@ -601,31 +593,21 @@ export const SHARED_LOKI_FAMILY: StackFamilySpec = {
   },
 };
 
-/** Public Grafana URL only when the proxy + ticket bounce are installed. */
+export const FLEET_GRAFANA_ROUTE = "/dashboard/monitoring/grafana";
+export const FLEET_GRAFANA_PROXY_PATH = "/api/v1/observability/grafana/";
+
+/** In-console Grafana URL only when the same-origin proxy is installed. */
 export function fleetGrafanaOpenURL(
-  status?: Pick<
-    SharedGrafanaStatus,
-    "status" | "authMode" | "grafanaHost" | "ingressHost"
-  > | null,
+  status?: Pick<SharedGrafanaStatus, "status" | "authMode"> | null,
 ): string | null {
-  if (!status || status.authMode !== "proxy") return null;
+  if (!status || status.authMode !== "same_origin_proxy") return null;
   if (!stackIsInstalled(status)) return null;
-  const raw = (status.grafanaHost || status.ingressHost || "").trim();
-  if (!raw) return null;
-  const host = raw.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-  if (!host) return null;
-  return `https://${host}/`;
+  return FLEET_GRAFANA_ROUTE;
 }
 
 /** Shared Grafana with this cluster pre-selected. Null unless the Open button exists. */
 export function fleetGrafanaClusterURL(
-  status:
-    | Pick<
-        SharedGrafanaStatus,
-        "status" | "authMode" | "grafanaHost" | "ingressHost"
-      >
-    | null
-    | undefined,
+  status: Pick<SharedGrafanaStatus, "status" | "authMode"> | null | undefined,
   clusterId: string,
 ): string | null {
   const base = fleetGrafanaOpenURL(status);

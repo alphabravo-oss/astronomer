@@ -260,7 +260,8 @@ type SharedAlertmanagerRequest struct {
 
 // openapi:request SharedGrafanaStackRequest
 // SharedGrafanaRequest is the camelCase body for the shared Grafana family.
-// ingressHost overrides grafana.<ServerURL host>; never values.ingress.host.
+// IngressHost is retained as an ignored compatibility field; Grafana is
+// exposed only through Astronomer's authenticated same-origin proxy.
 type SharedGrafanaRequest struct {
 	ManagementClusterID   string `json:"managementClusterId"`
 	Namespace             string `json:"namespace"`
@@ -269,7 +270,7 @@ type SharedGrafanaRequest struct {
 	Replicas              int32  `json:"replicas"`
 	StorageClass          string `json:"storageClass"`
 	StorageSize           string `json:"storageSize"`
-	IngressHost           string `json:"ingressHost"`
+	IngressHost           string `json:"ingressHost,omitempty"`
 	LogDatasourceURL      string `json:"logDatasourceUrl"`
 	AutoRollbackOnFailure *bool  `json:"autoRollbackOnFailure"`
 }

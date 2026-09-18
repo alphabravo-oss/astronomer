@@ -382,9 +382,27 @@ type K8sRequestPayload struct {
 	Path    string            `json:"path"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    string            `json:"body,omitempty"` // base64 encoded
+	// GrafanaAuth is server-minted authentication for the dedicated shared
+	// Grafana proxy. It is deliberately separate from Headers: browser-supplied
+	// headers are allow-listed at both tunnel hops, while this value originates
+	// only from the authenticated monitoring handler. Agents inject it only into
+	// Kubernetes Service proxy requests.
+	GrafanaAuth *GrafanaProxyAuth `json:"grafana_auth,omitempty"`
 
 	CallerIdentity
 }
+
+// GrafanaProxyAuth carries either the proxy's signed session cookie or a
+// one-use bootstrap ticket. The raw values are credentials: never log them.
+type GrafanaProxyAuth struct {
+	Cookie string `json:"cookie,omitempty"`
+	Ticket string `json:"ticket,omitempty"`
+}
+
+const (
+	GrafanaProxyCookieName   = "grafana_auth"
+	GrafanaProxyTicketHeader = "X-Astronomer-Grafana-Ticket"
+)
 
 // K8sResponsePayload represents the result of a proxied Kubernetes API request.
 type K8sResponsePayload struct {

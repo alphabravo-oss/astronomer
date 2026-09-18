@@ -281,6 +281,31 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     expect(onSearchChange).toHaveBeenCalledWith("platform");
   });
 
+  it("delegates sorting to a server-paged caller without reordering one page locally", () => {
+    const onSortingChange = vi.fn();
+    render(
+      <DataTable
+        data={rows}
+        columns={columns}
+        keyExtractor={(row) => row.id}
+        serverSide={{
+          rowCount: 30,
+          pagination: { pageIndex: 0, pageSize: 20 },
+          onPaginationChange: vi.fn(),
+          sorting: {
+            value: [{ id: "name", desc: false }],
+            onChange: onSortingChange,
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("columnheader", { name: /size/i }));
+
+    expect(onSortingChange).toHaveBeenCalledWith([{ id: "size", desc: false }]);
+    expect(bodyRowText()[0]).toContain("Banana");
+  });
+
   it("renders drag resize handles only when resizable is enabled", () => {
     const { container, rerender } = render(
       <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />,

@@ -320,7 +320,6 @@ DNS names list for the Certificate. Unions gateway.hosts and ingress.host
 {{- end -}}
 {{- range ($names | uniq) }}
 - {{ . | quote }}
-- {{ printf "grafana.%s" . | quote }}
 {{- end -}}
 {{- end }}
 

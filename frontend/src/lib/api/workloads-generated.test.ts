@@ -1,6 +1,7 @@
 import type { MockedFunction } from "vitest";
 import {
   getClustersByClusterIdNamespaces,
+  getClustersByClusterIdPods,
   getClustersByClusterIdWorkloads,
   getWorkloadsPodsByClusterIdByNamespaceByPodLogs,
   patchClustersByClusterIdWorkloadsByKindByNamespaceByNameScale,
@@ -8,6 +9,7 @@ import {
 } from "@/lib/api/generated/client";
 import {
   getPodLogs,
+  getClusterPods,
   getClusterNamespaces,
   getWorkloads,
   restartWorkload,
@@ -33,6 +35,9 @@ const mockedList = getClustersByClusterIdWorkloads as MockedFunction<
 >;
 const mockedNamespaces = getClustersByClusterIdNamespaces as MockedFunction<
   typeof getClustersByClusterIdNamespaces
+>;
+const mockedPods = getClustersByClusterIdPods as MockedFunction<
+  typeof getClustersByClusterIdPods
 >;
 const mockedLogs =
   getWorkloadsPodsByClusterIdByNamespaceByPodLogs as MockedFunction<
@@ -141,6 +146,51 @@ describe("workloads generated API boundary", () => {
       { limit: 200, offset: 0 },
       { limit: 200, offset: 200 },
     ]);
+  });
+
+  it("sends pod paging, search, sort, and health to the server", async () => {
+    mockedPods.mockResolvedValueOnce({
+      data: [
+        {
+          name: "api-1",
+          namespace: "default",
+          clusterId: "cluster-1",
+          phase: "Running",
+          status: "Running",
+          createdAt: "2026-09-18T00:00:00Z",
+        },
+      ],
+      pagination: {
+        total: 101,
+        limit: 20,
+        offset: 40,
+        has_more: true,
+        next_offset: 60,
+      },
+    });
+
+    const result = await getClusterPods("cluster-1", {
+      limit: 20,
+      offset: 40,
+      search: "api",
+      sort: "restarts_desc",
+      health: "restarted",
+    });
+
+    expect(mockedPods).toHaveBeenCalledWith({
+      path: { cluster_id: "cluster-1" },
+      query: {
+        namespace: undefined,
+        limit: 20,
+        offset: 40,
+        search: "api",
+        sort: "restarts_desc",
+        health: "restarted",
+      },
+      signal: undefined,
+    });
+    expect(result.pagination.total).toBe(101);
+    expect(result.data[0].name).toBe("api-1");
   });
 
   it("sends caller-stable idempotency on scale and maps the receipt", async () => {

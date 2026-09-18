@@ -752,6 +752,19 @@
   },
   {
     "method": "GET",
+    "pattern": "/api/v1/*/alerting/events/summary/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
+  },
+  {
+    "method": "GET",
     "pattern": "/api/v1/*/alerting/events/{id}/",
     "handler_owner": "internal/server route owner requires explicit classification",
     "surface": "management API",
@@ -2654,6 +2667,19 @@
       "TestHighRiskRoutesDenyUnauthenticatedRequests"
     ],
     "security_registry_id": "cluster-create"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/*/clusters/summary/",
+    "handler_owner": "handler.ClusterHandler",
+    "surface": "adopted cluster management API",
+    "auth": "bearer/session auth through route middleware or handler-specific gate",
+    "rbac": "route-specific read/list permission or handler-domain gate",
+    "csrf": "not applicable: safe HTTP method",
+    "audit": "read-side audit when policy matches; no request/response secrets recorded",
+    "tests": [
+      "TestRouteInventoryEntriesHaveCompleteSecurityPosture"
+    ]
   },
   {
     "method": "GET",
@@ -10251,40 +10277,115 @@
     ]
   },
   {
-    "method": "GET",
-    "pattern": "/api/v1/observability/grafana-ticket",
+    "method": "DELETE",
+    "pattern": "/api/v1/observability/grafana",
     "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "Grafana ticket bounce mint",
+    "surface": "same-origin shared Grafana proxy",
     "auth": "bearer/session auth",
-    "rbac": "monitoring:read at any scope",
-    "csrf": "not applicable: GET",
-    "audit": "do not log ticket or return",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestGrafanaTicketAllowListRejectsOpenRedirect"
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
     ],
-    "security_registry_id": "grafana-ticket-mint"
+    "security_registry_id": "grafana-same-origin-proxy-root"
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/observability/grafana-ticket/",
+    "pattern": "/api/v1/observability/grafana",
     "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "Grafana ticket bounce mint",
+    "surface": "same-origin shared Grafana proxy",
     "auth": "bearer/session auth",
-    "rbac": "monitoring:read at any scope",
-    "csrf": "not applicable: GET",
-    "audit": "do not log ticket or return",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
     "tests": [
       "TestHighRiskRoutesDenyUnauthenticatedRequests",
-      "TestGrafanaTicketAllowListRejectsOpenRedirect"
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
     ],
-    "security_registry_id": "grafana-ticket-mint"
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/observability/grafana",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/observability/grafana",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/observability/grafana",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/observability/grafana",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/observability/grafana",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
   },
   {
     "method": "POST",
     "pattern": "/api/v1/observability/grafana-ticket/redeem",
     "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "Grafana ticket bounce redeem",
+    "surface": "Internal one-use Grafana ticket redeem",
     "auth": "ticket is the only credential",
     "rbac": "none; Take() of one-use ticket",
     "csrf": "not applicable: no session cookie",
@@ -10299,7 +10400,7 @@
     "method": "POST",
     "pattern": "/api/v1/observability/grafana-ticket/redeem/",
     "handler_owner": "internal/server route owner requires explicit classification",
-    "surface": "Grafana ticket bounce redeem",
+    "surface": "Internal one-use Grafana ticket redeem",
     "auth": "ticket is the only credential",
     "rbac": "none; Take() of one-use ticket",
     "csrf": "not applicable: no session cookie",
@@ -10309,6 +10410,216 @@
       "TestGrafanaTicketRedeemOneUse"
     ],
     "security_registry_id": "grafana-ticket-redeem"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/observability/grafana/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/observability/grafana/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/observability/grafana/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/observability/grafana/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/observability/grafana/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/observability/grafana/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/observability/grafana/",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaUsesSameOriginTunnelAndPathScopedCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-root"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/observability/grafana/*",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaForwardsOnlySignedProxyCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-suffix"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/observability/grafana/*",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaForwardsOnlySignedProxyCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-suffix"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/observability/grafana/*",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaForwardsOnlySignedProxyCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-suffix"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/observability/grafana/*",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaForwardsOnlySignedProxyCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-suffix"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/observability/grafana/*",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaForwardsOnlySignedProxyCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-suffix"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/observability/grafana/*",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaForwardsOnlySignedProxyCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-suffix"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/observability/grafana/*",
+    "handler_owner": "internal/server route owner requires explicit classification",
+    "surface": "same-origin shared Grafana proxy with path suffix",
+    "auth": "bearer/session auth",
+    "rbac": "monitoring:read at any scope; scoped users receive mandatory cluster query rewriting",
+    "csrf": "safe methods are read-only; browser cookie mutations require authenticated-router CSRF enforcement",
+    "audit": "monitoring.grafana.proxy for mutating requests; credentials and response bodies are never logged",
+    "tests": [
+      "TestHighRiskRoutesDenyUnauthenticatedRequests",
+      "TestProxyGrafanaForwardsOnlySignedProxyCookie"
+    ],
+    "security_registry_id": "grafana-same-origin-proxy-suffix"
   },
   {
     "method": "GET",

@@ -358,6 +358,21 @@ func TestPreflightRBACResourceNamesFollowRenderedChecks(t *testing.T) {
 	})
 }
 
+func TestTLSCertificateOnlyIncludesConfiguredListenerHosts(t *testing.T) {
+	docs := parseRenderedDocs(t, helmTemplate(t,
+		"gateway.enabled=false",
+		"ingress.enabled=true",
+		"ingress.host=astronomer.example.com",
+		"tls.source=selfSigned",
+	))
+	certificate := findRenderedDoc(t, docs, "Certificate", "astronomer-tls")
+	got := stringListValue(nestedMap(certificate, "spec")["dnsNames"])
+	want := []string{"astronomer.example.com"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Certificate dnsNames = %v, want configured listener hosts only %v", got, want)
+	}
+}
+
 func TestPreflightHookUpgradeReplacementContract(t *testing.T) {
 	docs := parseRenderedDocs(t, helmTemplate(t))
 	for _, kind := range []string{"ServiceAccount", "ClusterRole", "ClusterRoleBinding", "Role", "RoleBinding"} {

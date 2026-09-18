@@ -1,5 +1,28 @@
 import api from "@/lib/api/transport";
-import type { APIResponse } from "@/types";
+import type { APIResponse, PaginatedResponse } from "@/types";
+
+export interface NamedResourceListParams {
+  namespace?: string;
+  namespaces?: string;
+  limit?: number;
+  offset?: number;
+  search?: string;
+  sort?: string;
+  signal?: AbortSignal;
+}
+
+export async function getNamedResources<T>(
+  clusterId: string,
+  resourceType: string,
+  params: NamedResourceListParams = {},
+): Promise<PaginatedResponse<T>> {
+  const { signal, ...query } = params;
+  const response = await api.get<PaginatedResponse<T>>(
+    `/clusters/${clusterId}/resources/${resourceType}`,
+    { params: query, signal },
+  );
+  return response.data;
+}
 
 // Storage
 

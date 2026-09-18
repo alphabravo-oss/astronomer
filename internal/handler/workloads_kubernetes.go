@@ -24,20 +24,37 @@ func (h *WorkloadHandler) listWorkloads(ctx context.Context, clusterID, namespac
 		if err != nil {
 			continue
 		}
-		var wl workloadList
-		if err := h.getJSON(ctx, clusterID, listPath, &wl); err != nil {
-			return nil, err
-		}
-		for _, item := range wl.Items {
-			// Kubernetes List responses only stamp `kind` on the
-			// outer wrapper (e.g. "DeploymentList"); each item in
-			// `.items` arrives with kind="". Stamp it from the
-			// loop kind so workloadToMap + the frontend
-			// filter-by-kind both see the correct value.
-			if item.Kind == "" {
-				item.Kind = k
+		continueToken := ""
+		previousToken := ""
+		for {
+			query := url.Values{}
+			query.Set("limit", fmt.Sprintf("%d", upstreamKubernetesPageLimit))
+			if continueToken != "" {
+				query.Set("continue", continueToken)
 			}
-			items = append(items, workloadToMap(clusterID, item))
+			var wl workloadList
+			if err := h.getJSON(ctx, clusterID, listPath+"?"+query.Encode(), &wl); err != nil {
+				return nil, err
+			}
+			for _, item := range wl.Items {
+				// Kubernetes List responses only stamp `kind` on the
+				// outer wrapper (e.g. "DeploymentList"); each item in
+				// `.items` arrives with kind="". Stamp it from the
+				// loop kind so workloadToMap + the frontend
+				// filter-by-kind both see the correct value.
+				if item.Kind == "" {
+					item.Kind = k
+				}
+				items = append(items, workloadToMap(clusterID, item))
+			}
+			continueToken = wl.Metadata.Continue
+			if continueToken == "" {
+				break
+			}
+			if continueToken == previousToken {
+				return nil, fmt.Errorf("workload pagination continuation did not advance")
+			}
+			previousToken = continueToken
 		}
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -72,22 +89,156 @@ func (h *WorkloadHandler) listPods(ctx context.Context, clusterID, namespace, se
 	if namespace != "" {
 		path = fmt.Sprintf("/api/v1/namespaces/%s/pods", namespace)
 	}
+	query := url.Values{}
+	query.Set("limit", fmt.Sprintf("%d", upstreamKubernetesPageLimit))
 	if selector != "" {
-		sep := "?"
-		if strings.Contains(path, "?") {
-			sep = "&"
+		query.Set("labelSelector", selector)
+	}
+	items := make([]map[string]any, 0)
+	continueToken := ""
+	previousToken := ""
+	for {
+		if continueToken == "" {
+			query.Del("continue")
+		} else {
+			query.Set("continue", continueToken)
 		}
-		path += sep + "labelSelector=" + url.QueryEscape(selector)
-	}
-	var pods podList
-	if err := h.getJSON(ctx, clusterID, path, &pods); err != nil {
-		return nil, err
-	}
-	items := make([]map[string]any, 0, len(pods.Items))
-	for _, pod := range pods.Items {
-		items = append(items, podToMap(clusterID, pod))
+		var pods podList
+		if err := h.getJSON(ctx, clusterID, path+"?"+query.Encode(), &pods); err != nil {
+			return nil, err
+		}
+		for _, pod := range pods.Items {
+			items = append(items, podToMap(clusterID, pod))
+		}
+		continueToken = pods.Metadata.Continue
+		if continueToken == "" {
+			break
+		}
+		if continueToken == previousToken {
+			return nil, fmt.Errorf("pod pagination continuation did not advance")
+		}
+		previousToken = continueToken
 	}
 	return items, nil
+}
+
+const upstreamKubernetesPageLimit = 500
+
+// listPodsPage follows Kubernetes continuation tokens while retaining only the
+// requested offset window. Unlike listPods, no single tunnel response can
+// contain an unbounded PodList. Kubernetes supplies remainingItemCount for
+// unfiltered lists, which preserves an exact UI row count without transferring
+// every pod body through the management plane.
+func (h *WorkloadHandler) listPodsPage(ctx context.Context, clusterID, namespace string, limit, offset int) ([]map[string]any, *int64, bool, error) {
+	path := "/api/v1/pods"
+	if namespace != "" {
+		path = fmt.Sprintf("/api/v1/namespaces/%s/pods", namespace)
+	}
+	remainingSkip := max(offset, 0)
+	remainingTake := max(limit, 1)
+	items := make([]map[string]any, 0, remainingTake)
+	continueToken := ""
+	previousToken := ""
+	var total *int64
+
+	for remainingTake > 0 {
+		requestLimit := min(upstreamKubernetesPageLimit, remainingSkip+remainingTake)
+		query := url.Values{}
+		query.Set("limit", fmt.Sprintf("%d", requestLimit))
+		if continueToken != "" {
+			query.Set("continue", continueToken)
+		}
+
+		var pods podList
+		if err := h.getJSON(ctx, clusterID, path+"?"+query.Encode(), &pods); err != nil {
+			return nil, nil, false, err
+		}
+		if total == nil && pods.Metadata.RemainingItemCount != nil {
+			count := int64(len(pods.Items)) + *pods.Metadata.RemainingItemCount
+			total = &count
+		}
+		for _, pod := range pods.Items {
+			if remainingSkip > 0 {
+				remainingSkip--
+				continue
+			}
+			if remainingTake == 0 {
+				break
+			}
+			items = append(items, podToMap(clusterID, pod))
+			remainingTake--
+		}
+
+		continueToken = pods.Metadata.Continue
+		if continueToken == "" {
+			break
+		}
+		if continueToken == previousToken {
+			return nil, nil, false, fmt.Errorf("pod pagination continuation did not advance")
+		}
+		previousToken = continueToken
+	}
+
+	hasMore := continueToken != ""
+	if total != nil {
+		hasMore = int64(offset+len(items)) < *total
+	}
+	return items, total, hasMore, nil
+}
+
+func (h *WorkloadHandler) countPods(ctx context.Context, clusterID, namespace string) (int64, error) {
+	path := "/api/v1/pods"
+	if namespace != "" {
+		path = fmt.Sprintf("/api/v1/namespaces/%s/pods", namespace)
+	}
+	var pods podList
+	if err := h.getJSON(ctx, clusterID, path+"?limit=1", &pods); err != nil {
+		return 0, err
+	}
+	count := int64(len(pods.Items))
+	if pods.Metadata.RemainingItemCount != nil {
+		count += *pods.Metadata.RemainingItemCount
+		return count, nil
+	}
+	if pods.Metadata.Continue != "" {
+		return 0, fmt.Errorf("apiserver omitted pod remainingItemCount")
+	}
+	return count, nil
+}
+
+func (h *WorkloadHandler) listPodsAcrossNamespacesPage(ctx context.Context, clusterID string, namespaces map[string]struct{}, limit, offset int) ([]map[string]any, int64, bool, error) {
+	names := make([]string, 0, len(namespaces))
+	for namespace := range namespaces {
+		names = append(names, namespace)
+	}
+	sort.Strings(names)
+
+	remainingOffset := int64(max(offset, 0))
+	remainingLimit := max(limit, 1)
+	items := make([]map[string]any, 0, remainingLimit)
+	var total int64
+	for _, namespace := range names {
+		count, err := h.countPods(ctx, clusterID, namespace)
+		if err != nil {
+			return nil, 0, false, err
+		}
+		total += count
+		if remainingLimit == 0 {
+			continue
+		}
+		if remainingOffset >= count {
+			remainingOffset -= count
+			continue
+		}
+		page, _, _, err := h.listPodsPage(ctx, clusterID, namespace, remainingLimit, int(remainingOffset))
+		if err != nil {
+			return nil, 0, false, err
+		}
+		items = append(items, page...)
+		remainingLimit -= len(page)
+		remainingOffset = 0
+	}
+	return items, total, int64(offset+len(items)) < total, nil
 }
 
 // listPodsFieldSelector lists pods filtered server-side by a fieldSelector
@@ -116,30 +267,93 @@ func (h *WorkloadHandler) listPodMetadata(ctx context.Context, clusterID, path s
 	}
 	headers := requestHeaders("")
 	headers["Accept"] = "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1,application/json"
-	resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path, nil, headers)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensureSuccess(resp); err != nil {
-		return nil, err
-	}
 	var out podMetadataList
-	if err := parseJSONResponse(resp, &out); err != nil {
-		return nil, err
+	continueToken := ""
+	previousToken := ""
+	for {
+		query := url.Values{}
+		query.Set("limit", fmt.Sprintf("%d", upstreamKubernetesPageLimit))
+		if continueToken != "" {
+			query.Set("continue", continueToken)
+		}
+		resp, err := h.requester.Do(ctx, clusterID, http.MethodGet, path+"?"+query.Encode(), nil, headers)
+		if err != nil {
+			return nil, err
+		}
+		if err := ensureSuccess(resp); err != nil {
+			return nil, err
+		}
+		var page podMetadataList
+		if err := parseJSONResponse(resp, &page); err != nil {
+			return nil, err
+		}
+		out.Items = append(out.Items, page.Items...)
+		continueToken = page.Metadata.Continue
+		if continueToken == "" {
+			return &out, nil
+		}
+		if continueToken == previousToken {
+			return nil, fmt.Errorf("pod metadata pagination continuation did not advance")
+		}
+		previousToken = continueToken
 	}
-	return &out, nil
+}
+
+func (h *WorkloadHandler) listNamespaces(ctx context.Context, clusterID string) (*namespaceList, error) {
+	var out namespaceList
+	continueToken := ""
+	previousToken := ""
+	for {
+		query := url.Values{}
+		query.Set("limit", fmt.Sprintf("%d", upstreamKubernetesPageLimit))
+		if continueToken != "" {
+			query.Set("continue", continueToken)
+		}
+		var page namespaceList
+		if err := h.getJSON(ctx, clusterID, "/api/v1/namespaces?"+query.Encode(), &page); err != nil {
+			return nil, err
+		}
+		out.Items = append(out.Items, page.Items...)
+		continueToken = page.Metadata.Continue
+		if continueToken == "" {
+			return &out, nil
+		}
+		if continueToken == previousToken {
+			return nil, fmt.Errorf("namespace pagination continuation did not advance")
+		}
+		previousToken = continueToken
+	}
 }
 
 func (h *WorkloadHandler) getNodes(ctx context.Context, clusterID string) ([]map[string]any, error) {
 	var nodes nodeList
-	if err := h.getJSON(ctx, clusterID, "/api/v1/nodes", &nodes); err != nil {
-		return nil, err
+	continueToken := ""
+	previousToken := ""
+	for {
+		query := url.Values{}
+		query.Set("limit", fmt.Sprintf("%d", upstreamKubernetesPageLimit))
+		if continueToken != "" {
+			query.Set("continue", continueToken)
+		}
+		var page nodeList
+		if err := h.getJSON(ctx, clusterID, "/api/v1/nodes?"+query.Encode(), &page); err != nil {
+			return nil, err
+		}
+		nodes.Items = append(nodes.Items, page.Items...)
+		continueToken = page.Metadata.Continue
+		if continueToken == "" {
+			break
+		}
+		if continueToken == previousToken {
+			return nil, fmt.Errorf("node pagination continuation did not advance")
+		}
+		previousToken = continueToken
 	}
-	var pods podList
-	_ = h.getJSON(ctx, clusterID, "/api/v1/pods", &pods)
+	pods, _ := h.listPods(ctx, clusterID, "", "")
 	podCounts := map[string]int{}
-	for _, pod := range pods.Items {
-		podCounts[pod.Spec.NodeName]++
+	for _, pod := range pods {
+		node, _ := pod["node"].(string)
+		podCounts[node]++
 	}
 	items := make([]map[string]any, 0, len(nodes.Items))
 	for _, node := range nodes.Items {

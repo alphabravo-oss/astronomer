@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
+import type { SortingState } from "@tanstack/react-table";
 import {
   useClusterEvents,
   useClusterNamespaces,
@@ -9,6 +11,7 @@ import {
 } from "@/lib/hooks/clusters";
 import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
 import { k8sCreate } from "@/lib/api/kubernetes-proxy";
+import type { PodSort } from "@/lib/api/workloads";
 import { useNavigate } from "@tanstack/react-router";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
 import { ActionButton } from "@/components/ui/action-button";
@@ -36,6 +39,7 @@ import {
   nameColumn,
 } from "@/components/resources/resource-table-primitives";
 import { k8sResourcePath } from "@/lib/k8s-paths";
+import { pageRowCount } from "@/lib/api/pagination";
 import {
   permissionDeniedReason,
   toastPermissionDenied,
@@ -486,27 +490,36 @@ export function EventsTable({ clusterId }: { clusterId: string }) {
   );
 }
 
-function podNeedsAttention(pod: Pod): boolean {
-  const [ready, total] = pod.ready.split("/").map(Number);
-  return (
-    !["Running", "Succeeded"].includes(pod.phase) ||
-    pod.status !== pod.phase ||
-    (Number.isFinite(ready) && Number.isFinite(total) && ready < total)
-  );
-}
-
 export function PodsTable({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
-  // Pod changes are routed by the shared SSE dispatcher to this Query key;
-  // the hook polls only while the dashboard event stream is unavailable.
-  const podsQuery = useClusterPods(clusterId);
-  const data = useMemo(() => podsQuery.data ?? [], [podsQuery.data]);
-  const isLoading = podsQuery.isLoading;
-  const deletePod = useDeletePod();
-  const permissions = useClusterResourcePermissions(clusterId, "pods");
+  const [pageIndex, setPageIndex] = useState(0);
+  const pageSize = 20;
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "namespace", desc: false },
+  ]);
   const [healthFilter, setHealthFilter] = useState<
     "all" | "attention" | "restarted"
   >("all");
+  const sort = (
+    sorting[0]
+      ? `${sorting[0].id}_${sorting[0].desc ? "desc" : "asc"}`
+      : "namespace_asc"
+  ) as PodSort;
+  // Pod changes are routed by the shared SSE dispatcher to this Query key;
+  // the hook polls only while the dashboard event stream is unavailable.
+  const podsQuery = useClusterPods(clusterId, {
+    limit: pageSize,
+    offset: pageIndex * pageSize,
+    search: debouncedSearch.trim() || undefined,
+    sort,
+    health: healthFilter,
+  });
+  const data = useMemo(() => podsQuery.data?.data ?? [], [podsQuery.data]);
+  const isLoading = podsQuery.isLoading;
+  const deletePod = useDeletePod();
+  const permissions = useClusterResourcePermissions(clusterId, "pods");
 
   const [deleteTarget, setDeleteTarget] = useState<Pod | null>(null);
   const [yamlTarget, setYamlTarget] = useState<{
@@ -623,16 +636,21 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
       permissions.read,
     ],
   );
-
-  const visiblePods = useMemo(() => {
-    if (healthFilter === "restarted") {
-      return data.filter((pod) => pod.restarts > 0);
-    }
-    if (healthFilter === "attention") {
-      return data.filter(podNeedsAttention);
-    }
-    return data;
-  }, [data, healthFilter]);
+  const sortableKeys = new Set([
+    "name",
+    "namespace",
+    "status",
+    "restarts",
+    "node",
+    "age",
+  ]);
+  const serverColumns = columns.map((column) => ({
+    ...column,
+    sortable: sortableKeys.has(column.key),
+    // Facet values derived from one server page would be incomplete. The
+    // server-backed health/search controls below operate over the full set.
+    filter: undefined,
+  }));
 
   return (
     <>
@@ -644,12 +662,36 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
       <ExplorerDataTable
         clusterId={clusterId}
         resourceType="pods"
-        data={visiblePods}
-        columns={columns}
+        data={data}
+        columns={serverColumns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search pods..."
-        filtersActive={healthFilter !== "all"}
-        onClearFilters={() => setHealthFilter("all")}
+        pageSize={pageSize}
+        serverSide={{
+          rowCount: pageRowCount(podsQuery.data),
+          pagination: { pageIndex, pageSize },
+          onPaginationChange: (next) => setPageIndex(next.pageIndex),
+          search: {
+            value: search,
+            onChange: (value) => {
+              setSearch(value);
+              setPageIndex(0);
+            },
+          },
+          sorting: {
+            value: sorting,
+            onChange: (next) => {
+              setSorting(next.slice(0, 1));
+              setPageIndex(0);
+            },
+          },
+        }}
+        filtersActive={healthFilter !== "all" || search.trim() !== ""}
+        onClearFilters={() => {
+          setHealthFilter("all");
+          setSearch("");
+          setPageIndex(0);
+        }}
         toolbar={
           <div
             className="flex items-center gap-1 rounded-md border border-border bg-muted/20 p-1"
@@ -657,24 +699,19 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
           >
             {(
               [
-                ["all", "All", data.length],
-                [
-                  "attention",
-                  "Needs attention",
-                  data.filter(podNeedsAttention).length,
-                ],
-                [
-                  "restarted",
-                  "Restarted",
-                  data.filter((pod) => pod.restarts > 0).length,
-                ],
+                ["all", "All"],
+                ["attention", "Needs attention"],
+                ["restarted", "Restarted"],
               ] as const
-            ).map(([value, label, count]) => (
+            ).map(([value, label]) => (
               <button
                 key={value}
                 type="button"
                 aria-pressed={healthFilter === value}
-                onClick={() => setHealthFilter(value)}
+                onClick={() => {
+                  setHealthFilter(value);
+                  setPageIndex(0);
+                }}
                 className={cn(
                   "inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors",
                   healthFilter === value
@@ -683,12 +720,14 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
                 )}
               >
                 {label}
-                <span className="tabular-nums text-2xs">{count}</span>
               </button>
             ))}
           </div>
         }
         loading={isLoading}
+        isError={podsQuery.isError}
+        error={podsQuery.error}
+        onRetry={() => void podsQuery.refetch()}
         emptyState={{
           title: "No pods found",
           description:

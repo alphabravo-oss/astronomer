@@ -2368,12 +2368,60 @@
     "pattern": "/api/v1/nodes/{cluster_id}/{node_name}/uncordon"
   },
   {
-    "method": "GET",
-    "pattern": "/api/v1/observability/grafana-ticket"
+    "method": "DELETE",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/observability/grafana"
   },
   {
     "method": "GET",
-    "pattern": "/api/v1/observability/grafana-ticket"
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/observability/grafana"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/observability/grafana"
   },
   {
     "method": "POST",
@@ -2382,6 +2430,34 @@
   {
     "method": "POST",
     "pattern": "/api/v1/observability/grafana-ticket/redeem"
+  },
+  {
+    "method": "DELETE",
+    "pattern": "/api/v1/observability/grafana/*"
+  },
+  {
+    "method": "GET",
+    "pattern": "/api/v1/observability/grafana/*"
+  },
+  {
+    "method": "HEAD",
+    "pattern": "/api/v1/observability/grafana/*"
+  },
+  {
+    "method": "OPTIONS",
+    "pattern": "/api/v1/observability/grafana/*"
+  },
+  {
+    "method": "PATCH",
+    "pattern": "/api/v1/observability/grafana/*"
+  },
+  {
+    "method": "POST",
+    "pattern": "/api/v1/observability/grafana/*"
+  },
+  {
+    "method": "PUT",
+    "pattern": "/api/v1/observability/grafana/*"
   },
   {
     "method": "GET",

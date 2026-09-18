@@ -1444,7 +1444,7 @@ components:
         replicas: {type: integer, format: int32, minimum: 0}
         storageClass: {type: string}
         storageSize: {type: string}
-        ingressHost: {type: string}
+        ingressHost: {type: string, deprecated: true, description: Ignored compatibility field; shared Grafana is exposed only through the authenticated same-origin proxy.}
         logDatasourceUrl: {type: string, format: uri}
         autoRollbackOnFailure: {type: boolean}
     SharedLokiStackRequest:
@@ -1586,9 +1586,8 @@ components:
         storeGatewayReplicas: {type: integer, format: int32}
         compactorReplicas: {type: integer, format: int32}
         replicas: {type: integer, format: int32}
-        ingressHost: {type: string}
         logDatasourceUrl: {type: string, format: uri}
-        grafanaHost: {type: string}
+        proxyPath: {type: string, example: /api/v1/observability/grafana/}
         authMode: {type: string}
         autoRollbackOnFailure: {type: boolean}
         managedAssetHashes: {type: object, additionalProperties: true}
@@ -11009,6 +11008,304 @@ tags:
   - name: Delivery
     description: Flux-native targets, authoritative placement, rollouts, deployments, and compatibility
 paths:
+  /api/v1/observability/grafana:
+    delete:
+      operationId: deleteObservabilityGrafana
+      tags: [Observability]
+      summary: "Delete observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '204':
+          description: Resource deleted or already absent
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    get:
+      operationId: getObservabilityGrafana
+      tags: [Observability]
+      summary: "Read observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    head:
+      operationId: headObservabilityGrafana
+      tags: [Observability]
+      summary: "HEAD observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    options:
+      operationId: optionsObservabilityGrafana
+      tags: [Observability]
+      summary: "OPTIONS observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      operationId: patchObservabilityGrafana
+      tags: [Observability]
+      summary: "Update observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-request-schema-status: provisional
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RouteMutationRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: postObservabilityGrafana
+      tags: [Observability]
+      summary: "Create or execute observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-request-schema-status: provisional
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RouteMutationRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: putObservabilityGrafana
+      tags: [Observability]
+      summary: "Replace observability/grafana"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: public-api
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-request-schema-status: provisional
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RouteMutationRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /api/v1/observability/grafana/*:
+    delete:
+      operationId: deleteObservabilityGrafanaProxy
+      tags: [Observability]
+      summary: "Delete observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '204':
+          description: Resource deleted or already absent
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    get:
+      operationId: getObservabilityGrafanaProxy
+      tags: [Observability]
+      summary: "Read observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    head:
+      operationId: headObservabilityGrafanaProxy
+      tags: [Observability]
+      summary: "HEAD observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    options:
+      operationId: optionsObservabilityGrafanaProxy
+      tags: [Observability]
+      summary: "OPTIONS observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      operationId: patchObservabilityGrafanaProxy
+      tags: [Observability]
+      summary: "Update observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-request-schema-status: provisional
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RouteMutationRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: postObservabilityGrafanaProxy
+      tags: [Observability]
+      summary: "Create or execute observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-request-schema-status: provisional
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RouteMutationRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: putObservabilityGrafanaProxy
+      tags: [Observability]
+      summary: "Replace observability/grafana/*"
+      description: Contract generated from the mounted route inventory; response and request envelopes are stable even when domain payload fields evolve additively.
+      x-astronomer-route-class: proxy
+      x-astronomer-rbac: "handler-and-route-policy"
+      x-astronomer-auth: "bearer-or-session"
+      x-astronomer-request-schema-status: provisional
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RouteMutationRequest'}
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RouteResponseEnvelope'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
   /internal/tunnel/k8s/{cluster_id}/capabilities/{capability}:
     get:
       operationId: internalTunnelK8sCapability
@@ -35997,6 +36294,45 @@ paths:
           description: Restrict to a single namespace.
           schema:
             type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum pod summaries returned in this page (1-200).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          description: Zero-based offset into the authorized pod list.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive search across pod identity, status, node, IP, and images.
+          schema:
+            type: string
+        - name: sort
+          in: query
+          required: false
+          description: Stable pod sort order.
+          schema:
+            type: string
+            enum: [namespace_asc, namespace_desc, name_asc, name_desc, status_asc, status_desc, restarts_asc, restarts_desc, node_asc, node_desc, age_asc, age_desc]
+            default: namespace_asc
+        - name: health
+          in: query
+          required: false
+          description: Operational pod filter.
+          schema:
+            type: string
+            enum: [all, attention, restarted]
+            default: all
       responses:
         '200':
           description: Pod summaries
@@ -36004,7 +36340,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - properties:
                       data:
                         type: array
@@ -37008,6 +37344,27 @@ paths:
           description: Restrict the listing to a single namespace. Ignored for cluster-scoped types (persistentvolumes, storageclasses, gatewayclasses).
           schema:
             type: string
+        - name: namespaces
+          in: query
+          required: false
+          description: Comma-separated UI namespace scope, intersected with the caller's authorized namespaces.
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 200, default: 20}
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, default: 0}
+        - name: search
+          in: query
+          required: false
+          schema: {type: string}
+        - name: sort
+          in: query
+          required: false
+          schema: {type: string, default: namespace_asc}
       responses:
         '200':
           description: List of flattened resource rows under `data` (empty array when the type is not installed on the cluster).
@@ -37015,7 +37372,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - type: object
                     properties:
                       data:
@@ -37305,6 +37662,30 @@ paths:
           description: Restrict the listing to a single namespace (ignored for cluster-scoped types).
           schema:
             type: string
+        - name: namespaces
+          in: query
+          required: false
+          description: Comma-separated UI namespace scope, intersected with the caller's authorized namespaces.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 200, default: 20}
+        - name: offset
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, default: 0}
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive search over the flattened resource row.
+          schema: {type: string}
+        - name: sort
+          in: query
+          required: false
+          description: Stable column sort in field_direction form.
+          schema: {type: string, default: namespace_asc}
       responses:
         '200':
           description: List of flattened generic resource rows under `data`.
@@ -37312,7 +37693,7 @@ paths:
             application/json:
               schema:
                 allOf:
-                  - $ref: '#/components/schemas/DataEnvelope'
+                  - $ref: '#/components/schemas/PageEnvelope'
                   - type: object
                     properties:
                       data:

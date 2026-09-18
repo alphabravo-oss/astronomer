@@ -204,15 +204,50 @@ export async function getClusterEvents(
 
 export async function getClusterPods(
   clusterId: string,
-  params?: { namespace?: string; signal?: AbortSignal },
-): Promise<Pod[]> {
+  params?: {
+    namespace?: string;
+    limit?: number;
+    offset?: number;
+    search?: string;
+    sort?: PodSort;
+    health?: "all" | "attention" | "restarted";
+    signal?: AbortSignal;
+  },
+): Promise<PaginatedResponse<Pod>> {
   const response = await getClustersByClusterIdPods({
     path: { cluster_id: clusterId },
-    query: { namespace: params?.namespace },
+    query: {
+      namespace: params?.namespace,
+      limit: params?.limit,
+      offset: params?.offset,
+      search: params?.search,
+      sort: params?.sort,
+      health: params?.health,
+    },
     signal: params?.signal,
   });
-  return (response.data ?? []).map(mapPod);
+  return mapPage(
+    {
+      data: response.data ?? [],
+      pagination: response.pagination,
+    },
+    mapPod,
+  );
 }
+
+export type PodSort =
+  | "namespace_asc"
+  | "namespace_desc"
+  | "name_asc"
+  | "name_desc"
+  | "status_asc"
+  | "status_desc"
+  | "restarts_asc"
+  | "restarts_desc"
+  | "node_asc"
+  | "node_desc"
+  | "age_asc"
+  | "age_desc";
 
 export async function deletePod(
   clusterId: string,
