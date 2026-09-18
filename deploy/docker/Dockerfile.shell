@@ -47,7 +47,7 @@ FROM gcr.io/projectsigstore/cosign:v2.6.0@sha256:71b96f6405dd3c3f081ebf73099f18e
 # enough to be in the "skew unsupported" zone. The official binary is scanned
 # separately from first-party code: it ships Kubernetes' own Go stdlib and
 # cannot be patched here.
-FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS kubectl
+FROM alpine:3.22@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb AS kubectl
 ARG KUBECTL_VERSION=v1.35.2
 ARG TARGETARCH=amd64
 COPY --from=cosign /ko-app/cosign /usr/local/bin/cosign
@@ -69,7 +69,7 @@ RUN apk add --no-cache ca-certificates coreutils curl \
     && chmod +x /kubectl \
     && /kubectl version --client=true --output=yaml | grep -q "${KUBECTL_VERSION}"
 
-FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS base
+FROM alpine:3.22@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb AS base
 
 ARG VERSION=1.2.0
 ARG GIT_COMMIT=unknown

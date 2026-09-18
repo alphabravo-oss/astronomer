@@ -6,6 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 . scripts/lib/docker-test-endpoint.sh
+. scripts/lib/flux-controller-readiness.sh
 
 if [[ "${1:-}" == "--validate-only" ]]; then
   echo "test-live-browser: static contract OK"
@@ -427,7 +428,7 @@ sed "s/__FIXTURE_PORT__/$flux_fixture_port/g" \
 	scripts/testdata/live-browser-fixture/flux-fixture-egress.yaml.tmpl >"$artifact_dir/flux-fixture-egress.yaml"
 KUBECONFIG="$flux_kubeconfig" kubectl apply -f "$artifact_dir/flux-fixture-egress.yaml" >/dev/null
 for controller in source-controller kustomize-controller helm-controller; do
-	KUBECONFIG="$flux_kubeconfig" kubectl -n astronomer-delivery-system rollout status "deployment/$controller" --timeout=5m
+	KUBECONFIG="$flux_kubeconfig" wait_flux_controller_deployment astronomer-delivery-system "$controller" 5m
 done
 KUBECONFIG="$flux_kubeconfig" kubectl create namespace astronomer-system >/dev/null
 KUBECONFIG="$flux_kubeconfig" kubectl create namespace live-delivery >/dev/null

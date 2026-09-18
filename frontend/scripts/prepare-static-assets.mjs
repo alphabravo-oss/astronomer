@@ -6,12 +6,25 @@ const monacoSource = new URL(
   import.meta.url,
 );
 const monacoDestination = new URL("../public/monaco/vs/", import.meta.url);
+const wtermSource = new URL(
+  "../node_modules/@wterm/core/wasm/wterm.wasm",
+  import.meta.url,
+);
+const wtermDestination = new URL("wterm.wasm", publicDirectory);
 
 await mkdir(publicDirectory, { recursive: true });
-await copyFile(
-  new URL("../node_modules/@wterm/core/wasm/wterm.wasm", import.meta.url),
-  new URL("wterm.wasm", publicDirectory),
+const wtermSourceContents = await readFile(wtermSource);
+const wtermDestinationContents = await readFile(wtermDestination).catch(
+  (error) => {
+    if (error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  },
 );
+if (!wtermDestinationContents?.equals(wtermSourceContents)) {
+  await copyFile(wtermSource, wtermDestination);
+}
 
 // This directory is generated exclusively from the lockfile-pinned package.
 await rm(monacoDestination, { recursive: true, force: true });

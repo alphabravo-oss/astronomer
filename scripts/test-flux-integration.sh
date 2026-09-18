@@ -6,6 +6,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$repo_root/scripts/lib/flux-controller-readiness.sh"
 fixture_root_source="$repo_root/scripts/fixtures/flux"
 distribution="$repo_root/deploy/flux/install.yaml"
 capacity_check="$repo_root/scripts/check-build-capacity.sh"
@@ -347,9 +348,9 @@ record_pass
 
 current_phase="distribution-ready"
 kubectl apply -f "$distribution" >/dev/null
-kubectl -n astronomer-delivery-system rollout status deployment/source-controller --timeout="$ready_timeout"
-kubectl -n astronomer-delivery-system rollout status deployment/kustomize-controller --timeout="$ready_timeout"
-kubectl -n astronomer-delivery-system rollout status deployment/helm-controller --timeout="$ready_timeout"
+for controller in source-controller kustomize-controller helm-controller; do
+    wait_flux_controller_deployment astronomer-delivery-system "$controller" "$ready_timeout"
+done
 [[ "$(kubectl -n astronomer-delivery-system get deployments -l app.kubernetes.io/part-of=flux -o name | wc -l)" -eq 3 ]] ||
     fail "distribution did not install exactly three Flux controllers"
 record_pass
@@ -411,7 +412,7 @@ for controller in source-controller kustomize-controller helm-controller; do
     kubectl -n astronomer-delivery-system rollout restart "deployment/$controller" >/dev/null
 done
 for controller in source-controller kustomize-controller helm-controller; do
-    kubectl -n astronomer-delivery-system rollout status "deployment/$controller" --timeout="$ready_timeout"
+    wait_flux_controller_deployment astronomer-delivery-system "$controller" "$ready_timeout"
 done
 kubectl -n "$namespace" annotate --overwrite gitrepository/integration-git reconcile.fluxcd.io/requestedAt="$restart_nonce" >/dev/null
 kubectl -n "$namespace" annotate --overwrite helmrepository/integration-helm reconcile.fluxcd.io/requestedAt="$restart_nonce" >/dev/null

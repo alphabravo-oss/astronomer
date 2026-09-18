@@ -14,7 +14,7 @@ ARG VERSION=1.2.0
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildVersion=${VERSION}" \
     -o /out/migrate ./cmd/migrator
 
-FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+FROM alpine:3.22@sha256:365499d9dccb7c8cfaffef995a6c382e71174585e0556f6476ead1c5971c39fb
 
 ARG VERSION=1.2.0
 ARG GIT_COMMIT=unknown
