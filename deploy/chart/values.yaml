@@ -466,9 +466,13 @@ redis:
     registry: ""    # T23 air-gapped override; falls back to image.registry
   port: 6379
   storage:
-    # AOF persistence needs room for rewrites and temporary growth. Longhorn
-    # allocates this thinly, so a 5Gi claim does not consume 5Gi up front.
-    size: 5Gi
+    # Keep the base claim size upgrade-compatible with pre-1.2 releases.
+    # StatefulSet volumeClaimTemplates are immutable, so increasing this
+    # default would make an otherwise ordinary Helm upgrade fail. New
+    # production HA installs request additional headroom in
+    # values-production.yaml; existing operators expand their PVCs through
+    # their storage provider rather than by changing this template.
+    size: 2Gi
     storageClassName: ""
   podSecurityContext:
     runAsNonRoot: true

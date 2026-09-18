@@ -150,6 +150,11 @@ redis:
   mode: sentinel
   bundled:
     enabled: true
+  storage:
+    # AOF rewrites temporarily need additional space. This applies to new
+    # production Sentinel installs; existing PVCs must be expanded through
+    # the storage provider because StatefulSet claim templates are immutable.
+    size: 5Gi
   sentinel:
     replicas: 3
     sentinels: 3
