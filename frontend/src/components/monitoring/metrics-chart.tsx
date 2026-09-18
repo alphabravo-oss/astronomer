@@ -1,4 +1,3 @@
-
 import { useMemo } from "react";
 import {
   ResponsiveContainer,
@@ -61,8 +60,10 @@ export function MetricsChart({
   }, [series]);
 
   const formatValue = (value: number): string => {
-    if (unit === "bytes" || unit === "bytes/s") return formatBytes(value);
+    if (unit === "bytes") return formatBytes(value);
+    if (unit === "bytes/s") return `${formatBytes(value)}/s`;
     if (unit === "millicores") return formatCPU(value);
+    if (unit === "cores") return `${Number(value.toFixed(3))} cores`;
     if (unit === "%") return `${value.toFixed(1)}%`;
     if (typeof value === "number") {
       return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1);

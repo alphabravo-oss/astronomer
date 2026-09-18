@@ -135,8 +135,10 @@ function mapPod(wire: PodWire): Pod {
     status: wire.status ?? phase,
     ready: wire.ready ?? "0/0",
     restarts: wire.restarts ?? 0,
+    lastRestartAt: wire.lastRestartAt ?? undefined,
     node: wire.node ?? "",
     ip: wire.ip ?? "",
+    images: wire.images ?? [],
     containers: (wire.containers ?? []) as unknown as Pod["containers"],
     conditions: (wire.conditions ?? []) as unknown as Pod["conditions"],
     createdAt: wire.createdAt ?? "",
@@ -338,6 +340,7 @@ export async function getPodLogs(
     tailLines?: number;
     sinceSeconds?: number;
     follow?: boolean;
+    previous?: boolean;
     signal?: AbortSignal;
   },
 ): Promise<PodLog[]> {
@@ -354,6 +357,7 @@ export async function getPodLogs(
           ? params.sinceSeconds
           : undefined,
       follow: params?.follow ? "true" : undefined,
+      previous: params?.previous,
     },
     signal: params?.signal,
   });

@@ -254,39 +254,61 @@ type workloadList struct {
 	Items []workloadResource `json:"items"`
 }
 
+type podContainerSpec struct {
+	Name  string `json:"name"`
+	Image string `json:"image"`
+	Ports []struct {
+		Name          string `json:"name"`
+		ContainerPort int    `json:"containerPort"`
+		Protocol      string `json:"protocol"`
+	} `json:"ports"`
+}
+
+type podContainerStateDetail struct {
+	Reason     string `json:"reason"`
+	Message    string `json:"message"`
+	ExitCode   int32  `json:"exitCode"`
+	StartedAt  string `json:"startedAt"`
+	FinishedAt string `json:"finishedAt"`
+}
+
+type podContainerState struct {
+	Running    *podContainerStateDetail `json:"running"`
+	Waiting    *podContainerStateDetail `json:"waiting"`
+	Terminated *podContainerStateDetail `json:"terminated"`
+}
+
+type podContainerStatus struct {
+	Name         string            `json:"name"`
+	Image        string            `json:"image"`
+	ImageID      string            `json:"imageID"`
+	Ready        bool              `json:"ready"`
+	RestartCount int               `json:"restartCount"`
+	State        podContainerState `json:"state"`
+	LastState    podContainerState `json:"lastState"`
+}
+
 type podResource struct {
 	Metadata struct {
 		Name              string            `json:"name"`
 		Namespace         string            `json:"namespace"`
 		CreationTimestamp time.Time         `json:"creationTimestamp"`
+		DeletionTimestamp *time.Time        `json:"deletionTimestamp"`
 		Labels            map[string]string `json:"labels"`
 	} `json:"metadata"`
 	Spec struct {
-		NodeName   string `json:"nodeName"`
-		Containers []struct {
-			Name  string `json:"name"`
-			Image string `json:"image"`
-			Ports []struct {
-				Name          string `json:"name"`
-				ContainerPort int    `json:"containerPort"`
-				Protocol      string `json:"protocol"`
-			} `json:"ports"`
-		} `json:"containers"`
+		NodeName       string             `json:"nodeName"`
+		Containers     []podContainerSpec `json:"containers"`
+		InitContainers []podContainerSpec `json:"initContainers"`
 	} `json:"spec"`
 	Status struct {
-		Phase             string `json:"phase"`
-		PodIP             string `json:"podIP"`
-		ContainerStatuses []struct {
-			Name         string `json:"name"`
-			Ready        bool   `json:"ready"`
-			RestartCount int    `json:"restartCount"`
-			State        struct {
-				Running    any `json:"running"`
-				Waiting    any `json:"waiting"`
-				Terminated any `json:"terminated"`
-			} `json:"state"`
-		} `json:"containerStatuses"`
-		Conditions []struct {
+		Phase                 string               `json:"phase"`
+		Reason                string               `json:"reason"`
+		Message               string               `json:"message"`
+		PodIP                 string               `json:"podIP"`
+		ContainerStatuses     []podContainerStatus `json:"containerStatuses"`
+		InitContainerStatuses []podContainerStatus `json:"initContainerStatuses"`
+		Conditions            []struct {
 			Type               string `json:"type"`
 			Status             string `json:"status"`
 			Reason             string `json:"reason"`

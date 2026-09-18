@@ -4208,13 +4208,14 @@ export interface OpenAPIComponents {
           "status"?: string;
           "ready"?: string;
           "restarts"?: number;
+          "lastRestartAt"?: string | null;
           "node"?: string;
           "ip"?: string;
           "containers"?: Record<string, unknown>[];
+          "images"?: string[];
           "conditions"?: Record<string, unknown>[];
           "createdAt"?: string;
           "age"?: string;
-          "images"?: string[];
         } & Record<string, unknown>;
     PodLogEntry: {
           "timestamp"?: string;
@@ -15079,6 +15080,7 @@ export interface OpenAPIOperations {
           "tailLines"?: number;
           "sinceSeconds"?: number;
           "follow"?: string;
+          "previous"?: boolean;
         };
       };
     response: OpenAPIComponents['schemas']['DataEnvelope'] & {

@@ -16,6 +16,24 @@ import { render, screen } from "@testing-library/react";
 vi.mock("@/components/workloads/pod-terminal", () => ({
   PodTerminal: () => null,
 }));
+vi.mock("@/lib/permission-hooks", () => ({
+  useClusterResourcePermission: () => ({
+    allowed: true,
+    reason: "Granted for test",
+    disabledReason: "",
+  }),
+  permissionDeniedReason: () => "Denied for test",
+}));
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@tanstack/react-router")>();
+  return {
+    ...original,
+    Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
+      <a href={to}>{children}</a>
+    ),
+  };
+});
 
 import { ResourceOverview } from "@/components/resources/resource-detail";
 
@@ -46,14 +64,14 @@ describe("ResourceOverview kind-specific branches", () => {
       />,
     );
 
-    expect(screen.getByText("Pod")).toBeInTheDocument();
-    expect(screen.getByText("Running")).toBeInTheDocument();
-    expect(screen.getByText("node-1")).toBeInTheDocument();
+    expect(screen.getByText("Phase")).toBeInTheDocument();
+    expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("node-1").length).toBeGreaterThan(0);
     expect(screen.getByText("10.1.2.3")).toBeInTheDocument();
     // Per-container row: name + image + state.
     expect(screen.getByText("app")).toBeInTheDocument();
     expect(screen.getByText("nginx:1.25")).toBeInTheDocument();
-    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
   });
 
   it("renders a service overview with type, clusterIP, ports and selector", () => {

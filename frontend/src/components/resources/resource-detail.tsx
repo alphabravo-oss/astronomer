@@ -8,6 +8,7 @@ import {
 import type { K8sObject } from "@/components/resources/resource-detail-model";
 import { supportsRolloutHistory } from "@/components/resources/rollout-history";
 import { PermissionState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { ResourceActions } from "@/components/workloads/resource-actions";
 import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import { useClusterResourcePermission } from "@/lib/permission-hooks";
@@ -85,6 +86,12 @@ export function ResourceDetail({
     "exec",
     permissionResource,
   );
+  const metricsPermission = useClusterResourcePermission(
+    clusterId,
+    "monitoring",
+    "read",
+    "monitoring",
+  );
 
   const isPod = resourceType === "pods";
   const resourceQuery = useK8sResource(clusterId, k8sPath, read.allowed);
@@ -105,10 +112,15 @@ export function ResourceDetail({
       available.push(
         { id: "workload-pods", label: "Pods" },
         { id: "workload-logs", label: "Logs" },
-        { id: "workload-metrics", label: "Metrics" },
       );
+      if (metricsPermission.allowed) {
+        available.push({ id: "workload-metrics", label: "Metrics" });
+      }
     }
     if (isPod) {
+      if (metricsPermission.allowed) {
+        available.push({ id: "pod-metrics", label: "Metrics" });
+      }
       if (logsPermission.allowed) available.push({ id: "logs", label: "Logs" });
       if (execPermission.allowed) available.push({ id: "exec", label: "Exec" });
     }
@@ -118,6 +130,7 @@ export function ResourceDetail({
     execPermission.allowed,
     isPod,
     logsPermission.allowed,
+    metricsPermission.allowed,
     namespace,
     obj?.kind,
     resourceType,
@@ -167,6 +180,7 @@ export function ResourceDetail({
 
   const kind = obj?.kind || resourceType;
   const created = obj?.metadata?.creationTimestamp;
+  const detailStatus = isPod ? podStatus(obj) : obj?.status?.phase;
 
   return (
     <div className="space-y-6">
@@ -184,6 +198,7 @@ export function ResourceDetail({
           </h1>
           <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
             <span>Kind: {kind}</span>
+            {detailStatus && <StatusBadge status={detailStatus} />}
             {namespace && <span>Namespace: {namespace}</span>}
             {created && <span>Age: {formatRelativeTime(created)}</span>}
           </div>
@@ -261,6 +276,21 @@ export function ResourceDetail({
       />
     </div>
   );
+}
+
+function podStatus(obj?: K8sObject): string | undefined {
+  for (const status of [
+    ...(obj?.status?.initContainerStatuses ?? []),
+    ...(obj?.status?.containerStatuses ?? []),
+  ]) {
+    const waiting = status.state?.waiting;
+    if (waiting?.reason) return waiting.reason;
+    const terminated = status.state?.terminated;
+    if (terminated?.reason && (terminated.exitCode ?? 0) !== 0) {
+      return terminated.reason;
+    }
+  }
+  return obj?.status?.reason ?? obj?.status?.phase;
 }
 
 function asObject(value: unknown): Record<string, unknown> {

@@ -8770,6 +8770,10 @@ components:
           description: '"n/m" ready ratio'
         restarts:
           type: integer
+        lastRestartAt:
+          type: string
+          format: date-time
+          nullable: true
         node:
           type: string
         ip:
@@ -8778,6 +8782,10 @@ components:
           type: array
           items:
             type: object
+        images:
+          type: array
+          items:
+            type: string
         conditions:
           type: array
           items:
@@ -8787,10 +8795,6 @@ components:
           format: date-time
         age:
           type: string
-        images:
-          type: array
-          items:
-            type: string
     Namespace:
       type: object
       additionalProperties: true
@@ -36929,6 +36933,12 @@ paths:
           required: false
           schema:
             type: string
+        - name: previous
+          in: query
+          required: false
+          description: Return logs from the previously terminated container instance.
+          schema:
+            type: boolean
       responses:
         '200':
           description: Parsed log lines

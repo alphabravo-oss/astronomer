@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
 import { OperationPartialError } from "@/lib/api/operation-polling";
+import { cn } from "@/lib/utils";
 
 export function NodesTable({ clusterId }: { clusterId: string }) {
   const { data, isLoading } = useClusterNodes(clusterId);
@@ -485,15 +486,27 @@ export function EventsTable({ clusterId }: { clusterId: string }) {
   );
 }
 
+function podNeedsAttention(pod: Pod): boolean {
+  const [ready, total] = pod.ready.split("/").map(Number);
+  return (
+    !["Running", "Succeeded"].includes(pod.phase) ||
+    pod.status !== pod.phase ||
+    (Number.isFinite(ready) && Number.isFinite(total) && ready < total)
+  );
+}
+
 export function PodsTable({ clusterId }: { clusterId: string }) {
   const navigate = useNavigate();
   // Pod changes are routed by the shared SSE dispatcher to this Query key;
   // the hook polls only while the dashboard event stream is unavailable.
   const podsQuery = useClusterPods(clusterId);
-  const data = podsQuery.data ?? [];
+  const data = useMemo(() => podsQuery.data ?? [], [podsQuery.data]);
   const isLoading = podsQuery.isLoading;
   const deletePod = useDeletePod();
   const permissions = useClusterResourcePermissions(clusterId, "pods");
+  const [healthFilter, setHealthFilter] = useState<
+    "all" | "attention" | "restarted"
+  >("all");
 
   const [deleteTarget, setDeleteTarget] = useState<Pod | null>(null);
   const [yamlTarget, setYamlTarget] = useState<{
@@ -515,7 +528,9 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
         clusterId,
         namespace: pod.namespace,
         pod: pod.name,
-        container: pod.containers[0]?.name,
+        container:
+          pod.containers.find((container) => !container.init)?.name ??
+          pod.containers[0]?.name,
       });
     },
     [clusterId, permissions.logs],
@@ -531,7 +546,9 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
         clusterId,
         namespace: pod.namespace,
         pod: pod.name,
-        container: pod.containers[0]?.name,
+        container:
+          pod.containers.find((container) => !container.init)?.name ??
+          pod.containers[0]?.name,
       });
     },
     [clusterId, permissions.exec],
@@ -607,6 +624,16 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
     ],
   );
 
+  const visiblePods = useMemo(() => {
+    if (healthFilter === "restarted") {
+      return data.filter((pod) => pod.restarts > 0);
+    }
+    if (healthFilter === "attention") {
+      return data.filter(podNeedsAttention);
+    }
+    return data;
+  }, [data, healthFilter]);
+
   return (
     <>
       <p className="sr-only" role="status" aria-live="polite">
@@ -617,10 +644,50 @@ export function PodsTable({ clusterId }: { clusterId: string }) {
       <ExplorerDataTable
         clusterId={clusterId}
         resourceType="pods"
-        data={data}
+        data={visiblePods}
         columns={columns}
         keyExtractor={(r) => `${r.namespace}/${r.name}`}
         searchPlaceholder="Search pods..."
+        filtersActive={healthFilter !== "all"}
+        onClearFilters={() => setHealthFilter("all")}
+        toolbar={
+          <div
+            className="flex items-center gap-1 rounded-md border border-border bg-muted/20 p-1"
+            aria-label="Pod health filter"
+          >
+            {(
+              [
+                ["all", "All", data.length],
+                [
+                  "attention",
+                  "Needs attention",
+                  data.filter(podNeedsAttention).length,
+                ],
+                [
+                  "restarted",
+                  "Restarted",
+                  data.filter((pod) => pod.restarts > 0).length,
+                ],
+              ] as const
+            ).map(([value, label, count]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={healthFilter === value}
+                onClick={() => setHealthFilter(value)}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs transition-colors",
+                  healthFilter === value
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+                <span className="tabular-nums text-2xs">{count}</span>
+              </button>
+            ))}
+          </div>
+        }
         loading={isLoading}
         emptyState={{
           title: "No pods found",

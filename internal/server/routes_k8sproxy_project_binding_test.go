@@ -194,6 +194,43 @@ func TestK8sProxy_ProjectMemberDeniedOutsideProjectNamespaces(t *testing.T) {
 	}
 }
 
+func TestK8sProxy_ProjectSecretReaderIsConfinedToProjectNamespaces(t *testing.T) {
+	jwtMgr := auth.MustNewJWTManager("route-security-test-secret", 60)
+	userID := uuid.New()
+	projectID := uuid.New()
+	clusterID := uuid.New()
+	token := nsRBACProxyToken(t, jwtMgr, userID)
+	router := projectMemberRouter(t, jwtMgr, projectBindingQuerier{
+		userID:    userID,
+		projectID: projectID,
+		roleName:  "project-secret-reader",
+		roleRules: []byte(`[{"resource":"secrets","verbs":["read"]}]`),
+		namespaces: []sqlc.ProjectNamespace{
+			{ProjectID: projectID, ClusterID: clusterID, Namespace: "team-a"},
+		},
+	})
+	base := "/api/v1/clusters/" + clusterID.String() + "/k8s/api/v1/namespaces/"
+
+	for _, tc := range []struct {
+		name      string
+		namespace string
+		want      int
+	}{
+		{name: "owned namespace", namespace: "team-a", want: http.StatusServiceUnavailable},
+		{name: "unowned namespace", namespace: "team-b", want: http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, base+tc.namespace+"/secrets/database", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != tc.want {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, tc.want, recorder.Body.String())
+			}
+		})
+	}
+}
+
 // assertProjectNamespaceAdmitted is the anchor the isolation tests use to prove
 // their fixture actually expands project bindings. The proxy has no agent, so an
 // admitted request surfaces as 503 from the handler; a 403 means the middleware

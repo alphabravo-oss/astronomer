@@ -320,6 +320,9 @@ func (h *WorkloadHandler) PodLogs(w http.ResponseWriter, r *http.Request) {
 	if f := r.URL.Query().Get("follow"); f != "" {
 		q.Set("follow", f)
 	}
+	if previous := r.URL.Query().Get("previous"); previous == "true" {
+		q.Set("previous", "true")
+	}
 	// Ask kubelet for timestamps so we can show real per-line times in the
 	// UI instead of stamping every line with the response time.
 	q.Set("timestamps", "true")

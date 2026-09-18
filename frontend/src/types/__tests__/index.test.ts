@@ -260,6 +260,7 @@ describe("Workload types", () => {
       restarts: 0,
       node: "node-1",
       ip: "10.0.0.5",
+      images: [],
       containers: [],
       conditions: [],
       createdAt: "2024-01-01T00:00:00Z",

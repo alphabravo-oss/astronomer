@@ -14,34 +14,58 @@ import (
 func podToMap(clusterID string, pod podResource) map[string]any {
 	readyCount := 0
 	restarts := 0
-	containers := make([]map[string]any, 0, len(pod.Spec.Containers))
-	for _, container := range pod.Spec.Containers {
-		status := "waiting"
-		ready := false
-		restartCount := 0
-		for _, cs := range pod.Status.ContainerStatuses {
-			if cs.Name != container.Name {
-				continue
+	lastRestartAt := ""
+	containers := make([]map[string]any, 0, len(pod.Spec.Containers)+len(pod.Spec.InitContainers))
+	appendContainer := func(container podContainerSpec, statuses []podContainerStatus, init bool) {
+		var current *podContainerStatus
+		for i := range statuses {
+			if statuses[i].Name == container.Name {
+				current = &statuses[i]
+				break
 			}
-			ready = cs.Ready
-			restartCount = cs.RestartCount
-			if cs.State.Running != nil {
-				status = "running"
-			} else if cs.State.Terminated != nil {
-				status = "terminated"
-			}
-			if cs.Ready {
-				readyCount++
-			}
-			restarts += cs.RestartCount
 		}
+		statusName, reason, message := "waiting", "", ""
+		ready, restartCount := false, 0
+		var state, lastState map[string]any
+		image, imageID := container.Image, ""
+		if current != nil {
+			ready, restartCount = current.Ready, current.RestartCount
+			imageID = current.ImageID
+			if current.Image != "" {
+				image = current.Image
+			}
+			statusName, reason, message, state = podContainerStateMap(current.State)
+			_, _, _, lastState = podContainerStateMap(current.LastState)
+			if current.RestartCount > 0 {
+				for _, candidate := range []string{
+					stateString(current.State.Running, "startedAt"),
+					stateString(current.LastState.Terminated, "finishedAt"),
+				} {
+					if newerRFC3339(candidate, lastRestartAt) {
+						lastRestartAt = candidate
+					}
+				}
+			}
+		}
+		if !init && ready {
+			readyCount++
+		}
+		restarts += restartCount
 		ports := make([]map[string]any, 0, len(container.Ports))
 		for _, port := range container.Ports {
 			ports = append(ports, map[string]any{"name": port.Name, "containerPort": port.ContainerPort, "protocol": port.Protocol})
 		}
 		containers = append(containers, map[string]any{
-			"name": container.Name, "image": container.Image, "status": status, "ready": ready, "restartCount": restartCount, "ports": ports,
+			"name": container.Name, "image": image, "imageId": imageID, "status": statusName, "ready": ready,
+			"restartCount": restartCount, "ports": ports, "init": init, "reason": reason, "message": message,
+			"state": state, "lastState": lastState,
 		})
+	}
+	for _, container := range pod.Spec.Containers {
+		appendContainer(container, pod.Status.ContainerStatuses, false)
+	}
+	for _, container := range pod.Spec.InitContainers {
+		appendContainer(container, pod.Status.InitContainerStatuses, true)
 	}
 	conditions := make([]map[string]any, 0, len(pod.Status.Conditions))
 	for _, cond := range pod.Status.Conditions {
@@ -50,25 +74,100 @@ func podToMap(clusterID string, pod podResource) map[string]any {
 		})
 	}
 	images := make([]string, 0, len(containers))
+	seenImages := map[string]struct{}{}
 	for _, c := range containers {
-		images = append(images, c["image"].(string))
+		image, _ := c["image"].(string)
+		if image == "" {
+			continue
+		}
+		if _, exists := seenImages[image]; exists {
+			continue
+		}
+		seenImages[image] = struct{}{}
+		images = append(images, image)
 	}
 	return map[string]any{
-		"name":       pod.Metadata.Name,
-		"namespace":  pod.Metadata.Namespace,
-		"clusterId":  clusterID,
-		"phase":      pod.Status.Phase,
-		"status":     pod.Status.Phase,
-		"ready":      fmt.Sprintf("%d/%d", readyCount, len(pod.Spec.Containers)),
-		"restarts":   restarts,
-		"node":       pod.Spec.NodeName,
-		"ip":         pod.Status.PodIP,
-		"containers": containers,
-		"conditions": conditions,
-		"createdAt":  pod.Metadata.CreationTimestamp.UTC().Format(time.RFC3339),
-		"age":        humanAge(pod.Metadata.CreationTimestamp),
-		"images":     images,
+		"name":          pod.Metadata.Name,
+		"namespace":     pod.Metadata.Namespace,
+		"clusterId":     clusterID,
+		"phase":         pod.Status.Phase,
+		"status":        podDisplayStatus(pod),
+		"ready":         fmt.Sprintf("%d/%d", readyCount, len(pod.Spec.Containers)),
+		"restarts":      restarts,
+		"lastRestartAt": lastRestartAt,
+		"node":          pod.Spec.NodeName,
+		"ip":            pod.Status.PodIP,
+		"containers":    containers,
+		"conditions":    conditions,
+		"createdAt":     pod.Metadata.CreationTimestamp.UTC().Format(time.RFC3339),
+		"age":           humanAge(pod.Metadata.CreationTimestamp),
+		"images":        images,
 	}
+}
+
+func podContainerStateMap(state podContainerState) (status, reason, message string, detail map[string]any) {
+	switch {
+	case state.Running != nil:
+		return "running", "", "", map[string]any{
+			"running": map[string]any{"startedAt": state.Running.StartedAt},
+		}
+	case state.Terminated != nil:
+		terminated := state.Terminated
+		return "terminated", terminated.Reason, terminated.Message, map[string]any{
+			"terminated": map[string]any{
+				"reason": terminated.Reason, "message": terminated.Message, "exitCode": terminated.ExitCode,
+				"startedAt": terminated.StartedAt, "finishedAt": terminated.FinishedAt,
+			},
+		}
+	case state.Waiting != nil:
+		return "waiting", state.Waiting.Reason, state.Waiting.Message, map[string]any{
+			"waiting": map[string]any{"reason": state.Waiting.Reason, "message": state.Waiting.Message},
+		}
+	default:
+		return "waiting", "", "", nil
+	}
+}
+
+func stateString(detail *podContainerStateDetail, field string) string {
+	if detail == nil {
+		return ""
+	}
+	if field == "finishedAt" {
+		return detail.FinishedAt
+	}
+	return detail.StartedAt
+}
+
+func newerRFC3339(candidate, current string) bool {
+	if candidate == "" {
+		return false
+	}
+	if current == "" {
+		return true
+	}
+	candidateTime, candidateErr := time.Parse(time.RFC3339Nano, candidate)
+	currentTime, currentErr := time.Parse(time.RFC3339Nano, current)
+	return candidateErr == nil && (currentErr != nil || candidateTime.After(currentTime))
+}
+
+func podDisplayStatus(pod podResource) string {
+	if pod.Metadata.DeletionTimestamp != nil {
+		return "Terminating"
+	}
+	for _, statuses := range [][]podContainerStatus{pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses} {
+		for _, status := range statuses {
+			if status.State.Waiting != nil && status.State.Waiting.Reason != "" {
+				return status.State.Waiting.Reason
+			}
+			if status.State.Terminated != nil && status.State.Terminated.Reason != "" && status.State.Terminated.ExitCode != 0 {
+				return status.State.Terminated.Reason
+			}
+		}
+	}
+	if pod.Status.Reason != "" {
+		return pod.Status.Reason
+	}
+	return pod.Status.Phase
 }
 
 func nodeSummaryMap(node struct {

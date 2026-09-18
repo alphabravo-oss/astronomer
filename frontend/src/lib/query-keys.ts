@@ -201,8 +201,14 @@ export const queryKeys = {
     container: string | undefined,
     tail: number | "no-tail",
     since: number | "no-since",
+    previous = false,
   ) =>
-    [...queryKeys.podLogs(clusterId, ns, pod, container), tail, since] as const,
+    [
+      ...queryKeys.podLogs(clusterId, ns, pod, container),
+      tail,
+      since,
+      previous ? "previous" : "current",
+    ] as const,
   rbac: {
     all: ["rbac"] as const,
     principalsAll: ["rbac", "principals"] as const,

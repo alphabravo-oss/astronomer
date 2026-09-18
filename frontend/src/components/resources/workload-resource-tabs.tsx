@@ -34,7 +34,7 @@ export function WorkloadResourceTabPanel({
     case "workload-logs":
       return <WorkloadLogsTab {...props} />;
     case "workload-metrics":
-      return <WorkloadMetricsTab {...props} />;
+      return <ResourceMetricsTab {...props} />;
   }
 }
 
@@ -192,7 +192,7 @@ function WorkloadLogsTab(props: WorkloadTabProps) {
   );
 }
 
-function WorkloadMetricsTab(props: WorkloadTabProps) {
+export function ResourceMetricsTab(props: WorkloadTabProps) {
   const [range, setRange] = useState("1h");
   const query = useWorkloadMetrics(
     props.clusterId,
@@ -224,22 +224,41 @@ function WorkloadMetricsTab(props: WorkloadTabProps) {
       </div>
       <QueryStates
         query={query}
-        loadingTitle="Loading workload metrics"
-        permission="metrics:read"
-        errorTitle="Failed to load workload metrics"
+        loadingTitle="Loading resource metrics"
+        permission="monitoring:read"
+        errorTitle="Failed to load resource metrics"
       >
         {(metrics) => (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <MetricsChart
-              title="CPU usage"
-              series={[metrics.cpuUsage]}
-              unit="millicores"
-            />
-            <MetricsChart
-              title="Memory usage"
-              series={[metrics.memoryUsage]}
-              unit="bytes"
-            />
+          <div className="space-y-4">
+            {metrics.available === false ? (
+              <div className="rounded-lg border border-status-warning/30 bg-status-warning/5 px-4 py-3 text-xs text-muted-foreground">
+                Time-series monitoring is not configured for this cluster.
+                Install or connect the monitoring stack to populate these
+                charts.
+              </div>
+            ) : null}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <MetricsChart
+                title="CPU usage and limit"
+                series={[metrics.cpuUsage, metrics.cpuCapacity]}
+                unit="cores"
+              />
+              <MetricsChart
+                title="Memory usage and limit"
+                series={[metrics.memoryUsage, metrics.memoryCapacity]}
+                unit="bytes"
+              />
+              <MetricsChart
+                title="Network throughput"
+                series={[metrics.networkReceive, metrics.networkTransmit]}
+                unit="bytes/s"
+              />
+              <MetricsChart
+                title="Filesystem usage"
+                series={[metrics.diskUsage]}
+                unit="bytes"
+              />
+            </div>
           </div>
         )}
       </QueryStates>

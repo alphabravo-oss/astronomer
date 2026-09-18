@@ -177,6 +177,7 @@ export function usePodLogs(
     // "give me everything."
     noTail?: boolean;
     follow?: boolean;
+    previous?: boolean;
   },
 ) {
   const streamIdentity = `${clusterId}/${namespace}/${pod}/${params?.container ?? ""}`;
@@ -223,12 +224,14 @@ export function usePodLogs(
       params?.container,
       effectiveTailLines ?? "no-tail",
       effectiveSinceSeconds ?? "no-since",
+      params?.previous ?? false,
     ),
     queryFn: ({ signal }) =>
       getPodLogs(clusterId, namespace, pod, {
         container: params?.container,
         tailLines: effectiveTailLines,
         sinceSeconds: effectiveSinceSeconds,
+        previous: params?.previous,
         signal,
       }),
     enabled: !!clusterId && !!namespace && !!pod,
@@ -236,7 +239,13 @@ export function usePodLogs(
 
   // Streaming
   useEffect(() => {
-    if (!params?.follow || !clusterId || !namespace || !pod) {
+    if (
+      !params?.follow ||
+      params?.previous ||
+      !clusterId ||
+      !namespace ||
+      !pod
+    ) {
       return;
     }
 
@@ -291,6 +300,7 @@ export function usePodLogs(
     pod,
     params?.container,
     params?.follow,
+    params?.previous,
     effectiveTailLines,
     effectiveSinceSeconds,
     streamIdentity,
@@ -305,7 +315,7 @@ export function usePodLogs(
   // screen.
   const streamLogs = stream.identity === streamIdentity ? stream.logs : [];
   const status: PodLogsStatus =
-    !params?.follow || !clusterId || !namespace || !pod
+    !params?.follow || params?.previous || !clusterId || !namespace || !pod
       ? "idle"
       : streamStatus.identity === streamIdentity
         ? streamStatus.value

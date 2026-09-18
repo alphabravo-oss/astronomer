@@ -10,6 +10,7 @@ import {
   Play,
   X,
   Clock,
+  History,
   Loader2,
 } from "lucide-react";
 
@@ -35,21 +36,30 @@ export function PodLogsViewer({
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [tailLines, setTailLines] = useState(500);
+  const [previous, setPrevious] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activePod = pods.find((p) => p.name === selectedPod) || pods[0];
   const podName = activePod?.name || "";
   const containers = useMemo(() => activePod?.containers ?? [], [activePod]);
   const [containerChoice, setSelectedContainer] = useState("");
-  const selectedContainer =
-    containers.find((container) => container.name === containerChoice)?.name ??
+  const defaultContainer =
+    containers.find((container) => !container.init)?.name ??
     containers[0]?.name ??
     "";
+  const selectedContainer =
+    containers.find((container) => container.name === containerChoice)?.name ??
+    defaultContainer;
+  const selectedContainerStatus = containers.find(
+    (container) => container.name === selectedContainer,
+  );
+  const previousAvailable = (selectedContainerStatus?.restartCount ?? 0) > 0;
 
   const { data: logs, isLoading } = usePodLogs(clusterId, namespace, podName, {
     container: selectedContainer,
     tailLines,
-    follow,
+    follow: follow && !previous,
+    previous,
   });
 
   // Auto-scroll when following. We pin to the bottom whenever `follow` is
@@ -176,7 +186,10 @@ export function PodLogsViewer({
             <select
               aria-label="Container"
               value={selectedContainer}
-              onChange={(e) => setSelectedContainer(e.target.value)}
+              onChange={(e) => {
+                setSelectedContainer(e.target.value);
+                setPrevious(false);
+              }}
               className="h-7 px-2 rounded-sm border border-border bg-background text-xs
                 focus:outline-hidden focus:ring-1 focus:ring-ring"
             >
@@ -204,6 +217,32 @@ export function PodLogsViewer({
         </div>
 
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setPrevious((value) => !value);
+              setFollow(false);
+            }}
+            disabled={!previousAvailable}
+            aria-label="Show previous container logs"
+            aria-pressed={previous}
+            className={cn(
+              "inline-flex h-7 items-center gap-1 rounded-sm px-2 text-xs transition-colors",
+              previous
+                ? "bg-status-warning/10 text-status-warning"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              !previousAvailable && "cursor-not-allowed opacity-40",
+            )}
+            title={
+              previousAvailable
+                ? "Show logs from the previously terminated container"
+                : "No previous container instance"
+            }
+          >
+            <History className="h-3 w-3" />
+            <span className="hidden sm:inline">Previous</span>
+          </button>
+
           {/* Timestamps toggle */}
           <button
             type="button"
@@ -241,7 +280,10 @@ export function PodLogsViewer({
           {/* Follow toggle */}
           <button
             type="button"
-            onClick={() => setFollow(!follow)}
+            onClick={() => {
+              if (previous) setPrevious(false);
+              setFollow(!follow);
+            }}
             aria-label="Follow new log lines"
             aria-pressed={follow}
             className={cn(

@@ -268,11 +268,33 @@ const podColumns: Column<Pod>[] = [
         {row.namespace}
       </span>
     ),
+    sortAccessor: (row) => row.namespace,
+    filter: { label: "Namespace" },
   },
   {
     key: "status",
     header: "Status",
     accessor: (row) => <StatusBadge status={row.status} />,
+    sortAccessor: (row) => row.status,
+    filter: { label: "Status" },
+  },
+  {
+    key: "images",
+    header: "Images",
+    accessor: (row) => {
+      const [first, ...rest] = row.images;
+      return (
+        <span
+          className="block max-w-64 truncate font-mono text-xs text-muted-foreground"
+          title={row.images.join("\n")}
+        >
+          {first || "—"}
+          {rest.length > 0 ? ` +${rest.length}` : ""}
+        </span>
+      );
+    },
+    searchAccessor: (row) => row.images.join(" "),
+    sortAccessor: (row) => row.images[0] ?? "",
   },
   {
     key: "ready",
@@ -299,6 +321,26 @@ const podColumns: Column<Pod>[] = [
     align: "center",
   },
   {
+    key: "lastRestart",
+    header: "Last Restart",
+    accessor: (row) => (
+      <span className="whitespace-nowrap text-xs text-muted-foreground">
+        {row.lastRestartAt ? formatRelativeTime(row.lastRestartAt) : "—"}
+      </span>
+    ),
+    sortAccessor: (row) => row.lastRestartAt ?? "",
+  },
+  {
+    key: "ip",
+    header: "Pod IP",
+    accessor: (row) => (
+      <span className="font-mono text-xs text-muted-foreground">
+        {row.ip || "—"}
+      </span>
+    ),
+    sortAccessor: (row) => row.ip,
+  },
+  {
     key: "node",
     header: "Node",
     accessor: (row) => (
@@ -306,6 +348,8 @@ const podColumns: Column<Pod>[] = [
         {row.node}
       </span>
     ),
+    sortAccessor: (row) => row.node,
+    filter: { label: "Node" },
   },
   {
     key: "age",

@@ -8544,17 +8544,18 @@ type PlatformSettingsBatchUpdateRequest struct {
 
 // Pod defines model for Pod.
 type Pod struct {
-	Age        *string                   `json:"age,omitempty"`
-	ClusterId  *string                   `json:"clusterId,omitempty"`
-	Conditions *[]map[string]interface{} `json:"conditions,omitempty"`
-	Containers *[]map[string]interface{} `json:"containers,omitempty"`
-	CreatedAt  *time.Time                `json:"createdAt,omitempty"`
-	Images     *[]string                 `json:"images,omitempty"`
-	Ip         *string                   `json:"ip,omitempty"`
-	Name       *string                   `json:"name,omitempty"`
-	Namespace  *string                   `json:"namespace,omitempty"`
-	Node       *string                   `json:"node,omitempty"`
-	Phase      *string                   `json:"phase,omitempty"`
+	Age           *string                   `json:"age,omitempty"`
+	ClusterId     *string                   `json:"clusterId,omitempty"`
+	Conditions    *[]map[string]interface{} `json:"conditions,omitempty"`
+	Containers    *[]map[string]interface{} `json:"containers,omitempty"`
+	CreatedAt     *time.Time                `json:"createdAt,omitempty"`
+	Images        *[]string                 `json:"images,omitempty"`
+	Ip            *string                   `json:"ip,omitempty"`
+	LastRestartAt *time.Time                `json:"lastRestartAt"`
+	Name          *string                   `json:"name,omitempty"`
+	Namespace     *string                   `json:"namespace,omitempty"`
+	Node          *string                   `json:"node,omitempty"`
+	Phase         *string                   `json:"phase,omitempty"`
 
 	// Ready "n/m" ready ratio
 	Ready                *string                `json:"ready,omitempty"`
@@ -13452,6 +13453,9 @@ type GetWorkloadsPodsByClusterIdByNamespaceByPodLogsParams struct {
 	// SinceSeconds Return logs newer than N seconds (alias since_seconds accepted).
 	SinceSeconds *int    `form:"sinceSeconds,omitempty" json:"sinceSeconds,omitempty"`
 	Follow       *string `form:"follow,omitempty" json:"follow,omitempty"`
+
+	// Previous Return logs from the previously terminated container instance.
+	Previous *bool `form:"previous,omitempty" json:"previous,omitempty"`
 }
 
 // KubectlShellWebSocketParams defines parameters for KubectlShellWebSocket.
@@ -16858,6 +16862,14 @@ func (a *Pod) UnmarshalJSON(b []byte) error {
 		delete(object, "ip")
 	}
 
+	if raw, found := object["lastRestartAt"]; found {
+		err = json.Unmarshal(raw, &a.LastRestartAt)
+		if err != nil {
+			return fmt.Errorf("error reading 'lastRestartAt': %w", err)
+		}
+		delete(object, "lastRestartAt")
+	}
+
 	if raw, found := object["name"]; found {
 		err = json.Unmarshal(raw, &a.Name)
 		if err != nil {
@@ -16979,6 +16991,13 @@ func (a Pod) MarshalJSON() ([]byte, error) {
 		object["ip"], err = json.Marshal(a.Ip)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'ip': %w", err)
+		}
+	}
+
+	if a.LastRestartAt != nil {
+		object["lastRestartAt"], err = json.Marshal(a.LastRestartAt)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'lastRestartAt': %w", err)
 		}
 	}
 
@@ -73588,6 +73607,22 @@ func NewGetWorkloadsPodsByClusterIdByNamespaceByPodLogsRequest(server string, cl
 		if params.Follow != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "follow", runtime.ParamLocationQuery, *params.Follow); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Previous != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "previous", runtime.ParamLocationQuery, *params.Previous); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err

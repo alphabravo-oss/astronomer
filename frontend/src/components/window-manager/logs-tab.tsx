@@ -6,6 +6,7 @@ import {
   ArrowDown,
   Clock,
   Download,
+  History,
   Loader2,
   Pause,
   Play,
@@ -38,6 +39,7 @@ export function LogsTab({
   onStatusChange,
 }: LogsTabProps) {
   const [follow, setFollow] = useState(true);
+  const [previous, setPrevious] = useState(false);
   const [wrap, setWrap] = useState(true);
   const [showTimestamps, setShowTimestamps] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -57,7 +59,8 @@ export function LogsTab({
     tailLines: tailRange.kind === "lines" ? tailRange.n : undefined,
     sinceSeconds: tailRange.kind === "seconds" ? tailRange.s : undefined,
     noTail: tailRange.kind === "all",
-    follow,
+    follow: follow && !previous,
+    previous,
   });
 
   useEffect(() => {
@@ -161,6 +164,25 @@ export function LogsTab({
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => {
+              setPrevious((value) => !value);
+              setFollow(false);
+            }}
+            aria-label="Show previous container logs"
+            aria-pressed={previous}
+            className={cn(
+              "inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-2xs transition-colors",
+              previous
+                ? "bg-status-warning/10 text-status-warning"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+            title="Show logs from the previously terminated container"
+          >
+            <History className="h-3 w-3" />
+            <span className="hidden sm:inline">Previous</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setShowTimestamps((v) => !v)}
             aria-label="Show timestamps"
             aria-pressed={showTimestamps}
@@ -206,7 +228,10 @@ export function LogsTab({
           </button>
           <button
             type="button"
-            onClick={() => setFollow((v) => !v)}
+            onClick={() => {
+              if (previous) setPrevious(false);
+              setFollow((value) => !value);
+            }}
             aria-label="Follow new log lines"
             aria-pressed={follow}
             className={cn(
@@ -331,6 +356,7 @@ export function LogsTab({
         <button
           type="button"
           onClick={() => {
+            setPrevious(false);
             setFollow(true);
             if (scrollRef.current) {
               scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
