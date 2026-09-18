@@ -586,7 +586,14 @@ func (h *Hub) routeToStream(conn *AgentConnection, msg *protocol.Message) {
 
 	stream, ok := conn.Streams.GetStream(streamID)
 	if !ok {
-		h.log.Warn("no stream found for message",
+		// The common case is a browser navigation canceling its request after the
+		// agent has already begun the upstream call. The server removes that
+		// stream immediately; the late response is safe to discard and is not a
+		// tunnel-health warning. Keep a metric for sustained anomalies and a
+		// debug record for request-level diagnosis without flooding production
+		// warning logs during ordinary route changes.
+		observability.RecordDroppedEvent("tunnel_stream_route", "stream_not_found")
+		h.log.Debug("no stream found for message",
 			slog.String("type", string(msg.Type)),
 			slog.String("stream_id", streamID),
 			slog.String("cluster_id", conn.ClusterID),

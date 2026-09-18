@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,22 @@ import (
 	paging "github.com/alphabravocompany/astronomer-go/internal/pagination"
 	"github.com/alphabravocompany/astronomer-go/internal/server/middleware"
 )
+
+func TestRespondRequestErrorClassifiesCanceledClient(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/clusters/", nil).WithContext(ctx)
+
+	RespondRequestError(recorder, request, http.StatusInternalServerError, "db_error", "context canceled")
+
+	if recorder.Code != statusClientClosedRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, statusClientClosedRequest)
+	}
+	if recorder.Body.Len() != 0 {
+		t.Fatalf("canceled request wrote a response body: %s", recorder.Body.String())
+	}
+}
 
 func TestRespondJSON(t *testing.T) {
 	w := httptest.NewRecorder()

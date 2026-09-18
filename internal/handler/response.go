@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -10,6 +12,12 @@ import (
 	"github.com/alphabravocompany/astronomer-go/internal/reqctx"
 	"github.com/google/uuid"
 )
+
+// statusClientClosedRequest is nginx's conventional code for a request whose
+// caller disconnected before a response could be produced. It is deliberately
+// non-standard and never reaches a still-listening browser; recording it keeps
+// canceled route-transition reads out of the platform's 5xx error signal.
+const statusClientClosedRequest = 499
 
 // RespondJSON writes a JSON response wrapped in {"data": payload}.
 func RespondJSON(w http.ResponseWriter, status int, payload any) {
@@ -43,6 +51,10 @@ func RespondError(w http.ResponseWriter, status int, code, message string) {
 // RespondRequestError writes a JSON error response that includes the request
 // correlation identifier when RequestID middleware has populated one.
 func RespondRequestError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	if r != nil && errors.Is(r.Context().Err(), context.Canceled) {
+		w.WriteHeader(statusClientClosedRequest)
+		return
+	}
 	requestID := ""
 	if r != nil {
 		requestID = reqctx.RequestID(r.Context())
