@@ -9,6 +9,7 @@ import { CreateResourceDialog } from "@/components/resources/create-resource-dia
 import type { Column } from "@/components/ui/data-table";
 import type { TableEmptyState } from "@/components/ui/data-table-empty-state";
 import { ServerResourceExplorerTable } from "@/components/resources/server-resource-explorer-table";
+import type { NamedResourceType } from "@/lib/api/kubernetes-resources";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import { resourceDeletionImpact } from "@/components/resources/resource-deletion-impact";
 import {
@@ -353,7 +354,7 @@ function NamespacedActions<T extends { name: string; namespace: string }>({
   onView,
   onDelete,
 }: {
-  resourceType: string;
+  resourceType: NamedResourceType;
   kindLabel: string;
   row: T;
   permissions: ResourcePermissionDecisions;
@@ -529,7 +530,7 @@ function RouteTable<T extends GatewayRoute>({
 }: {
   clusterId: string;
   kindLabel: string;
-  resourceType: string;
+  resourceType: NamedResourceType;
   searchPlaceholder: string;
   emptyState: TableEmptyState;
 }) {

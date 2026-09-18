@@ -22,6 +22,7 @@ import {
   getUDPRoutes,
   getReferenceGrants,
   getNamedResources,
+  type NamedResourceType,
   type NamedResourceListParams,
 } from "@/lib/api/kubernetes-resources";
 import { queryKeys } from "@/lib/query-keys";
@@ -30,7 +31,7 @@ import type { PersistentVolumeClaim } from "@/types";
 
 export function useNamedResources<T>(
   clusterId: string,
-  resourceType: string,
+  resourceType: NamedResourceType,
   params?: Omit<NamedResourceListParams, "signal">,
   enabled = true,
 ) {

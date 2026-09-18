@@ -8,6 +8,7 @@ import {
 } from "@/components/resources/explorer-data-table";
 import type { Column, DataTableProps } from "@/components/ui/data-table";
 import { pageRowCount } from "@/lib/api/pagination";
+import type { NamedResourceType } from "@/lib/api/kubernetes-resources";
 import { useClusterNamespaceScope } from "@/lib/cluster-scope";
 import { useNamedResources } from "@/lib/hooks/kubernetes-resources";
 
@@ -61,7 +62,7 @@ interface ServerResourceExplorerTableProps<T extends object> extends Omit<
   | "onClearFilters"
 > {
   clusterId: string;
-  resourceType: string;
+  resourceType: NamedResourceType;
   columns: Column<T>[];
   namespaceAccessor?: (row: T) => string | undefined;
   bulkDelete?: ExplorerBulkDelete<T>;
