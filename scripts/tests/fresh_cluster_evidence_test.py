@@ -59,6 +59,12 @@ assert 'expected_tools=' not in smoke
 assert 'ready_builtin_releases" -ge' not in smoke
 for legacy_slug in ("fluent-bit", "cert-manager", "ingress-nginx", "gatekeeper"):
     assert legacy_slug not in smoke
+
+live_fixture = (root / "scripts" / "testdata" / "live-browser-fixture" / "main.go").read_text(encoding="utf-8")
+assert '"dbRegistry":' in live_fixture and '"ghcr.io"' in live_fixture
+assert '"dbRepository":' in live_fixture and '"aquasecurity/trivy-db"' in live_fixture
+assert '"javaDbRegistry":' in live_fixture and '"ghcr.io"' in live_fixture
+assert '"javaDbRepository":' in live_fixture and '"aquasecurity/trivy-java-db"' in live_fixture
 assert "ASTRO_PASSWORD" not in writer.read_text(encoding="utf-8")
 
 print("fresh-cluster evidence writer tests passed")
