@@ -175,7 +175,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 - [`internal/handler/control_plane_snapshots.go:118`](internal/handler/control_plane_snapshots.go:118) - `_, err = tasks.EnqueueTaskOutbox(ctx, q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/gatekeeper_constraints.go:406`](internal/handler/gatekeeper_constraints.go:406) - `return tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/gitops_helpers.go:37`](internal/handler/gitops_helpers.go:37) - `intent, err := tasks.EnqueueTaskOutbox(r.Context(), outbox, task, tasks.TaskOutboxOptions{`
-- [`internal/handler/image_vulns.go:273`](internal/handler/image_vulns.go:273) - `if _, err := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
+- [`internal/handler/image_vulns.go:272`](internal/handler/image_vulns.go:272) - `if _, err := tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/network_policies.go:844`](internal/handler/network_policies.go:844) - `_, err = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/node_operations.go:167`](internal/handler/node_operations.go:167) - `if _, taskErr = tasks.EnqueueTaskOutbox(r.Context(), q, task, tasks.TaskOutboxOptions{`
 - [`internal/handler/platform_default_template.go:358`](internal/handler/platform_default_template.go:358) - `app, persisted, txErr = upsertClusterTemplateApplicationWithTaskOutbox(r.Context(), q, q, sqlc.UpsertClusterTemplateApplicationParams{`
@@ -213,16 +213,16 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | AdminQueueOperation |[`internal/db/sqlc/admin_queue_operations.sql.go:76`](internal/db/sqlc/admin_queue_operations.sql.go:76) |missing |2 |0 |
 | AgentLifecycleOperation |[`internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:97`](internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:97) |[`internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:146`](internal/db/sqlc/agent_lifecycle_operations_ext.sql.go:146) |2 |2 |
 | AuditExportOperation |[`internal/db/sqlc/audit_export_operations.sql.go:111`](internal/db/sqlc/audit_export_operations.sql.go:111) |missing |2 |0 |
-| CatalogOperation |[`internal/db/sqlc/catalog_operations.sql.go:93`](internal/db/sqlc/catalog_operations.sql.go:93) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:90`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:90) |4 |3 |
+| CatalogOperation |[`internal/db/sqlc/catalog_operations.sql.go:93`](internal/db/sqlc/catalog_operations.sql.go:93) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:93`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:93) |4 |3 |
 | DeferredOperation |[`internal/db/sqlc/maintenance.sql.go:50`](internal/db/sqlc/maintenance.sql.go:50) |[`internal/db/sqlc/operation_idempotency_special_ext.sql.go:123`](internal/db/sqlc/operation_idempotency_special_ext.sql.go:123) |2 |2 |
-| LoggingOperation |[`internal/db/sqlc/logging_operations.sql.go:112`](internal/db/sqlc/logging_operations.sql.go:112) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:158`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:158) |4 |3 |
-| MonitoringOperation |[`internal/db/sqlc/monitoring_operations.sql.go:85`](internal/db/sqlc/monitoring_operations.sql.go:85) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:253`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:253) |4 |3 |
+| LoggingOperation |[`internal/db/sqlc/logging_operations.sql.go:112`](internal/db/sqlc/logging_operations.sql.go:112) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:161`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:161) |4 |3 |
+| MonitoringOperation |[`internal/db/sqlc/monitoring_operations.sql.go:85`](internal/db/sqlc/monitoring_operations.sql.go:85) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:256`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:256) |4 |3 |
 | NodeOperation |missing |[`internal/db/sqlc/node_operations.sql.go:94`](internal/db/sqlc/node_operations.sql.go:94) |0 |2 |
 | ResourceOperation |missing |[`internal/db/sqlc/resource_operations.sql.go:110`](internal/db/sqlc/resource_operations.sql.go:110) |0 |2 |
 | RestoreOperation |[`internal/db/sqlc/backups.sql.go:275`](internal/db/sqlc/backups.sql.go:275) |[`internal/db/sqlc/operation_idempotency_special_ext.sql.go:62`](internal/db/sqlc/operation_idempotency_special_ext.sql.go:62) |4 |3 |
 | SupportBundleOperation |[`internal/db/sqlc/support_bundle_operations.sql.go:120`](internal/db/sqlc/support_bundle_operations.sql.go:120) |missing |2 |0 |
-| ToolOperation |[`internal/db/sqlc/tool_operations.sql.go:165`](internal/db/sqlc/tool_operations.sql.go:165) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:63`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:63) |4 |3 |
-| WorkloadOperation |[`internal/db/sqlc/workload_operations.sql.go:120`](internal/db/sqlc/workload_operations.sql.go:120) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:226`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:226) |7 |7 |
+| ToolOperation |[`internal/db/sqlc/tool_operations.sql.go:165`](internal/db/sqlc/tool_operations.sql.go:165) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:66`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:66) |4 |3 |
+| WorkloadOperation |[`internal/db/sqlc/workload_operations.sql.go:120`](internal/db/sqlc/workload_operations.sql.go:120) |[`internal/db/sqlc/operation_idempotency_operations_ext.sql.go:229`](internal/db/sqlc/operation_idempotency_operations_ext.sql.go:229) |7 |7 |
 
 ## Idempotency Scopes Used By Handlers
 
@@ -235,7 +235,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `admin-webhook-delivery-retry` |1 |[`internal/handler/webhooks_deliveries.go:141`](internal/handler/webhooks_deliveries.go:141) |
 | `admin-webhook-test` |1 |[`internal/handler/webhooks_test_delivery.go:62`](internal/handler/webhooks_test_delivery.go:62) |
 | `agent_lifecycle` |1 |[`internal/handler/cluster_agents_upgrade.go:90`](internal/handler/cluster_agents_upgrade.go:90) |
-| `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:238`](internal/handler/clusters_registration.go:238) |
+| `agent_token_rotation` |1 |[`internal/handler/clusters_registration.go:264`](internal/handler/clusters_registration.go:264) |
 | `apiserver_allowlist_reconcile` |1 |[`internal/handler/apiserver_allowlist.go:391`](internal/handler/apiserver_allowlist.go:391) |
 | `catalog` |4 |[`internal/handler/catalog_installations.go:231`](internal/handler/catalog_installations.go:231)<br>[`internal/handler/catalog_installations.go:292`](internal/handler/catalog_installations.go:292)<br>[`internal/handler/catalog_installations.go:540`](internal/handler/catalog_installations.go:540)<br>[`internal/handler/catalog_installations.go:618`](internal/handler/catalog_installations.go:618) |
 | `catalog_repository_sync` |1 |[`internal/handler/catalog_repositories.go:359`](internal/handler/catalog_repositories.go:359) |
@@ -247,10 +247,10 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `deferred` |1 |[`internal/handler/maintenance_gate.go:202`](internal/handler/maintenance_gate.go:202) |
 | `gatekeeper_constraint_create` |1 |[`internal/handler/gatekeeper_constraints.go:263`](internal/handler/gatekeeper_constraints.go:263) |
 | `gatekeeper_constraint_delete` |1 |[`internal/handler/gatekeeper_constraints.go:340`](internal/handler/gatekeeper_constraints.go:340) |
-| `image-vulnerability-rescans` |1 |[`internal/handler/image_vulns.go:235`](internal/handler/image_vulns.go:235) |
+| `image-vulnerability-rescans` |1 |[`internal/handler/image_vulns.go:234`](internal/handler/image_vulns.go:234) |
 | `logging` |11 |[`internal/handler/logging_attach.go:161`](internal/handler/logging_attach.go:161)<br>[`internal/handler/logging_loki_token.go:80`](internal/handler/logging_loki_token.go:80)<br>[`internal/handler/logging_outputs.go:98`](internal/handler/logging_outputs.go:98)<br>[`internal/handler/logging_outputs.go:158`](internal/handler/logging_outputs.go:158) |
 | `management_backup` |1 |[`internal/handler/admin_management_backup_operations.go:105`](internal/handler/admin_management_backup_operations.go:105) |
-| `monitoring` |3 |[`internal/handler/monitoring_stack_cluster.go:193`](internal/handler/monitoring_stack_cluster.go:193)<br>[`internal/handler/monitoring_stack_cluster.go:316`](internal/handler/monitoring_stack_cluster.go:316)<br>[`internal/handler/monitoring_stack_shared.go:342`](internal/handler/monitoring_stack_shared.go:342) |
+| `monitoring` |3 |[`internal/handler/monitoring_stack_cluster.go:194`](internal/handler/monitoring_stack_cluster.go:194)<br>[`internal/handler/monitoring_stack_cluster.go:317`](internal/handler/monitoring_stack_cluster.go:317)<br>[`internal/handler/monitoring_stack_shared.go:342`](internal/handler/monitoring_stack_shared.go:342) |
 | `monitoring_operation_retry` |1 |[`internal/handler/monitoring_operations.go:166`](internal/handler/monitoring_operations.go:166) |
 | `network_policy_apply` |1 |[`internal/handler/network_policies.go:557`](internal/handler/network_policies.go:557) |
 | `network_policy_reapply` |1 |[`internal/handler/network_policies.go:757`](internal/handler/network_policies.go:757) |
@@ -258,7 +258,7 @@ User-visible state changes should either use `task_outbox`, a durable operation 
 | `restore` |1 |[`internal/handler/backups_restores.go:76`](internal/handler/backups_restores.go:76) |
 | `support_bundle` |1 |[`internal/handler/supportbundle_api.go:37`](internal/handler/supportbundle_api.go:37) |
 | `tools` |1 |[`internal/handler/tools_operation_engine.go:48`](internal/handler/tools_operation_engine.go:48) |
-| `workloads` |1 |[`internal/handler/workloads_operations.go:33`](internal/handler/workloads_operations.go:33) |
+| `workloads` |1 |[`internal/handler/workloads_operations.go:32`](internal/handler/workloads_operations.go:32) |
 
 ## Definition Of Done For Durability Review
 
