@@ -4,7 +4,7 @@
 # other first-party images. It takes a database-scoped session lock before
 # golang-migrate touches schema state, preventing concurrent installer
 # deadlocks around non-transactional PostgreSQL DDL.
-FROM golang:1.26.6-alpine@sha256:1a9c10cf505a9e6b1e96ea77ebdbfe79a0f10380181faf88bc3b51d7e4315fae AS builder
+FROM golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS builder
 RUN apk add --no-cache git
 WORKDIR /src
 COPY go.mod go.sum ./

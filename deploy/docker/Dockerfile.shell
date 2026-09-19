@@ -30,7 +30,7 @@
 
 # syntax=docker/dockerfile:1.7
 
-FROM golang:1.26.6-alpine@sha256:1a9c10cf505a9e6b1e96ea77ebdbfe79a0f10380181faf88bc3b51d7e4315fae AS dex-validator
+FROM golang:1.27.0-alpine@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS dex-validator
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -38,7 +38,7 @@ COPY cmd/dexconfigcheck ./cmd/dexconfigcheck
 COPY internal/dexconfig ./internal/dexconfig
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dexconfigcheck ./cmd/dexconfigcheck
 
-FROM gcr.io/projectsigstore/cosign:v2.6.0@sha256:71b96f6405dd3c3f081ebf73099f18edac7a716699398660890a86c42bf5edfd AS cosign
+FROM gcr.io/projectsigstore/cosign:v2.6.5@sha256:ad281047f85c5e1fc6ffbc30c2b55be3b07b4032bef715a12122ce5829619aca AS cosign
 
 # Fetch kubectl in a throwaway stage so the runtime image does not ship curl.
 # kubectl version is pinned in lockstep with the bundled control-plane minor.
