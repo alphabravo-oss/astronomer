@@ -119,18 +119,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 PY
 }
 
-choose_port_at() {
-  python3 - "$1" <<'PY'
-import socket
-import sys
-
-host = sys.argv[1]
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.bind((host, 0))
-    print(sock.getsockname()[1])
-PY
-}
-
 process_alive() {
   [[ -n "$1" ]] && kill -0 "$1" >/dev/null 2>&1
 }
@@ -345,26 +333,36 @@ direct_api_host="$(docker network inspect bridge --format '{{(index .IPAM.Config
 	echo "test-live-browser: Docker bridge has no routable gateway for direct API validation" >&2
 	exit 1
 }
-# GitHub-hosted runners can already have the conventional 443 binding in use.
-# Select an ephemeral host port for direct runs, while retaining a predictable
-# override for Local CI where the Docker bridge gateway is not a local socket.
+# The API contract deliberately accepts only the conventional Kubernetes API
+# ports. Keeping this restriction here makes the live fixture exercise the same
+# SSRF-resistant validation as a real adoption, instead of silently creating a
+# cluster that production would reject.
 direct_api_port="${LIVE_BROWSER_DIRECT_API_PORT:-}"
 if [[ -z "$direct_api_port" ]]; then
 	if [[ "${LOCAL_CI_LOCAL:-false}" == "true" ]]; then
 		direct_api_port=443
 	else
-		direct_api_port="$(choose_port_at "$direct_api_host")"
+		for candidate in 6443 443; do
+			if port_is_free_at "$direct_api_host" "$candidate"; then
+				direct_api_port="$candidate"
+				break
+			fi
+		done
 	fi
 fi
-[[ "$direct_api_port" =~ ^[0-9]+$ && "$direct_api_port" -ge 1024 && "$direct_api_port" -le 65535 ]] || {
-	echo "test-live-browser: invalid direct API port: $direct_api_port" >&2
+[[ -n "$direct_api_port" ]] || {
+	echo "test-live-browser: neither supported direct API port (443, 6443) is available" >&2
+	exit 2
+}
+[[ "$direct_api_port" == 443 || "$direct_api_port" == 6443 ]] || {
+	echo "test-live-browser: direct API port must be 443 or 6443: $direct_api_port" >&2
 	exit 2
 }
 # Direct host runs retain the early bind check so they cannot accidentally
 # probe an existing endpoint. Local CI delegates the host-side check to k3d.
 if [[ "${LOCAL_CI_LOCAL:-false}" != "true" ]]; then
 	port_is_free_at "$direct_api_host" "$direct_api_port" || {
-		echo "test-live-browser: $direct_api_host:$direct_api_port is already in use; choose LIVE_BROWSER_DIRECT_API_PORT or retry" >&2
+		echo "test-live-browser: $direct_api_host:$direct_api_port is already in use; choose the other supported port with LIVE_BROWSER_DIRECT_API_PORT" >&2
 		exit 2
 	}
 fi
@@ -581,10 +579,28 @@ print(json.dumps({
 }))
 PY
 )"
-cluster_id="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
+cluster_create_body="$artifact_dir/cluster-create-response.json"
+if ! cluster_create_status="$(curl -sS --max-time 10 -o "$cluster_create_body" -w '%{http_code}' \
+  -H 'Content-Type: application/json' \
   --config "$admin_curl_config" \
   -d "$cluster_payload" \
-  "$backend_url/api/v1/clusters/" | json_field id)"
+  "$backend_url/api/v1/clusters/")"; then
+	echo "test-live-browser: cluster create request failed (HTTP $cluster_create_status)" >&2
+	sed -n '1,8p' "$cluster_create_body" >&2 || true
+	exit 1
+fi
+if [[ ! "$cluster_create_status" =~ ^2[0-9][0-9]$ ]]; then
+	echo "test-live-browser: cluster create returned HTTP $cluster_create_status" >&2
+	sed -n '1,8p' "$cluster_create_body" >&2 || true
+	exit 1
+fi
+cluster_id="$(json_field id <"$cluster_create_body")"
+[[ -n "$cluster_id" ]] || {
+	echo "test-live-browser: cluster create response did not contain an id" >&2
+	sed -n '1,8p' "$cluster_create_body" >&2 || true
+	exit 1
+}
+rm -f -- "$cluster_create_body"
 unset cluster_payload
 agent_token="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
   --config "$admin_curl_config" -d '{}' \
