@@ -170,12 +170,7 @@ function ActiveYamlPanel({
   // Only user edits are local state; query refreshes never overwrite a draft.
   const editedYaml = yamlDraft ?? yaml ?? "";
   const changeEditMode = (editing: boolean) => {
-    // The YAML query can still be loading when the operator enters edit mode
-    // (the toolbar intentionally remains available while the panel loads).
-    // Keep the draft unset until the first server copy arrives so an early
-    // click cannot permanently capture an empty string and make dry-run fail
-    // with "expected a document, but the input is empty".
-    setEditedYaml(editing && yaml !== undefined ? yaml : undefined);
+    setEditedYaml(editing ? yaml : undefined); // Do not capture an empty draft before the initial fetch completes.
     setPreview(null);
     setEditorMode("yaml");
     setEditMode(editing);
