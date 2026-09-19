@@ -70,6 +70,17 @@ fail()  { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; exit 1; }
 record_check() { SMOKE_COMPLETED_CHECKS+=("$1"); }
 record_skip() { SMOKE_SKIPPED_CHECKS+=("$1"); }
 
+# curl prefixes HttpOnly entries in a Netscape cookie jar with
+# `#HttpOnly_`. They are still real cookie rows; treating every line beginning
+# with `#` as a comment silently drops the session cookie and makes a successful
+# browser login look unauthenticated to this headless smoke client.
+cookie_value() {
+  local name="$1"
+  awk -v wanted="$name" \
+    '($0 !~ /^#/ || $0 ~ /^#HttpOnly_/) && $6 == wanted { value = $7 } END { print value }' \
+    "$COOKIE_JAR" 2>/dev/null || true
+}
+
 write_evidence() {
   local rc="$1" status="fail" commit kubernetes_version flux_version check flux_image management_image management_images
   [[ "$rc" -eq 0 ]] && status="pass"
@@ -118,7 +129,7 @@ cleanup() {
       if [[ -n "${TOKEN:-}" ]]; then
         cleanup_auth_args+=( -H "Authorization: Bearer $TOKEN" )
       fi
-      cleanup_csrf="$(awk '$0 !~ /^#/ && $6 == "astronomer_csrf" { value = $7 } END { print value }' "$COOKIE_JAR" 2>/dev/null || true)"
+      cleanup_csrf="$(cookie_value astronomer_csrf)"
       if [[ -n "$cleanup_csrf" ]]; then
         cleanup_auth_args+=( -H "X-CSRF-Token: $cleanup_csrf" )
       fi
@@ -147,7 +158,7 @@ api() {
   if [[ -n "${TOKEN:-}" ]]; then
     auth_args+=( -H "Authorization: Bearer $TOKEN" )
   fi
-  csrf_token="$(awk '$0 !~ /^#/ && $6 == "astronomer_csrf" { value = $7 } END { print value }' "$COOKIE_JAR" 2>/dev/null || true)"
+  csrf_token="$(cookie_value astronomer_csrf)"
   if [[ -n "$csrf_token" ]]; then
     auth_args+=( -H "X-CSRF-Token: $csrf_token" )
   fi
@@ -212,8 +223,8 @@ try:
 except (json.JSONDecodeError, AttributeError):
     print("")' 2>/dev/null || true)"
 if [[ -z "$TOKEN" ]]; then
-  session_cookie="$(awk '$0 !~ /^#/ && $6 == "astronomer_session" { value = $7 } END { print value }' "$COOKIE_JAR" 2>/dev/null || true)"
-  csrf_cookie="$(awk '$0 !~ /^#/ && $6 == "astronomer_csrf" { value = $7 } END { print value }' "$COOKIE_JAR" 2>/dev/null || true)"
+  session_cookie="$(cookie_value astronomer_session)"
+  csrf_cookie="$(cookie_value astronomer_csrf)"
   [[ -n "$session_cookie" && -n "$csrf_cookie" ]] \
     || fail "login succeeded without a bearer token or browser session cookies"
   ok "authenticated with browser session cookies"
