@@ -36,6 +36,10 @@ LABEL org.opencontainers.image.title="astronomer-frontend" \
       org.opencontainers.image.revision="${GIT_COMMIT}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
+# Refresh the pinned Alpine base packages so the immutable Nginx base does not
+# carry stale security fixes between upstream image rebuilds.
+RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
+
 RUN rm -rf /etc/nginx/conf.d /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /app/dist /usr/share/nginx/html

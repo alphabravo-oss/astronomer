@@ -40,6 +40,8 @@ assert "SMOKE_EVIDENCE_FILE: smoke-evidence/evidence.json" in workflow
 assert "if: ${{ always() }}" in workflow
 assert "path: smoke-evidence/evidence.json" in workflow
 assert "retention-days: 90" in workflow
+assert "Install checksum-verified k3d" in workflow
+assert "checksums.txt" in workflow
 
 smoke = (root / "scripts" / "smoke-fresh-cluster.sh").read_text(encoding="utf-8")
 assert 'write_evidence "$rc"' in smoke
@@ -48,6 +50,10 @@ assert 'deploy/bundles/catalog.json' in smoke
 assert 'item["default_enabled"]' in smoke
 assert 'spec.get("targetNamespace", "")' in smoke
 assert 'spec.get("releaseName", "")' in smoke
+assert 'COOKIE_JAR=' in smoke
+assert 'astronomer_session' in smoke and 'astronomer_csrf' in smoke
+assert 'authenticated with browser session cookies' in smoke
+assert 'api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/manifest/"' in smoke
 assert '/tools/status/' not in smoke
 assert 'expected_tools=' not in smoke
 assert 'ready_builtin_releases" -ge' not in smoke
