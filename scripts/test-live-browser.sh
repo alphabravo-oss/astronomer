@@ -119,6 +119,18 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 PY
 }
 
+choose_port_at() {
+  python3 - "$1" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind((host, 0))
+    print(sock.getsockname()[1])
+PY
+}
+
 process_alive() {
   [[ -n "$1" ]] && kill -0 "$1" >/dev/null 2>&1
 }
@@ -333,17 +345,30 @@ direct_api_host="$(docker network inspect bridge --format '{{(index .IPAM.Config
 	echo "test-live-browser: Docker bridge has no routable gateway for direct API validation" >&2
 	exit 1
 }
-# From a Local CI runner container, the Docker bridge gateway is deliberately
-# not a local interface. k3d performs the authoritative host-side bind below
-# and fails closed if port 443 is occupied. Direct host runs retain the early
-# bind check so they cannot accidentally probe an existing endpoint.
+# GitHub-hosted runners can already have the conventional 443 binding in use.
+# Select an ephemeral host port for direct runs, while retaining a predictable
+# override for Local CI where the Docker bridge gateway is not a local socket.
+direct_api_port="${LIVE_BROWSER_DIRECT_API_PORT:-}"
+if [[ -z "$direct_api_port" ]]; then
+	if [[ "${LOCAL_CI_LOCAL:-false}" == "true" ]]; then
+		direct_api_port=443
+	else
+		direct_api_port="$(choose_port_at "$direct_api_host")"
+	fi
+fi
+[[ "$direct_api_port" =~ ^[0-9]+$ && "$direct_api_port" -ge 1024 && "$direct_api_port" -le 65535 ]] || {
+	echo "test-live-browser: invalid direct API port: $direct_api_port" >&2
+	exit 2
+}
+# Direct host runs retain the early bind check so they cannot accidentally
+# probe an existing endpoint. Local CI delegates the host-side check to k3d.
 if [[ "${LOCAL_CI_LOCAL:-false}" != "true" ]]; then
-	port_is_free_at "$direct_api_host" 443 || {
-		echo "test-live-browser: $direct_api_host:443 is already in use; direct API acceptance requires a supported production port" >&2
+	port_is_free_at "$direct_api_host" "$direct_api_port" || {
+		echo "test-live-browser: $direct_api_host:$direct_api_port is already in use; choose LIVE_BROWSER_DIRECT_API_PORT or retry" >&2
 		exit 2
 	}
 fi
-direct_api_endpoint="https://$direct_api_host:443"
+direct_api_endpoint="https://$direct_api_host:$direct_api_port"
 
 echo "test-live-browser: creating isolated Flux member cluster $flux_cluster"
 mkdir -p "$flux_fixture_root/git" "$flux_fixture_root/helm" "$artifact_dir/flux-worktree"
@@ -405,7 +430,7 @@ GIT_SSL_CAINFO="$flux_tls_cert" git ls-remote \
 
 k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
 	--image "${K3S_IMAGE:-rancher/k3s:v1.35.0-k3s1}" \
-	--api-port "$direct_api_host:443" \
+	--api-port "$direct_api_host:$direct_api_port" \
 	--k3s-arg '--disable=traefik@server:0' \
 	--k3s-arg "--tls-san=$direct_api_host@server:0" \
 	--kubeconfig-update-default=false --kubeconfig-switch-context=false \
