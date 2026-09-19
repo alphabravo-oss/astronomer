@@ -141,6 +141,38 @@ describe("YamlPanel — edit-mode preservation", () => {
       "name: v2-from-server",
     );
   });
+
+  it("seeds edit mode when YAML arrives after the edit control is pressed", () => {
+    const refetch = vi.fn();
+    mockedGetYaml.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: null,
+      refetch,
+    } as unknown as ReturnType<typeof useK8sGetYaml>);
+
+    const { getByText, queryByTestId, getByTestId, rerender } = render(
+      <YamlPanel clusterId="c1" k8sPath="api/v1/namespaces/default/pods/p" />,
+    );
+
+    // The edit control is available while the initial fetch is in flight.
+    fireEvent.click(getByText("Edit"));
+    expect(queryByTestId("yaml-editor")).toBeNull();
+
+    mockedGetYaml.mockReturnValue({
+      data: "name: fetched-after-edit",
+      isLoading: false,
+      error: null,
+      refetch,
+    } as unknown as ReturnType<typeof useK8sGetYaml>);
+    rerender(
+      <YamlPanel clusterId="c1" k8sPath="api/v1/namespaces/default/pods/p" />,
+    );
+
+    expect((getByTestId("yaml-editor") as HTMLTextAreaElement).value).toBe(
+      "name: fetched-after-edit",
+    );
+  });
 });
 
 describe("resourceTypeFromK8sPath", () => {
