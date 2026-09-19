@@ -29,6 +29,11 @@ export function parseFields(source) {
   const pattern =
     /^\s*([A-Z][A-Za-z0-9_]*)\s+([^\s]+)\s+`mapstructure:"([^"]+)"`/gm;
   for (const match of source.matchAll(pattern)) {
+    // Derived/runtime-only fields are deliberately excluded from Viper's
+    // configuration surface with mapstructure:"-". They are still exported
+    // so the rest of the application can consume the normalized value, but
+    // must not appear in generated docs or .env.example.
+    if (match[3] === "-") continue;
     fields.push({ field: match[1], type: match[2], key: match[3] });
   }
   return fields;

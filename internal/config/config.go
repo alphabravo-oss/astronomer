@@ -340,6 +340,68 @@ func (c *Config) CORSOrigins() []string {
 	return strings.Split(c.CORSAllowedOrigins, ",")
 }
 
+func normalizeDeliveryFluxTrust(cfg *Config) error {
+	if strings.TrimSpace(cfg.DeliveryFluxDistributionPublicKey) != "" {
+		keys, err := protocol.ParseDeliverySystemPublicKeys(cfg.DeliveryFluxDistributionPublicKeys)
+		if err != nil {
+			return fmt.Errorf("invalid delivery Flux distribution public-key set: %w", err)
+		}
+		if len(keys) != 0 {
+			return errors.New("configure either delivery Flux distribution publicKey or publicKeys, not both")
+		}
+		key := []byte(cfg.DeliveryFluxDistributionPublicKey)
+		if err := protocol.ValidateDeliverySystemPublicKey(key); err != nil {
+			return fmt.Errorf("invalid delivery Flux distribution public key: %w", err)
+		}
+		cfg.DeliveryFluxDistributionKeyring = [][]byte{key}
+		return nil
+	}
+	keys, err := protocol.ParseDeliverySystemPublicKeys(cfg.DeliveryFluxDistributionPublicKeys)
+	if err != nil {
+		return fmt.Errorf("invalid delivery Flux distribution public-key set: %w", err)
+	}
+	cfg.DeliveryFluxDistributionKeyring = keys
+	return nil
+}
+
+func applyReleaseManifest(cfg *Config) error {
+	if strings.TrimSpace(cfg.ReleaseManifestPath) == "" {
+		return nil
+	}
+	_, release, err := releasecontract.Load(cfg.ReleaseManifestPath, version.Version)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(cfg.ReleaseMirrorMappingPath) != "" {
+		release, err = releasecontract.ApplyMirrorMapping(cfg.ReleaseMirrorMappingPath, cfg.ReleaseManifestPath, release)
+		if err != nil {
+			return err
+		}
+	}
+	cfg.AgentImageRepository = release.AgentImage
+	cfg.AgentImageTag = release.Version
+	cfg.DeliveryKubernetesMinMinor = release.MinimumKubernetesMinor
+	cfg.DeliveryKubernetesMaxMinor = release.MaximumKubernetesMinor
+	cfg.DeliveryFluxVersion = release.FluxVersion
+	cfg.DeliveryFluxDistributionRepository = release.FluxRepository
+	cfg.DeliveryFluxDistributionDigest = release.FluxDigest
+	if len(cfg.DeliveryFluxDistributionKeyring) == 0 {
+		cfg.DeliveryFluxDistributionOIDCIssuer = release.CertificateOIDCIssuer
+		cfg.DeliveryFluxDistributionCertificateIdentity = release.CertificateIdentity
+	} else {
+		// An air-gapped mirror can re-sign the preserved Flux artifact with
+		// an offline Cosign key. That key is an explicit installation trust
+		// root and takes precedence over the upstream keyless identity.
+		cfg.DeliveryFluxDistributionOIDCIssuer = ""
+		cfg.DeliveryFluxDistributionCertificateIdentity = ""
+	}
+	cfg.DeliveryBundleRepository = release.BundleRepository
+	cfg.DeliveryBundleDigest = release.BundleDigest
+	cfg.DeliveryBundleOIDCIssuer = release.CertificateOIDCIssuer
+	cfg.DeliveryBundleCertificateIdentity = release.CertificateIdentity
+	return nil
+}
+
 // Load reads configuration from environment variables with sensible defaults.
 func Load() (*Config, error) {
 	v := envconfig.NewViper("")
@@ -580,54 +642,11 @@ func Load() (*Config, error) {
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(cfg.DeliveryFluxDistributionPublicKey) != "" {
-		if keys, err := protocol.ParseDeliverySystemPublicKeys(cfg.DeliveryFluxDistributionPublicKeys); err != nil {
-			return nil, fmt.Errorf("invalid delivery Flux distribution public-key set: %w", err)
-		} else if len(keys) != 0 {
-			return nil, errors.New("configure either delivery fluxDistribution trustPolicy publicKey or publicKeys, not both")
-		}
-		key := []byte(cfg.DeliveryFluxDistributionPublicKey)
-		if err := protocol.ValidateDeliverySystemPublicKey(key); err != nil {
-			return nil, fmt.Errorf("invalid delivery Flux distribution public key: %w", err)
-		}
-		cfg.DeliveryFluxDistributionKeyring = [][]byte{key}
-	} else if keys, err := protocol.ParseDeliverySystemPublicKeys(cfg.DeliveryFluxDistributionPublicKeys); err != nil {
-		return nil, fmt.Errorf("invalid delivery Flux distribution public-key set: %w", err)
-	} else {
-		cfg.DeliveryFluxDistributionKeyring = keys
+	if err := normalizeDeliveryFluxTrust(cfg); err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(cfg.ReleaseManifestPath) != "" {
-		_, release, err := releasecontract.Load(cfg.ReleaseManifestPath, version.Version)
-		if err != nil {
-			return nil, err
-		}
-		if strings.TrimSpace(cfg.ReleaseMirrorMappingPath) != "" {
-			release, err = releasecontract.ApplyMirrorMapping(cfg.ReleaseMirrorMappingPath, cfg.ReleaseManifestPath, release)
-			if err != nil {
-				return nil, err
-			}
-		}
-		cfg.AgentImageRepository = release.AgentImage
-		cfg.AgentImageTag = release.Version
-		cfg.DeliveryKubernetesMinMinor = release.MinimumKubernetesMinor
-		cfg.DeliveryKubernetesMaxMinor = release.MaximumKubernetesMinor
-		cfg.DeliveryFluxVersion = release.FluxVersion
-		cfg.DeliveryFluxDistributionRepository = release.FluxRepository
-		cfg.DeliveryFluxDistributionDigest = release.FluxDigest
-		if len(cfg.DeliveryFluxDistributionKeyring) == 0 {
-			cfg.DeliveryFluxDistributionOIDCIssuer = release.CertificateOIDCIssuer
-			cfg.DeliveryFluxDistributionCertificateIdentity = release.CertificateIdentity
-		} else {
-			// An air-gapped mirror can re-sign the preserved Flux artifact with
-			// an offline Cosign key. That key is an explicit installation trust
-			// root and takes precedence over the upstream keyless identity.
-			cfg.DeliveryFluxDistributionOIDCIssuer = ""
-			cfg.DeliveryFluxDistributionCertificateIdentity = ""
-		}
-		cfg.DeliveryBundleRepository = release.BundleRepository
-		cfg.DeliveryBundleDigest = release.BundleDigest
-		cfg.DeliveryBundleOIDCIssuer = release.CertificateOIDCIssuer
-		cfg.DeliveryBundleCertificateIdentity = release.CertificateIdentity
+	if err := applyReleaseManifest(cfg); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }
