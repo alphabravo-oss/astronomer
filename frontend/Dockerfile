@@ -25,7 +25,7 @@ RUN npm run build \
 
 # Stage 2: static nginx. Same base pin as deploy/nginx/Dockerfile.nginx —
 # bump both digests in lockstep (D16).
-FROM nginx:1.29.8-alpine3.23-slim@sha256:04a927892bd65fc7216be7a18bd379ab1987f2fab3ee269bd465d53b1c341b2c AS nginx-base
+FROM nginx:1.31.0-alpine3.23-slim@sha256:241b0d0fe06250e026e7a35a008d022c9a1d3bec19442d65cc33b84d0b5dd64d AS nginx-base
 
 # The upstream image is digest pinned, but its Alpine package snapshot can be
 # older than the currently fixed security advisories. Keep the refresh in a
