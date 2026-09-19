@@ -40,6 +40,8 @@ assert "SMOKE_EVIDENCE_FILE: smoke-evidence/evidence.json" in workflow
 assert "if: ${{ always() }}" in workflow
 assert "path: smoke-evidence/evidence.json" in workflow
 assert "retention-days: 90" in workflow
+assert "Install checksum-verified k3d" in workflow
+assert "checksums.txt" in workflow
 
 smoke = (root / "scripts" / "smoke-fresh-cluster.sh").read_text(encoding="utf-8")
 assert 'write_evidence "$rc"' in smoke
@@ -48,11 +50,23 @@ assert 'deploy/bundles/catalog.json' in smoke
 assert 'item["default_enabled"]' in smoke
 assert 'spec.get("targetNamespace", "")' in smoke
 assert 'spec.get("releaseName", "")' in smoke
+assert 'minimum_available=1 if name == "source-controller" else replicas' in smoke
+assert 'status.get("updatedReplicas", 0) >= replicas' in smoke
+assert 'COOKIE_JAR=' in smoke
+assert 'astronomer_session' in smoke and 'astronomer_csrf' in smoke
+assert 'authenticated with browser session cookies' in smoke
+assert 'api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/manifest/"' in smoke
 assert '/tools/status/' not in smoke
 assert 'expected_tools=' not in smoke
 assert 'ready_builtin_releases" -ge' not in smoke
 for legacy_slug in ("fluent-bit", "cert-manager", "ingress-nginx", "gatekeeper"):
     assert legacy_slug not in smoke
+
+live_fixture = (root / "scripts" / "testdata" / "live-browser-fixture" / "main.go").read_text(encoding="utf-8")
+assert '"dbRegistry":' in live_fixture and '"ghcr.io"' in live_fixture
+assert '"dbRepository":' in live_fixture and '"aquasecurity/trivy-db"' in live_fixture
+assert '"javaDbRegistry":' in live_fixture and '"ghcr.io"' in live_fixture
+assert '"javaDbRepository":' in live_fixture and '"aquasecurity/trivy-java-db"' in live_fixture
 assert "ASTRO_PASSWORD" not in writer.read_text(encoding="utf-8")
 
 print("fresh-cluster evidence writer tests passed")

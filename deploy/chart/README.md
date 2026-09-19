@@ -171,8 +171,10 @@ manifest, never in an ad-hoc live override.
 ### Signed artifacts
 
 Online installations use OCI repositories; disconnected installations use a
-release-bundled file. Both forms require an exact `sha256` digest and a verified
-signature identity.
+release-bundled file. Both forms require an exact `sha256` digest and signature
+verification. The normal online Flux-distribution policy is keyless Cosign
+verification against the release workflow's exact OIDC issuer and certificate
+identity.
 
 ```yaml
 delivery:
@@ -198,6 +200,41 @@ Mutable OCI tags, unsigned artifact policies, non-HTTPS issuers, and malformed
 digests fail values-schema validation. Artifact credentials are accepted only
 through Secret references in the runtime API; this chart has no plaintext
 artifact-password values.
+
+For a fully disconnected Flux bootstrap, the mirror operator can re-sign only
+the mirrored Flux-distribution artifact with an installation-owned Cosign key.
+Set `delivery.artifacts.fluxDistribution.trustPolicy.publicKeys` to a list of
+PEM public keys and leave `certificateIdentity` and `oidcIssuer` empty. The old
+singular `publicKey` value remains supported for one-key installations. These
+modes are mutually exclusive. The keyless signature on the signed Astronomer
+release manifest remains the authority for release contents, and built-in
+bundles retain their release-workflow OIDC policy. The public-key set is used
+by Flux to verify the exact immutable distribution digest; its SHA-256
+fingerprints are separately pinned into each agent's enrollment manifest.
+Only public keys are installed; never put a private signing key in Helm, the
+release kit, or a cluster. Static-key signatures intentionally have no public
+transparency-log inclusion proof, so protect the offline signers and audit each
+signing operation.
+
+Offline signer rotation is a staged keyring change, not an incidental release
+upgrade:
+
+1. Add the next public key while retaining the current key. The resulting
+   trust-policy digest creates a distinct immutable system-release draft; it
+   does not rewrite a previously published version.
+2. Re-apply the refreshed agent manifest to every enrolled cluster (and
+   confirm the new agent trust pins are present) before promoting a system
+   release signed by the new key. Existing agents intentionally do not trust a
+   key merely because the management-plane Helm values changed.
+3. Retain the old key through the rollback window. After that window, remove it
+   from the configured keyring and re-apply the refreshed agent manifests to
+   retire the old enrollment pin.
+
+Flux accepts signatures from any key in the projected Secret during the
+overlap. Agents fail closed if a release's keyring contains even one key that
+was not pinned at enrollment. This makes key rotation explicit and reviewable
+while avoiding a single-key cutover; the connected keyless OIDC path is
+unchanged.
 
 For disconnected media, set `disconnectedAssetPath` to an absolute path in the
 verified release payload and retain the same digest and trust policy. Release

@@ -421,7 +421,10 @@ def sign(plan_path: Path, signature_output: Path, key: str | None) -> None:
     signature_output.parent.mkdir(parents=True, exist_ok=True)
     command = ["cosign", "sign-blob", "--yes", "--bundle", str(signature_output)]
     if key:
-        command.extend(["--key", key])
+        # Static key mode is intended for disconnected verification. Do not
+        # make signing depend on Rekor availability; the verifier pins this
+        # exact key and skips tlog verification for the resulting bundle.
+        command.extend(["--key", key, "--tlog-upload=false"])
     command.append(str(plan_path))
     run(command)
 

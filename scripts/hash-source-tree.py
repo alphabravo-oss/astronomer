@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Hash the exact tracked plus non-ignored untracked source tree deterministically."""
+"""Hash the tracked plus non-ignored untracked source tree deterministically.
+
+Git records whether a regular file is executable, but not its owner/group read
+and write bits.  Hashing raw ``stat`` permissions makes a clean checkout look
+changed when a generator recreates a file under a different umask, so the
+identity below intentionally follows Git's 0644/0755 mode semantics.
+"""
 
 import argparse
 import hashlib
@@ -20,7 +26,7 @@ def source_paths(root: Path) -> list[Path]:
 def tree_identity(root: Path, excluded: Path | None = None) -> dict[str, object]:
     root = root.resolve()
     excluded = excluded.resolve() if excluded else None
-    digest = hashlib.sha256(b"astronomer-source-tree-v1\0")
+    digest = hashlib.sha256(b"astronomer-source-tree-v2\0")
     count = 0
     for relative in sorted(source_paths(root), key=lambda value: os.fsencode(value.as_posix())):
         path = root / relative
@@ -39,16 +45,18 @@ def tree_identity(root: Path, excluded: Path | None = None) -> dict[str, object]
             digest.update(b"missing\0")
             count += 1
             continue
-        digest.update(stat.S_IMODE(metadata.st_mode).to_bytes(4, "big"))
         if stat.S_ISLNK(metadata.st_mode):
+            mode = 0
             payload = os.fsencode(os.readlink(path)); kind = b"symlink\0"
         elif stat.S_ISREG(metadata.st_mode):
+            mode = 0o755 if stat.S_IMODE(metadata.st_mode) & 0o111 else 0o644
             payload = path.read_bytes(); kind = b"regular\0"
         else:
             raise SystemExit(f"unsupported non-regular source path: {relative}")
+        digest.update(mode.to_bytes(4, "big"))
         digest.update(kind); digest.update(len(payload).to_bytes(8, "big")); digest.update(payload)
         count += 1
-    return {"schema_version": 1, "source_file_count": count, "source_tree_sha256": digest.hexdigest()}
+    return {"schema_version": 2, "source_file_count": count, "source_tree_sha256": digest.hexdigest()}
 
 
 def main() -> None:

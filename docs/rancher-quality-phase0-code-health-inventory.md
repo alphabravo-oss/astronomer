@@ -8,10 +8,10 @@ This inventory supports Phase 0 duplicate/dead-code detection and Phase 10 clean
 
 ## Scan Scope
 
-- Frontend source files: 792
-- Frontend source lines: 189858
+- Frontend source files: 793
+- Frontend source lines: 190267
 - Go source files under `internal/` excluding generated sqlc and tests: 906
-- Go source files scanned for sqlc query references excluding generated sqlc: 1952
+- Go source files scanned for sqlc query references excluding generated sqlc: 1954
 - sqlc query declarations: 1249
 - Component files scanned: 254
 - Helm top-level values scanned: 35
@@ -121,9 +121,9 @@ Owner: backend/platform. Target abstraction: shared helper package only when cal
 - `podReady` in [`internal/agent/delivery/system_inventory.go:406`](internal/agent/delivery/system_inventory.go:406), [`internal/charlie/management_kubernetes_adapter.go:30`](internal/charlie/management_kubernetes_adapter.go:30), [`internal/handler/monitoring_operations_readiness.go:191`](internal/handler/monitoring_operations_readiness.go:191)
 - `recordAuditOutbox` in [`internal/handler/audit_helpers.go:106`](internal/handler/audit_helpers.go:106), [`internal/handler/delivery/common.go:93`](internal/handler/delivery/common.go:93)
 - `requireSuperuser` in [`internal/handler/authorization.go:90`](internal/handler/authorization.go:90), [`internal/server/routes_tools_controlplane.go:17`](internal/server/routes_tools_controlplane.go:17)
-- `retryAfter` in [`internal/apisvr/allowlist/providers/errors.go:51`](internal/apisvr/allowlist/providers/errors.go:51), [`internal/delivery/builtin/provisioner.go:558`](internal/delivery/builtin/provisioner.go:558)
+- `retryAfter` in [`internal/apisvr/allowlist/providers/errors.go:51`](internal/apisvr/allowlist/providers/errors.go:51), [`internal/delivery/builtin/provisioner.go:580`](internal/delivery/builtin/provisioner.go:580)
 - `sortedUUIDs` in [`internal/delivery/model/placement.go:187`](internal/delivery/model/placement.go:187), [`internal/handler/authorization.go:223`](internal/handler/authorization.go:223)
-- `stableID` in [`internal/delivery/builtin/provisioner.go:562`](internal/delivery/builtin/provisioner.go:562), [`internal/delivery/catalogapp/service.go:429`](internal/delivery/catalogapp/service.go:429)
+- `stableID` in [`internal/delivery/builtin/provisioner.go:584`](internal/delivery/builtin/provisioner.go:584), [`internal/delivery/catalogapp/service.go:429`](internal/delivery/catalogapp/service.go:429)
 - ... 7 more
 
 ### Dead-Code Candidates

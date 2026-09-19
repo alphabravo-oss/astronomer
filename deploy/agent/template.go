@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 )
 
 //go:embed install.yaml.template
@@ -54,6 +55,8 @@ type InstallTemplateData struct {
 	SystemArtifactDigest string
 	SystemOIDCIssuer     string
 	SystemOIDCIdentity   string
+	SystemPublicKey      []byte
+	SystemPublicKeys     [][]byte
 	// Agent tracing is intentionally limited to non-secret routing settings.
 	// Collector authentication headers stay management-plane local unless an
 	// adopted cluster is configured with its own Secret-backed collector path.
@@ -136,6 +139,7 @@ func RenderInstallYAML(data InstallTemplateData) string {
 		"{{AGENT_ENVIRONMENT}}", escapeYAMLDoubleQuoted(environment),
 		"{{SYSTEM_OIDC_ISSUER}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIssuer)),
 		"{{SYSTEM_OIDC_IDENTITY}}", escapeYAMLDoubleQuoted(strings.TrimSpace(data.SystemOIDCIdentity)),
+		"{{SYSTEM_KEY_FINGERPRINTS}}", escapeYAMLDoubleQuoted(strings.Join(protocol.DeliverySystemKeyFingerprints(data.systemPublicKeys()), ",")),
 		"{{AGENT_SERVICE_ACCOUNT_NAME}}", serviceAccountName,
 		"{{AGENT_POD_LABELS}}", PodLabelsYAML(data.PodLabels),
 		"{{AGENT_CONFIGURATION_DIGEST}}", mustAgentOverridesDigest(data.AgentOverrides),
@@ -174,19 +178,67 @@ func renderSystemBootstrap(data InstallTemplateData) string {
 	digest := strings.TrimSpace(data.SystemArtifactDigest)
 	issuer := strings.TrimSpace(data.SystemOIDCIssuer)
 	identity := strings.TrimSpace(data.SystemOIDCIdentity)
+	publicKeys := data.systemPublicKeys()
 	parsedArtifact, artifactErr := url.Parse(artifactURL)
-	parsedIssuer, issuerErr := url.Parse(issuer)
-	if artifactErr != nil || parsedArtifact.Scheme != "oci" || parsedArtifact.Host == "" || parsedArtifact.User != nil || parsedArtifact.RawQuery != "" || parsedArtifact.Fragment != "" ||
-		!regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(digest) || issuerErr != nil || parsedIssuer.Scheme != "https" || parsedIssuer.Host == "" ||
-		identity == "" || len(identity) > 512 || strings.ContainsAny(identity, "\r\n\x00") {
+	validArtifact := artifactErr == nil && parsedArtifact.Scheme == "oci" && parsedArtifact.Host != "" && parsedArtifact.User == nil && parsedArtifact.RawQuery == "" && parsedArtifact.Fragment == "" &&
+		regexp.MustCompile(`^sha256:[0-9a-f]{64}$`).MatchString(digest)
+	if !validArtifact {
 		return ""
+	}
+	verifyPolicy, trustSecret := "", ""
+	if len(publicKeys) != 0 {
+		if issuer != "" || identity != "" || (protocol.DeliverySystemVerification{Provider: "cosign", PublicKeys: publicKeys}).Validate() != nil {
+			return ""
+		}
+		var secretData strings.Builder
+		for index, publicKey := range publicKeys {
+			name := "cosign.pub"
+			if index > 0 {
+				fingerprint := strings.TrimPrefix(protocol.DeliverySystemKeyFingerprint(publicKey), "sha256:")
+				name = "cosign-" + fingerprint + ".pub"
+			}
+			secretData.WriteString("  " + name + ": " + base64.StdEncoding.EncodeToString(publicKey) + "\n")
+		}
+		trustSecret = `---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: astronomer-system-release-trust
+  namespace: astronomer-delivery-system
+  labels:
+    app.kubernetes.io/managed-by: astronomer-agent
+    app.kubernetes.io/part-of: astronomer-delivery
+    delivery.astronomer.io/system: "true"
+type: Opaque
+data:
+` + secretData.String()
+		verifyPolicy = "    secretRef:\n      name: astronomer-system-release-trust"
+	} else {
+		parsedIssuer, issuerErr := url.Parse(issuer)
+		if issuerErr != nil || parsedIssuer.Scheme != "https" || parsedIssuer.Host == "" || parsedIssuer.User != nil || parsedIssuer.RawQuery != "" || parsedIssuer.Fragment != "" ||
+			identity == "" || len(identity) > 512 || strings.ContainsAny(identity, "\r\n\x00") {
+			return ""
+		}
+		verifyPolicy = "    matchOIDCIdentity:\n      - issuer: \"" + escapeYAMLDoubleQuoted(issuer) + "\"\n        subject: \"" + escapeYAMLDoubleQuoted(identity) + "\""
 	}
 	return "\n" + strings.NewReplacer(
 		"{{SYSTEM_ARTIFACT_URL}}", escapeYAMLDoubleQuoted(artifactURL),
 		"{{SYSTEM_ARTIFACT_DIGEST}}", digest,
-		"{{SYSTEM_OIDC_ISSUER}}", escapeYAMLDoubleQuoted(issuer),
-		"{{SYSTEM_OIDC_IDENTITY}}", escapeYAMLDoubleQuoted(identity),
+		"{{SYSTEM_TRUST_SECRET}}", trustSecret,
+		"{{SYSTEM_VERIFY_POLICY}}", verifyPolicy,
 	).Replace(systemBootstrapTemplate)
+}
+
+func (data InstallTemplateData) systemPublicKeys() [][]byte {
+	keys := data.SystemPublicKeys
+	if len(keys) == 0 && len(data.SystemPublicKey) != 0 {
+		keys = [][]byte{data.SystemPublicKey}
+	}
+	result := make([][]byte, len(keys))
+	for index := range keys {
+		result[index] = append([]byte(nil), keys[index]...)
+	}
+	return result
 }
 
 // imageRepositoryOf strips the tag and/or digest from an image reference,

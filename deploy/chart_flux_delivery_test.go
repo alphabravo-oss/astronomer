@@ -18,6 +18,8 @@ func TestFluxNativeDeliveryDefaultsOnWithLocalBootstrap(t *testing.T) {
 		"DELIVERY_PRIVATE_REGISTRY:",
 		"DELIVERY_FLUX_DISTRIBUTION_CERTIFICATE_IDENTITY:",
 		"DELIVERY_FLUX_DISTRIBUTION_OIDC_ISSUER:",
+		"DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEY:",
+		`DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEYS: "[]"`,
 		`DELIVERY_FLUX_DISTRIBUTION_REQUIRE_SIGNATURE: "true"`,
 		"DELIVERY_BUNDLE_CERTIFICATE_IDENTITY:",
 		"DELIVERY_BUNDLE_OIDC_ISSUER:",
@@ -45,6 +47,15 @@ func TestFluxNativeDeliveryDefaultsOnWithLocalBootstrap(t *testing.T) {
 	}
 }
 
+func TestFluxDistributionNilPublicKeyringRendersEmptyArray(t *testing.T) {
+	out := helmTemplateWithValueFilesAndFlags(t, nil, []string{"--skip-schema-validation"},
+		"delivery.artifacts.fluxDistribution.trustPolicy.publicKeys=null",
+	)
+	if !strings.Contains(out, `DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEYS: "[]"`) {
+		t.Fatal("nil publicKeys from an older Helm release did not normalize to an empty keyring")
+	}
+}
+
 func TestFluxNativeDeliveryCanBeEnabledExplicitly(t *testing.T) {
 	out := helmTemplate(t, "delivery.enabled=true")
 	if !strings.Contains(out, `DELIVERY_ENABLED: "true"`) {
@@ -68,6 +79,67 @@ func TestDeliveryValuesSchemaRejectsUnsafeReleaseInputs(t *testing.T) {
 				t.Fatalf("schema rejection missing %q:\n%s", tt.want, errOut)
 			}
 		})
+	}
+}
+
+func TestProductionDeliveryAcceptsOfflinePinnedCosignKey(t *testing.T) {
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
+		"managementBackup.enabled=false",
+		"delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=",
+		"delivery.artifacts.fluxDistribution.trustPolicy.oidcIssuer=",
+		"delivery.artifacts.fluxDistribution.trustPolicy.publicKey=offline-cosign-public-key",
+	)
+	out := helmTemplateWithValueFiles(t, []string{"chart/values-production.yaml"}, sets...)
+	if !strings.Contains(out, "offline-cosign-public-key") || !strings.Contains(out, "DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEYS:") {
+		t.Fatal("offline Cosign public key was not projected to the management runtime")
+	}
+	if !strings.Contains(out, "DELIVERY_FLUX_DISTRIBUTION_OIDC_ISSUER: \"\"") || !strings.Contains(out, "DELIVERY_FLUX_DISTRIBUTION_CERTIFICATE_IDENTITY: \"\"") {
+		t.Fatal("offline key mode did not clear inherited upstream OIDC identity")
+	}
+}
+
+func TestProductionDeliveryAcceptsOfflineOverlappingCosignKeyring(t *testing.T) {
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
+		"managementBackup.enabled=false",
+		"delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=",
+		"delivery.artifacts.fluxDistribution.trustPolicy.oidcIssuer=",
+		"delivery.artifacts.fluxDistribution.trustPolicy.publicKeys[0]=old-cosign-public-key",
+		"delivery.artifacts.fluxDistribution.trustPolicy.publicKeys[1]=next-cosign-public-key",
+	)
+	out := helmTemplateWithValueFiles(t, []string{"chart/values-production.yaml"}, sets...)
+	if !strings.Contains(out, "old-cosign-public-key") || !strings.Contains(out, "next-cosign-public-key") {
+		t.Fatal("offline keyring was not projected to the management runtime")
+	}
+}
+
+func TestProductionDeliveryRejectsMixedFluxTrustModes(t *testing.T) {
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
+		"managementBackup.enabled=false",
+		"delivery.artifacts.fluxDistribution.trustPolicy.publicKey=offline-key",
+	)
+	errOut := helmTemplateExpectError(t, []string{"chart/values-production.yaml"}, sets...)
+	if !strings.Contains(errOut, "/delivery/artifacts/fluxDistribution/trustPolicy") &&
+		!strings.Contains(errOut, "delivery.artifacts.fluxDistribution.trustPolicy") {
+		t.Fatalf("production mixed-trust schema rejection is missing:\n%s", errOut)
+	}
+}
+
+func TestProductionDeliveryRejectsBothOfflineTrustInputForms(t *testing.T) {
+	sets := append([]string{}, productionWiringSets...)
+	sets = append(sets,
+		"managementBackup.enabled=false",
+		"delivery.artifacts.fluxDistribution.trustPolicy.certificateIdentity=",
+		"delivery.artifacts.fluxDistribution.trustPolicy.oidcIssuer=",
+		"delivery.artifacts.fluxDistribution.trustPolicy.publicKey=legacy-key",
+		"delivery.artifacts.fluxDistribution.trustPolicy.publicKeys[0]=next-key",
+	)
+	errOut := helmTemplateExpectError(t, []string{"chart/values-production.yaml"}, sets...)
+	if !strings.Contains(errOut, "/delivery/artifacts/fluxDistribution/trustPolicy") &&
+		!strings.Contains(errOut, "delivery.artifacts.fluxDistribution.trustPolicy") {
+		t.Fatalf("production overlapping singular/keyring config was not rejected:\n%s", errOut)
 	}
 }
 

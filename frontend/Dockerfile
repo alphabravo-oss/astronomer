@@ -25,7 +25,15 @@ RUN npm run build \
 
 # Stage 2: static nginx. Same base pin as deploy/nginx/Dockerfile.nginx —
 # bump both digests in lockstep (D16).
-FROM nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+FROM nginx:1.29.8-alpine3.23-slim@sha256:04a927892bd65fc7216be7a18bd379ab1987f2fab3ee269bd465d53b1c341b2c AS nginx-base
+
+# The upstream image is digest pinned, but its Alpine package snapshot can be
+# older than the currently fixed security advisories. Keep the refresh in a
+# dedicated base stage so the final application stage stays immutable and the
+# resulting image contains only the patched package set.
+RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
+
+FROM nginx-base
 
 ARG VERSION=1.2.0
 ARG GIT_COMMIT=unknown

@@ -148,6 +148,7 @@ func main() {
 			MaximumKubernetes:   cfg.DeliveryKubernetesMaxMinor,
 			CertificateIssuer:   cfg.DeliveryFluxDistributionOIDCIssuer,
 			CertificateIdentity: cfg.DeliveryFluxDistributionCertificateIdentity,
+			PublicKeys:          cfg.DeliveryFluxDistributionKeyring,
 		})
 		if releaseErr != nil {
 			logger.Error("failed to ensure signed delivery system release", "error", releaseErr)

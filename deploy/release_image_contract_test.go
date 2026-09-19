@@ -491,7 +491,7 @@ func TestReleaseAndOfflineImportInventoriesMatch(t *testing.T) {
 		t.Fatal("k3d bootstrap still preloads obsolete bitnami/kubectl instead of astronomer-shell")
 	}
 	for _, required := range []string{
-		`make IMG_TAG="${IMG_TAG}" IMG_REGISTRY="${IMG_REGISTRY}" docker-build-all`,
+		`make VERSION="${BUILD_VERSION}" IMG_TAG="${IMG_TAG}" IMG_REGISTRY="${IMG_REGISTRY}" docker-build-all`,
 		`--set preflight.image.registry="${IMG_REGISTRY}"`,
 		`--set preflight.image.tag="${IMG_TAG}"`,
 		`--set-string kubectlShell.image="${IMG_SHELL}"`,

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -388,6 +389,7 @@ func runConnect(logger *slog.Logger) error {
 					Issuer:  cfg.SystemOIDCIssuer,
 					Subject: cfg.SystemOIDCIdentity,
 				}},
+				KeyFingerprints:        systemKeyFingerprintAllowlist(cfg.SystemKeyFingerprints, cfg.SystemKeyFingerprint),
 				AgentImageRepositories: []string{cfg.AgentImageRepository},
 			},
 		})
@@ -433,6 +435,27 @@ func runConnect(logger *slog.Logger) error {
 		return err
 	}
 	return tunnel.Close()
+}
+
+func systemKeyFingerprintAllowlist(keyring, legacy string) []string {
+	values := strings.Split(keyring, ",")
+	if strings.TrimSpace(keyring) == "" {
+		values = []string{legacy}
+	}
+	allowlist := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		fingerprint := strings.TrimSpace(value)
+		if fingerprint == "" {
+			continue
+		}
+		if _, exists := seen[fingerprint]; exists {
+			continue
+		}
+		seen[fingerprint] = struct{}{}
+		allowlist = append(allowlist, fingerprint)
+	}
+	return allowlist
 }
 
 func registerHelm(tunnel *agent.TunnelClient, logger *slog.Logger, runtime agent.HelmRuntimeConfig) {

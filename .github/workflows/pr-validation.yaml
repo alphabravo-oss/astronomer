@@ -36,8 +36,8 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Install ShellCheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Install ShellCheck and ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep shellcheck
 
       - name: Migration roundtrip smoke (TEST-05)
         run: ./scripts/migrate-roundtrip-smoke.sh
@@ -279,6 +279,21 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Install checksum-verified k3d
+        env:
+          K3D_VERSION: v5.8.3
+        run: |
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          curl -fsSLO "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/checksums.txt"
+          awk '$2 == "_dist/k3d-linux-amd64" { print $1 "  k3d-linux-amd64" }' checksums.txt \
+            | sha256sum --check
+          sudo install -m 0755 k3d-linux-amd64 /usr/local/bin/k3d
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: v3.21.0
+
       - name: Validate live-browser harness contract
         run: make test-live-browser-static
 
@@ -411,6 +426,10 @@ jobs:
       - container-supply-chain
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
       - name: Require every same-commit qualification
         env:
           RESULTS_JSON: ${{ toJSON(needs) }}

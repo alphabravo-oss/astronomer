@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/alphabravocompany/astronomer-go/pkg/protocol"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -197,7 +198,7 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 		if !cfg.DeliveryLocalFluxBootstrap {
 			errs = append(errs, "delivery_local_flux_bootstrap must be true")
 		}
-		validateSignedArtifact := func(name, repository, digest, identity, issuer string) {
+		validateSignedArtifact := func(name, repository, digest, identity, issuer, publicKey, publicKeys string) {
 			repository = strings.TrimSpace(repository)
 			if repository == "" {
 				errs = append(errs, name+" repository is empty")
@@ -213,16 +214,35 @@ func ValidateProductionSecurity(cfg *Config, encryptorReady bool) error {
 			if !immutableDigestPattern.MatchString(strings.TrimSpace(digest)) {
 				errs = append(errs, name+" digest must be an immutable sha256")
 			}
-			if strings.TrimSpace(identity) == "" {
-				errs = append(errs, name+" certificate identity is empty")
+			parsedPublicKeys, keyringErr := protocol.ParseDeliverySystemPublicKeys(publicKeys)
+			if keyringErr != nil {
+				errs = append(errs, name+" Cosign public-key set is invalid")
 			}
-			parsedIssuer, err := url.Parse(strings.TrimSpace(issuer))
-			if err != nil || parsedIssuer.Scheme != "https" || parsedIssuer.Host == "" {
-				errs = append(errs, name+" OIDC issuer must be https")
+			keyMode := strings.TrimSpace(publicKey) != "" || len(parsedPublicKeys) != 0
+			if keyMode {
+				if strings.TrimSpace(publicKey) != "" && len(parsedPublicKeys) != 0 {
+					errs = append(errs, name+" must configure publicKey or publicKeys, not both")
+				}
+				if strings.TrimSpace(identity) != "" || strings.TrimSpace(issuer) != "" {
+					errs = append(errs, name+" must configure either a Cosign public-key set or a keyless OIDC identity, not both")
+				}
+				if strings.TrimSpace(publicKey) != "" && len(parsedPublicKeys) == 0 {
+					if err := protocol.ValidateDeliverySystemPublicKey([]byte(publicKey)); err != nil {
+						errs = append(errs, name+" Cosign public key is invalid")
+					}
+				}
+			} else {
+				if strings.TrimSpace(identity) == "" {
+					errs = append(errs, name+" certificate identity is empty")
+				}
+				parsedIssuer, err := url.Parse(strings.TrimSpace(issuer))
+				if err != nil || parsedIssuer.Scheme != "https" || parsedIssuer.Host == "" {
+					errs = append(errs, name+" OIDC issuer must be https")
+				}
 			}
 		}
-		validateSignedArtifact("delivery flux distribution", cfg.DeliveryFluxDistributionRepository, cfg.DeliveryFluxDistributionDigest, cfg.DeliveryFluxDistributionCertificateIdentity, cfg.DeliveryFluxDistributionOIDCIssuer)
-		validateSignedArtifact("delivery built-in bundle", cfg.DeliveryBundleRepository, cfg.DeliveryBundleDigest, cfg.DeliveryBundleCertificateIdentity, cfg.DeliveryBundleOIDCIssuer)
+		validateSignedArtifact("delivery flux distribution", cfg.DeliveryFluxDistributionRepository, cfg.DeliveryFluxDistributionDigest, cfg.DeliveryFluxDistributionCertificateIdentity, cfg.DeliveryFluxDistributionOIDCIssuer, cfg.DeliveryFluxDistributionPublicKey, cfg.DeliveryFluxDistributionPublicKeys)
+		validateSignedArtifact("delivery built-in bundle", cfg.DeliveryBundleRepository, cfg.DeliveryBundleDigest, cfg.DeliveryBundleCertificateIdentity, cfg.DeliveryBundleOIDCIssuer, "", "")
 		if !strings.Contains(strings.TrimSpace(cfg.AgentImageRepository), "@sha256:") {
 			errs = append(errs, "agent_image_repository must be digest-pinned")
 		}

@@ -29,6 +29,7 @@
 #   SKIP_PREREQS  Skip Gateway API + NGF install             (default: 0)
 #   SECRET_KEY    JWT signing key                            (default: a local-dev value)
 #   ENCRYPTION_KEY Fernet key wrapping stored credentials     (default: a local-dev value)
+#   VERSION       SemVer used for first-party image metadata  (default: 1.2.0-local.<git-sha>)
 
 set -euo pipefail
 
@@ -88,6 +89,17 @@ GATEWAY_HOSTS_CSV="$(IFS=,; printf '%s' "${GATEWAY_HOSTS[*]}")"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${ROOT_DIR}/scripts/lib/gatewayclass-readiness.sh"
 cd "$ROOT_DIR"
+
+# Pull-request checkouts usually point at a synthetic merge commit (a short
+# hexadecimal SHA), not a release version. The agent protocol intentionally
+# rejects that value, so normalize it to a valid local SemVer for smoke images.
+# Keep an explicitly supplied valid VERSION untouched for local rehearsals.
+short_sha="$(git rev-parse --short HEAD 2>/dev/null || printf 'local')"
+if [[ "${VERSION:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+  BUILD_VERSION="$VERSION"
+else
+  BUILD_VERSION="1.2.0-local.${short_sha}"
+fi
 
 step()    { printf "\n\033[1;36m==> %s\033[0m\n" "$*"; }
 info()    { printf "\033[0;90m    %s\033[0m\n" "$*"; }
@@ -160,7 +172,7 @@ wait_for_gatewayclass nginx 30 2 \
 # ── 3. Build images ──────────────────────────────────────────────────────────
 if [[ "${SKIP_BUILD}" != "1" ]]; then
   step "Building Docker images (tag=${IMG_TAG})"
-  make IMG_TAG="${IMG_TAG}" IMG_REGISTRY="${IMG_REGISTRY}" docker-build-all
+  make VERSION="${BUILD_VERSION}" IMG_TAG="${IMG_TAG}" IMG_REGISTRY="${IMG_REGISTRY}" docker-build-all
 else
   info "SKIP_BUILD=1, skipping docker build"
 fi

@@ -168,6 +168,7 @@ else exit 2; fi
                 """#!/usr/bin/env bash
 set -euo pipefail
 bundle=''
+printf 'cosign %s\\n' "$*" >>"$MIRROR_LOG"
 while [[ $# -gt 0 ]]; do
   [[ "$1" == "--bundle" ]] && bundle="$2" && shift 2 || shift
 done
@@ -176,10 +177,17 @@ printf 'cosign\n' >>"$MIRROR_LOG"
 """,
             )
             env = os.environ.copy()
-            env.update({"PATH": str(bin_dir) + ":" + env["PATH"], "MIRROR_STATE": str(state), "MIRROR_LOG": str(log)})
+            env.update({
+                "PATH": str(bin_dir) + ":" + env["PATH"],
+                "MIRROR_STATE": str(state),
+                "MIRROR_LOG": str(log),
+                # This unit test uses fake registry tools and does no disk-heavy copy.
+                "ASTRONOMER_MIN_FREE_GIB": "0",
+                "ASTRONOMER_MIN_FREE_PERCENT": "0",
+            })
             signature = root / "mapping.sigstore.json"
             completed = subprocess.run(
-                [str(SCRIPT), "apply", "--plan", str(plan_path), "--signature-output", str(signature)],
+                [str(SCRIPT), "apply", "--plan", str(plan_path), "--signature-output", str(signature), "--cosign-key", "offline.key"],
                 cwd=ROOT,
                 env=env,
                 text=True,
@@ -195,7 +203,10 @@ printf 'cosign\n' >>"$MIRROR_LOG"
                 if line.startswith("mirror-release: copied ")
             }
             self.assertEqual(reported, expected_ids)
-            self.assertIn("cosign", log.read_text(encoding="utf-8"))
+            log_contents = log.read_text(encoding="utf-8")
+            self.assertIn("cosign", log_contents)
+            self.assertIn("--tlog-upload=false", log_contents)
+            self.assertIn("--key offline.key", log_contents)
 
     @staticmethod
     def _write_tool(path: Path, contents: str) -> None:

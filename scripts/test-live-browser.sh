@@ -333,17 +333,40 @@ direct_api_host="$(docker network inspect bridge --format '{{(index .IPAM.Config
 	echo "test-live-browser: Docker bridge has no routable gateway for direct API validation" >&2
 	exit 1
 }
-# From a Local CI runner container, the Docker bridge gateway is deliberately
-# not a local interface. k3d performs the authoritative host-side bind below
-# and fails closed if port 443 is occupied. Direct host runs retain the early
-# bind check so they cannot accidentally probe an existing endpoint.
+# The API contract deliberately accepts only the conventional Kubernetes API
+# ports. Keeping this restriction here makes the live fixture exercise the same
+# SSRF-resistant validation as a real adoption, instead of silently creating a
+# cluster that production would reject.
+direct_api_port="${LIVE_BROWSER_DIRECT_API_PORT:-}"
+if [[ -z "$direct_api_port" ]]; then
+	if [[ "${LOCAL_CI_LOCAL:-false}" == "true" ]]; then
+		direct_api_port=443
+	else
+		for candidate in 6443 443; do
+			if port_is_free_at "$direct_api_host" "$candidate"; then
+				direct_api_port="$candidate"
+				break
+			fi
+		done
+	fi
+fi
+[[ -n "$direct_api_port" ]] || {
+	echo "test-live-browser: neither supported direct API port (443, 6443) is available" >&2
+	exit 2
+}
+[[ "$direct_api_port" == 443 || "$direct_api_port" == 6443 ]] || {
+	echo "test-live-browser: direct API port must be 443 or 6443: $direct_api_port" >&2
+	exit 2
+}
+# Direct host runs retain the early bind check so they cannot accidentally
+# probe an existing endpoint. Local CI delegates the host-side check to k3d.
 if [[ "${LOCAL_CI_LOCAL:-false}" != "true" ]]; then
-	port_is_free_at "$direct_api_host" 443 || {
-		echo "test-live-browser: $direct_api_host:443 is already in use; direct API acceptance requires a supported production port" >&2
+	port_is_free_at "$direct_api_host" "$direct_api_port" || {
+		echo "test-live-browser: $direct_api_host:$direct_api_port is already in use; choose the other supported port with LIVE_BROWSER_DIRECT_API_PORT" >&2
 		exit 2
 	}
 fi
-direct_api_endpoint="https://$direct_api_host:443"
+direct_api_endpoint="https://$direct_api_host:$direct_api_port"
 
 echo "test-live-browser: creating isolated Flux member cluster $flux_cluster"
 mkdir -p "$flux_fixture_root/git" "$flux_fixture_root/helm" "$artifact_dir/flux-worktree"
@@ -405,7 +428,7 @@ GIT_SSL_CAINFO="$flux_tls_cert" git ls-remote \
 
 k3d cluster create "$flux_cluster" --servers 1 --agents 0 --no-lb \
 	--image "${K3S_IMAGE:-rancher/k3s:v1.35.0-k3s1}" \
-	--api-port "$direct_api_host:443" \
+	--api-port "$direct_api_host:$direct_api_port" \
 	--k3s-arg '--disable=traefik@server:0' \
 	--k3s-arg "--tls-san=$direct_api_host@server:0" \
 	--kubeconfig-update-default=false --kubeconfig-switch-context=false \
@@ -556,10 +579,28 @@ print(json.dumps({
 }))
 PY
 )"
-cluster_id="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
+cluster_create_body="$artifact_dir/cluster-create-response.json"
+if ! cluster_create_status="$(curl -sS --max-time 10 -o "$cluster_create_body" -w '%{http_code}' \
+  -H 'Content-Type: application/json' \
   --config "$admin_curl_config" \
   -d "$cluster_payload" \
-  "$backend_url/api/v1/clusters/" | json_field id)"
+  "$backend_url/api/v1/clusters/")"; then
+	echo "test-live-browser: cluster create request failed (HTTP $cluster_create_status)" >&2
+	sed -n '1,8p' "$cluster_create_body" >&2 || true
+	exit 1
+fi
+if [[ ! "$cluster_create_status" =~ ^2[0-9][0-9]$ ]]; then
+	echo "test-live-browser: cluster create returned HTTP $cluster_create_status" >&2
+	sed -n '1,8p' "$cluster_create_body" >&2 || true
+	exit 1
+fi
+cluster_id="$(json_field id <"$cluster_create_body")"
+[[ -n "$cluster_id" ]] || {
+	echo "test-live-browser: cluster create response did not contain an id" >&2
+	sed -n '1,8p' "$cluster_create_body" >&2 || true
+	exit 1
+}
+rm -f -- "$cluster_create_body"
 unset cluster_payload
 agent_token="$(curl -fsS --max-time 10 -H 'Content-Type: application/json' \
   --config "$admin_curl_config" -d '{}' \

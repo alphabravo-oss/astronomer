@@ -157,6 +157,24 @@ finalize_evidence() {
     tree_stable="false"
     status="failed"
     exit_code=1
+    {
+      printf 'source tree changed while enterprise verification was running\n'
+      printf 'initial:  %s files=%s\n' "$SOURCE_TREE_SHA256" "$SOURCE_FILE_COUNT"
+      printf 'finished: %s files=%s\n\n' "$finished_tree_sha256" "$finished_file_count"
+      printf '%s\n' 'git status --short --untracked-files=all:'
+      git status --short --untracked-files=all || true
+      printf '\ngit diff --name-status:'
+      git diff --name-status || true
+      printf '\ngit diff --summary:'
+      git diff --summary || true
+      printf '\nsource regeneration switches:'
+      for name in UPDATE_ROUTE_TABLE DUMP_ROUTES ASTRONOMER_WRITE_ROUTE_INVENTORY; do
+        if [[ -v "$name" ]]; then
+          printf ' %s=%q' "$name" "${!name}"
+        fi
+      done
+      printf '\n'
+    } >"$ARTIFACT_DIR/source-tree-mismatch.log"
   fi
   python3 - "$ARTIFACT_DIR" "$RESULTS_FILE" "$RUN_ID" "$scope" \
     "$SOURCE_COMMIT" "$SOURCE_DIRTY" "$STARTED_AT" "$status" "$TOOLS_FILE" \
@@ -382,10 +400,16 @@ verify_backend() {
   run_logged charlie-contract ./scripts/check-charlie-contract-generated.sh
 
   step "Full Go test suite"
-  run_logged go-test go test ./... -count=1
+  # Route-table tests expose explicit regeneration switches for developers.
+  # Clear them in the enterprise gate so an inherited shell environment cannot
+  # rewrite tracked route artifacts while the source-tree stability guard is
+  # measuring this run.
+  run_logged go-test env -u UPDATE_ROUTE_TABLE -u DUMP_ROUTES -u ASTRONOMER_WRITE_ROUTE_INVENTORY \
+    go test ./... -count=1
 
   step "Full Go race suite"
-  run_logged go-race go test -race -count=1 ./...
+  run_logged go-race env -u UPDATE_ROUTE_TABLE -u DUMP_ROUTES -u ASTRONOMER_WRITE_ROUTE_INVENTORY \
+    go test -race -count=1 ./...
 
   # The full suites above already execute the Go route/error-code tests. Keep
   # generated and static contract checks here without pointlessly rerunning

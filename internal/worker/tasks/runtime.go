@@ -178,6 +178,8 @@ type RuntimeDependencies struct {
 	SystemArtifactDigest      string
 	SystemOIDCIssuer          string
 	SystemOIDCIdentity        string
+	SystemPublicKey           []byte
+	SystemPublicKeys          [][]byte
 	PlatformName              string
 	ChartRecommendationPolicy catalog.RecommendationPolicy
 	ServerURL                 string

@@ -74,6 +74,8 @@ Production-specific invariants are enforced at startup by
 | `DELIVERY_FLUX_DISTRIBUTION_ASSET_PATH` | `DeliveryFluxDistributionAssetPath` | string | Go zero value | No |
 | `DELIVERY_FLUX_DISTRIBUTION_CERTIFICATE_IDENTITY` | `DeliveryFluxDistributionCertificateIdentity` | string | Go zero value | No |
 | `DELIVERY_FLUX_DISTRIBUTION_OIDC_ISSUER` | `DeliveryFluxDistributionOIDCIssuer` | string | Go zero value | No |
+| `DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEY` | `DeliveryFluxDistributionPublicKey` | string | Go zero value | No |
+| `DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEYS` | `DeliveryFluxDistributionPublicKeys` | string | Go zero value | No |
 | `DELIVERY_BUNDLE_REPOSITORY` | `DeliveryBundleRepository` | string | Go zero value | No |
 | `DELIVERY_BUNDLE_DIGEST` | `DeliveryBundleDigest` | string | Go zero value | No |
 | `DELIVERY_BUNDLE_CERTIFICATE_IDENTITY` | `DeliveryBundleCertificateIdentity` | string | Go zero value | No |

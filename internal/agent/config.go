@@ -109,8 +109,12 @@ type AgentConfig struct {
 	// System-release trust is enrollment-pinned in the install manifest. The
 	// management plane may select a release signed by this identity, but cannot
 	// broaden trust through the delivery protocol itself.
-	SystemOIDCIssuer   string `mapstructure:"system_oidc_issuer"`
-	SystemOIDCIdentity string `mapstructure:"system_oidc_identity"`
+	SystemOIDCIssuer     string `mapstructure:"system_oidc_issuer"`
+	SystemOIDCIdentity   string `mapstructure:"system_oidc_identity"`
+	SystemKeyFingerprint string `mapstructure:"system_key_fingerprint"`
+	// SystemKeyFingerprints is the comma-separated enrollment-pinned Cosign
+	// keyring. It allows a staged old+new overlap during offline key rotation.
+	SystemKeyFingerprints string `mapstructure:"system_key_fingerprints"`
 
 	// Server-CA pinning on the agent tunnel (Rancher CATTLE_CA_CHECKSUM
 	// semantics). Both are empty by default, in which case the tunnel dialer
@@ -185,6 +189,8 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 		envconfig.Default{Key: "agent_upgrade_rollout_timeout", Value: 300},
 		envconfig.Default{Key: "system_oidc_issuer", Value: ""},
 		envconfig.Default{Key: "system_oidc_identity", Value: ""},
+		envconfig.Default{Key: "system_key_fingerprint", Value: ""},
+		envconfig.Default{Key: "system_key_fingerprints", Value: ""},
 	)
 
 	cfg := &AgentConfig{}
@@ -258,6 +264,8 @@ func LoadAgentConfigWithLogger(log *slog.Logger) (*AgentConfig, error) {
 	cfg.AgentImageRepository = strings.TrimSpace(cfg.AgentImageRepository)
 	cfg.SystemOIDCIssuer = strings.TrimSpace(cfg.SystemOIDCIssuer)
 	cfg.SystemOIDCIdentity = strings.TrimSpace(cfg.SystemOIDCIdentity)
+	cfg.SystemKeyFingerprint = strings.TrimSpace(cfg.SystemKeyFingerprint)
+	cfg.SystemKeyFingerprints = strings.TrimSpace(cfg.SystemKeyFingerprints)
 
 	return cfg, nil
 }

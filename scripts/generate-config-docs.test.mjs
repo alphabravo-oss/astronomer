@@ -39,6 +39,9 @@ test("schema drift cannot silently drop a bound field or default", () => {
     () => render(source + '\nAgain bool `mapstructure:"enabled"`'),
     /duplicate mapstructure/,
   );
+  assert.doesNotThrow(() =>
+    render(source + '\nDerived []byte `mapstructure:"-"`'),
+  );
 });
 
 test("unrecognized defaults and missing Vite configuration fail closed", () => {

@@ -170,7 +170,7 @@ function ActiveYamlPanel({
   // Only user edits are local state; query refreshes never overwrite a draft.
   const editedYaml = yamlDraft ?? yaml ?? "";
   const changeEditMode = (editing: boolean) => {
-    setEditedYaml(editing ? (yaml ?? "") : undefined);
+    setEditedYaml(editing ? yaml : undefined); // Do not capture an empty draft before the initial fetch completes.
     setPreview(null);
     setEditorMode("yaml");
     setEditMode(editing);

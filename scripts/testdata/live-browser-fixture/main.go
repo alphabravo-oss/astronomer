@@ -489,8 +489,12 @@ func seedTrivyTarget(ctx context.Context, pool *pgxpool.Pool, projectID, cluster
 			"scanJobsConcurrentLimit": 1, "scanJobTimeout": "5m", "scannerReportTTL": "24h",
 		},
 		"trivy": map[string]any{
-			"image":         map[string]any{"tag": "0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"},
-			"ignoreUnfixed": false,
+			"image":            map[string]any{"tag": "0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969"},
+			"dbRegistry":       "ghcr.io",
+			"dbRepository":     "aquasecurity/trivy-db",
+			"javaDbRegistry":   "ghcr.io",
+			"javaDbRepository": "aquasecurity/trivy-java-db",
+			"ignoreUnfixed":    false,
 		},
 	})
 	if err != nil {

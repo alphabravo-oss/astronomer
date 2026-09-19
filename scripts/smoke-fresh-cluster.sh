@@ -59,6 +59,7 @@ SMOKE_SKIPPED_CHECKS=()
 SMOKE_EVIDENCE_WRITER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/write-fresh-cluster-evidence.py"
 
 KUBECONFIG_FILE="$(mktemp -t smoke-kubeconfig.XXXXXX)"
+COOKIE_JAR="$(mktemp -t smoke-cookies.XXXXXX)"
 trap 'cleanup "$?"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -68,6 +69,17 @@ ok()    { printf "\033[1;32m✓ %s\033[0m\n" "$*"; }
 fail()  { printf "\033[1;31m✗ %s\033[0m\n" "$*" >&2; exit 1; }
 record_check() { SMOKE_COMPLETED_CHECKS+=("$1"); }
 record_skip() { SMOKE_SKIPPED_CHECKS+=("$1"); }
+
+# curl prefixes HttpOnly entries in a Netscape cookie jar with
+# `#HttpOnly_`. They are still real cookie rows; treating every line beginning
+# with `#` as a comment silently drops the session cookie and makes a successful
+# browser login look unauthenticated to this headless smoke client.
+cookie_value() {
+  local name="$1"
+  awk -v wanted="$name" \
+    '($0 !~ /^#/ || $0 ~ /^#HttpOnly_/) && $6 == wanted { value = $7 } END { print value }' \
+    "$COOKIE_JAR" 2>/dev/null || true
+}
 
 write_evidence() {
   local rc="$1" status="fail" commit kubernetes_version flux_version check flux_image management_image management_images
@@ -113,15 +125,24 @@ cleanup() {
       k3d cluster delete "$SMOKE_CLUSTER" >/dev/null 2>&1 || true
     fi
     if [[ -n "${SMOKE_CLUSTER_ID:-}" ]]; then
+      cleanup_auth_args=( -b "$COOKIE_JAR" )
+      if [[ -n "${TOKEN:-}" ]]; then
+        cleanup_auth_args+=( -H "Authorization: Bearer $TOKEN" )
+      fi
+      cleanup_csrf="$(cookie_value astronomer_csrf)"
+      if [[ -n "$cleanup_csrf" ]]; then
+        cleanup_auth_args+=( -H "X-CSRF-Token: $cleanup_csrf" )
+      fi
       curl -sS -X DELETE \
-        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        "${cleanup_auth_args[@]}" \
         "$ASTRO_URL/api/v1/clusters/$SMOKE_CLUSTER_ID/" >/dev/null 2>&1 || true
     fi
   else
     printf "\n  k3d cluster left behind: %s\n" "$SMOKE_CLUSTER"
     printf "  registered as cluster_id: %s\n" "${SMOKE_CLUSTER_ID:-N/A}"
   fi
-  rm -f "$KUBECONFIG_FILE"
+  rm -f "$KUBECONFIG_FILE" "$COOKIE_JAR"
   if [[ $rc -eq 0 ]]; then
     printf "\n\033[1;32m═══ SMOKE TEST PASSED ═══\033[0m\n"
   else
@@ -133,9 +154,18 @@ api() {
   # Wrapper that re-authenticates if the token expired mid-run.
   local method="$1"; shift
   local path="$1"; shift
+  local auth_args=() csrf_token
+  if [[ -n "${TOKEN:-}" ]]; then
+    auth_args+=( -H "Authorization: Bearer $TOKEN" )
+  fi
+  csrf_token="$(cookie_value astronomer_csrf)"
+  if [[ -n "$csrf_token" ]]; then
+    auth_args+=( -H "X-CSRF-Token: $csrf_token" )
+  fi
   curl -sS -X "$method" \
-    -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
+    -b "$COOKIE_JAR" \
+    "${auth_args[@]}" \
     "$ASTRO_URL$path" "$@"
 }
 
@@ -171,11 +201,36 @@ record_check "management_api_ready"
 # ── 1. authenticate ───────────────────────────────────────────────────
 
 step "Authenticate"
-LOGIN_BODY="$(curl -fsS -X POST -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$ASTRO_EMAIL\",\"password\":\"$ASTRO_PASSWORD\"}" \
-  "$ASTRO_URL/api/v1/auth/login/")"
-TOKEN="$(echo "$LOGIN_BODY" | jget "['data']['token']")"
-[[ -n "$TOKEN" ]] || fail "no token in login response"
+LOGIN_BODY=""
+LOGIN_STATUS=""
+deadline=$(( $(date +%s) + TIMEOUT_API ))
+while (( $(date +%s) < deadline )); do
+  login_response="$(curl -sS -w $'\n%{http_code}' -c "$COOKIE_JAR" \
+    -X POST -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$ASTRO_EMAIL\",\"password\":\"$ASTRO_PASSWORD\"}" \
+    "$ASTRO_URL/api/v1/auth/login/" || true)"
+  LOGIN_STATUS="${login_response##*$'\n'}"
+  LOGIN_BODY="${login_response%$'\n'*}"
+  if [[ "$LOGIN_STATUS" == "200" ]]; then
+    break
+  fi
+  sleep 2
+done
+[[ "$LOGIN_STATUS" == "200" ]] || fail "authentication endpoint returned HTTP $LOGIN_STATUS after ${TIMEOUT_API}s"
+TOKEN="$(echo "$LOGIN_BODY" | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("data", {}).get("token", ""))
+except (json.JSONDecodeError, AttributeError):
+    print("")' 2>/dev/null || true)"
+if [[ -z "$TOKEN" ]]; then
+  session_cookie="$(cookie_value astronomer_session)"
+  csrf_cookie="$(cookie_value astronomer_csrf)"
+  [[ -n "$session_cookie" && -n "$csrf_cookie" ]] \
+    || fail "login succeeded without a bearer token or browser session cookies"
+  ok "authenticated with browser session cookies"
+else
+  ok "authenticated with bearer token"
+fi
 ok "authenticated as $ASTRO_EMAIL"
 record_check "authentication"
 
@@ -221,8 +276,7 @@ ok "install_baseline=true recorded"
 
 step "Fetch agent manifest"
 MANIFEST_FILE="$(mktemp -t smoke-agent.XXXXXX.yaml)"
-curl -fsS -H "Authorization: Bearer $TOKEN" \
-  "$ASTRO_URL/api/v1/clusters/$SMOKE_CLUSTER_ID/manifest/" > "$MANIFEST_FILE"
+api GET "/api/v1/clusters/$SMOKE_CLUSTER_ID/manifest/" > "$MANIFEST_FILE"
 grep -q "SERVER_URL" "$MANIFEST_FILE" || fail "manifest missing SERVER_URL placeholder"
 ok "manifest fetched ($(wc -l <"$MANIFEST_FILE") lines)"
 
@@ -278,9 +332,17 @@ for item in payload.get("items", []):
     metadata=item.get("metadata", {})
     spec=item.get("spec", {})
     status=item.get("status", {})
+    name=metadata.get("name", "")
     replicas=spec.get("replicas", 1)
-    if status.get("observedGeneration", 0) >= metadata.get("generation", 1) and status.get("availableReplicas", 0) >= replicas:
-        ready.append(metadata.get("name", ""))
+    # Source-controller deliberately keeps its second, warm-standby replica
+    # NotReady until leader-election failover. It must have the desired
+    # rollout present and one active replica, while the other two controllers
+    # must have every requested replica available.
+    minimum_available=1 if name == "source-controller" else replicas
+    if (status.get("observedGeneration", 0) >= metadata.get("generation", 1)
+            and status.get("updatedReplicas", 0) >= replicas
+            and status.get("availableReplicas", 0) >= minimum_available):
+        ready.append(name)
 print(" ".join(sorted(ready)))' 2>/dev/null || true)"
   if [[ "$ready_flux_controllers" == "$expected_flux_controllers" ]]; then
     ok "exact Flux controller set is ready: $ready_flux_controllers"

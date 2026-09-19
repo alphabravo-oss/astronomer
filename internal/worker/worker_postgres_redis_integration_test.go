@@ -1997,6 +1997,7 @@ func waitForWorkerBusinessTask(t *testing.T, ctx context.Context, inspector *asy
 
 func assertWorkerBusinessFixtures(t *testing.T, ctx context.Context, pool *pgxpool.Pool, inspector *asynq.Inspector, fixtures workerBusinessFixtures) {
 	t.Helper()
+	waitForWorkerSnapshotConvergence(t, ctx, pool, fixtures)
 	assertCount := func(label, query string, want int, args ...any) {
 		t.Helper()
 		var got int
@@ -2541,6 +2542,41 @@ func assertWorkerBusinessFixtures(t *testing.T, ctx context.Context, pool *pgxpo
 		}
 		if !exists {
 			t.Fatalf("audit partition %s was not ensured", partition)
+		}
+	}
+}
+
+// Snapshot dispatch and expiry cleanup are independent periodic tasks. The
+// production worker is intentionally allowed to run them concurrently, so a
+// completed task can be visible in Asynq before the other task's transaction
+// commits. Wait for the durable cross-task invariant before asserting the
+// business fixture rather than making the qualification depend on scheduler
+// timing.
+func waitForWorkerSnapshotConvergence(t *testing.T, ctx context.Context, pool *pgxpool.Pool, fixtures workerBusinessFixtures) {
+	t.Helper()
+	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var retained, expired, scheduled int
+		err := pool.QueryRow(waitCtx, `
+			SELECT count(*),
+			       count(*) FILTER (WHERE id=$2),
+			       count(*) FILTER (WHERE source='scheduled')
+			FROM cluster_snapshots
+			WHERE cluster_id=$1`, fixtures.clusterID, fixtures.snapshotExpiredID).
+			Scan(&retained, &expired, &scheduled)
+		if err != nil {
+			t.Fatalf("snapshot convergence query: %v", err)
+		}
+		if retained == 3 && expired == 0 && scheduled == 1 {
+			return
+		}
+		select {
+		case <-waitCtx.Done():
+			t.Fatalf("snapshot convergence retained=%d expired=%d scheduled=%d: %v", retained, expired, scheduled, waitCtx.Err())
+		case <-ticker.C:
 		}
 	}
 }

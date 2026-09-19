@@ -1,9 +1,28 @@
 package config
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"strings"
 	"testing"
 )
+
+func testCosignPublicKey(t *testing.T) string {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded}))
+}
 
 // prodBase is a fully-valid production config; individual cases mutate one field
 // to prove that field is enforced.
@@ -117,6 +136,56 @@ func TestValidateProductionSecurity_HappyPathAndDevNoop(t *testing.T) {
 	dev.EncryptionKey = ""
 	if err := ValidateProductionSecurity(dev, false); err != nil {
 		t.Fatalf("dev config should never fail, got %v", err)
+	}
+}
+
+func TestValidateProductionSecurityTreatsEmptyKeyringAsKeylessMode(t *testing.T) {
+	cfg := prodBase()
+	cfg.DeliveryFluxDistributionPublicKeys = "[]"
+	if err := ValidateProductionSecurity(cfg, true); err != nil {
+		t.Fatalf("default empty keyring incorrectly shadowed OIDC trust: %v", err)
+	}
+}
+
+func TestValidateProductionSecurity_AcceptsOnlyOneFluxTrustMode(t *testing.T) {
+	cfg := prodBase()
+	cfg.DeliveryFluxDistributionCertificateIdentity = ""
+	cfg.DeliveryFluxDistributionOIDCIssuer = ""
+	cfg.DeliveryFluxDistributionPublicKey = testCosignPublicKey(t)
+	if err := ValidateProductionSecurity(cfg, true); err != nil {
+		t.Fatalf("valid offline Flux trust policy rejected: %v", err)
+	}
+
+	cfg = prodBase()
+	cfg.DeliveryFluxDistributionPublicKey = testCosignPublicKey(t)
+	if err := ValidateProductionSecurity(cfg, true); err == nil || !strings.Contains(err.Error(), "Cosign public-key set or a keyless OIDC identity") {
+		t.Fatalf("mixed Flux trust modes accepted: %v", err)
+	}
+
+	cfg = prodBase()
+	cfg.DeliveryFluxDistributionCertificateIdentity = ""
+	cfg.DeliveryFluxDistributionOIDCIssuer = ""
+	cfg.DeliveryFluxDistributionPublicKey = "not a PEM key"
+	if err := ValidateProductionSecurity(cfg, true); err == nil || !strings.Contains(err.Error(), "Cosign public key is invalid") {
+		t.Fatalf("invalid Flux public key accepted: %v", err)
+	}
+}
+
+func TestValidateProductionSecurityAcceptsOverlappingOfflineFluxKeys(t *testing.T) {
+	cfg := prodBase()
+	cfg.DeliveryFluxDistributionCertificateIdentity = ""
+	cfg.DeliveryFluxDistributionOIDCIssuer = ""
+	keys, err := json.Marshal([]string{testCosignPublicKey(t), testCosignPublicKey(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.DeliveryFluxDistributionPublicKeys = string(keys)
+	if err := ValidateProductionSecurity(cfg, true); err != nil {
+		t.Fatalf("valid overlapping offline keyring rejected: %v", err)
+	}
+	cfg.DeliveryFluxDistributionPublicKey = testCosignPublicKey(t)
+	if err := ValidateProductionSecurity(cfg, true); err == nil {
+		t.Fatal("mixed single-key and keyring inputs were accepted")
 	}
 }
 

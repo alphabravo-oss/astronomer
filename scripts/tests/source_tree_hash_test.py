@@ -22,6 +22,15 @@ class SourceTreeHashTest(unittest.TestCase):
             first = MODULE.tree_identity(root)
             self.assertEqual(first, MODULE.tree_identity(root))
 
+            # Git tracks the executable bit, not owner/group permission bits.
+            # A generator may recreate a file under a restrictive umask without
+            # changing the committed source tree identity.
+            tracked.chmod(0o600)
+            self.assertEqual(first, MODULE.tree_identity(root))
+            tracked.chmod(0o700)
+            self.assertNotEqual(first["source_tree_sha256"], MODULE.tree_identity(root)["source_tree_sha256"])
+            tracked.chmod(0o600)
+
             tracked.write_text("two\n", encoding="utf-8")
             dirty = MODULE.tree_identity(root)
             self.assertNotEqual(first["source_tree_sha256"], dirty["source_tree_sha256"])

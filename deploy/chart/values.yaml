@@ -662,6 +662,11 @@ delivery:
         requireSignature: true
         certificateIdentity: "https://github.com/fluxcd/flux2/.github/workflows/release.yaml@refs/tags/v2.9.3"
         oidcIssuer: "https://token.actions.githubusercontent.com"
+        # Set either one PEM publicKey for compatibility, or an overlapping
+        # publicKeys keyring for staged offline signer rotation. New installs
+        # should provision old+next keys before switching the signer.
+        publicKey: ""
+        publicKeys: []
     builtInBundles:
       ociRepository: ""
       digest: ""

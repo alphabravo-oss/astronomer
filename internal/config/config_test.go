@@ -1,6 +1,12 @@
 package config
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"testing"
 
 	"github.com/alphabravocompany/astronomer-go/internal/sessionpolicy"
@@ -30,6 +36,40 @@ func TestLoadDefaultsWorkerMetricsAddr(t *testing.T) {
 	}
 	if cfg.WorkerMetricsAddr != ":9090" {
 		t.Fatalf("WorkerMetricsAddr = %q, want %q", cfg.WorkerMetricsAddr, ":9090")
+	}
+}
+
+func TestLoadParsesOfflineFluxPublicKeyring(t *testing.T) {
+	makePublicKey := func() string {
+		t.Helper()
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encoded}))
+	}
+	want := []string{makePublicKey(), makePublicKey()}
+	encoded, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEY", "")
+	t.Setenv("DELIVERY_FLUX_DISTRIBUTION_PUBLIC_KEYS", string(encoded))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() rejected a valid PEM keyring: %v", err)
+	}
+	if len(cfg.DeliveryFluxDistributionKeyring) != len(want) {
+		t.Fatalf("loaded keyring has %d keys, want %d", len(cfg.DeliveryFluxDistributionKeyring), len(want))
+	}
+	for index := range want {
+		if string(cfg.DeliveryFluxDistributionKeyring[index]) != want[index] {
+			t.Fatalf("keyring key %d changed during config load", index)
+		}
 	}
 }
 

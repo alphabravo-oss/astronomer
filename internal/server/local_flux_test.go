@@ -2,9 +2,12 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"testing"
+	"time"
 
 	fluxdistribution "github.com/alphabravocompany/astronomer-go/deploy/flux"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -33,5 +36,41 @@ func TestLocalFluxBootstrapSupportsEveryPinnedDistributionObject(t *testing.T) {
 	}
 	if objects == 0 {
 		t.Fatal("embedded Flux distribution is empty")
+	}
+}
+
+func TestLocalFluxBootstrapRetriesTransientFailuresUntilApplied(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	attempts := 0
+	err := retryLocalFluxBootstrap(context.Background(), logger, time.Millisecond, func(context.Context) error {
+		attempts++
+		if attempts < 3 {
+			return errors.New("temporary Kubernetes API failure")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("retry bootstrap: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("bootstrap attempts = %d, want 3", attempts)
+	}
+}
+
+func TestLocalFluxBootstrapStopsCleanlyOnShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	attempts := 0
+	err := retryLocalFluxBootstrap(ctx, logger, time.Hour, func(context.Context) error {
+		attempts++
+		cancel()
+		return errors.New("temporary Kubernetes API failure")
+	})
+	if err != nil {
+		t.Fatalf("shutdown should stop retry cleanly: %v", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("bootstrap attempts = %d, want 1", attempts)
 	}
 }
