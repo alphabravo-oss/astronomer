@@ -332,9 +332,17 @@ for item in payload.get("items", []):
     metadata=item.get("metadata", {})
     spec=item.get("spec", {})
     status=item.get("status", {})
+    name=metadata.get("name", "")
     replicas=spec.get("replicas", 1)
-    if status.get("observedGeneration", 0) >= metadata.get("generation", 1) and status.get("availableReplicas", 0) >= replicas:
-        ready.append(metadata.get("name", ""))
+    # Source-controller deliberately keeps its second, warm-standby replica
+    # NotReady until leader-election failover. It must have the desired
+    # rollout present and one active replica, while the other two controllers
+    # must have every requested replica available.
+    minimum_available=1 if name == "source-controller" else replicas
+    if (status.get("observedGeneration", 0) >= metadata.get("generation", 1)
+            and status.get("updatedReplicas", 0) >= replicas
+            and status.get("availableReplicas", 0) >= minimum_available):
+        ready.append(name)
 print(" ".join(sorted(ready)))' 2>/dev/null || true)"
   if [[ "$ready_flux_controllers" == "$expected_flux_controllers" ]]; then
     ok "exact Flux controller set is ready: $ready_flux_controllers"

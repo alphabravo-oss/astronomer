@@ -50,6 +50,8 @@ assert 'deploy/bundles/catalog.json' in smoke
 assert 'item["default_enabled"]' in smoke
 assert 'spec.get("targetNamespace", "")' in smoke
 assert 'spec.get("releaseName", "")' in smoke
+assert 'minimum_available=1 if name == "source-controller" else replicas' in smoke
+assert 'status.get("updatedReplicas", 0) >= replicas' in smoke
 assert 'COOKIE_JAR=' in smoke
 assert 'astronomer_session' in smoke and 'astronomer_csrf' in smoke
 assert 'authenticated with browser session cookies' in smoke
