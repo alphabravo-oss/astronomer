@@ -11,10 +11,25 @@ export const PROJECT_SCOPE_PARAM = "project";
 /** `null` means every authorized namespace; an array is an explicit allow-list. */
 export type NamespaceSelection = readonly string[] | null;
 
+export const MAX_RECENT_CLUSTERS = 5;
+
+/** Push `clusterId` to the front of `recent`, de-duped, capped at the limit. */
+export function withRecentCluster(
+  recent: readonly string[],
+  clusterId: string,
+): string[] {
+  return [clusterId, ...recent.filter((id) => id !== clusterId)].slice(
+    0,
+    MAX_RECENT_CLUSTERS,
+  );
+}
+
 interface ClusterScopeState extends Record<string, unknown> {
   lastClusterId: string | null;
   namespacesByCluster: Record<string, NamespaceSelection>;
   projectByCluster: Record<string, string | null>;
+  /** Most-recently-visited clusters, most-recent-first, capped at MAX_RECENT_CLUSTERS. */
+  recentClusterIds: string[];
   setClusterScope: (
     clusterId: string,
     namespaces: NamespaceSelection,
@@ -27,6 +42,7 @@ export const useClusterScopeStore = createBrowserState<ClusterScopeState>(
     lastClusterId: null,
     namespacesByCluster: {},
     projectByCluster: {},
+    recentClusterIds: [],
     setClusterScope: (clusterId, namespaces, projectId) =>
       useClusterScopeStore.setState((state) => ({
         lastClusterId: clusterId,
@@ -39,6 +55,7 @@ export const useClusterScopeStore = createBrowserState<ClusterScopeState>(
           ...state.projectByCluster,
           [clusterId]: projectId,
         },
+        recentClusterIds: withRecentCluster(state.recentClusterIds, clusterId),
       })),
   },
   {
@@ -48,6 +65,7 @@ export const useClusterScopeStore = createBrowserState<ClusterScopeState>(
       lastClusterId: state.lastClusterId,
       namespacesByCluster: state.namespacesByCluster,
       projectByCluster: state.projectByCluster,
+      recentClusterIds: state.recentClusterIds,
     }),
   },
 );

@@ -31,14 +31,21 @@ interface CreateResourceDialogProps {
   open: boolean;
   onClose: () => void;
   clusterId: string;
-  /** Resource type key from k8sTemplates (e.g. "deployment", "service") */
-  templateKey: string;
+  /**
+   * Resource type key from k8sTemplates (e.g. "deployment", "service").
+   * Omit for a bare "Import YAML" flow with no starting template: the
+   * dialog opens directly in YAML mode with the guided/YAML toggle hidden.
+   */
+  templateKey?: string;
   /** Display title */
   title: string;
   /** K8s API path to POST to. The live discovery contract is preferred. */
   apiPath?: string;
   resourceType?: ResourceType;
 }
+
+const IMPORT_YAML_PLACEHOLDER =
+  "# Paste one or more Kubernetes manifests, separated by ---\n";
 
 const TEMPLATE_RESOURCE_TYPES: Record<string, ResourceType> = {
   deployment: "deployments",
@@ -83,6 +90,22 @@ const KIND_TO_PLURAL: Record<string, string> = {
 };
 
 const MAX_YAML_DOCUMENTS = 50;
+
+const EDITOR_MODES = ["guided", "yaml"] as const;
+
+/** Arrow/Home/End navigation for the guided/yaml tablist. */
+function nextEditorModeIndex(
+  key: string,
+  index: number,
+  length: number,
+): number | undefined {
+  if (key === "ArrowRight" || key === "ArrowDown") return (index + 1) % length;
+  if (key === "ArrowLeft" || key === "ArrowUp")
+    return (index - 1 + length) % length;
+  if (key === "Home") return 0;
+  if (key === "End") return length - 1;
+  return undefined;
+}
 
 export function normalizeManifestDocuments(
   documents: unknown[],
@@ -159,10 +182,13 @@ function CreateResourceEditor({
   resourceType,
 }: CreateResourceDialogProps) {
   const resolvedResourceType =
-    resourceType ?? TEMPLATE_RESOURCE_TYPES[templateKey];
-  const [mode, setMode] = useState<"guided" | "yaml">("guided");
+    resourceType ??
+    (templateKey ? TEMPLATE_RESOURCE_TYPES[templateKey] : undefined);
+  const [mode, setMode] = useState<"guided" | "yaml">(
+    templateKey ? "guided" : "yaml",
+  );
   const [yamlContent, setYamlContent] = useState(
-    k8sTemplates[templateKey] || "",
+    templateKey ? k8sTemplates[templateKey] || "" : IMPORT_YAML_PLACEHOLDER,
   );
   const [manifest, setManifest] = useState<KubernetesManifest>({});
   const [guidedValid, setGuidedValid] = useState(false);
@@ -177,7 +203,7 @@ function CreateResourceEditor({
   );
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !templateKey) return;
     modeRequestRef.current += 1;
     const template = k8sTemplates[templateKey] || "";
     let cancelled = false;
@@ -239,26 +265,18 @@ function CreateResourceEditor({
     setMode(next);
   };
 
-  const editorModes = ["guided", "yaml"] as const;
   const handleModeKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
     index: number,
   ) => {
-    let nextIndex: number | undefined;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-      nextIndex = (index + 1) % editorModes.length;
-    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-      nextIndex = (index - 1 + editorModes.length) % editorModes.length;
-    } else if (event.key === "Home") {
-      nextIndex = 0;
-    } else if (event.key === "End") {
-      nextIndex = editorModes.length - 1;
-    } else {
-      return;
-    }
+    const nextIndex = nextEditorModeIndex(
+      event.key,
+      index,
+      EDITOR_MODES.length,
+    );
+    if (nextIndex === undefined) return;
     event.preventDefault();
-    const next = editorModes[nextIndex];
-    void changeMode(next);
+    void changeMode(EDITOR_MODES[nextIndex]);
     const tabs =
       event.currentTarget.parentElement?.querySelectorAll<HTMLElement>(
         '[role="tab"]',
@@ -387,27 +405,28 @@ function CreateResourceEditor({
         role="tablist"
         aria-label="Resource editor mode"
       >
-        {editorModes.map((item, index) => (
-          <button
-            key={item}
-            id={`resource-editor-tab-${item}`}
-            type="button"
-            role="tab"
-            aria-selected={mode === item}
-            aria-controls={`resource-editor-panel-${item}`}
-            tabIndex={mode === item ? 0 : -1}
-            onClick={() => void changeMode(item)}
-            onKeyDown={(event) => handleModeKeyDown(event, index)}
-            className={cn(
-              "border-b-2 px-4 py-2 text-sm font-medium capitalize",
-              mode === item
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {item}
-          </button>
-        ))}
+        {templateKey &&
+          EDITOR_MODES.map((item, index) => (
+            <button
+              key={item}
+              id={`resource-editor-tab-${item}`}
+              type="button"
+              role="tab"
+              aria-selected={mode === item}
+              aria-controls={`resource-editor-panel-${item}`}
+              tabIndex={mode === item ? 0 : -1}
+              onClick={() => void changeMode(item)}
+              onKeyDown={(event) => handleModeKeyDown(event, index)}
+              className={cn(
+                "border-b-2 px-4 py-2 text-sm font-medium capitalize",
+                mode === item
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {item}
+            </button>
+          ))}
         <div className="ml-auto self-center pb-2 text-xs text-muted-foreground">
           {schemaQuery.isLoading
             ? "Loading live cluster schema…"

@@ -17,10 +17,7 @@ import {
   useDeleteCluster,
 } from "@/lib/hooks/clusters";
 import { useClusterMetricsSummary } from "@/lib/hooks/workloads";
-import {
-  useDownloadProxyKubeconfig,
-  useDownloadDirectKubeconfig,
-} from "@/lib/hooks/kubernetes-proxy";
+import { useClusterKubeconfig } from "@/lib/hooks/kubernetes-proxy";
 import { queryKeys } from "@/lib/query-keys";
 import { useClustersUpdate } from "@/lib/permission-hooks";
 import { useAnomalyBaselines } from "@/lib/hooks/alerting";
@@ -101,9 +98,8 @@ function ClusterDetailPage() {
     refetchInterval: liveFallback(5 * 60 * 1000),
     refetchIntervalInBackground: false,
   });
-  const downloadProxyKubeconfig = useDownloadProxyKubeconfig();
-  const downloadDirectKubeconfig = useDownloadDirectKubeconfig();
   const directPermission = useClustersUpdate(clusterId);
+  const kubeconfig = useClusterKubeconfig(clusterId, cluster, directPermission);
   const deleteMutation = useDeleteCluster();
   // Service-mesh badge data (sprint 071). Cheap query — the row is one
   // SELECT keyed by cluster_id; if no detection has run yet the API
@@ -145,44 +141,6 @@ function ClusterDetailPage() {
   // Action menu state
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-
-  const downloadProxyKubeconfigFile = async () => {
-    try {
-      const blob = await downloadProxyKubeconfig.mutateAsync(clusterId);
-      const url = window.URL.createObjectURL(new Blob([blob]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute(
-        "download",
-        `${cluster?.name || "cluster"}-proxy-kubeconfig.yaml`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch {
-      // Error handled by mutation
-    }
-  };
-
-  const downloadDirectKubeconfigFile = async () => {
-    try {
-      const blob = await downloadDirectKubeconfig.mutateAsync(clusterId);
-      const url = window.URL.createObjectURL(new Blob([blob]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute(
-        "download",
-        `${cluster?.name || "cluster"}-direct-kubeconfig.yaml`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch {
-      // Error handled by mutation
-    }
-  };
 
   const handleDelete = async () => {
     try {
@@ -252,30 +210,18 @@ function ClusterDetailPage() {
           actions={
             <>
               <ActionButton
-                onClick={downloadProxyKubeconfigFile}
-                loading={downloadProxyKubeconfig.isPending}
+                onClick={kubeconfig.downloadProxy}
+                loading={kubeconfig.proxyPending}
                 icon={<Download className="h-4 w-4" />}
                 title="Download a one-hour, read-only kubeconfig routed and audited through Astronomer"
               >
                 Proxy kubeconfig
               </ActionButton>
               <ActionButton
-                onClick={downloadDirectKubeconfigFile}
-                loading={downloadDirectKubeconfig.isPending}
-                disabled={
-                  !directPermission.canWrite ||
-                  !cluster.apiServerUrl ||
-                  cluster.isLocal
-                }
-                disabledReason={
-                  cluster.isLocal
-                    ? "Direct access is for adopted clusters"
-                    : !directPermission.canWrite
-                      ? directPermission.reason
-                      : !cluster.apiServerUrl
-                        ? "Configure an external Kubernetes API endpoint in Edit cluster"
-                        : undefined
-                }
+                onClick={kubeconfig.downloadDirect}
+                loading={kubeconfig.directPending}
+                disabled={!!kubeconfig.directDisabledReason}
+                disabledReason={kubeconfig.directDisabledReason}
                 icon={<Download className="h-4 w-4" />}
                 title="Download a separately scoped, read-only direct kubeconfig valid for 15 minutes"
               >

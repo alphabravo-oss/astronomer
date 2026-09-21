@@ -2,8 +2,10 @@ import {
   Activity,
   BarChart3,
   Bell,
+  Blocks,
   Box,
   Boxes,
+  Cable,
   Camera,
   Clock,
   Container,
@@ -12,16 +14,22 @@ import {
   FileText,
   FolderOpen,
   Gauge,
+  Gavel,
   Globe,
   HardDrive,
+  History,
+  Key,
   KeyRound,
   Layers,
   LayoutDashboard,
+  Link,
   Link2,
+  LineChart,
   Lock,
   Network,
   Package,
   Puzzle,
+  Radio,
   Rocket,
   Route,
   Scale,
@@ -108,6 +116,7 @@ export function getClusterNavGroups(
   return [
     {
       label: "Cluster",
+      icon: LayoutDashboard,
       defaultOpen: true,
       items: [
         { label: "Overview", href: base, icon: LayoutDashboard, exact: true },
@@ -129,7 +138,7 @@ export function getClusterNavGroups(
         // operators want is "any Warning events recently?". Drop the
         // numeric count for now; a status-dot replacement (green/amber
         // driven by recent Warning count) is the better end state.
-        { label: "Events", href: `${base}/events`, icon: Activity },
+        { label: "Events", href: `${base}/events`, icon: History },
         { label: "Tools", href: `${base}/tools`, icon: Wrench },
         { label: "Apps", href: `${base}/apps`, icon: Package },
         {
@@ -150,6 +159,7 @@ export function getClusterNavGroups(
     },
     {
       label: "Observability",
+      icon: Gauge,
       defaultOpen: true,
       items: [
         {
@@ -175,7 +185,7 @@ export function getClusterNavGroups(
               {
                 label: "Grafana",
                 href: `${base}/grafana`,
-                icon: BarChart3,
+                icon: LineChart,
                 permission: {
                   resource: "monitoring",
                   verb: "read" as const,
@@ -200,6 +210,7 @@ export function getClusterNavGroups(
     },
     {
       label: "Workloads",
+      icon: Box,
       items: [
         {
           label: "Overview",
@@ -242,6 +253,7 @@ export function getClusterNavGroups(
     },
     {
       label: "Service Discovery",
+      icon: Network,
       items: [
         {
           label: "Services",
@@ -260,18 +272,19 @@ export function getClusterNavGroups(
     },
     {
       label: "Gateway API",
+      icon: Globe,
       items: [
         { label: "Gateways", href: `${base}/gateways`, icon: Globe },
-        { label: "HTTPRoutes", href: `${base}/httproutes`, icon: Network },
         {
           label: "GatewayClasses",
           href: `${base}/gatewayclasses`,
           icon: Layers,
         },
-        { label: "GRPCRoutes", href: `${base}/grpcroutes`, icon: Network },
-        { label: "TLSRoutes", href: `${base}/tlsroutes`, icon: Network },
-        { label: "TCPRoutes", href: `${base}/tcproutes`, icon: Network },
-        { label: "UDPRoutes", href: `${base}/udproutes`, icon: Network },
+        { label: "HTTPRoutes", href: `${base}/httproutes`, icon: Route },
+        { label: "GRPCRoutes", href: `${base}/grpcroutes`, icon: Waypoints },
+        { label: "TLSRoutes", href: `${base}/tlsroutes`, icon: Lock },
+        { label: "TCPRoutes", href: `${base}/tcproutes`, icon: Cable },
+        { label: "UDPRoutes", href: `${base}/udproutes`, icon: Radio },
         {
           label: "ReferenceGrants",
           href: `${base}/referencegrants`,
@@ -281,6 +294,7 @@ export function getClusterNavGroups(
     },
     {
       label: "Storage",
+      icon: HardDrive,
       items: [
         {
           label: "PersistentVolumes",
@@ -317,6 +331,7 @@ export function getClusterNavGroups(
     },
     {
       label: "Policy",
+      icon: Shield,
       items: [
         {
           label: "Network Policies",
@@ -346,13 +361,14 @@ export function getClusterNavGroups(
         {
           label: "Gatekeeper",
           href: `${base}/gatekeeper`,
-          icon: ShieldCheck,
+          icon: Gavel,
           permission: { resource: "security", verb: "read" },
         },
       ],
     },
     {
       label: "RBAC",
+      icon: UserCircle,
       items: [
         {
           label: "ServiceAccounts",
@@ -375,19 +391,20 @@ export function getClusterNavGroups(
         {
           label: "Roles",
           href: `${base}/k8s-roles`,
-          icon: KeyRound,
+          icon: Key,
           countKey: "k8sRoles",
         },
         {
           label: "RoleBindings",
           href: `${base}/k8s-rolebindings`,
-          icon: Link2,
+          icon: Link,
           countKey: "k8sRolebindings",
         },
       ],
     },
     {
       label: "More Resources",
+      icon: Puzzle,
       items: [
         // GATE C: dynamic CR explorer (distinct from the static CRD-definition list).
         {
@@ -396,7 +413,7 @@ export function getClusterNavGroups(
           icon: Puzzle,
           permission: { resource: "custom_resources", verb: "read" },
         },
-        { label: "CRDs", href: `${base}/crds`, icon: Puzzle, countKey: "crds" },
+        { label: "CRDs", href: `${base}/crds`, icon: Blocks, countKey: "crds" },
         {
           label: "Endpoints",
           href: `${base}/endpoints`,

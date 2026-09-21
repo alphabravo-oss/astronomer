@@ -5717,6 +5717,7 @@ export interface OpenAPIComponents {
           "landing_route": "/dashboard" | "/dashboard/clusters" | "/dashboard/projects" | "/dashboard/workloads" | "/dashboard/delivery" | "/dashboard/monitoring" | "/dashboard/alerting" | "/dashboard/security" | "/dashboard/audit";
           "time_format": "locale" | "12h" | "24h";
           "favorites": Array<"/dashboard" | "/dashboard/clusters" | "/dashboard/projects" | "/dashboard/workloads" | "/dashboard/delivery" | "/dashboard/monitoring" | "/dashboard/alerting" | "/dashboard/logging" | "/dashboard/security" | "/dashboard/rbac" | "/dashboard/audit" | "/dashboard/tools" | "/dashboard/extensions">;
+          "pinned_clusters"?: string[];
         };
     UserQuotaDimensions: {
           "max_projects_per_user": number;

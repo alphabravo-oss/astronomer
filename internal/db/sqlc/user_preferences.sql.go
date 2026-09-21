@@ -13,7 +13,7 @@ import (
 )
 
 const getUserPreferences = `-- name: GetUserPreferences :one
-SELECT user_id, theme, table_density, landing_route, time_format, favorites, created_at, updated_at FROM user_preferences WHERE user_id = $1
+SELECT user_id, theme, table_density, landing_route, time_format, favorites, created_at, updated_at, pinned_clusters FROM user_preferences WHERE user_id = $1
 `
 
 func (q *Queries) GetUserPreferences(ctx context.Context, userID uuid.UUID) (UserPreference, error) {
@@ -28,16 +28,17 @@ func (q *Queries) GetUserPreferences(ctx context.Context, userID uuid.UUID) (Use
 		&i.Favorites,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PinnedClusters,
 	)
 	return i, err
 }
 
 const upsertUserPreferences = `-- name: UpsertUserPreferences :one
 INSERT INTO user_preferences (
-    user_id, theme, table_density, landing_route, time_format, favorites
+    user_id, theme, table_density, landing_route, time_format, favorites, pinned_clusters
 ) VALUES (
     $1, $2, $3,
-    $4, $5, $6
+    $4, $5, $6, $7
 )
 ON CONFLICT (user_id) DO UPDATE SET
     theme = EXCLUDED.theme,
@@ -45,17 +46,19 @@ ON CONFLICT (user_id) DO UPDATE SET
     landing_route = EXCLUDED.landing_route,
     time_format = EXCLUDED.time_format,
     favorites = EXCLUDED.favorites,
+    pinned_clusters = EXCLUDED.pinned_clusters,
     updated_at = now()
-RETURNING user_id, theme, table_density, landing_route, time_format, favorites, created_at, updated_at
+RETURNING user_id, theme, table_density, landing_route, time_format, favorites, created_at, updated_at, pinned_clusters
 `
 
 type UpsertUserPreferencesParams struct {
-	UserID       uuid.UUID       `json:"user_id"`
-	Theme        string          `json:"theme"`
-	TableDensity string          `json:"table_density"`
-	LandingRoute string          `json:"landing_route"`
-	TimeFormat   string          `json:"time_format"`
-	Favorites    json.RawMessage `json:"favorites"`
+	UserID         uuid.UUID       `json:"user_id"`
+	Theme          string          `json:"theme"`
+	TableDensity   string          `json:"table_density"`
+	LandingRoute   string          `json:"landing_route"`
+	TimeFormat     string          `json:"time_format"`
+	Favorites      json.RawMessage `json:"favorites"`
+	PinnedClusters json.RawMessage `json:"pinned_clusters"`
 }
 
 func (q *Queries) UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UserPreference, error) {
@@ -66,6 +69,7 @@ func (q *Queries) UpsertUserPreferences(ctx context.Context, arg UpsertUserPrefe
 		arg.LandingRoute,
 		arg.TimeFormat,
 		arg.Favorites,
+		arg.PinnedClusters,
 	)
 	var i UserPreference
 	err := row.Scan(
@@ -77,6 +81,7 @@ func (q *Queries) UpsertUserPreferences(ctx context.Context, arg UpsertUserPrefe
 		&i.Favorites,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PinnedClusters,
 	)
 	return i, err
 }

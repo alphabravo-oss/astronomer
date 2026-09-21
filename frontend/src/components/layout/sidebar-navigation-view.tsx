@@ -2,6 +2,10 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 
 import { useClusterToolsStatus, useTools } from "@/lib/hooks/tools";
+import {
+  CollapsedNavItems,
+  SidebarRailGroup,
+} from "@/components/layout/sidebar-rail";
 import { cn } from "@/lib/utils";
 import type { NavGroup } from "@/components/layout/sidebar-navigation";
 
@@ -121,35 +125,10 @@ export function SidebarGroup({
   onToggle: () => void;
 }) {
   if (collapsed) {
-    return (
-      <div className="space-y-0.5">
-        {group.items.map((item) => {
-          const Icon = item.icon;
-          const active = item.exact
-            ? pathname === item.href
-            : pathname.startsWith(item.href);
-          return (
-            <RouterLink
-              key={item.href}
-              to={item.href}
-              className={cn(
-                "nav-item group justify-center px-0",
-                active && "active",
-              )}
-              title={item.label}
-            >
-              <Icon
-                className={cn(
-                  "h-4 w-4 shrink-0",
-                  active
-                    ? "text-foreground"
-                    : "text-muted-foreground group-hover:text-foreground",
-                )}
-              />
-            </RouterLink>
-          );
-        })}
-      </div>
+    return group.hideLabel ? (
+      <CollapsedNavItems items={group.items} pathname={pathname} />
+    ) : (
+      <SidebarRailGroup group={group} pathname={pathname} counts={counts} />
     );
   }
 

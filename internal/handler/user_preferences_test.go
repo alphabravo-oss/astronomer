@@ -40,7 +40,8 @@ func (f *preferenceTxFake) UpsertUserPreferences(_ context.Context, arg sqlc.Ups
 	f.row = sqlc.UserPreference{
 		UserID: arg.UserID, Theme: arg.Theme, TableDensity: arg.TableDensity,
 		LandingRoute: arg.LandingRoute, TimeFormat: arg.TimeFormat,
-		Favorites: arg.Favorites, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		Favorites: arg.Favorites, PinnedClusters: arg.PinnedClusters,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	return f.row, nil
 }
@@ -69,7 +70,7 @@ func TestGetUserPreferencesReturnsCanonicalDefaults(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	for _, want := range []string{`"theme":"system"`, `"table_density":"comfortable"`, `"landing_route":"/dashboard"`, `"favorites":[]`} {
+	for _, want := range []string{`"theme":"system"`, `"table_density":"comfortable"`, `"landing_route":"/dashboard"`, `"favorites":[]`, `"pinned_clusters":[]`} {
 		if !bytes.Contains(w.Body.Bytes(), []byte(want)) {
 			t.Errorf("response missing %s: %s", want, w.Body.String())
 		}
@@ -107,10 +108,91 @@ func TestPutUserPreferencesCommitsWithAuditIntent(t *testing.T) {
 	}
 }
 
+func TestPutUserPreferencesRoundTripsPinnedClusters(t *testing.T) {
+	store := &preferenceStoreFake{}
+	tx := &preferenceTxFake{}
+	h := NewAuthHandler(nil, nil)
+	h.SetUserPreferences(store, func(_ context.Context, fn func(UserPreferencesMutationTx) error) error {
+		if err := fn(tx); err != nil {
+			return err
+		}
+		row := tx.row
+		store.row = &row
+		store.audits = append(store.audits, tx.audits...)
+		return nil
+	})
+	pinned := []string{
+		"11111111-1111-1111-1111-111111111111",
+		"22222222-2222-2222-2222-222222222222",
+	}
+	body := map[string]any{
+		"theme": "dark", "table_density": "compact",
+		"landing_route": "/dashboard/clusters", "time_format": "24h",
+		"favorites": []string{}, "pinned_clusters": pinned,
+	}
+	w := httptest.NewRecorder()
+	h.PutUserPreferences(w, preferenceRequest(http.MethodPut, uuid.New(), body))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	for _, id := range pinned {
+		if !bytes.Contains(w.Body.Bytes(), []byte(id)) {
+			t.Errorf("response missing pinned cluster %s: %s", id, w.Body.String())
+		}
+	}
+
+	// A second GET (simulating a fresh session) must read back the same
+	// pinned clusters from the stored row.
+	getStore := &preferenceStoreFake{row: store.row}
+	h2 := NewAuthHandler(nil, nil)
+	h2.SetUserPreferences(getStore, nil)
+	getW := httptest.NewRecorder()
+	h2.GetUserPreferences(getW, preferenceRequest(http.MethodGet, uuid.New(), nil))
+	if getW.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", getW.Code, getW.Body.String())
+	}
+	for _, id := range pinned {
+		if !bytes.Contains(getW.Body.Bytes(), []byte(id)) {
+			t.Errorf("GET response missing pinned cluster %s: %s", id, getW.Body.String())
+		}
+	}
+}
+
+func TestPutUserPreferencesDefaultsOmittedPinnedClusters(t *testing.T) {
+	store := &preferenceStoreFake{}
+	tx := &preferenceTxFake{}
+	h := NewAuthHandler(nil, nil)
+	h.SetUserPreferences(store, func(_ context.Context, fn func(UserPreferencesMutationTx) error) error {
+		if err := fn(tx); err != nil {
+			return err
+		}
+		row := tx.row
+		store.row = &row
+		return nil
+	})
+	body := map[string]any{
+		"theme": "dark", "table_density": "compact",
+		"landing_route": "/dashboard/clusters", "time_format": "24h",
+		"favorites": []string{},
+	}
+	w := httptest.NewRecorder()
+	h.PutUserPreferences(w, preferenceRequest(http.MethodPut, uuid.New(), body))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"pinned_clusters":[]`)) {
+		t.Fatalf("omitted pinned_clusters did not default to []: %s", w.Body.String())
+	}
+	if string(tx.row.PinnedClusters) != "[]" {
+		t.Fatalf("stored pinned_clusters = %q, want [] (not null)", tx.row.PinnedClusters)
+	}
+}
+
 func TestPutUserPreferencesRejectsUnknownAndUnregisteredValues(t *testing.T) {
 	for _, body := range []string{
 		`{"theme":"sepia","table_density":"compact","landing_route":"/dashboard","time_format":"24h","favorites":[]}`,
 		`{"theme":"dark","table_density":"compact","landing_route":"/dashboard","time_format":"24h","favorites":[],"extra":true}`,
+		`{"theme":"dark","table_density":"compact","landing_route":"/dashboard","time_format":"24h","favorites":[],"pinned_clusters":["not-a-uuid"]}`,
 	} {
 		t.Run(body, func(t *testing.T) {
 			store := &preferenceStoreFake{}

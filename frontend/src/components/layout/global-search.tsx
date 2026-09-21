@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
@@ -12,7 +11,10 @@ import { cn } from "@/lib/utils";
  * cheap and avoids competing with the search page's own debounce.
  *
  * Keyboard shortcut: "/" focuses the input. Cmd/Ctrl+K is reserved for
- * the global command palette.
+ * the global command palette (command-palette.tsx owns that shortcut); the
+ * kbd hint rendered here is a visual (non-interactive, so it stays clear of
+ * axe's touch-target-size checks) pointer to it, freeing the topbar from a
+ * separate ⌘K chip.
  */
 export function GlobalSearch() {
   const navigate = useNavigate();
@@ -67,18 +69,27 @@ export function GlobalSearch() {
         placeholder="Search resources..."
         aria-label="Global resource search"
         className={cn(
-          "w-full h-8 pl-8 pr-12 rounded-md border border-border bg-background text-sm",
+          "w-full h-8 pl-8 pr-16 rounded-md border border-border bg-background text-sm",
           "text-foreground placeholder:text-muted-foreground",
           "focus:outline-hidden focus:ring-1 focus:ring-ring focus:border-ring",
           "transition-colors",
         )}
       />
-      <kbd
-        className="absolute right-2 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5
-          px-1.5 py-0.5 rounded-sm border border-border text-[10px] text-muted-foreground font-mono pointer-events-none"
-      >
-        /
-      </kbd>
+      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 pointer-events-none">
+        <kbd
+          className="hidden md:inline-flex items-center gap-0.5
+            px-1.5 py-0.5 rounded-sm border border-border text-[10px] text-muted-foreground font-mono"
+        >
+          /
+        </kbd>
+        <kbd
+          title="Command palette"
+          className="hidden sm:inline-flex items-center gap-0.5 rounded-sm border border-border
+            px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground"
+        >
+          ⌘K
+        </kbd>
+      </div>
     </div>
   );
 }

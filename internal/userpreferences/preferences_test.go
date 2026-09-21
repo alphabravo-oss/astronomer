@@ -1,6 +1,9 @@
 package userpreferences
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+)
 
 func TestDefaultsAreValid(t *testing.T) {
 	if err := Defaults().Validate(); err != nil {
@@ -19,6 +22,22 @@ func TestValidateRejectsUnregisteredValues(t *testing.T) {
 		{"time format", func(p *Preferences) { p.TimeFormat = "seconds" }},
 		{"favorite", func(p *Preferences) { p.Favorites = []string{"/dashboard/not-real"} }},
 		{"duplicate favorite", func(p *Preferences) { p.Favorites = []string{"/dashboard", "/dashboard"} }},
+		{"pinned cluster not a uuid", func(p *Preferences) {
+			p.PinnedClusters = []string{"not-a-uuid"}
+		}},
+		{"duplicate pinned cluster", func(p *Preferences) {
+			p.PinnedClusters = []string{
+				"11111111-1111-1111-1111-111111111111",
+				"11111111-1111-1111-1111-111111111111",
+			}
+		}},
+		{"too many pinned clusters", func(p *Preferences) {
+			ids := make([]string, MaxPinnedClusters+1)
+			for i := range ids {
+				ids[i] = "11111111-1111-1111-1111-" + fixedSuffix(i)
+			}
+			p.PinnedClusters = ids
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -29,4 +48,20 @@ func TestValidateRejectsUnregisteredValues(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateAcceptsEmptyPinnedClusters(t *testing.T) {
+	prefs := Defaults()
+	prefs.PinnedClusters = nil
+	if err := prefs.Validate(); err != nil {
+		t.Fatalf("Validate() rejected nil pinned_clusters: %v", err)
+	}
+}
+
+// fixedSuffix produces a distinct, valid 12-hex-digit UUID suffix per index
+// so TestValidateRejectsUnregisteredValues's "too many" case is entirely
+// well-formed except for its length.
+func fixedSuffix(i int) string {
+	s := strconv.Itoa(100000000000 + i)
+	return s[len(s)-12:]
 }

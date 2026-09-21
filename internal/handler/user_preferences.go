@@ -42,13 +42,17 @@ func preferenceUserID(r *http.Request) (uuid.UUID, bool) {
 
 func preferencesFromRow(row sqlc.UserPreference) (userpreferences.Preferences, error) {
 	prefs := userpreferences.Preferences{
-		Theme:        userpreferences.Theme(row.Theme),
-		TableDensity: userpreferences.TableDensity(row.TableDensity),
-		LandingRoute: row.LandingRoute,
-		TimeFormat:   userpreferences.TimeFormat(row.TimeFormat),
-		Favorites:    []string{},
+		Theme:          userpreferences.Theme(row.Theme),
+		TableDensity:   userpreferences.TableDensity(row.TableDensity),
+		LandingRoute:   row.LandingRoute,
+		TimeFormat:     userpreferences.TimeFormat(row.TimeFormat),
+		Favorites:      []string{},
+		PinnedClusters: []string{},
 	}
 	if err := json.Unmarshal(row.Favorites, &prefs.Favorites); err != nil {
+		return userpreferences.Preferences{}, err
+	}
+	if err := json.Unmarshal(row.PinnedClusters, &prefs.PinnedClusters); err != nil {
 		return userpreferences.Preferences{}, err
 	}
 	if err := prefs.Validate(); err != nil {
@@ -113,6 +117,13 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, "Request body must contain one JSON object")
 		return
 	}
+	if prefs.PinnedClusters == nil {
+		// pinned_clusters is optional in the request (older clients may omit
+		// it); normalize to an empty array so the stored value never becomes
+		// the JSON scalar `null`, which would fail the column's
+		// jsonb_typeof(...) = 'array' check.
+		prefs.PinnedClusters = []string{}
+	}
 	if err := prefs.Validate(); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
@@ -122,10 +133,16 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode user preferences")
 		return
 	}
+	pinnedClusters, err := json.Marshal(prefs.PinnedClusters)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode user preferences")
+		return
+	}
 	params := sqlc.UpsertUserPreferencesParams{
 		UserID: userID, Theme: string(prefs.Theme),
 		TableDensity: string(prefs.TableDensity), LandingRoute: prefs.LandingRoute,
 		TimeFormat: string(prefs.TimeFormat), Favorites: favorites,
+		PinnedClusters: pinnedClusters,
 	}
 	var stored sqlc.UserPreference
 	err = h.preferencesRunTx(r.Context(), func(q UserPreferencesMutationTx) error {
@@ -137,7 +154,7 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		return recordAuditOutbox(r, q, "user.preferences.updated", "user_preferences", userID.String(), "Console preferences", http.StatusOK, map[string]any{
 			"theme": prefs.Theme, "table_density": prefs.TableDensity,
 			"landing_route": prefs.LandingRoute, "time_format": prefs.TimeFormat,
-			"favorite_count": len(prefs.Favorites),
+			"favorite_count": len(prefs.Favorites), "pinned_cluster_count": len(prefs.PinnedClusters),
 		})
 	})
 	if err != nil {

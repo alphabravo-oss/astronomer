@@ -28,7 +28,7 @@ export function clusterIdFromPath(pathname: string): string | undefined {
     : undefined;
 }
 
-function useDismissable(
+export function useDismissable(
   open: boolean,
   close: () => void,
   restoreFocus?: () => void,
@@ -62,7 +62,7 @@ const statusClass: Record<ClusterStatus, string> = {
   pending: "bg-status-info",
 };
 
-function ClusterOption({ cluster }: { cluster: Cluster }) {
+export function ClusterOption({ cluster }: { cluster: Cluster }) {
   return (
     <>
       <span
@@ -85,7 +85,14 @@ function ClusterOption({ cluster }: { cluster: Cluster }) {
   );
 }
 
-/** Searchable, status-aware cluster switcher that keeps the current sub-route. */
+/**
+ * Searchable, status-aware cluster switcher that keeps the current sub-route.
+ *
+ * @deprecated Superseded by the always-mounted `ClusterSwitcherMenu`
+ * (components/layout/cluster-switcher-menu.tsx), which adds pinned/recent
+ * shelves and is rendered in the topbar regardless of route. Slated for
+ * removal in plan 020.
+ */
 export function SearchableClusterSwitcher({
   clusterId,
   fallbackName,
