@@ -11,6 +11,7 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
+import { Field } from "@/components/form/fields";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -746,21 +747,6 @@ function credentialFromForm(
       passphrase: value("passphrase") || undefined,
     };
   return {};
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5 text-sm">
-      <span className="font-medium text-foreground">{label}</span>
-      {children}
-    </label>
-  );
 }
 
 const sourceKinds: Array<[DeliverySourceType, string]> = [

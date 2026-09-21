@@ -25,6 +25,7 @@ import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { Field } from "@/components/form/fields";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   listReadAuditPolicies,
@@ -344,23 +345,6 @@ function CreatePolicyModal({
         Enabled
       </label>
     </ModalShell>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1">
-      <label className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }
 

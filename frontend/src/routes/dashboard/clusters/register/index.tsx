@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormShell } from "@/components/ui/form-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader } from "@/components/ui/page";
+import { Field } from "@/components/form/fields";
 import { QueryStates } from "@/components/ui/query-states";
 import { RegistrationConnectStep } from "@/components/clusters/registration-connect-step";
 import {
@@ -575,26 +576,6 @@ function RegisterClusterWizardPage({
           </ActionButton>
         </div>
       </FormShell>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-medium text-foreground">
-        {label}
-        {required && <span className="text-status-error ml-1">*</span>}
-      </label>
-      {children}
     </div>
   );
 }

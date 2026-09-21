@@ -10,6 +10,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
+import { Field } from "@/components/form/fields";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -454,20 +455,6 @@ function CreateTargetDialog({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      {children}
-    </label>
-  );
-}
 export const Route = createFileRoute("/dashboard/delivery/targets/")({
   component: function DeliveryTargetsRedirect() {
     return <RedirectDeliveryList tab="targets" />;

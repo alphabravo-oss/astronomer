@@ -16,6 +16,7 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { Field } from "@/components/form/fields";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -576,20 +577,6 @@ function CreateVersionDialog({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      {children}
-    </label>
-  );
-}
 function DeliveryBundleDetailRedirect() {
   const { bundleId } = useParams({ strict: false }) as { bundleId: string };
   return (

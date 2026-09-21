@@ -26,6 +26,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
 import { ActionButton } from "@/components/ui/action-button";
 import { MetricCard } from "@/components/ui/metric-card";
+import { Field } from "@/components/form/fields";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -1137,20 +1138,6 @@ function LaunchDialog({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      {children}
-    </label>
-  );
-}
 function DeliveryTargetDetailRedirect() {
   const { targetId } = useParams({ strict: false }) as { targetId: string };
   return (

@@ -82,6 +82,12 @@ function FieldShell({
  * wiring) but still want the kit's visuals. Matches `FieldShell` above; the
  * error line carries `role="alert"` since it isn't wired through a shared
  * `aria-describedby` id here.
+ *
+ * `htmlFor` is optional: pass it (with a matching `id` on the control) for
+ * an explicit label association, or omit it to wrap the control in the
+ * `<label>` itself (implicit association) — the pattern several pages used
+ * before converging on this component, kept so migrating them doesn't
+ * require inventing an id/htmlFor pair at every call site.
  */
 export function Field({
   label,
@@ -95,16 +101,33 @@ export function Field({
   description?: string;
   error?: string;
   required?: boolean;
-  htmlFor: string;
+  htmlFor?: string;
   children: React.ReactNode;
 }) {
+  const labelText = (
+    <>
+      {label}
+      {required && <span className="text-status-error ml-0.5">*</span>}
+    </>
+  );
   return (
     <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
-        {label}
-        {required && <span className="text-status-error ml-0.5">*</span>}
-      </label>
-      {children}
+      {htmlFor ? (
+        <>
+          <label
+            htmlFor={htmlFor}
+            className="text-sm font-medium text-foreground"
+          >
+            {labelText}
+          </label>
+          {children}
+        </>
+      ) : (
+        <label className="block space-y-1.5 text-sm">
+          <span className="font-medium text-foreground">{labelText}</span>
+          {children}
+        </label>
+      )}
       {error ? (
         <p role="alert" className="text-2xs text-status-error">
           {error}
