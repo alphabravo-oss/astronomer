@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { useAppForm, useFieldContext } from "@/lib/form";
 import { controlClassName } from "@/components/ui/input";
 import { ActionButton } from "@/components/ui/action-button";
+import { Switch } from "@/components/ui/switch";
 import {
   isStoredSecret,
   stripUntouchedSecrets,
@@ -435,25 +436,11 @@ function EnabledField() {
         Enabled
       </span>
       <div className="inline-flex items-center gap-2">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
+        <Switch
           aria-labelledby="connector-enabled-label connector-enabled-state"
-          onClick={() => field.handleChange(!enabled)}
-          className={cn(
-            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-            enabled ? "bg-status-success" : "bg-muted",
-          )}
-        >
-          <span
-            className={cn(
-              // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
-              "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-              enabled ? "translate-x-6" : "translate-x-1",
-            )}
-          />
-        </button>
+          checked={enabled}
+          onCheckedChange={field.handleChange}
+        />
         <span
           id="connector-enabled-state"
           className="text-sm text-muted-foreground"

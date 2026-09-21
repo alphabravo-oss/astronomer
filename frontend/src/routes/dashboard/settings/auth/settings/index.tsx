@@ -28,7 +28,7 @@ import {
   useApplyDexConfig,
 } from "@/components/auth/hooks";
 import type { DexPublicClient } from "@/types";
-import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 function DexSettingsPage() {
   const { data: settings, isLoading } = useDexSettings();
@@ -542,22 +542,12 @@ function PublicClientEditor({
         </FieldRow>
         <FieldRow label="Public client?">
           <label className="inline-flex items-center gap-2 mt-1.5 cursor-pointer">
-            <button
-              type="button"
-              onClick={() => onChange({ ...value, public: !value.public })}
-              className={cn(
-                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                value.public ? "bg-status-success" : "bg-muted",
-              )}
-            >
-              <span
-                className={cn(
-                  // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
-                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                  value.public ? "translate-x-6" : "translate-x-1",
-                )}
-              />
-            </button>
+            <Switch
+              checked={value.public}
+              onCheckedChange={(isPublic) =>
+                onChange({ ...value, public: isPublic })
+              }
+            />
             <span className="text-xs text-muted-foreground">
               {value.public ? "Yes — no client secret" : "No — confidential"}
             </span>
