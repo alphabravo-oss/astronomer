@@ -28,3 +28,20 @@ export function useBanner() {
     throwOnError: false,
   });
 }
+
+/** The operator's product name, falling back to "Astronomer". */
+export function useProductName(): string {
+  const { data: branding } = useBranding();
+  return branding?.["branding.product_name"] || "Astronomer";
+}
+
+/** Branding + banner fields the login screen renders, pre-defaulted. */
+export function useLoginBranding() {
+  const { data: branding } = useBranding();
+  const { data: banner } = useBanner();
+  return {
+    productName: branding?.["branding.product_name"] || "Astronomer",
+    logoUrl: branding?.["branding.logo_url"],
+    loginBannerText: banner?.["banner.login_text"],
+  };
+}

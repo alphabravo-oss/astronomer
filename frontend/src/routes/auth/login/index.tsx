@@ -7,7 +7,6 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { sanitizeReturnTo } from "@/lib/auth/session";
 import {
-  Orbit,
   GitFork,
   Globe,
   KeyRound,
@@ -20,7 +19,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useSSOProviders } from "@/lib/hooks/user-settings";
-import { useBanner, useBranding } from "@/lib/hooks/public-settings";
+import { useLoginBranding } from "@/lib/hooks/public-settings";
+import { BrandMark, LoginBanner } from "@/components/auth/login-branding";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   loginWithCredentialsChallengeAware,
@@ -40,32 +40,22 @@ export const Route = createFileRoute("/auth/login/")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  // returnTo round-trips the deep link the auth guard (or the api.ts 401
-  // handler) captured; sanitizeReturnTo guards against open redirects (D3).
+  // returnTo round-trips the deep link the auth guard (or the api.ts 401 handler) captured; sanitizeReturnTo guards against open redirects (D3).
   const { returnTo } = Route.useSearch();
   const { login } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [ssoLoading, setSsoLoading] = useState<string | null>(null);
-  // 423 challenge state: when present, render the TOTP screen instead of the
-  // credentials form. `enrollmentRequired` distinguishes the "you must enroll
-  // now" branch from the standard "enter your code" branch.
+  // 423 challenge state: present -> render the TOTP screen; `enrollmentRequired` distinguishes "must enroll now" from "enter your code".
   const [challenge, setChallenge] = useState<TotpChallenge | null>(null);
 
-  // SSO providers come from React Query (cached, retry-aware, devtools-visible).
-  // On error the query data is undefined → we fall back to an empty list, the
-  // same behavior the old imperative fetch had.
+  // SSO providers via React Query; on error data is undefined -> empty list (same as the old imperative fetch).
   const { data: ssoProvidersData } = useSSOProviders();
   const ssoProviders = (ssoProvidersData ?? []).filter(
     (provider) => provider.enabled,
   );
 
-  // Public, unauthenticated settings — the login screen renders before any
-  // session exists. Both degrade to today's defaults on error.
-  const { data: branding } = useBranding();
-  const { data: banner } = useBanner();
-  const productName = branding?.["branding.product_name"] || "Astronomer";
-  const logoUrl = branding?.["branding.logo_url"];
-  const loginBannerText = banner?.["banner.login_text"];
+  // Public settings — renders before a session exists; degrades to defaults on error.
+  const { productName, logoUrl, loginBannerText } = useLoginBranding();
 
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
@@ -233,14 +223,7 @@ function LoginPage() {
             </div>
           </div>
 
-          {loginBannerText && (
-            <p
-              role="status"
-              className="rounded-md border border-border bg-muted/40 px-3 py-2 text-center text-xs text-muted-foreground"
-            >
-              {loginBannerText}
-            </p>
-          )}
+          <LoginBanner text={loginBannerText} />
 
           <div className="space-y-2 text-center lg:text-left">
             <h2 className="text-2xl font-semibold text-foreground tracking-tight">
@@ -409,30 +392,6 @@ function LoginPage() {
           </p>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** Operator-branded logo when configured, falling back to the built-in mark. */
-function BrandMark({
-  logoUrl,
-  productName,
-}: {
-  logoUrl: string | undefined;
-  productName: string;
-}) {
-  if (logoUrl) {
-    return (
-      <img
-        src={logoUrl}
-        alt={productName}
-        className="h-10 w-10 rounded-xl object-contain"
-      />
-    );
-  }
-  return (
-    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-      <Orbit className="h-5 w-5 text-white" />
     </div>
   );
 }
