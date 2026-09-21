@@ -1,24 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type ElementType } from "react";
-import { FileText, Key, LifeBuoy, Settings, Shield } from "lucide-react";
+import { FileText, Key, LifeBuoy, Settings } from "lucide-react";
 import { useTabParam } from "@/lib/use-tab-param";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { TabStrip, TabsContent } from "@/components/ui/tabs";
+import { StatePanel } from "@/components/ui/empty-state";
 import { AuditTab } from "./-audit-tab";
 import { GeneralEditModal } from "./-general-edit-modal";
 import { GeneralTab } from "./-general-tab";
-import { SSOModal } from "./-sso-modal";
-import { SSOTab } from "./-sso-tab";
 import { SupportTab } from "./-support-tab";
 import { TokenModal } from "./-token-modal";
 import { TokensTab } from "./-tokens-tab";
 
-type TabKey = "sso" | "general" | "tokens" | "audit" | "support";
+type TabKey = "general" | "tokens" | "audit" | "support";
 
-const TAB_KEYS = ["sso", "general", "tokens", "audit", "support"] as const;
+const TAB_KEYS = ["general", "tokens", "audit", "support"] as const;
 
 const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
-  { key: "sso", label: "SSO Providers", icon: Shield },
   { key: "general", label: "General", icon: Settings },
   { key: "tokens", label: "API Tokens", icon: Key },
   { key: "audit", label: "Audit Log", icon: FileText },
@@ -26,15 +24,14 @@ const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
 ];
 
 function SettingsPage() {
-  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "sso");
+  const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "general");
   const [showCreateToken, setShowCreateToken] = useState(false);
-  const [showAddSSO, setShowAddSSO] = useState(false);
   const [showEditGeneral, setShowEditGeneral] = useState(false);
 
   return (
     <PageShell>
       <PageHeader
-        title="Settings"
+        title="General"
         description="Platform configuration and administration"
       />
 
@@ -48,9 +45,18 @@ function SettingsPage() {
       </div>
 
       <TabsContent>
-        {activeTab === "sso" && <SSOTab onAdd={() => setShowAddSSO(true)} />}
         {activeTab === "general" && (
-          <GeneralTab onEdit={() => setShowEditGeneral(true)} />
+          <div className="space-y-4">
+            <StatePanel
+              tone="info"
+              title="Looking for SSO providers?"
+              description="Single sign-on providers are configured under Settings › Authentication."
+              actionLabel="Go to Authentication"
+              actionHref="/dashboard/settings/auth"
+              className="items-start py-4 text-left"
+            />
+            <GeneralTab onEdit={() => setShowEditGeneral(true)} />
+          </div>
         )}
         {activeTab === "tokens" && (
           <TokensTab onCreate={() => setShowCreateToken(true)} />
@@ -62,7 +68,6 @@ function SettingsPage() {
       {showEditGeneral && (
         <GeneralEditModal onClose={() => setShowEditGeneral(false)} />
       )}
-      {showAddSSO && <SSOModal onClose={() => setShowAddSSO(false)} />}
       {showCreateToken && (
         <TokenModal onClose={() => setShowCreateToken(false)} />
       )}
