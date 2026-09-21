@@ -1,12 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/operator-table";
+import { DataTable, type Column } from "@/components/ui/data-table";
 /**
  * /dashboard/settings/read-audit — operator UI for the read-side audit
  * policies (migration 063). Each row is a path-prefix + verbs +
@@ -17,9 +10,9 @@ import {
  *
  * Backend: /api/v1/admin/read-audit-policies/. Superuser-gated.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -78,7 +71,7 @@ function ReadAuditPoliciesList() {
     };
   }, []);
 
-  async function toggleEnabled(p: ReadAuditPolicyView) {
+  const toggleEnabled = useCallback(async (p: ReadAuditPolicyView) => {
     setBusyId(p.id);
     try {
       await updateReadAuditPolicy(p.id, { enabled: !p.enabled });
@@ -88,7 +81,7 @@ function ReadAuditPoliciesList() {
     } finally {
       setBusyId(null);
     }
-  }
+  }, []);
 
   async function remove() {
     if (!deleteTarget) return;
@@ -103,6 +96,84 @@ function ReadAuditPoliciesList() {
       setBusyId(null);
     }
   }
+
+  const columns = useMemo<Column<ReadAuditPolicyView>[]>(
+    () => [
+      {
+        key: "name",
+        header: "Name",
+        accessor: (p) => <span className="font-mono text-xs">{p.name}</span>,
+        searchAccessor: (p) => p.name,
+        sortAccessor: (p) => p.name,
+      },
+      {
+        key: "path_pattern",
+        header: "Path pattern",
+        accessor: (p) => (
+          <span className="font-mono text-xs">{p.path_pattern}</span>
+        ),
+        searchAccessor: (p) => p.path_pattern,
+        sortAccessor: (p) => p.path_pattern,
+      },
+      {
+        key: "verbs",
+        header: "Verbs",
+        accessor: (p) => <span className="text-xs">{p.verbs}</span>,
+        searchAccessor: (p) => p.verbs,
+        sortAccessor: (p) => p.verbs,
+        width: "8rem",
+      },
+      {
+        key: "sample_rate",
+        header: "Sample",
+        accessor: (p) => (
+          <span className="text-xs">{Math.round(p.sample_rate * 100)}%</span>
+        ),
+        sortAccessor: (p) => p.sample_rate,
+        align: "right",
+        width: "6rem",
+      },
+      {
+        key: "enabled",
+        header: "Enabled",
+        accessor: (p) => (
+          <button
+            disabled={busyId === p.id}
+            onClick={() => toggleEnabled(p)}
+            className={`text-xs px-2 py-0.5 rounded-md ${
+              p.enabled
+                ? "bg-status-success/15 text-status-success"
+                : "bg-status-warning/15 text-status-warning"
+            }`}
+          >
+            {p.enabled ? "enabled" : "disabled"}
+          </button>
+        ),
+        searchAccessor: (p) => (p.enabled ? "enabled" : "disabled"),
+        sortAccessor: (p) => (p.enabled ? 1 : 0),
+        filter: { label: "Enabled" },
+        width: "8rem",
+      },
+      {
+        key: "actions",
+        header: "",
+        hideable: false,
+        accessor: (p) => (
+          <button
+            disabled={busyId === p.id}
+            onClick={() => setDeleteTarget(p)}
+            className="text-muted-foreground hover:text-destructive"
+            title="Delete policy"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        ),
+        align: "right",
+        width: "4rem",
+      },
+    ],
+    [busyId, toggleEnabled],
+  );
 
   return (
     <PageShell>
@@ -131,81 +202,18 @@ function ReadAuditPoliciesList() {
         </div>
       )}
 
-      {items === null && !error ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading policies…
-        </div>
-      ) : (
-        <div className="rounded-lg border border-border overflow-hidden">
-          <Table className="w-full text-sm">
-            <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <TableRow>
-                <TableHead className="px-4 py-2 font-medium">Name</TableHead>
-                <TableHead className="px-4 py-2 font-medium">
-                  Path pattern
-                </TableHead>
-                <TableHead className="px-4 py-2 font-medium">Verbs</TableHead>
-                <TableHead className="px-4 py-2 font-medium">Sample</TableHead>
-                <TableHead className="px-4 py-2 font-medium">Enabled</TableHead>
-                <TableHead className="px-4 py-2 font-medium" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(items ?? []).map((p) => (
-                <TableRow
-                  key={p.id}
-                  className="border-t border-border hover:bg-muted/30"
-                >
-                  <TableCell className="px-4 py-2 font-mono text-xs">
-                    {p.name}
-                  </TableCell>
-                  <TableCell className="px-4 py-2 font-mono text-xs">
-                    {p.path_pattern}
-                  </TableCell>
-                  <TableCell className="px-4 py-2 text-xs">{p.verbs}</TableCell>
-                  <TableCell className="px-4 py-2 text-xs">
-                    {Math.round(p.sample_rate * 100)}%
-                  </TableCell>
-                  <TableCell className="px-4 py-2">
-                    <button
-                      disabled={busyId === p.id}
-                      onClick={() => toggleEnabled(p)}
-                      className={`text-xs px-2 py-0.5 rounded-md ${
-                        p.enabled
-                          ? "bg-status-success/15 text-status-success"
-                          : "bg-status-warning/15 text-status-warning"
-                      }`}
-                    >
-                      {p.enabled ? "enabled" : "disabled"}
-                    </button>
-                  </TableCell>
-                  <TableCell className="px-4 py-2 text-right">
-                    <button
-                      disabled={busyId === p.id}
-                      onClick={() => setDeleteTarget(p)}
-                      className="text-muted-foreground hover:text-destructive"
-                      title="Delete policy"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {items && items.length === 0 && (
-                <TableRow>
-                  <TableCell
-                    className="px-4 py-6 text-center text-muted-foreground"
-                    colSpan={6}
-                  >
-                    No policies configured. Read-side audit is currently
-                    disabled.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <DataTable
+        data={items ?? []}
+        columns={columns}
+        keyExtractor={(p) => p.id}
+        density="compact"
+        loading={items === null && !error}
+        searchPlaceholder="Search policies..."
+        emptyState={{
+          title: "No policies configured",
+          description: "Read-side audit is currently disabled.",
+        }}
+      />
 
       {showCreate && (
         <CreatePolicyModal

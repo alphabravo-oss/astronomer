@@ -1,13 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/operator-table";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page";
 /**
  * Cluster "Network & access" tab (migration 070).
@@ -52,6 +45,7 @@ import {
   reconcileApiserverAllowlist,
   updateApiserverAllowlist,
   type ApiserverAllowlistMode,
+  type ApiserverAllowlistSnapshot,
 } from "@/lib/api/cluster-apiserver-allowlist";
 import { queryKeys } from "@/lib/query-keys";
 import { liveFallback } from "@/lib/live/status-store";
@@ -119,6 +113,47 @@ function CIDRPill({
     </span>
   );
 }
+
+// ─── Snapshot history table ─────────────────────────────────────────────────
+const snapshotColumns: Column<ApiserverAllowlistSnapshot>[] = [
+  {
+    key: "capturedAt",
+    header: "Captured",
+    accessor: (s) => <span className="font-mono text-xs">{s.capturedAt}</span>,
+    sortAccessor: (s) => s.capturedAt,
+  },
+  {
+    key: "drift",
+    header: "Drift",
+    accessor: (s) => (
+      <span className="text-xs">{s.drift ? "⚠ yes" : "no"}</span>
+    ),
+    searchAccessor: (s) => (s.drift ? "yes" : "no"),
+    sortAccessor: (s) => (s.drift ? 1 : 0),
+    filter: { label: "Drift" },
+    width: "6rem",
+  },
+  {
+    key: "effective",
+    header: "Effective",
+    accessor: (s) => (
+      <span className="font-mono text-xs">{s.effectiveCidrs.length}</span>
+    ),
+    sortAccessor: (s) => s.effectiveCidrs.length,
+    align: "right",
+    width: "7rem",
+  },
+  {
+    key: "desired",
+    header: "Desired",
+    accessor: (s) => (
+      <span className="font-mono text-xs">{s.desiredCidrs.length}</span>
+    ),
+    sortAccessor: (s) => s.desiredCidrs.length,
+    align: "right",
+    width: "7rem",
+  },
+];
 
 // ─── Main page ──────────────────────────────────────────────────────────────
 function ClusterNetworkAccessPage() {
@@ -523,38 +558,17 @@ function ClusterNetworkAccessPage() {
         </button>
         {showSnapshots && (
           <div className="border-t p-3">
-            {snapshots.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No snapshots captured yet.
-              </p>
-            ) : (
-              <Table className="w-full text-sm">
-                <TableHeader>
-                  <TableRow className="text-left text-xs text-muted-foreground">
-                    <TableHead className="py-1">Captured</TableHead>
-                    <TableHead>Drift</TableHead>
-                    <TableHead>Effective</TableHead>
-                    <TableHead>Desired</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {snapshots.map((s) => (
-                    <TableRow key={s.id} className="border-t text-xs">
-                      <TableCell className="py-1 font-mono">
-                        {s.capturedAt}
-                      </TableCell>
-                      <TableCell>{s.drift ? "⚠ yes" : "no"}</TableCell>
-                      <TableCell className="font-mono">
-                        {s.effectiveCidrs.length}
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {s.desiredCidrs.length}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <DataTable
+              data={snapshots}
+              columns={snapshotColumns}
+              keyExtractor={(s) => String(s.id)}
+              density="compact"
+              searchable={false}
+              emptyState={{
+                title: "No snapshots captured yet",
+                description: "Snapshots appear here after the next reconcile.",
+              }}
+            />
           </div>
         )}
       </div>

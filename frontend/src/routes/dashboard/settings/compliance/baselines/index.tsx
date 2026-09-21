@@ -1,12 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/operator-table";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { DrawerShell } from "@/components/ui/drawer-shell";
 import { OverlayShell } from "@/components/ui/overlay-shell";
 /**
@@ -129,6 +122,40 @@ function BaselineCard({
   );
 }
 
+interface DiffRow {
+  field: string;
+  current: string;
+  target: string;
+}
+
+const diffColumns: Column<DiffRow>[] = [
+  {
+    key: "field",
+    header: "Field",
+    accessor: (r) => <span className="font-mono text-xs">{r.field}</span>,
+    searchAccessor: (r) => r.field,
+    sortAccessor: (r) => r.field,
+  },
+  {
+    key: "current",
+    header: "Current",
+    accessor: (r) => (
+      <span className="font-mono text-xs text-muted-foreground break-all">
+        {r.current}
+      </span>
+    ),
+    searchAccessor: (r) => r.current,
+  },
+  {
+    key: "target",
+    header: "Target",
+    accessor: (r) => (
+      <span className="font-mono text-xs break-all">{r.target}</span>
+    ),
+    searchAccessor: (r) => r.target,
+  },
+];
+
 function DiffDrawer({
   baseline,
   onClose,
@@ -143,36 +170,26 @@ function DiffDrawer({
       onClose={onClose}
       panelClassName="sm:max-w-lg bg-card"
     >
-      <QueryStates query={query}>{(diff) => diff.changes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No changes — baseline already matches current state.
-        </p>
-      ) : (
-        <Table className="text-sm w-full">
-          <TableHeader className="text-xs text-muted-foreground">
-            <TableRow>
-              <TableHead className="text-left py-1">Field</TableHead>
-              <TableHead className="text-left py-1">Current</TableHead>
-              <TableHead className="text-left py-1">Target</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {diff.changes.map((key) => (
-              <TableRow key={key} className="border-t">
-                <TableCell className="py-1 pr-2 font-mono text-xs">
-                  {key}
-                </TableCell>
-                <TableCell className="py-1 pr-2 font-mono text-xs text-muted-foreground break-all">
-                  {JSON.stringify(diff.current[key] ?? null)}
-                </TableCell>
-                <TableCell className="py-1 font-mono text-xs break-all">
-                  {JSON.stringify(diff.target[key] ?? null)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}</QueryStates>
+      <QueryStates query={query}>
+        {(diff) => (
+          <DataTable
+            data={diff.changes.map((key) => ({
+              field: key,
+              current: JSON.stringify(diff.current[key] ?? null),
+              target: JSON.stringify(diff.target[key] ?? null),
+            }))}
+            columns={diffColumns}
+            keyExtractor={(r) => r.field}
+            density="compact"
+            searchable={false}
+            emptyState={{
+              title: "No changes",
+              description:
+                "Baseline already matches current state.",
+            }}
+          />
+        )}
+      </QueryStates>
     </DrawerShell>
   );
 }
