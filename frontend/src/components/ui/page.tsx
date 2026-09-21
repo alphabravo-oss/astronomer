@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { Link as RouterLink } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function PageShell({
@@ -51,6 +53,93 @@ export function PageHeader({
           {actions}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Detail-page masthead: back link, eyebrow, title (+ inline status), actions,
+ * a metadata `<dl>` row, and an optional description. Introduced so the five
+ * hand-rolled resource/cluster detail headers (icon-button back link + h1 +
+ * inline meta spans) converge on one primitive instead of re-inventing the
+ * layout per page (see docs/design-system.md).
+ */
+export function ResourceMasthead({
+  backTo,
+  backLabel = "Back",
+  eyebrow,
+  title,
+  mono = false,
+  status,
+  meta = [],
+  actions,
+  description,
+  className,
+}: {
+  backTo?: string;
+  backLabel?: string;
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  mono?: boolean;
+  status?: ReactNode;
+  meta?: Array<{ label: string; value: ReactNode }>;
+  actions?: ReactNode;
+  description?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-3", className)}>
+      <div className="flex flex-wrap items-start gap-4">
+        {backTo ? (
+          <RouterLink
+            to={backTo}
+            className="mt-1 shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={backLabel}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </RouterLink>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          {eyebrow ? (
+            <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {eyebrow}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <h1
+              className={cn(
+                "truncate text-2xl font-semibold tracking-tight text-foreground",
+                mono && "font-mono",
+              )}
+            >
+              {title}
+            </h1>
+            {status}
+          </div>
+          {meta.length > 0 ? (
+            <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              {meta.map((item, index) => (
+                <div key={index} className="flex items-center gap-1">
+                  <dt className="sr-only">{item.label}</dt>
+                  <dd>
+                    {item.label}: {item.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          {description ? (
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              {description}
+            </p>
+          ) : null}
+        </div>
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {actions}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
