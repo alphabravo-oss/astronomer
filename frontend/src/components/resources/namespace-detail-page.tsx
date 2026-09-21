@@ -14,6 +14,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TabStrip } from "@/components/ui/tabs";
 import { ResourceMasthead } from "@/components/ui/page";
+import { MetricCard } from "@/components/ui/metric-card";
 import {
   useClusterEvents,
   useClusterNamespaces,
@@ -521,18 +522,13 @@ function Stat({
 }) {
   return (
     <div className="p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <div
-        className={cn(
-          "mt-1 text-2xl font-semibold tabular-nums",
-          danger && "text-status-warning",
-        )}
-      >
-        {value}
-      </div>
+      <MetricCard
+        label={label}
+        value={value}
+        icon={<Icon className="h-3.5 w-3.5" />}
+        tone={danger ? "warning" : undefined}
+        className="border-0 bg-transparent p-0 hover:bg-transparent"
+      />
     </div>
   );
 }

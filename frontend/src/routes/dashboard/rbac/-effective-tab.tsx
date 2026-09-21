@@ -3,7 +3,7 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { MetricCard } from "@/components/ui/metric-card";
 import { useClusters } from "@/lib/hooks/clusters";
 import { useProjects } from "@/lib/hooks/projects";
 import { useUsers } from "@/lib/hooks/user-settings";
@@ -164,15 +164,11 @@ export function EffectiveTab() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricTile label="Grants" value={permissions.length} />
-        <MetricTile label="Bindings" value={bindings.length} />
-        <MetricTile label="Resources" value={resourceCount} />
-        <MetricTile label="Applies here" value={applicableCount} />
-        <MetricTile
-          label="High risk"
-          value={highRiskCount}
-          tone={highRiskCount > 0 ? "warning" : "default"}
-        />
+        <MetricCard dense label="Grants" value={permissions.length} />
+        <MetricCard dense label="Bindings" value={bindings.length} />
+        <MetricCard dense label="Resources" value={resourceCount} />
+        <MetricCard dense label="Applies here" value={applicableCount} />
+        <MetricCard dense label="High risk" value={highRiskCount} tone={highRiskCount > 0 ? "warning" : undefined} />
       </div>
 
       <div className="grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-2 xl:grid-cols-4">
@@ -276,30 +272,6 @@ export function EffectiveTab() {
         }}
         pageSize={10}
       />
-    </div>
-  );
-}
-
-function MetricTile({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value: number;
-  tone?: "default" | "warning";
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "mt-1 text-2xl font-semibold tabular-nums",
-          tone === "warning" ? "text-status-warning" : "text-foreground",
-        )}
-      >
-        {value}
-      </p>
     </div>
   );
 }

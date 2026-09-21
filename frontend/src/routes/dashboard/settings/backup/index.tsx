@@ -30,6 +30,7 @@ import { OperationMutationTimeline } from "@/components/ui/operation-mutation-ti
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { MetricCard } from "@/components/ui/metric-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
@@ -80,12 +81,11 @@ function durationLabel(
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border bg-background p-3">
-      <p className="text-muted-foreground">{label}</p>
-      <p className="text-sm font-mono text-foreground truncate mt-0.5">
-        {value || "—"}
-      </p>
-    </div>
+    <MetricCard
+      dense
+      label={label}
+      value={<span className="font-mono">{value || "—"}</span>}
+    />
   );
 }
 
