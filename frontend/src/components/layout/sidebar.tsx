@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 
 import { ExtensionNavItems } from "@/components/extensions/ExtensionNavItems";
-import { SearchableClusterSwitcher } from "@/components/layout/cluster-scope-controls";
 import {
   InstalledToolLinks,
   SidebarGroup,
@@ -195,19 +194,11 @@ export function Sidebar() {
               <ArrowLeft className="h-3.5 w-3.5" />
               <span>All Clusters</span>
             </RouterLink>
-            <div className="px-2 mt-1">
-              <SearchableClusterSwitcher
-                clusterId={clusterId!}
-                fallbackName={
-                  cluster?.displayName || cluster?.name || "Cluster"
-                }
-              />
-              {cluster?.kubernetesVersion && (
-                <p className="text-2xs text-muted-foreground mt-1 px-1">
-                  {formatK8sVersion(cluster.kubernetesVersion)}
-                </p>
-              )}
-            </div>
+            {cluster?.kubernetesVersion && (
+              <p className="text-2xs text-muted-foreground mt-1 px-3">
+                {formatK8sVersion(cluster.kubernetesVersion)}
+              </p>
+            )}
           </div>
         )}
         {isClusterContext && collapsed && (

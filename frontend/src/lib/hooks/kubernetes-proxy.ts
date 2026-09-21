@@ -123,6 +123,97 @@ export function useDownloadDirectKubeconfig() {
   });
 }
 
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export interface ClusterKubeconfigPermission {
+  canWrite: boolean;
+  reason?: string;
+}
+
+/**
+ * Kubeconfig actions shared by the cluster overview page's page-header
+ * buttons and the topbar's header-wide "Kubeconfig" menu
+ * (header-cluster-actions.tsx). `directDisabledReason` encodes a security
+ * decision (direct access requires update permission, an external API
+ * endpoint, and an adopted — non-local — cluster) and must stay identical
+ * across both call sites.
+ */
+export function useClusterKubeconfig(
+  clusterId: string,
+  cluster:
+    { name?: string; apiServerUrl?: string; isLocal?: boolean } | undefined,
+  directPermission: ClusterKubeconfigPermission,
+) {
+  const proxyMutation = useDownloadProxyKubeconfig();
+  const directMutation = useDownloadDirectKubeconfig();
+
+  const downloadProxy = async () => {
+    try {
+      const blob = await proxyMutation.mutateAsync(clusterId);
+      triggerBlobDownload(
+        new Blob([blob]),
+        `${cluster?.name || "cluster"}-proxy-kubeconfig.yaml`,
+      );
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const downloadDirect = async () => {
+    try {
+      const blob = await directMutation.mutateAsync(clusterId);
+      triggerBlobDownload(
+        new Blob([blob]),
+        `${cluster?.name || "cluster"}-direct-kubeconfig.yaml`,
+      );
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const copyProxy = async () => {
+    try {
+      const blob = await proxyMutation.mutateAsync(clusterId);
+      const text = await blob.text();
+      await navigator.clipboard.writeText(text);
+      toastSuccess("Kubeconfig copied (expires in 1 hour)");
+    } catch {
+      // Error handled by mutation (download failures) or silently ignored
+      // (clipboard permission failures, which are rare and non-actionable).
+    }
+  };
+
+  // Always non-empty when direct access is disabled — callers derive the
+  // disabled boolean from `!!directDisabledReason`, so an empty-string
+  // `directPermission.reason` (permission denied, no message) must not
+  // collapse to a falsy value here.
+  const directDisabledReason = cluster?.isLocal
+    ? "Direct access is for adopted clusters"
+    : !directPermission.canWrite
+      ? directPermission.reason || "You don't have permission for this action"
+      : !cluster?.apiServerUrl
+        ? "Configure an external Kubernetes API endpoint in Edit cluster"
+        : undefined;
+
+  return {
+    downloadProxy,
+    downloadDirect,
+    copyProxy,
+    proxyPending: proxyMutation.isPending,
+    directPending: directMutation.isPending,
+    directDisabledReason,
+  };
+}
+
 // ============================================================
 // K8s Proxy Hooks
 // ============================================================

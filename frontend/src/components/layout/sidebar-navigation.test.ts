@@ -6,6 +6,7 @@ import { Box } from "lucide-react";
 import {
   activeNavGroupLabel,
   defaultOpenNavGroupLabel,
+  getClusterNavGroups,
   globalNavGroups,
   navLabelForHref,
   type NavGroup,
@@ -79,7 +80,41 @@ describe("nav registry hrefs resolve to real routes", () => {
     ),
   ];
 
-  it.each([...new Set(hrefs)])("%s resolves to a generated route id", (href) => {
-    expect(routeTreeSource).toContain(`id: '${href}/'`);
+  it.each([...new Set(hrefs)])(
+    "%s resolves to a generated route id",
+    (href) => {
+      expect(routeTreeSource).toContain(`id: '${href}/'`);
+    },
+  );
+});
+
+describe("nav group item icons are unique per group", () => {
+  function assertUniqueIcons(navGroups: NavGroup[], context: string) {
+    for (const group of navGroups) {
+      const seen = new Map<NavGroup["items"][number]["icon"], string>();
+      for (const item of group.items) {
+        const collidesWith = seen.get(item.icon);
+        expect(
+          collidesWith,
+          `${context} > "${group.label}": "${item.label}" shares an icon with "${collidesWith}"`,
+        ).toBeUndefined();
+        seen.set(item.icon, item.label);
+      }
+    }
+  }
+
+  it("holds for every global nav group", () => {
+    assertUniqueIcons(globalNavGroups, "global");
+  });
+
+  it("holds for every cluster nav group, all conditional items included", () => {
+    assertUniqueIcons(
+      getClusterNavGroups("c-1", {
+        isLocal: false,
+        veleroInstalled: true,
+        grafanaAvailable: true,
+      }),
+      "cluster",
+    );
   });
 });
