@@ -202,6 +202,12 @@ export function getClusterNavGroups(
       label: "Workloads",
       items: [
         {
+          label: "Overview",
+          href: `${base}/workloads`,
+          icon: LayoutDashboard,
+          exact: true,
+        },
+        {
           label: "Deployments",
           href: `${base}/deployments`,
           icon: Box,
@@ -314,7 +320,7 @@ export function getClusterNavGroups(
       items: [
         {
           label: "Network Policies",
-          href: `${base}/networkpolicies`,
+          href: `${base}/network-policies`,
           icon: Shield,
           countKey: "networkpolicies",
         },
