@@ -145,6 +145,7 @@ export function SnapshotSchedulesTable({
         >
           <span
             className={cn(
+              // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
               "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
               schedule.enabled ? "translate-x-4" : "translate-x-0.5",
             )}

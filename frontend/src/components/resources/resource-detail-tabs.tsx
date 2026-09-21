@@ -24,7 +24,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 import { YamlPanel } from "@/components/ui/yaml-view-dialog";
 import { PodLogsViewer } from "@/components/workloads/pod-logs-viewer";
 import { PodTerminal } from "@/components/workloads/pod-terminal";

@@ -627,7 +627,7 @@ export function ClusterResourcePage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-foreground tracking-tight">
+      {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold text-foreground tracking-tight">
         {title}
       </h1>
       {renderTable()}

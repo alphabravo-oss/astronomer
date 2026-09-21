@@ -96,7 +96,7 @@ function CharlieHub() {
     <div className="space-y-6">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold">Charlie</h1>
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold">Charlie</h1>
           <span
             className={cn(
               "rounded-full border px-2.5 py-0.5 text-xs font-semibold",

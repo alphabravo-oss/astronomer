@@ -311,7 +311,7 @@ function WidgetsAdminPage() {
           >
             <ArrowLeft className="h-3 w-3" /> Settings
           </RouterLink>
-          <h1 className="text-2xl font-semibold mt-1">Dashboard widgets</h1>
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold mt-1">Dashboard widgets</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Define widgets pinned to the global dashboard, per-cluster pages, or
             per-project pages.

@@ -299,7 +299,7 @@ function ClusterImageScansPage() {
             : ""}
         </p>
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
             <ShieldAlert className="h-6 w-6" /> Image Scans
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

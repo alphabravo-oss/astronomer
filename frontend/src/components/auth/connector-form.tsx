@@ -448,6 +448,7 @@ function EnabledField() {
         >
           <span
             className={cn(
+              // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
               "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
               enabled ? "translate-x-6" : "translate-x-1",
             )}

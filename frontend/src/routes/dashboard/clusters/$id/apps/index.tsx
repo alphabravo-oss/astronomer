@@ -403,7 +403,7 @@ function ClusterAppsPage() {
     <div className="space-y-6 p-4">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
             <Package className="h-6 w-6" /> Apps
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

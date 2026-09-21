@@ -162,6 +162,12 @@ const config = [
     },
   },
   {
+    // NOTE: flat config does not merge array-valued rule options across
+    // matching blocks — a later block matching the same file REPLACES an
+    // earlier block's setting for the same rule name. Every selector/pattern
+    // that must still apply to routes (the "use client"/queryKey/input-etc.
+    // bans, plus the shared design-system rules below) is therefore kept in
+    // this one block rather than split across several.
     files: ["src/routes/**/*.tsx"],
     rules: {
       "no-restricted-syntax": [
@@ -179,6 +185,24 @@ const config = [
           message:
             "Use shared Input/Select/Textarea controls and FormShell with useAppForm for editable workflows.",
         },
+        {
+          selector: "JSXOpeningElement[name.name='h1']",
+          message: "Use PageHeader or ResourceMasthead.",
+        },
+        {
+          selector: "JSXOpeningElement[name.name='table']",
+          message: "Use DataTable / operator-table.",
+        },
+        {
+          selector:
+            "Literal[value=/rounded-full bg-white transition-transform/]",
+          message: "Use Switch.",
+        },
+        {
+          selector:
+            "Literal[value=/\\b(text|bg|border)-(red|green|blue|amber|emerald|zinc|gray|slate|orange|sky)-\\d{2,3}\\b/]",
+          message: "Use semantic tokens.",
+        },
       ],
       "no-restricted-imports": [
         "error",
@@ -192,9 +216,98 @@ const config = [
             {
               group: ["@/components/ui/table"],
               message:
-                "Route modules use DataTable or the shared operator-table contract; do not import raw table primitives.",
+                "Import from @/components/ui/operator-table or use DataTable.",
             },
           ],
+        },
+      ],
+    },
+  },
+  {
+    // The design-system primitives (masthead/page header, tables, tabs,
+    // status badges, switches, semantic color tokens) must be the only path
+    // to their markup in components too — otherwise hand-rolled copies drift
+    // in accessibility and visual details (see docs/design-system.md's
+    // ratchets). Excludes the primitives themselves (components/ui/**) and
+    // the form kit (components/form/**), which legitimately contain this
+    // markup because they *are* the shared implementation. Re-declares the
+    // "use client"/queryKey bans from the base block above for the same
+    // flat-config-doesn't-merge reason noted there.
+    files: ["src/components/**/*.tsx"],
+    ignores: ["src/components/ui/**", "src/components/form/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ExpressionStatement[expression.value='use client']",
+          message:
+            'The Vite frontend does not use React Server Components; remove the no-op "use client" directive.',
+        },
+        {
+          selector: "Property[key.name='queryKey'] > ArrayExpression",
+          message:
+            "Do not inline queryKey arrays. Add/use a factory entry in src/lib/query-keys.ts instead.",
+        },
+        {
+          selector: "JSXOpeningElement[name.name='h1']",
+          message: "Use PageHeader or ResourceMasthead.",
+        },
+        {
+          selector: "JSXOpeningElement[name.name='table']",
+          message: "Use DataTable / operator-table.",
+        },
+        {
+          selector:
+            "Literal[value=/rounded-full bg-white transition-transform/]",
+          message: "Use Switch.",
+        },
+        {
+          selector:
+            "Literal[value=/\\b(text|bg|border)-(red|green|blue|amber|emerald|zinc|gray|slate|orange|sky)-\\d{2,3}\\b/]",
+          message: "Use semantic tokens.",
+        },
+      ],
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["next", "next/*", "next-themes"],
+              message:
+                "Next.js was removed in the Vite/TanStack migration. Use TanStack Router and native equivalents instead.",
+            },
+            {
+              group: ["@/components/ui/table"],
+              message:
+                "Import from @/components/ui/operator-table or use DataTable.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Brand marks / the marketing login hero legitimately use non-semantic
+    // color literals outside the app's semantic token scale. Re-declares the
+    // "use client"/queryKey bans (see the flat-config-doesn't-merge note
+    // above) so turning off the design-system rules here doesn't also turn
+    // those off.
+    files: [
+      "src/components/projects/cloud-credentials/provider-badge.tsx",
+      "src/components/auth/login-branding.tsx",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ExpressionStatement[expression.value='use client']",
+          message:
+            'The Vite frontend does not use React Server Components; remove the no-op "use client" directive.',
+        },
+        {
+          selector: "Property[key.name='queryKey'] > ArrayExpression",
+          message:
+            "Do not inline queryKey arrays. Add/use a factory entry in src/lib/query-keys.ts instead.",
         },
       ],
     },

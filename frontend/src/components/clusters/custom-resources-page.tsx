@@ -229,7 +229,7 @@ function CRDList({ clusterId }: { clusterId: string }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-foreground tracking-tight">
+      {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold text-foreground tracking-tight">
         Custom Resources
       </h1>
       <DataTable
@@ -362,7 +362,7 @@ function CRList({
           <ArrowLeft className="h-5 w-5" />
         </RouterLink>
         <div>
-          <h1 className="text-xl font-semibold text-foreground tracking-tight font-mono">
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold text-foreground tracking-tight font-mono">
             {plural}
           </h1>
           <p className="mt-1 text-xs text-muted-foreground font-mono">

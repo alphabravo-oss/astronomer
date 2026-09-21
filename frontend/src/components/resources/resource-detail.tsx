@@ -193,7 +193,7 @@ export function ResourceDetail({
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="min-w-[10rem] flex-1">
-          <h1 className="truncate font-mono text-xl font-semibold tracking-tight text-foreground">
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="truncate font-mono text-xl font-semibold tracking-tight text-foreground">
             {name}
           </h1>
           <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">

@@ -89,7 +89,7 @@ function ClusterDeliveryLayout() {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Cluster delivery
           </p>
-          <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
             {cluster?.displayName || cluster?.name || "Cluster"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

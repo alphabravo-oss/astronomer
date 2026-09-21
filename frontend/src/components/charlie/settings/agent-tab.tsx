@@ -9,7 +9,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 import { queryKeys } from "@/lib/query-keys";
 import { formatRelativeTime } from "@/lib/utils";
 import { liveFallback } from "@/lib/live/status-store";

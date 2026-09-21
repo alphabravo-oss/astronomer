@@ -85,6 +85,7 @@ function ProjectDetailLayout() {
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             ) : (
+              // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
               <h1 className="text-2xl font-semibold text-foreground tracking-tight truncate">
                 {project?.displayName || project?.name || "Project"}
               </h1>

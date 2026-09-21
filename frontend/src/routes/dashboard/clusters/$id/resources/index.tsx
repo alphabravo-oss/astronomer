@@ -504,7 +504,7 @@ function ClusterResourcesPage() {
   return (
     <div className="p-6">
       <header className="mb-4">
-        <h1 className="text-xl font-semibold">Cluster resources</h1>
+        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold">Cluster resources</h1>
         <p className="text-sm text-muted-foreground">
           A read-only view of the policy / routing / quota objects installed in
           this cluster. Data is mirrored from the cluster agent every ~10

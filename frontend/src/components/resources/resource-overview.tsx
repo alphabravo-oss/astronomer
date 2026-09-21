@@ -6,7 +6,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/operator-table";
 import type { K8sObject } from "@/components/resources/resource-detail-model";
 import {
   asRecord,

@@ -1,6 +1,6 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Table, TableCell, TableHead } from "@/components/ui/table";
+import { Table, TableCell, TableHead } from "@/components/ui/operator-table";
 
 export function safeLink(href: string): string | null {
   const value = href.trim();
@@ -15,6 +15,7 @@ export function safeLink(href: string): string | null {
 
 const markdownComponents: Components = {
   h1: ({ children }) => (
+    // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
     <h1 className="mt-4 text-base font-semibold first:mt-0">{children}</h1>
   ),
   h2: ({ children }) => (

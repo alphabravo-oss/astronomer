@@ -335,7 +335,7 @@ export function NamespaceDetailPage({
               <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 <Boxes className="h-4 w-4" /> Namespace
               </div>
-              <h1 className="font-mono text-2xl font-semibold text-foreground">
+              {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="font-mono text-2xl font-semibold text-foreground">
                 {namespace}
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">

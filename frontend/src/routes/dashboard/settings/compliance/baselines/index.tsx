@@ -257,7 +257,7 @@ function ComplianceBaselinesPage() {
           </RouterLink>
         </div>
         <div>
-          <h1 className="text-2xl font-semibold">Compliance baselines</h1>
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold">Compliance baselines</h1>
           <p className="text-sm text-muted-foreground mt-1">
             One-click preset profiles for PCI-DSS, HIPAA, FedRAMP-Moderate, and
             SOC 2. Each baseline snapshots prior state on apply so a revert
