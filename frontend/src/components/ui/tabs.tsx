@@ -141,7 +141,12 @@ export function TabStrip<T extends string>({
             key={tab.key}
             id={`tab-${tab.key}`}
             active={value === tab.key}
-            aria-controls={`tabpanel-${tab.key}`}
+            // aria-controls is intentionally omitted: none of TabStrip's
+            // current consumers render a TabsContent with a matching
+            // `value`, so a wired-up reference would point at a
+            // non-existent id (an axe "aria-valid-attr-value" violation).
+            // A consumer that does pass matching `value`s to TabsContent
+            // can restore the association via TabsList/TabsTrigger directly.
             onClick={() => onChange(tab.key)}
             onKeyDown={(event) =>
               handleTabStripKeyDown(event, index, tabs, onChange)

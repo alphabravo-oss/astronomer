@@ -147,7 +147,18 @@ export function SemanticDataTable<T extends RowData>({
                         aria-label={`Sort by ${col.header}`}
                         onClick={() => column?.toggleSorting()}
                         className={cn(
-                          "flex w-full items-center gap-1 p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                          "flex items-center gap-1 p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                          // Narrower than the full header width when a resize
+                          // handle shares this header, so the two adjacent
+                          // touch targets have clear space between them
+                          // instead of touching bounding boxes (WCAG 2.5.8
+                          // target spacing) — a right-margin/padding trick
+                          // doesn't work here because the browser resolves an
+                          // over-constrained `width: 100%` + margin by
+                          // discarding the margin.
+                          resizable && header?.column.getCanResize()
+                            ? "w-[calc(100%-12px)]"
+                            : "w-full",
                           alignClass,
                         )}
                       >

@@ -124,10 +124,10 @@
     /* Cloud-provider brand tints (provider-badge.tsx). Not semantic status
      * colors — identify a vendor, not a state — so they live outside the
      * --status-* scale. */
-    --brand-aws: 25 95% 53%;
-    --brand-gcp: 217 91% 60%;
-    --brand-azure: 199 89% 48%;
-    --brand-do: 221 83% 53%;
+    --brand-aws: 15 79% 34%;
+    --brand-gcp: 221 83% 53%;
+    --brand-azure: 200 98% 39%;
+    --brand-do: 224 76% 48%;
     --terminal-bg: 240 10% 4%;
     --terminal-fg: 240 5% 84%;
     --z-sticky: 10;

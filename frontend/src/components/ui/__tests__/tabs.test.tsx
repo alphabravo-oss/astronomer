@@ -40,7 +40,11 @@ describe("Tabs", () => {
     const overviewTab = screen.getByRole("tab", { name: "Overview" });
     expect(overviewTab).toHaveAttribute("aria-selected", "true");
     expect(overviewTab).toHaveAttribute("id", "tab-overview");
-    expect(overviewTab).toHaveAttribute("aria-controls", "tabpanel-overview");
+    // TabStrip intentionally does not auto-wire aria-controls: none of its
+    // real consumers render a TabsContent with a matching `value` today, so
+    // a guessed reference would point at a non-existent id (an axe
+    // "aria-valid-attr-value" violation) — see tabs.tsx.
+    expect(overviewTab).not.toHaveAttribute("aria-controls");
     expect(overviewTab).toHaveAttribute("tabindex", "0");
 
     const yamlTab = screen.getByRole("tab", { name: "YAML" });
