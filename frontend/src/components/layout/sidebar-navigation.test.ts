@@ -4,7 +4,6 @@ import { Box } from "lucide-react";
 import {
   activeNavGroupLabel,
   defaultOpenNavGroupLabel,
-  toggleOpenNavGroupLabel,
   type NavGroup,
 } from "@/components/layout/sidebar-navigation";
 
@@ -45,10 +44,5 @@ describe("sidebar accordion group selection", () => {
     expect(
       defaultOpenNavGroupLabel(groupsWithoutDefault, "/outside-dashboard"),
     ).toBeNull();
-  });
-
-  it("replaces the open group and closes a group toggled twice", () => {
-    expect(toggleOpenNavGroupLabel("Default", "Workloads")).toBe("Workloads");
-    expect(toggleOpenNavGroupLabel("Workloads", "Workloads")).toBeNull();
   });
 });

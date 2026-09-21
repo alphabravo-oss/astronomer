@@ -96,13 +96,6 @@ export function defaultOpenNavGroupLabel(
   );
 }
 
-export function toggleOpenNavGroupLabel(
-  current: string | null,
-  requested: string,
-): string | null {
-  return current === requested ? null : requested;
-}
-
 // Default (global) navigation groups
 export const globalNavGroups: NavGroup[] = [
   {
