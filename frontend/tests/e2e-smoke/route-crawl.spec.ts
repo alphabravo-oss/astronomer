@@ -77,6 +77,11 @@ for (const entry of manifest) {
       await expect(page.locator("form").first()).toBeVisible();
     } else {
       await expect(page.getByTestId("app-shell")).toBeVisible();
+      // Every dashboard route sets its own document.title (P-018); this
+      // catches a route silently falling back to the static index.html title.
+      await expect
+        .poll(() => page.title())
+        .not.toBe("Astronomer - Kubernetes Multi-Cluster Management");
     }
     await expect(page.getByTestId("route-error-boundary")).toHaveCount(0);
     await expect(page.getByTestId("route-not-found")).toHaveCount(0);
