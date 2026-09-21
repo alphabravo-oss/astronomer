@@ -305,11 +305,6 @@ function EstateDeliveryOverview({
   ];
   return (
     <PageShell>
-      <PageHeader
-        eyebrow="Continuous Delivery"
-        title="Estate"
-        description="All environments. Click a cluster to open its Flux workspace — Sources, Bundles, Targets, Rollouts, and Deployments live there."
-      />
       {query.isError && !isForbiddenError(query.error) && (
         <ErrorMessage error={query.error} />
       )}
