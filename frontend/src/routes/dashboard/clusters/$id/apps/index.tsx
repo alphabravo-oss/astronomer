@@ -79,6 +79,7 @@ import type { PermissionDecision } from "@/lib/permissions";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { QueryStates } from "@/components/ui/query-states";
+import { PageHeader } from "@/components/ui/page";
 import { TabStrip } from "@/components/ui/tabs";
 import { useTabParam } from "@/lib/use-tab-param";
 import {
@@ -415,19 +416,15 @@ function ClusterAppsPage() {
 
   return (
     <div className="space-y-6 p-4">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Package className="h-6 w-6" /> Apps
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+      <PageHeader
+        title={<span className="inline-flex items-center gap-2"><Package className="h-6 w-6" /> Apps</span>}
+        description={
+          <>
             Browse, install, and manage helm-packaged applications on
             {cluster?.displayName ? (
               <>
                 {" "}
-                <span className="font-medium text-foreground">
-                  {cluster.displayName}
-                </span>
+                <span className="font-medium text-foreground">{cluster.displayName}</span>
               </>
             ) : (
               " this cluster"
@@ -441,39 +438,41 @@ function ClusterAppsPage() {
               Tools tab
             </RouterLink>{" "}
             appear here too with a &quot;Managed by Tools&quot; pivot.
-          </p>
-        </div>
-        <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-          {section !== "repositories" && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Project visibility
-              <Select
-                aria-label="Catalog project"
-                value={projectId}
-                onChange={(event) => setProjectId(event.target.value)}
-                className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
-                disabled={projectsQuery.isLoading}
+          </>
+        }
+        actions={
+          <>
+            {section !== "repositories" && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Project visibility
+                <Select
+                  aria-label="Catalog project"
+                  value={projectId}
+                  onChange={(event) => setProjectId(event.target.value)}
+                  className="h-9 min-w-56 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+                  disabled={projectsQuery.isLoading}
+                >
+                  <option value="">Select a project</option>
+                  {clusterProjects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.displayName || project.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            )}
+            {section === "repositories" && (
+              <ActionButton
+                intent="primary"
+                icon={<Plus className="h-4 w-4" />}
+                onClick={() => setShowRepoModal(true)}
               >
-                <option value="">Select a project</option>
-                {clusterProjects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.displayName || project.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          )}
-          {section === "repositories" && (
-            <ActionButton
-              intent="primary"
-              icon={<Plus className="h-4 w-4" />}
-              onClick={() => setShowRepoModal(true)}
-            >
-              Add Repository
-            </ActionButton>
-          )}
-        </div>
-      </header>
+                Add Repository
+              </ActionButton>
+            )}
+          </>
+        }
+      />
 
       <TabStrip
         tabs={SECTIONS.map((s) => ({

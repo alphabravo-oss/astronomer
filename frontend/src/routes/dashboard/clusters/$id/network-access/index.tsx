@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/operator-table";
+import { PageHeader } from "@/components/ui/page";
 /**
  * Cluster "Network & access" tab (migration 070).
  *
@@ -257,53 +258,50 @@ function ClusterNetworkAccessPage() {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold flex items-center gap-2">
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
             Network &amp; access
             <ModeBadge mode={data.mode} drift={data.drift} />
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage the operator-defined CIDR allow-list for this cluster&apos;s
-            apiserver. Astronomer&apos;s tunnel egress block is always stamped
-            on top — operators can&apos;t remove it without disabling Astronomer
-            management.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {data.drift && (
-            <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning">
-              <ShieldAlert className="h-3 w-3" /> Drift detected
-            </span>
-          )}
-          {data.syncStatus === "synced" && (
-            <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-success/10 text-status-success">
-              <ShieldCheck className="h-3 w-3" /> Synced
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => reconcileMut.mutate()}
-            disabled={!canReconcile || reconcileMut.isPending}
-            title={
-              !canWrite
-                ? reason
-                : canMonitor
-                  ? "Run reconcile now"
-                  : (data.capability.reason ??
-                    "This provider cannot be monitored")
-            }
-            className="inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50"
-          >
-            <RefreshCw
-              className={
-                reconcileMut.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"
+          </span>
+        }
+        description="Manage the operator-defined CIDR allow-list for this cluster's apiserver. Astronomer's tunnel egress block is always stamped on top — operators can't remove it without disabling Astronomer management."
+        actions={
+          <>
+            {data.drift && (
+              <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning">
+                <ShieldAlert className="h-3 w-3" /> Drift detected
+              </span>
+            )}
+            {data.syncStatus === "synced" && (
+              <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-success/10 text-status-success">
+                <ShieldCheck className="h-3 w-3" /> Synced
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => reconcileMut.mutate()}
+              disabled={!canReconcile || reconcileMut.isPending}
+              title={
+                !canWrite
+                  ? reason
+                  : canMonitor
+                    ? "Run reconcile now"
+                    : (data.capability.reason ??
+                      "This provider cannot be monitored")
               }
-            />
-            Reconcile now
-          </button>
-        </div>
-      </div>
+              className="inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50"
+            >
+              <RefreshCw
+                className={
+                  reconcileMut.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"
+                }
+              />
+              Reconcile now
+            </button>
+          </>
+        }
+      />
 
       {!canEnforce && (
         <div className="flex items-start gap-2 rounded-sm border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">

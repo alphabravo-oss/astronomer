@@ -13,6 +13,7 @@ import {
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TabStrip } from "@/components/ui/tabs";
+import { ResourceMasthead } from "@/components/ui/page";
 import {
   useClusterEvents,
   useClusterNamespaces,
@@ -331,26 +332,21 @@ export function NamespaceDetailPage({
     <div className="space-y-6">
       <section className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border bg-gradient-to-r from-primary/10 via-card to-card px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <ResourceMasthead
+            eyebrow={
+              <span className="inline-flex items-center gap-2">
                 <Boxes className="h-4 w-4" /> Namespace
-              </div>
-              {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="font-mono text-2xl font-semibold text-foreground">
-                {namespace}
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {ns
-                  ? `Created ${formatRelativeTime(ns.createdAt)}`
-                  : "Namespace-scoped operations and resources"}
-              </p>
-            </div>
-            <StatusBadge
-              status={
-                ns?.status ?? (namespaces.isLoading ? "Loading" : "Unknown")
-              }
-            />
-          </div>
+              </span>
+            }
+            title={namespace}
+            mono
+            status={
+              <StatusBadge status={ns?.status ?? (namespaces.isLoading ? "Loading" : "Unknown")} />
+            }
+            description={
+              ns ? `Created ${formatRelativeTime(ns.createdAt)}` : "Namespace-scoped operations and resources"
+            }
+          />
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
           <Stat

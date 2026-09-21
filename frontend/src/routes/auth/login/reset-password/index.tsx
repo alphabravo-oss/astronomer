@@ -92,7 +92,7 @@ function ResetPasswordPage() {
           <Orbit className="h-8 w-8 text-foreground mx-auto" />
           <div className="rounded-lg border border-status-error/40 bg-status-error/10 p-6 space-y-3">
             <AlertTriangle className="h-6 w-6 text-status-error mx-auto" />
-            {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-base font-semibold text-foreground">
+            {/* eslint-disable-line no-restricted-syntax -- standalone auth screen, not dashboard chrome */}<h1 className="text-base font-semibold text-foreground">
               Invalid reset link
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -116,7 +116,7 @@ function ResetPasswordPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <Orbit className="h-8 w-8 text-foreground" />
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold tracking-tight">
+          {/* eslint-disable-line no-restricted-syntax -- standalone auth screen, not dashboard chrome */}<h1 className="text-xl font-semibold tracking-tight">
             {done ? "Password updated" : "Choose a new password"}
           </h1>
           {!done && (

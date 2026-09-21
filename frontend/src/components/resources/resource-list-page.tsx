@@ -13,6 +13,7 @@ import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
 import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader } from "@/components/ui/page";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ScaleDialog } from "@/components/workloads/scale-dialog";
 import { useWindowManagerStore } from "@/lib/window-manager-store";
@@ -627,9 +628,7 @@ export function ClusterResourcePage() {
 
   return (
     <div className="space-y-4">
-      {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold text-foreground tracking-tight">
-        {title}
-      </h1>
+      <PageHeader title={title} />
       {renderTable()}
     </div>
   );

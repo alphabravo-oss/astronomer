@@ -19,9 +19,8 @@ import { OverlayShell } from "@/components/ui/overlay-shell";
 import { useState } from "react";
 import { useComplianceBaselines, useComplianceBaselineDiff } from "@/lib/hooks/policy-queries";
 import { QueryStates } from "@/components/ui/query-states";
-import { Link as RouterLink } from "@tanstack/react-router";
+import { ResourceMasthead } from "@/components/ui/page";
 import {
-  ArrowLeft,
   CheckCircle2,
   History,
   Loader2,
@@ -248,22 +247,12 @@ function ComplianceBaselinesPage() {
   return (
     <SettingsAuthGate>
       <div className="space-y-6">
-        <div className="flex items-center gap-2">
-          <RouterLink
-            to="/dashboard/settings/compliance"
-            className="text-sm text-muted-foreground inline-flex items-center gap-1"
-          >
-            <ArrowLeft className="w-4 h-4" /> Compliance
-          </RouterLink>
-        </div>
-        <div>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold">Compliance baselines</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            One-click preset profiles for PCI-DSS, HIPAA, FedRAMP-Moderate, and
-            SOC 2. Each baseline snapshots prior state on apply so a revert
-            restores it. Applying a preset is not a certification or FIPS claim.
-          </p>
-        </div>
+        <ResourceMasthead
+          backTo="/dashboard/settings/compliance"
+          backLabel="Compliance"
+          title="Compliance baselines"
+          description="One-click preset profiles for PCI-DSS, HIPAA, FedRAMP-Moderate, and SOC 2. Each baseline snapshots prior state on apply so a revert restores it. Applying a preset is not a certification or FIPS claim."
+        />
 
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

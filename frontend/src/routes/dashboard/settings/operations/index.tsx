@@ -22,9 +22,8 @@ import {
  */
 
 import { useState, useMemo } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
+import { ResourceMasthead } from "@/components/ui/page";
 import {
-  ArrowLeft,
   Loader2,
   RefreshCw,
   RotateCw,
@@ -147,22 +146,16 @@ function OperationsBody() {
             ? `DLQ discard ${discard.operationState.phase}`
             : ""}
       </p>
-      <RouterLink
-        to="/dashboard/settings"
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Back to Settings
-      </RouterLink>
-
-      <div>
-        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Activity className="h-5 w-5" /> Operations
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Live view of the asynq worker queues + DLQ. Audited; superuser-only.
-        </p>
-      </div>
+      <ResourceMasthead
+        backTo="/dashboard/settings"
+        backLabel="Back to Settings"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <Activity className="h-5 w-5" /> Operations
+          </span>
+        }
+        description="Live view of the asynq worker queues + DLQ. Audited; superuser-only."
+      />
 
       {queues.isError && (
         <QueryStates query={queues} permission="admin_operations:read">

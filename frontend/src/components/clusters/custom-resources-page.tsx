@@ -26,7 +26,7 @@ import {
   crDetailHref,
 } from "@/lib/k8s-paths";
 import { formatRelativeTime } from "@/lib/utils";
-import { ArrowLeft } from "lucide-react";
+import { PageHeader, ResourceMasthead } from "@/components/ui/page";
 
 // CR proxy access is gated server-side on the `custom_resources` RBAC resource
 // (see internal/server/routes.go); mirror that for client gating.
@@ -229,9 +229,7 @@ function CRDList({ clusterId }: { clusterId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold text-foreground tracking-tight">
-        Custom Resources
-      </h1>
+      <PageHeader title="Custom Resources" />
       <DataTable
         data={rows}
         columns={columns}
@@ -353,23 +351,16 @@ function CRList({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3">
-        <RouterLink
-          to={crdListHref(clusterId)}
-          className="mt-1 p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-          aria-label="Back"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </RouterLink>
-        <div>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold text-foreground tracking-tight font-mono">
-            {plural}
-          </h1>
-          <p className="mt-1 text-xs text-muted-foreground font-mono">
+      <ResourceMasthead
+        backTo={crdListHref(clusterId)}
+        title={plural}
+        mono
+        description={
+          <span className="font-mono">
             {group ? `${group}/${version}` : version}
-          </p>
-        </div>
-      </div>
+          </span>
+        }
+      />
       <DataTable
         data={rows}
         columns={columns}

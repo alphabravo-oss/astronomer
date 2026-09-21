@@ -28,9 +28,8 @@ import {
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link as RouterLink } from "@tanstack/react-router";
+import { ResourceMasthead } from "@/components/ui/page";
 import {
-  ArrowLeft,
   Plus,
   Trash2,
   Save,
@@ -303,21 +302,12 @@ function WidgetsAdminPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <RouterLink
-            to="/dashboard/settings"
-            className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-          >
-            <ArrowLeft className="h-3 w-3" /> Settings
-          </RouterLink>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold mt-1">Dashboard widgets</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Define widgets pinned to the global dashboard, per-cluster pages, or
-            per-project pages.
-          </p>
-        </div>
-      </div>
+      <ResourceMasthead
+        backTo="/dashboard/settings"
+        backLabel="Settings"
+        title="Dashboard widgets"
+        description="Define widgets pinned to the global dashboard, per-cluster pages, or per-project pages."
+      />
 
       {widgetsQuery.isError && (
         <QueryStates query={widgetsQuery} permission="dashboard_widgets:read">

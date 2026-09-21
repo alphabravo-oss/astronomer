@@ -13,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormShell } from "@/components/ui/form-shell";
 import { ActionButton } from "@/components/ui/action-button";
+import { PageHeader } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { RegistrationConnectStep } from "@/components/clusters/registration-connect-step";
 import {
@@ -223,22 +224,17 @@ function RegisterClusterWizardPage({
   return (
     <div>
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-            <Server className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div>
-            {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold text-foreground">
+        <PageHeader
+          title={
+            <span className="inline-flex items-center gap-3">
+              <span className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                <Server className="h-5 w-5 text-muted-foreground" />
+              </span>
               Register an existing cluster
-            </h1>
-          </div>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Connect a Kubernetes cluster you already run so Astronomer can observe
-          and manage it. Astronomer does not create clusters, provision
-          infrastructure, or add nodes — you install a lightweight agent and it
-          adopts the cluster as-is.
-        </p>
+            </span>
+          }
+          description="Connect a Kubernetes cluster you already run so Astronomer can observe and manage it. Astronomer does not create clusters, provision infrastructure, or add nodes — you install a lightweight agent and it adopts the cluster as-is."
+        />
         <WizardStepper
           steps={REGISTRATION_STEPS}
           currentStep={1}

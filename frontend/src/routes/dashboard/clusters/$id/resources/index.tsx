@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/operator-table";
+import { PageHeader } from "@/components/ui/page";
 /**
  * Cluster Resources tab — sprint 069 CRD-mirror v2 read-only view.
  *
@@ -503,15 +504,11 @@ function ClusterResourcesPage() {
 
   return (
     <div className="p-6">
-      <header className="mb-4">
-        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold">Cluster resources</h1>
-        <p className="text-sm text-muted-foreground">
-          A read-only view of the policy / routing / quota objects installed in
-          this cluster. Data is mirrored from the cluster agent every ~10
-          minutes; rows you delete in the cluster disappear here within roughly
-          an hour.
-        </p>
-      </header>
+      <PageHeader
+        title="Cluster resources"
+        description="A read-only view of the policy / routing / quota objects installed in this cluster. Data is mirrored from the cluster agent every ~10 minutes; rows you delete in the cluster disappear here within roughly an hour."
+        className="mb-4"
+      />
 
       {ingressClassesQ.isError && (
         <QueryStates query={ingressClassesQ} permission="clusters:read">
