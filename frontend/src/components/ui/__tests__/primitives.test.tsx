@@ -85,7 +85,7 @@ describe("Card / Badge / Switch / Tabs", () => {
         ]}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Channels" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Channels" }));
     expect(onChange).toHaveBeenCalledWith("channels");
   });
 });
