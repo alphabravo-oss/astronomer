@@ -100,7 +100,7 @@
     "frontend/src/routes/dashboard/clusters/$id/network-access/index.tsx:ClusterNetworkAccessPage": 456,
     "frontend/src/routes/dashboard/clusters/$id/network-policies/index.tsx:ClusterNetworkPoliciesPage": 283,
     "frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.tsx:NodeDetailPage": 975,
-    "frontend/src/routes/dashboard/clusters/$id/registries/index.tsx:ClusterRegistriesPage": 263,
+    "frontend/src/routes/dashboard/clusters/$id/registries/index.tsx:ClusterRegistriesPage": 261,
     "frontend/src/routes/dashboard/clusters/$id/registries/index.tsx:RegistryDialog": 255,
     "frontend/src/routes/dashboard/clusters/$id/template/index.tsx:ClusterTemplatePage": 303,
     "frontend/src/routes/dashboard/clusters/index.tsx:ClustersPage": 431,
