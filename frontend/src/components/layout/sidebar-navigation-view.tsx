@@ -153,21 +153,25 @@ export function SidebarGroup({
     );
   }
 
+  const expanded = group.hideLabel || isOpen;
+
   return (
     <div>
       {/* Group header with chevron on the right (Rancher style) */}
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <span>{group.label}</span>
-        {isOpen ? (
-          <ChevronUp className="h-3.5 w-3.5" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5" />
-        )}
-      </button>
-      {isOpen && (
+      {!group.hideLabel && (
+        <button
+          onClick={onToggle}
+          className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span>{group.label}</span>
+          {isOpen ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )}
+        </button>
+      )}
+      {expanded && (
         <div className="space-y-px">
           {group.items.map((item) => {
             const Icon = item.icon;

@@ -41,7 +41,7 @@ export const favoriteNavigationOptions: ReadonlyArray<{
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/clusters", label: "Clusters" },
   { href: "/dashboard/projects", label: "Projects" },
-  { href: "/dashboard/workloads", label: "Workloads" },
+  { href: "/dashboard/workloads", label: "Search: Workloads" },
   { href: "/dashboard/delivery", label: "Delivery" },
   { href: "/dashboard/monitoring", label: "Monitoring" },
   { href: "/dashboard/alerting", label: "Alerting" },

@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
-  BarChart3,
   FileArchive,
   FileSearch,
   FileText,
@@ -13,7 +12,6 @@ import {
   Mail,
   Network,
   Palette,
-  Puzzle,
   Radio,
   Settings,
   ShieldAlert,
@@ -156,12 +154,6 @@ export const SETTINGS_NAVIGATION: readonly SettingsNavigationGroup[] = [
           "Configure management-plane backups, encryption, and restore drills.",
         icon: ShieldCheck,
       },
-      {
-        href: "/dashboard/settings/monitoring",
-        title: "Shared observability stacks",
-        description: "Operate shared Thanos and Alertmanager installations.",
-        icon: BarChart3,
-      },
     ],
   },
   {
@@ -206,13 +198,6 @@ export const SETTINGS_NAVIGATION: readonly SettingsNavigationGroup[] = [
         title: "Vault connections",
         description: "Resolve encrypted Vault references during installations.",
         icon: KeyRound,
-      },
-      {
-        href: "/dashboard/extensions",
-        title: "Extensions",
-        description: "Review extension manifests, permissions, and enablement.",
-        icon: Puzzle,
-        featureFlag: "feature.extensions",
       },
     ],
   },

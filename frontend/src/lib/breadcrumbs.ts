@@ -1,3 +1,5 @@
+import { navLabelForHref } from "@/components/layout/sidebar-navigation";
+
 const routeLabels: Record<string, string> = {
   dashboard: "Dashboard",
   clusters: "Clusters",
@@ -15,7 +17,6 @@ const routeLabels: Record<string, string> = {
   audit: "Audit",
   catalog: "Catalog",
   security: "Security",
-  fleet: "Fleet Operations",
   search: "Search",
   resources: "Resources",
   shell: "Shell",
@@ -38,9 +39,9 @@ const routeLabels: Record<string, string> = {
   secrets: "Secrets",
   hpa: "HPA",
   "network-policies": "Network Policies",
-  "persistent-volumes": "Persistent Volumes",
-  "persistent-volume-claims": "PVCs",
-  "storage-classes": "Storage Classes",
+  persistentvolumes: "Persistent Volumes",
+  persistentvolumeclaims: "PVCs",
+  storageclasses: "Storage Classes",
   resourcequotas: "Resource Quotas",
   limitranges: "Limit Ranges",
   poddisruptionbudgets: "PDBs",
@@ -90,7 +91,7 @@ export function generateBreadcrumbs(
     const label =
       segments[i - 1] === "clusters" && clusterMap?.[segment]
         ? clusterMap[segment]
-        : breadcrumbLabel(segment);
+        : (navLabelForHref(path) ?? breadcrumbLabel(segment));
     crumbs.push({ label, href: path });
   }
 
