@@ -2,31 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { Command } from "cmdk";
-import {
-  LayoutDashboard,
-  Server,
-  BarChart3,
-  Shield,
-  Settings,
-  Search,
-  ArrowRight,
-  Folder,
-  Rocket,
-  BookOpen,
-  Box,
-  Boxes,
-  Camera,
-  Route,
-  Waypoints,
-  Layers,
-  Bell,
-  ScrollText,
-  Gauge,
-} from "lucide-react";
+import { Server, ArrowRight, Folder, BookOpen, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useUIStore } from "@/lib/store";
 import { useAuthStore } from "@/lib/store";
-import { useClusters, useFeatureFlags } from "@/lib/hooks/clusters";
+import {
+  useCharlieActivated,
+  useClusters,
+  useFeatureFlags,
+} from "@/lib/hooks/clusters";
 import { useProjects } from "@/lib/hooks/projects";
 import type { SearchableResourceType } from "@/lib/api/resource-search";
 import { OverlayShell } from "@/components/ui/overlay-shell";
@@ -37,99 +21,10 @@ import {
   visibleSettingsNavigation,
 } from "@/components/settings/settings-navigation";
 import { isSuperuser } from "@/lib/permissions";
-
-const pages = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Clusters", href: "/dashboard/clusters", icon: Server },
-  { name: "Projects", href: "/dashboard/projects", icon: Folder },
-  { name: "Shared metrics", href: "/dashboard/monitoring", icon: BarChart3 },
-  { name: "Continuous Delivery", href: "/dashboard/delivery", icon: Rocket },
-  { name: "RBAC", href: "/dashboard/rbac", icon: Shield },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-] as const;
-
-// Per-cluster destinations that are otherwise only reachable from the cluster
-// sidebar. Surfaced in the palette when the user is inside a cluster context so
-// keyboard users can jump straight to them.
-const clusterPages: Array<{
-  name: string;
-  to: string;
-  icon: LucideIcon;
-  description: string;
-}> = [
-  {
-    name: "Apps",
-    to: "/dashboard/clusters/$id/apps",
-    icon: Box,
-    description: "Helm charts, installed apps, and repositories",
-  },
-  {
-    name: "Registries",
-    to: "/dashboard/clusters/$id/registries",
-    icon: Boxes,
-    description: "Private image-pull credentials",
-  },
-  {
-    name: "Snapshots",
-    to: "/dashboard/clusters/$id/snapshots",
-    icon: Camera,
-    description: "Velero workload snapshots",
-  },
-  {
-    name: "Network & Access",
-    to: "/dashboard/clusters/$id/network-access",
-    icon: Route,
-    description: "Apiserver allow-list",
-  },
-  {
-    name: "Service Mesh",
-    to: "/dashboard/clusters/$id/service-mesh",
-    icon: Waypoints,
-    description: "mTLS + mesh status",
-  },
-  {
-    name: "Mirrored Resources",
-    to: "/dashboard/clusters/$id/resources",
-    icon: Layers,
-    description: "Read-only CRD mirror",
-  },
-  {
-    name: "Gatekeeper",
-    to: "/dashboard/clusters/$id/gatekeeper",
-    icon: Shield,
-    description: "OPA constraint authoring",
-  },
-  {
-    name: "Delivery",
-    to: "/dashboard/clusters/$id/delivery",
-    icon: Rocket,
-    description: "Flux and delivery for this cluster",
-  },
-  {
-    name: "Metrics",
-    to: "/dashboard/clusters/$id/metrics",
-    icon: Gauge,
-    description: "CPU, memory, and node utilization",
-  },
-  {
-    name: "Monitoring Stack",
-    to: "/dashboard/clusters/$id/monitoring-stack",
-    icon: BarChart3,
-    description: "kube-prometheus-stack for this cluster",
-  },
-  {
-    name: "Alerting",
-    to: "/dashboard/clusters/$id/alerting",
-    icon: Bell,
-    description: "Alert rules and firing alerts",
-  },
-  {
-    name: "Logging",
-    to: "/dashboard/clusters/$id/logging",
-    icon: ScrollText,
-    description: "Log pipelines for this cluster",
-  },
-] as const;
+import {
+  commandPaletteClusterPages,
+  commandPalettePages,
+} from "@/components/layout/command-palette-pages";
 
 // Extract the cluster id from a /dashboard/clusters/<id>/... path, skipping the
 // static sub-routes that aren't real cluster ids (mirrors the sidebar logic).
@@ -245,6 +140,7 @@ export function CommandPalette() {
   const { data: clustersData } = useClusters({ pageSize: 50 });
   const { data: projectsData } = useProjects({ pageSize: 25 });
   const { data: featureFlags } = useFeatureFlags();
+  const { activated: charlieActivated } = useCharlieActivated();
   const user = useAuthStore((state) => state.user);
   const [search, setSearch] = useState("");
   const settingsGroups = visibleSettingsNavigation(SETTINGS_NAVIGATION, {
@@ -252,6 +148,10 @@ export function CommandPalette() {
     canManageCharlie: canManageCharlie(user),
     extensionsEnabled: featureFlags?.["feature.extensions"] === true,
   });
+  const globalPages = commandPalettePages(user, featureFlags, charlieActivated);
+  const clusterContextPages = currentClusterId
+    ? commandPaletteClusterPages(currentClusterId, user, featureFlags, charlieActivated)
+    : [];
 
   // Keyboard shortcut
   useEffect(() => {
@@ -333,20 +233,18 @@ export function CommandPalette() {
               heading="Pages"
               className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5"
             >
-              {pages.map((page) => {
-                return (
-                  <CommandRow
-                    key={page.href}
-                    value={page.name}
-                    icon={page.icon}
-                    title={page.name}
-                    onSelect={() => {
-                      void routerNavigate({ to: page.href });
-                      close();
-                    }}
-                  />
-                );
-              })}
+              {globalPages.map((page) => (
+                <CommandRow
+                  key={page.href}
+                  value={page.label}
+                  icon={page.icon}
+                  title={page.label}
+                  onSelect={() => {
+                    void routerNavigate({ to: page.href });
+                    close();
+                  }}
+                />
+              ))}
             </Command.Group>
 
             {settingsGroups.map((group) => (
@@ -376,18 +274,14 @@ export function CommandPalette() {
                 heading="Cluster Pages"
                 className="text-xs text-muted-foreground/60 font-semibold uppercase tracking-wider px-2 py-1.5 mt-2"
               >
-                {clusterPages.map((page) => (
+                {clusterContextPages.map((page) => (
                   <CommandRow
-                    key={page.to}
-                    value={`${page.name} ${page.description} cluster`}
+                    key={page.href}
+                    value={`${page.label} cluster`}
                     icon={page.icon}
-                    title={page.name}
-                    description={page.description}
+                    title={page.label}
                     onSelect={() => {
-                      void routerNavigate({
-                        to: page.to,
-                        params: { id: currentClusterId },
-                      });
+                      void routerNavigate({ to: page.href });
                       close();
                     }}
                   />
