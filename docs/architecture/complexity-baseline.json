@@ -12,7 +12,7 @@
     "frontend/src/routes/dashboard/agents/index.tsx": 1118,
     "frontend/src/routes/dashboard/charlie/index.tsx": 1076,
     "frontend/src/routes/dashboard/clusters/$id/apps/index.tsx": 1240,
-    "frontend/src/routes/dashboard/clusters/$id/index.tsx": 1004,
+    "frontend/src/routes/dashboard/clusters/$id/index.tsx": 1003,
     "frontend/src/routes/dashboard/clusters/$id/nodes/$nodeName/index.tsx": 1371,
     "frontend/src/routes/dashboard/delivery/targets/$targetId/index.tsx": 1183,
     "frontend/src/routes/dashboard/security/index.tsx": 1161,
