@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/wizard-stepper";
 import type { Cluster, ClusterEnvironment } from "@/types";
 
-export function RegisterClusterWizardPage() {
+export function RegisterClusterWizardRoute() {
   const navigate = useNavigate();
   const { clusterId } = Route.useSearch();
   const draftClusterId = clusterId ?? null;
@@ -61,7 +61,7 @@ export function RegisterClusterWizardPage() {
     return (
       <QueryStates query={clusterQuery} loadingTitle="Loading draft cluster…">
         {(cluster) => (
-          <RegisterClusterForm
+          <RegisterClusterWizardPage
             draftClusterId={draftClusterId}
             initialCluster={cluster}
             onRegistered={(id) => {
@@ -79,7 +79,7 @@ export function RegisterClusterWizardPage() {
   }
 
   return (
-    <RegisterClusterForm
+    <RegisterClusterWizardPage
       draftClusterId={null}
       initialCluster={null}
       onRegistered={(id) => {
@@ -93,7 +93,7 @@ export function RegisterClusterWizardPage() {
   );
 }
 
-function RegisterClusterForm({
+function RegisterClusterWizardPage({
   draftClusterId,
   initialCluster,
   onRegistered,
@@ -605,5 +605,5 @@ function Field({
 
 export const Route = createFileRoute("/dashboard/clusters/register/")({
   validateSearch: parseRegistrationSearch,
-  component: RegisterClusterWizardPage,
+  component: RegisterClusterWizardRoute,
 });

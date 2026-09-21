@@ -53,7 +53,7 @@ vi.mock("@/components/clusters/registration-connect-step", () => ({
   ),
 }));
 
-import { RegisterClusterWizardPage } from "./index";
+import { RegisterClusterWizardRoute } from "./index";
 
 function draftCluster(overrides: Record<string, unknown> = {}) {
   return {
@@ -94,7 +94,7 @@ describe("register wizard draft identity", () => {
       refetch: vi.fn(),
     });
 
-    render(<RegisterClusterWizardPage />);
+    render(<RegisterClusterWizardRoute />);
 
     // Step 2 (connect) renders first for a draft that already exists.
     expect(screen.getByText("connect-step for abc")).toBeInTheDocument();
@@ -136,7 +136,7 @@ describe("register wizard draft identity", () => {
       refetch: vi.fn(),
     });
 
-    render(<RegisterClusterWizardPage />);
+    render(<RegisterClusterWizardRoute />);
 
     expect(
       screen.queryByPlaceholderText("my-cluster"),
