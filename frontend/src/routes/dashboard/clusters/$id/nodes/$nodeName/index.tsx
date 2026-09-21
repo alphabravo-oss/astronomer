@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import { QueryStates } from "@/components/ui/query-states";
+import { ResourceMasthead } from "@/components/ui/page";
 import { ResourceActions } from "@/components/workloads/resource-actions";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import { usePermissionDecision } from "@/lib/permission-hooks";
@@ -26,7 +27,6 @@ import type {
   NodeDetailCondition,
 } from "@/types";
 import {
-  ArrowLeft,
   Cpu,
   MemoryStick,
   Box,
@@ -697,89 +697,78 @@ function NodeDetailPage() {
           : ""}
       </p>
       {/* Header */}
-      <div className="flex items-start gap-4">
-        <button
-          type="button"
-          onClick={() =>
-            void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
-          }
-          aria-label="Back to nodes"
-          className="mt-1 p-1 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-1">
-            {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold text-foreground tracking-tight font-mono truncate">
-              {node.name}
-            </h1>
+      <ResourceMasthead
+        backTo={`/dashboard/clusters/${clusterId}/nodes`}
+        backLabel="Back to nodes"
+        title={node.name}
+        mono
+        status={
+          <>
             <StatusBadge status={node.status} />
             {node.unschedulable && (
-              <span className="px-2 py-0.5 rounded-sm text-2xs bg-status-warning/10 text-status-warning font-medium">
-                Unschedulable
-              </span>
+              <StatusBadge status="warning" label="Unschedulable" shape="square" />
             )}
-          </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span>Roles: {node.roles.join(", ")}</span>
-            <span>Age: {formatRelativeTime(node.createdAt)}</span>
-            <span>{node.nodeInfo.kubeletVersion}</span>
-          </div>
-        </div>
-
-        {/* Node Actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setShowYaml(true)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-sm font-medium
-              border border-border text-foreground hover:bg-accent transition-colors"
-          >
-            <Code className="h-3.5 w-3.5" /> YAML
-          </button>
-          {node.unschedulable ? (
+          </>
+        }
+        meta={[
+          { label: "Roles", value: node.roles.join(", ") },
+          { label: "Age", value: formatRelativeTime(node.createdAt) },
+          { label: "Version", value: node.nodeInfo.kubeletVersion },
+        ]}
+        actions={
+          <>
             <ActionButton
-              onClick={handleUncordon}
-              disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-              disabledReason={nodeUpdateBlockedReason}
+              onClick={() => setShowYaml(true)}
               size="sm"
-              icon={<ShieldCheck className="h-3.5 w-3.5" />}
-              className="gap-1.5 text-sm border-status-success/30 text-status-success hover:bg-status-success/10"
+              icon={<Code className="h-3.5 w-3.5" />}
             >
-              Uncordon
+              View YAML
             </ActionButton>
-          ) : (
+            {node.unschedulable ? (
+              <ActionButton
+                onClick={handleUncordon}
+                disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+                disabledReason={nodeUpdateBlockedReason}
+                size="sm"
+                icon={<ShieldCheck className="h-3.5 w-3.5" />}
+                className="gap-1.5 text-sm border-status-success/30 text-status-success hover:bg-status-success/10"
+              >
+                Uncordon
+              </ActionButton>
+            ) : (
+              <ActionButton
+                onClick={handleCordon}
+                disabled={nodeActionPending || !nodeUpdateDecision.allowed}
+                disabledReason={nodeUpdateBlockedReason}
+                size="sm"
+                icon={<ShieldBan className="h-3.5 w-3.5" />}
+                className="gap-1.5 text-sm border-status-warning/30 text-status-warning hover:bg-status-warning/10"
+              >
+                Cordon
+              </ActionButton>
+            )}
             <ActionButton
-              onClick={handleCordon}
-              disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-              disabledReason={nodeUpdateBlockedReason}
+              onClick={() => setShowDrain(true)}
+              disabled={nodeActionPending || !nodeManageDecision.allowed}
+              disabledReason={nodeManageBlockedReason}
               size="sm"
-              icon={<ShieldBan className="h-3.5 w-3.5" />}
-              className="gap-1.5 text-sm border-status-warning/30 text-status-warning hover:bg-status-warning/10"
+              icon={<Unplug className="h-3.5 w-3.5" />}
+              className="gap-1.5 text-sm border-status-error/30 text-status-error hover:bg-status-error/10"
             >
-              Cordon
+              Drain
             </ActionButton>
-          )}
-          <ActionButton
-            onClick={() => setShowDrain(true)}
-            disabled={nodeActionPending || !nodeManageDecision.allowed}
-            disabledReason={nodeManageBlockedReason}
-            size="sm"
-            icon={<Unplug className="h-3.5 w-3.5" />}
-            className="gap-1.5 text-sm border-status-error/30 text-status-error hover:bg-status-error/10"
-          >
-            Drain
-          </ActionButton>
-          {/* Node is cluster-scoped — ResourceActions renders only Delete here. */}
-          <ResourceActions
-            clusterId={clusterId}
-            kind="Node"
-            name={nodeName}
-            onDeleted={() =>
-              void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
-            }
-          />
-        </div>
-      </div>
+            {/* Node is cluster-scoped — ResourceActions renders only Delete here. */}
+            <ResourceActions
+              clusterId={clusterId}
+              kind="Node"
+              name={nodeName}
+              onDeleted={() =>
+                void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
+              }
+            />
+          </>
+        }
+      />
 
       {/* Tabs */}
       <div className="border-b border-border">

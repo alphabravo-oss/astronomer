@@ -17,6 +17,7 @@ import {
 import { useCluster } from "@/lib/hooks/clusters";
 import { cn } from "@/lib/utils";
 import { useDeliveryProjectScope } from "@/components/delivery/shared";
+import { PageHeader } from "@/components/ui/page";
 
 const tabs = [
   { key: "flux", label: "Flux", icon: Radio, segment: "" },
@@ -84,38 +85,31 @@ function ClusterDeliveryLayout() {
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to delivery estate
       </RouterLink>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Cluster delivery
-          </p>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-foreground">
-            {cluster?.displayName || cluster?.name || "Cluster"}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Flux and delivery for this environment. Switch clusters from the
-            sidebar to stay on the same tab.
-          </p>
-        </div>
-        {projects.length > 1 ? (
-          <label className="flex min-w-56 items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Project</span>
-            <Select
-              aria-label="Delivery project"
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-              className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm"
-            >
-              <option value="">Select a project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.displayName || project.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-        ) : null}
-      </div>
+      <PageHeader
+        eyebrow="Cluster delivery"
+        title={cluster?.displayName || cluster?.name || "Cluster"}
+        description="Flux and delivery for this environment. Switch clusters from the sidebar to stay on the same tab."
+        actions={
+          projects.length > 1 ? (
+            <label className="flex min-w-56 items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Project</span>
+              <Select
+                aria-label="Delivery project"
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-sm"
+              >
+                <option value="">Select a project</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.displayName || project.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ) : null
+        }
+      />
       <div className="border-b border-border">
         <nav aria-label="Cluster delivery" className="flex flex-wrap gap-4">
           {tabs.map((tab) => {

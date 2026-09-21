@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/operator-table";
+import { TabsContent } from "@/components/ui/tabs";
 import { YamlPanel } from "@/components/ui/yaml-view-dialog";
 import { PodLogsViewer } from "@/components/workloads/pod-logs-viewer";
 import { PodTerminal } from "@/components/workloads/pod-terminal";
@@ -81,13 +82,7 @@ export function ResourceDetailTabPanel({
   const kind = obj?.kind || resourceType;
 
   return (
-    <div
-      id={`resource-tabpanel-${tab}`}
-      role="tabpanel"
-      aria-labelledby={`resource-tab-${tab}`}
-      tabIndex={0}
-      className="focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-    >
+    <TabsContent value={tab}>
       {tab === "overview" &&
         (isLoading ? (
           <LoadingState
@@ -187,7 +182,7 @@ export function ResourceDetailTabPanel({
           name={name}
         />
       )}
-    </div>
+    </TabsContent>
   );
 }
 
