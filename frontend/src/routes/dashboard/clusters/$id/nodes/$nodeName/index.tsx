@@ -1,54 +1,21 @@
-import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from "@/components/ui/operator-table";
-import { useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
 import { useState } from "react";
-import { useNodeDetail, useNodeOperation } from "@/lib/hooks/clusters";
-import type { NodeTaintRequest } from "@/lib/api/nodes";
+import { useNodeDetail } from "@/lib/hooks/clusters";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { DataTable, type Column } from "@/components/ui/data-table";
-import { ActionButton } from "@/components/ui/action-button";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import { QueryStates } from "@/components/ui/query-states";
 import { ResourceMasthead } from "@/components/ui/page";
 import { TabStrip } from "@/components/ui/tabs";
-import { ResourceActions } from "@/components/workloads/resource-actions";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import { usePermissionDecision } from "@/lib/permission-hooks";
-import { formatBytes, formatCPU, formatRelativeTime, cn } from "@/lib/utils";
-import type {
-  NodePod,
-  NodeEvent,
-  NodeTaint,
-  NodeImage,
-  NodeDetailCondition,
-} from "@/types";
-import {
-  Cpu,
-  MemoryStick,
-  Box,
-  CheckCircle2,
-  XCircle,
-  Server,
-  Tag,
-  Code,
-  ShieldBan,
-  ShieldCheck,
-  Unplug,
-  Plus,
-  Trash2,
-} from "lucide-react";
-import { toastApiError, toastSuccess, toastWarning } from "@/lib/toast";
-import { OperationPartialError } from "@/lib/api/operation-polling";
+import { formatRelativeTime } from "@/lib/utils";
+import { Server } from "lucide-react";
+import { NodeHeaderActions } from "./-node-header-actions";
+import { NodeTabContent, type NodeTabId } from "./-node-tab-content";
+import { NodeMetadataModals } from "./-node-metadata-modals";
+import { useNodeActions } from "./-node-actions";
 
 // ── Tabs ──
 
@@ -60,362 +27,34 @@ const TABS = [
   { id: "taints", label: "Taints" },
   { id: "images", label: "Images" },
   { id: "events", label: "Events" },
-] as const;
-
-type TabId = (typeof TABS)[number]["id"];
-
-// ── Column Definitions ──
-
-const podColumns: Column<NodePod>[] = [
-  {
-    key: "name",
-    header: "Name",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "namespace",
-    header: "Namespace",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </span>
-    ),
-  },
-  {
-    key: "status",
-    header: "Status",
-    accessor: (row) => <StatusBadge status={row.status} />,
-  },
-  {
-    key: "ready",
-    header: "Ready",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.ready}</span>
-    ),
-    align: "center",
-  },
-  {
-    key: "restarts",
-    header: "Restarts",
-    accessor: (row) => (
-      <span
-        className={cn(
-          "tabular-nums text-xs",
-          row.restarts > 0 ? "text-status-warning" : "text-muted-foreground",
-        )}
-      >
-        {row.restarts}
-      </span>
-    ),
-    sortAccessor: (row) => row.restarts,
-    align: "center",
-  },
-  {
-    key: "image",
-    header: "Image",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono truncate max-w-[220px] block">
-        {row.images?.[0] || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "age",
-    header: "Age",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {formatRelativeTime(row.createdAt)}
-      </span>
-    ),
-  },
-];
-
-const conditionColumns: Column<NodeDetailCondition>[] = [
-  {
-    key: "type",
-    header: "Type",
-    accessor: (row) => (
-      <span className="font-medium text-foreground text-xs">{row.type}</span>
-    ),
-  },
-  {
-    key: "status",
-    header: "Status",
-    accessor: (row) => {
-      const isHealthy =
-        (row.type === "Ready" && row.status === "True") ||
-        (row.type !== "Ready" && row.status === "False");
-      return (
-        <div className="flex items-center gap-1.5">
-          {isHealthy ? (
-            <CheckCircle2 className="h-3.5 w-3.5 text-status-success" />
-          ) : (
-            <XCircle className="h-3.5 w-3.5 text-status-error" />
-          )}
-          <span className="text-xs">{row.status}</span>
-        </div>
-      );
-    },
-  },
-  {
-    key: "reason",
-    header: "Reason",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">{row.reason || "-"}</span>
-    ),
-  },
-  {
-    key: "message",
-    header: "Message",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground line-clamp-2">
-        {row.message || "-"}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "lastHeartbeat",
-    header: "Last Heartbeat",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.lastHeartbeat ? formatRelativeTime(row.lastHeartbeat) : "-"}
-      </span>
-    ),
-  },
-  {
-    key: "lastTransition",
-    header: "Last Transition",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.lastTransition ? formatRelativeTime(row.lastTransition) : "-"}
-      </span>
-    ),
-  },
-];
-
-const taintColumns: Column<NodeTaint>[] = [
-  {
-    key: "key",
-    header: "Key",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs">
-        {row.key}
-      </span>
-    ),
-  },
-  {
-    key: "value",
-    header: "Value",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground font-mono">
-        {row.value || "-"}
-      </span>
-    ),
-  },
-  {
-    key: "effect",
-    header: "Effect",
-    accessor: (row) => (
-      <span
-        className={cn(
-          "px-1.5 py-0.5 rounded-sm text-2xs",
-          row.effect === "NoSchedule"
-            ? "bg-status-warning/10 text-status-warning"
-            : row.effect === "NoExecute"
-              ? "bg-status-error/10 text-status-error"
-              : "bg-muted text-muted-foreground",
-        )}
-      >
-        {row.effect}
-      </span>
-    ),
-  },
-];
-
-const imageColumns: Column<NodeImage>[] = [
-  {
-    key: "name",
-    header: "Image",
-    accessor: (row) => (
-      <span className="font-medium text-foreground font-mono text-xs truncate max-w-[500px] block">
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: "size",
-    header: "Size",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {row.sizeBytes > 0 ? formatBytes(row.sizeBytes) : "-"}
-      </span>
-    ),
-    sortAccessor: (row) => row.sizeBytes,
-    align: "right",
-  },
-];
-
-const eventColumns: Column<NodeEvent>[] = [
-  {
-    key: "type",
-    header: "Type",
-    accessor: (row) => (
-      <span
-        className={cn(
-          "text-xs font-medium",
-          row.type === "Warning" ? "text-status-warning" : "text-status-info",
-        )}
-      >
-        {row.type}
-      </span>
-    ),
-  },
-  {
-    key: "reason",
-    header: "Reason",
-    accessor: (row) => (
-      <span className="font-medium text-foreground text-xs">{row.reason}</span>
-    ),
-  },
-  {
-    key: "message",
-    header: "Message",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground line-clamp-2">
-        {row.message}
-      </span>
-    ),
-    sortable: false,
-  },
-  {
-    key: "count",
-    header: "Count",
-    accessor: (row) => (
-      <span className="tabular-nums text-xs">{row.count}</span>
-    ),
-    sortAccessor: (row) => row.count,
-    align: "center",
-  },
-  {
-    key: "lastSeen",
-    header: "Last Seen",
-    accessor: (row) => (
-      <span className="text-xs text-muted-foreground">
-        {row.lastTimestamp ? formatRelativeTime(row.lastTimestamp) : "-"}
-      </span>
-    ),
-  },
-];
-
-// ── Gauge Component ──
-
-function ResourceGauge({
-  label,
-  icon: Icon,
-  used,
-  total,
-  formatFn,
-}: {
-  label: string;
-  icon: React.ElementType;
-  used: number;
-  total: number;
-  formatFn: (v: number) => string;
-}) {
-  const pct = total > 0 ? (used / total) * 100 : 0;
-  const color =
-    pct >= 90
-      ? "bg-status-error"
-      : pct >= 75
-        ? "bg-status-warning"
-        : "bg-status-success";
-  const textColor =
-    pct >= 90
-      ? "text-status-error"
-      : pct >= 75
-        ? "text-status-warning"
-        : "text-status-success";
-
-  return (
-    <div className="bg-card border border-border rounded-lg p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium text-foreground">{label}</span>
-      </div>
-      <div className="flex items-end gap-2 mb-2">
-        <span className={cn("text-2xl font-bold tabular-nums", textColor)}>
-          {Math.round(pct)}%
-        </span>
-      </div>
-      <div className="w-full h-2 bg-muted rounded-full overflow-hidden mb-2">
-        <div
-          className={cn("h-full rounded-full transition-all", color)}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
-      </div>
-      <p className="text-xs text-muted-foreground tabular-nums">
-        {formatFn(used)} / {formatFn(total)}
-      </p>
-    </div>
-  );
-}
-
-// ── Health Alert ──
-
-function ConditionAlert({ label, ok }: { label: string; ok: boolean }) {
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-2 px-3 py-2 rounded-md border text-xs font-medium",
-        ok
-          ? "bg-status-success/5 border-status-success/20 text-status-success"
-          : "bg-status-error/5 border-status-error/20 text-status-error",
-      )}
-    >
-      {ok ? (
-        <CheckCircle2 className="h-3.5 w-3.5" />
-      ) : (
-        <XCircle className="h-3.5 w-3.5" />
-      )}
-      {label}
-    </div>
-  );
-}
+] as const satisfies { id: NodeTabId; label: string }[];
 
 // ── Main Page ──
 
 function NodeDetailPage() {
   const params = Route.useParams();
+  return <NodeDetailPageBody clusterId={params.id} nodeName={params.nodeName} />;
+}
+
+// Split from NodeDetailPage so tests can render the real page body without
+// needing an active router match for Route.useParams() (the route's own
+// params hook requires a live router context; the body doesn't).
+export function NodeDetailPageBody({
+  clusterId,
+  nodeName,
+}: {
+  clusterId: string;
+  nodeName: string;
+}) {
   const navigate = useNavigate();
-  const clusterId = params.id;
-  const nodeName = params.nodeName;
-  const [activeTab, setActiveTab] = useTabParam<TabId>(
+  const [activeTab, setActiveTab] = useTabParam<NodeTabId>(
     TABS.map((t) => t.id),
     "overview",
   );
 
   const nodeQuery = useNodeDetail(clusterId, nodeName);
   const { data: node, isLoading, refetch } = nodeQuery;
-  const nodeOperation = useNodeOperation();
   const [showYaml, setShowYaml] = useState(false);
-  const [showDrain, setShowDrain] = useState(false);
-  const [showAddTaint, setShowAddTaint] = useState(false);
-  const [newTaint, setNewTaint] = useState<NodeTaintRequest>({
-    key: "",
-    value: "",
-    effect: "NoSchedule",
-  });
-  const [showAddLabel, setShowAddLabel] = useState(false);
-  const [newLabel, setNewLabel] = useState({ key: "", value: "" });
-  const [showAddAnnotation, setShowAddAnnotation] = useState(false);
-  const [newAnnotation, setNewAnnotation] = useState({ key: "", value: "" });
-  const [nodeActionPending, setNodeActionPending] = useState(false);
   const nodeScope = { type: "cluster" as const, id: clusterId };
   const nodeUpdateDecision = usePermissionDecision(
     "nodes",
@@ -430,235 +69,14 @@ function NodeDetailPage() {
   const nodeUpdateBlockedReason = nodeUpdateDecision.allowed
     ? undefined
     : nodeUpdateDecision.disabledReason;
-  const nodeManageBlockedReason = nodeManageDecision.allowed
-    ? undefined
-    : nodeManageDecision.disabledReason;
 
-  const handleCordon = async () => {
-    if (!nodeUpdateDecision.allowed) {
-      toastWarning(
-        nodeUpdateDecision.disabledReason || "Requires nodes:update",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({
-        clusterId,
-        nodeName,
-        action: "cordon",
-      });
-      refetch();
-      toastSuccess("Node cordoned");
-    } catch (error) {
-      toastApiError("Failed to cordon node", error);
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
-
-  const handleUncordon = async () => {
-    if (!nodeUpdateDecision.allowed) {
-      toastWarning(
-        nodeUpdateDecision.disabledReason || "Requires nodes:update",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({
-        clusterId,
-        nodeName,
-        action: "uncordon",
-      });
-      refetch();
-      toastSuccess("Node uncordoned");
-    } catch (error) {
-      toastApiError("Failed to uncordon node", error);
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
-
-  const handleDrain = async () => {
-    if (!nodeManageDecision.allowed) {
-      toastWarning(
-        nodeManageDecision.disabledReason || "Requires nodes:manage",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({ clusterId, nodeName, action: "drain" });
-      toastSuccess(`Node ${nodeName} drained`);
-      setShowDrain(false);
-      refetch();
-    } catch (error) {
-      if (error instanceof OperationPartialError) {
-        const blockers =
-          error.operation.errorMessage ||
-          "one or more pods could not be evicted";
-        toastWarning(`Drain incomplete; node remains cordoned: ${blockers}`);
-      } else {
-        toastApiError("Failed to drain", error);
-      }
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
-
-  const handleAddTaint = async () => {
-    if (!newTaint.key) return;
-    if (!nodeUpdateDecision.allowed) {
-      toastWarning(
-        nodeUpdateDecision.disabledReason || "Requires nodes:update",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({
-        clusterId,
-        nodeName,
-        action: "add_taint",
-        body: newTaint,
-      });
-      refetch();
-      setShowAddTaint(false);
-      setNewTaint({ key: "", value: "", effect: "NoSchedule" });
-      toastSuccess("Taint added");
-    } catch (error) {
-      toastApiError("Failed to add taint", error);
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
-
-  const handleRemoveTaint = async (taint: NodeTaint) => {
-    if (!nodeUpdateDecision.allowed) {
-      toastWarning(
-        nodeUpdateDecision.disabledReason || "Requires nodes:update",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({
-        clusterId,
-        nodeName,
-        action: "remove_taint",
-        body: { key: taint.key, effect: taint.effect },
-      });
-      refetch();
-      toastSuccess("Taint removed");
-    } catch (error) {
-      toastApiError("Failed to remove taint", error);
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
-
-  const handleAddLabel = async () => {
-    if (!newLabel.key) return;
-    if (!nodeUpdateDecision.allowed) {
-      toastWarning(
-        nodeUpdateDecision.disabledReason || "Requires nodes:update",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({
-        clusterId,
-        nodeName,
-        action: "set_label",
-        body: newLabel,
-      });
-      refetch();
-      setShowAddLabel(false);
-      setNewLabel({ key: "", value: "" });
-      toastSuccess("Label added");
-    } catch (error) {
-      toastApiError("Failed to add label", error);
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
-
-  const handleRemoveLabel = async (key: string) => {
-    if (!nodeUpdateDecision.allowed) {
-      toastWarning(
-        nodeUpdateDecision.disabledReason || "Requires nodes:update",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({
-        clusterId,
-        nodeName,
-        action: "remove_label",
-        body: { key },
-      });
-      refetch();
-      toastSuccess("Label removed");
-    } catch (error) {
-      toastApiError("Failed to remove label", error);
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
-
-  const handleAddAnnotation = async () => {
-    if (!newAnnotation.key) return;
-    if (!nodeUpdateDecision.allowed) {
-      toastWarning(
-        nodeUpdateDecision.disabledReason || "Requires nodes:update",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({
-        clusterId,
-        nodeName,
-        action: "set_annotation",
-        body: newAnnotation,
-      });
-      refetch();
-      setShowAddAnnotation(false);
-      setNewAnnotation({ key: "", value: "" });
-      toastSuccess("Annotation added");
-    } catch (error) {
-      toastApiError("Failed to add annotation", error);
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
-
-  const handleRemoveAnnotation = async (key: string) => {
-    if (!nodeUpdateDecision.allowed) {
-      toastWarning(
-        nodeUpdateDecision.disabledReason || "Requires nodes:update",
-      );
-      return;
-    }
-    setNodeActionPending(true);
-    try {
-      await nodeOperation.mutateAsync({
-        clusterId,
-        nodeName,
-        action: "remove_annotation",
-        body: { key },
-      });
-      refetch();
-      toastSuccess("Annotation removed");
-    } catch (error) {
-      toastApiError("Failed to remove annotation", error);
-    } finally {
-      setNodeActionPending(false);
-    }
-  };
+  const actions = useNodeActions({
+    clusterId,
+    nodeName,
+    refetch,
+    nodeUpdateDecision,
+    nodeManageDecision,
+  });
 
   if (isLoading || nodeQuery.isError) {
     return (
@@ -686,20 +104,11 @@ function NodeDetailPage() {
     );
   }
 
-  // Derive condition health
-  const condMap = Object.fromEntries(
-    node.conditions.map((c) => [c.type, c.status]),
-  );
-  const isKubeletOk = condMap["Ready"] === "True";
-  const isMemoryPressureOk = condMap["MemoryPressure"] === "False";
-  const isDiskPressureOk = condMap["DiskPressure"] === "False";
-  const isPidPressureOk = condMap["PIDPressure"] === "False";
-
   return (
     <div className="space-y-6">
       <p className="sr-only" role="status" aria-live="polite">
-        {nodeOperation.isPending
-          ? `Node operation ${nodeOperation.operationState.phase}`
+        {actions.nodeOperation.isPending
+          ? `Node operation ${actions.nodeOperation.operationState.phase}`
           : ""}
       </p>
       {/* Header */}
@@ -726,57 +135,23 @@ function NodeDetailPage() {
           { label: "Version", value: node.nodeInfo.kubeletVersion },
         ]}
         actions={
-          <>
-            <ActionButton
-              onClick={() => setShowYaml(true)}
-              size="sm"
-              icon={<Code className="h-3.5 w-3.5" />}
-            >
-              View YAML
-            </ActionButton>
-            {node.unschedulable ? (
-              <ActionButton
-                onClick={handleUncordon}
-                disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-                disabledReason={nodeUpdateBlockedReason}
-                size="sm"
-                icon={<ShieldCheck className="h-3.5 w-3.5" />}
-                className="gap-1.5 text-sm border-status-success/30 text-status-success hover:bg-status-success/10"
-              >
-                Uncordon
-              </ActionButton>
-            ) : (
-              <ActionButton
-                onClick={handleCordon}
-                disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-                disabledReason={nodeUpdateBlockedReason}
-                size="sm"
-                icon={<ShieldBan className="h-3.5 w-3.5" />}
-                className="gap-1.5 text-sm border-status-warning/30 text-status-warning hover:bg-status-warning/10"
-              >
-                Cordon
-              </ActionButton>
-            )}
-            <ActionButton
-              onClick={() => setShowDrain(true)}
-              disabled={nodeActionPending || !nodeManageDecision.allowed}
-              disabledReason={nodeManageBlockedReason}
-              size="sm"
-              icon={<Unplug className="h-3.5 w-3.5" />}
-              className="gap-1.5 text-sm border-status-error/30 text-status-error hover:bg-status-error/10"
-            >
-              Drain
-            </ActionButton>
-            {/* Node is cluster-scoped — ResourceActions renders only Delete here. */}
-            <ResourceActions
-              clusterId={clusterId}
-              kind="Node"
-              name={nodeName}
-              onDeleted={() =>
-                void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
-              }
-            />
-          </>
+          <NodeHeaderActions
+            clusterId={clusterId}
+            nodeName={nodeName}
+            unschedulable={node.unschedulable}
+            onViewYaml={() => setShowYaml(true)}
+            onCordon={actions.handleCordon}
+            onUncordon={actions.handleUncordon}
+            onDrainClick={() => actions.setShowDrain(true)}
+            onDeleted={() =>
+              void navigate({ to: `/dashboard/clusters/${clusterId}/nodes` })
+            }
+            cordonPending={actions.cordonPending}
+            uncordonPending={actions.uncordonPending}
+            drainPending={actions.drainPending}
+            nodeUpdateDecision={nodeUpdateDecision}
+            nodeManageDecision={nodeManageDecision}
+          />
         }
       />
 
@@ -803,279 +178,13 @@ function NodeDetailPage() {
       />
 
       {/* Tab Content */}
-      {activeTab === "overview" && (
-        <div className="space-y-6">
-          {/* Health Status Alerts */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <ConditionAlert label="Kubelet" ok={isKubeletOk} />
-            <ConditionAlert label="Memory Pressure" ok={isMemoryPressureOk} />
-            <ConditionAlert label="Disk Pressure" ok={isDiskPressureOk} />
-            <ConditionAlert label="PID Pressure" ok={isPidPressureOk} />
-          </div>
-
-          {/* Resource Gauges */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <ResourceGauge
-              label="CPU"
-              icon={Cpu}
-              used={node.cpuUsage}
-              total={node.cpuCapacity}
-              formatFn={formatCPU}
-            />
-            <ResourceGauge
-              label="Memory"
-              icon={MemoryStick}
-              used={node.memoryUsage}
-              total={node.memoryCapacity}
-              formatFn={formatBytes}
-            />
-            <ResourceGauge
-              label="Pods"
-              icon={Box}
-              used={node.podCount}
-              total={node.podCapacity}
-              formatFn={(v) => String(v)}
-            />
-          </div>
-
-          {/* Addresses */}
-          {node.addresses.length > 0 && (
-            <div className="bg-card border border-border rounded-lg p-4">
-              <h3 className="text-sm font-medium text-foreground mb-3">
-                Addresses
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {node.addresses.map((addr) => (
-                  <div
-                    key={`${addr.type}-${addr.address}`}
-                    className="flex items-center gap-2"
-                  >
-                    <span className="px-1.5 py-0.5 rounded-sm text-2xs bg-muted text-muted-foreground min-w-[80px] text-center">
-                      {addr.type}
-                    </span>
-                    <span className="text-xs font-mono text-foreground">
-                      {addr.address}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Labels */}
-          <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Tag className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-medium text-foreground">Labels</h3>
-                <span className="text-xs text-muted-foreground">
-                  ({Object.keys(node.labels).length})
-                </span>
-              </div>
-              <button
-                onClick={() => setShowAddLabel(true)}
-                disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-                title={nodeUpdateBlockedReason}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium
-                  text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus className="h-3 w-3" /> Add
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(node.labels).map(([k, v]) => (
-                <span
-                  key={k}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-2xs bg-muted text-muted-foreground font-mono group"
-                >
-                  <span className="text-foreground">{k}</span>
-                  {v && <span>= {v}</span>}
-                  <button
-                    disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-                    title={nodeUpdateBlockedReason}
-                    onClick={() => handleRemoveLabel(k)}
-                    className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity disabled:cursor-not-allowed"
-                  >
-                    <XCircle className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Annotations */}
-          <div className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Code className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-medium text-foreground">
-                  Annotations
-                </h3>
-                <span className="text-xs text-muted-foreground">
-                  ({Object.keys(node.annotations).length})
-                </span>
-              </div>
-              <button
-                onClick={() => setShowAddAnnotation(true)}
-                disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-                title={nodeUpdateBlockedReason}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium
-                  text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus className="h-3 w-3" /> Add
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(node.annotations).map(([k, v]) => (
-                <span
-                  key={k}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-2xs bg-muted text-muted-foreground font-mono group"
-                >
-                  <span className="text-foreground">{k}</span>
-                  {v && <span>= {v}</span>}
-                  <button
-                    disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-                    title={nodeUpdateBlockedReason}
-                    onClick={() => handleRemoveAnnotation(k)}
-                    className="ml-0.5 opacity-0 group-hover:opacity-100 text-status-error/70 hover:text-status-error transition-opacity disabled:cursor-not-allowed"
-                  >
-                    <XCircle className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "pods" && (
-        <DataTable
-          data={node.pods}
-          columns={podColumns}
-          keyExtractor={(r) => `${r.namespace}/${r.name}`}
-          searchPlaceholder="Search pods..."
-          emptyState={{
-            title: "No pods running on this node",
-            description:
-              "Resources will appear here when they are available in this scope.",
-          }}
-        />
-      )}
-
-      {activeTab === "conditions" && (
-        <DataTable
-          data={node.conditions}
-          columns={conditionColumns}
-          keyExtractor={(r) => r.type}
-          emptyState={{
-            title: "No conditions reported",
-            description:
-              "New observations will appear here as they are reported.",
-          }}
-        />
-      )}
-
-      {activeTab === "info" && (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <Table className="w-full">
-            <TableBody className="divide-y divide-border">
-              {[
-                ["Machine ID", node.nodeInfo.machineId],
-                ["System UUID", node.nodeInfo.systemUuid],
-                ["Boot ID", node.nodeInfo.bootId],
-                ["Kernel Version", node.nodeInfo.kernelVersion],
-                ["OS Image", node.nodeInfo.osImage],
-                ["Container Runtime", node.nodeInfo.containerRuntimeVersion],
-                ["Kubelet Version", node.nodeInfo.kubeletVersion],
-                ["Kube-Proxy Version", node.nodeInfo.kubeProxyVersion],
-                ["Operating System", node.nodeInfo.operatingSystem],
-                ["Architecture", node.nodeInfo.architecture],
-              ].map(([label, value]) => (
-                <TableRow key={label}>
-                  <TableCell className="px-4 py-2.5 text-xs font-medium text-muted-foreground w-48">
-                    {label}
-                  </TableCell>
-                  <TableCell className="px-4 py-2.5 text-xs text-foreground font-mono">
-                    {value || "-"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {activeTab === "taints" && (
-        <div className="space-y-3">
-          <div className="flex justify-end">
-            <button
-              onClick={() => setShowAddTaint(true)}
-              disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-              title={nodeUpdateBlockedReason}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-sm text-xs font-medium
-                bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Plus className="h-3.5 w-3.5" /> Add Taint
-            </button>
-          </div>
-          <DataTable
-            data={node.taints}
-            columns={[
-              ...taintColumns,
-              {
-                key: "actions",
-                header: "",
-                accessor: (row) => (
-                  <button
-                    onClick={() => handleRemoveTaint(row)}
-                    disabled={nodeActionPending || !nodeUpdateDecision.allowed}
-                    title={nodeUpdateBlockedReason}
-                    className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                ),
-                sortable: false,
-                align: "center" as const,
-              },
-            ]}
-            keyExtractor={(r) => `${r.key}-${r.effect}`}
-            emptyState={{
-              title: "No taints on this node",
-              description:
-                "Resources will appear here when they are available in this scope.",
-            }}
-          />
-        </div>
-      )}
-
-      {activeTab === "images" && (
-        <DataTable
-          data={node.images}
-          columns={imageColumns}
-          keyExtractor={(r) => r.name}
-          searchPlaceholder="Search images..."
-          emptyState={{
-            title: "No images cached on this node",
-            description:
-              "Resources will appear here when they are available in this scope.",
-          }}
-        />
-      )}
-
-      {activeTab === "events" && (
-        <DataTable
-          data={node.events}
-          columns={eventColumns}
-          keyExtractor={(r) => `${r.reason}-${r.lastTimestamp}`}
-          searchPlaceholder="Search events..."
-          emptyState={{
-            title: "No events for this node",
-            description:
-              "New observations will appear here as they are reported.",
-          }}
-        />
-      )}
+      <NodeTabContent
+        activeTab={activeTab}
+        node={node}
+        actions={actions}
+        canUpdate={nodeUpdateDecision.allowed}
+        blockedReason={nodeUpdateBlockedReason}
+      />
 
       {/* YAML Dialog */}
       <YamlViewDialog
@@ -1090,258 +199,22 @@ function NodeDetailPage() {
 
       {/* Drain Confirm Dialog */}
       <ConfirmDialog
-        open={showDrain}
-        onClose={() => setShowDrain(false)}
-        onConfirm={handleDrain}
+        open={actions.showDrain}
+        onClose={() => actions.setShowDrain(false)}
+        onConfirm={actions.handleDrain}
         title="Drain Node"
         description="This will cordon the node and evict all non-DaemonSet pods. Workloads will be rescheduled to other nodes."
         confirmValue={nodeName}
         confirmText="Drain"
         variant="destructive"
-        loading={nodeActionPending}
+        loading={actions.drainPending}
       />
 
-      {/* Add Taint Dialog */}
-      {showAddTaint && (
-        <ModalShell
-          title="Add Taint"
-          onClose={() => setShowAddTaint(false)}
-          size="sm"
-          footerClassName="flex items-center justify-end gap-2"
-          footer={
-            <>
-              <ActionButton
-                size="sm"
-                intent="ghost"
-                onClick={() => setShowAddTaint(false)}
-              >
-                Cancel
-              </ActionButton>
-              <ActionButton
-                size="sm"
-                intent="primary"
-                onClick={handleAddTaint}
-                disabled={
-                  !newTaint.key ||
-                  nodeActionPending ||
-                  !nodeUpdateDecision.allowed
-                }
-                disabledReason={nodeUpdateBlockedReason}
-                loading={nodeActionPending}
-              >
-                Add Taint
-              </ActionButton>
-            </>
-          }
-        >
-          <div>
-            <label
-              className="block text-xs text-muted-foreground mb-1"
-              htmlFor="field-b10d840c-875"
-            >
-              Key
-            </label>
-            <Input
-              id="field-b10d840c-875"
-              type="text"
-              value={newTaint.key}
-              onChange={(e) =>
-                setNewTaint({ ...newTaint, key: e.target.value })
-              }
-              placeholder="node.kubernetes.io/unreachable"
-              data-initial-focus
-              className="h-8 font-mono"
-            />
-          </div>
-          <div>
-            <label
-              className="block text-xs text-muted-foreground mb-1"
-              htmlFor="field-b10d840c-880"
-            >
-              Value
-            </label>
-            <Input
-              id="field-b10d840c-880"
-              type="text"
-              value={newTaint.value ?? ""}
-              onChange={(e) =>
-                setNewTaint({ ...newTaint, value: e.target.value })
-              }
-              placeholder="(optional)"
-              className="h-8 font-mono"
-            />
-          </div>
-          <div>
-            <label
-              className="block text-xs text-muted-foreground mb-1"
-              htmlFor="field-b10d840c-885"
-            >
-              Effect
-            </label>
-            <Select
-              id="field-b10d840c-885"
-              value={newTaint.effect}
-              onChange={(e) =>
-                setNewTaint({
-                  ...newTaint,
-                  effect: e.target.value as NodeTaintRequest["effect"],
-                })
-              }
-              className="h-8"
-            >
-              <option value="NoSchedule">NoSchedule</option>
-              <option value="PreferNoSchedule">PreferNoSchedule</option>
-              <option value="NoExecute">NoExecute</option>
-            </Select>
-          </div>
-        </ModalShell>
-      )}
-
-      {/* Add Label Dialog */}
-      {showAddLabel && (
-        <ModalShell
-          title="Add Label"
-          onClose={() => setShowAddLabel(false)}
-          size="sm"
-          footerClassName="flex items-center justify-end gap-2"
-          footer={
-            <>
-              <ActionButton
-                size="sm"
-                intent="ghost"
-                onClick={() => setShowAddLabel(false)}
-              >
-                Cancel
-              </ActionButton>
-              <ActionButton
-                size="sm"
-                intent="primary"
-                onClick={handleAddLabel}
-                disabled={
-                  !newLabel.key ||
-                  nodeActionPending ||
-                  !nodeUpdateDecision.allowed
-                }
-                disabledReason={nodeUpdateBlockedReason}
-                loading={nodeActionPending}
-              >
-                Add Label
-              </ActionButton>
-            </>
-          }
-        >
-          <div>
-            <label
-              className="block text-xs text-muted-foreground mb-1"
-              htmlFor="field-b10d840c-921"
-            >
-              Key
-            </label>
-            <Input
-              id="field-b10d840c-921"
-              type="text"
-              value={newLabel.key}
-              onChange={(e) =>
-                setNewLabel({ ...newLabel, key: e.target.value })
-              }
-              placeholder="app.kubernetes.io/name"
-              data-initial-focus
-              className="h-8 font-mono"
-            />
-          </div>
-          <div>
-            <label
-              className="block text-xs text-muted-foreground mb-1"
-              htmlFor="field-b10d840c-926"
-            >
-              Value
-            </label>
-            <Input
-              id="field-b10d840c-926"
-              type="text"
-              value={newLabel.value}
-              onChange={(e) =>
-                setNewLabel({ ...newLabel, value: e.target.value })
-              }
-              placeholder="my-app"
-              className="h-8 font-mono"
-            />
-          </div>
-        </ModalShell>
-      )}
-
-      {/* Add Annotation Dialog */}
-      {showAddAnnotation && (
-        <ModalShell
-          title="Add Annotation"
-          onClose={() => setShowAddAnnotation(false)}
-          size="sm"
-          footerClassName="flex items-center justify-end gap-2"
-          footer={
-            <>
-              <ActionButton
-                size="sm"
-                intent="ghost"
-                onClick={() => setShowAddAnnotation(false)}
-              >
-                Cancel
-              </ActionButton>
-              <ActionButton
-                size="sm"
-                intent="primary"
-                onClick={handleAddAnnotation}
-                disabled={
-                  !newAnnotation.key ||
-                  nodeActionPending ||
-                  !nodeUpdateDecision.allowed
-                }
-                disabledReason={nodeUpdateBlockedReason}
-                loading={nodeActionPending}
-              >
-                Add Annotation
-              </ActionButton>
-            </>
-          }
-        >
-          <div>
-            <label
-              className="block text-xs text-muted-foreground mb-1"
-              htmlFor="field-b10d840c-957"
-            >
-              Key
-            </label>
-            <Input
-              id="field-b10d840c-957"
-              type="text"
-              value={newAnnotation.key}
-              onChange={(e) =>
-                setNewAnnotation({ ...newAnnotation, key: e.target.value })
-              }
-              placeholder="example.com/owner"
-              data-initial-focus
-              className="h-8 font-mono"
-            />
-          </div>
-          <div>
-            <label
-              className="block text-xs text-muted-foreground mb-1"
-              htmlFor="field-b10d840c-962"
-            >
-              Value
-            </label>
-            <Input
-              id="field-b10d840c-962"
-              type="text"
-              value={newAnnotation.value}
-              onChange={(e) =>
-                setNewAnnotation({ ...newAnnotation, value: e.target.value })
-              }
-              placeholder="platform"
-              className="h-8 font-mono"
-            />
-          </div>
-        </ModalShell>
-      )}
+      <NodeMetadataModals
+        actions={actions}
+        canUpdate={nodeUpdateDecision.allowed}
+        blockedReason={nodeUpdateBlockedReason}
+      />
     </div>
   );
 }

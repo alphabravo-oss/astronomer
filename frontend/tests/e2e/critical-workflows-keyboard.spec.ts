@@ -47,6 +47,42 @@ const clusterWire2 = {
   environment: "staging",
 };
 
+const NODE_NAME = "ip-10-0-1-23";
+
+const nodeDetailWire = {
+  name: NODE_NAME,
+  status: "Ready",
+  roles: ["worker"],
+  labels: {},
+  annotations: {},
+  createdAt: "2026-08-01T00:00:00Z",
+  nodeInfo: {
+    machineID: "m-1",
+    systemUUID: "u-1",
+    bootID: "b-1",
+    kernelVersion: "6.1.0",
+    osImage: "Ubuntu 22.04",
+    containerRuntimeVersion: "containerd://1.7.0",
+    kubeletVersion: "v1.29.0",
+    kubeProxyVersion: "v1.29.0",
+    operatingSystem: "linux",
+    architecture: "amd64",
+  },
+  cpuCapacity: 4,
+  cpuUsage: 1,
+  memoryCapacity: 16_000_000_000,
+  memoryUsage: 4_000_000_000,
+  podCapacity: 110,
+  podCount: 3,
+  addresses: [],
+  conditions: [],
+  taints: [],
+  images: [],
+  pods: [],
+  events: [],
+  unschedulable: false,
+};
+
 const cisScanWire = {
   id: "scan-keyboard",
   cluster_id: CLUSTER_ID,
@@ -115,6 +151,12 @@ async function mockApi(pageContext: Page, mutations: MutationRecord[]) {
     }
     if (path === `/clusters/${CLUSTER_ID}` && method === "GET") {
       return route.fulfill({ json: data(clusterWire) });
+    }
+    if (
+      path === `/clusters/${CLUSTER_ID}/nodes/${NODE_NAME}` &&
+      method === "GET"
+    ) {
+      return route.fulfill({ json: data(nodeDetailWire) });
     }
     if (path === `/clusters/${CLUSTER_ID_2}` && method === "GET") {
       return route.fulfill({ json: data(clusterWire2) });
@@ -471,4 +513,20 @@ test("keyboard-only cluster switcher opens with Ctrl/Cmd+J and navigates on Ente
   await page.keyboard.press("Enter");
 
   await expect(page).toHaveURL(`/dashboard/clusters/${CLUSTER_ID_2}`);
+});
+
+test("keyboard-only node detail tab strip moves focus and selection with ArrowRight", async ({
+  page,
+}) => {
+  await page.goto(`/dashboard/clusters/${CLUSTER_ID}/nodes/${NODE_NAME}`);
+  await expect(
+    page.getByRole("heading", { name: NODE_NAME }),
+  ).toBeVisible();
+
+  const overview = page.getByRole("tab", { name: "Overview" });
+  await overview.focus();
+  await page.keyboard.press("ArrowRight");
+  const pods = page.getByRole("tab", { name: /^Pods/ });
+  await expect(pods).toBeFocused();
+  await expect(pods).toHaveAttribute("aria-selected", "true");
 });
