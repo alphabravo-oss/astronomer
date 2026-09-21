@@ -1,14 +1,5 @@
 import { Select } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/operator-table";
 /**
  * Per-cluster Apps tab — sprint 082+.
  *
@@ -42,19 +33,7 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { toastApiError, toastSuccess } from "@/lib/toast";
-import {
-  Package,
-  Loader2,
-  Search,
-  ExternalLink,
-  Wrench,
-  Star,
-  AlertTriangle,
-  Box,
-  ArrowUpCircle,
-  Trash2,
-  Plus,
-} from "lucide-react";
+import { Package, Plus } from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
 
 import { queryKeys } from "@/lib/query-keys";
@@ -65,20 +44,10 @@ import {
   useSyncHelmRepository,
   useDeleteHelmRepository,
 } from "@/lib/hooks/catalog";
-import { AddRepositoryModal } from "../../../catalog/-add-repository-modal";
-import { RepositoriesTab } from "../../../catalog/-repositories-tab";
 import { liveFallback } from "@/lib/live/status-store";
 import { pageRowCount } from "@/lib/api/pagination";
-import type { PaginatedResponse } from "@/types";
-import {
-  usePermissionDecision,
-  permissionDeniedReason,
-  toastPermissionDenied,
-} from "@/lib/permission-hooks";
-import type { PermissionDecision } from "@/lib/permissions";
-import { ModalShell } from "@/components/ui/modal-shell";
+import { usePermissionDecision, toastPermissionDenied } from "@/lib/permission-hooks";
 import { ActionButton } from "@/components/ui/action-button";
-import { QueryStates } from "@/components/ui/query-states";
 import { PageHeader } from "@/components/ui/page";
 import { TabStrip } from "@/components/ui/tabs";
 import { useTabParam } from "@/lib/use-tab-param";
@@ -90,103 +59,12 @@ import {
   deleteFailedClusterApps,
   type ClusterAppRow,
 } from "@/lib/api/cluster-apps";
-import {
-  AppInstallModal,
-  AppUninstallModal,
-} from "@/components/clusters/app-install-modal";
+import { SECTIONS, type Section, type ModalState } from "./-modal-state";
+import { AppsTabContent } from "./-apps-tab-content";
+import { AppsModals } from "./-apps-modals";
 
-type Section = "installed" | "browse" | "recommended" | "repositories";
-const SECTIONS: Section[] = [
-  "installed",
-  "browse",
-  "recommended",
-  "repositories",
-];
-
-// Coarse status → tone mapping. We don't try to enumerate every
-// helm-release state; just bucket into the four colors operators
-// recognise: green=happy, blue=in flight, amber=needs attention,
-// red=broken. Anything we don't know maps to muted.
-function statusTone(status: string): string {
-  const s = status.toLowerCase();
-  if (s === "installed" || s === "adopted" || s === "ready") {
-    return "bg-status-success/10 text-status-success border-status-success/30";
-  }
-  if (
-    s.startsWith("installing") ||
-    s.startsWith("upgrading") ||
-    s === "pending_install" ||
-    s === "pending_upgrade"
-  ) {
-    return "bg-status-info/10 text-status-info border-status-info/30";
-  }
-  if (s.startsWith("uninstalling") || s === "pending_uninstall") {
-    return "bg-status-warning/10 text-status-warning border-status-warning/30";
-  }
-  if (s.includes("fail") || s === "errored" || s === "broken") {
-    return "bg-status-error/10 text-status-error border-status-error/30";
-  }
-  return "bg-muted text-muted-foreground border-border";
-}
-
-// Cheap "stale install" detector. A release in a transient state
-// (installing / pending_*) should converge to installed within
-// minutes — the platform-baseline tools resolve in seconds, even
-// kube-prom-stack settles in <10 min. Anything still pending past
-// the threshold is either failed silently or stuck on the agent
-// side; surface that as an amber warning so the operator notices.
-//
-// We don't try to compute the *real* helm-release age here — we'd
-// need an API change to expose status_changed_at separately. The
-// updated_at proxy is fine for v1: catalog operations bump it on
-// every state transition, so "updated_at far in the past + transient
-// status" is a strong signal that something stalled.
-const TRANSIENT_STATES = new Set([
-  "installing",
-  "upgrading",
-  "uninstalling",
-  "pending_install",
-  "pending_upgrade",
-  "pending_uninstall",
-]);
-const STALE_THRESHOLD_MS = 10 * 60 * 1000;
-
-function isStale(row: ClusterAppRow): { stale: boolean; ageMin: number } {
-  const s = row.status.toLowerCase();
-  if (!TRANSIENT_STATES.has(s)) return { stale: false, ageMin: 0 };
-  const updated = Date.parse(row.updatedAt);
-  if (Number.isNaN(updated)) return { stale: false, ageMin: 0 };
-  const ageMs = Date.now() - updated;
-  return {
-    stale: ageMs > STALE_THRESHOLD_MS,
-    ageMin: Math.round(ageMs / 60_000),
-  };
-}
-
-// Modal control state hoisted into the page so any of the three
-// sections (Installed row Upgrade/Uninstall, Browse / Recommended
-// card Install) can open the right modal without prop-drilling
-// onClose/onSuccess handlers everywhere.
-type ModalState =
-  | { kind: "none" }
-  | { kind: "install"; chartId: string; chartName: string }
-  | {
-      kind: "upgrade";
-      installedChartId: string;
-      chartId: string;
-      chartName: string;
-      currentVersionId: string;
-      currentValues: string;
-      releaseName: string;
-      namespace: string;
-    }
-  | {
-      kind: "uninstall";
-      installedChartId: string;
-      releaseName: string;
-      chartName: string;
-      namespace: string;
-    };
+export { InstalledView } from "./-installed-tab";
+export { RecommendedView } from "./-recommended-tab";
 
 function ClusterAppsPage() {
   const params = Route.useParams();
@@ -414,6 +292,12 @@ function ClusterAppsPage() {
     setShowDeleteFailed(true);
   };
 
+  const failedCount =
+    installed.data?.data.filter((r) => {
+      const s = r.status.toLowerCase();
+      return s === "failed_install" || s === "failed_uninstall";
+    }).length ?? 0;
+
   return (
     <div className="space-y-6 p-4">
       <PageHeader
@@ -492,727 +376,50 @@ function ClusterAppsPage() {
         aria-label="Apps"
       />
 
-      {section === "installed" && (
-        <InstalledView
-          clusterId={clusterId}
-          q={installed}
-          updateDecision={catalogUpdateDecision}
-          deleteDecision={catalogDeleteDecision}
-          onUpgrade={openUpgrade}
-          onUninstall={openUninstall}
-          onDeleteFailed={openDeleteFailed}
-        />
-      )}
-      {(section === "browse" || section === "recommended") && !projectId && (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
-          <Package className="mx-auto h-7 w-7 text-muted-foreground" />
-          <p className="mt-3 text-sm font-medium text-foreground">
-            Select a project
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Chart visibility and install authorization are isolated by project.
-          </p>
-        </div>
-      )}
-      {section === "browse" && projectId && (
-        <BrowseView
-          q={browse}
-          search={searchQ}
-          setSearch={setSearchQ}
-          installed={installed.data?.data ?? []}
-          installDecision={catalogCreateDecision}
-          onInstall={openInstall}
-        />
-      )}
-      {section === "repositories" && (
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            Helm repositories are shared across the fleet. Charts from these
-            sources are available to install on every cluster.
-          </p>
-          <RepositoriesTab
-            repos={repos}
-            loading={reposLoading}
-            onSync={(id) => syncRepo.mutate(id)}
-            onDelete={(id) => deleteRepo.mutate(id)}
-            syncPending={syncRepo.isPending}
-          />
-        </div>
-      )}
-      {section === "recommended" && projectId && (
-        <RecommendedView
-          q={recommended}
-          installed={installed.data?.data ?? []}
-          installDecision={catalogCreateDecision}
-          onInstall={openInstall}
-        />
-      )}
+      <AppsTabContent
+        section={section}
+        clusterId={clusterId}
+        projectId={projectId}
+        installed={installed}
+        browse={browse}
+        recommended={recommended}
+        repos={repos}
+        reposLoading={reposLoading}
+        onSyncRepo={(id) => syncRepo.mutate(id)}
+        onDeleteRepo={(id) => deleteRepo.mutate(id)}
+        syncRepoPending={syncRepo.isPending}
+        searchQ={searchQ}
+        setSearchQ={setSearchQ}
+        catalogCreateDecision={catalogCreateDecision}
+        catalogUpdateDecision={catalogUpdateDecision}
+        catalogDeleteDecision={catalogDeleteDecision}
+        onUpgrade={openUpgrade}
+        onUninstall={openUninstall}
+        onDeleteFailed={openDeleteFailed}
+        onInstall={openInstall}
+      />
 
-      {/* Modal layer */}
-      {modal.kind === "install" && (
-        <AppInstallModal
-          projectId={projectId}
-          clusterId={clusterId}
-          mode={{
-            kind: "install",
-            chartId: modal.chartId,
-            chartName: modal.chartName,
-          }}
-          submitDecision={catalogCreateDecision}
-          onClose={() => setModal({ kind: "none" })}
-        />
-      )}
-      {modal.kind === "upgrade" && (
-        <AppInstallModal
-          projectId={projectId}
-          clusterId={clusterId}
-          mode={{
-            kind: "upgrade",
-            installedChartId: modal.installedChartId,
-            chartId: modal.chartId,
-            chartName: modal.chartName,
-            currentVersionId: modal.currentVersionId,
-            currentValues: modal.currentValues,
-            releaseName: modal.releaseName,
-            namespace: modal.namespace,
-          }}
-          submitDecision={catalogUpdateDecision}
-          onClose={() => setModal({ kind: "none" })}
-        />
-      )}
-      {modal.kind === "uninstall" && (
-        <AppUninstallModal
-          clusterId={clusterId}
-          installedChartId={modal.installedChartId}
-          releaseName={modal.releaseName}
-          chartName={modal.chartName}
-          namespace={modal.namespace}
-          pending={uninstall.isPending}
-          confirmDecision={catalogDeleteDecision}
-          onClose={() => setModal({ kind: "none" })}
-          onConfirm={() => uninstall.mutate(modal.installedChartId)}
-        />
-      )}
-      {showRepoModal && (
-        <AddRepositoryModal onClose={() => setShowRepoModal(false)} />
-      )}
-      {showDeleteFailed && (
-        <DeleteFailedModal
-          count={
-            installed.data?.data.filter((r) => {
-              const s = r.status.toLowerCase();
-              return s === "failed_install" || s === "failed_uninstall";
-            }).length ?? 0
-          }
-          pending={deleteFailed.isPending}
-          confirmDecision={catalogDeleteDecision}
-          onClose={() => setShowDeleteFailed(false)}
-          onConfirm={() => deleteFailed.mutate()}
-        />
-      )}
+      <AppsModals
+        modal={modal}
+        onCloseModal={() => setModal({ kind: "none" })}
+        projectId={projectId}
+        clusterId={clusterId}
+        catalogCreateDecision={catalogCreateDecision}
+        catalogUpdateDecision={catalogUpdateDecision}
+        catalogDeleteDecision={catalogDeleteDecision}
+        uninstallPending={uninstall.isPending}
+        onConfirmUninstall={(installedChartId) =>
+          uninstall.mutate(installedChartId)
+        }
+        showRepoModal={showRepoModal}
+        onCloseRepoModal={() => setShowRepoModal(false)}
+        showDeleteFailed={showDeleteFailed}
+        onCloseDeleteFailed={() => setShowDeleteFailed(false)}
+        deleteFailedCount={failedCount}
+        deleteFailedPending={deleteFailed.isPending}
+        onConfirmDeleteFailed={() => deleteFailed.mutate()}
+      />
     </div>
-  );
-}
-
-// DeleteFailedModal — confirmation dialog for the bulk action. Plain
-// modal (not the AppUninstallModal) because there's no per-row context
-// to surface; we're nuking every failed_* row on this cluster.
-function DeleteFailedModal({
-  count,
-  pending,
-  onClose,
-  onConfirm,
-  confirmDecision,
-}: {
-  count: number;
-  pending: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  confirmDecision: PermissionDecision;
-}) {
-  const blockedReason = !confirmDecision.allowed
-    ? permissionDeniedReason(confirmDecision)
-    : undefined;
-
-  return (
-    <ModalShell
-      title="Delete failed installs"
-      onClose={onClose}
-      size="sm"
-      titleIcon={<Trash2 className="h-4 w-4 text-status-error" />}
-      footerClassName="flex items-center justify-end gap-2"
-      footer={
-        <>
-          <ActionButton type="button" onClick={onClose} disabled={pending}>
-            Cancel
-          </ActionButton>
-          <ActionButton
-            type="button"
-            intent="destructive"
-            onClick={() => {
-              if (!confirmDecision.allowed) {
-                toastPermissionDenied(confirmDecision);
-                return;
-              }
-              onConfirm();
-            }}
-            disabled={pending || !confirmDecision.allowed || count === 0}
-            disabledReason={blockedReason}
-            loading={pending}
-            icon={<Trash2 className="h-3.5 w-3.5" />}
-          >
-            Delete {count} row{count === 1 ? "" : "s"}
-          </ActionButton>
-        </>
-      }
-    >
-      <p className="text-sm text-muted-foreground">
-        Hard-delete {count} <code className="font-mono">installed_charts</code>{" "}
-        row{count === 1 ? "" : "s"} in{" "}
-        <code className="font-mono">failed_install</code> /{" "}
-        <code className="font-mono">failed_uninstall</code> on this cluster.
-      </p>
-      <p className="text-xs text-muted-foreground">
-        No helm release uninstall is attempted — by definition these rows never
-        deployed (or already failed to uninstall). If you suspect a stale
-        release exists in-cluster, run{" "}
-        <code className="font-mono">helm uninstall</code> via the kubectl shell
-        first.
-      </p>
-    </ModalShell>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Installed view
-// ---------------------------------------------------------------------
-export function InstalledView({
-  clusterId,
-  q,
-  onUpgrade,
-  onUninstall,
-  onDeleteFailed,
-  updateDecision,
-  deleteDecision,
-}: {
-  clusterId: string;
-  q: ReturnType<typeof useQuery<PaginatedResponse<ClusterAppRow>>>;
-  onUpgrade: (row: ClusterAppRow) => void;
-  onUninstall: (row: ClusterAppRow) => void;
-  onDeleteFailed: () => void;
-  updateDecision: PermissionDecision;
-  deleteDecision: PermissionDecision;
-}) {
-  return (
-    <QueryStates query={q} loadingTitle="Loading installed apps…" isEmpty={(page) => page.data.length === 0}
-      empty={
-        <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
-          <Box className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">No apps installed yet</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Browse the catalog and install your first chart. The Platform
-            Baseline tools (trivy-operator, kube-state-metrics, fluent-bit,
-            ingress-nginx, cert-manager, gatekeeper) are managed via the Tools
-            tab and will also appear here once installed.
-          </p>
-          <div className="flex items-center justify-center gap-2 pt-2">
-            <RouterLink
-              to="/dashboard/clusters/$id/apps"
-              params={{ id: clusterId }}
-              search={{ section: "browse" }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
-            >
-              Browse catalog
-            </RouterLink>
-            <RouterLink
-              to="/dashboard/clusters/$id/tools"
-              params={{ id: clusterId }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs font-medium hover:bg-muted"
-            >
-              Open Tools
-            </RouterLink>
-          </div>
-        </div>
-      }
-    >
-      {(page) => {
-        const items = page.data;
-        const staleCount = items.filter((r) => isStale(r).stale).length;
-        const failedCount = items.filter((r) => {
-          const s = r.status.toLowerCase();
-          return s === "failed_install" || s === "failed_uninstall";
-        }).length;
-        return (
-          <div className="space-y-3">
-            {failedCount > 0 && (
-              <div className="rounded-md border border-status-error/40 bg-status-error/5 px-3 py-2 text-xs flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-status-error shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <div className="font-medium text-foreground">
-                    {failedCount} failed install{failedCount === 1 ? "" : "s"}{" "}
-                    on this cluster
-                  </div>
-                  <p className="text-muted-foreground mt-0.5">
-                    Releases in{" "}
-                    <code className="font-mono">failed_install</code> /{" "}
-                    <code className="font-mono">failed_uninstall</code> never
-                    deployed cleanly. The helm release itself is either
-                    missing or already gone, so they can&apos;t be uninstalled
-                    through the normal flow — use the bulk delete to clear
-                    them.
-                  </p>
-                </div>
-                <ActionButton
-                  type="button"
-                  onClick={onDeleteFailed}
-                  size="sm"
-                  icon={<Trash2 className="h-3 w-3" />}
-                  disabled={!deleteDecision.allowed}
-                  disabledReason={
-                    !deleteDecision.allowed
-                      ? permissionDeniedReason(deleteDecision)
-                      : undefined
-                  }
-                  className="border-status-error/40 text-status-error hover:bg-status-error/10"
-                >
-                  Delete {failedCount} failed
-                </ActionButton>
-              </div>
-            )}
-            {staleCount > 0 && (
-              <div className="rounded-md border border-status-warning/40 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-medium text-foreground">
-                    {staleCount} release{staleCount === 1 ? "" : "s"} stuck in
-                    a transient state for over 10 minutes
-                  </div>
-                  <p className="text-muted-foreground mt-0.5">
-                    The helm operation may have stalled. Common causes: the
-                    agent tunnel dropped, the helm chart failed validation, or
-                    a long-running install (kube-prom-stack, istio) is still
-                    pulling images. Check the worker queue or re-trigger the
-                    operation.
-                  </p>
-                </div>
-              </div>
-            )}
-            <div className="border border-border rounded-lg overflow-hidden">
-              <Table className="w-full text-sm">
-                <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-                  <TableRow>
-                    <TableHead className="px-3 py-2">Release</TableHead>
-                    <TableHead className="px-3 py-2">Chart</TableHead>
-                    <TableHead className="px-3 py-2">Namespace</TableHead>
-                    <TableHead className="px-3 py-2">Version</TableHead>
-                    <TableHead className="px-3 py-2">Status</TableHead>
-                    <TableHead className="px-3 py-2 text-right">
-                      Actions
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((row) => (
-                    <InstalledRow
-                      key={row.id}
-                      row={row}
-                      clusterId={clusterId}
-                      onUpgrade={onUpgrade}
-                      onUninstall={onUninstall}
-                      updateDecision={updateDecision}
-                      deleteDecision={deleteDecision}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        );
-      }}
-    </QueryStates>
-  );
-}
-
-function InstalledRow({
-  row,
-  clusterId,
-  onUpgrade,
-  onUninstall,
-  updateDecision,
-  deleteDecision,
-}: {
-  row: ClusterAppRow;
-  clusterId: string;
-  onUpgrade: (row: ClusterAppRow) => void;
-  onUninstall: (row: ClusterAppRow) => void;
-  updateDecision: PermissionDecision;
-  deleteDecision: PermissionDecision;
-}) {
-  const isTool = row.sourceKind === "tool";
-  // Upgrade requires the parent chartId; Tools installs (chart_version_id
-  // null) have no chartId so we can't drive the version dropdown.
-  const canUpgrade = !isTool && !!row.chartId;
-  const { stale, ageMin } = isStale(row);
-  return (
-    <TableRow className="border-t border-border hover:bg-muted/40">
-      <TableCell className="px-3 py-2 font-mono text-xs">
-        {row.releaseName}
-      </TableCell>
-      <TableCell className="px-3 py-2">
-        <div className="flex items-center gap-2">
-          {row.chartIconUrl ? (
-            <img src={row.chartIconUrl} alt="" className="h-5 w-5 rounded-sm" />
-          ) : (
-            <Box className="h-5 w-5 text-muted-foreground" />
-          )}
-          {/* Backend's displayName falls back to releaseName when chart
-              metadata is missing, which duplicates the Release column for
-              failed installs that never resolved a chart_version. Drop that
-              shape to "—" with a hover hint so the operator sees "no chart
-              info" rather than "same string twice". */}
-          {row.displayName && row.displayName !== row.releaseName ? (
-            <span className="text-foreground">{row.displayName}</span>
-          ) : (
-            <span
-              className="text-muted-foreground italic"
-              title="No chart metadata recorded for this release — the install likely failed before the chart version was resolved."
-            >
-              —
-            </span>
-          )}
-          {isTool && (
-            <RouterLink
-              to="/dashboard/clusters/$id/tools"
-              params={{ id: clusterId }}
-              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-sm border border-border bg-muted text-muted-foreground hover:bg-accent"
-              title="This release is managed by the Tools tab. Open Tools to upgrade or uninstall."
-            >
-              <Wrench className="h-3 w-3" /> Tools
-            </RouterLink>
-          )}
-        </div>
-        {row.repoName && (
-          <div className="text-[11px] text-muted-foreground mt-0.5">
-            {row.repoName}
-            {row.chartCategory ? ` · ${row.chartCategory}` : ""}
-          </div>
-        )}
-      </TableCell>
-      <TableCell className="px-3 py-2 text-xs text-muted-foreground font-mono">
-        {row.namespace}
-      </TableCell>
-      <TableCell className="px-3 py-2 text-xs tabular-nums">
-        {row.chartVersion || <span className="text-muted-foreground">—</span>}
-      </TableCell>
-      <TableCell className="px-3 py-2">
-        <div className="inline-flex items-center gap-1.5">
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-sm border text-[11px] font-medium ${statusTone(row.status)}`}
-          >
-            {row.status}
-          </span>
-          {stale && (
-            <span
-              className="inline-flex items-center gap-1 text-[10px] text-status-warning"
-              title={`Stuck in '${row.status}' for ${ageMin} min. The helm operation may have stalled — check the worker queue or the cluster's agent connectivity.`}
-            >
-              <AlertTriangle className="h-3 w-3" /> stale {ageMin}m
-            </span>
-          )}
-        </div>
-      </TableCell>
-      <TableCell className="px-3 py-2 text-right">
-        {isTool ? (
-          <RouterLink
-            to="/dashboard/clusters/$id/tools"
-            params={{ id: clusterId }}
-            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-          >
-            Manage <ExternalLink className="h-3 w-3" />
-          </RouterLink>
-        ) : (
-          <div className="inline-flex items-center gap-1">
-            <ActionButton
-              onClick={() => onUpgrade(row)}
-              disabled={!canUpgrade || !updateDecision.allowed}
-              disabledReason={
-                !canUpgrade
-                  ? "Upgrade unavailable for this release"
-                  : !updateDecision.allowed
-                    ? permissionDeniedReason(updateDecision)
-                    : undefined
-              }
-              title="Upgrade to a newer chart version or edit values"
-              size="sm"
-              icon={<ArrowUpCircle className="h-3 w-3" />}
-              className="h-7 px-2"
-            >
-              Upgrade
-            </ActionButton>
-            <ActionButton
-              onClick={() => onUninstall(row)}
-              disabled={!deleteDecision.allowed}
-              disabledReason={
-                !deleteDecision.allowed
-                  ? permissionDeniedReason(deleteDecision)
-                  : undefined
-              }
-              title="Uninstall this release"
-              size="sm"
-              icon={<Trash2 className="h-3 w-3" />}
-              className="h-7 px-2 border-status-error/40 text-status-error hover:bg-status-error/10"
-            >
-              Uninstall
-            </ActionButton>
-          </div>
-        )}
-      </TableCell>
-    </TableRow>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Browse view
-// ---------------------------------------------------------------------
-function BrowseView({
-  q,
-  search,
-  setSearch,
-  installed,
-  installDecision,
-  onInstall,
-}: {
-  q: ReturnType<
-    typeof useQuery<
-      PaginatedResponse<import("@/lib/api/cluster-apps").CatalogChartSummary>
-    >
-  >;
-  search: string;
-  setSearch: (s: string) => void;
-  installed: ClusterAppRow[];
-  installDecision: PermissionDecision;
-  onInstall: (chartId: string, chartName: string) => void;
-}) {
-  const charts = q.data?.data ?? [];
-
-  // Build a name→releases index so each Browse card knows whether
-  // it's already on this cluster (and via what install path). This
-  // is the cheap version of "drift detection" — we don't reconcile
-  // helm releases, we just notice when the catalog browse offers
-  // something the cluster already has.
-  const installedByChart = new Map<string, ClusterAppRow>();
-  for (const r of installed) {
-    if (r.chartName) installedByChart.set(r.chartName, r);
-    else if (r.toolSlug) installedByChart.set(r.toolSlug, r);
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="relative max-w-md">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search charts (kube-prometheus, loki, …)"
-          className="w-full h-9 pl-8 pr-3 rounded-md border border-border bg-background text-sm
-            placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
-        />
-      </div>
-      {q.isError ? (
-        <QueryStates query={q}>{null}</QueryStates>
-      ) : q.isLoading ? (
-        <div className="flex items-center justify-center h-32 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading catalog…
-        </div>
-      ) : charts.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-6 text-center">
-          <p className="text-sm font-medium text-foreground">
-            No matching charts
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Try a broader search, or add a repository on the Repositories tab.
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {charts.map((c) => {
-            const existing = installedByChart.get(c.name);
-            return (
-              <article
-                key={c.id}
-                className="border border-border rounded-lg p-3 flex gap-3 bg-card hover:border-muted-foreground/40 transition-colors"
-              >
-                <div className="h-10 w-10 shrink-0 rounded-md bg-muted flex items-center justify-center overflow-hidden">
-                  {c.iconUrl ? (
-                    <img
-                      src={c.iconUrl}
-                      alt=""
-                      className="h-10 w-10 object-contain"
-                    />
-                  ) : (
-                    <Box className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="font-medium text-sm text-foreground truncate">
-                      {c.displayName || c.name}
-                    </div>
-                    {c.deprecated && (
-                      <span className="text-[10px] text-status-warning border border-status-warning/40 bg-status-warning/10 px-1.5 py-0.5 rounded-sm">
-                        deprecated
-                      </span>
-                    )}
-                  </div>
-                  {c.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {c.description}
-                    </p>
-                  )}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    {existing ? (
-                      <span className="text-[11px] text-status-success font-medium inline-flex items-center gap-1">
-                        Installed
-                        {existing.sourceKind === "tool" && (
-                          <span className="text-muted-foreground font-normal">
-                            (via Tools)
-                          </span>
-                        )}
-                      </span>
-                    ) : (
-                      <button
-                        className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                        disabled={!installDecision.allowed}
-                        title={
-                          !installDecision.allowed
-                            ? permissionDeniedReason(installDecision)
-                            : "Install chart"
-                        }
-                        onClick={() => onInstall(c.id, c.name)}
-                      >
-                        Install →
-                      </button>
-                    )}
-                    {c.homeUrl && (
-                      <a
-                        href={c.homeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                      >
-                        Docs <ExternalLink className="h-2.5 w-2.5" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Recommended view
-// ---------------------------------------------------------------------
-export function RecommendedView({
-  q,
-  installed,
-  installDecision,
-  onInstall,
-}: {
-  q: ReturnType<
-    typeof useQuery<import("@/lib/api/cluster-apps").RecommendedChart[]>
-  >;
-  installed: ClusterAppRow[];
-  installDecision: PermissionDecision;
-  onInstall: (chartId: string, chartName: string) => void;
-}) {
-  const installedByChart = new Set(
-    installed.map((r) => r.chartName).filter(Boolean),
-  );
-
-  return (
-    <QueryStates
-      query={q}
-      loadingTitle="Loading recommendations…"
-      isEmpty={(data) => data.length === 0}
-      empty={
-        <div className="rounded-lg border border-dashed border-border p-6 text-center">
-          <AlertTriangle className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
-          <p className="text-sm text-foreground">No recommendations yet</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-            The recommendation engine needs at least a handful of installs
-            across managed clusters to surface popular charts. Try the Browse
-            tab for the full catalog.
-          </p>
-        </div>
-      }
-    >
-      {(items) => (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {items.map((c) => {
-            const isInstalled = installedByChart.has(c.name);
-            return (
-              <article
-                key={c.chartId || c.name}
-                className="border border-border rounded-lg p-3 bg-card space-y-2"
-              >
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-status-warning" />
-                  <div className="font-medium text-sm text-foreground">
-                    {c.name}
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground space-y-0.5">
-                  <div>
-                    Score:{" "}
-                    <span className="tabular-nums text-foreground">
-                      {c.score.toFixed(2)}
-                    </span>
-                  </div>
-                  <div>
-                    Installs across clusters:{" "}
-                    <span className="tabular-nums text-foreground">
-                      {c.installCount}
-                    </span>
-                  </div>
-                  {c.ratingAvg > 0 && (
-                    <div>
-                      Avg rating:{" "}
-                      <span className="tabular-nums text-foreground">
-                        {c.ratingAvg.toFixed(1)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {isInstalled ? (
-                  <span className="text-[11px] text-status-success font-medium">
-                    Already installed
-                  </span>
-                ) : (
-                  <button
-                    className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                    disabled={!installDecision.allowed}
-                    title={
-                      !installDecision.allowed
-                        ? permissionDeniedReason(installDecision)
-                        : "Install chart"
-                    }
-                    onClick={() => onInstall(c.chartId, c.name)}
-                  >
-                    Install →
-                  </button>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </QueryStates>
   );
 }
 
