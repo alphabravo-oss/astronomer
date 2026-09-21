@@ -68,7 +68,6 @@ import { Route as DashboardSettingsGeneralIndexRouteImport } from './routes/dash
 import { Route as DashboardSettingsGitopsIndexRouteImport } from './routes/dashboard/settings/gitops/index'
 import { Route as DashboardSettingsGroupMappingsIndexRouteImport } from './routes/dashboard/settings/group-mappings/index'
 import { Route as DashboardSettingsMonitoringIndexRouteImport } from './routes/dashboard/settings/monitoring/index'
-import { Route as DashboardSettingsNativeRbacIndexRouteImport } from './routes/dashboard/settings/native-rbac/index'
 import { Route as DashboardSettingsNetworkPoliciesIndexRouteImport } from './routes/dashboard/settings/network-policies/index'
 import { Route as DashboardSettingsOperationsIndexRouteImport } from './routes/dashboard/settings/operations/index'
 import { Route as DashboardSettingsPlatformIndexRouteImport } from './routes/dashboard/settings/platform/index'
@@ -483,12 +482,6 @@ const DashboardSettingsMonitoringIndexRoute =
   DashboardSettingsMonitoringIndexRouteImport.update({
     id: '/monitoring/',
     path: '/monitoring/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
-  } as any)
-const DashboardSettingsNativeRbacIndexRoute =
-  DashboardSettingsNativeRbacIndexRouteImport.update({
-    id: '/native-rbac/',
-    path: '/native-rbac/',
     getParentRoute: () => DashboardSettingsRouteRoute,
   } as any)
 const DashboardSettingsNetworkPoliciesIndexRoute =
@@ -1058,7 +1051,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings/gitops/': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings/': typeof DashboardSettingsGroupMappingsIndexRoute
   '/dashboard/settings/monitoring/': typeof DashboardSettingsMonitoringIndexRoute
-  '/dashboard/settings/native-rbac/': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies/': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations/': typeof DashboardSettingsOperationsIndexRoute
   '/dashboard/settings/platform/': typeof DashboardSettingsPlatformIndexRoute
@@ -1198,7 +1190,6 @@ export interface FileRoutesByTo {
   '/dashboard/settings/gitops': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings': typeof DashboardSettingsGroupMappingsIndexRoute
   '/dashboard/settings/monitoring': typeof DashboardSettingsMonitoringIndexRoute
-  '/dashboard/settings/native-rbac': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations': typeof DashboardSettingsOperationsIndexRoute
   '/dashboard/settings/platform': typeof DashboardSettingsPlatformIndexRoute
@@ -1345,7 +1336,6 @@ export interface FileRoutesById {
   '/dashboard/settings/gitops/': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings/': typeof DashboardSettingsGroupMappingsIndexRoute
   '/dashboard/settings/monitoring/': typeof DashboardSettingsMonitoringIndexRoute
-  '/dashboard/settings/native-rbac/': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies/': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations/': typeof DashboardSettingsOperationsIndexRoute
   '/dashboard/settings/platform/': typeof DashboardSettingsPlatformIndexRoute
@@ -1493,7 +1483,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/gitops/'
     | '/dashboard/settings/group-mappings/'
     | '/dashboard/settings/monitoring/'
-    | '/dashboard/settings/native-rbac/'
     | '/dashboard/settings/network-policies/'
     | '/dashboard/settings/operations/'
     | '/dashboard/settings/platform/'
@@ -1633,7 +1622,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/gitops'
     | '/dashboard/settings/group-mappings'
     | '/dashboard/settings/monitoring'
-    | '/dashboard/settings/native-rbac'
     | '/dashboard/settings/network-policies'
     | '/dashboard/settings/operations'
     | '/dashboard/settings/platform'
@@ -1779,7 +1767,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/gitops/'
     | '/dashboard/settings/group-mappings/'
     | '/dashboard/settings/monitoring/'
-    | '/dashboard/settings/native-rbac/'
     | '/dashboard/settings/network-policies/'
     | '/dashboard/settings/operations/'
     | '/dashboard/settings/platform/'
@@ -2288,13 +2275,6 @@ declare module '@tanstack/react-router' {
       path: '/monitoring'
       fullPath: '/dashboard/settings/monitoring/'
       preLoaderRoute: typeof DashboardSettingsMonitoringIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
-    '/dashboard/settings/native-rbac/': {
-      id: '/dashboard/settings/native-rbac/'
-      path: '/native-rbac'
-      fullPath: '/dashboard/settings/native-rbac/'
-      preLoaderRoute: typeof DashboardSettingsNativeRbacIndexRouteImport
       parentRoute: typeof DashboardSettingsRouteRoute
     }
     '/dashboard/settings/network-policies/': {
@@ -2946,7 +2926,6 @@ interface DashboardSettingsRouteRouteChildren {
   DashboardSettingsGitopsIndexRoute: typeof DashboardSettingsGitopsIndexRoute
   DashboardSettingsGroupMappingsIndexRoute: typeof DashboardSettingsGroupMappingsIndexRoute
   DashboardSettingsMonitoringIndexRoute: typeof DashboardSettingsMonitoringIndexRoute
-  DashboardSettingsNativeRbacIndexRoute: typeof DashboardSettingsNativeRbacIndexRoute
   DashboardSettingsNetworkPoliciesIndexRoute: typeof DashboardSettingsNetworkPoliciesIndexRoute
   DashboardSettingsOperationsIndexRoute: typeof DashboardSettingsOperationsIndexRoute
   DashboardSettingsPlatformIndexRoute: typeof DashboardSettingsPlatformIndexRoute
@@ -2993,8 +2972,6 @@ const DashboardSettingsRouteRouteChildren: DashboardSettingsRouteRouteChildren =
       DashboardSettingsGroupMappingsIndexRoute,
     DashboardSettingsMonitoringIndexRoute:
       DashboardSettingsMonitoringIndexRoute,
-    DashboardSettingsNativeRbacIndexRoute:
-      DashboardSettingsNativeRbacIndexRoute,
     DashboardSettingsNetworkPoliciesIndexRoute:
       DashboardSettingsNetworkPoliciesIndexRoute,
     DashboardSettingsOperationsIndexRoute:
