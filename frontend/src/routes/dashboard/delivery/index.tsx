@@ -32,9 +32,15 @@ import {
   projectClusterId,
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
-import { listClusterDeployments } from "@/lib/api/delivery-deployments";
+import {
+  listClusterDeployments,
+  type ClusterDeployment,
+} from "@/lib/api/delivery-deployments";
 import { listComponentBundles } from "@/lib/api/delivery-bundles";
-import { listDeliveryRollouts } from "@/lib/api/delivery-rollouts";
+import {
+  listDeliveryRollouts,
+  type DeliveryRollout,
+} from "@/lib/api/delivery-rollouts";
 import { listDeliverySources } from "@/lib/api/delivery-sources";
 import { listDeliveryTargets } from "@/lib/api/delivery-targets";
 import {
@@ -44,12 +50,14 @@ import {
   type DeliveryEstateAttention,
   type DeliveryEstateCluster,
   type DeliveryEstateCount,
+  type DeliverySystemCompatibility,
 } from "@/lib/api/delivery-system";
 import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can } from "@/lib/permissions";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
+import type { PaginatedResponse } from "@/types";
 import { pageRowCount } from "@/lib/api/pagination";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
@@ -668,53 +676,8 @@ function ProjectDeliveryOverview({
   const clusterId = projectClusterId(
     projects.find((project) => project.id === projectId) ?? {},
   );
-  const queryHealth = [
-    { key: "sources", label: "Sources", query: sources },
-    {
-      key: "unhealthySources",
-      label: "Degraded sources",
-      query: unhealthySources,
-    },
-    { key: "bundles", label: "Bundles", query: bundles },
-    { key: "targets", label: "Targets", query: targets },
-    { key: "rollouts", label: "Rollouts", query: rollouts },
-    { key: "deployments", label: "Deployments", query: deployments },
-    { key: "system", label: "Delivery system", query: system },
-  ] as const;
-  const failedQueries = queryHealth.filter((entry) => entry.query.isError);
-  const deploymentRows = deployments.isError
-    ? []
-    : (deployments.data?.data ?? []);
-  const failures = deploymentRows.filter(
-    (item) =>
-      item.phase === "failed" ||
-      item.phase === "degraded" ||
-      item.phase === "unknown",
-  );
-  const drifted = deployments.isError
-    ? undefined
-    : deploymentRows.filter((item) =>
-        item.conditions.some(
-          (condition) =>
-            condition.type === "Drifted" && condition.status === "True",
-        ),
-      ).length;
-  const activeRollouts = rollouts.isError
-    ? undefined
-    : (rollouts.data?.data ?? []).filter((row) =>
-        [
-          "queued",
-          "progressing",
-          "paused",
-          "awaiting_approval",
-          "rolling_back",
-        ].includes(row.state),
-      ).length;
-  const incompatibleClusters = system.isError
-    ? undefined
-    : (system.data?.observedInventory ?? [])
-        .filter((item) => item.compatibilityStatus !== "compatible")
-        .reduce((total, item) => total + item.clusterCount, 0);
+  const { failedQueries, failures, drifted, activeRollouts, incompatibleClusters } =
+    useDeliveryOverviewHealth({ sources, unhealthySources, bundles, targets, rollouts, deployments, system });
   return (
     <DeliveryProjectGate
       projectId={projectId}
@@ -731,19 +694,7 @@ function ProjectDeliveryOverview({
           title="Delivery overview"
           description="Astronomer-owned intent and rollout policy with local, pull-based convergence on managed clusters."
         />
-        {failedQueries.length > 0 && (
-          <StatePanel
-            icon={AlertTriangle}
-            tone="danger"
-            role="alert"
-            title="Delivery status unavailable"
-            description={`${failedQueries.map((entry) => entry.label).join(", ")} could not be loaded. Counts below are hidden until this recovers.`}
-            actionLabel="Retry"
-            onAction={() =>
-              failedQueries.forEach((entry) => void entry.query.refetch())
-            }
-          />
-        )}
+        <DeliveryUnavailablePanel failedQueries={failedQueries} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <MetricLink
             section="sources"
@@ -935,6 +886,81 @@ function ProjectDeliveryOverview({
         </PageSection>
       </PageShell>
     </DeliveryProjectGate>
+  );
+}
+
+type DeliveryQueryHealthEntry = { label: string; query: UseQueryResult<unknown> };
+
+// Pure post-processing over the seven overview queries — which failed (danger
+// panel + tile dashes) and the derived counts that must never fall back to
+// `?? []` on a failed query (that would silently read an outage as "zero").
+function useDeliveryOverviewHealth(queries: {
+  sources: UseQueryResult<unknown>;
+  unhealthySources: UseQueryResult<unknown>;
+  bundles: UseQueryResult<unknown>;
+  targets: UseQueryResult<unknown>;
+  rollouts: UseQueryResult<PaginatedResponse<DeliveryRollout>>;
+  deployments: UseQueryResult<PaginatedResponse<ClusterDeployment>>;
+  system: UseQueryResult<DeliverySystemCompatibility>;
+}) {
+  const { sources, unhealthySources, bundles, targets, rollouts, deployments, system } =
+    queries;
+  const failedQueries: DeliveryQueryHealthEntry[] = [
+    { label: "Sources", query: sources },
+    { label: "Degraded sources", query: unhealthySources },
+    { label: "Bundles", query: bundles },
+    { label: "Targets", query: targets },
+    { label: "Rollouts", query: rollouts },
+    { label: "Deployments", query: deployments },
+    { label: "Delivery system", query: system },
+  ].filter((entry) => entry.query.isError);
+  const deploymentRows = deployments.isError
+    ? []
+    : (deployments.data?.data ?? []);
+  const failures = deploymentRows.filter(
+    (item) =>
+      item.phase === "failed" ||
+      item.phase === "degraded" ||
+      item.phase === "unknown",
+  );
+  const drifted = deployments.isError
+    ? undefined
+    : deploymentRows.filter((item) =>
+        item.conditions.some(
+          (c) => c.type === "Drifted" && c.status === "True",
+        ),
+      ).length;
+  const activeRollouts = rollouts.isError
+    ? undefined
+    : (rollouts.data?.data ?? []).filter((row) =>
+        ["queued", "progressing", "paused", "awaiting_approval", "rolling_back"].includes(
+          row.state,
+        ),
+      ).length;
+  const incompatibleClusters = system.isError
+    ? undefined
+    : (system.data?.observedInventory ?? [])
+        .filter((item) => item.compatibilityStatus !== "compatible")
+        .reduce((total, item) => total + item.clusterCount, 0);
+  return { failedQueries, failures, drifted, activeRollouts, incompatibleClusters };
+}
+
+function DeliveryUnavailablePanel({
+  failedQueries,
+}: {
+  failedQueries: DeliveryQueryHealthEntry[];
+}) {
+  if (failedQueries.length === 0) return null;
+  return (
+    <StatePanel
+      icon={AlertTriangle}
+      tone="danger"
+      role="alert"
+      title="Delivery status unavailable"
+      description={`${failedQueries.map((entry) => entry.label).join(", ")} could not be loaded. Counts below are hidden until this recovers.`}
+      actionLabel="Retry"
+      onAction={() => failedQueries.forEach((entry) => void entry.query.refetch())}
+    />
   );
 }
 
