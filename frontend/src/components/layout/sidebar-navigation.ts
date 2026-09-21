@@ -188,14 +188,9 @@ export const globalNavGroups: NavGroup[] = [
         permission: { resource: "monitoring", verb: "read" },
         featureFlag: "feature.monitoring",
       },
-      // Shared Thanos / Alertmanager lifecycle. It lives under the settings URL
-      // because the API does (/settings/monitoring/...), but it is surfaced
-      // here rather than only on the settings hub: the hub is superuser-only,
-      // while these endpoints authorize on monitoring:read/update, so a
-      // monitoring admin who is not a superuser would otherwise never find it.
       {
         label: "Shared stacks",
-        href: "/dashboard/settings/monitoring",
+        href: "/dashboard/monitoring/stacks",
         icon: Layers,
         permission: { resource: "monitoring", verb: "read" },
         featureFlag: "feature.monitoring",

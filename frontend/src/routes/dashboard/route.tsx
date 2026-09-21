@@ -327,7 +327,6 @@ const featurePathPrefixes: Array<{ prefix: string; flag: FeatureFlagKey }> = [
   { prefix: "/dashboard/catalog", flag: "feature.catalog" },
   { prefix: "/dashboard/tools", flag: "feature.catalog" },
   { prefix: "/dashboard/monitoring", flag: "feature.monitoring" },
-  { prefix: "/dashboard/settings/monitoring", flag: "feature.monitoring" },
   { prefix: "/dashboard/security", flag: "feature.security" },
   { prefix: "/dashboard/charlie", flag: "feature.charlie" },
   { prefix: "/dashboard/extensions", flag: "feature.extensions" },
