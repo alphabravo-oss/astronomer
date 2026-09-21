@@ -694,7 +694,7 @@ function DeleteFailedModal({
 // ---------------------------------------------------------------------
 // Installed view
 // ---------------------------------------------------------------------
-function InstalledView({
+export function InstalledView({
   clusterId,
   q,
   onUpgrade,
@@ -711,140 +711,145 @@ function InstalledView({
   updateDecision: PermissionDecision;
   deleteDecision: PermissionDecision;
 }) {
-  if (q.isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading installed
-        apps…
-      </div>
-    );
-  }
-  const items = q.data?.data ?? [];
-  const staleCount = items.filter((r) => isStale(r).stale).length;
-  const failedCount = items.filter((r) => {
-    const s = r.status.toLowerCase();
-    return s === "failed_install" || s === "failed_uninstall";
-  }).length;
-  if (items.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
-        <Box className="h-8 w-8 mx-auto text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">
-          No apps installed yet
-        </p>
-        <p className="text-xs text-muted-foreground max-w-md mx-auto">
-          Browse the catalog and install your first chart. The Platform Baseline
-          tools (trivy-operator, kube-state-metrics, fluent-bit, ingress-nginx,
-          cert-manager, gatekeeper) are managed via the Tools tab and will also
-          appear here once installed.
-        </p>
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <RouterLink
-            to="/dashboard/clusters/$id/apps"
-            params={{ id: clusterId }}
-            search={{ section: "browse" }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
-            onClick={(e) => {
-              e.preventDefault();
-              const btn = document.querySelector<HTMLButtonElement>(
-                "nav button:nth-of-type(2)",
-              );
-              btn?.click();
-            }}
-          >
-            Browse catalog
-          </RouterLink>
-          <RouterLink
-            to="/dashboard/clusters/$id/tools"
-            params={{ id: clusterId }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs font-medium hover:bg-muted"
-          >
-            Open Tools
-          </RouterLink>
-        </div>
-      </div>
-    );
-  }
   return (
-    <div className="space-y-3">
-      {failedCount > 0 && (
-        <div className="rounded-md border border-status-error/40 bg-status-error/5 px-3 py-2 text-xs flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-status-error shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <div className="font-medium text-foreground">
-              {failedCount} failed install{failedCount === 1 ? "" : "s"} on this
-              cluster
-            </div>
-            <p className="text-muted-foreground mt-0.5">
-              Releases in <code className="font-mono">failed_install</code> /{" "}
-              <code className="font-mono">failed_uninstall</code> never deployed
-              cleanly. The helm release itself is either missing or already
-              gone, so they can&apos;t be uninstalled through the normal flow —
-              use the bulk delete to clear them.
-            </p>
-          </div>
-          <ActionButton
-            type="button"
-            onClick={onDeleteFailed}
-            size="sm"
-            icon={<Trash2 className="h-3 w-3" />}
-            disabled={!deleteDecision.allowed}
-            disabledReason={
-              !deleteDecision.allowed
-                ? permissionDeniedReason(deleteDecision)
-                : undefined
-            }
-            className="border-status-error/40 text-status-error hover:bg-status-error/10"
-          >
-            Delete {failedCount} failed
-          </ActionButton>
-        </div>
-      )}
-      {staleCount > 0 && (
-        <div className="rounded-md border border-status-warning/40 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
-          <AlertTriangle className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
-          <div>
-            <div className="font-medium text-foreground">
-              {staleCount} release{staleCount === 1 ? "" : "s"} stuck in a
-              transient state for over 10 minutes
-            </div>
-            <p className="text-muted-foreground mt-0.5">
-              The helm operation may have stalled. Common causes: the agent
-              tunnel dropped, the helm chart failed validation, or a
-              long-running install (kube-prom-stack, istio) is still pulling
-              images. Check the worker queue or re-trigger the operation.
-            </p>
+    <QueryStates
+      query={q}
+      loadingTitle="Loading installed apps…"
+      isEmpty={(page) => page.data.length === 0}
+      empty={
+        <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
+          <Box className="h-8 w-8 mx-auto text-muted-foreground" />
+          <p className="text-sm font-medium text-foreground">
+            No apps installed yet
+          </p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Browse the catalog and install your first chart. The Platform
+            Baseline tools (trivy-operator, kube-state-metrics, fluent-bit,
+            ingress-nginx, cert-manager, gatekeeper) are managed via the Tools
+            tab and will also appear here once installed.
+          </p>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <RouterLink
+              to="/dashboard/clusters/$id/apps"
+              params={{ id: clusterId }}
+              search={{ section: "browse" }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
+              onClick={(e) => {
+                e.preventDefault();
+                const btn = document.querySelector<HTMLButtonElement>(
+                  "nav button:nth-of-type(2)",
+                );
+                btn?.click();
+              }}
+            >
+              Browse catalog
+            </RouterLink>
+            <RouterLink
+              to="/dashboard/clusters/$id/tools"
+              params={{ id: clusterId }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs font-medium hover:bg-muted"
+            >
+              Open Tools
+            </RouterLink>
           </div>
         </div>
-      )}
-      <div className="border border-border rounded-lg overflow-hidden">
-        <Table className="w-full text-sm">
-          <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-            <TableRow>
-              <TableHead className="px-3 py-2">Release</TableHead>
-              <TableHead className="px-3 py-2">Chart</TableHead>
-              <TableHead className="px-3 py-2">Namespace</TableHead>
-              <TableHead className="px-3 py-2">Version</TableHead>
-              <TableHead className="px-3 py-2">Status</TableHead>
-              <TableHead className="px-3 py-2 text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((row) => (
-              <InstalledRow
-                key={row.id}
-                row={row}
-                clusterId={clusterId}
-                onUpgrade={onUpgrade}
-                onUninstall={onUninstall}
-                updateDecision={updateDecision}
-                deleteDecision={deleteDecision}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
+      }
+    >
+      {(page) => {
+        const items = page.data;
+        const staleCount = items.filter((r) => isStale(r).stale).length;
+        const failedCount = items.filter((r) => {
+          const s = r.status.toLowerCase();
+          return s === "failed_install" || s === "failed_uninstall";
+        }).length;
+        return (
+          <div className="space-y-3">
+            {failedCount > 0 && (
+              <div className="rounded-md border border-status-error/40 bg-status-error/5 px-3 py-2 text-xs flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-status-error shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="font-medium text-foreground">
+                    {failedCount} failed install{failedCount === 1 ? "" : "s"}{" "}
+                    on this cluster
+                  </div>
+                  <p className="text-muted-foreground mt-0.5">
+                    Releases in{" "}
+                    <code className="font-mono">failed_install</code> /{" "}
+                    <code className="font-mono">failed_uninstall</code> never
+                    deployed cleanly. The helm release itself is either
+                    missing or already gone, so they can&apos;t be uninstalled
+                    through the normal flow — use the bulk delete to clear
+                    them.
+                  </p>
+                </div>
+                <ActionButton
+                  type="button"
+                  onClick={onDeleteFailed}
+                  size="sm"
+                  icon={<Trash2 className="h-3 w-3" />}
+                  disabled={!deleteDecision.allowed}
+                  disabledReason={
+                    !deleteDecision.allowed
+                      ? permissionDeniedReason(deleteDecision)
+                      : undefined
+                  }
+                  className="border-status-error/40 text-status-error hover:bg-status-error/10"
+                >
+                  Delete {failedCount} failed
+                </ActionButton>
+              </div>
+            )}
+            {staleCount > 0 && (
+              <div className="rounded-md border border-status-warning/40 bg-status-warning/5 px-3 py-2 text-xs flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-medium text-foreground">
+                    {staleCount} release{staleCount === 1 ? "" : "s"} stuck in
+                    a transient state for over 10 minutes
+                  </div>
+                  <p className="text-muted-foreground mt-0.5">
+                    The helm operation may have stalled. Common causes: the
+                    agent tunnel dropped, the helm chart failed validation, or
+                    a long-running install (kube-prom-stack, istio) is still
+                    pulling images. Check the worker queue or re-trigger the
+                    operation.
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="border border-border rounded-lg overflow-hidden">
+              <Table className="w-full text-sm">
+                <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
+                  <TableRow>
+                    <TableHead className="px-3 py-2">Release</TableHead>
+                    <TableHead className="px-3 py-2">Chart</TableHead>
+                    <TableHead className="px-3 py-2">Namespace</TableHead>
+                    <TableHead className="px-3 py-2">Version</TableHead>
+                    <TableHead className="px-3 py-2">Status</TableHead>
+                    <TableHead className="px-3 py-2 text-right">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((row) => (
+                    <InstalledRow
+                      key={row.id}
+                      row={row}
+                      clusterId={clusterId}
+                      onUpgrade={onUpgrade}
+                      onUninstall={onUninstall}
+                      updateDecision={updateDecision}
+                      deleteDecision={deleteDecision}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        );
+      }}
+    </QueryStates>
   );
 }
 
@@ -1133,7 +1138,7 @@ function BrowseView({
 // ---------------------------------------------------------------------
 // Recommended view
 // ---------------------------------------------------------------------
-function RecommendedView({
+export function RecommendedView({
   q,
   installed,
   installDecision,
@@ -1150,87 +1155,84 @@ function RecommendedView({
     installed.map((r) => r.chartName).filter(Boolean),
   );
 
-  if (q.isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading
-        recommendations…
-      </div>
-    );
-  }
-  const items = q.data ?? [];
-  if (items.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-border p-6 text-center">
-        <AlertTriangle className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
-        <p className="text-sm text-foreground">No recommendations yet</p>
-        <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-          The recommendation engine needs at least a handful of installs across
-          managed clusters to surface popular charts. Try the Browse tab for the
-          full catalog.
-        </p>
-      </div>
-    );
-  }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {items.map((c) => {
-        const isInstalled = installedByChart.has(c.name);
-        return (
-          <article
-            key={c.chartId || c.name}
-            className="border border-border rounded-lg p-3 bg-card space-y-2"
-          >
-            <div className="flex items-center gap-2">
-              <Star className="h-4 w-4 text-status-warning" />
-              <div className="font-medium text-sm text-foreground">
-                {c.name}
-              </div>
-            </div>
-            <div className="text-xs text-muted-foreground space-y-0.5">
-              <div>
-                Score:{" "}
-                <span className="tabular-nums text-foreground">
-                  {c.score.toFixed(2)}
-                </span>
-              </div>
-              <div>
-                Installs across clusters:{" "}
-                <span className="tabular-nums text-foreground">
-                  {c.installCount}
-                </span>
-              </div>
-              {c.ratingAvg > 0 && (
-                <div>
-                  Avg rating:{" "}
-                  <span className="tabular-nums text-foreground">
-                    {c.ratingAvg.toFixed(1)}
-                  </span>
-                </div>
-              )}
-            </div>
-            {isInstalled ? (
-              <span className="text-[11px] text-status-success font-medium">
-                Already installed
-              </span>
-            ) : (
-              <button
-                className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
-                disabled={!installDecision.allowed}
-                title={
-                  !installDecision.allowed
-                    ? permissionDeniedReason(installDecision)
-                    : "Install chart"
-                }
-                onClick={() => onInstall(c.chartId, c.name)}
+    <QueryStates
+      query={q}
+      loadingTitle="Loading recommendations…"
+      isEmpty={(data) => data.length === 0}
+      empty={
+        <div className="rounded-lg border border-dashed border-border p-6 text-center">
+          <AlertTriangle className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+          <p className="text-sm text-foreground">No recommendations yet</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+            The recommendation engine needs at least a handful of installs
+            across managed clusters to surface popular charts. Try the Browse
+            tab for the full catalog.
+          </p>
+        </div>
+      }
+    >
+      {(items) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {items.map((c) => {
+            const isInstalled = installedByChart.has(c.name);
+            return (
+              <article
+                key={c.chartId || c.name}
+                className="border border-border rounded-lg p-3 bg-card space-y-2"
               >
-                Install →
-              </button>
-            )}
-          </article>
-        );
-      })}
-    </div>
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 text-status-warning" />
+                  <div className="font-medium text-sm text-foreground">
+                    {c.name}
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <div>
+                    Score:{" "}
+                    <span className="tabular-nums text-foreground">
+                      {c.score.toFixed(2)}
+                    </span>
+                  </div>
+                  <div>
+                    Installs across clusters:{" "}
+                    <span className="tabular-nums text-foreground">
+                      {c.installCount}
+                    </span>
+                  </div>
+                  {c.ratingAvg > 0 && (
+                    <div>
+                      Avg rating:{" "}
+                      <span className="tabular-nums text-foreground">
+                        {c.ratingAvg.toFixed(1)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {isInstalled ? (
+                  <span className="text-[11px] text-status-success font-medium">
+                    Already installed
+                  </span>
+                ) : (
+                  <button
+                    className="text-[11px] text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                    disabled={!installDecision.allowed}
+                    title={
+                      !installDecision.allowed
+                        ? permissionDeniedReason(installDecision)
+                        : "Install chart"
+                    }
+                    onClick={() => onInstall(c.chartId, c.name)}
+                  >
+                    Install →
+                  </button>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </QueryStates>
   );
 }
 

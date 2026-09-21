@@ -931,77 +931,69 @@ function RegistrationPhaseHeaderBadge({ clusterId }: { clusterId: string }) {
 // metrics by sample count (the most-observed → most-trustworthy)
 // with mean ± stddev so an operator can sanity-check what the
 // platform considers "normal" for the cluster. Read-only.
-function AnomalyBaselinesPanel({ clusterId }: { clusterId: string }) {
-  const { data, isLoading } = useAnomalyBaselines({ clusterId, limit: 5 });
-  if (isLoading) {
-    return (
-      <div>
-        <h3 className="text-sm font-medium text-muted-foreground mb-3">
-          Anomaly Baselines
-        </h3>
-        <div className="rounded-lg border border-border p-4 text-xs text-muted-foreground">
-          Loading baselines…
-        </div>
-      </div>
-    );
-  }
-  const rows = (data ?? []).slice(0, 5);
-  if (rows.length === 0) {
-    return (
-      <div>
-        <h3 className="text-sm font-medium text-muted-foreground mb-3">
-          Anomaly Baselines
-        </h3>
-        <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
-          No baselines computed yet. The nightly anomaly_baseline_recompute task
-          fills these in once the cluster has at least 24h of metric samples.
-        </div>
-      </div>
-    );
-  }
+export function AnomalyBaselinesPanel({ clusterId }: { clusterId: string }) {
+  const query = useAnomalyBaselines({ clusterId, limit: 5 });
   return (
     <div>
       <h3 className="text-sm font-medium text-muted-foreground mb-3">
         Anomaly Baselines
       </h3>
-      <div className="rounded-lg border border-border overflow-hidden">
-        <Table className="w-full text-sm">
-          <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
-            <TableRow>
-              <TableHead className="px-3 py-2 text-left font-medium">
-                Metric
-              </TableHead>
-              <TableHead className="px-3 py-2 text-right font-medium">
-                Mean
-              </TableHead>
-              <TableHead className="px-3 py-2 text-right font-medium">
-                Stddev
-              </TableHead>
-              <TableHead className="px-3 py-2 text-right font-medium">
-                Samples
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody className="divide-y divide-border">
-            {rows.map((b) => (
-              <TableRow key={b.id}>
-                <TableCell className="px-3 py-2 font-mono text-xs text-foreground">
-                  {b.metric}
-                </TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums text-foreground">
-                  {b.mean.toFixed(2)}
-                </TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                  ±{b.stddev.toFixed(2)}
-                </TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                  {b.sampleCount}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <QueryStates
+        query={query}
+        loadingTitle="Loading baselines…"
+        isEmpty={(data) => data.length === 0}
+        empty={
+          <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
+            No baselines computed yet. The nightly anomaly_baseline_recompute
+            task fills these in once the cluster has at least 24h of metric
+            samples.
+          </div>
+        }
+      >
+        {(data) => {
+          const rows = data.slice(0, 5);
+          return (
+            <div className="rounded-lg border border-border overflow-hidden">
+              <Table className="w-full text-sm">
+                <TableHeader className="bg-muted/30 text-xs text-muted-foreground">
+                  <TableRow>
+                    <TableHead className="px-3 py-2 text-left font-medium">
+                      Metric
+                    </TableHead>
+                    <TableHead className="px-3 py-2 text-right font-medium">
+                      Mean
+                    </TableHead>
+                    <TableHead className="px-3 py-2 text-right font-medium">
+                      Stddev
+                    </TableHead>
+                    <TableHead className="px-3 py-2 text-right font-medium">
+                      Samples
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-border">
+                  {rows.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="px-3 py-2 font-mono text-xs text-foreground">
+                        {b.metric}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right tabular-nums text-foreground">
+                        {b.mean.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                        ±{b.stddev.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                        {b.sampleCount}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          );
+        }}
+      </QueryStates>
     </div>
   );
 }
