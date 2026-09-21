@@ -834,10 +834,18 @@ function ProjectDeliveryOverview({
           title="Recent operator attention"
           description="Failures, degraded convergence, stale state, and rollback failures from the latest server page."
         >
-          {failures.length === 0 &&
-          !(rollouts.data?.data ?? []).some(
-            (item) => item.state === "rollback_failed",
-          ) ? (
+          {deployments.isError || rollouts.isError ? (
+            <div
+              className="rounded-lg border border-dashed border-border bg-card p-6 text-sm text-muted-foreground"
+              aria-label="unavailable"
+            >
+              Recent operator attention is unavailable while some delivery
+              data failed to load — see the banner above.
+            </div>
+          ) : failures.length === 0 &&
+            !(rollouts.data?.data ?? []).some(
+              (item) => item.state === "rollback_failed",
+            ) ? (
             <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
               No recent delivery failures are visible in this page.
             </div>

@@ -153,5 +153,24 @@ describe("delivery overview error roll-up", () => {
     const driftedTile = screen.getByText("Drifted (loaded page)").closest("a");
     expect(activeTile?.textContent).toContain("0");
     expect(driftedTile?.textContent).toContain("0");
+    expect(
+      await screen.findByText(/No recent delivery failures/),
+    ).toBeInTheDocument();
+  });
+
+  it("does not report a false all-clear in Recent operator attention when deployments fail", async () => {
+    vi.mocked(deploymentsApi.listClusterDeployments).mockRejectedValue(
+      new Error("deployments down"),
+    );
+    mount();
+
+    await screen.findByText("Delivery status unavailable");
+
+    expect(
+      screen.queryByText(/No recent delivery failures/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("unavailable")).toHaveTextContent(
+      /unavailable/i,
+    );
   });
 });
