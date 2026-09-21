@@ -8,11 +8,13 @@ import {
   Clock,
   Container,
   Copy,
+  Crosshair,
   Database,
   FileText,
   FolderKanban,
   FolderOpen,
   Gauge,
+  GitBranch,
   Globe,
   HardDrive,
   KeyRound,
@@ -27,11 +29,14 @@ import {
   Route,
   Scale,
   ScrollText,
+  Search,
   Server,
   Settings,
   Shield,
   ShieldAlert,
   ShieldCheck,
+  SlidersHorizontal,
+  SlidersVertical,
   Sparkles,
   Star,
   TerminalSquare,
@@ -68,6 +73,10 @@ export type NavGroup = {
   label: string;
   items: NavItem[];
   defaultOpen?: boolean;
+  // Rendered without a group header/toggle and always expanded — for the
+  // small set of top-level destinations that don't belong under a labeled
+  // section (e.g. the global "Home" group).
+  hideLabel?: boolean;
 };
 
 export const INSTALLED_TOOLS_NAV_GROUP = "Tool UIs";
@@ -97,16 +106,32 @@ export function defaultOpenNavGroupLabel(
 }
 
 // Default (global) navigation groups
+const deliveryListPermission = {
+  resource: "delivery_targets",
+  verb: "list",
+} as const;
+
 export const globalNavGroups: NavGroup[] = [
   {
-    label: "Platform",
-    defaultOpen: true,
+    label: "Home",
+    hideLabel: true,
     items: [
       {
         label: "Overview",
         href: "/dashboard",
         icon: LayoutDashboard,
         exact: true,
+      },
+      {
+        label: "Clusters",
+        href: "/dashboard/clusters",
+        icon: Server,
+        permission: { resource: "clusters", verb: "list" },
+      },
+      {
+        label: "Search",
+        href: "/dashboard/search",
+        icon: Search,
       },
       {
         label: "Charlie",
@@ -116,29 +141,59 @@ export const globalNavGroups: NavGroup[] = [
         featureFlag: "feature.charlie",
         requiresCharlieActivated: true,
       },
+    ],
+  },
+  {
+    label: "Continuous Delivery",
+    items: [
       {
-        label: "Clusters",
-        href: "/dashboard/clusters",
-        icon: Server,
-        permission: { resource: "clusters", verb: "list" },
+        label: "Estate",
+        href: "/dashboard/delivery",
+        icon: Rocket,
+        permission: deliveryListPermission,
+        exact: true,
       },
       {
-        label: "Workloads",
-        href: "/dashboard/workloads",
-        icon: Box,
-        permission: { resource: "clusters", verb: "list" },
-      },
-      {
-        label: "Cluster Agents",
-        href: "/dashboard/agents",
-        icon: Activity,
-        permission: { resource: "cluster_agents", verb: "read" },
-      },
-      {
-        label: "Onboarding Bundles",
-        href: "/dashboard/cluster-templates",
+        label: "Deployments",
+        href: "/dashboard/delivery/deployments",
         icon: Layers,
-        permission: { resource: "cluster_templates", verb: "list" },
+        permission: deliveryListPermission,
+      },
+      {
+        label: "Rollouts",
+        href: "/dashboard/delivery/rollouts",
+        icon: Route,
+        permission: deliveryListPermission,
+      },
+      {
+        label: "Sources",
+        href: "/dashboard/delivery/sources",
+        icon: GitBranch,
+        permission: deliveryListPermission,
+      },
+      {
+        label: "Bundles",
+        href: "/dashboard/delivery/bundles",
+        icon: Boxes,
+        permission: deliveryListPermission,
+      },
+      {
+        label: "Targets",
+        href: "/dashboard/delivery/targets",
+        icon: Crosshair,
+        permission: deliveryListPermission,
+      },
+      {
+        label: "Templates",
+        href: "/dashboard/delivery/configuration-templates",
+        icon: SlidersHorizontal,
+        permission: deliveryListPermission,
+      },
+      {
+        label: "Overrides",
+        href: "/dashboard/delivery/override-sets",
+        icon: SlidersVertical,
+        permission: deliveryListPermission,
       },
     ],
   },
@@ -146,7 +201,7 @@ export const globalNavGroups: NavGroup[] = [
     label: "Observability",
     items: [
       {
-        label: "Shared metrics",
+        label: "Metrics",
         href: "/dashboard/monitoring",
         icon: BarChart3,
         permission: { resource: "monitoring", verb: "read" },
@@ -179,20 +234,56 @@ export const globalNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Continuous Delivery",
+    label: "Security",
     items: [
       {
-        label: "Estate",
-        href: "/dashboard/delivery",
-        icon: Rocket,
-        permission: { resource: "delivery_targets", verb: "list" },
-        exact: true,
+        label: "Security",
+        href: "/dashboard/security",
+        icon: ShieldCheck,
+        permission: { resource: "security", verb: "read" },
+        featureFlag: "feature.security",
+      },
+      {
+        label: "Cluster Agents",
+        href: "/dashboard/agents",
+        icon: Activity,
+        permission: { resource: "cluster_agents", verb: "read" },
       },
     ],
   },
   {
-    label: "Integrations",
+    label: "Users & Access",
     items: [
+      {
+        label: "RBAC",
+        href: "/dashboard/rbac",
+        icon: Shield,
+        permission: { resource: "rbac", verb: "read" },
+      },
+      {
+        label: "Projects",
+        href: "/dashboard/projects",
+        icon: FolderKanban,
+        permission: { resource: "projects", verb: "list" },
+        featureFlag: "feature.projects",
+      },
+      {
+        label: "Audit Log",
+        href: "/dashboard/audit",
+        icon: FileText,
+        permission: { resource: "audit_logs", verb: "read" },
+      },
+    ],
+  },
+  {
+    label: "Configuration",
+    items: [
+      {
+        label: "Onboarding templates",
+        href: "/dashboard/cluster-templates",
+        icon: Layers,
+        permission: { resource: "cluster_templates", verb: "list" },
+      },
       {
         label: "Cluster Tools",
         href: "/dashboard/tools",
@@ -209,42 +300,6 @@ export const globalNavGroups: NavGroup[] = [
         permission: { resource: "settings", verb: "read" },
         featureFlag: "feature.extensions",
         optIn: true,
-      },
-    ],
-  },
-  {
-    label: "Security",
-    items: [
-      {
-        label: "Security Policies",
-        href: "/dashboard/security",
-        icon: ShieldCheck,
-        permission: { resource: "security", verb: "read" },
-        featureFlag: "feature.security",
-      },
-    ],
-  },
-  {
-    label: "Administration",
-    items: [
-      {
-        label: "Projects",
-        href: "/dashboard/projects",
-        icon: FolderKanban,
-        permission: { resource: "projects", verb: "list" },
-        featureFlag: "feature.projects",
-      },
-      {
-        label: "RBAC",
-        href: "/dashboard/rbac",
-        icon: Shield,
-        permission: { resource: "rbac", verb: "read" },
-      },
-      {
-        label: "Audit Log",
-        href: "/dashboard/audit",
-        icon: FileText,
-        permission: { resource: "audit_logs", verb: "read" },
       },
       // Superuser-only hub. Prefix-match so Dex/SSO under /settings/auth
       // highlights Settings instead of a sibling Auth row.
