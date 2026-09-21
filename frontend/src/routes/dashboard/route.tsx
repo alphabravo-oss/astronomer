@@ -9,6 +9,7 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { GlobalBanner } from "@/components/layout/global-banner";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { WindowManager } from "@/components/window-manager/window-manager";
 import { ExtensionProvider } from "@/components/extensions/ExtensionProvider";
@@ -21,7 +22,8 @@ import type { FeatureFlags, FeatureFlagKey } from "@/lib/api/feature-flags";
 import { useLiveClusterMetricsMerger } from "@/lib/live/cluster-merger";
 import { useLiveEvents } from "@/lib/live/hooks";
 import { hasSessionHint } from "@/lib/auth/session";
-import { cn } from "@/lib/utils";
+import { cn, hexToHslTriplet } from "@/lib/utils";
+import { useBranding } from "@/lib/hooks/public-settings";
 import { dashboardContentLayout } from "@/lib/dashboard-content-layout";
 import { useUserPreferences } from "@/lib/user-preferences";
 import { isNavigableLandingRoute } from "@/lib/api/user-preferences";
@@ -207,6 +209,23 @@ function DashboardAuthorizedShell() {
     };
   }, []);
 
+  // Operator-configured brand color (public settings). Degrades to the
+  // built-in theme on any failure or unparsable value — never blocks the
+  // shell — and restores it on unmount so leaving the dashboard (e.g. back
+  // to /auth/login) doesn't leak a stale override.
+  const primaryColorHex = useBranding().data?.["branding.primary_color"];
+  useEffect(() => {
+    const triplet = primaryColorHex ? hexToHslTriplet(primaryColorHex) : null;
+    if (!triplet) return;
+    const root = document.documentElement;
+    const previous = root.style.getPropertyValue("--primary");
+    root.style.setProperty("--primary", triplet);
+    return () => {
+      if (previous) root.style.setProperty("--primary", previous);
+      else root.style.removeProperty("--primary");
+    };
+  }, [primaryColorHex]);
+
   useEffect(() => {
     mainRef.current?.focus({ preventScroll: true });
   }, [pathname]);
@@ -242,6 +261,7 @@ function DashboardAuthorizedShell() {
       <Sidebar />
       <div className={cn("flex flex-col flex-1 min-w-0 overflow-hidden")}>
         <Topbar />
+        <GlobalBanner />
         {!online && (
           <div
             role="status"

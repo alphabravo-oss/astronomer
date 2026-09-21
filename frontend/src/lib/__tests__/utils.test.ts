@@ -19,6 +19,7 @@ import {
   stringToColor,
   gaugeColor,
   gaugeTextColor,
+  hexToHslTriplet,
 } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -392,5 +393,33 @@ describe("gaugeTextColor()", () => {
 
   it("returns error text for 90+", () => {
     expect(gaugeTextColor(95)).toBe("text-status-error");
+  });
+});
+
+describe("hexToHslTriplet()", () => {
+  it("converts a branding blue to the --primary triplet format", () => {
+    // r=59 g=130 b=246 -> h≈217.2 (rounds to 217), s≈91.2% (rounds to 91%),
+    // l=59.8% (rounds to 60%), computed by hand from the standard RGB->HSL
+    // formula so this doesn't just echo the implementation back at itself.
+    expect(hexToHslTriplet("#3b82f6")).toBe("217 91% 60%");
+  });
+
+  it("converts pure red", () => {
+    expect(hexToHslTriplet("#ff0000")).toBe("0 100% 50%");
+  });
+
+  it("converts white and black to zero saturation", () => {
+    expect(hexToHslTriplet("#ffffff")).toBe("0 0% 100%");
+    expect(hexToHslTriplet("#000000")).toBe("0 0% 0%");
+  });
+
+  it("accepts a hex value without a leading #", () => {
+    expect(hexToHslTriplet("3b82f6")).toBe("217 91% 60%");
+  });
+
+  it("returns null for anything that isn't a strict 6-digit hex color", () => {
+    expect(hexToHslTriplet("not-a-color")).toBeNull();
+    expect(hexToHslTriplet("#fff")).toBeNull();
+    expect(hexToHslTriplet("")).toBeNull();
   });
 });

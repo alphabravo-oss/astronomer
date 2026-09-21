@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useSSOProviders } from "@/lib/hooks/user-settings";
+import { useBanner, useBranding } from "@/lib/hooks/public-settings";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   loginWithCredentialsChallengeAware,
@@ -57,6 +58,14 @@ function LoginPage() {
   const ssoProviders = (ssoProvidersData ?? []).filter(
     (provider) => provider.enabled,
   );
+
+  // Public, unauthenticated settings — the login screen renders before any
+  // session exists. Both degrade to today's defaults on error.
+  const { data: branding } = useBranding();
+  const { data: banner } = useBanner();
+  const productName = branding?.["branding.product_name"] || "Astronomer";
+  const logoUrl = branding?.["branding.logo_url"];
+  const loginBannerText = banner?.["banner.login_text"];
 
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
@@ -155,12 +164,10 @@ function LoginPage() {
 
         <div className="relative">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-              <Orbit className="h-5 w-5 text-white" />
-            </div>
+            <BrandMark logoUrl={logoUrl} productName={productName} />
             <div className="flex flex-col">
               <span className="text-xl font-semibold text-white tracking-tight leading-tight">
-                Astronomer
+                {productName}
               </span>
               <span className="text-[11px] text-zinc-500 leading-tight">
                 by AlphaBravo
@@ -215,12 +222,10 @@ function LoginPage() {
         <div className="w-full max-w-sm space-y-8">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 justify-center">
-            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-              <Orbit className="h-5 w-5 text-white" />
-            </div>
+            <BrandMark logoUrl={logoUrl} productName={productName} />
             <div className="flex flex-col">
               <span className="text-xl font-semibold text-foreground tracking-tight leading-tight">
-                Astronomer
+                {productName}
               </span>
               <span className="text-[11px] text-muted-foreground leading-tight">
                 by AlphaBravo
@@ -228,9 +233,18 @@ function LoginPage() {
             </div>
           </div>
 
+          {loginBannerText && (
+            <p
+              role="status"
+              className="rounded-md border border-border bg-muted/40 px-3 py-2 text-center text-xs text-muted-foreground"
+            >
+              {loginBannerText}
+            </p>
+          )}
+
           <div className="space-y-2 text-center lg:text-left">
             <h2 className="text-2xl font-semibold text-foreground tracking-tight">
-              Sign in to Astronomer
+              Sign in to {productName}
             </h2>
             <p className="text-sm text-muted-foreground">
               Enter your credentials or use SSO to continue
@@ -395,6 +409,30 @@ function LoginPage() {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Operator-branded logo when configured, falling back to the built-in mark. */
+function BrandMark({
+  logoUrl,
+  productName,
+}: {
+  logoUrl: string | undefined;
+  productName: string;
+}) {
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt={productName}
+        className="h-10 w-10 rounded-xl object-contain"
+      />
+    );
+  }
+  return (
+    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
+      <Orbit className="h-5 w-5 text-white" />
     </div>
   );
 }

@@ -38,6 +38,7 @@ import { useUserPreferences } from "@/lib/user-preferences";
 import { cn, formatK8sVersion } from "@/lib/utils";
 import { useSidebarResourceCounts } from "@/components/layout/use-sidebar-resource-counts";
 import { useClusterStackStatus } from "@/components/monitoring/hooks";
+import { useBranding } from "@/lib/hooks/public-settings";
 
 // Vite stamps APP_VERSION from the release tag; local builds use the current
 // package fallback in lib/env.ts.
@@ -54,6 +55,8 @@ export function Sidebar() {
   const { data: featureFlags } = useFeatureFlags();
   const { activated: charlieActivated } = useCharlieActivated();
   const { preferences } = useUserPreferences();
+  const { data: branding } = useBranding();
+  const productName = branding?.["branding.product_name"] || "Astronomer";
 
   // Detect cluster context from URL. Static sub-routes (new, register) are NOT
   // cluster ids — treating them as such fires cluster-detail queries with a
@@ -168,7 +171,7 @@ export function Sidebar() {
               </div>
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-semibold text-foreground tracking-tight truncate leading-tight">
-                  Astronomer
+                  {productName}
                 </span>
                 <span className="text-[10px] text-muted-foreground leading-tight">
                   by AlphaBravo
@@ -286,7 +289,7 @@ export function Sidebar() {
           {!collapsed && (
             <div className="px-3 py-1 space-y-0.5">
               <p className="text-[10px] text-muted-foreground">
-                Astronomer {APP_VERSION}
+                {productName} {APP_VERSION}
               </p>
               <p className="text-[10px] text-muted-foreground">
                 Built by{" "}

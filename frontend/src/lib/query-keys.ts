@@ -596,4 +596,8 @@ export const queryKeys = {
   cis: {
     scansAll: ["cis", "scans"] as const,
   },
+  publicSettings: {
+    branding: ["public-settings", "branding"] as const,
+    banner: ["public-settings", "banner"] as const,
+  },
 };
