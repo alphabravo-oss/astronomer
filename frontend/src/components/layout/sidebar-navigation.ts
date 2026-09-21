@@ -29,6 +29,7 @@ import {
 import { can, isSuperuser, type PermissionVerb } from "@/lib/permissions";
 import type { FeatureFlags, FeatureFlagKey } from "@/lib/api/feature-flags";
 import type { User } from "@/types";
+import { SETTINGS_NAVIGATION } from "@/components/settings/settings-navigation";
 
 export type NavItem = {
   label: string;
@@ -292,6 +293,22 @@ export const globalNavGroups: NavGroup[] = [
     ],
   },
 ];
+
+// The single label registry for breadcrumbs, the command palette, and the
+// sidebar itself: given a route href, return the same label the nav (or the
+// settings hub) shows for it, so a destination never carries a different
+// name in different chrome.
+export function navLabelForHref(href: string): string | undefined {
+  for (const group of globalNavGroups) {
+    const item = group.items.find((candidate) => candidate.href === href);
+    if (item) return item.label;
+  }
+  for (const group of SETTINGS_NAVIGATION) {
+    const item = group.items.find((candidate) => candidate.href === href);
+    if (item) return item.title;
+  }
+  return undefined;
+}
 
 export function withFavoriteNavigation(
   groups: NavGroup[],

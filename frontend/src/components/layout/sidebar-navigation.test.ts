@@ -1,11 +1,16 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Box } from "lucide-react";
 
 import {
   activeNavGroupLabel,
   defaultOpenNavGroupLabel,
+  globalNavGroups,
+  navLabelForHref,
   type NavGroup,
 } from "@/components/layout/sidebar-navigation";
+import { SETTINGS_NAVIGATION } from "@/components/settings/settings-navigation";
 
 const groups: NavGroup[] = [
   {
@@ -44,5 +49,37 @@ describe("sidebar accordion group selection", () => {
     expect(
       defaultOpenNavGroupLabel(groupsWithoutDefault, "/outside-dashboard"),
     ).toBeNull();
+  });
+});
+
+describe("navLabelForHref", () => {
+  it("finds the label for a global nav item by href", () => {
+    expect(navLabelForHref("/dashboard/delivery")).toBe("Estate");
+    expect(navLabelForHref("/dashboard/security")).toBe("Security");
+  });
+
+  it("finds the title for a settings nav item by href", () => {
+    expect(navLabelForHref("/dashboard/settings/auth")).toBe("Authentication");
+  });
+
+  it("returns undefined for an href not in either registry", () => {
+    expect(navLabelForHref("/dashboard/clusters/c-1")).toBeUndefined();
+  });
+});
+
+describe("nav registry hrefs resolve to real routes", () => {
+  const routeTreeSource = readFileSync(
+    join(process.cwd(), "src/routeTree.gen.ts"),
+    "utf8",
+  );
+  const hrefs = [
+    ...globalNavGroups.flatMap((group) => group.items.map((item) => item.href)),
+    ...SETTINGS_NAVIGATION.flatMap((group) =>
+      group.items.map((item) => item.href),
+    ),
+  ];
+
+  it.each([...new Set(hrefs)])("%s resolves to a generated route id", (href) => {
+    expect(routeTreeSource).toContain(`id: '${href}/'`);
   });
 });

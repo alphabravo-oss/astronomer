@@ -158,7 +158,7 @@ export const SETTINGS_NAVIGATION: readonly SettingsNavigationGroup[] = [
       },
       {
         href: "/dashboard/settings/monitoring",
-        title: "Shared observability stacks",
+        title: "Shared stacks",
         description: "Operate shared Thanos and Alertmanager installations.",
         icon: BarChart3,
       },
