@@ -116,7 +116,6 @@
     "frontend/src/routes/dashboard/delivery/targets/$targetId/index.tsx:LaunchDialog": 310,
     "frontend/src/routes/dashboard/delivery/targets/index.tsx:CreateTargetDialog": 256,
     "frontend/src/routes/dashboard/index.tsx:DashboardPage": 326,
-    "frontend/src/routes/dashboard/logging/-outputs-tab.tsx:OutputsTab": 243,
     "frontend/src/routes/dashboard/logging/-pipeline-modal.tsx:CreatePipelineModal": 336,
     "frontend/src/routes/dashboard/projects/$id/catalogs/index.tsx:ProjectCatalogsPage": 270,
     "frontend/src/routes/dashboard/projects/$id/policy/index.tsx:PolicyPage": 355,
