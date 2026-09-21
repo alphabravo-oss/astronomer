@@ -226,6 +226,14 @@ describe("statusColor()", () => {
     expect(statusColor("degraded")).toBe("text-status-warning");
   });
 
+  it('returns warning color for "drifting"', () => {
+    expect(statusColor("drifting")).toBe("text-status-warning");
+  });
+
+  it('returns success color for "applied"', () => {
+    expect(statusColor("applied")).toBe("text-status-success");
+  });
+
   it('returns error color for "error"', () => {
     expect(statusColor("error")).toBe("text-status-error");
   });

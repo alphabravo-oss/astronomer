@@ -10,10 +10,10 @@ import type { OpenAPIComponents } from "@/types/openapi.generated";
 import type { Cluster, ClusterEnvironment } from "@/types";
 import { Pencil } from "lucide-react";
 import {
-  CLUSTER_BADGE_COLORS,
-  ClusterBadge,
-  type ClusterBadgeColor,
-} from "@/components/clusters/cluster-badge";
+  CLUSTER_BADGE_TONES,
+  StatusBadge,
+  type ClusterBadgeTone,
+} from "@/components/ui/status-badge";
 
 interface EditClusterModalProps {
   cluster: Cluster;
@@ -27,7 +27,7 @@ interface ClusterEditForm {
   apiServerUrl: string;
   caCertificate: string;
   badgeText: string;
-  badgeColor: ClusterBadgeColor;
+  badgeColor: ClusterBadgeTone;
   agentOverrides?: OpenAPIComponents["schemas"]["AgentOverrides"];
 }
 
@@ -157,7 +157,7 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
               (optional)
             </span>
           </label>
-          <ClusterBadge text={form.badgeText} color={form.badgeColor} />
+          <StatusBadge tone={form.badgeColor} label={form.badgeText} />
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_9rem] gap-2">
           <Input
@@ -180,11 +180,11 @@ export function EditClusterModal({ cluster, onClose }: EditClusterModalProps) {
             onChange={(event) =>
               setForm((current) => ({
                 ...current,
-                badgeColor: event.target.value as ClusterBadgeColor,
+                badgeColor: event.target.value as ClusterBadgeTone,
               }))
             }
           >
-            {CLUSTER_BADGE_COLORS.map((color) => (
+            {CLUSTER_BADGE_TONES.map((color) => (
               <option key={color} value={color}>
                 {color[0].toUpperCase() + color.slice(1)}
               </option>
