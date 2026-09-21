@@ -19,18 +19,12 @@ import { PageHeader, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
 import { Select } from "@/components/ui/select";
 import { TabStrip, Tabs, TabsContent } from "@/components/ui/tabs";
-import type {
-  HelmChart,
-  HelmChartCategory,
-  HelmChartVersion,
-  InstalledChart,
-} from "@/types";
+import type { HelmChart, HelmChartCategory, HelmChartVersion } from "@/types";
 import { Package, Plus, SearchX } from "lucide-react";
 import { AddRepositoryModal } from "./-add-repository-modal";
 import { BrowseTab } from "./-browse-tab";
 import { ChartDetailModal } from "./-chart-detail-modal";
 import { InstallChartModal } from "./-install-chart-modal";
-import { UpgradeChartModal } from "./-upgrade-chart-modal";
 import { CatalogOperationTimeline } from "@/components/catalog/catalog-operation-timeline";
 import { InstalledTab } from "./-installed-tab";
 import { RepositoriesTab } from "./-repositories-tab";
@@ -82,10 +76,8 @@ function CatalogPage() {
   const [selectedChart, setSelectedChart] = useState<HelmChart | null>(null);
   const [showRepoModal, setShowRepoModal] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
-  const [installChart, setInstallChart] = useState<{
-    chart: HelmChart;
-    version: HelmChartVersion;
-  } | null>(null);
+  const [installChart, setInstallChart] =
+    useState<{ chart: HelmChart; version: HelmChartVersion } | null>(null);
   const [operationId, setOperationId] = useState<string | null>(null);
 
   const chartsQuery = useHelmCharts({
@@ -117,9 +109,6 @@ function CatalogPage() {
   const deleteRepo = useDeleteHelmRepository();
   const uninstall = useUninstallChart();
   const rollback = useRollbackChart();
-  const [upgradeTarget, setUpgradeTarget] = useState<InstalledChart | null>(
-    null,
-  );
 
   const tabs: { key: TabKey; label: ReactNode }[] = [
     { key: "browse", label: "Browse Charts" },
@@ -318,7 +307,6 @@ function CatalogPage() {
               <InstalledTab
                 installed={installed}
                 loading={false}
-                onUpgrade={setUpgradeTarget}
                 onRollback={(id, revision) => rollback.mutate({ id, revision })}
                 onUninstall={(id) => uninstall.mutateAsync(id)}
                 uninstallPending={uninstall.isPending}
@@ -384,12 +372,6 @@ function CatalogPage() {
         />
       )}
 
-      {upgradeTarget && (
-        <UpgradeChartModal
-          installation={upgradeTarget}
-          onClose={() => setUpgradeTarget(null)}
-        />
-      )}
       {operationId && (
         <div className="fixed bottom-4 right-4 z-40 w-full max-w-xl shadow-lg">
           <CatalogOperationTimeline operationId={operationId} />

@@ -7,6 +7,11 @@ vi.mock("@/lib/hooks/clusters", () => ({
   useCluster: () => ({ data: { displayName: "prod", name: "prod" } }),
 }));
 
+vi.mock("@/lib/hooks/catalog", () => ({
+  useInstalledChartUpgradeVersions: () => ({ data: [], isLoading: false }),
+  useUpgradeInstalledChart: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+
 const row: InstalledChart = {
   id: "installed-1",
   clusterId: "cluster-1",
@@ -25,7 +30,6 @@ describe("catalog InstalledTab actions", () => {
       <InstalledTab
         installed={[row]}
         loading={false}
-        onUpgrade={vi.fn()}
         onRollback={vi.fn()}
         onUninstall={vi.fn()}
       />,
@@ -46,13 +50,11 @@ describe("catalog InstalledTab actions", () => {
     ).toBeInTheDocument();
   });
 
-  it("calls onUpgrade with the row when Upgrade is clicked", () => {
-    const onUpgrade = vi.fn();
+  it("opens the upgrade modal for the row when Upgrade is clicked", () => {
     render(
       <InstalledTab
         installed={[row]}
         loading={false}
-        onUpgrade={onUpgrade}
         onRollback={vi.fn()}
         onUninstall={vi.fn()}
       />,
@@ -65,7 +67,9 @@ describe("catalog InstalledTab actions", () => {
     );
     fireEvent.click(screen.getByRole("menuitem", { name: "Upgrade" }));
 
-    expect(onUpgrade).toHaveBeenCalledWith(row);
+    expect(
+      screen.getByRole("dialog", { name: `Upgrade ${row.releaseName}` }),
+    ).toBeInTheDocument();
   });
 
   it("disables Rollback at revision 1 with a reason", () => {
@@ -73,7 +77,6 @@ describe("catalog InstalledTab actions", () => {
       <InstalledTab
         installed={[{ ...row, revision: 1 }]}
         loading={false}
-        onUpgrade={vi.fn()}
         onRollback={vi.fn()}
         onUninstall={vi.fn()}
       />,
