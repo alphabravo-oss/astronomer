@@ -53,10 +53,12 @@ export function TableRow({
 
 export function TableHead({
   className,
+  scope = "col",
   ...props
 }: ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
+      scope={scope}
       className={cn("h-10 px-3 text-left text-xs font-semibold", className)}
       {...props}
     />
