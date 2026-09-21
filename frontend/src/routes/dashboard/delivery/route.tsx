@@ -1,32 +1,13 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useLocation } from "@tanstack/react-router";
-import {
-  Boxes,
-  Crosshair,
-  GitBranch,
-  Layers,
-  Rocket,
-  Route as RouteIcon,
-  SlidersHorizontal,
-  SlidersVertical,
-} from "lucide-react";
+import { Rocket, SlidersHorizontal, SlidersVertical } from "lucide-react";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { TabsList } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { key: "estate", label: "Estate", icon: Rocket, segment: "" },
-  {
-    key: "deployments",
-    label: "Deployments",
-    icon: Layers,
-    segment: "/deployments",
-  },
-  { key: "rollouts", label: "Rollouts", icon: RouteIcon, segment: "/rollouts" },
-  { key: "sources", label: "Sources", icon: GitBranch, segment: "/sources" },
-  { key: "bundles", label: "Bundles", icon: Boxes, segment: "/bundles" },
-  { key: "targets", label: "Targets", icon: Crosshair, segment: "/targets" },
   {
     key: "configuration-templates",
     label: "Templates",
