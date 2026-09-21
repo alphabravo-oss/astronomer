@@ -28,6 +28,7 @@ describe("EmptyState", () => {
         icon={Lock}
         title="Admins only"
         description="This surface is gated to platform administrators."
+        terminal
       />,
     );
 
@@ -152,5 +153,12 @@ describe("EmptyState", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Retrying");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("type-checks: an EmptyState without an action or terminal is rejected", () => {
+    // @ts-expect-error — must pass actionLabel or terminal (variant="table" is
+    // the one escape hatch, exercised by TableEmptyPanel's own tests).
+    const missingAction = <EmptyState icon={Lock} title="x" description="y" />;
+    expect(missingAction).toBeTruthy();
   });
 });

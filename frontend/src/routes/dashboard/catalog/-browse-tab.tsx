@@ -1,4 +1,7 @@
-import { EmptyState } from "@/components/ui/empty-state";
+import {
+  EmptyState,
+  type EmptyStateActionProps,
+} from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { HelmChart, HelmChartCategory } from "@/types";
@@ -69,6 +72,8 @@ export function BrowseTab({
           icon={Package}
           title="Select a project"
           description="Chart visibility and install authorization are isolated by project."
+          // terminal: the action is the project selector rendered above this tab.
+          terminal
         />
       ) : chartsLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -94,6 +99,16 @@ export function BrowseTab({
           icon={Package}
           title="No charts found"
           description="Try adjusting your search or category filter."
+          {...(searchQuery || selectedCategory !== "all"
+            ? ({
+                actionLabel: "Clear filters",
+                onAction: () => {
+                  onSearchQueryChange("");
+                  onSelectedCategoryChange("all");
+                },
+              } satisfies EmptyStateActionProps)
+              // terminal: no filters active — the repositories genuinely have no charts.
+            : { terminal: true })}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

@@ -227,10 +227,10 @@ function ClusterTemplateDetailPage() {
           isEmpty={(clusters) => clusters.length === 0}
           empty={
             <EmptyState
-              icon={Layers}
-              title="No clusters bound"
+              icon={Layers} title="No clusters bound"
               description="Apply this bundle during cluster registration to track its rollout here."
               className="py-10"
+              actionLabel="Register cluster" actionHref="/dashboard/clusters/register"
             />
           }
         >

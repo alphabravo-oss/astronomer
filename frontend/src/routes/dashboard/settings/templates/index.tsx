@@ -60,6 +60,8 @@ function NotificationTemplatesList() {
             icon={FileText}
             title="No notification templates registered"
             description="The server has not registered any email or webhook templates. Check the notification registry configuration."
+            // terminal: templates come from the server-side registry, not a UI action.
+            terminal
           />
         }
       >

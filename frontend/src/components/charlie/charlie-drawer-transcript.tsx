@@ -83,6 +83,8 @@ export function CharlieTranscript({
           icon={Bot}
           title="Ask Charlie"
           description="Investigate, explain, or plan work using the selected context."
+          // terminal: the action is the chat composer below this panel, not a link/button here.
+          terminal
         />
       ) : (
         <>

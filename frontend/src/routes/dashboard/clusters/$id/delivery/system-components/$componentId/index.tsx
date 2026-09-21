@@ -107,6 +107,8 @@ function SystemComponentDetailPage() {
             icon={Boxes}
             title="Component not found"
             description="The component is no longer present in the latest cluster observation."
+            actionLabel="Back to system components"
+            actionHref={`/dashboard/clusters/${clusterId}/delivery/system-components`}
           />
         ) : null}
         {component ? (

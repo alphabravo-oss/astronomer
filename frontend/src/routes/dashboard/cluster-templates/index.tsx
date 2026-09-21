@@ -16,7 +16,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Plus, Trash2, Layers } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { EmptyState, PermissionState } from "@/components/ui/empty-state";
+import {
+  EmptyState,
+  PermissionState,
+  type EmptyStateActionProps,
+} from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -171,14 +175,15 @@ function ClusterTemplatesPage() {
             icon={Layers}
             title="No onboarding bundles yet"
             description="Create a reusable bundle of tools, policy, and project defaults for adopted clusters."
-            actionLabel={canWrite ? "Create bundle" : undefined}
-            actionIcon={Plus}
-            onAction={
-              canWrite
-                ? () =>
-                    void navigate({ to: "/dashboard/cluster-templates/new" })
-                : undefined
-            }
+            {...(canWrite
+              ? ({
+                  actionLabel: "Create bundle",
+                  actionIcon: Plus,
+                  onAction: () =>
+                    void navigate({ to: "/dashboard/cluster-templates/new" }),
+                } satisfies EmptyStateActionProps)
+              // terminal: read-only viewers can't create a bundle from here.
+              : { terminal: true })}
           />
         }
       >

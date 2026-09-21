@@ -55,7 +55,11 @@ import {
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { EmptyState, StatePanel } from "@/components/ui/empty-state";
+import {
+  EmptyState,
+  StatePanel,
+  type EmptyStateActionProps,
+} from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
 import { liveFallback } from "@/lib/live/status-store";
 
@@ -68,6 +72,16 @@ function fmt(iso?: string) {
   } catch {
     return iso;
   }
+}
+
+/** Read-only viewers can't add a registry, so the empty state has no action. */
+function registriesEmptyAction(
+  canWrite: boolean,
+  onAdd: () => void,
+): EmptyStateActionProps | { terminal: true } {
+  return canWrite
+    ? { actionLabel: "Add registry", actionIcon: Plus, onAction: onAdd }
+    : { terminal: true };
 }
 
 function ClusterRegistriesPage() {
@@ -183,9 +197,7 @@ function ClusterRegistriesPage() {
             icon={Container}
             title="No private registries configured"
             description="Add a registry to reconcile image-pull credentials into namespaces on this cluster."
-            actionLabel={canWrite ? "Add registry" : undefined}
-            actionIcon={Plus}
-            onAction={canWrite ? () => setNewOpen(true) : undefined}
+            {...registriesEmptyAction(canWrite, () => setNewOpen(true))}
           />
         }
       >

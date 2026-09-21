@@ -11,7 +11,7 @@ import {
   Loader2,
   ShieldCheck,
 } from "lucide-react";
-import { EmptyState, StatePanel } from "@/components/ui/empty-state";
+import { EmptyState, StatePanel, type EmptyStateActionProps } from "@/components/ui/empty-state";
 import { QueryStates, type QueryState } from "@/components/ui/query-states";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -57,7 +57,7 @@ type Tab = (typeof CHARLIE_HUB_TABS)[number];
 function isCharlieTab(value: unknown): value is Tab {
   return typeof value === "string" && CHARLIE_HUB_TABS.some((tab) => tab === value);
 }
-
+function filterEmptyAction(active: boolean, onClear: () => void): EmptyStateActionProps | { terminal: true } { return active ? { actionLabel: "Clear filters", onAction: onClear } : { terminal: true }; } // filtered-out: "Clear filters"; else terminal
 export function normalizeCharlieTab(value: string | null): Tab {
   return isCharlieTab(value) ? value : "conversations";
 }
@@ -305,7 +305,7 @@ function Conversations({
           <EmptyState
             icon={Bot}
             title="No private conversations"
-            description="Your private Charlie chats appear here. Shared incident investigations are kept in the Investigations tab."
+            description="Your private Charlie chats appear here. Shared incident investigations are kept in the Investigations tab." terminal // action is the Charlie drawer
           />
         )}
       </div>
@@ -314,7 +314,7 @@ function Conversations({
           <EmptyState
             icon={Bot}
             title="Select a conversation"
-            description="Only your private user-started conversations can be opened here."
+            description="Only your private user-started conversations can be opened here." terminal // action: the conversation list to the left
           />
         ) : h.isLoading ? (
           <StatePanel
@@ -474,7 +474,7 @@ function Investigations({
         <EmptyState
           icon={Clock}
           title="No investigations match"
-          description="Shared incident investigations appear only while you can read every affected Astronomer resource. Try changing the filters."
+          description="Shared incident investigations appear only while you can read every affected Astronomer resource." {...filterEmptyAction(Boolean(status || severity || cluster || source || from || to), () => set({ status: undefined, severity: undefined, cluster: undefined, source: undefined, from: undefined, to: undefined }))}
         />
       )}
       {detail && (
@@ -679,7 +679,7 @@ function Findings({
             <EmptyState
               icon={ShieldCheck}
               title="No findings match"
-              description="Try changing the finding filters."
+              description="Try changing the finding filters." {...filterEmptyAction(Boolean(status || severity || source || resource || block || from || to), () => set({ status: undefined, severity: undefined, source: undefined, resource: undefined, block: undefined, from: undefined, to: undefined }))}
             />
           )}
         </div>
@@ -688,7 +688,7 @@ function Findings({
             <EmptyState
               icon={ShieldCheck}
               title="Select a finding"
-              description="Evidence is fetched from Charlie only when selected."
+              description="Evidence is fetched from Charlie only when selected." terminal // action: the finding list to the left
             />
           ) : d.isLoading ? (
             <StatePanel
@@ -1027,7 +1027,7 @@ function Approvals({ selected }: { selected: string | null }) {
         <EmptyState
           icon={CheckCircle2}
           title="No pending approvals"
-          description="Only server-confirmed eligible approvals can be acted on here."
+          description="Only server-confirmed eligible approvals can be acted on here." terminal // queued by Charlie itself, not created here
         />
       )}
       {decide.isError && (

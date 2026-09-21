@@ -156,6 +156,8 @@ function ManagedToolsPage() {
             icon={Server}
             title="No clusters registered"
             description="Register a cluster to start managing tools."
+            actionLabel="Register cluster"
+            actionHref="/dashboard/clusters/register"
           />
         }
       >
@@ -169,6 +171,8 @@ function ManagedToolsPage() {
                 icon={Server}
                 title="No tools available"
                 description="No cluster tools are configured for this installation."
+                // terminal: tool catalogs are configured at the platform level, not per-user.
+                terminal
               />
             }
           >

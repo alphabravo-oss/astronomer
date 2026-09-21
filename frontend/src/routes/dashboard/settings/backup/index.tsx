@@ -568,6 +568,8 @@ function LatestDrillCard() {
           title="No restore drill has run"
           description="The weekly drill restores the latest dump into a scratch Postgres and records the result here."
           className="rounded-xl border border-dashed border-border bg-card p-6"
+          // terminal: the drill runs on a schedule (CronJob); there's no manual trigger here.
+          terminal
         />
       }
     >
@@ -711,6 +713,8 @@ function HistoryTable() {
             title="No restore drill history"
             description="Completed restore drills will appear here after the scheduled validation runs."
             className="rounded-xl border border-dashed border-border bg-card p-6"
+            // terminal: history accrues from the scheduled CronJob, not a UI action.
+            terminal
           />
         }
       >
