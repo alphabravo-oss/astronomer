@@ -38,7 +38,7 @@ import { useUserPreferences } from "@/lib/user-preferences";
 import { cn, formatK8sVersion } from "@/lib/utils";
 import { useSidebarResourceCounts } from "@/components/layout/use-sidebar-resource-counts";
 import { useClusterStackStatus } from "@/components/monitoring/hooks";
-import { useBranding } from "@/lib/hooks/public-settings";
+import { useProductName } from "@/lib/hooks/public-settings";
 
 // Vite stamps APP_VERSION from the release tag; local builds use the current
 // package fallback in lib/env.ts.
@@ -55,8 +55,7 @@ export function Sidebar() {
   const { data: featureFlags } = useFeatureFlags();
   const { activated: charlieActivated } = useCharlieActivated();
   const { preferences } = useUserPreferences();
-  const { data: branding } = useBranding();
-  const productName = branding?.["branding.product_name"] || "Astronomer";
+  const productName = useProductName();
 
   // Detect cluster context from URL. Static sub-routes (new, register) are NOT
   // cluster ids — treating them as such fires cluster-detail queries with a
@@ -84,8 +83,7 @@ export function Sidebar() {
 
   const collapsed = sidebarCollapsed && !mobileSidebarOpen;
 
-  // Fetch cluster name for header
-  const { data: cluster } = useCluster(clusterId || "");
+  const { data: cluster } = useCluster(clusterId || ""); // cluster name for header
   const { data: veleroStatus } = useQuery({
     queryKey: queryKeys.clusterPages.veleroStatus(clusterId || ""),
     queryFn: ({ signal }) => getVeleroStatus(clusterId!, signal),
