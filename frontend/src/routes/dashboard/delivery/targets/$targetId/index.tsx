@@ -24,6 +24,8 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
+import { ActionButton } from "@/components/ui/action-button";
+import { MetricCard } from "@/components/ui/metric-card";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -31,10 +33,7 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
-  dangerButton,
   inputClass,
-  primaryButton,
-  secondaryButton,
   textareaClass,
   RedirectDeliveryDetail,
   useDeliveryWorkspace,
@@ -246,31 +245,30 @@ export function TargetDetailPage() {
             actions={
               target ? (
                 <>
-                  <button
-                    type="button"
-                    className={secondaryButton}
+                  <ActionButton
                     disabled={!canUpdate}
                     onClick={() => setEditing(true)}
+                    icon={<Pencil className="h-4 w-4" />}
                   >
-                    <Pencil className="h-4 w-4" /> Edit configuration
-                  </button>
-                  <button
-                    type="button"
-                    className={secondaryButton}
+                    Edit configuration
+                  </ActionButton>
+                  <ActionButton
                     disabled={!canUpdate || suspendMutation.isPending}
                     onClick={() => suspendMutation.mutate()}
+                    icon={
+                      target.suspended ? (
+                        <Play className="h-4 w-4" />
+                      ) : (
+                        <Pause className="h-4 w-4" />
+                      )
+                    }
                   >
-                    {target.suspended ? (
-                      <Play className="h-4 w-4" />
-                    ) : (
-                      <Pause className="h-4 w-4" />
-                    )}
                     {target.suspended ? "Resume target" : "Suspend target"}
-                  </button>
-                  <button
-                    type="button"
-                    className={primaryButton}
+                  </ActionButton>
+                  <ActionButton
                     disabled={previewMutation.isPending}
+                    loading={previewMutation.isPending}
+                    loadingLabel="Evaluating…"
                     onClick={() =>
                       previewMutation.mutate({
                         cursor: "",
@@ -278,20 +276,19 @@ export function TargetDetailPage() {
                         reset: true,
                       })
                     }
+                    intent="primary"
+                    icon={<Eye className="h-4 w-4" />}
                   >
-                    <Eye className="h-4 w-4" />{" "}
-                    {previewMutation.isPending
-                      ? "Evaluating…"
-                      : "Preview placement"}
-                  </button>
+                    Preview placement
+                  </ActionButton>
                   {canDelete && (
-                    <button
-                      type="button"
-                      className={dangerButton}
+                    <ActionButton
                       onClick={() => setDeleting(true)}
+                      intent="destructive"
+                      icon={<Trash2 className="h-4 w-4" />}
                     >
-                      <Trash2 className="h-4 w-4" /> Delete
-                    </button>
+                      Delete
+                    </ActionButton>
                   )}
                 </>
               ) : undefined
@@ -401,16 +398,14 @@ export function TargetDetailPage() {
         loading={deleteMutation.isPending}
       >
         {canOrphan && (
-          <button
-            type="button"
-            className={secondaryButton}
+          <ActionButton
             onClick={() => {
               setDeleting(false);
               setOrphaning(true);
             }}
           >
             Orphan workloads instead
-          </button>
+          </ActionButton>
         )}
       </ConfirmDialog>
       <ConfirmDialog
@@ -480,21 +475,22 @@ function PreviewPanel({
       title="Authoritative placement preview"
       description="This is the server-evaluated, project-scoped membership snapshot. Launch is bound to its digest."
       actions={
-        <button
-          type="button"
-          className={primaryButton}
+        <ActionButton
           disabled={!canLaunch || preview.selectedCount === 0}
           onClick={onLaunch}
+          intent="primary"
+          icon={<Rocket className="h-4 w-4" />}
         >
-          <Rocket className="h-4 w-4" /> Launch rollout
-        </button>
+          Launch rollout
+        </ActionButton>
       }
     >
       <div className="grid gap-3 sm:grid-cols-4">
-        <Metric label="Selected" value={preview.selectedCount} />
-        <Metric label="Excluded / blocked" value={preview.excludedCount} />
-        <Metric label="Target generation" value={preview.targetGeneration} />
-        <Metric
+        <MetricCard dense label="Selected" value={preview.selectedCount} />
+        <MetricCard dense label="Excluded / blocked" value={preview.excludedCount} />
+        <MetricCard dense label="Target generation" value={preview.targetGeneration} />
+        <MetricCard
+          dense
           label="All-cluster confirmation"
           value={preview.requiresAllConfirmation ? "Required" : "No"}
         />
@@ -539,21 +535,18 @@ function PreviewPanel({
             : `Showing ${preview.decisionOffset + 1}–${preview.decisionOffset + preview.decisions.length} of ${preview.decisionCount} decisions`}
         </p>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className={secondaryButton}
+          <ActionButton
             disabled={!canGoBack || loadingPage}
             onClick={onPrevious}
             aria-label="Previous placement decision page"
+            icon={<ChevronLeft className="h-4 w-4" />}
           >
-            <ChevronLeft className="h-4 w-4" /> Previous
-          </button>
+            Previous
+          </ActionButton>
           <span className="min-w-16 text-center text-xs text-muted-foreground">
             Page {pageIndex + 1}
           </span>
-          <button
-            type="button"
-            className={secondaryButton}
+          <ActionButton
             disabled={
               !preview.hasMoreDecisions || !preview.nextCursor || loadingPage
             }
@@ -561,7 +554,7 @@ function PreviewPanel({
             aria-label="Next placement decision page"
           >
             Next <ChevronRight className="h-4 w-4" />
-          </button>
+          </ActionButton>
         </div>
       </div>
     </PageSection>
@@ -817,16 +810,16 @@ function TargetEditDialog({
           <ErrorMessage error={formError ?? mutation.error} />
         )}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
             type="submit"
-            className={primaryButton}
+            intent="primary"
             disabled={mutation.isPending}
+            loading={mutation.isPending}
+            loadingLabel="Saving…"
           >
-            {mutation.isPending ? "Saving…" : "Save and require new preview"}
-          </button>
+            Save and require new preview
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>
@@ -1128,32 +1121,22 @@ function LaunchDialog({
           <ErrorMessage error={formError ?? mutation.error} />
         )}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
             type="submit"
-            className={primaryButton}
+            intent="primary"
             disabled={mutation.isPending}
+            loading={mutation.isPending}
+            loadingLabel="Launching…"
           >
-            {mutation.isPending ? "Launching…" : "Launch frozen rollout"}
-          </button>
+            Launch frozen rollout
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>
   );
 }
 
-function Metric({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-semibold">{value}</p>
-    </div>
-  );
-}
 function Field({
   label,
   children,

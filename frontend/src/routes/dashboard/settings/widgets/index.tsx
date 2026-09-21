@@ -29,11 +29,11 @@ import {
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ResourceMasthead } from "@/components/ui/page";
+import { ActionButton } from "@/components/ui/action-button";
 import {
   Plus,
   Trash2,
   Save,
-  Loader2,
   FlaskConical,
   CheckCircle,
   XCircle,
@@ -333,12 +333,9 @@ function WidgetsAdminPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium">Widgets</h2>
           {!editing ? (
-            <button
-              onClick={startCreate}
-              className="text-sm inline-flex items-center gap-1 bg-primary text-primary-foreground px-3 py-1.5 rounded-sm"
-            >
-              <Plus className="h-4 w-4" /> New widget
-            </button>
+            <ActionButton onClick={startCreate} intent="primary" size="sm" icon={<Plus className="h-4 w-4" />}>
+              New widget
+            </ActionButton>
           ) : null}
         </div>
 
@@ -463,24 +460,10 @@ function WidgetsAdminPage() {
               </form.Field>
             </label>
             <div className="flex gap-2">
-              <button
-                onClick={() => void form.handleSubmit()}
-                disabled={saving}
-                className="inline-flex items-center gap-1 bg-primary text-primary-foreground text-sm px-3 py-1.5 rounded-sm"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
+              <ActionButton onClick={() => void form.handleSubmit()} disabled={saving} loading={saving} intent="primary" size="sm" icon={<Save className="h-4 w-4" />}>
                 Save
-              </button>
-              <button
-                onClick={cancel}
-                className="text-sm px-3 py-1.5 rounded-sm border border-border"
-              >
-                Cancel
-              </button>
+              </ActionButton>
+              <ActionButton onClick={cancel} size="sm">Cancel</ActionButton>
             </div>
           </div>
         ) : null}
@@ -523,18 +506,23 @@ function WidgetsAdminPage() {
                       {w.enabled ? "yes" : "no"}
                     </TableCell>
                     <TableCell className="px-3 py-2 text-right">
-                      <button
+                      <ActionButton
                         onClick={() => startEdit(w)}
-                        className="text-xs text-primary hover:underline mr-2"
+                        intent="ghost"
+                        size="sm"
+                        className="mr-2"
                       >
                         Edit
-                      </button>
-                      <button
+                      </ActionButton>
+                      <ActionButton
                         onClick={() => setDeleteWidgetTarget(w)}
-                        className="text-xs text-status-error hover:underline inline-flex items-center gap-1"
+                        intent="ghost"
+                        size="sm"
+                        className="text-status-error"
+                        icon={<Trash2 className="h-3 w-3" />}
                       >
-                        <Trash2 className="h-3 w-3" /> Delete
-                      </button>
+                        Delete
+                      </ActionButton>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -548,12 +536,13 @@ function WidgetsAdminPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium">Prometheus datasources</h2>
           {!showAddDS && (
-            <button
+            <ActionButton
               onClick={() => setShowAddDS(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-sm font-medium hover:bg-accent transition-colors"
+              size="sm"
+              icon={<Plus className="h-3.5 w-3.5" />}
             >
-              <Plus className="h-3.5 w-3.5" /> Add datasource
-            </button>
+              Add datasource
+            </ActionButton>
           )}
         </div>
         {dsError || datasourcesQuery.isError ? (
@@ -609,18 +598,23 @@ function WidgetsAdminPage() {
                     )}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right">
-                    <button
+                    <ActionButton
                       onClick={() => runTest(d.id)}
-                      className="text-xs text-primary hover:underline mr-2 inline-flex items-center gap-1"
+                      intent="ghost"
+                      size="sm"
+                      className="mr-2"
+                      icon={<FlaskConical className="h-3 w-3" />}
                     >
-                      <FlaskConical className="h-3 w-3" /> Test
-                    </button>
-                    <button
+                      Test
+                    </ActionButton>
+                    <ActionButton
                       onClick={() => setDeleteDatasourceTarget(d)}
-                      className="text-xs text-status-error hover:underline"
+                      intent="ghost"
+                      size="sm"
+                      className="text-status-error"
                     >
                       Delete
-                    </button>
+                    </ActionButton>
                   </TableCell>
                 </TableRow>
               ))}
@@ -654,23 +648,27 @@ function WidgetsAdminPage() {
                     —
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right whitespace-nowrap">
-                    <button
+                    <ActionButton
                       onClick={addDS}
-                      className="text-xs text-primary hover:underline inline-flex items-center gap-1 mr-2"
+                      intent="ghost"
+                      size="sm"
+                      className="mr-2"
+                      icon={<Plus className="h-3 w-3" />}
                     >
-                      <Plus className="h-3 w-3" /> Add
-                    </button>
-                    <button
+                      Add
+                    </ActionButton>
+                    <ActionButton
                       onClick={() => {
                         setShowAddDS(false);
                         setDsName("");
                         setDsURL("");
                         setDsBearer("");
                       }}
-                      className="text-xs text-muted-foreground hover:text-foreground"
+                      intent="ghost"
+                      size="sm"
                     >
                       Cancel
-                    </button>
+                    </ActionButton>
                   </TableCell>
                 </TableRow>
               )}

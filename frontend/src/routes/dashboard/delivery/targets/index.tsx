@@ -9,6 +9,7 @@ import { Crosshair, Plus } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { ActionButton } from "@/components/ui/action-button";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -16,8 +17,6 @@ import {
   RedirectDeliveryList,
   deliveryPageRowCount,
   inputClass,
-  primaryButton,
-  secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
@@ -152,13 +151,13 @@ export function TargetsPage() {
             description="Bind an immutable bundle version to centrally evaluated placement and rollout policy."
             actions={
               canCreate ? (
-                <button
-                  type="button"
-                  className={primaryButton}
+                <ActionButton
                   onClick={() => setCreating(true)}
+                  intent="primary"
+                  icon={<Plus className="h-4 w-4" />}
                 >
-                  <Plus className="h-4 w-4" /> New target
-                </button>
+                  New target
+                </ActionButton>
               ) : undefined
             }
           />
@@ -439,16 +438,16 @@ function CreateTargetDialog({
           <ErrorMessage error={formError ?? mutation.error} />
         )}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
             type="submit"
-            className={primaryButton}
+            intent="primary"
             disabled={mutation.isPending}
+            loading={mutation.isPending}
+            loadingLabel="Creating…"
           >
-            {mutation.isPending ? "Creating…" : "Create target"}
-          </button>
+            Create target
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>
