@@ -712,16 +712,11 @@ export function InstalledView({
   deleteDecision: PermissionDecision;
 }) {
   return (
-    <QueryStates
-      query={q}
-      loadingTitle="Loading installed apps…"
-      isEmpty={(page) => page.data.length === 0}
+    <QueryStates query={q} loadingTitle="Loading installed apps…" isEmpty={(page) => page.data.length === 0}
       empty={
         <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
           <Box className="h-8 w-8 mx-auto text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">
-            No apps installed yet
-          </p>
+          <p className="text-sm font-medium text-foreground">No apps installed yet</p>
           <p className="text-xs text-muted-foreground max-w-md mx-auto">
             Browse the catalog and install your first chart. The Platform
             Baseline tools (trivy-operator, kube-state-metrics, fluent-bit,
