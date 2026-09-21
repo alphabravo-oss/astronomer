@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 type Theme string
@@ -27,6 +29,7 @@ const (
 )
 
 const MaxFavorites = 12
+const MaxPinnedClusters = 20
 
 var (
 	allowedLandingRoutes = map[string]struct{}{
@@ -54,13 +57,18 @@ type Preferences struct {
 	LandingRoute string       `json:"landing_route"`
 	TimeFormat   TimeFormat   `json:"time_format"`
 	Favorites    []string     `json:"favorites"`
+	// PinnedClusters holds cluster ids only — existence is not verified here
+	// (a pinned cluster that is later deleted or the pinner loses access to
+	// simply drops out of the switcher's rendered results).
+	PinnedClusters []string `json:"pinned_clusters"`
 }
 
 func Defaults() Preferences {
 	return Preferences{
 		Theme: ThemeSystem, TableDensity: DensityComfortable,
 		LandingRoute: "/dashboard", TimeFormat: TimeLocale,
-		Favorites: []string{},
+		Favorites:      []string{},
+		PinnedClusters: []string{},
 	}
 }
 
@@ -92,6 +100,19 @@ func (p Preferences) Validate() error {
 			return fmt.Errorf("favorite route %q is duplicated", route)
 		}
 		seen[route] = struct{}{}
+	}
+	if len(p.PinnedClusters) > MaxPinnedClusters {
+		return fmt.Errorf("pinned_clusters may contain at most %d clusters", MaxPinnedClusters)
+	}
+	seenClusters := make(map[string]struct{}, len(p.PinnedClusters))
+	for _, id := range p.PinnedClusters {
+		if _, err := uuid.Parse(id); err != nil {
+			return fmt.Errorf("pinned cluster %q is not a valid id", id)
+		}
+		if _, duplicate := seenClusters[id]; duplicate {
+			return fmt.Errorf("pinned cluster %q is duplicated", id)
+		}
+		seenClusters[id] = struct{}{}
 	}
 	return nil
 }
