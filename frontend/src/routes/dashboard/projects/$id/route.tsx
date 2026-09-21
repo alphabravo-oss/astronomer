@@ -25,9 +25,8 @@ import {
   Package,
 } from "lucide-react";
 import { useProject } from "@/lib/hooks/projects";
-import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page";
-import { TabsList } from "@/components/ui/tabs";
+import { tabLinkClassName } from "@/components/ui/tabs";
 
 const tabs = [
   { key: "overview", label: "Overview", icon: LayoutDashboard, segment: "" },
@@ -93,7 +92,7 @@ function ProjectDetailLayout() {
       />
 
       <div className="border-b border-border">
-        <TabsList aria-label="Project">
+        <nav aria-label="Project sections" className="flex gap-6">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const href = `${base}${tab.segment}`;
@@ -103,19 +102,14 @@ function ProjectDetailLayout() {
                 key={tab.key}
                 to={href}
                 aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors",
-                  active
-                    ? "border-foreground text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
+                className={tabLinkClassName(active)}
               >
                 <Icon className="h-4 w-4" />
                 {tab.label}
               </RouterLink>
             );
           })}
-        </TabsList>
+        </nav>
       </div>
 
       <div className="animate-fade-in">

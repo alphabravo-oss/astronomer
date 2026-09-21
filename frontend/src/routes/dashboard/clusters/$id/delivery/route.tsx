@@ -15,10 +15,9 @@ import {
   SlidersVertical,
 } from "lucide-react";
 import { useCluster } from "@/lib/hooks/clusters";
-import { cn } from "@/lib/utils";
 import { useDeliveryProjectScope } from "@/components/delivery/shared";
 import { PageHeader } from "@/components/ui/page";
-import { TabsList } from "@/components/ui/tabs";
+import { tabLinkClassName } from "@/components/ui/tabs";
 
 const tabs = [
   { key: "flux", label: "Flux", icon: Radio, segment: "" },
@@ -112,7 +111,10 @@ function ClusterDeliveryLayout() {
         }
       />
       <div className="border-b border-border">
-        <TabsList aria-label="Cluster delivery" className="flex-wrap gap-4">
+        <nav
+          aria-label="Cluster delivery sections"
+          className="flex flex-wrap gap-4"
+        >
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const href = `${base}${tab.segment}${projectQuery}`;
@@ -122,19 +124,14 @@ function ClusterDeliveryLayout() {
                 key={tab.key}
                 to={href}
                 aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-2 border-b-2 pb-3 text-sm font-medium transition-colors",
-                  active
-                    ? "border-foreground text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
+                className={tabLinkClassName(active)}
               >
                 <Icon className="h-4 w-4" />
                 {tab.label}
               </RouterLink>
             );
           })}
-        </TabsList>
+        </nav>
       </div>
       <Outlet />
     </div>
