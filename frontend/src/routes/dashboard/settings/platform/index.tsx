@@ -15,7 +15,8 @@ import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { PageHeader, PageShell } from "@/components/ui/page";
+import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
+import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { KeyStatusPanel } from "@/components/settings/key-status-panel";
 import { GovernanceFields } from "@/components/settings/governance-fields";
@@ -34,28 +35,6 @@ import {
 // Banner textareas are text-sm / row-sized, unlike the kit's mono default —
 // merged over the kit textarea class (twMerge, later wins).
 const bannerTextareaClassName = "min-h-0 text-sm font-sans";
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-xl border border-border bg-card p-6 space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-        )}
-      </div>
-      <div className="space-y-4">{children}</div>
-    </section>
-  );
-}
 
 function BannerPreview({
   text,
@@ -137,7 +116,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
       <form.AppForm>
         <form.FormErrorSummary serverError={save.error?.message} />
       </form.AppForm>
-      <Section
+      <Card padding="lg"><PageSection
         title="Branding"
         description="Logo, product name, colors. Applied across the dashboard chrome."
       >
@@ -197,9 +176,9 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             />
           )}
         </form.AppField>
-      </Section>
+      </PageSection></Card>
 
-      <Section
+      <Card padding="lg"><PageSection
         title="Banners"
         description="Optional banner text shown on the login screen and inside the dashboard."
       >
@@ -247,9 +226,9 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             )}
           </form.Subscribe>
         </div>
-      </Section>
+      </PageSection></Card>
 
-      <Section
+      <Card padding="lg"><PageSection
         title="Feature flags"
         description="Hide entire dashboard areas from the sidebar. Server-side authorisation still applies regardless."
       >
@@ -276,9 +255,9 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             />
           )}
         </form.AppField>
-      </Section>
+      </PageSection></Card>
 
-      <Section
+      <Card padding="lg"><PageSection
         title="Token TTL"
         description="Defaults applied to newly minted API tokens."
       >
@@ -303,9 +282,9 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             </p>
           )}
         </form.Subscribe>
-      </Section>
+      </PageSection></Card>
 
-      <Section
+      <Card padding="lg"><PageSection
         title="Browser session"
         description="JWT access-token lifetime for interactive logins (password, SSO, TOTP). Absolute TTL at mint/refresh — not an idle timeout."
       >
@@ -332,9 +311,9 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             </p>
           )}
         </form.Subscribe>
-      </Section>
+      </PageSection></Card>
 
-      <Section
+      <Card padding="lg"><PageSection
         title="Telemetry"
         description="Anonymous usage signals. Opt-in only."
       >
@@ -354,11 +333,11 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             />
           )}
         </form.AppField>
-      </Section>
+      </PageSection></Card>
 
       <GovernanceFields form={form} />
 
-      <Section
+      <Card padding="lg"><PageSection
         title="Cluster registration TLS"
         description="Controls which curl variant the cluster-registration wizard shows by default and whether the public /api/v1/register/ca.crt endpoint serves a CA bundle."
       >
@@ -452,7 +431,7 @@ function PlatformSettingsForm({ onSaved }: { onSaved?: () => void }) {
             </>
           )}
         </form.Field>
-      </Section>
+      </PageSection></Card>
 
       <form.Subscribe selector={(s) => s.values}>
         {(values) => {
