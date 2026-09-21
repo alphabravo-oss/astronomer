@@ -2,7 +2,7 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useLocation } from "@tanstack/react-router";
 import { Rocket, SlidersHorizontal, SlidersVertical } from "lucide-react";
-import { PageHeader, PageShell } from "@/components/ui/page";
+import { PageShell } from "@/components/ui/page";
 import { TabsList } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +41,9 @@ function DeliveryEstateLayout() {
 
   return (
     <PageShell>
-      <PageHeader eyebrow="Continuous Delivery" title={activeTab.label} />
+      <div className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        Continuous Delivery
+      </div>
       <div className="border-b border-border">
         <TabsList className="flex-wrap gap-4">
           {tabs.map((tab) => {

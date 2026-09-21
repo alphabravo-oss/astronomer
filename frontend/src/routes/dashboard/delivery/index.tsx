@@ -31,6 +31,7 @@ import {
   projectClusterId,
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
+import { EstateHeader } from "@/components/delivery/estate-header";
 import {
   DeliveryUnavailablePanel,
   useDeliveryOverviewHealth,
@@ -181,15 +182,14 @@ function EstateDeliveryOverview({
 }: {
   query: UseQueryResult<DeliveryEstate>;
 }) {
-  const estate = query.data;
-  const summary = estate?.summary;
+  const summary = query.data?.summary;
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
   const search = new URLSearchParams(
     useLocation({ select: (location) => location.searchStr }),
   );
   const focus = search.get("focus") ?? "";
-  const clusters = estate?.clusters ?? [];
+  const clusters = query.data?.clusters ?? [];
   const visible = focus
     ? clusters.filter((cluster) => clusterMatchesFocus(cluster, focus))
     : clusters;
@@ -305,6 +305,7 @@ function EstateDeliveryOverview({
   ];
   return (
     <PageShell>
+      <EstateHeader />
       {query.isError && !isForbiddenError(query.error) && (
         <ErrorMessage error={query.error} />
       )}
@@ -383,7 +384,7 @@ function EstateDeliveryOverview({
         description="Disconnected agents, failed assignments, incompatible controllers, drift, and stale inventory."
       >
         <AttentionList
-          items={estate?.attention ?? []}
+          items={query.data?.attention ?? []}
           loading={query.isLoading}
         />
       </PageSection>
@@ -394,7 +395,7 @@ function EstateDeliveryOverview({
         <div className="grid gap-4 md:grid-cols-3">
           <DistributionList
             title="Compatibility"
-            items={estate?.distributions.compatibility ?? []}
+            items={query.data?.distributions.compatibility ?? []}
             activeKey={
               focus.startsWith("compatibility:")
                 ? focus.slice("compatibility:".length)
@@ -404,7 +405,7 @@ function EstateDeliveryOverview({
           />
           <DistributionList
             title="Privilege"
-            items={estate?.distributions.privilege ?? []}
+            items={query.data?.distributions.privilege ?? []}
             activeKey={
               focus.startsWith("privilege:")
                 ? focus.slice("privilege:".length)
@@ -414,7 +415,7 @@ function EstateDeliveryOverview({
           />
           <DistributionList
             title="Assignment phases"
-            items={estate?.distributions.assignmentPhases ?? []}
+            items={query.data?.distributions.assignmentPhases ?? []}
             activeKey={
               focus.startsWith("phase:") ? focus.slice("phase:".length) : ""
             }
