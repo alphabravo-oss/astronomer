@@ -156,7 +156,7 @@ describe("Charlie hub acceptance", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Investigate flapping agent")).toBeNull();
 
-    fireEvent.click(screen.getByRole("tab", { name: "investigations" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Investigations" }));
     expect(navigate).toHaveBeenCalledWith({
       to: "/dashboard/charlie?tab=investigations",
     });

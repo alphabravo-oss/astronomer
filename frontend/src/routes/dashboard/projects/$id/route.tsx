@@ -27,6 +27,7 @@ import {
 import { useProject } from "@/lib/hooks/projects";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui/page";
+import { TabsList } from "@/components/ui/tabs";
 
 const tabs = [
   { key: "overview", label: "Overview", icon: LayoutDashboard, segment: "" },
@@ -92,7 +93,7 @@ function ProjectDetailLayout() {
       />
 
       <div className="border-b border-border">
-        <nav className="flex gap-6">
+        <TabsList aria-label="Project">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const href = `${base}${tab.segment}`;
@@ -101,6 +102,7 @@ function ProjectDetailLayout() {
               <RouterLink
                 key={tab.key}
                 to={href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors",
                   active
@@ -113,7 +115,7 @@ function ProjectDetailLayout() {
               </RouterLink>
             );
           })}
-        </nav>
+        </TabsList>
       </div>
 
       <div className="animate-fade-in">

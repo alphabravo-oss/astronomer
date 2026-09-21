@@ -18,6 +18,7 @@ import { useCluster } from "@/lib/hooks/clusters";
 import { cn } from "@/lib/utils";
 import { useDeliveryProjectScope } from "@/components/delivery/shared";
 import { PageHeader } from "@/components/ui/page";
+import { TabsList } from "@/components/ui/tabs";
 
 const tabs = [
   { key: "flux", label: "Flux", icon: Radio, segment: "" },
@@ -111,7 +112,7 @@ function ClusterDeliveryLayout() {
         }
       />
       <div className="border-b border-border">
-        <nav aria-label="Cluster delivery" className="flex flex-wrap gap-4">
+        <TabsList aria-label="Cluster delivery" className="flex-wrap gap-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const href = `${base}${tab.segment}${projectQuery}`;
@@ -133,7 +134,7 @@ function ClusterDeliveryLayout() {
               </RouterLink>
             );
           })}
-        </nav>
+        </TabsList>
       </div>
       <Outlet />
     </div>

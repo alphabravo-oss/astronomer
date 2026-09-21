@@ -1,15 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { type KeyboardEvent } from "react";
-import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
-import { Link as RouterLink } from "@tanstack/react-router";
+import { Loader2, Sparkles } from "lucide-react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useFeatureFlags } from "@/lib/hooks/clusters";
 import { useAuthStore } from "@/lib/store";
-import { cn } from "@/lib/utils";
 import { PermissionState, StatePanel } from "@/components/ui/empty-state";
+import { ResourceMasthead } from "@/components/ui/page";
+import { TabStrip } from "@/components/ui/tabs";
 import {
   CHARLIE_ADMIN_TABS,
-  adjacentTab,
   canManageCharlie,
   mergeCharlieSearch,
   normalizeCharlieAdminTab,
@@ -60,7 +58,9 @@ export function CharlieAdminContent() {
   const flags = useFeatureFlags();
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
-  const params = new URLSearchParams(useLocation({ select: (location) => location.searchStr }));
+  const params = new URLSearchParams(
+    useLocation({ select: (location) => location.searchStr }),
+  );
   const requestedTab = normalizeCharlieAdminTab(params.get("tab"));
 
   if (flags.isError)
@@ -94,32 +94,17 @@ export function CharlieAdminContent() {
     : ["connection", "diagnostics"];
   const tab = activeTabs.includes(requestedTab) ? requestedTab : "connection";
   const select = (next: CharlieAdminTab) =>
-    void navigate({ to: `/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}` });
-  const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const next = adjacentTab(activeTabs, tab, event.key);
-    if (!next) return;
-    event.preventDefault();
-    select(next);
-    document.getElementById(`charlie-admin-tab-${next}`)?.focus();
-  };
+    void navigate({
+      to: `/dashboard/settings/charlie?${mergeCharlieSearch(params, { tab: next })}`,
+    });
   return (
     <div className="space-y-6">
-      <div className="flex items-start gap-3">
-        <RouterLink
-          to="/dashboard/settings"
-          aria-label="Back to settings"
-          className="mt-1 rounded-sm p-1 text-muted-foreground hover:bg-accent"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </RouterLink>
-        <div>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold">Charlie</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Connect and govern the external Charlie service and its Astronomer
-            product agent.
-          </p>
-        </div>
-      </div>
+      <ResourceMasthead
+        backTo="/dashboard/settings"
+        backLabel="Back to settings"
+        title="Charlie"
+        description="Connect and govern the external Charlie service and its Astronomer product agent."
+      />
       {!featureEnabled && (
         <StatePanel
           icon={Sparkles}
@@ -128,38 +113,20 @@ export function CharlieAdminContent() {
           description="Only locally stored connection metadata and network-quiesced diagnostics are available. Astronomer makes no product-agent or Charlie central request until an administrator explicitly enables the feature."
         />
       )}
-      <div
-        role="tablist"
+      <TabStrip
+        tabs={activeTabs.map((value) => ({
+          key: value,
+          label: tabLabels[value],
+        }))}
+        value={tab}
+        onChange={select}
         aria-label="Charlie administration"
-        className="flex overflow-x-auto border-b border-border"
-      >
-        {activeTabs.map((value) => (
-          <button
-            key={value}
-            id={`charlie-admin-tab-${value}`}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            aria-controls={`charlie-admin-panel-${value}`}
-            tabIndex={tab === value ? 0 : -1}
-            onKeyDown={onTabKey}
-            onClick={() => select(value)}
-            className={cn(
-              "min-h-11 border-b-2 px-4 text-sm",
-              tab === value
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {tabLabels[value]}
-          </button>
-        ))}
-      </div>
+      />
       <div
         id={`charlie-admin-panel-${tab}`}
         role="tabpanel"
         tabIndex={0}
-        aria-labelledby={`charlie-admin-tab-${tab}`}
+        aria-labelledby={`tab-${tab}`}
       >
         {tab === "connection" && <ConnectionTab localOnly={!featureEnabled} />}
         {tab === "agent" && <AgentTab />}

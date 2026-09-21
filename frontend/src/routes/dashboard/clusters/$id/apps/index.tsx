@@ -79,6 +79,8 @@ import type { PermissionDecision } from "@/lib/permissions";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { QueryStates } from "@/components/ui/query-states";
+import { TabStrip } from "@/components/ui/tabs";
+import { useTabParam } from "@/lib/use-tab-param";
 import {
   listClusterApps,
   listCatalogCharts,
@@ -93,6 +95,12 @@ import {
 } from "@/components/clusters/app-install-modal";
 
 type Section = "installed" | "browse" | "recommended" | "repositories";
+const SECTIONS: Section[] = [
+  "installed",
+  "browse",
+  "recommended",
+  "repositories",
+];
 
 // Coarse status → tone mapping. We don't try to enumerate every
 // helm-release state; just bucket into the four colors operators
@@ -221,13 +229,15 @@ function ClusterAppsPage() {
     setModal({ kind: "none" });
   };
   const requestedInstall = searchParams?.get("install") ?? "";
-  const requestedSection = searchParams?.get("section") as Section | null;
 
   // Default to Browse when a deep-link asks for an install — we
   // need the browse query to populate so the auto-open effect can
-  // find the chart id by name.
-  const [section, setSection] = useState<Section>(
-    requestedSection ?? (requestedInstall ? "browse" : "installed"),
+  // find the chart id by name. Backed by the URL's ?section= so the
+  // active section is deep-linkable and survives a refresh.
+  const [section, setSection] = useTabParam<Section>(
+    SECTIONS,
+    requestedInstall ? "browse" : "installed",
+    "section",
   );
   const [searchQ, setSearchQ] = useState(requestedInstall || "");
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
@@ -326,10 +336,14 @@ function ClusterAppsPage() {
     if (browse.isLoading || !browse.data) return;
     const match = browse.data.data.find((c) => c.name === requestedInstall);
     if (match) {
+      // Preserve the Browse section in the URL — otherwise dropping
+      // ?install= below would also drop the implied section and land
+      // the user back on Installed.
+      const remainingSearch = `project=${encodeURIComponent(projectId)}&section=browse`;
       if (!catalogCreateDecision.allowed) {
         toastPermissionDenied(catalogCreateDecision);
         void navigate({
-          to: `/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`,
+          to: `/dashboard/clusters/${clusterId}/apps?${remainingSearch}`,
           replace: true,
         });
         return;
@@ -337,7 +351,7 @@ function ClusterAppsPage() {
       setModal({ kind: "install", chartId: match.id, chartName: match.name });
       // Drop the query param so a back-button + re-navigate doesn't loop.
       void navigate({
-        to: `/dashboard/clusters/${clusterId}/apps?project=${encodeURIComponent(projectId)}`,
+        to: `/dashboard/clusters/${clusterId}/apps?${remainingSearch}`,
         replace: true,
       });
     }
@@ -461,44 +475,23 @@ function ClusterAppsPage() {
         </div>
       </header>
 
-      <nav className="flex items-center gap-1 border-b border-border">
-        {(
-          ["installed", "browse", "recommended", "repositories"] as Section[]
-        ).map((s) => {
-          const active = section === s;
-          const count =
+      <TabStrip
+        tabs={SECTIONS.map((s) => ({
+          key: s,
+          label: s[0].toUpperCase() + s.slice(1),
+          count:
             s === "installed"
-              ? installed.data
-                ? pageRowCount(installed.data)
-                : undefined
+              ? (installed.data ? pageRowCount(installed.data) : undefined)
               : s === "browse"
-                ? browse.data
-                  ? pageRowCount(browse.data)
-                  : undefined
+                ? (browse.data ? pageRowCount(browse.data) : undefined)
                 : s === "recommended"
                   ? recommended.data?.length
-                  : repos?.length;
-          return (
-            <button
-              key={s}
-              onClick={() => setSection(s)}
-              className={
-                "px-3 py-2 text-sm border-b-2 -mb-px transition-colors " +
-                (active
-                  ? "border-primary text-foreground font-medium"
-                  : "border-transparent text-muted-foreground hover:text-foreground")
-              }
-            >
-              {s[0].toUpperCase() + s.slice(1)}
-              {count != null && (
-                <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
-                  ({count})
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
+                  : repos?.length,
+        }))}
+        value={section}
+        onChange={setSection}
+        aria-label="Apps"
+      />
 
       {section === "installed" && (
         <InstalledView
@@ -729,13 +722,6 @@ export function InstalledView({
               params={{ id: clusterId }}
               search={{ section: "browse" }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
-              onClick={(e) => {
-                e.preventDefault();
-                const btn = document.querySelector<HTMLButtonElement>(
-                  "nav button:nth-of-type(2)",
-                );
-                btn?.click();
-              }}
             >
               Browse catalog
             </RouterLink>

@@ -12,6 +12,7 @@ import {
 
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { TabStrip } from "@/components/ui/tabs";
 import {
   useClusterEvents,
   useClusterNamespaces,
@@ -388,26 +389,12 @@ export function NamespaceDetailPage({
         </div>
       </section>
 
-      <nav
-        className="flex gap-1 overflow-x-auto border-b border-border"
+      <TabStrip
+        tabs={tabs.map((item) => ({ key: item.id, label: item.label }))}
+        value={tab}
+        onChange={setTab}
         aria-label="Namespace details"
-      >
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setTab(item.id)}
-            className={cn(
-              "shrink-0 border-b-2 px-3 py-2 text-sm font-medium",
-              tab === item.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+      />
 
       {tab === "overview" && (
         <div className="grid gap-4 lg:grid-cols-3">

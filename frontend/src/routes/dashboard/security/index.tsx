@@ -23,6 +23,7 @@ import { Select } from "@/components/ui/select";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { TabStrip } from "@/components/ui/tabs";
 import { CISScansTab } from "@/components/security/cis-scans-tab";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import type {
@@ -495,28 +496,7 @@ function SecurityPage() {
       />
 
       {/* Tabs */}
-      <div className="border-b border-border">
-        <nav className="flex gap-6">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={cn(
-                  "flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors",
-                  activeTab === tab.key
-                    ? "border-foreground text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      <TabStrip tabs={tabs} value={activeTab} onChange={setActiveTab} />
 
       {/* Content */}
       <div className="animate-fade-in">

@@ -1,5 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/operator-table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+} from "@/components/ui/operator-table";
 import { useNavigate } from "@tanstack/react-router";
 import { useTabParam } from "@/lib/use-tab-param";
 import { useState } from "react";
@@ -15,6 +20,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { YamlViewDialog } from "@/components/ui/yaml-view-dialog";
 import { QueryStates } from "@/components/ui/query-states";
 import { ResourceMasthead } from "@/components/ui/page";
+import { TabStrip } from "@/components/ui/tabs";
 import { ResourceActions } from "@/components/workloads/resource-actions";
 import { k8sResourcePath } from "@/lib/k8s-paths";
 import { usePermissionDecision } from "@/lib/permission-hooks";
@@ -706,7 +712,11 @@ function NodeDetailPage() {
           <>
             <StatusBadge status={node.status} />
             {node.unschedulable && (
-              <StatusBadge status="warning" label="Unschedulable" shape="square" />
+              <StatusBadge
+                status="warning"
+                label="Unschedulable"
+                shape="square"
+              />
             )}
           </>
         }
@@ -771,39 +781,26 @@ function NodeDetailPage() {
       />
 
       {/* Tabs */}
-      <div className="border-b border-border">
-        <nav className="flex gap-0 -mb-px">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-                activeTab === tab.id
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30",
-              )}
-            >
-              {tab.label}
-              {tab.id === "pods" && node.pods.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">
-                  {node.pods.length}
-                </span>
-              )}
-              {tab.id === "taints" && node.taints.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">
-                  {node.taints.length}
-                </span>
-              )}
-              {tab.id === "events" && node.events.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-2xs bg-muted">
-                  {node.events.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-      </div>
+      <TabStrip
+        tabs={TABS.map((tab) => {
+          const count =
+            tab.id === "pods"
+              ? node.pods.length
+              : tab.id === "taints"
+                ? node.taints.length
+                : tab.id === "events"
+                  ? node.events.length
+                  : 0;
+          return {
+            key: tab.id,
+            label: tab.label,
+            count: count > 0 ? count : undefined,
+          };
+        })}
+        value={activeTab}
+        onChange={setActiveTab}
+        aria-label="Node detail"
+      />
 
       {/* Tab Content */}
       {activeTab === "overview" && (
