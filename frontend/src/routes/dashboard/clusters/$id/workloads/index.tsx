@@ -19,6 +19,7 @@ import type { Workload } from "@/types";
 import { Select } from "@/components/ui/select";
 import { pageRowCount } from "@/lib/api/pagination";
 import type { WorkloadSort } from "@/lib/api/workloads";
+import { useSearchParam } from "@/lib/use-search-param";
 
 const WORKLOAD_PAGE_SIZE = 50;
 
@@ -27,9 +28,9 @@ function WorkloadsPage() {
   const navigate = useNavigate();
   const clusterId = params.id;
   const [pageIndex, setPageIndex] = useState(0);
-  const [search, setSearch] = useState("");
-  const [kind, setKind] = useState("");
-  const [namespace, setNamespace] = useState("");
+  const [search, setSearch] = useSearchParam("q", { debounceMs: 250 });
+  const [kind, setKind] = useSearchParam("kind");
+  const [namespace, setNamespace] = useSearchParam("namespace");
   const [sort, setSort] = useState<WorkloadSort>("namespace_asc");
   const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
 
@@ -199,5 +200,10 @@ function WorkloadsPage() {
 }
 
 export const Route = createFileRoute("/dashboard/clusters/$id/workloads/")({
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { q?: string; kind?: string; namespace?: string } & Record<
+      string,
+      unknown
+    >,
   component: WorkloadsPage,
 });

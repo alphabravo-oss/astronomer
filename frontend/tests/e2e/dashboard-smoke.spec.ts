@@ -583,6 +583,27 @@ test("cluster registration wizard creates a cluster and advances to connect step
   );
 });
 
+test("cluster list filter persists across navigation and Back", async ({
+  context,
+  page,
+}) => {
+  await seedAuth(context, page, adminUser);
+  await page.goto("/dashboard/clusters");
+
+  const statusFilter = page.getByRole("combobox", {
+    name: "Filter clusters by status",
+  });
+  await statusFilter.selectOption("active");
+  await expect(page).toHaveURL(/status=active/);
+
+  await page.getByText("Prod East").click();
+  await expect(page).toHaveURL(/\/dashboard\/clusters\/cluster-1/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/dashboard\/clusters\?.*status=active/);
+  await expect(statusFilter).toHaveValue("active");
+});
+
 test("read-only cluster detail hides admin-only settings navigation", async ({
   context,
   page,

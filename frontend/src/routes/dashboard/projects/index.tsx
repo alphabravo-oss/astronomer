@@ -23,6 +23,7 @@ import { FolderKanban, Plus, Trash2, Users } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
+import { useSearchParam } from "@/lib/use-search-param";
 import { pageRowCount } from "@/lib/api/pagination";
 
 const PROJECTS_PAGE_SIZE = 50;
@@ -32,7 +33,7 @@ function ProjectsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useSearchParam("q", { debounceMs: 250 });
   const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
 
   const projectsQuery = useProjects({
@@ -566,5 +567,7 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
 }
 
 export const Route = createFileRoute("/dashboard/projects/")({
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { q?: string } & Record<string, unknown>,
   component: ProjectsPage,
 });

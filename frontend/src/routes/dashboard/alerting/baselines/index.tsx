@@ -11,9 +11,9 @@ import { createFileRoute } from "@tanstack/react-router";
 // — it would tempt the UI into rendering hundreds of points per
 // row, blowing up page render time for active baselines.
 
-import { useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useAnomalyBaselines } from "@/lib/hooks/alerting";
+import { useSearchParam } from "@/lib/use-search-param";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ import type { AnomalyBaseline } from "@/types";
 import { ArrowLeft, Activity, RefreshCw } from "lucide-react";
 
 function AnomalyBaselinesPage() {
-  const [clusterFilter, setClusterFilter] = useState("");
+  const [clusterFilter, setClusterFilter] = useSearchParam("cluster");
   const {
     data: rows,
     isLoading,
@@ -188,5 +188,7 @@ function formatWindow(s: number): string {
 }
 
 export const Route = createFileRoute("/dashboard/alerting/baselines/")({
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { cluster?: string } & Record<string, unknown>,
   component: AnomalyBaselinesPage,
 });

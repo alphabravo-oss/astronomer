@@ -23,6 +23,7 @@ import {
   type ActivityDetailField,
 } from "@/components/audit/activity-details-drawer";
 import { useAuditLogs } from "@/lib/hooks/audit";
+import { useSearchParam } from "@/lib/use-search-param";
 import { pageRowCount } from "@/lib/api/pagination";
 import { useClusters } from "@/lib/hooks/clusters";
 import { useProjects } from "@/lib/hooks/projects";
@@ -44,7 +45,7 @@ import {
 
 function AuditLogPage() {
   const [filters, setFilters] = useState<AuditFilters>(emptyFilters);
-  const [qInput, setQInput] = useState("");
+  const [qInput, setQInput] = useSearchParam("q", { debounceMs: 200 });
   const [qDebounced] = useDebouncedValue(qInput, { wait: 200 });
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [page, setPage] = useDraft(0, qDebounced);
@@ -625,5 +626,7 @@ function AuditDetailsDrawer({
 }
 
 export const Route = createFileRoute("/dashboard/audit/")({
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { q?: string } & Record<string, unknown>,
   component: AuditLogPage,
 });

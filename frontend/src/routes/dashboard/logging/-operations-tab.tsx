@@ -1,8 +1,8 @@
-import { useState } from "react";
 import {
   useLoggingOperations,
   useRetryLoggingOperation,
 } from "@/lib/hooks/logging";
+import { useSearchParam } from "@/lib/use-search-param";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
@@ -13,8 +13,8 @@ import { X, RotateCcw } from "lucide-react";
 import { mapLoggingOperationStatus, truncate } from "./-utils";
 
 export function OperationsTab() {
-  const [statusFilter, setStatusFilter] = useState("");
-  const [targetFilter, setTargetFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useSearchParam("op_status");
+  const [targetFilter, setTargetFilter] = useSearchParam("op_target");
   // Server-side params kept narrow so the list query key changes drive the
   // refetch — client-side filtering of the bigger fields happens in DataTable.
   const {

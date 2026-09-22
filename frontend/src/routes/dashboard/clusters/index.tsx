@@ -7,6 +7,7 @@ import { registrationSearch } from "@/components/clusters/registration-flow";
 import { useClusters, useDeleteCluster } from "@/lib/hooks/clusters";
 import { queryKeys } from "@/lib/query-keys";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
+import { useSearchParam } from "@/lib/use-search-param";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
@@ -31,14 +32,11 @@ const CLUSTERS_PAGE_SIZE = 50;
 
 function ClustersPage() {
   const navigate = useNavigate();
-  const routeSearch = Route.useSearch();
-  const [statusFilter, setStatusFilter] = useState<string>(
-    typeof routeSearch.status === "string" ? routeSearch.status : "",
-  );
+  const [statusFilter, setStatusFilter] = useSearchParam("status");
   const [providerFilter, setProviderFilter] = useState<string>("");
   const [envFilter, setEnvFilter] = useState<string>("");
   const [pageIndex, setPageIndex] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useSearchParam("q", { debounceMs: 250 });
   const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
 
   // Action menu state
@@ -464,6 +462,9 @@ function ClustersPage() {
 export const Route = createFileRoute("/dashboard/clusters/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
   validateSearch: (search: Record<string, unknown>) =>
-    search as { register?: string; status?: string } & Record<string, unknown>,
+    search as { register?: string; status?: string; q?: string } & Record<
+      string,
+      unknown
+    >,
   component: ClustersPage,
 });

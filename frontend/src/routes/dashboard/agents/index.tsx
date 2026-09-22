@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -39,6 +38,7 @@ import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { liveFallback } from "@/lib/live/status-store";
 import { cn, formatRelativeTime, downloadBlob } from "@/lib/utils";
 import { pageRowCount } from "@/lib/api/pagination";
+import { useSearchParam } from "@/lib/use-search-param";
 import type {
   AgentDiagnosticsResponse,
   ClusterAgentItem,
@@ -52,12 +52,10 @@ function ClusterAgentsPage() {
   const { data: user } = useCurrentUser();
   const canRead = can(user, "cluster_agents", "read");
   const canManage = can(user, "cluster_agents", "update");
-  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(
-    null,
-  );
-  const [upgradePlan, setUpgradePlan] =
-    useState<AgentUpgradePlanResponse | null>(null);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+  const [upgradePlan, setUpgradePlan] = useState<AgentUpgradePlanResponse | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
+  const [search, setSearch] = useSearchParam("q");
   const pageSize = 50;
   const agentsQuery = useQuery({
     queryKey: queryKeys.agents.list({
@@ -348,6 +346,7 @@ function ClusterAgentsPage() {
               rowCount: pageRowCount(agentsQuery.data),
               pagination: { pageIndex, pageSize },
               onPaginationChange: (next) => setPageIndex(next.pageIndex),
+              search: { value: search, onChange: (v) => { setSearch(v); setPageIndex(0); } },
             }}
           />
         </>
@@ -1074,5 +1073,6 @@ function PlanList({ title, items }: { title: string; items: string[] }) {
 }
 
 export const Route = createFileRoute("/dashboard/agents/")({
+  validateSearch: (search: Record<string, unknown>) => search as { q?: string } & Record<string, unknown>,
   component: ClusterAgentsPage,
 });
