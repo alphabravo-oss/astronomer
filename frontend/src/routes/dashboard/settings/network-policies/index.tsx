@@ -122,6 +122,7 @@ function TemplateRow({
                 type="button"
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-sm border border-status-error/30 text-status-error hover:bg-status-error/10"
                 onClick={onDelete}
+                aria-label={`Delete ${tmpl.name}`}
               >
                 <Trash2 className="h-3 w-3" />
               </button>

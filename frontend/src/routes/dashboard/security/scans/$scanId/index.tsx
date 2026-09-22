@@ -457,7 +457,7 @@ function FindingsSection({
             if (!f) return null;
             return (
               <div
-                key={id}
+                key={id} id={`finding-${id}`}
                 className="rounded-md border border-border bg-muted/20 p-4 space-y-2"
               >
                 <div className="flex items-center gap-2 flex-wrap">
@@ -488,9 +488,9 @@ function FindingsSection({
                         return next;
                       })
                     }
-                    className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                    aria-expanded={true} aria-controls={`finding-${id}`} className="ml-auto text-xs text-muted-foreground hover:text-foreground"
                   >
-                    Collapse
+                    Collapse {f.testId}
                   </button>
                 </div>
                 <p className="text-sm text-foreground">{f.description}</p>

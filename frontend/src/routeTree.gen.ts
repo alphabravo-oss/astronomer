@@ -57,6 +57,7 @@ import { Route as DashboardDeliveryOverrideSetsIndexRouteImport } from './routes
 import { Route as DashboardDeliveryRolloutsIndexRouteImport } from './routes/dashboard/delivery/rollouts/index'
 import { Route as DashboardDeliverySourcesIndexRouteImport } from './routes/dashboard/delivery/sources/index'
 import { Route as DashboardDeliveryTargetsIndexRouteImport } from './routes/dashboard/delivery/targets/index'
+import { Route as DashboardExtensionsNameIndexRouteImport } from './routes/dashboard/extensions/$name/index'
 import { Route as DashboardMonitoringStacksIndexRouteImport } from './routes/dashboard/monitoring/stacks/index'
 import { Route as DashboardProjectsIdIndexRouteImport } from './routes/dashboard/projects/$id/index'
 import { Route as DashboardSettingsAuthIndexRouteImport } from './routes/dashboard/settings/auth/index'
@@ -425,6 +426,12 @@ const DashboardDeliveryTargetsIndexRoute =
     id: '/targets/',
     path: '/targets/',
     getParentRoute: () => DashboardDeliveryRouteRoute,
+  } as any)
+const DashboardExtensionsNameIndexRoute =
+  DashboardExtensionsNameIndexRouteImport.update({
+    id: '/extensions/$name/',
+    path: '/extensions/$name/',
+    getParentRoute: () => DashboardRouteRoute,
   } as any)
 const DashboardMonitoringStacksIndexRoute =
   DashboardMonitoringStacksIndexRouteImport.update({
@@ -1096,6 +1103,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/delivery/rollouts/': typeof DashboardDeliveryRolloutsIndexRoute
   '/dashboard/delivery/sources/': typeof DashboardDeliverySourcesIndexRoute
   '/dashboard/delivery/targets/': typeof DashboardDeliveryTargetsIndexRoute
+  '/dashboard/extensions/$name/': typeof DashboardExtensionsNameIndexRoute
   '/dashboard/monitoring/stacks/': typeof DashboardMonitoringStacksIndexRoute
   '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth/': typeof DashboardSettingsAuthIndexRoute
@@ -1243,6 +1251,7 @@ export interface FileRoutesByTo {
   '/dashboard/delivery/rollouts': typeof DashboardDeliveryRolloutsIndexRoute
   '/dashboard/delivery/sources': typeof DashboardDeliverySourcesIndexRoute
   '/dashboard/delivery/targets': typeof DashboardDeliveryTargetsIndexRoute
+  '/dashboard/extensions/$name': typeof DashboardExtensionsNameIndexRoute
   '/dashboard/monitoring/stacks': typeof DashboardMonitoringStacksIndexRoute
   '/dashboard/projects/$id': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth': typeof DashboardSettingsAuthIndexRoute
@@ -1397,6 +1406,7 @@ export interface FileRoutesById {
   '/dashboard/delivery/rollouts/': typeof DashboardDeliveryRolloutsIndexRoute
   '/dashboard/delivery/sources/': typeof DashboardDeliverySourcesIndexRoute
   '/dashboard/delivery/targets/': typeof DashboardDeliveryTargetsIndexRoute
+  '/dashboard/extensions/$name/': typeof DashboardExtensionsNameIndexRoute
   '/dashboard/monitoring/stacks/': typeof DashboardMonitoringStacksIndexRoute
   '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth/': typeof DashboardSettingsAuthIndexRoute
@@ -1552,6 +1562,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/rollouts/'
     | '/dashboard/delivery/sources/'
     | '/dashboard/delivery/targets/'
+    | '/dashboard/extensions/$name/'
     | '/dashboard/monitoring/stacks/'
     | '/dashboard/projects/$id/'
     | '/dashboard/settings/auth/'
@@ -1699,6 +1710,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/rollouts'
     | '/dashboard/delivery/sources'
     | '/dashboard/delivery/targets'
+    | '/dashboard/extensions/$name'
     | '/dashboard/monitoring/stacks'
     | '/dashboard/projects/$id'
     | '/dashboard/settings/auth'
@@ -1852,6 +1864,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/rollouts/'
     | '/dashboard/delivery/sources/'
     | '/dashboard/delivery/targets/'
+    | '/dashboard/extensions/$name/'
     | '/dashboard/monitoring/stacks/'
     | '/dashboard/projects/$id/'
     | '/dashboard/settings/auth/'
@@ -2303,6 +2316,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/delivery/targets/'
       preLoaderRoute: typeof DashboardDeliveryTargetsIndexRouteImport
       parentRoute: typeof DashboardDeliveryRouteRoute
+    }
+    '/dashboard/extensions/$name/': {
+      id: '/dashboard/extensions/$name/'
+      path: '/extensions/$name'
+      fullPath: '/dashboard/extensions/$name/'
+      preLoaderRoute: typeof DashboardExtensionsNameIndexRouteImport
+      parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/monitoring/stacks/': {
       id: '/dashboard/monitoring/stacks/'
@@ -3403,6 +3423,7 @@ interface DashboardRouteRouteChildren {
   DashboardClusterTemplatesIdIndexRoute: typeof DashboardClusterTemplatesIdIndexRoute
   DashboardClusterTemplatesNewIndexRoute: typeof DashboardClusterTemplatesNewIndexRoute
   DashboardClustersRegisterIndexRoute: typeof DashboardClustersRegisterIndexRoute
+  DashboardExtensionsNameIndexRoute: typeof DashboardExtensionsNameIndexRoute
   DashboardMonitoringStacksIndexRoute: typeof DashboardMonitoringStacksIndexRoute
   DashboardAdminUsersIdIndexRoute: typeof DashboardAdminUsersIdIndexRoute
   DashboardBackupsRestoresRestoreIdIndexRoute: typeof DashboardBackupsRestoresRestoreIdIndexRoute
@@ -3446,6 +3467,7 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardClusterTemplatesNewIndexRoute:
     DashboardClusterTemplatesNewIndexRoute,
   DashboardClustersRegisterIndexRoute: DashboardClustersRegisterIndexRoute,
+  DashboardExtensionsNameIndexRoute: DashboardExtensionsNameIndexRoute,
   DashboardMonitoringStacksIndexRoute: DashboardMonitoringStacksIndexRoute,
   DashboardAdminUsersIdIndexRoute: DashboardAdminUsersIdIndexRoute,
   DashboardBackupsRestoresRestoreIdIndexRoute:

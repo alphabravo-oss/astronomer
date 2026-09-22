@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 
@@ -124,6 +125,7 @@ export function SidebarGroup({
   isOpen: boolean;
   onToggle: () => void;
 }) {
+  const contentId = useId();
   if (collapsed) {
     return group.hideLabel ? (
       <CollapsedNavItems items={group.items} pathname={pathname} />
@@ -140,6 +142,8 @@ export function SidebarGroup({
       {!group.hideLabel && (
         <button
           onClick={onToggle}
+          aria-expanded={isOpen}
+          aria-controls={contentId}
           className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
         >
           <span>{group.label}</span>
@@ -151,7 +155,7 @@ export function SidebarGroup({
         </button>
       )}
       {expanded && (
-        <div className="space-y-px">
+        <div id={contentId} className="space-y-px">
           {group.items.map((item) => {
             const Icon = item.icon;
             const active = item.exact
