@@ -39,7 +39,7 @@ import { logoutCurrentSession } from "@/lib/api/account-security";
 import { listCharlieFindings } from "@/lib/api/charlie";
 import { queryKeys } from "@/lib/query-keys";
 import { selectImportantCharlieFindings } from "@/components/charlie/topbar-findings";
-import { generateBreadcrumbs } from "@/lib/breadcrumbs";
+import { usePageBreadcrumbs } from "@/lib/use-page-breadcrumbs";
 import { liveFallback } from "@/lib/live/status-store";
 import {
   ClusterScopeControls,
@@ -119,7 +119,7 @@ export function Topbar() {
     return map;
   }, [clustersData?.data]);
 
-  const breadcrumbs = generateBreadcrumbs(pathname, clusterMap);
+  const breadcrumbs = usePageBreadcrumbs(pathname, clusterMap);
 
   const recentAlerts = alertEventsPage?.data ?? [];
   const actionableCharlieFindings = selectImportantCharlieFindings(

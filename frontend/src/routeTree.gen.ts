@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
+import { Route as DashboardDeliveryRouteRouteImport } from './routes/dashboard/delivery/route'
 import { Route as DashboardSettingsRouteRouteImport } from './routes/dashboard/settings/route'
 import { Route as AuthChangePasswordIndexRouteImport } from './routes/auth/change-password/index'
 import { Route as AuthLoginIndexRouteImport } from './routes/auth/login/index'
@@ -56,6 +57,7 @@ import { Route as DashboardDeliveryOverrideSetsIndexRouteImport } from './routes
 import { Route as DashboardDeliveryRolloutsIndexRouteImport } from './routes/dashboard/delivery/rollouts/index'
 import { Route as DashboardDeliverySourcesIndexRouteImport } from './routes/dashboard/delivery/sources/index'
 import { Route as DashboardDeliveryTargetsIndexRouteImport } from './routes/dashboard/delivery/targets/index'
+import { Route as DashboardMonitoringStacksIndexRouteImport } from './routes/dashboard/monitoring/stacks/index'
 import { Route as DashboardProjectsIdIndexRouteImport } from './routes/dashboard/projects/$id/index'
 import { Route as DashboardSettingsAuthIndexRouteImport } from './routes/dashboard/settings/auth/index'
 import { Route as DashboardSettingsBackupDrillIndexRouteImport } from './routes/dashboard/settings/backup-drill/index'
@@ -67,7 +69,6 @@ import { Route as DashboardSettingsGeneralIndexRouteImport } from './routes/dash
 import { Route as DashboardSettingsGitopsIndexRouteImport } from './routes/dashboard/settings/gitops/index'
 import { Route as DashboardSettingsGroupMappingsIndexRouteImport } from './routes/dashboard/settings/group-mappings/index'
 import { Route as DashboardSettingsMonitoringIndexRouteImport } from './routes/dashboard/settings/monitoring/index'
-import { Route as DashboardSettingsNativeRbacIndexRouteImport } from './routes/dashboard/settings/native-rbac/index'
 import { Route as DashboardSettingsNetworkPoliciesIndexRouteImport } from './routes/dashboard/settings/network-policies/index'
 import { Route as DashboardSettingsOperationsIndexRouteImport } from './routes/dashboard/settings/operations/index'
 import { Route as DashboardSettingsPlatformIndexRouteImport } from './routes/dashboard/settings/platform/index'
@@ -168,6 +169,11 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
+const DashboardDeliveryRouteRoute = DashboardDeliveryRouteRouteImport.update({
+  id: '/delivery',
+  path: '/delivery',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
 const DashboardSettingsRouteRoute = DashboardSettingsRouteRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -231,9 +237,9 @@ const DashboardClustersIdRouteRoute =
     getParentRoute: () => DashboardRouteRoute,
   } as any)
 const DashboardDeliveryIndexRoute = DashboardDeliveryIndexRouteImport.update({
-  id: '/delivery/',
-  path: '/delivery/',
-  getParentRoute: () => DashboardRouteRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardDeliveryRouteRoute,
 } as any)
 const DashboardExtensionsIndexRoute =
   DashboardExtensionsIndexRouteImport.update({
@@ -373,44 +379,50 @@ const DashboardClustersRegisterIndexRoute =
   } as any)
 const DashboardDeliveryBundlesIndexRoute =
   DashboardDeliveryBundlesIndexRouteImport.update({
-    id: '/delivery/bundles/',
-    path: '/delivery/bundles/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/bundles/',
+    path: '/bundles/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliveryConfigurationTemplatesIndexRoute =
   DashboardDeliveryConfigurationTemplatesIndexRouteImport.update({
-    id: '/delivery/configuration-templates/',
-    path: '/delivery/configuration-templates/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/configuration-templates/',
+    path: '/configuration-templates/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliveryDeploymentsIndexRoute =
   DashboardDeliveryDeploymentsIndexRouteImport.update({
-    id: '/delivery/deployments/',
-    path: '/delivery/deployments/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/deployments/',
+    path: '/deployments/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliveryOverrideSetsIndexRoute =
   DashboardDeliveryOverrideSetsIndexRouteImport.update({
-    id: '/delivery/override-sets/',
-    path: '/delivery/override-sets/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/override-sets/',
+    path: '/override-sets/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliveryRolloutsIndexRoute =
   DashboardDeliveryRolloutsIndexRouteImport.update({
-    id: '/delivery/rollouts/',
-    path: '/delivery/rollouts/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/rollouts/',
+    path: '/rollouts/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliverySourcesIndexRoute =
   DashboardDeliverySourcesIndexRouteImport.update({
-    id: '/delivery/sources/',
-    path: '/delivery/sources/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/sources/',
+    path: '/sources/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliveryTargetsIndexRoute =
   DashboardDeliveryTargetsIndexRouteImport.update({
-    id: '/delivery/targets/',
-    path: '/delivery/targets/',
+    id: '/targets/',
+    path: '/targets/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
+  } as any)
+const DashboardMonitoringStacksIndexRoute =
+  DashboardMonitoringStacksIndexRouteImport.update({
+    id: '/monitoring/stacks/',
+    path: '/monitoring/stacks/',
     getParentRoute: () => DashboardRouteRoute,
   } as any)
 const DashboardProjectsIdIndexRoute =
@@ -477,12 +489,6 @@ const DashboardSettingsMonitoringIndexRoute =
   DashboardSettingsMonitoringIndexRouteImport.update({
     id: '/monitoring/',
     path: '/monitoring/',
-    getParentRoute: () => DashboardSettingsRouteRoute,
-  } as any)
-const DashboardSettingsNativeRbacIndexRoute =
-  DashboardSettingsNativeRbacIndexRouteImport.update({
-    id: '/native-rbac/',
-    path: '/native-rbac/',
     getParentRoute: () => DashboardSettingsRouteRoute,
   } as any)
 const DashboardSettingsNetworkPoliciesIndexRoute =
@@ -733,27 +739,27 @@ const DashboardClustersIdWorkloadsIndexRoute =
   } as any)
 const DashboardDeliveryBundlesBundleIdIndexRoute =
   DashboardDeliveryBundlesBundleIdIndexRouteImport.update({
-    id: '/delivery/bundles/$bundleId/',
-    path: '/delivery/bundles/$bundleId/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/bundles/$bundleId/',
+    path: '/bundles/$bundleId/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliveryDeploymentsDeploymentIdIndexRoute =
   DashboardDeliveryDeploymentsDeploymentIdIndexRouteImport.update({
-    id: '/delivery/deployments/$deploymentId/',
-    path: '/delivery/deployments/$deploymentId/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/deployments/$deploymentId/',
+    path: '/deployments/$deploymentId/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliveryRolloutsRolloutIdIndexRoute =
   DashboardDeliveryRolloutsRolloutIdIndexRouteImport.update({
-    id: '/delivery/rollouts/$rolloutId/',
-    path: '/delivery/rollouts/$rolloutId/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/rollouts/$rolloutId/',
+    path: '/rollouts/$rolloutId/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardDeliveryTargetsTargetIdIndexRoute =
   DashboardDeliveryTargetsTargetIdIndexRouteImport.update({
-    id: '/delivery/targets/$targetId/',
-    path: '/delivery/targets/$targetId/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/targets/$targetId/',
+    path: '/targets/$targetId/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardProjectsIdCatalogsIndexRoute =
   DashboardProjectsIdCatalogsIndexRouteImport.update({
@@ -981,9 +987,9 @@ const DashboardClustersIdDeliveryTargetsTargetIdIndexRoute =
   } as any)
 const DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute =
   DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRouteImport.update({
-    id: '/delivery/bundles/$bundleId/versions/$versionId/',
-    path: '/delivery/bundles/$bundleId/versions/$versionId/',
-    getParentRoute: () => DashboardRouteRoute,
+    id: '/bundles/$bundleId/versions/$versionId/',
+    path: '/bundles/$bundleId/versions/$versionId/',
+    getParentRoute: () => DashboardDeliveryRouteRoute,
   } as any)
 const DashboardProjectsIdCloudCredentialsCredIdEditIndexRoute =
   DashboardProjectsIdCloudCredentialsCredIdEditIndexRouteImport.update({
@@ -995,6 +1001,7 @@ const DashboardProjectsIdCloudCredentialsCredIdEditIndexRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/delivery': typeof DashboardDeliveryRouteRouteWithChildren
   '/dashboard/settings': typeof DashboardSettingsRouteRouteWithChildren
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/clusters/$id': typeof DashboardClustersIdRouteRouteWithChildren
@@ -1040,6 +1047,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/delivery/rollouts/': typeof DashboardDeliveryRolloutsIndexRoute
   '/dashboard/delivery/sources/': typeof DashboardDeliverySourcesIndexRoute
   '/dashboard/delivery/targets/': typeof DashboardDeliveryTargetsIndexRoute
+  '/dashboard/monitoring/stacks/': typeof DashboardMonitoringStacksIndexRoute
   '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth/': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill/': typeof DashboardSettingsBackupDrillIndexRoute
@@ -1051,7 +1059,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings/gitops/': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings/': typeof DashboardSettingsGroupMappingsIndexRoute
   '/dashboard/settings/monitoring/': typeof DashboardSettingsMonitoringIndexRoute
-  '/dashboard/settings/native-rbac/': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies/': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations/': typeof DashboardSettingsOperationsIndexRoute
   '/dashboard/settings/platform/': typeof DashboardSettingsPlatformIndexRoute
@@ -1180,6 +1187,7 @@ export interface FileRoutesByTo {
   '/dashboard/delivery/rollouts': typeof DashboardDeliveryRolloutsIndexRoute
   '/dashboard/delivery/sources': typeof DashboardDeliverySourcesIndexRoute
   '/dashboard/delivery/targets': typeof DashboardDeliveryTargetsIndexRoute
+  '/dashboard/monitoring/stacks': typeof DashboardMonitoringStacksIndexRoute
   '/dashboard/projects/$id': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill': typeof DashboardSettingsBackupDrillIndexRoute
@@ -1191,7 +1199,6 @@ export interface FileRoutesByTo {
   '/dashboard/settings/gitops': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings': typeof DashboardSettingsGroupMappingsIndexRoute
   '/dashboard/settings/monitoring': typeof DashboardSettingsMonitoringIndexRoute
-  '/dashboard/settings/native-rbac': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations': typeof DashboardSettingsOperationsIndexRoute
   '/dashboard/settings/platform': typeof DashboardSettingsPlatformIndexRoute
@@ -1281,6 +1288,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteRouteWithChildren
+  '/dashboard/delivery': typeof DashboardDeliveryRouteRouteWithChildren
   '/dashboard/settings': typeof DashboardSettingsRouteRouteWithChildren
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/clusters/$id': typeof DashboardClustersIdRouteRouteWithChildren
@@ -1326,6 +1334,7 @@ export interface FileRoutesById {
   '/dashboard/delivery/rollouts/': typeof DashboardDeliveryRolloutsIndexRoute
   '/dashboard/delivery/sources/': typeof DashboardDeliverySourcesIndexRoute
   '/dashboard/delivery/targets/': typeof DashboardDeliveryTargetsIndexRoute
+  '/dashboard/monitoring/stacks/': typeof DashboardMonitoringStacksIndexRoute
   '/dashboard/projects/$id/': typeof DashboardProjectsIdIndexRoute
   '/dashboard/settings/auth/': typeof DashboardSettingsAuthIndexRoute
   '/dashboard/settings/backup-drill/': typeof DashboardSettingsBackupDrillIndexRoute
@@ -1337,7 +1346,6 @@ export interface FileRoutesById {
   '/dashboard/settings/gitops/': typeof DashboardSettingsGitopsIndexRoute
   '/dashboard/settings/group-mappings/': typeof DashboardSettingsGroupMappingsIndexRoute
   '/dashboard/settings/monitoring/': typeof DashboardSettingsMonitoringIndexRoute
-  '/dashboard/settings/native-rbac/': typeof DashboardSettingsNativeRbacIndexRoute
   '/dashboard/settings/network-policies/': typeof DashboardSettingsNetworkPoliciesIndexRoute
   '/dashboard/settings/operations/': typeof DashboardSettingsOperationsIndexRoute
   '/dashboard/settings/platform/': typeof DashboardSettingsPlatformIndexRoute
@@ -1428,6 +1436,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/dashboard/delivery'
     | '/dashboard/settings'
     | '/dashboard/'
     | '/dashboard/clusters/$id'
@@ -1473,6 +1482,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/rollouts/'
     | '/dashboard/delivery/sources/'
     | '/dashboard/delivery/targets/'
+    | '/dashboard/monitoring/stacks/'
     | '/dashboard/projects/$id/'
     | '/dashboard/settings/auth/'
     | '/dashboard/settings/backup-drill/'
@@ -1484,7 +1494,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/gitops/'
     | '/dashboard/settings/group-mappings/'
     | '/dashboard/settings/monitoring/'
-    | '/dashboard/settings/native-rbac/'
     | '/dashboard/settings/network-policies/'
     | '/dashboard/settings/operations/'
     | '/dashboard/settings/platform/'
@@ -1613,6 +1622,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/rollouts'
     | '/dashboard/delivery/sources'
     | '/dashboard/delivery/targets'
+    | '/dashboard/monitoring/stacks'
     | '/dashboard/projects/$id'
     | '/dashboard/settings/auth'
     | '/dashboard/settings/backup-drill'
@@ -1624,7 +1634,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/gitops'
     | '/dashboard/settings/group-mappings'
     | '/dashboard/settings/monitoring'
-    | '/dashboard/settings/native-rbac'
     | '/dashboard/settings/network-policies'
     | '/dashboard/settings/operations'
     | '/dashboard/settings/platform'
@@ -1713,6 +1722,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dashboard'
+    | '/dashboard/delivery'
     | '/dashboard/settings'
     | '/dashboard/'
     | '/dashboard/clusters/$id'
@@ -1758,6 +1768,7 @@ export interface FileRouteTypes {
     | '/dashboard/delivery/rollouts/'
     | '/dashboard/delivery/sources/'
     | '/dashboard/delivery/targets/'
+    | '/dashboard/monitoring/stacks/'
     | '/dashboard/projects/$id/'
     | '/dashboard/settings/auth/'
     | '/dashboard/settings/backup-drill/'
@@ -1769,7 +1780,6 @@ export interface FileRouteTypes {
     | '/dashboard/settings/gitops/'
     | '/dashboard/settings/group-mappings/'
     | '/dashboard/settings/monitoring/'
-    | '/dashboard/settings/native-rbac/'
     | '/dashboard/settings/network-policies/'
     | '/dashboard/settings/operations/'
     | '/dashboard/settings/platform/'
@@ -1888,6 +1898,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
+    '/dashboard/delivery': {
+      id: '/dashboard/delivery'
+      path: '/delivery'
+      fullPath: '/dashboard/delivery'
+      preLoaderRoute: typeof DashboardDeliveryRouteRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/settings': {
       id: '/dashboard/settings'
       path: '/settings'
@@ -1974,10 +1991,10 @@ declare module '@tanstack/react-router' {
     }
     '/dashboard/delivery/': {
       id: '/dashboard/delivery/'
-      path: '/delivery'
+      path: '/'
       fullPath: '/dashboard/delivery/'
       preLoaderRoute: typeof DashboardDeliveryIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/extensions/': {
       id: '/dashboard/extensions/'
@@ -2149,51 +2166,58 @@ declare module '@tanstack/react-router' {
     }
     '/dashboard/delivery/bundles/': {
       id: '/dashboard/delivery/bundles/'
-      path: '/delivery/bundles'
+      path: '/bundles'
       fullPath: '/dashboard/delivery/bundles/'
       preLoaderRoute: typeof DashboardDeliveryBundlesIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/configuration-templates/': {
       id: '/dashboard/delivery/configuration-templates/'
-      path: '/delivery/configuration-templates'
+      path: '/configuration-templates'
       fullPath: '/dashboard/delivery/configuration-templates/'
       preLoaderRoute: typeof DashboardDeliveryConfigurationTemplatesIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/deployments/': {
       id: '/dashboard/delivery/deployments/'
-      path: '/delivery/deployments'
+      path: '/deployments'
       fullPath: '/dashboard/delivery/deployments/'
       preLoaderRoute: typeof DashboardDeliveryDeploymentsIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/override-sets/': {
       id: '/dashboard/delivery/override-sets/'
-      path: '/delivery/override-sets'
+      path: '/override-sets'
       fullPath: '/dashboard/delivery/override-sets/'
       preLoaderRoute: typeof DashboardDeliveryOverrideSetsIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/rollouts/': {
       id: '/dashboard/delivery/rollouts/'
-      path: '/delivery/rollouts'
+      path: '/rollouts'
       fullPath: '/dashboard/delivery/rollouts/'
       preLoaderRoute: typeof DashboardDeliveryRolloutsIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/sources/': {
       id: '/dashboard/delivery/sources/'
-      path: '/delivery/sources'
+      path: '/sources'
       fullPath: '/dashboard/delivery/sources/'
       preLoaderRoute: typeof DashboardDeliverySourcesIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/targets/': {
       id: '/dashboard/delivery/targets/'
-      path: '/delivery/targets'
+      path: '/targets'
       fullPath: '/dashboard/delivery/targets/'
       preLoaderRoute: typeof DashboardDeliveryTargetsIndexRouteImport
+      parentRoute: typeof DashboardDeliveryRouteRoute
+    }
+    '/dashboard/monitoring/stacks/': {
+      id: '/dashboard/monitoring/stacks/'
+      path: '/monitoring/stacks'
+      fullPath: '/dashboard/monitoring/stacks/'
+      preLoaderRoute: typeof DashboardMonitoringStacksIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/projects/$id/': {
@@ -2271,13 +2295,6 @@ declare module '@tanstack/react-router' {
       path: '/monitoring'
       fullPath: '/dashboard/settings/monitoring/'
       preLoaderRoute: typeof DashboardSettingsMonitoringIndexRouteImport
-      parentRoute: typeof DashboardSettingsRouteRoute
-    }
-    '/dashboard/settings/native-rbac/': {
-      id: '/dashboard/settings/native-rbac/'
-      path: '/native-rbac'
-      fullPath: '/dashboard/settings/native-rbac/'
-      preLoaderRoute: typeof DashboardSettingsNativeRbacIndexRouteImport
       parentRoute: typeof DashboardSettingsRouteRoute
     }
     '/dashboard/settings/network-policies/': {
@@ -2569,31 +2586,31 @@ declare module '@tanstack/react-router' {
     }
     '/dashboard/delivery/bundles/$bundleId/': {
       id: '/dashboard/delivery/bundles/$bundleId/'
-      path: '/delivery/bundles/$bundleId'
+      path: '/bundles/$bundleId'
       fullPath: '/dashboard/delivery/bundles/$bundleId/'
       preLoaderRoute: typeof DashboardDeliveryBundlesBundleIdIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/deployments/$deploymentId/': {
       id: '/dashboard/delivery/deployments/$deploymentId/'
-      path: '/delivery/deployments/$deploymentId'
+      path: '/deployments/$deploymentId'
       fullPath: '/dashboard/delivery/deployments/$deploymentId/'
       preLoaderRoute: typeof DashboardDeliveryDeploymentsDeploymentIdIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/rollouts/$rolloutId/': {
       id: '/dashboard/delivery/rollouts/$rolloutId/'
-      path: '/delivery/rollouts/$rolloutId'
+      path: '/rollouts/$rolloutId'
       fullPath: '/dashboard/delivery/rollouts/$rolloutId/'
       preLoaderRoute: typeof DashboardDeliveryRolloutsRolloutIdIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/delivery/targets/$targetId/': {
       id: '/dashboard/delivery/targets/$targetId/'
-      path: '/delivery/targets/$targetId'
+      path: '/targets/$targetId'
       fullPath: '/dashboard/delivery/targets/$targetId/'
       preLoaderRoute: typeof DashboardDeliveryTargetsTargetIdIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/projects/$id/catalogs/': {
       id: '/dashboard/projects/$id/catalogs/'
@@ -2856,10 +2873,10 @@ declare module '@tanstack/react-router' {
     }
     '/dashboard/delivery/bundles/$bundleId/versions/$versionId/': {
       id: '/dashboard/delivery/bundles/$bundleId/versions/$versionId/'
-      path: '/delivery/bundles/$bundleId/versions/$versionId'
+      path: '/bundles/$bundleId/versions/$versionId'
       fullPath: '/dashboard/delivery/bundles/$bundleId/versions/$versionId/'
       preLoaderRoute: typeof DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRouteImport
-      parentRoute: typeof DashboardRouteRoute
+      parentRoute: typeof DashboardDeliveryRouteRoute
     }
     '/dashboard/projects/$id/cloud-credentials/$credId/edit/': {
       id: '/dashboard/projects/$id/cloud-credentials/$credId/edit/'
@@ -2870,6 +2887,52 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface DashboardDeliveryRouteRouteChildren {
+  DashboardDeliveryIndexRoute: typeof DashboardDeliveryIndexRoute
+  DashboardDeliveryBundlesIndexRoute: typeof DashboardDeliveryBundlesIndexRoute
+  DashboardDeliveryConfigurationTemplatesIndexRoute: typeof DashboardDeliveryConfigurationTemplatesIndexRoute
+  DashboardDeliveryDeploymentsIndexRoute: typeof DashboardDeliveryDeploymentsIndexRoute
+  DashboardDeliveryOverrideSetsIndexRoute: typeof DashboardDeliveryOverrideSetsIndexRoute
+  DashboardDeliveryRolloutsIndexRoute: typeof DashboardDeliveryRolloutsIndexRoute
+  DashboardDeliverySourcesIndexRoute: typeof DashboardDeliverySourcesIndexRoute
+  DashboardDeliveryTargetsIndexRoute: typeof DashboardDeliveryTargetsIndexRoute
+  DashboardDeliveryBundlesBundleIdIndexRoute: typeof DashboardDeliveryBundlesBundleIdIndexRoute
+  DashboardDeliveryDeploymentsDeploymentIdIndexRoute: typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
+  DashboardDeliveryRolloutsRolloutIdIndexRoute: typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
+  DashboardDeliveryTargetsTargetIdIndexRoute: typeof DashboardDeliveryTargetsTargetIdIndexRoute
+  DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute: typeof DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute
+}
+
+const DashboardDeliveryRouteRouteChildren: DashboardDeliveryRouteRouteChildren =
+  {
+    DashboardDeliveryIndexRoute: DashboardDeliveryIndexRoute,
+    DashboardDeliveryBundlesIndexRoute: DashboardDeliveryBundlesIndexRoute,
+    DashboardDeliveryConfigurationTemplatesIndexRoute:
+      DashboardDeliveryConfigurationTemplatesIndexRoute,
+    DashboardDeliveryDeploymentsIndexRoute:
+      DashboardDeliveryDeploymentsIndexRoute,
+    DashboardDeliveryOverrideSetsIndexRoute:
+      DashboardDeliveryOverrideSetsIndexRoute,
+    DashboardDeliveryRolloutsIndexRoute: DashboardDeliveryRolloutsIndexRoute,
+    DashboardDeliverySourcesIndexRoute: DashboardDeliverySourcesIndexRoute,
+    DashboardDeliveryTargetsIndexRoute: DashboardDeliveryTargetsIndexRoute,
+    DashboardDeliveryBundlesBundleIdIndexRoute:
+      DashboardDeliveryBundlesBundleIdIndexRoute,
+    DashboardDeliveryDeploymentsDeploymentIdIndexRoute:
+      DashboardDeliveryDeploymentsDeploymentIdIndexRoute,
+    DashboardDeliveryRolloutsRolloutIdIndexRoute:
+      DashboardDeliveryRolloutsRolloutIdIndexRoute,
+    DashboardDeliveryTargetsTargetIdIndexRoute:
+      DashboardDeliveryTargetsTargetIdIndexRoute,
+    DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute:
+      DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute,
+  }
+
+const DashboardDeliveryRouteRouteWithChildren =
+  DashboardDeliveryRouteRoute._addFileChildren(
+    DashboardDeliveryRouteRouteChildren,
+  )
 
 interface DashboardSettingsRouteRouteChildren {
   DashboardSettingsIndexRoute: typeof DashboardSettingsIndexRoute
@@ -2883,7 +2946,6 @@ interface DashboardSettingsRouteRouteChildren {
   DashboardSettingsGitopsIndexRoute: typeof DashboardSettingsGitopsIndexRoute
   DashboardSettingsGroupMappingsIndexRoute: typeof DashboardSettingsGroupMappingsIndexRoute
   DashboardSettingsMonitoringIndexRoute: typeof DashboardSettingsMonitoringIndexRoute
-  DashboardSettingsNativeRbacIndexRoute: typeof DashboardSettingsNativeRbacIndexRoute
   DashboardSettingsNetworkPoliciesIndexRoute: typeof DashboardSettingsNetworkPoliciesIndexRoute
   DashboardSettingsOperationsIndexRoute: typeof DashboardSettingsOperationsIndexRoute
   DashboardSettingsPlatformIndexRoute: typeof DashboardSettingsPlatformIndexRoute
@@ -2930,8 +2992,6 @@ const DashboardSettingsRouteRouteChildren: DashboardSettingsRouteRouteChildren =
       DashboardSettingsGroupMappingsIndexRoute,
     DashboardSettingsMonitoringIndexRoute:
       DashboardSettingsMonitoringIndexRoute,
-    DashboardSettingsNativeRbacIndexRoute:
-      DashboardSettingsNativeRbacIndexRoute,
     DashboardSettingsNetworkPoliciesIndexRoute:
       DashboardSettingsNetworkPoliciesIndexRoute,
     DashboardSettingsOperationsIndexRoute:
@@ -3153,6 +3213,7 @@ const DashboardProjectsIdRouteRouteWithChildren =
   )
 
 interface DashboardRouteRouteChildren {
+  DashboardDeliveryRouteRoute: typeof DashboardDeliveryRouteRouteWithChildren
   DashboardSettingsRouteRoute: typeof DashboardSettingsRouteRouteWithChildren
   DashboardIndexRoute: typeof DashboardIndexRoute
   DashboardClustersIdRouteRoute: typeof DashboardClustersIdRouteRouteWithChildren
@@ -3166,7 +3227,6 @@ interface DashboardRouteRouteChildren {
   DashboardCharlieIndexRoute: typeof DashboardCharlieIndexRoute
   DashboardClusterTemplatesIndexRoute: typeof DashboardClusterTemplatesIndexRoute
   DashboardClustersIndexRoute: typeof DashboardClustersIndexRoute
-  DashboardDeliveryIndexRoute: typeof DashboardDeliveryIndexRoute
   DashboardExtensionsIndexRoute: typeof DashboardExtensionsIndexRoute
   DashboardLoggingIndexRoute: typeof DashboardLoggingIndexRoute
   DashboardMonitoringIndexRoute: typeof DashboardMonitoringIndexRoute
@@ -3183,29 +3243,19 @@ interface DashboardRouteRouteChildren {
   DashboardClusterTemplatesIdIndexRoute: typeof DashboardClusterTemplatesIdIndexRoute
   DashboardClusterTemplatesNewIndexRoute: typeof DashboardClusterTemplatesNewIndexRoute
   DashboardClustersRegisterIndexRoute: typeof DashboardClustersRegisterIndexRoute
-  DashboardDeliveryBundlesIndexRoute: typeof DashboardDeliveryBundlesIndexRoute
-  DashboardDeliveryConfigurationTemplatesIndexRoute: typeof DashboardDeliveryConfigurationTemplatesIndexRoute
-  DashboardDeliveryDeploymentsIndexRoute: typeof DashboardDeliveryDeploymentsIndexRoute
-  DashboardDeliveryOverrideSetsIndexRoute: typeof DashboardDeliveryOverrideSetsIndexRoute
-  DashboardDeliveryRolloutsIndexRoute: typeof DashboardDeliveryRolloutsIndexRoute
-  DashboardDeliverySourcesIndexRoute: typeof DashboardDeliverySourcesIndexRoute
-  DashboardDeliveryTargetsIndexRoute: typeof DashboardDeliveryTargetsIndexRoute
+  DashboardMonitoringStacksIndexRoute: typeof DashboardMonitoringStacksIndexRoute
   DashboardAdminUsersIdIndexRoute: typeof DashboardAdminUsersIdIndexRoute
   DashboardBackupsRestoresRestoreIdIndexRoute: typeof DashboardBackupsRestoresRestoreIdIndexRoute
   DashboardBackupsRunsRunIdIndexRoute: typeof DashboardBackupsRunsRunIdIndexRoute
   DashboardBackupsSchedulesNewIndexRoute: typeof DashboardBackupsSchedulesNewIndexRoute
   DashboardBackupsStorageNewIndexRoute: typeof DashboardBackupsStorageNewIndexRoute
   DashboardClusterTemplatesIdEditIndexRoute: typeof DashboardClusterTemplatesIdEditIndexRoute
-  DashboardDeliveryBundlesBundleIdIndexRoute: typeof DashboardDeliveryBundlesBundleIdIndexRoute
-  DashboardDeliveryDeploymentsDeploymentIdIndexRoute: typeof DashboardDeliveryDeploymentsDeploymentIdIndexRoute
-  DashboardDeliveryRolloutsRolloutIdIndexRoute: typeof DashboardDeliveryRolloutsRolloutIdIndexRoute
-  DashboardDeliveryTargetsTargetIdIndexRoute: typeof DashboardDeliveryTargetsTargetIdIndexRoute
   DashboardSecurityScansScanIdIndexRoute: typeof DashboardSecurityScansScanIdIndexRoute
   DashboardSecurityScansNewIndexRoute: typeof DashboardSecurityScansNewIndexRoute
-  DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute: typeof DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute
 }
 
 const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
+  DashboardDeliveryRouteRoute: DashboardDeliveryRouteRouteWithChildren,
   DashboardSettingsRouteRoute: DashboardSettingsRouteRouteWithChildren,
   DashboardIndexRoute: DashboardIndexRoute,
   DashboardClustersIdRouteRoute: DashboardClustersIdRouteRouteWithChildren,
@@ -3219,7 +3269,6 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardCharlieIndexRoute: DashboardCharlieIndexRoute,
   DashboardClusterTemplatesIndexRoute: DashboardClusterTemplatesIndexRoute,
   DashboardClustersIndexRoute: DashboardClustersIndexRoute,
-  DashboardDeliveryIndexRoute: DashboardDeliveryIndexRoute,
   DashboardExtensionsIndexRoute: DashboardExtensionsIndexRoute,
   DashboardLoggingIndexRoute: DashboardLoggingIndexRoute,
   DashboardMonitoringIndexRoute: DashboardMonitoringIndexRoute,
@@ -3237,16 +3286,7 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardClusterTemplatesNewIndexRoute:
     DashboardClusterTemplatesNewIndexRoute,
   DashboardClustersRegisterIndexRoute: DashboardClustersRegisterIndexRoute,
-  DashboardDeliveryBundlesIndexRoute: DashboardDeliveryBundlesIndexRoute,
-  DashboardDeliveryConfigurationTemplatesIndexRoute:
-    DashboardDeliveryConfigurationTemplatesIndexRoute,
-  DashboardDeliveryDeploymentsIndexRoute:
-    DashboardDeliveryDeploymentsIndexRoute,
-  DashboardDeliveryOverrideSetsIndexRoute:
-    DashboardDeliveryOverrideSetsIndexRoute,
-  DashboardDeliveryRolloutsIndexRoute: DashboardDeliveryRolloutsIndexRoute,
-  DashboardDeliverySourcesIndexRoute: DashboardDeliverySourcesIndexRoute,
-  DashboardDeliveryTargetsIndexRoute: DashboardDeliveryTargetsIndexRoute,
+  DashboardMonitoringStacksIndexRoute: DashboardMonitoringStacksIndexRoute,
   DashboardAdminUsersIdIndexRoute: DashboardAdminUsersIdIndexRoute,
   DashboardBackupsRestoresRestoreIdIndexRoute:
     DashboardBackupsRestoresRestoreIdIndexRoute,
@@ -3256,19 +3296,9 @@ const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardBackupsStorageNewIndexRoute: DashboardBackupsStorageNewIndexRoute,
   DashboardClusterTemplatesIdEditIndexRoute:
     DashboardClusterTemplatesIdEditIndexRoute,
-  DashboardDeliveryBundlesBundleIdIndexRoute:
-    DashboardDeliveryBundlesBundleIdIndexRoute,
-  DashboardDeliveryDeploymentsDeploymentIdIndexRoute:
-    DashboardDeliveryDeploymentsDeploymentIdIndexRoute,
-  DashboardDeliveryRolloutsRolloutIdIndexRoute:
-    DashboardDeliveryRolloutsRolloutIdIndexRoute,
-  DashboardDeliveryTargetsTargetIdIndexRoute:
-    DashboardDeliveryTargetsTargetIdIndexRoute,
   DashboardSecurityScansScanIdIndexRoute:
     DashboardSecurityScansScanIdIndexRoute,
   DashboardSecurityScansNewIndexRoute: DashboardSecurityScansNewIndexRoute,
-  DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute:
-    DashboardDeliveryBundlesBundleIdVersionsVersionIdIndexRoute,
 }
 
 const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(

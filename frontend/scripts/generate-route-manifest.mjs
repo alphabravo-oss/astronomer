@@ -33,7 +33,7 @@ const outputPath = path.join(
 // Reviewed 2026-08-23 after adding resource discovery/schema and enterprise
 // operations surfaces. Keep this exact: a route addition needs a smoke fixture
 // and a route removal needs an explicit product decision.
-const EXPECTED_ROUTE_COUNT = 136; // 2026-09-18: delivery templates, overrides, bundle versions, and system-component routes added.
+const EXPECTED_ROUTE_COUNT = 136; // 2026-09-21: net +1 after P-018 — removed the dead /dashboard/settings/native-rbac/ redirect stub (step 8) and added /dashboard/monitoring/stacks/, the new home for shared observability stacks with a redirect stub left at the old /dashboard/settings/monitoring/ (step 9).
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to

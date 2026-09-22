@@ -155,7 +155,7 @@ function AuthOverviewPage() {
       )}
       <PageHeader
         eyebrow="Settings · Auth"
-        title="Identity Broker"
+        title="Authentication"
         description="Astronomer brokers enterprise IdPs through Dex. Configure upstream connectors (Azure AD, Okta, LDAP, SAML, …) here; once applied, register Dex as the platform's SSO provider with one click."
         actions={
           connectors.length > 0 ? (

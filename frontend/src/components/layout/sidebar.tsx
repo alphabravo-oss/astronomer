@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link as RouterLink, useLocation } from "@tanstack/react-router";
 import {
@@ -16,14 +16,13 @@ import {
   SidebarGroup,
 } from "@/components/layout/sidebar-navigation-view";
 import {
-  defaultOpenNavGroupLabel,
   filterNavGroups,
   getClusterNavGroups,
   globalNavGroups,
   INSTALLED_TOOLS_NAV_GROUP,
-  toggleOpenNavGroupLabel,
   withFavoriteNavigation,
 } from "@/components/layout/sidebar-navigation";
+import { useOpenNavGroups } from "@/components/layout/nav-open-groups";
 import { OverlayBackdrop } from "@/components/ui/overlay-shell";
 import { getVeleroStatus } from "@/lib/api/cluster-velero";
 import { APP_VERSION } from "@/lib/env";
@@ -116,14 +115,12 @@ export function Sidebar() {
     veleroStatus?.installed,
   ]);
 
-  // Accordion navigation: every collapsible sidebar section, including the
-  // dynamically discovered Tool UIs section, shares one open-section key.
-  const [openGroup, setOpenGroup] = useState<string | null>(() =>
-    defaultOpenNavGroupLabel(navGroups, pathname),
-  );
-  const openGroups = useMemo(
-    () => new Set(openGroup ? [openGroup] : []),
-    [openGroup],
+  // Sidebar sections stay open across navigation (multi-open, not an
+  // accordion); open state is remembered per scope in localStorage.
+  const { openGroups, toggleGroup } = useOpenNavGroups(
+    isClusterContext ? "cluster" : "global",
+    navGroups,
+    pathname,
   );
 
   // Fetch resource counts when in cluster context — only for groups that are
@@ -132,14 +129,6 @@ export function Sidebar() {
     isClusterContext ? clusterId! : "",
     openGroups,
   );
-
-  // Auto-expand the active group after route/context changes. Resolving to a
-  // single key preserves the accordion invariant across those transitions.
-  const [groupScope, setGroupScope] = useState({ navGroups, pathname });
-  if (groupScope.navGroups !== navGroups || groupScope.pathname !== pathname) {
-    setGroupScope({ navGroups, pathname });
-    setOpenGroup(defaultOpenNavGroupLabel(navGroups, pathname));
-  }
 
   return (
     <>
@@ -242,24 +231,16 @@ export function Sidebar() {
               pathname={pathname}
               collapsed={collapsed}
               counts={isClusterContext ? counts : undefined}
-              isOpen={openGroup === group.label}
-              onToggle={() =>
-                setOpenGroup((current) =>
-                  toggleOpenNavGroupLabel(current, group.label),
-                )
-              }
+              isOpen={openGroups.has(group.label)}
+              onToggle={() => toggleGroup(group.label)}
             />
           ))}
           {isClusterContext && (
             <InstalledToolLinks
               clusterId={clusterId!}
               collapsed={collapsed}
-              isOpen={openGroup === INSTALLED_TOOLS_NAV_GROUP}
-              onToggle={() =>
-                setOpenGroup((current) =>
-                  toggleOpenNavGroupLabel(current, INSTALLED_TOOLS_NAV_GROUP),
-                )
-              }
+              isOpen={openGroups.has(INSTALLED_TOOLS_NAV_GROUP)}
+              onToggle={() => toggleGroup(INSTALLED_TOOLS_NAV_GROUP)}
             />
           )}
           {/* §HostMounts mount point 1 — enabled `sidebar` extensions append
