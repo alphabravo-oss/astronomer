@@ -14,7 +14,66 @@ import type {
   EffectivePermissionSource,
   User,
 } from "@/types";
-import { clusterLabel, projectLabel, userLabel } from "./-utils";
+import {
+  clusterLabel,
+  projectLabel,
+  userLabel,
+} from "@/components/rbac/binding-utils";
+
+function effectivePermissionColumns(
+  clusterNameById: Map<string, string>,
+  projectNameById: Map<string, string>,
+): Column<EffectivePermissionGrant>[] {
+  return [
+    {
+      key: "applies",
+      header: "Applies",
+      accessor: (row) => (
+        <Badge
+          variant={row.appliesToContext === false ? "secondary" : "success"}
+        >
+          {row.appliesToContext === false ? "No" : "Yes"}
+        </Badge>
+      ),
+      sortAccessor: (row) => (row.appliesToContext === false ? 0 : 1),
+    },
+    {
+      key: "resource",
+      header: "Resource",
+      accessor: (row) => (
+        <span className="font-mono text-sm">{row.resource}</span>
+      ),
+      sortAccessor: (row) => row.resource,
+    },
+    {
+      key: "verb",
+      header: "Verb",
+      accessor: (row) => <span className="font-mono text-sm">{row.verb}</span>,
+      sortAccessor: (row) => row.verb,
+    },
+    {
+      key: "risk",
+      header: "Risk",
+      accessor: (row) => (
+        <Badge variant={riskVariant(row)}>{riskLabel(row)}</Badge>
+      ),
+      sortAccessor: (row) => riskSort(row),
+    },
+    {
+      key: "sources",
+      header: "Granted By",
+      accessor: (row) => sourceSummary(row.sources),
+      sortable: false,
+    },
+    {
+      key: "target",
+      header: "Scope Target",
+      accessor: (row) =>
+        targetSummary(row.sources, clusterNameById, projectNameById),
+      sortable: false,
+    },
+  ];
+}
 
 export function EffectiveTab() {
   const { data: usersData } = useUsers({ pageSize: 200 });
@@ -64,55 +123,10 @@ export function EffectiveTab() {
     [projects],
   );
 
-  const permissionColumns: Column<EffectivePermissionGrant>[] = [
-    {
-      key: "applies",
-      header: "Applies",
-      accessor: (row) => (
-        <Badge
-          variant={row.appliesToContext === false ? "secondary" : "success"}
-        >
-          {row.appliesToContext === false ? "No" : "Yes"}
-        </Badge>
-      ),
-      sortAccessor: (row) => (row.appliesToContext === false ? 0 : 1),
-    },
-    {
-      key: "resource",
-      header: "Resource",
-      accessor: (row) => (
-        <span className="font-mono text-sm">{row.resource}</span>
-      ),
-      sortAccessor: (row) => row.resource,
-    },
-    {
-      key: "verb",
-      header: "Verb",
-      accessor: (row) => <span className="font-mono text-sm">{row.verb}</span>,
-      sortAccessor: (row) => row.verb,
-    },
-    {
-      key: "risk",
-      header: "Risk",
-      accessor: (row) => (
-        <Badge variant={riskVariant(row)}>{riskLabel(row)}</Badge>
-      ),
-      sortAccessor: (row) => riskSort(row),
-    },
-    {
-      key: "sources",
-      header: "Granted By",
-      accessor: (row) => sourceSummary(row.sources),
-      sortable: false,
-    },
-    {
-      key: "target",
-      header: "Scope Target",
-      accessor: (row) =>
-        targetSummary(row.sources, clusterNameById, projectNameById),
-      sortable: false,
-    },
-  ];
+  const permissionColumns = effectivePermissionColumns(
+    clusterNameById,
+    projectNameById,
+  );
 
   const bindingColumns: Column<EffectivePermissionBinding>[] = [
     {
@@ -168,7 +182,12 @@ export function EffectiveTab() {
         <MetricCard dense label="Bindings" value={bindings.length} />
         <MetricCard dense label="Resources" value={resourceCount} />
         <MetricCard dense label="Applies here" value={applicableCount} />
-        <MetricCard dense label="High risk" value={highRiskCount} tone={highRiskCount > 0 ? "warning" : undefined} />
+        <MetricCard
+          dense
+          label="High risk"
+          value={highRiskCount}
+          tone={highRiskCount > 0 ? "warning" : undefined}
+        />
       </div>
 
       <div className="grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-2 xl:grid-cols-4">

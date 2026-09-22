@@ -8,7 +8,7 @@ import {
   isValidNamespace,
   roleTitle,
   toAccessBinding,
-} from "./-utils";
+} from "@/components/rbac/binding-utils";
 
 // F-03 regression: the RBAC users table must link each row to the admin
 // user-security detail, and lock state must be derivable for the badge.

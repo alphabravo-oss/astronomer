@@ -15,13 +15,15 @@ discovery-gated navigation, CRD subgroups, persisted starred resource types,
 bounded metadata counts, and migration 065. Final combined validation is running.
 Plan 025 is the next feature phase, not part of this implementation.
 
-The integration also exposed two issues that individual branch checks missed:
+The integration also exposed issues that individual branch checks missed:
 exported route components defeated automatic code splitting, and the Helm
 preflight/release compatibility contract still targeted schema 62. Page modules
 are now separate from route entrypoints, optional UI loads lazily, and the chart,
 binary, and generated compatibility contract agree on schema 65. Bundle ceilings
 were not increased. Collapsed navigation now portals its flyout outside the
 sidebar's scroll clipping boundary.
+The project-members card's route-layer imports were also moved into shared RBAC
+components, preserving one implementation and restoring dependency direction.
 
 Integrated branch ledger:
 
