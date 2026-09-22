@@ -1,7 +1,12 @@
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { cn, formatPercentage } from "@/lib/utils";
+import {
+  cn,
+  distributionDisplayName,
+  formatPercentage,
+  providerDisplayName,
+} from "@/lib/utils";
 import type { Cluster } from "@/types";
 
 function utilizationTone(value: number | null | undefined): string {
@@ -35,6 +40,24 @@ export const estateClusterColumns: Column<Cluster>[] = [
     sortAccessor: (cluster) => cluster.status,
     filter: { label: "Status" },
     width: "9rem",
+  },
+  {
+    key: "provider",
+    header: "Provider",
+    accessor: (cluster) => (
+      <div className="space-y-0.5">
+        <span className="block text-xs text-muted-foreground">
+          {providerDisplayName(cluster.provider)}
+        </span>
+        <span className="inline-block rounded-sm bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">
+          {distributionDisplayName(cluster.distribution)}
+        </span>
+      </div>
+    ),
+    searchAccessor: (cluster) =>
+      `${cluster.provider} ${cluster.distribution}`.trim(),
+    sortAccessor: (cluster) => cluster.provider,
+    width: "8rem",
   },
   {
     key: "version",

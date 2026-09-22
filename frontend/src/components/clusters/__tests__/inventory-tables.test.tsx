@@ -124,6 +124,7 @@ describe("estate cluster table", () => {
     expect(estateClusterColumns.map((column) => column.key)).toEqual([
       "name",
       "status",
+      "provider",
       "version",
       "nodes",
       "pods",
@@ -132,6 +133,20 @@ describe("estate cluster table", () => {
     ]);
     const nodes = estateClusterColumns.find((column) => column.key === "nodes");
     expect(nodes?.sortAccessor?.(cluster({ nodeCount: 27 }))).toBe(27);
+  });
+
+  it("shows the provider with its distribution as a sublabel", () => {
+    render(
+      <EstateClustersTable
+        clusters={[cluster({ provider: "aws", distribution: "eks" })]}
+        loading={false}
+        isError={false}
+        onRetry={vi.fn()}
+        onRowClick={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("AWS")).toBeInTheDocument();
+    expect(screen.getByText("Amazon EKS")).toBeInTheDocument();
   });
 
   it("searches display names and exposes loading failures with retry", async () => {
