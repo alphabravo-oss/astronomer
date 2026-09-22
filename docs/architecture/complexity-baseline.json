@@ -73,7 +73,7 @@
     "frontend/src/components/resources/resource-list-page.tsx:WorkloadsTable": 311,
     "frontend/src/components/resources/secret-data-overview.tsx:decodeSecretValue": 285,
     "frontend/src/components/security/cis-scans-tab.tsx:CISScansTab": 272,
-    "frontend/src/components/ui/yaml-view-dialog.tsx:ActiveYamlPanel": 364,
+    "frontend/src/components/ui/yaml-view-dialog.tsx:ActiveYamlPanel": 352,
     "frontend/src/components/window-manager/logs-tab.tsx:LogsTab": 343,
     "frontend/src/components/window-manager/window-manager.tsx:WindowManager": 277,
     "frontend/src/components/workloads/pod-logs-viewer.tsx:PodLogsViewer": 401,
