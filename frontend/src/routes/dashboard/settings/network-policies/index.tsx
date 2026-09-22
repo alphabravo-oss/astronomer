@@ -35,6 +35,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { toastApiError, toastSuccess } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
@@ -330,6 +331,7 @@ function TemplateDraftForm({
   onCancel: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const [saveError, setSaveError] = useState<unknown>(null);
   const form = useAppForm({
     defaultValues: {
       slug: draft.slug ?? "",
@@ -339,6 +341,7 @@ function TemplateDraftForm({
       enabled: draft.enabled ?? true,
     },
     onSubmit: async ({ value }) => {
+      setSaveError(null);
       try {
         if (draft.id) {
           await updateNetworkPolicyTemplate(draft.id, {
@@ -361,6 +364,7 @@ function TemplateDraftForm({
         }
         await onSaved();
       } catch (err: unknown) {
+        setSaveError(err);
         toastApiError("Save failed", err);
       }
     },
@@ -381,6 +385,11 @@ function TemplateDraftForm({
           Cancel
         </button>
       </div>
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={saveError ? extractApiErrorMessage(saveError) : null}
+        />
+      </form.AppForm>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="text-sm space-y-1">
           <span className="text-muted-foreground">Slug</span>

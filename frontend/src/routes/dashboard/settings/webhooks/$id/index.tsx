@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toastSuccess } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm } from "@/lib/form";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
@@ -106,6 +107,11 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscriptionView }) {
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={update.error ? extractApiErrorMessage(update.error) : null}
+        />
+      </form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"

@@ -340,7 +340,7 @@ function WidgetsAdminPage() {
         </div>
 
         {editing ? (
-          <div className="border border-border rounded-lg p-4 bg-card space-y-3">
+          <div className="border border-border rounded-lg p-4 bg-card space-y-3"><form.AppForm><form.FormErrorSummary serverError={error} /></form.AppForm>
             <div className="grid grid-cols-2 gap-3">
               <label className="text-sm">
                 <div className="text-muted-foreground mb-1">Name</div>

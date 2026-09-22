@@ -14,6 +14,7 @@ import { useAppForm, useStore } from "@/lib/form";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Hash, Send, Settings2, Webhook } from "lucide-react";
 import { toastError } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { cn } from "@/lib/utils";
 import { ActionButton } from "@/components/ui/action-button";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -168,7 +169,7 @@ function NewWebhookWizard() {
         <ArrowLeft className="h-3.5 w-3.5" />
         Back to webhooks
       </RouterLink>
-      <PageHeader eyebrow="Webhooks · New" title={title} />
+      <PageHeader eyebrow="Webhooks · New" title={title} /><form.AppForm><form.FormErrorSummary serverError={createMutation.error ? extractApiErrorMessage(createMutation.error) : null} /></form.AppForm>
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         {(["pick", "configure", "preview"] as Step[]).map((s, idx) => (

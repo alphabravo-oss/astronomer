@@ -21,6 +21,7 @@ import { formatRelativeTime, cn } from "@/lib/utils";
 import type { Project } from "@/types";
 import { FolderKanban, Plus, Trash2, Users } from "lucide-react";
 import { toastError } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
 import { pageRowCount } from "@/lib/api/pagination";
 
@@ -414,6 +415,15 @@ function CreateProjectModal({ onClose }: { onClose: () => void }) {
         </>
       }
     >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={
+            createProject.error
+              ? extractApiErrorMessage(createProject.error)
+              : null
+          }
+        />
+      </form.AppForm>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label

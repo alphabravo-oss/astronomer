@@ -33,6 +33,7 @@ import {
   Save,
 } from "lucide-react";
 import { toastApiError, toastSuccess } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { useAppForm } from "@/lib/form";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,8 +63,7 @@ function NotificationTemplateEditorPage() {
 }
 
 function NotificationTemplateEditor() {
-  const params = Route.useParams();
-  const key = decodeURIComponent(String(params?.key ?? ""));
+  const params = Route.useParams(); const key = decodeURIComponent(String(params?.key ?? ""));
   const queryClient = useQueryClient();
   const templateQuery = useNotificationTemplate(key);
   const detail = templateQuery.data ?? null;
@@ -74,6 +74,7 @@ function NotificationTemplateEditor() {
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [saveError, setSaveError] = useState<unknown>(null);
 
   // Override subject/body/enabled + the sample-variables JSON live on one
   // form; save uses the first three, Preview reads all of them.
@@ -81,7 +82,7 @@ function NotificationTemplateEditor() {
     defaultValues: { subject: "", body: "", enabled: true, samples: "{}" },
     onSubmit: async ({ value }) => {
       if (!detail) return;
-      setSaving(true);
+      setSaving(true); setSaveError(null);
       try {
         const updated = await updateNotificationTemplate(key, {
           subject: value.subject,
@@ -95,7 +96,7 @@ function NotificationTemplateEditor() {
         );
         toastSuccess("Template override saved");
       } catch (err) {
-        toastApiError("", err, "Save failed");
+        setSaveError(err); toastApiError("", err, "Save failed");
       } finally {
         setSaving(false);
       }
@@ -229,7 +230,7 @@ function NotificationTemplateEditor() {
             </span>
           </>
         }
-      />
+      /><form.AppForm><form.FormErrorSummary serverError={saveError ? extractApiErrorMessage(saveError) : null} /></form.AppForm>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-2">

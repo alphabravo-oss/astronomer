@@ -32,7 +32,8 @@ import { ResourceMasthead } from "@/components/ui/page";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
-import { useAppForm, useStore } from "@/lib/form";
+import { useAppForm, useStore, isValidUrlWithScheme } from "@/lib/form";
+import { errorMessages } from "@/components/form/error-summary";
 import { FormShell } from "@/components/ui/form-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { QueryStates } from "@/components/ui/query-states";
@@ -254,16 +255,16 @@ function VaultConnectionsPage() {
           </label>
           <label className="block text-sm">
             Vault URL
-            <form.Field name="addr">
+            <form.Field name="addr" validators={{ onChange: ({ value }) => !isValidUrlWithScheme(value, ["http", "https"]) ? "Vault URL must be a valid http(s) address" : undefined }}>
               {(field) => (
-                <Input
-                  name={field.name}
-                  required
-                  className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
-                  value={field.state.value}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  onBlur={field.handleBlur}
-                />
+                <>
+                  <Input
+                    name={field.name} required className="block w-full bg-background border border-border rounded-sm p-1.5 mt-1 font-mono"
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)} onBlur={field.handleBlur}
+                  />
+                  {errorMessages(field.state.meta.errors)[0] && <p className="mt-1 text-xs text-status-error">{errorMessages(field.state.meta.errors)[0]}</p>}
+                </>
               )}
             </form.Field>
           </label>

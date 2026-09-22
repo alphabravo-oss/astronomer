@@ -22,6 +22,24 @@ import {
 export const { fieldContext, formContext, useFieldContext, useFormContext } =
   createFormHookContexts();
 
+/**
+ * Permissive URL-with-scheme check for onChange field validators (P023.5):
+ * parses with the platform `URL` parser and checks the scheme against an
+ * allowlist. Internal/unqualified hostnames (e.g. `https://gitea.internal`)
+ * are accepted — only the scheme is restricted.
+ */
+export function isValidUrlWithScheme(
+  value: string,
+  schemes: readonly string[],
+): boolean {
+  if (!value.trim()) return false;
+  try {
+    return schemes.includes(new URL(value).protocol.replace(/:$/, ""));
+  } catch {
+    return false;
+  }
+}
+
 export const { useAppForm, withForm } = createFormHook({
   fieldContext,
   formContext,
