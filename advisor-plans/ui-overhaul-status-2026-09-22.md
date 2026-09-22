@@ -10,10 +10,15 @@ The seven reviewed branches are integrated on **`advisor/ui-overhaul-integration
 at `642ab6c5`. Planning documents were committed as `e20f98db`. `main` remains
 untouched at `59619920`; nothing has been pushed or deployed.
 
-Plan 020 is implemented on `advisor/020-explorer-nav` on top of that integration:
+Plan 020 is complete and merged at `15025b73` on top of that integration:
 discovery-gated navigation, CRD subgroups, persisted starred resource types,
-bounded metadata counts, and migration 065. Final combined validation is running.
-Plan 025 is the next feature phase, not part of this implementation.
+bounded metadata counts, and migration 065. The final production revision
+`7a41061d` passed all three enterprise scopes on a clean, unchanged tree;
+1,495 frontend unit tests and the final 296-check desktop/mobile smoke crawl pass.
+The browser-only selector correction is `c0f9252c`.
+See the [validation record](./ui-overhaul-validation-2026-09-22.md) for retained
+evidence and qualification limits. Plan 025 is the next feature phase, not part
+of this implementation.
 
 The integration also exposed issues that individual branch checks missed:
 exported route components defeated automatic code splitting, and the Helm
@@ -47,9 +52,7 @@ dedicated port; final counts 292–294 routes green.
 
 ```bash
 git checkout advisor/ui-overhaul-integration
-# After Plan 020's final validation and commit:
-git merge --no-ff advisor/020-explorer-nav
-# Before opening/pushing the integration PR:
+# Plan 020 is already merged. Before opening/pushing the integration PR:
 make local-ci-pr-representative
 make local-ci-pr
 ```
@@ -64,7 +67,7 @@ replace them.
 
 | Plan | Status | Needs |
 |---|---|---|
-| [020 — Explorer nav: discovery + CRD groups](./020-cluster-explorer-nav-discovery-and-crd-groups.md) | IMPLEMENTED — FINAL VALIDATION | Discovery, Gateway regrouping, CRD subgroups, stars, counts, and schema 65 implemented; finish combined gates and integrate. |
+| [020 — Explorer nav: discovery + CRD groups](./020-cluster-explorer-nav-discovery-and-crd-groups.md) | DONE — INTEGRATED | Discovery, Gateway regrouping, CRD subgroups, stars, counts, and schema 65; [validation passed](./ui-overhaul-validation-2026-09-22.md). |
 | [025 — Guided form depth + table parity](./025-guided-form-depth-and-table-parity.md) | TODO — NEXT | `ArrayField` for containers/rules/volumes/env/ports/paths/tolerations/affinity; group-by-namespace; bulk restart/scale; generic related resources; `questions.yaml` ADR spike. Reconcile its original excerpts against the integrated tree before implementation. |
 
 Follow-ups discovered during execution (all recorded in 017 §7):

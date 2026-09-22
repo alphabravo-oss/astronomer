@@ -14,6 +14,7 @@
 
 ## Status
 
+- **Execution**: DONE — integrated on `advisor/ui-overhaul-integration`; [validation record](./ui-overhaul-validation-2026-09-22.md). Production revision `7a41061d` passed frontend/backend/Helm enterprise gates; final browser crawl passed 296 checks.
 - **Priority**: P2
 - **Effort**: L (3 days)
 - **Risk**: MED (nav becomes data-driven; an extra discovery call per cluster)
@@ -200,12 +201,12 @@ node scripts/check-complexity-budget.mjs
 
 ## Done criteria
 
-- [ ] Gates exit 0
-- [ ] `grep -n 'label: "Gateway API"' frontend/src/components/layout/sidebar-navigation.ts` → 0 (as a top-level group)
-- [ ] `grep -n "ifHaveGroup" frontend/src/components/layout/sidebar-navigation.ts` → ≥ 8 hits
-- [ ] `grep -n "starred_types" docs/openapi.yaml internal/userpreferences/preferences.go` → hits
-- [ ] Cluster nav preserves the 47 standard supported destinations with empty discovery; dynamic CRD rows are capped at 40 and the Cluster group at 8
-- [ ] `git status` limited to in-scope + generated files
+- [x] Applicable gates exit 0; retained evidence is linked above
+- [x] No top-level Gateway API group; two primary links are in Service Discovery, six in a More Resources subgroup
+- [x] The shared `gatewayNavItems` factory applies API-group and served-kind predicates to all eight Gateway links; Gatekeeper is group-gated (verified by navigation tests rather than literal source-line counts)
+- [x] `starred_types` is present in OpenAPI, preferences validation, migration 065, sqlc, handler mapping/audit, and generated clients
+- [x] Cluster nav preserves the 47 standard supported destinations with empty discovery; dynamic CRD rows are capped at 40 and the Cluster group at 8
+- [x] Implementation, generated artifacts, and integration gate repairs are committed; no unrelated working-tree changes were discarded
 
 ## STOP conditions
 
