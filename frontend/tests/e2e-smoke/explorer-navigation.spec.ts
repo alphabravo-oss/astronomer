@@ -15,7 +15,8 @@ test("discovered CRD navigation is reachable and accessible", async ({
   if (testInfo.project.name.includes("mobile")) {
     await page
       .getByRole("button", {
-        name: /open.*navigation|open.*menu|toggle.*sidebar/i,
+        name: "Open navigation",
+        exact: true,
       })
       .click();
   }
@@ -73,6 +74,9 @@ test("discovered CRD navigation is reachable and accessible", async ({
         violation.impact === "serious" || violation.impact === "critical",
     ),
   ).toEqual([]);
+  await page.screenshot({
+    path: testInfo.outputPath("explorer-navigation.png"),
+  });
   await destination.click();
   await expect(page).toHaveURL(
     /custom-resources\/cert-manager.io\/v1\/certificates/,
