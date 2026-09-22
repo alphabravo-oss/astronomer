@@ -1,5 +1,7 @@
 import type { MockedFunction } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { createMemoryHistory, createRouter } from "@tanstack/react-router";
+import { routeTree } from "@/routeTree.gen";
 import { ExtensionNavItems, extensionSidebarHref } from "./ExtensionNavItems";
 import type { ExtensionMount } from "@/lib/api/extensions";
 
@@ -43,6 +45,17 @@ describe("extensionSidebarHref", () => {
   });
   it("encodes the extension name into the path", () => {
     expect(extensionSidebarHref("a b")).toBe("/dashboard/extensions/a%20b");
+  });
+
+  it("resolves to the extensions/$name route, not the app's 404", () => {
+    const router = createRouter({
+      routeTree,
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+    });
+    const matches = router.matchRoutes(extensionSidebarHref("cost"));
+    expect(matches[matches.length - 1]?.routeId).toBe(
+      "/dashboard/extensions/$name/",
+    );
   });
 });
 

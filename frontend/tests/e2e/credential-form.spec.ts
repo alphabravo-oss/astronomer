@@ -186,6 +186,38 @@ test.describe("credential edit (marker secret variant)", () => {
   });
 });
 
+test.describe("unsaved-changes guard", () => {
+  test("blocks in-app navigation away from a dirty form until Discard is confirmed", async ({
+    page,
+    context,
+  }) => {
+    await mockApi(page);
+    await seedAuth(context, page, adminUser);
+
+    await page.goto("/dashboard/settings/gitops/new");
+    await page.getByLabel("Name").fill("my-new-source");
+
+    await page
+      .getByRole("link", { name: "Back to GitOps sources" })
+      .click();
+
+    const dialog = page.getByRole("dialog", { name: "Unsaved changes" });
+    await expect(dialog).toBeVisible();
+    // Cancelling the prompt keeps the operator on the dirty form.
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByLabel("Name")).toHaveValue("my-new-source");
+
+    await page
+      .getByRole("link", { name: "Back to GitOps sources" })
+      .click();
+    await page
+      .getByRole("dialog", { name: "Unsaved changes" })
+      .getByRole("button", { name: "Discard" })
+      .click();
+    await expect(page).toHaveURL(/\/dashboard\/settings\/gitops$/);
+  });
+});
+
 test.describe("smtp (sentinel secret variant)", () => {
   test("PUT body drops the __redacted__ sentinel unless a new password is typed", async ({
     page,

@@ -74,7 +74,7 @@ import { WidgetGrid } from "@/components/dashboards/widget-grid";
 import { ExtensionSlot } from "@/components/extensions/ExtensionSlot";
 import { renderForCluster } from "@/lib/api/dashboards";
 
-function ClusterDetailPage() {
+export function ClusterDetailPage() {
   const params = Route.useParams();
   const navigate = useNavigate();
   const clusterId = params.id;

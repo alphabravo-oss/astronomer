@@ -20,6 +20,7 @@ import {
   Send,
 } from "lucide-react";
 import { toastError } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { formatRelativeTime } from "@/lib/utils";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { useAppForm } from "@/lib/form";
@@ -99,15 +100,34 @@ function SmtpForm({
 
   return (
     <div className="space-y-5">
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={update.error ? extractApiErrorMessage(update.error) : null}
+        />
+      </form.AppForm>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="sm:col-span-2">
-          <form.AppField name="host">
+          <form.AppField
+            name="host"
+            validators={{
+              onChange: ({ value }) =>
+                !value.trim() ? "Host is required" : undefined,
+            }}
+          >
             {(field) => (
               <field.TextField label="Host" placeholder="smtp.example.com" />
             )}
           </form.AppField>
         </div>
-        <form.AppField name="port">
+        <form.AppField
+          name="port"
+          validators={{
+            onChange: ({ value }) =>
+              value < 1 || value > 65535
+                ? "Port must be between 1 and 65535"
+                : undefined,
+          }}
+        >
           {(field) => <field.NumberField label="Port" />}
         </form.AppField>
       </div>
@@ -127,7 +147,15 @@ function SmtpForm({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <form.AppField name="fromAddress">
+        <form.AppField
+          name="fromAddress"
+          validators={{
+            onChange: ({ value }) =>
+              !value.includes("@")
+                ? "From address must be a valid email address"
+                : undefined,
+          }}
+        >
           {(field) => (
             <field.TextField
               label="From address"

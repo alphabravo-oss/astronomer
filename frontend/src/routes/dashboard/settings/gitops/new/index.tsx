@@ -11,9 +11,10 @@ import { ArrowLeft } from "lucide-react";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { useAppForm, useStore } from "@/lib/form";
+import { useAppForm, useStore, isValidUrlWithScheme } from "@/lib/form";
 import { FormShell } from "@/components/ui/form-shell";
 import { useCreateGitOpsSource } from "@/components/settings/hooks";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import type { GitOpsSourceWriteRequest } from "@/lib/api/gitops";
 
 function GitOpsForm() {
@@ -46,55 +47,46 @@ function GitOpsForm() {
   const pathPrefix = useStore(form.store, (s) => s.values.path_prefix);
 
   return (
-    <FormShell
+    <FormShell form={form}
       onSubmit={(e) => {
         e.preventDefault();
         void form.handleSubmit();
       }}
       className="space-y-5 max-w-2xl"
-    >
-      <div className="space-y-1">
-        <label
-          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-          htmlFor="field-bf605de5-54"
-        >
-          Name
-        </label>
-        <form.Field name="name">
-          {(field) => (
-            <Input
-              id="field-bf605de5-54"
-              required
-              value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-              className="w-full h-9 px-3 rounded-sm border bg-background text-sm"
-              placeholder="platform-clusters"
-            />
-          )}
-        </form.Field>
-      </div>
-      <div className="space-y-1">
-        <label
-          className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-          htmlFor="field-bf605de5-69"
-        >
-          Repo URL
-        </label>
-        <form.Field name="repo_url">
-          {(field) => (
-            <Input
-              id="field-bf605de5-69"
-              required
-              value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-              className="w-full h-9 px-3 rounded-sm border bg-background text-sm font-mono"
-              placeholder="https://github.com/example/clusters.git"
-            />
-          )}
-        </form.Field>
-      </div>
+    ><form.AppForm><form.FormErrorSummary serverError={create.error ? extractApiErrorMessage(create.error) : null} /></form.AppForm>
+      <form.AppField
+        name="name"
+        validators={{
+          onChange: ({ value }) =>
+            !value.trim() ? "Name is required" : undefined,
+        }}
+      >
+        {(field) => (
+          <field.TextField
+            label="Name"
+            required
+            placeholder="platform-clusters"
+          />
+        )}
+      </form.AppField>
+      <form.AppField
+        name="repo_url"
+        validators={{
+          onChange: ({ value }) =>
+            !isValidUrlWithScheme(value, ["http", "https", "ssh", "oci"])
+              ? "Repo URL must be a valid http(s), ssh, or oci URL"
+              : undefined,
+        }}
+      >
+        {(field) => (
+          <field.TextField
+            label="Repo URL"
+            required
+            className="font-mono"
+            placeholder="https://github.com/example/clusters.git"
+          />
+        )}
+      </form.AppField>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1">
           <label

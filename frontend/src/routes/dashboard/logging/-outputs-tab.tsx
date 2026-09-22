@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ElementType } from "react";
 import { useLoggingOutputs, useTestLoggingOutput } from "@/lib/hooks/logging";
 import { queryKeys } from "@/lib/query-keys";
 import { deleteLoggingOutput, updateLoggingOutput } from "@/lib/api/logging";
 import {
-  clearSharedLoggingURL,
+  SHARED_LOGGING_PARAM_KEYS,
   parseSharedLoggingFilters,
 } from "@/lib/logging-share";
 import { DataTable, type Column } from "@/components/ui/data-table";
@@ -44,7 +45,8 @@ const outputTypeIcons: Record<string, ElementType> = {
 };
 
 export function OutputsTab() {
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname }); const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<LoggingOutput | null>(null);
   const [querySelection, setQueryTarget] = useState<LoggingOutput | null>();
   const [sharedFilters] = useState(() =>
@@ -66,9 +68,13 @@ export function OutputsTab() {
 
   const closeQueryDialog = () => {
     setQueryTarget(null);
-    if (typeof window === "undefined") return;
-    const next = clearSharedLoggingURL(window.location.href);
-    window.history.replaceState(null, "", next);
+    void navigate({ to: pathname, replace: true, resetScroll: false,
+      search: (prev: Record<string, unknown>) => {
+        const next = { ...prev };
+        for (const key of SHARED_LOGGING_PARAM_KEYS) delete next[key];
+        return next;
+      },
+    });
   };
 
   const handleDelete = async () => {

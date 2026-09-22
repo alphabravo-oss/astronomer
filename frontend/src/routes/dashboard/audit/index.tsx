@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useDraft } from "@/lib/hooks/use-draft";
 import {
   ChevronDown,
@@ -23,6 +23,7 @@ import {
   type ActivityDetailField,
 } from "@/components/audit/activity-details-drawer";
 import { useAuditLogs } from "@/lib/hooks/audit";
+import { useSearchParam } from "@/lib/use-search-param";
 import { pageRowCount } from "@/lib/api/pagination";
 import { useClusters } from "@/lib/hooks/clusters";
 import { useProjects } from "@/lib/hooks/projects";
@@ -44,9 +45,10 @@ import {
 
 function AuditLogPage() {
   const [filters, setFilters] = useState<AuditFilters>(emptyFilters);
-  const [qInput, setQInput] = useState("");
+  const [qInput, setQInput] = useSearchParam("q", { debounceMs: 200 });
   const [qDebounced] = useDebouncedValue(qInput, { wait: 200 });
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const advancedFiltersId = useId();
   const [page, setPage] = useDraft(0, qDebounced);
   const [selected, setSelected] = useState<AuditLogEntry | null>(null);
 
@@ -58,14 +60,10 @@ function AuditLogPage() {
   const { data: usersData } = useUsers({ pageSize: 200 });
   const { data: clustersData } = useClusters({ pageSize: 200 });
   const { data: projectsData } = useProjects({ pageSize: 200 });
-
   const rows = auditQuery.data?.data || [];
   const total = pageRowCount(auditQuery.data);
   const users = useMemo(() => usersData?.data ?? [], [usersData?.data]);
-  const clusters = useMemo(
-    () => clustersData?.data ?? [],
-    [clustersData?.data],
-  );
+  const clusters = useMemo(() => clustersData?.data ?? [], [clustersData?.data]);
   const projects = useMemo(
     () => projectsData?.data ?? [],
     [projectsData?.data],
@@ -321,6 +319,7 @@ function AuditLogPage() {
               intent={advancedOpen || advancedCount > 0 ? "default" : "ghost"}
               icon={<Filter className="h-4 w-4" />}
               onClick={() => setAdvancedOpen((open) => !open)}
+              aria-expanded={advancedOpen} aria-controls={advancedFiltersId}
             >
               Filters
               {advancedCount > 0 ? ` (${advancedCount})` : ""}
@@ -362,7 +361,7 @@ function AuditLogPage() {
         )}
 
         {advancedOpen && (
-          <div className="grid gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-2 xl:grid-cols-4">
+          <div id={advancedFiltersId} className="grid gap-3 rounded-lg border border-border bg-card p-3 md:grid-cols-2 xl:grid-cols-4">
             <label className="space-y-1">
               <span className="text-xs font-medium text-muted-foreground">
                 Actor
@@ -625,5 +624,7 @@ function AuditDetailsDrawer({
 }
 
 export const Route = createFileRoute("/dashboard/audit/")({
+  validateSearch: (search: Record<string, unknown>) =>
+    search as { q?: string } & Record<string, unknown>,
   component: AuditLogPage,
 });

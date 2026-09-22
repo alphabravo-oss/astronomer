@@ -29,6 +29,7 @@ import { Loader2, Save, AlertCircle, ExternalLink } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { useCurrentUser } from "@/lib/hooks/auth";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import {
   useProjectPolicy,
   useUpdateProjectPolicy,
@@ -175,7 +176,7 @@ function PolicyPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6"><form.AppForm><form.FormErrorSummary serverError={updateMutation.error ? extractApiErrorMessage(updateMutation.error) : null} /></form.AppForm>
       {!canEdit && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />

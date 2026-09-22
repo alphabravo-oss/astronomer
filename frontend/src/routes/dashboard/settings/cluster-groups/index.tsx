@@ -26,6 +26,7 @@ import { ClusterGroupMembership } from "./-membership";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { useAppForm, useStore } from "@/lib/form";
 import { QueryStates } from "@/components/ui/query-states";
 import {
@@ -288,6 +289,7 @@ function ClusterGroupsPage() {
           existing={editing}
           allGroups={tree}
           onClose={() => setEditing(null)}
+          error={updateMut.error}
           onSubmit={(body) => {
             updateMut.mutateAsync({ id: editing.id, body }).then(() => {
               setEditing(null);
@@ -337,6 +339,7 @@ interface FormProps {
   allGroups: ClusterGroupTreeNode[];
   onSubmit: (body: ClusterGroupWriteRequest) => void;
   onClose: () => void;
+  error?: unknown;
 }
 
 function ClusterGroupForm({
@@ -344,6 +347,7 @@ function ClusterGroupForm({
   allGroups,
   onSubmit,
   onClose,
+  error,
 }: FormProps) {
   const [slugTouched, setSlugTouched] = useState(!!existing);
 
@@ -430,6 +434,11 @@ function ClusterGroupForm({
         </>
       }
     >
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={error ? extractApiErrorMessage(error) : null}
+        />
+      </form.AppForm>
       <div className="space-y-3">
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">

@@ -14,7 +14,7 @@ import { createFileRoute } from "@tanstack/react-router";
  */
 import { useEffect, useState } from "react";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { useAppForm, useStore } from "@/lib/form";
+import { useAppForm, useStore, isValidUrlWithScheme } from "@/lib/form";
 import { ArrowLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
@@ -195,7 +195,7 @@ function DexSettingsPage() {
             title="Identity"
             description="Where Dex lives and what it calls itself."
           >
-            <form.AppField name="issuer">
+            <form.AppField name="issuer" validators={{ onChange: ({ value }) => !isValidUrlWithScheme(value, ["http", "https"]) ? "Issuer must be a valid http(s) URL" : undefined }}>
               {(field) => (
                 <field.TextField
                   label="Issuer URL"

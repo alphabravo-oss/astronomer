@@ -21,6 +21,7 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
 import { FormShell } from "@/components/ui/form-shell";
 import { ArrowLeft, GitBranch, Loader2, Play, RefreshCw } from "lucide-react";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
@@ -202,13 +203,13 @@ function DetailInner({ id }: { id: string }) {
         </div>
       ) : null}
 
-      <FormShell
+      <FormShell form={form}
         onSubmit={(e) => {
           e.preventDefault();
           void form.handleSubmit();
         }}
         className="space-y-5 max-w-2xl"
-      >
+      ><form.AppForm><form.FormErrorSummary serverError={update.error ? extractApiErrorMessage(update.error) : null} /></form.AppForm>
         <h3 className="text-sm font-semibold text-foreground">Configuration</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">

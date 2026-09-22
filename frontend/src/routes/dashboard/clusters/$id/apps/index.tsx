@@ -66,7 +66,7 @@ import { AppsModals } from "./-apps-modals";
 export { InstalledView } from "./-installed-tab";
 export { RecommendedView } from "./-recommended-tab";
 
-function ClusterAppsPage() {
+export function ClusterAppsPage() {
   const params = Route.useParams();
   const clusterId = params.id;
   const { data: cluster } = useCluster(clusterId);

@@ -25,7 +25,7 @@ const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
   { key: "inhibitions", label: "Inhibitions", icon: Ban },
 ];
 
-function AlertingPage() {
+export function AlertingPage() {
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "active");
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [showSilenceModal, setShowSilenceModal] = useState(false);

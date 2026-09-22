@@ -3,6 +3,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import type { LoggingOutput } from "@/types";
 
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => vi.fn(),
+  useLocation: <T,>({
+    select,
+  }: {
+    select: (location: { pathname: string }) => T;
+  }) => select({ pathname: "/dashboard/logging" }),
+}));
+
 vi.mock("@/lib/toast", () => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),

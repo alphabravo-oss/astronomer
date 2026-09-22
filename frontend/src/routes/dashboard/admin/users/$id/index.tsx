@@ -150,12 +150,12 @@ function AdminUserDetailPage() {
   const missingUser = (
     <div className="rounded-lg border border-border bg-card p-6">
       <p className="text-sm text-muted-foreground">User not found.</p>
-      <button
-        onClick={() => window.history.back()}
+      <RouterLink
+        to="/dashboard/rbac"
         className="mt-3 inline-flex items-center gap-1 text-sm text-foreground hover:underline"
       >
-        <ArrowLeft className="h-4 w-4" /> Back
-      </button>
+        <ArrowLeft className="h-4 w-4" /> Back to RBAC
+      </RouterLink>
     </div>
   );
 

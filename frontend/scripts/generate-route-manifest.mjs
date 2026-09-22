@@ -33,7 +33,7 @@ const outputPath = path.join(
 // Reviewed 2026-08-23 after adding resource discovery/schema and enterprise
 // operations surfaces. Keep this exact: a route addition needs a smoke fixture
 // and a route removal needs an explicit product decision.
-const EXPECTED_ROUTE_COUNT = 143; // 2026-09-22: net +7 after plan 022 step 8 — converted seven create modals to */new routes (settings/backup/destinations/new, settings/read-audit/new, settings/general/tokens/new, settings/cluster-groups/new, settings/siem/new, settings/auth/scim-tokens/new, settings/group-mappings/new); editing an existing row on each of those pages stays a modal.
+const EXPECTED_ROUTE_COUNT = 144; // 2026-09-22: net +1 after plan 023 step 8 — added dashboard/extensions/$name, the host-fixed full-page mount ExtensionNavItems' sidebar links already pointed at (previously a 404).
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to

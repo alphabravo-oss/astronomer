@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useAppForm } from "@/lib/form";
 import { FormShell } from "@/components/ui/form-shell";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -324,7 +325,7 @@ export function DestinationsSection({
   );
 }
 
-function DestinationModal({
+export function DestinationModal({
   existing,
   onClose,
 }: {
@@ -374,20 +375,27 @@ function DestinationModal({
         </div>
       }
     >
-      <FormShell
+      <FormShell form={form}
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
           void form.handleSubmit();
         }}
       >
-        <form.AppField name="name">
+        <form.AppForm>
+          <form.FormErrorSummary
+            serverError={
+              update.error ? extractApiErrorMessage(update.error) : null
+            }
+          />
+        </form.AppForm>
+        <form.AppField name="name" validators={{ onChange: ({ value }) => !value.trim() ? "Name is required" : undefined }}>
           {(field) => (
             <field.TextField label="Name" required placeholder="primary" />
           )}
         </form.AppField>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <form.AppField name="bucket">
+          <form.AppField name="bucket" validators={{ onChange: ({ value }) => !value.trim() ? "Bucket is required" : undefined }}>
             {(field) => (
               <field.TextField
                 label="Bucket"
@@ -738,7 +746,7 @@ function HistoryTable() {
   );
 }
 
-function AstronomerBackupPage() {
+export function AstronomerBackupPage() {
   const backupQuery = useManagementBackupStatus();
 
   return (

@@ -7,6 +7,7 @@ import { registrationSearch } from "@/components/clusters/registration-flow";
 import { useClusters, useDeleteCluster } from "@/lib/hooks/clusters";
 import { queryKeys } from "@/lib/query-keys";
 import { useLiveQueryInvalidation } from "@/lib/live/hooks";
+import { useSearchParam } from "@/lib/use-search-param";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ActionButton } from "@/components/ui/action-button";
@@ -29,18 +30,14 @@ import { pageRowCount } from "@/lib/api/pagination";
 
 const CLUSTERS_PAGE_SIZE = 50;
 
-function ClustersPage() {
+export function ClustersPage() {
   const navigate = useNavigate();
-  const routeSearch = Route.useSearch();
-  const [statusFilter, setStatusFilter] = useState<string>(
-    typeof routeSearch.status === "string" ? routeSearch.status : "",
-  );
+  const [statusFilter, setStatusFilter] = useSearchParam("status");
   const [providerFilter, setProviderFilter] = useState<string>("");
   const [envFilter, setEnvFilter] = useState<string>("");
   const [pageIndex, setPageIndex] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useSearchParam("q", { debounceMs: 250 });
   const [debouncedSearch] = useDebouncedValue(search, { wait: 250 });
-
   // Action menu state
   const [editCluster, setEditCluster] = useState<Cluster | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
@@ -55,7 +52,6 @@ function ClustersPage() {
     page: pageIndex + 1,
     pageSize: CLUSTERS_PAGE_SIZE,
   });
-
   // Live updates: shape-changing events trigger a list refetch; per-row
   // metric ticks are merged in place by the layout's metrics merger.
   useLiveQueryInvalidation(
@@ -74,9 +70,7 @@ function ClustersPage() {
   );
 
   const clusters = clustersQuery.data?.data || [];
-  const hasServerFilters = Boolean(
-    statusFilter || providerFilter || envFilter || search,
-  );
+  const hasServerFilters = Boolean(statusFilter || providerFilter || envFilter || search);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -324,6 +318,9 @@ function ClustersPage() {
           columns={serverColumns}
           keyExtractor={(row) => row.id}
           persistKey="clusters"
+          isError={clustersQuery.isError} error={clustersQuery.error}
+          errorMessage="Failed to load clusters." permission="clusters:read"
+          onRetry={() => void clustersQuery.refetch()}
           onRowClick={(row) =>
             void navigate({ to: `/dashboard/clusters/${row.id}` })
           }
@@ -464,6 +461,9 @@ function ClustersPage() {
 export const Route = createFileRoute("/dashboard/clusters/")({
   // Deep-link contract (P2.4): typed passthrough — unrelated params survive.
   validateSearch: (search: Record<string, unknown>) =>
-    search as { register?: string; status?: string } & Record<string, unknown>,
+    search as { register?: string; status?: string; q?: string } & Record<
+      string,
+      unknown
+    >,
   component: ClustersPage,
 });

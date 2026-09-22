@@ -8,6 +8,7 @@ import { setRegistrationOptions } from "@/lib/api/cluster-registration";
 import { useCluster } from "@/lib/hooks/clusters";
 import { useClusterSearch } from "@/lib/hooks/cluster-search";
 import { useAppForm, useStore } from "@/lib/form";
+import { errorMessages } from "@/components/form/error-summary";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +27,11 @@ import {
   WizardStepper,
 } from "@/components/ui/wizard-stepper";
 import type { Cluster, ClusterEnvironment } from "@/types";
+
+// Mirrors the backend's RFC-1123-slug `validate:"required,rfc1123"` tag
+// (internal/handler/clusters_inventory.go) restricted to the documented
+// convention (OpenAPI: "RFC-1123 slug; must be lowercase + hyphens").
+const CLUSTER_NAME_PATTERN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export function RegisterClusterWizardRoute() {
   const navigate = useNavigate();
@@ -202,15 +208,13 @@ function RegisterClusterWizardPage({
   });
 
   const name = useStore(form.store, (s) => s.values.name);
+  const nameFieldError = useStore(form.store, (s) => errorMessages(s.fieldMeta.name?.errors ?? [])[0]);
   // Name availability is a bounded server search; the create endpoint remains
   // the final uniqueness authority if another registration races this check.
   const [debouncedName] = useDebouncedValue(name.trim(), { wait: 250 });
   const nameMatches = useClusterSearch(debouncedName, debouncedName.length > 0);
   const submitting = useStore(form.store, (s) => s.isSubmitting);
-  const privilegeProfile = useStore(
-    form.store,
-    (s) => s.values.privilegeProfile,
-  );
+  const privilegeProfile = useStore(form.store, (s) => s.values.privilegeProfile);
   const nameTaken =
     name.length > 0 &&
     (nameMatches.data?.pages ?? []).some((page) =>
@@ -243,7 +247,7 @@ function RegisterClusterWizardPage({
         />
       </div>
 
-      <FormShell
+      <FormShell form={form}
         onSubmit={(e) => {
           e.preventDefault();
           void form.handleSubmit();
@@ -254,7 +258,7 @@ function RegisterClusterWizardPage({
           <form.FormErrorSummary serverError={submissionError} />
         </form.AppForm>
         <Field label="Cluster name" required>
-          <form.Field name="name">
+          <form.Field name="name" validators={{ onChange: ({ value }) => !CLUSTER_NAME_PATTERN.test(value) ? "Name must be a lowercase RFC-1123 slug (letters, digits, hyphens; can't start or end with a hyphen)" : undefined }}>
             {(field) => (
               <Input
                 name={field.name}
@@ -278,8 +282,8 @@ function RegisterClusterWizardPage({
               &quot;{name}&quot; already exists. Choose a different name.
             </p>
           )}
+          {!nameTaken && nameFieldError && <p className="mt-1 text-xs text-status-error">{nameFieldError}</p>}
         </Field>
-
         <Field label="Display name">
           <form.Field name="displayName">
             {(field) => (

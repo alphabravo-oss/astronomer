@@ -25,9 +25,11 @@ import {
   type LoggingQueryResult,
   type LoggingSavedSearch,
 } from "@/lib/api/logging";
+import { useNavigate, useLocation } from "@tanstack/react-router";
 import {
   buildSharedLoggingURL,
   parseSharedLoggingFilters,
+  sharedLoggingSearchParams,
   type SharedLoggingFilters,
 } from "@/lib/logging-share";
 import { toastSuccess } from "@/lib/toast";
@@ -303,18 +305,29 @@ export function LoggingQueryDialog({
   const state = useLoggingQueryState(output, initialSharedFilters(output.id));
   const saved = useSavedSearchController(output, state);
   const [shareStatus, setShareStatus] = useState("");
+  const navigate = useNavigate();
+  const pathname = useLocation({ select: (location) => location.pathname });
 
   const shareFilters = async () => {
     if (typeof window === "undefined") return;
-    const sharedURL = buildSharedLoggingURL(window.location.href, {
+    const filters: SharedLoggingFilters = {
       outputId: output.id,
       query: state.query,
       namespaces: state.namespaceValues,
       limit: state.limit,
       start: fromUTCDateTimeInput(state.start),
       end: fromUTCDateTimeInput(state.end),
+    };
+    const sharedURL = buildSharedLoggingURL(window.location.href, filters);
+    void navigate({
+      to: pathname,
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        ...sharedLoggingSearchParams(filters),
+      }),
+      replace: true,
+      resetScroll: false,
     });
-    window.history.replaceState(null, "", sharedURL);
     try {
       await navigator.clipboard.writeText(sharedURL);
       setShareStatus("Share link copied");

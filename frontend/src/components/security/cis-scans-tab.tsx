@@ -30,13 +30,12 @@ import {
 export function CISScansTab() {
   const now = useClock();
   const navigate = useNavigate();
-  const { data: scansPage, isLoading } = useCISScans({ pageSize: 100 });
+  const { data: scansPage, isLoading, isError, error, refetch } = useCISScans({ pageSize: 100 });
   const { data: clustersPage } = useClusters({ pageSize: 200 });
 
   // Cross-cluster signal: any K8s mutation invalidates the scan list so a
   // newly-completed ingest pops up without a manual refresh.
   useLiveQueryInvalidation("cluster.k8s_changed", [["cis", "scans"]]);
-
   const clusterById = useMemo(() => {
     const map = new Map<string, string>();
     for (const c of clustersPage?.data ?? []) {
@@ -285,6 +284,7 @@ export function CISScansTab() {
         columns={columns}
         keyExtractor={(row) => row.id}
         loading={isLoading}
+        isError={isError} error={error} errorMessage="Failed to load CIS scans." onRetry={() => void refetch()}
         searchPlaceholder="Search scans..."
         emptyState={{
           title: "No CIS scans yet",

@@ -22,6 +22,7 @@ import { ArrowLeft, ArrowRight, Check, Globe } from "lucide-react";
 import { useCluster } from "@/lib/hooks/clusters";
 import { useAppForm, useStore } from "@/lib/form";
 import { useUpdateDexSettings } from "@/components/auth/hooks";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { cn } from "@/lib/utils";
@@ -91,6 +92,16 @@ function InstallDexPage() {
       />
 
       <Stepper step={step} />
+
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={
+            settingsMutation.error
+              ? extractApiErrorMessage(settingsMutation.error)
+              : null
+          }
+        />
+      </form.AppForm>
 
       <div className="rounded-xl border border-border bg-card p-6 space-y-5">
         {step === 1 && (

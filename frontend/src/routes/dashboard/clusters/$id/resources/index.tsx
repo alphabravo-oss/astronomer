@@ -18,7 +18,7 @@ import { PageHeader } from "@/components/ui/page";
  * second-guess whether a row is still in the cluster.
  */
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import { QueryStates } from "@/components/ui/query-states";
@@ -110,11 +110,14 @@ function Section({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const contentId = useId();
   return (
     <div className="rounded-lg border bg-card mb-4">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={contentId}
         className="flex w-full items-center justify-between p-4 text-left"
       >
         <div className="flex items-center gap-2">
@@ -130,7 +133,11 @@ function Section({
           <ChevronRight className="h-4 w-4" />
         )}
       </button>
-      {open && <div className="border-t p-4">{children}</div>}
+      {open && (
+        <div id={contentId} className="border-t p-4">
+          {children}
+        </div>
+      )}
     </div>
   );
 }

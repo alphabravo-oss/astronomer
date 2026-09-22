@@ -22,6 +22,7 @@ import { useMemo, useState } from "react";
 import { useAppForm, useStore } from "@/lib/form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
+import { extractApiErrorMessage } from "@/lib/api/errors";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import {
@@ -472,7 +473,7 @@ function RegistryDialog({
       title={isEdit ? `Edit ${existing.registryUrl}` : "Add registry"}
       icon={<Lock className="h-4 w-4" />}
       onClose={onClose}
-    >
+    ><form.AppForm><form.FormErrorSummary serverError={(create.error ?? update.error) ? extractApiErrorMessage(create.error ?? update.error) : null} /></form.AppForm>
       <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"

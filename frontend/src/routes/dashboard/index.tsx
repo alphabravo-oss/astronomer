@@ -35,7 +35,7 @@ import { EstateClustersTable } from "@/components/clusters/estate-clusters-table
 import { ClustersSectionHeader } from "@/components/dashboards/clusters-section-header";
 import { WelcomeBanner } from "@/components/dashboards/welcome-banner";
 
-function DashboardPage() {
+export function DashboardPage() {
   const navigate = useNavigate();
   const clustersQuery = useClusters({
     pageSize: 10,

@@ -128,26 +128,21 @@ export function SearchPage({
   const [debouncedNamespace] = useDebouncedValue(namespace, { wait: 250 });
 
   // Sync URL with debounced inputs so the URL reflects the in-flight
-  // query. Using replaceState prevents history pollution on every key.
+  // query. A router-native replace keeps this off the back/forward stack.
   useEffect(() => {
-    const params = new URLSearchParams();
-    params.set("type", resourceType);
-    if (debouncedNamespace) params.set("namespace", debouncedNamespace);
-    if (debouncedLabel) params.set("label", debouncedLabel);
-    if (debouncedName) params.set("name", debouncedName);
-    const qs = params.toString();
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${pathname}${qs ? `?${qs}` : ""}`,
-    );
-  }, [
-    pathname,
-    resourceType,
-    debouncedNamespace,
-    debouncedLabel,
-    debouncedName,
-  ]);
+    void navigate({
+      to: pathname,
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        type: resourceType,
+        namespace: debouncedNamespace || undefined,
+        label: debouncedLabel || undefined,
+        name: debouncedName || undefined,
+      }),
+      replace: true,
+      resetScroll: false,
+    });
+  }, [navigate, pathname, resourceType, debouncedNamespace, debouncedLabel, debouncedName]);
 
   const queryKey = useMemo(
     () =>
