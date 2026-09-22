@@ -3076,6 +3076,8 @@ type UserPreference struct {
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
 	PinnedClusters json.RawMessage `json:"pinned_clusters"`
+	RowsPerPage    int32           `json:"rows_per_page"`
+	DateFormat     string          `json:"date_format"`
 }
 
 type UserTotpEnrollment struct {

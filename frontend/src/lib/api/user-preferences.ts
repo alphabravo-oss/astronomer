@@ -11,6 +11,12 @@ export type TableDensityPreference = UserPreferences["table_density"];
 export type TimeFormatPreference = UserPreferences["time_format"];
 export type FavoriteRoute = UserPreferences["favorites"][number];
 export type LandingRoute = UserPreferences["landing_route"];
+export type RowsPerPagePreference = NonNullable<
+  UserPreferences["rows_per_page"]
+>;
+export type DateFormatPreference = NonNullable<
+  UserPreferences["date_format"]
+>;
 
 export const defaultUserPreferences: UserPreferences = {
   theme: "system",
@@ -19,6 +25,8 @@ export const defaultUserPreferences: UserPreferences = {
   time_format: "locale",
   favorites: [],
   pinned_clusters: [],
+  rows_per_page: 25,
+  date_format: "locale",
 };
 
 export async function getUserPreferences(

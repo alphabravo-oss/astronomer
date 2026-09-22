@@ -15,7 +15,7 @@ import {
   putUserPreferences,
   type UserPreferences,
 } from "@/lib/api/user-preferences";
-import { setTimeFormatPreference } from "@/lib/utils";
+import { setDateFormatPreference, setTimeFormatPreference } from "@/lib/utils";
 
 interface UserPreferencesContextValue {
   preferences: UserPreferences;
@@ -53,6 +53,10 @@ export function UserPreferencesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setTimeFormatPreference(preferences.time_format);
   }, [preferences.time_format]);
+
+  useEffect(() => {
+    setDateFormatPreference(preferences.date_format ?? "locale");
+  }, [preferences.date_format]);
 
   const mutation = useMutation({
     // Full-document PUTs are serialized so rapid control changes cannot reach

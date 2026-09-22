@@ -31,6 +31,18 @@ const (
 const MaxFavorites = 12
 const MaxPinnedClusters = 20
 
+const (
+	DateLocale   = "locale"
+	DateISO      = "iso"
+	DateRelative = "relative"
+)
+
+// AllowedRowsPerPage mirrors the migration's CHECK (rows_per_page IN (...)).
+var AllowedRowsPerPage = map[int]struct{}{10: {}, 25: {}, 50: {}, 100: {}}
+
+const DefaultRowsPerPage = 25
+const DefaultDateFormat = DateLocale
+
 var (
 	allowedLandingRoutes = map[string]struct{}{
 		"/dashboard": {}, "/dashboard/clusters": {}, "/dashboard/projects": {},
@@ -61,6 +73,15 @@ type Preferences struct {
 	// (a pinned cluster that is later deleted or the pinner loses access to
 	// simply drops out of the switcher's rendered results).
 	PinnedClusters []string `json:"pinned_clusters"`
+	// RowsPerPage is the initial page size data tables seed from, one of
+	// AllowedRowsPerPage. Zero (an omitted field on PUT, or a legacy row
+	// this package never wrote) is normalized to DefaultRowsPerPage before
+	// validation, not treated as an invalid value.
+	RowsPerPage int `json:"rows_per_page"`
+	// DateFormat controls how absolute timestamps render across the console
+	// (lib/utils.ts's formatDate on the frontend); "" is normalized to
+	// DefaultDateFormat the same way.
+	DateFormat string `json:"date_format"`
 }
 
 func Defaults() Preferences {
@@ -69,6 +90,8 @@ func Defaults() Preferences {
 		LandingRoute: "/dashboard", TimeFormat: TimeLocale,
 		Favorites:      []string{},
 		PinnedClusters: []string{},
+		RowsPerPage:    DefaultRowsPerPage,
+		DateFormat:     DefaultDateFormat,
 	}
 }
 
@@ -113,6 +136,12 @@ func (p Preferences) Validate() error {
 			return fmt.Errorf("pinned cluster %q is duplicated", id)
 		}
 		seenClusters[id] = struct{}{}
+	}
+	if _, ok := AllowedRowsPerPage[p.RowsPerPage]; !ok {
+		return fmt.Errorf("rows_per_page must be one of 10, 25, 50, or 100")
+	}
+	if p.DateFormat != DateLocale && p.DateFormat != DateISO && p.DateFormat != DateRelative {
+		return fmt.Errorf("date_format must be locale, iso, or relative")
 	}
 	return nil
 }
