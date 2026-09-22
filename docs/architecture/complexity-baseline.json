@@ -96,7 +96,7 @@
     "frontend/src/routes/dashboard/clusters/$id/registries/index.tsx:ClusterRegistriesPage": 261,
     "frontend/src/routes/dashboard/clusters/$id/registries/index.tsx:RegistryDialog": 255,
     "frontend/src/routes/dashboard/clusters/$id/template/index.tsx:ClusterTemplatePage": 303,
-    "frontend/src/routes/dashboard/clusters/index.tsx:ClustersPage": 428,
+    "frontend/src/routes/dashboard/clusters/index.tsx:ClustersPage": 427,
     "frontend/src/routes/dashboard/clusters/register/index.tsx:RegisterClusterWizardPage": 482,
     "frontend/src/routes/dashboard/delivery/bundles/$bundleId/index.tsx:CreateVersionDialog": 328,
     "frontend/src/routes/dashboard/delivery/deployments/$deploymentId/index.tsx:DeploymentDetailPage": 248,
