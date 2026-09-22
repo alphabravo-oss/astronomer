@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/data-table-state";
 import { useDraft } from "@/lib/hooks/use-draft";
 import { useStorageSnapshot } from "@/lib/hooks/use-storage-snapshot";
+import { useUserPreferences } from "@/lib/user-preferences";
 
 interface DataTableStateOptions<T> {
   data: T[];
@@ -47,13 +48,22 @@ export function useDataTableState<T>({
 }: DataTableStateOptions<T>) {
   const [searchInput, setSearchInput] = useState("");
   const [globalFilter] = useDebouncedValue(searchInput, { wait: 200 });
+  // The caller's `pageSize` is the fallback default (it's often tuned to a
+  // server page limit, e.g. a resource table's server-side page). Only a
+  // real, server-owned preference overrides it — `isServerOwned` is false
+  // both before the initial load resolves and when signed out, and
+  // defaultUserPreferences always carries a concrete rows_per_page that
+  // would otherwise clobber every caller's tuned pageSize.
+  const { preferences, isServerOwned } = useUserPreferences();
+  const initialPageSize =
+    (isServerOwned ? preferences.rows_per_page : undefined) ?? pageSize;
   const defaultPagination = useMemo(
-    () => ({ pageIndex: 0, pageSize }),
-    [pageSize],
+    () => ({ pageIndex: 0, pageSize: initialPageSize }),
+    [initialPageSize],
   );
   const [clientPagination, setClientPagination] = useDraft<PaginationState>(
     defaultPagination,
-    `${globalFilter}:${pageSize}`,
+    `${globalFilter}:${initialPageSize}`,
   );
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);

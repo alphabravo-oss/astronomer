@@ -5718,6 +5718,8 @@ export interface OpenAPIComponents {
           "time_format": "locale" | "12h" | "24h";
           "favorites": Array<"/dashboard" | "/dashboard/clusters" | "/dashboard/projects" | "/dashboard/workloads" | "/dashboard/delivery" | "/dashboard/monitoring" | "/dashboard/alerting" | "/dashboard/logging" | "/dashboard/security" | "/dashboard/rbac" | "/dashboard/audit" | "/dashboard/tools" | "/dashboard/extensions">;
           "pinned_clusters"?: string[];
+          "rows_per_page"?: 10 | 25 | 50 | 100;
+          "date_format"?: "locale" | "iso" | "relative";
         };
     UserQuotaDimensions: {
           "max_projects_per_user": number;

@@ -122,6 +122,40 @@ function AccountPreferencesPage() {
                     ["24h", "24-hour clock"],
                   ]}
                 />
+                <PreferenceSelect
+                  id="preference-date-format"
+                  label="Date display"
+                  value={preferences.date_format ?? "locale"}
+                  onChange={(date_format) =>
+                    updatePreferences({
+                      date_format:
+                        date_format as typeof preferences.date_format,
+                    })
+                  }
+                  options={[
+                    ["locale", "Browser locale"],
+                    ["iso", "ISO 8601"],
+                    ["relative", "Relative (e.g. 2 hours ago)"],
+                  ]}
+                />
+                <PreferenceSelect
+                  id="preference-rows-per-page"
+                  label="Rows per page"
+                  value={String(preferences.rows_per_page ?? 25)}
+                  onChange={(rowsPerPage) =>
+                    updatePreferences({
+                      rows_per_page: Number(
+                        rowsPerPage,
+                      ) as typeof preferences.rows_per_page,
+                    })
+                  }
+                  options={[
+                    ["10", "10"],
+                    ["25", "25"],
+                    ["50", "50"],
+                    ["100", "100"],
+                  ]}
+                />
               </CardContent>
             </Card>
           </PageSection>

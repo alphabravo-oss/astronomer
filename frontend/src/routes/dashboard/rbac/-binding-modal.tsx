@@ -19,9 +19,9 @@ import { useProjects } from "@/lib/hooks/projects";
 import { isValidNamespace, projectLabel, roleTitle } from "./-utils";
 
 export function CreateClusterBindingModal({
-  onClose,
+  onClose, fixedScope,
 }: {
-  onClose: () => void;
+  onClose: () => void; fixedScope?: { kind: "project"; projectId: string };
 }) {
   const { data: globalRoles } = useGlobalRoles();
   const { data: clusterRoles } = useClusterRoles();
@@ -35,11 +35,11 @@ export function CreateClusterBindingModal({
 
   const form = useAppForm({
     defaultValues: {
-      scope: "cluster" as "global" | "cluster" | "project",
+      scope: (fixedScope ? "project" : "cluster") as "global" | "cluster" | "project",
       userId: "",
       roleId: "",
       clusterId: "",
-      projectId: "",
+      projectId: fixedScope?.projectId ?? "",
       namespace: "",
     },
     validators: {
@@ -141,7 +141,7 @@ export function CreateClusterBindingModal({
           }
         />
       </form.AppForm>
-      <div className="space-y-1.5">
+      {!fixedScope && <div className="space-y-1.5">
         <label
           className="text-sm font-medium text-foreground"
           htmlFor="field-b53e75b3-111"
@@ -168,7 +168,7 @@ export function CreateClusterBindingModal({
             </Select>
           )}
         </form.Field>
-      </div>
+      </div>}
 
       <div className="space-y-1.5">
         <label
@@ -290,7 +290,7 @@ export function CreateClusterBindingModal({
         </>
       )}
 
-      {scope === "project" && (
+      {scope === "project" && !fixedScope && (
         <div className="space-y-1.5">
           <label
             className="text-sm font-medium text-foreground"

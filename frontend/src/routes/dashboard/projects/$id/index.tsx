@@ -11,9 +11,14 @@ import { Link as RouterLink } from "@tanstack/react-router";
 
 import { Users, Server, Layers } from "lucide-react";
 import { useProject } from "@/lib/hooks/projects";
+import { useProjectRoleBindings } from "@/lib/hooks/rbac";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { canAssignProjectNamespaces } from "@/components/projects/hooks";
 import { ProjectNamespacesCard } from "@/components/projects/namespaces-card";
+import {
+  ProjectMembersCard,
+  PROJECT_MEMBERS_CARD_ID,
+} from "@/components/projects/members-card";
 import { formatRelativeTime } from "@/lib/utils";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
 import { QueryStates } from "@/components/ui/query-states";
@@ -27,6 +32,10 @@ function ProjectOverviewPage() {
   const { data: project, isLoading } = projectQuery;
   const { data: user } = useCurrentUser();
   const canEdit = canAssignProjectNamespaces(user);
+  // `Project.members` is a dead wire field (never populated by the GET) — the
+  // real roster is the project-scoped RBAC binding list; see members-card.tsx.
+  const { data: memberBindings } = useProjectRoleBindings({ project_id: id });
+  const memberCount = memberBindings?.length ?? 0;
 
   if (isLoading || projectQuery.isError) {
     return (
@@ -75,12 +84,17 @@ function ProjectOverviewPage() {
           label="Namespaces"
           value={project.namespaces?.length ?? 0}
         />
-        <MetricCard
-          dense
-          icon={<Users className="h-3.5 w-3.5" />}
-          label="Members"
-          value={project.members?.length ?? 0}
-        />
+        {/* A plain in-page anchor rather than MetricCard's router-`Link` href
+            (which resolves `to` as a route path, not a hash fragment) — this
+            scrolls to the members card below instead of trying to navigate. */}
+        <a href={`#${PROJECT_MEMBERS_CARD_ID}`} className="block">
+          <MetricCard
+            dense
+            icon={<Users className="h-3.5 w-3.5" />}
+            label="Members"
+            value={memberCount}
+          />
+        </a>
 
         <div className="md:col-span-3">
           <ProjectNamespacesCard
@@ -88,6 +102,10 @@ function ProjectOverviewPage() {
             namespaces={project.namespaces ?? []}
             canEdit={canEdit}
           />
+        </div>
+
+        <div className="md:col-span-3">
+          <ProjectMembersCard projectId={project.id} />
         </div>
 
         <div className="md:col-span-3 rounded-xl border border-border bg-card p-5 space-y-2">

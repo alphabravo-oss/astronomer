@@ -1,12 +1,20 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, formatDistanceToNow, parseISO } from "date-fns";
-import type { TimeFormatPreference } from "@/lib/api/user-preferences";
+import type {
+  DateFormatPreference,
+  TimeFormatPreference,
+} from "@/lib/api/user-preferences";
 
 let activeTimeFormat: TimeFormatPreference = "locale";
+let activeDateFormat: DateFormatPreference = "locale";
 
 export function setTimeFormatPreference(preference: TimeFormatPreference) {
   activeTimeFormat = preference;
+}
+
+export function setDateFormatPreference(preference: DateFormatPreference) {
+  activeDateFormat = preference;
 }
 
 /**
@@ -17,7 +25,11 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Format a date string to a human-readable format
+ * Format a date string to a human-readable format. An explicit `fmt`
+ * (date-fns pattern) always wins; otherwise the `date_format` preference
+ * picks the overall style ("iso" / "relative" bypass `time_format`
+ * entirely, since neither has a 12h/24h axis), and `time_format` only
+ * matters for the default "locale" style's hour rendering.
  */
 export function formatDate(
   dateStr: string,
@@ -26,6 +38,10 @@ export function formatDate(
   try {
     const date = parseISO(dateStr);
     if (fmt) return format(date, fmt);
+    if (activeDateFormat === "iso") return date.toISOString();
+    if (activeDateFormat === "relative") {
+      return formatDistanceToNow(date, { addSuffix: true });
+    }
     if (activeTimeFormat === "12h") {
       return format(date, "MMM d, yyyy h:mm a");
     }

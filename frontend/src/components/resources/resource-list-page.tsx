@@ -8,7 +8,10 @@ import {
   useRestartWorkload,
 } from "@/lib/hooks/workloads";
 import { useK8sDelete } from "@/lib/hooks/kubernetes-proxy";
+import { k8sGetYaml } from "@/lib/api/kubernetes-proxy";
 import { getWorkloadPods, type WorkloadSort } from "@/lib/api/workloads";
+import { prepareCloneManifest } from "@/lib/k8s-clone";
+import { downloadBlob } from "@/lib/utils";
 import type { Column } from "@/components/ui/data-table";
 import { ExplorerDataTable } from "@/components/resources/explorer-data-table";
 import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
@@ -90,6 +93,8 @@ import {
   Code,
   Pencil,
   Plus,
+  Download,
+  Copy,
 } from "lucide-react";
 import { toastError } from "@/lib/toast";
 import { pageRowCount } from "@/lib/api/pagination";
@@ -98,7 +103,7 @@ const WORKLOAD_RESOURCE_PAGE_SIZE = 50;
 
 // ── Per-resource components (each calls only its own hook) ──
 
-function WorkloadActions({
+export function WorkloadActions({
   row,
   permissions,
   podPermissions,
@@ -117,6 +122,11 @@ function WorkloadActions({
   onRestart: (workload: Workload) => void;
   onDelete: (workload: Workload) => void;
 }) {
+  // Read from the route rather than a threaded prop: WorkloadActions is a
+  // leaf of the per-row action column, and threading clusterId down would
+  // grow WorkloadsTable past its complexity-budget ceiling for no benefit —
+  // every mount of this component already lives under the cluster route.
+  const { id: clusterId } = useParams({ strict: false }) as { id: string };
   const resourceType = kindToResourceType(row.kind);
   const execDenied = firstDeniedDecision(
     podPermissions.read,
@@ -126,6 +136,39 @@ function WorkloadActions({
     podPermissions.read,
     podPermissions.logs,
   );
+  const [cloneYaml, setCloneYaml] = useState<string | null>(null);
+  const resourcePath = k8sResourcePath(resourceType, row.name, row.namespace);
+
+  const downloadYaml = async () => {
+    try {
+      const yamlStr = await k8sGetYaml(clusterId, resourcePath);
+      downloadBlob(
+        yamlStr,
+        `${row.namespace}-${row.name}.yaml`,
+        "application/x-yaml",
+      );
+    } catch {
+      toastError("Failed to download YAML");
+    }
+  };
+
+  const prepareClone = async () => {
+    try {
+      const yamlStr = await k8sGetYaml(clusterId, resourcePath);
+      const yaml = await import("js-yaml");
+      const parsed = yaml.load(yamlStr);
+      const cloned = prepareCloneManifest(
+        (parsed && typeof parsed === "object" ? parsed : {}) as Record<
+          string,
+          unknown
+        >,
+      );
+      setCloneYaml(yaml.dump(cloned, { lineWidth: -1, noRefs: true }));
+    } catch {
+      toastError("Failed to prepare clone");
+    }
+  };
+
   const items: ActionMenuItem[] = [
     {
       label: "Execute Shell",
@@ -168,6 +211,21 @@ function WorkloadActions({
       disabled: !permissions.update.allowed,
       disabledReason: permissionDeniedReason(permissions.update),
     },
+    {
+      label: "Download YAML",
+      icon: <Download className="h-3.5 w-3.5" />,
+      onClick: () => void downloadYaml(),
+      disabled: !permissions.read.allowed,
+      disabledReason: permissionDeniedReason(permissions.read),
+    },
+    {
+      label: "Clone",
+      icon: <Copy className="h-3.5 w-3.5" />,
+      onClick: () => void prepareClone(),
+      disabled: !permissions.create.allowed,
+      disabledReason: permissionDeniedReason(permissions.create),
+      separator: true,
+    },
   ];
   if (WORKLOAD_SCALABLE_KINDS.includes(row.kind)) {
     items.push({
@@ -205,6 +263,15 @@ function WorkloadActions({
   return (
     <StopRowClick>
       <ActionMenu items={items} />
+      {cloneYaml !== null && (
+        <CreateResourceDialog
+          open
+          onClose={() => setCloneYaml(null)}
+          clusterId={clusterId}
+          title={`Clone ${row.kind}`}
+          initialYaml={cloneYaml}
+        />
+      )}
     </StopRowClick>
   );
 }

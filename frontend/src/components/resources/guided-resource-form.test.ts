@@ -67,6 +67,71 @@ describe("guided resource form model", () => {
     });
   });
 
+  it("leaves probes unvalidated when absent, but blocks a configured probe with no port", () => {
+    const base: KubernetesManifest = {
+      kind: "Deployment",
+      metadata: { name: "web" },
+      spec: {
+        template: {
+          spec: {
+            containers: [{ image: "nginx", readinessProbe: { httpGet: {} } }],
+          },
+        },
+      },
+    };
+    expect(validateGuidedResource(base)).toHaveProperty(
+      "readinessProbe",
+      expect.any(String),
+    );
+
+    const withPort = updateManifest(
+      base,
+      [
+        "spec",
+        "template",
+        "spec",
+        "containers",
+        0,
+        "readinessProbe",
+        "httpGet",
+        "port",
+      ],
+      8080,
+    );
+    expect(validateGuidedResource(withPort)).not.toHaveProperty(
+      "readinessProbe",
+    );
+
+    // No probe configured at all — never flagged.
+    const noProbe: KubernetesManifest = {
+      kind: "Deployment",
+      metadata: { name: "web" },
+      spec: {
+        template: { spec: { containers: [{ image: "nginx" }] } },
+      },
+    };
+    expect(validateGuidedResource(noProbe)).not.toHaveProperty(
+      "readinessProbe",
+    );
+  });
+
+  it("blocks an exec probe with no command arguments", () => {
+    const errors = validateGuidedResource({
+      kind: "Deployment",
+      metadata: { name: "web" },
+      spec: {
+        template: {
+          spec: {
+            containers: [
+              { image: "nginx", livenessProbe: { exec: { command: [] } } },
+            ],
+          },
+        },
+      },
+    });
+    expect(errors).toHaveProperty("livenessProbe", expect.any(String));
+  });
+
   it("resolves descriptions through the bounded schema definition closure", () => {
     const root = {
       properties: {

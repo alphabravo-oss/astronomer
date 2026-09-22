@@ -77,7 +77,10 @@ export async function materializePrincipal(input: {
   return requireData(response, "materializePrincipal");
 }
 
-const RBAC_LIST_LIMIT = 200;
+// Exported so callers that need to detect a possibly-truncated list (e.g. the
+// project members card) can compare a result's length against the same cap
+// this module requests, without duplicating the number.
+export const RBAC_LIST_LIMIT = 200;
 
 function requiredString(value: string | undefined, field: string): string {
   if (!value) throw new Error(`RBAC API response omitted ${field}`);

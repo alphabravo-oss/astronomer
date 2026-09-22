@@ -32,6 +32,8 @@ import {
 import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { EstateClustersTable } from "@/components/clusters/estate-clusters-table";
+import { ClustersSectionHeader } from "@/components/dashboards/clusters-section-header";
+import { WelcomeBanner } from "@/components/dashboards/welcome-banner";
 
 function DashboardPage() {
   const navigate = useNavigate();
@@ -62,6 +64,7 @@ function DashboardPage() {
   );
 
   const clusters = clustersQuery.data?.data || [];
+  const clusterTotal = clustersQuery.data?.pagination?.total ?? clusters.length;
   const clusterSummary = clusterSummaryQuery.data;
   const activity = activityData || [];
   const tools = toolsData || [];
@@ -81,6 +84,8 @@ function DashboardPage() {
         title="Platform Overview"
         description="Real-time status of your Kubernetes infrastructure"
       />
+
+      <WelcomeBanner estateEmpty={clusterTotal === 0} />
 
       {/* At-a-glance metric strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -168,16 +173,7 @@ function DashboardPage() {
 
       {/* Clusters table */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium text-foreground">Clusters</h2>
-          <RouterLink
-            to="/dashboard/clusters"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            View all
-            <ArrowRight className="h-3.5 w-3.5" />
-          </RouterLink>
-        </div>
+        <ClustersSectionHeader shown={clusters.length} total={clusterTotal} />
 
         {!clustersQuery.isLoading &&
         !clustersQuery.isError &&

@@ -48,6 +48,8 @@ func preferencesFromRow(row sqlc.UserPreference) (userpreferences.Preferences, e
 		TimeFormat:     userpreferences.TimeFormat(row.TimeFormat),
 		Favorites:      []string{},
 		PinnedClusters: []string{},
+		RowsPerPage:    int(row.RowsPerPage),
+		DateFormat:     row.DateFormat,
 	}
 	if err := json.Unmarshal(row.Favorites, &prefs.Favorites); err != nil {
 		return userpreferences.Preferences{}, err
@@ -124,6 +126,15 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		// jsonb_typeof(...) = 'array' check.
 		prefs.PinnedClusters = []string{}
 	}
+	if prefs.RowsPerPage == 0 {
+		// rows_per_page is optional in the request (older clients omit it,
+		// and Go's zero value for an absent int field is 0, not one of the
+		// allowed page sizes); normalize before Validate rejects it.
+		prefs.RowsPerPage = userpreferences.DefaultRowsPerPage
+	}
+	if prefs.DateFormat == "" {
+		prefs.DateFormat = userpreferences.DefaultDateFormat
+	}
 	if err := prefs.Validate(); err != nil {
 		RespondRequestError(w, r, http.StatusBadRequest, apierror.ValidationError, err.Error())
 		return
@@ -143,6 +154,8 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		TableDensity: string(prefs.TableDensity), LandingRoute: prefs.LandingRoute,
 		TimeFormat: string(prefs.TimeFormat), Favorites: favorites,
 		PinnedClusters: pinnedClusters,
+		RowsPerPage:    int32(prefs.RowsPerPage),
+		DateFormat:     prefs.DateFormat,
 	}
 	var stored sqlc.UserPreference
 	err = h.preferencesRunTx(r.Context(), func(q UserPreferencesMutationTx) error {
@@ -155,6 +168,7 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 			"theme": prefs.Theme, "table_density": prefs.TableDensity,
 			"landing_route": prefs.LandingRoute, "time_format": prefs.TimeFormat,
 			"favorite_count": len(prefs.Favorites), "pinned_cluster_count": len(prefs.PinnedClusters),
+			"rows_per_page": prefs.RowsPerPage, "date_format": prefs.DateFormat,
 		})
 	})
 	if err != nil {

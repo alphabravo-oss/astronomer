@@ -2119,6 +2119,13 @@ const (
 	UpdateProjectPolicyRequestNetworkPolicyModeNone             UpdateProjectPolicyRequestNetworkPolicyMode = "none"
 )
 
+// Defines values for UserPreferencesDateFormat.
+const (
+	UserPreferencesDateFormatIso      UserPreferencesDateFormat = "iso"
+	UserPreferencesDateFormatLocale   UserPreferencesDateFormat = "locale"
+	UserPreferencesDateFormatRelative UserPreferencesDateFormat = "relative"
+)
+
 // Defines values for UserPreferencesFavorites.
 const (
 	UserPreferencesFavoritesDashboard           UserPreferencesFavorites = "/dashboard"
@@ -2147,6 +2154,14 @@ const (
 	UserPreferencesLandingRouteDashboardprojects   UserPreferencesLandingRoute = "/dashboard/projects"
 	UserPreferencesLandingRouteDashboardsecurity   UserPreferencesLandingRoute = "/dashboard/security"
 	UserPreferencesLandingRouteDashboardworkloads  UserPreferencesLandingRoute = "/dashboard/workloads"
+)
+
+// Defines values for UserPreferencesRowsPerPage.
+const (
+	UserPreferencesRowsPerPageN10  UserPreferencesRowsPerPage = 10
+	UserPreferencesRowsPerPageN100 UserPreferencesRowsPerPage = 100
+	UserPreferencesRowsPerPageN25  UserPreferencesRowsPerPage = 25
+	UserPreferencesRowsPerPageN50  UserPreferencesRowsPerPage = 50
 )
 
 // Defines values for UserPreferencesTableDensity.
@@ -10848,19 +10863,27 @@ type User struct {
 
 // UserPreferences defines model for UserPreferences.
 type UserPreferences struct {
+	DateFormat     *UserPreferencesDateFormat  `json:"date_format,omitempty"`
 	Favorites      []UserPreferencesFavorites  `json:"favorites"`
 	LandingRoute   UserPreferencesLandingRoute `json:"landing_route"`
 	PinnedClusters *[]openapi_types.UUID       `json:"pinned_clusters,omitempty"`
+	RowsPerPage    *UserPreferencesRowsPerPage `json:"rows_per_page,omitempty"`
 	TableDensity   UserPreferencesTableDensity `json:"table_density"`
 	Theme          UserPreferencesTheme        `json:"theme"`
 	TimeFormat     UserPreferencesTimeFormat   `json:"time_format"`
 }
+
+// UserPreferencesDateFormat defines model for UserPreferences.DateFormat.
+type UserPreferencesDateFormat string
 
 // UserPreferencesFavorites defines model for UserPreferences.Favorites.
 type UserPreferencesFavorites string
 
 // UserPreferencesLandingRoute defines model for UserPreferences.LandingRoute.
 type UserPreferencesLandingRoute string
+
+// UserPreferencesRowsPerPage defines model for UserPreferences.RowsPerPage.
+type UserPreferencesRowsPerPage int
 
 // UserPreferencesTableDensity defines model for UserPreferences.TableDensity.
 type UserPreferencesTableDensity string

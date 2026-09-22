@@ -7,8 +7,20 @@
  * by the Playwright e2e instead.
  */
 
-import React from "react";
+import React, { type ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// GenericOverview mounts LabelsAnnotationsEditor, which reads/writes through
+// react-query (useMutation/useQueryClient) — every render needs a client.
+function renderWithQuery(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+}
 
 // resource-detail statically imports PodTerminal, which pulls in the WASM-backed
 // @wterm/react bundle. We never render the terminal here, so stub the module
@@ -22,6 +34,12 @@ vi.mock("@/lib/permission-hooks", () => ({
     reason: "Granted for test",
     disabledReason: "",
   }),
+  usePermissionDecision: () => ({
+    allowed: true,
+    reason: "Granted for test",
+    disabledReason: "",
+  }),
+  canonicalPermissionResource: (resourceType: string) => resourceType,
   permissionDeniedReason: () => "Denied for test",
 }));
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -39,7 +57,7 @@ import { ResourceOverview } from "@/components/resources/resource-detail";
 
 describe("ResourceOverview kind-specific branches", () => {
   it("renders a pod overview with phase, node, IP and per-container rows", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="pods"
         obj={{
@@ -75,7 +93,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders a service overview with type, clusterIP, ports and selector", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="services"
         obj={{
@@ -102,7 +120,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("lists configmap keys", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="configmaps"
         obj={{
@@ -119,7 +137,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders ingress class, hosts and TLS", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="ingresses"
         obj={{
@@ -142,7 +160,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders PVC status, capacity, storageClass and volume", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="persistentvolumeclaims"
         obj={{
@@ -161,7 +179,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders a job overview with completions, parallelism and counts", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="jobs"
         obj={{
@@ -178,7 +196,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders a cronjob overview with schedule and suspend state", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="cronjobs"
         obj={{
@@ -200,7 +218,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders an HPA overview with target, min/max and replicas", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="hpa"
         obj={{
@@ -228,7 +246,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders RBAC role rules", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="k8s-clusterroles"
         obj={
@@ -248,7 +266,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders a rolebinding roleRef and subjects", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="k8s-rolebindings"
         obj={
@@ -269,7 +287,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders a storageclass with provisioner and parameters", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="storageclasses"
         obj={
@@ -288,7 +306,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("surfaces top-level status scalars for an unmapped/custom kind", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="widgets"
         obj={
@@ -311,7 +329,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("surfaces top-level spec scalars for an unmapped/custom kind", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="widgets"
         obj={
@@ -331,7 +349,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("renders a Gateway with class and listeners", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="gateways"
         obj={
@@ -354,7 +372,7 @@ describe("ResourceOverview kind-specific branches", () => {
   });
 
   it("masks secret data values", () => {
-    render(
+    renderWithQuery(
       <ResourceOverview
         resourceType="secrets"
         obj={{

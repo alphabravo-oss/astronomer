@@ -42,6 +42,12 @@ interface CreateResourceDialogProps {
   /** K8s API path to POST to. The live discovery contract is preferred. */
   apiPath?: string;
   resourceType?: ResourceType;
+  /**
+   * Starting YAML for the kind-less import flow (e.g. Clone), rendered in
+   * YAML mode with the guided/YAML toggle hidden just like the bare import
+   * flow. Ignored when `templateKey` is set.
+   */
+  initialYaml?: string;
 }
 
 const IMPORT_YAML_PLACEHOLDER =
@@ -178,8 +184,8 @@ function CreateResourceEditor({
   clusterId,
   templateKey,
   title,
-  apiPath,
-  resourceType,
+  apiPath, resourceType,
+  initialYaml,
 }: CreateResourceDialogProps) {
   const resolvedResourceType =
     resourceType ??
@@ -188,7 +194,7 @@ function CreateResourceEditor({
     templateKey ? "guided" : "yaml",
   );
   const [yamlContent, setYamlContent] = useState(
-    templateKey ? k8sTemplates[templateKey] || "" : IMPORT_YAML_PLACEHOLDER,
+    templateKey ? k8sTemplates[templateKey] || "" : initialYaml ?? IMPORT_YAML_PLACEHOLDER,
   );
   const [manifest, setManifest] = useState<KubernetesManifest>({});
   const [guidedValid, setGuidedValid] = useState(false);

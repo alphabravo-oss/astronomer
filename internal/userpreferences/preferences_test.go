@@ -38,6 +38,9 @@ func TestValidateRejectsUnregisteredValues(t *testing.T) {
 			}
 			p.PinnedClusters = ids
 		}},
+		{"rows per page", func(p *Preferences) { p.RowsPerPage = 15 }},
+		{"zero rows per page", func(p *Preferences) { p.RowsPerPage = 0 }},
+		{"date format", func(p *Preferences) { p.DateFormat = "epoch" }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -47,6 +50,26 @@ func TestValidateRejectsUnregisteredValues(t *testing.T) {
 				t.Fatal("Validate() accepted an unregistered preference")
 			}
 		})
+	}
+}
+
+func TestValidateAcceptsEveryAllowedRowsPerPage(t *testing.T) {
+	for rows := range AllowedRowsPerPage {
+		prefs := Defaults()
+		prefs.RowsPerPage = rows
+		if err := prefs.Validate(); err != nil {
+			t.Fatalf("Validate() rejected rows_per_page=%d: %v", rows, err)
+		}
+	}
+}
+
+func TestValidateAcceptsEveryDateFormat(t *testing.T) {
+	for _, format := range []string{DateLocale, DateISO, DateRelative} {
+		prefs := Defaults()
+		prefs.DateFormat = format
+		if err := prefs.Validate(); err != nil {
+			t.Fatalf("Validate() rejected date_format=%q: %v", format, err)
+		}
 	}
 }
 

@@ -9,8 +9,11 @@ import {
   cn,
   formatBytes,
   formatCPU,
+  formatDate,
   formatPercentage,
   formatRelativeTime,
+  setDateFormatPreference,
+  setTimeFormatPreference,
   statusColor,
   statusBgColor,
   statusDotColor,
@@ -105,6 +108,43 @@ describe("formatBytes()", () => {
     expect(formatBytes(NaN)).toBe("—");
     expect(formatBytes(Infinity)).toBe("—");
     expect(formatBytes(-1)).toBe("—");
+  });
+});
+
+describe("formatDate()", () => {
+  const sample = "2026-03-15T18:30:00.000Z";
+
+  afterEach(() => {
+    // Module-level preference state — reset so it never leaks across tests.
+    setTimeFormatPreference("locale");
+    setDateFormatPreference("locale");
+  });
+
+  it("honours an explicit date-fns format string regardless of preference", () => {
+    setDateFormatPreference("iso");
+    expect(formatDate(sample, "yyyy")).toBe("2026");
+  });
+
+  it("renders ISO 8601 when date_format is iso", () => {
+    setDateFormatPreference("iso");
+    expect(formatDate(sample)).toBe(new Date(sample).toISOString());
+  });
+
+  it("renders a relative time when date_format is relative", () => {
+    setDateFormatPreference("relative");
+    expect(formatDate(sample)).toMatch(/ago|in /);
+  });
+
+  it("falls through to time_format's 12h/24h locale rendering by default", () => {
+    setDateFormatPreference("locale");
+    setTimeFormatPreference("24h");
+    expect(formatDate(sample)).toContain("18:30");
+    setTimeFormatPreference("12h");
+    expect(formatDate(sample)).toMatch(/6:30\s?PM/i);
+  });
+
+  it("never throws on an unparseable date", () => {
+    expect(() => formatDate("not-a-date")).not.toThrow();
   });
 });
 

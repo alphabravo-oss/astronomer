@@ -4205,6 +4205,12 @@ components:
           items:
             type: string
             format: uuid
+        rows_per_page:
+          type: integer
+          enum: [10, 25, 50, 100]
+        date_format:
+          type: string
+          enum: [locale, iso, relative]
     StreamTicketRequest:
       type: object
       additionalProperties: false

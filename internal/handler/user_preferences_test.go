@@ -41,6 +41,7 @@ func (f *preferenceTxFake) UpsertUserPreferences(_ context.Context, arg sqlc.Ups
 		UserID: arg.UserID, Theme: arg.Theme, TableDensity: arg.TableDensity,
 		LandingRoute: arg.LandingRoute, TimeFormat: arg.TimeFormat,
 		Favorites: arg.Favorites, PinnedClusters: arg.PinnedClusters,
+		RowsPerPage: arg.RowsPerPage, DateFormat: arg.DateFormat,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	return f.row, nil
@@ -188,11 +189,86 @@ func TestPutUserPreferencesDefaultsOmittedPinnedClusters(t *testing.T) {
 	}
 }
 
+func TestPutUserPreferencesRoundTripsRowsPerPageAndDateFormat(t *testing.T) {
+	store := &preferenceStoreFake{}
+	tx := &preferenceTxFake{}
+	h := NewAuthHandler(nil, nil)
+	h.SetUserPreferences(store, func(_ context.Context, fn func(UserPreferencesMutationTx) error) error {
+		if err := fn(tx); err != nil {
+			return err
+		}
+		row := tx.row
+		store.row = &row
+		return nil
+	})
+	body := map[string]any{
+		"theme": "dark", "table_density": "compact",
+		"landing_route": "/dashboard/clusters", "time_format": "24h",
+		"favorites": []string{}, "rows_per_page": 50, "date_format": "iso",
+	}
+	w := httptest.NewRecorder()
+	h.PutUserPreferences(w, preferenceRequest(http.MethodPut, uuid.New(), body))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	for _, want := range []string{`"rows_per_page":50`, `"date_format":"iso"`} {
+		if !bytes.Contains(w.Body.Bytes(), []byte(want)) {
+			t.Errorf("response missing %s: %s", want, w.Body.String())
+		}
+	}
+
+	getStore := &preferenceStoreFake{row: store.row}
+	h2 := NewAuthHandler(nil, nil)
+	h2.SetUserPreferences(getStore, nil)
+	getW := httptest.NewRecorder()
+	h2.GetUserPreferences(getW, preferenceRequest(http.MethodGet, uuid.New(), nil))
+	if getW.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", getW.Code, getW.Body.String())
+	}
+	for _, want := range []string{`"rows_per_page":50`, `"date_format":"iso"`} {
+		if !bytes.Contains(getW.Body.Bytes(), []byte(want)) {
+			t.Errorf("GET response missing %s: %s", want, getW.Body.String())
+		}
+	}
+}
+
+func TestPutUserPreferencesDefaultsOmittedRowsPerPageAndDateFormat(t *testing.T) {
+	store := &preferenceStoreFake{}
+	tx := &preferenceTxFake{}
+	h := NewAuthHandler(nil, nil)
+	h.SetUserPreferences(store, func(_ context.Context, fn func(UserPreferencesMutationTx) error) error {
+		if err := fn(tx); err != nil {
+			return err
+		}
+		row := tx.row
+		store.row = &row
+		return nil
+	})
+	body := map[string]any{
+		"theme": "dark", "table_density": "compact",
+		"landing_route": "/dashboard/clusters", "time_format": "24h",
+		"favorites": []string{},
+	}
+	w := httptest.NewRecorder()
+	h.PutUserPreferences(w, preferenceRequest(http.MethodPut, uuid.New(), body))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"rows_per_page":25`)) {
+		t.Fatalf("omitted rows_per_page did not default to 25: %s", w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"date_format":"locale"`)) {
+		t.Fatalf("omitted date_format did not default to locale: %s", w.Body.String())
+	}
+}
+
 func TestPutUserPreferencesRejectsUnknownAndUnregisteredValues(t *testing.T) {
 	for _, body := range []string{
 		`{"theme":"sepia","table_density":"compact","landing_route":"/dashboard","time_format":"24h","favorites":[]}`,
 		`{"theme":"dark","table_density":"compact","landing_route":"/dashboard","time_format":"24h","favorites":[],"extra":true}`,
 		`{"theme":"dark","table_density":"compact","landing_route":"/dashboard","time_format":"24h","favorites":[],"pinned_clusters":["not-a-uuid"]}`,
+		`{"theme":"dark","table_density":"compact","landing_route":"/dashboard","time_format":"24h","favorites":[],"rows_per_page":15}`,
+		`{"theme":"dark","table_density":"compact","landing_route":"/dashboard","time_format":"24h","favorites":[],"date_format":"epoch"}`,
 	} {
 		t.Run(body, func(t *testing.T) {
 			store := &preferenceStoreFake{}
