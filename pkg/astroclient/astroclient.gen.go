@@ -10848,11 +10848,12 @@ type User struct {
 
 // UserPreferences defines model for UserPreferences.
 type UserPreferences struct {
-	Favorites    []UserPreferencesFavorites  `json:"favorites"`
-	LandingRoute UserPreferencesLandingRoute `json:"landing_route"`
-	TableDensity UserPreferencesTableDensity `json:"table_density"`
-	Theme        UserPreferencesTheme        `json:"theme"`
-	TimeFormat   UserPreferencesTimeFormat   `json:"time_format"`
+	Favorites      []UserPreferencesFavorites  `json:"favorites"`
+	LandingRoute   UserPreferencesLandingRoute `json:"landing_route"`
+	PinnedClusters *[]openapi_types.UUID       `json:"pinned_clusters,omitempty"`
+	TableDensity   UserPreferencesTableDensity `json:"table_density"`
+	Theme          UserPreferencesTheme        `json:"theme"`
+	TimeFormat     UserPreferencesTimeFormat   `json:"time_format"`
 }
 
 // UserPreferencesFavorites defines model for UserPreferences.Favorites.

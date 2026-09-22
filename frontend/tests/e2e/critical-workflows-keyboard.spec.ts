@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { authMeWire, seedAuth } from "./helpers/auth";
 
 const CLUSTER_ID = "cluster-1";
+const CLUSTER_ID_2 = "cluster-2";
 const USER_ID = "1fa85f64-5717-4562-b3fc-2c963f66afa6";
 const ROLE_ID = "2fa85f64-5717-4562-b3fc-2c963f66afa6";
 const SNAPSHOT_ID = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
@@ -36,6 +37,14 @@ const clusterWire = {
   is_local: false,
   created_at: "2026-08-01T00:00:00Z",
   updated_at: "2026-08-23T00:00:00Z",
+};
+
+const clusterWire2 = {
+  ...clusterWire,
+  id: CLUSTER_ID_2,
+  name: "staging-eks",
+  display_name: "Staging EKS",
+  environment: "staging",
 };
 
 const cisScanWire = {
@@ -106,6 +115,9 @@ async function mockApi(pageContext: Page, mutations: MutationRecord[]) {
     }
     if (path === `/clusters/${CLUSTER_ID}` && method === "GET") {
       return route.fulfill({ json: data(clusterWire) });
+    }
+    if (path === `/clusters/${CLUSTER_ID_2}` && method === "GET") {
+      return route.fulfill({ json: data(clusterWire2) });
     }
     if (path === "/projects" && method === "GET") {
       return route.fulfill({ json: page([]) });
@@ -412,4 +424,51 @@ test("keyboard-only snapshot restore queues the selected backup", async ({
       },
     },
   });
+});
+
+test("keyboard-only cluster switcher opens with Ctrl/Cmd+J and navigates on Enter", async ({
+  page,
+}) => {
+  // Override the shared single-cluster list just for this test so ArrowDown
+  // has a second cluster to land on; other tests rely on exactly one.
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    const path =
+      url.pathname.replace(/^\/api\/v1/, "").replace(/\/$/, "") || "/";
+    if (path === "/clusters" && route.request().method() === "GET") {
+      return route.fulfill({
+        json: {
+          data: [clusterWire, clusterWire2],
+          pagination: {
+            total: 2,
+            limit: 200,
+            offset: 0,
+            has_more: false,
+            next_offset: null,
+          },
+        },
+      });
+    }
+    return route.fallback();
+  });
+
+  await page.goto("/dashboard/clusters");
+  await expect(
+    page.getByRole("heading", { name: "Clusters", exact: true }),
+  ).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+j");
+  const listbox = page.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+  await expect(
+    listbox.getByRole("option", { name: /Production EKS/ }),
+  ).toBeVisible();
+  await expect(
+    listbox.getByRole("option", { name: /Staging EKS/ }),
+  ).toBeVisible();
+
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+
+  await expect(page).toHaveURL(`/dashboard/clusters/${CLUSTER_ID_2}`);
 });

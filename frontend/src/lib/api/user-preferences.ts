@@ -18,6 +18,7 @@ export const defaultUserPreferences: UserPreferences = {
   landing_route: "/dashboard",
   time_format: "locale",
   favorites: [],
+  pinned_clusters: [],
 };
 
 export async function getUserPreferences(

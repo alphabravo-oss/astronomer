@@ -4198,6 +4198,13 @@ components:
               - /dashboard/audit
               - /dashboard/tools
               - /dashboard/extensions
+        pinned_clusters:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
     StreamTicketRequest:
       type: object
       additionalProperties: false

@@ -3067,14 +3067,15 @@ type UserIdpGroup struct {
 
 // Typed, server-owned operator console preferences; one complete document per user.
 type UserPreference struct {
-	UserID       uuid.UUID       `json:"user_id"`
-	Theme        string          `json:"theme"`
-	TableDensity string          `json:"table_density"`
-	LandingRoute string          `json:"landing_route"`
-	TimeFormat   string          `json:"time_format"`
-	Favorites    json.RawMessage `json:"favorites"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	UserID         uuid.UUID       `json:"user_id"`
+	Theme          string          `json:"theme"`
+	TableDensity   string          `json:"table_density"`
+	LandingRoute   string          `json:"landing_route"`
+	TimeFormat     string          `json:"time_format"`
+	Favorites      json.RawMessage `json:"favorites"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+	PinnedClusters json.RawMessage `json:"pinned_clusters"`
 }
 
 type UserTotpEnrollment struct {

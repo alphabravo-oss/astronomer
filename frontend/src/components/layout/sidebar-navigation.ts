@@ -54,6 +54,11 @@ export type NavGroup = {
   // small set of top-level destinations that don't belong under a labeled
   // section (e.g. the global "Home" group).
   hideLabel?: boolean;
+  // Icon shown for the whole group in the collapsed sidebar rail
+  // (sidebar-rail.tsx). Falls back to the first item's icon when omitted —
+  // set it explicitly whenever that fallback would collide with another
+  // group's icon in the same rail.
+  icon?: typeof Box;
 };
 
 export const INSTALLED_TOOLS_NAV_GROUP = "Tool UIs";
@@ -122,6 +127,7 @@ export const globalNavGroups: NavGroup[] = [
   },
   {
     label: "Continuous Delivery",
+    icon: Rocket,
     items: [
       {
         label: "Estate",
@@ -146,6 +152,7 @@ export const globalNavGroups: NavGroup[] = [
   },
   {
     label: "Observability",
+    icon: BarChart3,
     items: [
       {
         label: "Metrics",
@@ -177,6 +184,7 @@ export const globalNavGroups: NavGroup[] = [
   },
   {
     label: "Security",
+    icon: ShieldCheck,
     items: [
       {
         label: "Security",
@@ -195,6 +203,7 @@ export const globalNavGroups: NavGroup[] = [
   },
   {
     label: "Users & Access",
+    icon: Shield,
     items: [
       {
         label: "RBAC",
@@ -219,6 +228,7 @@ export const globalNavGroups: NavGroup[] = [
   },
   {
     label: "Configuration",
+    icon: Layers,
     items: [
       {
         label: "Onboarding templates",
@@ -284,7 +294,7 @@ export function withFavoriteNavigation(
     return item ? [{ ...item, icon: Star }] : [];
   });
   return items.length > 0
-    ? [{ label: "Favorites", items, defaultOpen: true }, ...groups]
+    ? [{ label: "Favorites", items, defaultOpen: true, icon: Star }, ...groups]
     : groups;
 }
 

@@ -10,7 +10,6 @@ import {
   Settings,
   Shield,
   User,
-  Command,
   Sun,
   Moon,
   Monitor,
@@ -28,10 +27,7 @@ import {
   useCharlieActivated,
   useFeatureFlags,
 } from "@/lib/hooks/clusters";
-import {
-  useAlertEvents,
-  useAlertEventSummary,
-} from "@/lib/hooks/alerting";
+import { useAlertEvents, useAlertEventSummary } from "@/lib/hooks/alerting";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatRelativeTime } from "@/lib/utils";
 import { GlobalSearch } from "@/components/layout/global-search";
@@ -40,14 +36,18 @@ import { listCharlieFindings } from "@/lib/api/charlie";
 import { queryKeys } from "@/lib/query-keys";
 import { selectImportantCharlieFindings } from "@/components/charlie/topbar-findings";
 import { usePageBreadcrumbs } from "@/lib/use-page-breadcrumbs";
+import type { Breadcrumb } from "@/lib/breadcrumbs";
 import { liveFallback } from "@/lib/live/status-store";
 import {
   ClusterScopeControls,
   clusterIdFromPath,
 } from "@/components/layout/cluster-scope-controls";
 import { ClusterShellLauncher } from "@/components/window-manager/cluster-shell-launcher";
+import { ClusterSwitcherMenu } from "@/components/layout/cluster-switcher-menu";
+import { HeaderClusterActions } from "@/components/layout/header-cluster-actions";
 import { useClusterScopeStore } from "@/lib/cluster-scope";
 import { can } from "@/lib/permissions";
+import { useClustersUpdate } from "@/lib/permission-hooks";
 
 // --- Breadcrumb generation ---
 
@@ -63,6 +63,53 @@ const severityColor: Record<string, string> = {
   info: "text-status-info",
 };
 
+/** Breadcrumb trail shown outside cluster context (see Topbar). */
+function TopbarBreadcrumbs({
+  breadcrumbs,
+  navigate,
+}: {
+  breadcrumbs: Breadcrumb[];
+  navigate: (opts: { to: string }) => unknown;
+}) {
+  return (
+    <nav className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-sm">
+      {breadcrumbs.map((crumb, i) => {
+        const isLast = i === breadcrumbs.length - 1;
+        return (
+          <div
+            key={crumb.href}
+            // Ancestor crumbs collapse below `sm`: the always-mounted
+            // cluster switcher chip leaves too little room on narrow
+            // viewports for their clickable text to clear the 24px
+            // touch-target minimum. The current page's plain-text crumb
+            // always stays visible.
+            className={cn(
+              "items-center gap-1.5 min-w-0",
+              isLast ? "flex" : "hidden sm:flex",
+            )}
+          >
+            {i > 0 && (
+              <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground sm:block" />
+            )}
+            {isLast ? (
+              <span className="text-foreground font-medium truncate">
+                {crumb.label}
+              </span>
+            ) : (
+              <button
+                onClick={() => void navigate({ to: crumb.href })}
+                className="text-muted-foreground hover:text-foreground transition-colors truncate"
+              >
+                {crumb.label}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function Topbar() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const currentClusterId = clusterIdFromPath(pathname);
@@ -70,8 +117,9 @@ export function Topbar() {
     (state) => state.lastClusterId,
   );
   const activeClusterId = currentClusterId ?? rememberedClusterId ?? undefined;
+  const directPermission = useClustersUpdate(currentClusterId ?? "");
   const navigate = useNavigate();
-  const { setCommandPaletteOpen, setMobileSidebarOpen } = useUIStore();
+  const { setMobileSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -178,39 +226,29 @@ export function Topbar() {
       >
         <Menu className="h-4 w-4" />
       </button>
-      {/* Left: Breadcrumbs */}
-      <nav className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-sm">
-        {breadcrumbs.map((crumb, i) => (
-          <div key={crumb.href} className="flex items-center gap-1.5 min-w-0">
-            {i > 0 && (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            )}
-            {i === breadcrumbs.length - 1 ? (
-              <span className="text-foreground font-medium truncate">
-                {crumb.label}
-              </span>
-            ) : (
-              <button
-                onClick={() => void navigate({ to: crumb.href })}
-                className="text-muted-foreground hover:text-foreground transition-colors truncate"
-              >
-                {crumb.label}
-              </button>
-            )}
-          </div>
-        ))}
-      </nav>
+      {/* Left: always-mounted cluster switcher, then either the cluster
+          scope controls (cluster context — the chip already says which
+          cluster, so breadcrumbs would be redundant noise) or breadcrumbs
+          (everywhere else). */}
+      <ClusterSwitcherMenu
+        clusterId={currentClusterId}
+        clusterName={activeCluster?.displayName || activeCluster?.name}
+      />
+      {currentClusterId ? (
+        <ClusterScopeControls clusterId={currentClusterId} />
+      ) : (
+        <TopbarBreadcrumbs breadcrumbs={breadcrumbs} navigate={navigate} />
+      )}
 
-      {/* Center: Cross-cluster Global Search (Phase A3) */}
+      {/* Center: Cross-cluster Global Search (Phase A3). Its own kbd hint
+          covers the command palette shortcut, so the topbar no longer needs
+          a separate ⌘K chip. */}
       <div className="hidden md:flex flex-1 justify-center px-6">
         <GlobalSearch />
       </div>
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        {currentClusterId ? (
-          <ClusterScopeControls clusterId={currentClusterId} />
-        ) : null}
         <ClusterShellLauncher
           clusterId={activeClusterId}
           clusterName={
@@ -219,15 +257,13 @@ export function Topbar() {
           disabled={Boolean(shellDisabledReason)}
           disabledReason={shellDisabledReason}
         />
-        {/* Command Palette Trigger */}
-        <button
-          onClick={() => setCommandPaletteOpen(true)}
-          className="hidden items-center gap-1.5 h-8 px-2.5 rounded-md border border-border text-xs sm:inline-flex
-            text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
-          <Command className="h-3.5 w-3.5" />
-          <kbd className="font-mono text-[10px]">K</kbd>
-        </button>
+        {currentClusterId ? (
+          <HeaderClusterActions
+            clusterId={currentClusterId}
+            cluster={activeCluster}
+            directPermission={directPermission}
+          />
+        ) : null}
 
         {/* Theme Toggle */}
         <button
