@@ -746,7 +746,7 @@ function HistoryTable() {
   );
 }
 
-function AstronomerBackupPage() {
+export function AstronomerBackupPage() {
   const backupQuery = useManagementBackupStatus();
 
   return (

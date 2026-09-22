@@ -48,7 +48,7 @@ import type {
   AgentUpgradePlanResponse,
 } from "@/types";
 
-function ClusterAgentsPage() {
+export function ClusterAgentsPage() {
   const { data: user } = useCurrentUser();
   const canRead = can(user, "cluster_agents", "read");
   const canManage = can(user, "cluster_agents", "update");

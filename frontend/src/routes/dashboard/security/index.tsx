@@ -46,7 +46,7 @@ const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: "policies", label: "Security Policies", icon: ShieldCheck },
 ];
 
-function SecurityPage() {
+export function SecurityPage() {
   // Default-tab heuristic: the spec says CIS should default-select when
   // scans exist. We need the count *before* committing, so kick off a
   // tiny page-1 query and use it to pick the fallback tab. Default to `cis`

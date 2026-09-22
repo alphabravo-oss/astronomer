@@ -33,7 +33,7 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { EstateClustersTable } from "@/components/clusters/estate-clusters-table";
 
-function DashboardPage() {
+export function DashboardPage() {
   const navigate = useNavigate();
   const clustersQuery = useClusters({
     pageSize: 10,
