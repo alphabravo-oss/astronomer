@@ -106,7 +106,7 @@
     "frontend/src/routes/dashboard/delivery/sources/index.tsx:SourcesPage": 242,
     "frontend/src/routes/dashboard/delivery/targets/$targetId/index.tsx:TargetDetailPage": 350,
     "frontend/src/routes/dashboard/delivery/targets/index.tsx:CreateTargetDialog": 256,
-    "frontend/src/routes/dashboard/index.tsx:DashboardPage": 326,
+    "frontend/src/routes/dashboard/index.tsx:DashboardPage": 320,
     "frontend/src/routes/dashboard/logging/-pipeline-modal.tsx:CreatePipelineModal": 336,
     "frontend/src/routes/dashboard/projects/$id/catalogs/index.tsx:ProjectCatalogsPage": 270,
     "frontend/src/routes/dashboard/projects/$id/policy/index.tsx:PolicyPage": 355,
