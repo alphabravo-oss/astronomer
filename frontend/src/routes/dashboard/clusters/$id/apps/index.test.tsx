@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PermissionDecision } from "@/lib/permissions";
 import type { PaginatedResponse } from "@/types";
 import type { ClusterAppRow, RecommendedChart } from "@/lib/api/cluster-apps";
-import { InstalledView, RecommendedView } from "./index";
+import { InstalledView, RecommendedView } from "./-page";
 
 type InstalledQuery = ComponentProps<typeof InstalledView>["q"];
 type RecommendedQuery = ComponentProps<typeof RecommendedView>["q"];

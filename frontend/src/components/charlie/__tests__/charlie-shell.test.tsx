@@ -62,17 +62,23 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   };
 });
 
-function renderShell() {
+async function renderShell() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const result = render(
     <QueryClientProvider client={client}>
       <CharlieShell>
         <main>Dashboard</main>
       </CharlieShell>
     </QueryClientProvider>,
   );
+  await screen.findByRole(
+    "button",
+    { name: "Open Charlie assistant" },
+    { timeout: 5000 },
+  );
+  return result;
 }
 
 describe("Charlie global shell accessibility", () => {
@@ -220,7 +226,7 @@ describe("Charlie global shell accessibility", () => {
   });
 
   it("does not fetch Charlie overview or history while the drawer is closed", async () => {
-    renderShell();
+    await renderShell();
     await Promise.resolve();
     expect(screen.queryByRole("dialog", { name: "Charlie" })).toBeNull();
     expect(getCharlieOverview).not.toHaveBeenCalled();
@@ -228,7 +234,7 @@ describe("Charlie global shell accessibility", () => {
   });
 
   it("opens with the non-command-palette shortcut, loads active thread, and exposes route context", async () => {
-    renderShell();
+    await renderShell();
     fireEvent.keyDown(window, { key: ".", ctrlKey: true, shiftKey: true });
     expect(
       await screen.findByRole("dialog", { name: "Charlie" }),
@@ -243,7 +249,7 @@ describe("Charlie global shell accessibility", () => {
   });
 
   it("shows the read-only ceiling once at the top without a redundant composer hint", async () => {
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -266,7 +272,7 @@ describe("Charlie global shell accessibility", () => {
         return () => undefined;
       },
     );
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -326,7 +332,7 @@ describe("Charlie global shell accessibility", () => {
         turnId: "turn-new",
       },
     } as never);
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -368,7 +374,7 @@ describe("Charlie global shell accessibility", () => {
         return () => undefined;
       },
     );
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -433,7 +439,7 @@ describe("Charlie global shell accessibility", () => {
       },
     ] as never);
 
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -471,7 +477,7 @@ describe("Charlie global shell accessibility", () => {
       { id: "u1", role: "user", content: "what version" },
       { id: "a1", role: "assistant", content: "Kubernetes v1.36.2+k3s1" },
     ] as never);
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -517,7 +523,7 @@ describe("Charlie global shell accessibility", () => {
           ] as never),
     );
 
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -564,7 +570,7 @@ describe("Charlie global shell accessibility", () => {
       { id: "u1", role: "user", content: "prior message" },
       { id: "a1", role: "assistant", content: "prior answer" },
     ] as never);
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -596,7 +602,7 @@ describe("Charlie global shell accessibility", () => {
         content: "Hi. How can I help?",
       },
     ] as never);
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -614,7 +620,7 @@ describe("Charlie global shell accessibility", () => {
   });
 
   it("sends on Enter and inserts a newline on Shift+Enter", async () => {
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -639,7 +645,7 @@ describe("Charlie global shell accessibility", () => {
           resolveSend = resolve;
         }) as never,
     );
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -686,7 +692,7 @@ describe("Charlie global shell accessibility", () => {
         { id: "u-new", role: "user", content: "assess health" },
         { id: "a-new", role: "assistant", content: "Everything is healthy." },
       ] as never);
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -712,7 +718,7 @@ describe("Charlie global shell accessibility", () => {
       id: "session-1",
       state: "failed",
     } as never);
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -731,7 +737,7 @@ describe("Charlie global shell accessibility", () => {
   });
 
   it("explains deployment scope and offers browsable narrowing choices", async () => {
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -749,7 +755,7 @@ describe("Charlie global shell accessibility", () => {
   });
 
   it("suggests slash commands and sends an operational command as a structured invocation", async () => {
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -782,7 +788,7 @@ describe("Charlie global shell accessibility", () => {
   });
 
   it("handles help and scope commands locally without creating a model turn", async () => {
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -835,7 +841,7 @@ describe("Charlie global shell accessibility", () => {
           ] as never)
         : [],
     );
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );
@@ -871,7 +877,7 @@ describe("Charlie global shell accessibility", () => {
       { id: "a1", role: "assistant", content: "kept history" },
     ] as never);
     vi.mocked(abortCharlieSession).mockResolvedValue(undefined as never);
-    renderShell();
+    await renderShell();
     fireEvent.click(
       screen.getByRole("button", { name: "Open Charlie assistant" }),
     );

@@ -1,4 +1,3 @@
-
 // §HostMounts — ExtensionSlot: the ONE integration point a host page adds per
 // mount location. `<ExtensionSlot point="clusterTab" context={{clusterId}} />`
 // reads the registry (via useExtensionMounts), and for every enabled mount at
@@ -14,17 +13,26 @@
 // placeholder is intentionally text-only (no third-party HTML) — the same
 // fail-closed posture the real renderers must keep.
 
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { useExtensionRuntime, useExtensionMounts } from "./ExtensionProvider";
 import { ExtensionErrorBoundary } from "./ExtensionErrorBoundary";
-import { DeclarativeWidget } from "./DeclarativeWidget";
-import { SandboxedExtension } from "./SandboxedExtension";
 import type {
   ExtensionContext,
   ExtensionMount,
   ExtensionPointKind,
 } from "@/lib/api/extensions";
+
+const DeclarativeWidget = lazy(() =>
+  import("./DeclarativeWidget").then((module) => ({
+    default: module.DeclarativeWidget,
+  })),
+);
+const SandboxedExtension = lazy(() =>
+  import("./SandboxedExtension").then((module) => ({
+    default: module.SandboxedExtension,
+  })),
+);
 
 // A host page may inject the real renderer once it ships (item 3/4). When no
 // renderer is supplied the slot falls back to the placeholder below, so wiring
@@ -129,7 +137,9 @@ export function ExtensionSlot({
           key={`${mount.extension}:${mount.pointId}`}
           extensionName={mount.extension}
         >
-          <MountContent mount={mount} context={context} render={render} />
+          <Suspense fallback={<MountPlaceholder mount={mount} />}>
+            <MountContent mount={mount} context={context} render={render} />
+          </Suspense>
         </ExtensionErrorBoundary>
       ))}
     </div>

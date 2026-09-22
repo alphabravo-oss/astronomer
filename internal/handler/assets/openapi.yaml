@@ -4205,6 +4205,14 @@ components:
           items:
             type: string
             format: uuid
+        starred_types:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            maxLength: 317
+            pattern: '^[a-z0-9][a-z0-9.-]*/[a-z0-9][a-z0-9-]*$'
         rows_per_page:
           type: integer
           enum: [10, 25, 50, 100]

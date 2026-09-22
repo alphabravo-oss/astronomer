@@ -49,6 +49,10 @@ vi.mock("@/lib/hooks/projects", () => ({
   useProjects: () => ({ data: { data: [] } }),
 }));
 
+vi.mock("./use-sidebar-navigation", () => ({
+  useSidebarNavigation: () => ({ navGroups: [] }),
+}));
+
 const superuser = {
   id: "u-1",
   username: "admin",
@@ -63,10 +67,12 @@ beforeEach(() => {
 });
 
 describe("CommandPalette", () => {
-  it("surfaces every global nav destination by label search", () => {
+  it("surfaces every global nav destination by label search", async () => {
     render(<CommandPalette />);
-    const input = screen.getByPlaceholderText(
+    const input = await screen.findByPlaceholderText(
       "Search clusters, pages, actions...",
+      {},
+      { timeout: 5000 },
     );
     for (const group of globalNavGroups) {
       for (const item of group.items) {
@@ -77,5 +83,26 @@ describe("CommandPalette", () => {
         ).toBeGreaterThan(0);
       }
     }
+  });
+
+  it("opens with the keyboard and clears search after closing", async () => {
+    useUIStore.setState({ commandPaletteOpen: false });
+    render(<CommandPalette />);
+    expect(
+      screen.queryByPlaceholderText("Search clusters, pages, actions..."),
+    ).toBeNull();
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const input = await screen.findByPlaceholderText(
+      "Search clusters, pages, actions...",
+    );
+    fireEvent.change(input, { target: { value: "clusters" } });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(
+      screen.queryByPlaceholderText("Search clusters, pages, actions..."),
+    ).toBeNull();
+    fireEvent.keyDown(document, { key: "k", metaKey: true });
+    expect(
+      await screen.findByPlaceholderText("Search clusters, pages, actions..."),
+    ).toHaveValue("");
   });
 });

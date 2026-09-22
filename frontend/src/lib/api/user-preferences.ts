@@ -4,8 +4,7 @@ import {
 } from "@/lib/api/generated/client";
 import type { OpenAPIComponents } from "@/types/openapi.generated";
 
-export type UserPreferences =
-  OpenAPIComponents["schemas"]["UserPreferences"];
+export type UserPreferences = OpenAPIComponents["schemas"]["UserPreferences"];
 export type ThemePreference = UserPreferences["theme"];
 export type TableDensityPreference = UserPreferences["table_density"];
 export type TimeFormatPreference = UserPreferences["time_format"];
@@ -14,9 +13,7 @@ export type LandingRoute = UserPreferences["landing_route"];
 export type RowsPerPagePreference = NonNullable<
   UserPreferences["rows_per_page"]
 >;
-export type DateFormatPreference = NonNullable<
-  UserPreferences["date_format"]
->;
+export type DateFormatPreference = NonNullable<UserPreferences["date_format"]>;
 
 export const defaultUserPreferences: UserPreferences = {
   theme: "system",
@@ -25,6 +22,7 @@ export const defaultUserPreferences: UserPreferences = {
   time_format: "locale",
   favorites: [],
   pinned_clusters: [],
+  starred_types: [],
   rows_per_page: 25,
   date_format: "locale",
 };
@@ -65,14 +63,19 @@ export const favoriteNavigationOptions: ReadonlyArray<{
 export const landingRouteOptions: ReadonlyArray<{
   value: LandingRoute;
   label: string;
-}> = favoriteNavigationOptions.filter(
-  (item): item is { href: LandingRoute; label: string } =>
-    item.href !== "/dashboard/logging" &&
-    item.href !== "/dashboard/rbac" &&
-    item.href !== "/dashboard/tools" &&
-    item.href !== "/dashboard/extensions",
-).map(({ href, label }) => ({ value: href, label }));
+}> = favoriteNavigationOptions
+  .filter(
+    (item): item is { href: LandingRoute; label: string } =>
+      item.href !== "/dashboard/logging" &&
+      item.href !== "/dashboard/rbac" &&
+      item.href !== "/dashboard/tools" &&
+      item.href !== "/dashboard/extensions",
+  )
+  .map(({ href, label }) => ({ value: href, label }));
 
 export function isNavigableLandingRoute(route: string): route is LandingRoute {
-  return route !== "/dashboard" && landingRouteOptions.some((option) => option.value === route);
+  return (
+    route !== "/dashboard" &&
+    landingRouteOptions.some((option) => option.value === route)
+  );
 }

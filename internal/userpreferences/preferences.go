@@ -73,6 +73,7 @@ type Preferences struct {
 	// (a pinned cluster that is later deleted or the pinner loses access to
 	// simply drops out of the switcher's rendered results).
 	PinnedClusters []string `json:"pinned_clusters"`
+	StarredTypes   []string `json:"starred_types"`
 	// RowsPerPage is the initial page size data tables seed from, one of
 	// AllowedRowsPerPage. Zero (an omitted field on PUT, or a legacy row
 	// this package never wrote) is normalized to DefaultRowsPerPage before
@@ -90,12 +91,16 @@ func Defaults() Preferences {
 		LandingRoute: "/dashboard", TimeFormat: TimeLocale,
 		Favorites:      []string{},
 		PinnedClusters: []string{},
+		StarredTypes:   []string{},
 		RowsPerPage:    DefaultRowsPerPage,
 		DateFormat:     DefaultDateFormat,
 	}
 }
 
 func (p Preferences) Validate() error {
+	if err := validateStarredTypes(p.StarredTypes); err != nil {
+		return err
+	}
 	if p.Theme != ThemeLight && p.Theme != ThemeDark && p.Theme != ThemeSystem {
 		return fmt.Errorf("theme must be light, dark, or system")
 	}

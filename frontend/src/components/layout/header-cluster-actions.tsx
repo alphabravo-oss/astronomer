@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ChevronDown, Download, Upload } from "lucide-react";
 
 import { ActionButton } from "@/components/ui/action-button";
@@ -7,9 +7,14 @@ import {
   useClusterKubeconfig,
   type ClusterKubeconfigPermission,
 } from "@/lib/hooks/kubernetes-proxy";
-import { CreateResourceDialog } from "@/components/resources/create-resource-dialog";
 import { cn } from "@/lib/utils";
 import type { Cluster } from "@/types";
+
+const CreateResourceDialog = lazy(() =>
+  import("@/components/resources/create-resource-dialog").then((module) => ({
+    default: module.CreateResourceDialog,
+  })),
+);
 
 /**
  * Header-wide cluster actions rendered next to the ClusterShellLauncher in
@@ -107,12 +112,16 @@ export function HeaderClusterActions({
       >
         Import
       </ActionButton>
-      <CreateResourceDialog
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        clusterId={clusterId}
-        title="Import YAML"
-      />
+      {importOpen && (
+        <Suspense fallback={<span role="status">Loading YAML importer…</span>}>
+          <CreateResourceDialog
+            open
+            onClose={() => setImportOpen(false)}
+            clusterId={clusterId}
+            title="Import YAML"
+          />
+        </Suspense>
+      )}
     </>
   );
 }

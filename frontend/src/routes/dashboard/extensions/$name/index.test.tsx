@@ -10,15 +10,14 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import("@tanstack/react-router")>()),
     Link: RouterLinkStub,
+    getRouteApi: () => ({ useParams: () => paramsState }),
     // The real `createFileRoute(...)(...)` needs a mounted router to back
     // `Route.useParams()`. This test drives the page component directly, so
     // stub it down to just the piece the component actually reads.
-    createFileRoute:
-      () =>
-      (routeOptions: Record<string, unknown>) => ({
-        useParams: () => paramsState,
-        options: routeOptions,
-      }),
+    createFileRoute: () => (routeOptions: Record<string, unknown>) => ({
+      useParams: () => paramsState,
+      options: routeOptions,
+    }),
   };
 });
 
@@ -38,7 +37,7 @@ import {
   useExtensionMounts,
   useExtensionRuntime,
 } from "@/components/extensions/ExtensionProvider";
-import { ExtensionPage } from "./index";
+import { ExtensionPage } from "./-page";
 
 const mockedMounts = useExtensionMounts as MockedFunction<
   typeof useExtensionMounts
@@ -94,9 +93,7 @@ describe("extensions/$name page", () => {
     });
     mockedMounts.mockReturnValue([mount()]);
     render(<ExtensionPage />);
-    expect(
-      screen.getByRole("heading", { name: "Cost" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cost" })).toBeInTheDocument();
   });
 
   it("renders the sandboxed (tier 2) iframe wrapper for a bundle mount", () => {

@@ -5,7 +5,6 @@ import {
   Blocks,
   Box,
   Boxes,
-  Cable,
   Camera,
   Clock,
   Container,
@@ -29,7 +28,6 @@ import {
   Network,
   Package,
   Puzzle,
-  Radio,
   Rocket,
   Route,
   Scale,
@@ -43,9 +41,15 @@ import {
   UserCircle,
   Waypoints,
   Wrench,
+  Compass,
+  Settings2,
 } from "lucide-react";
 
 import type { NavGroup } from "@/components/layout/sidebar-navigation";
+import {
+  gatewayNavItems,
+  withClusterResourceTypes,
+} from "./cluster-resource-types";
 
 // Cluster-context navigation - Rancher-style resource browser
 export function getClusterNavGroups(
@@ -113,14 +117,13 @@ export function getClusterNavGroups(
           permission: { resource: "security", verb: "read" as const },
         },
       ];
-  return [
+  return withClusterResourceTypes([
     {
       label: "Cluster",
       icon: LayoutDashboard,
       defaultOpen: true,
       items: [
         { label: "Overview", href: base, icon: LayoutDashboard, exact: true },
-        { label: "Adoption", href: `${base}/adoption`, icon: Activity },
         {
           label: "Nodes",
           href: `${base}/nodes`,
@@ -147,14 +150,6 @@ export function getClusterNavGroups(
           icon: Rocket,
           permission: { resource: "delivery_inventory", verb: "read" as const },
         },
-        // Promoted from the overview badge pill to a first-class destination.
-        // Reads mesh CRs over the k8s proxy, so it works for local + remote.
-        {
-          label: "Service Mesh",
-          href: `${base}/service-mesh`,
-          icon: Waypoints,
-        },
-        ...agentRequiredItems,
       ],
     },
     {
@@ -264,32 +259,11 @@ export function getClusterNavGroups(
         {
           label: "Ingresses",
           href: `${base}/ingresses`,
-          icon: Globe,
+          icon: Compass,
           countKey: "ingresses",
         },
+        ...gatewayNavItems(base).slice(0, 2),
         { label: "HPA", href: `${base}/hpa`, icon: Gauge, countKey: "hpa" },
-      ],
-    },
-    {
-      label: "Gateway API",
-      icon: Globe,
-      items: [
-        { label: "Gateways", href: `${base}/gateways`, icon: Globe },
-        {
-          label: "GatewayClasses",
-          href: `${base}/gatewayclasses`,
-          icon: Layers,
-        },
-        { label: "HTTPRoutes", href: `${base}/httproutes`, icon: Route },
-        { label: "GRPCRoutes", href: `${base}/grpcroutes`, icon: Waypoints },
-        { label: "TLSRoutes", href: `${base}/tlsroutes`, icon: Lock },
-        { label: "TCPRoutes", href: `${base}/tcproutes`, icon: Cable },
-        { label: "UDPRoutes", href: `${base}/udproutes`, icon: Radio },
-        {
-          label: "ReferenceGrants",
-          href: `${base}/referencegrants`,
-          icon: KeyRound,
-        },
       ],
     },
     {
@@ -360,6 +334,7 @@ export function getClusterNavGroups(
         // P-04 — Gatekeeper/OPA constraint authoring (bundle + custom).
         {
           label: "Gatekeeper",
+          ifHaveGroup: "constraints.gatekeeper.sh",
           href: `${base}/gatekeeper`,
           icon: Gavel,
           permission: { resource: "security", verb: "read" },
@@ -403,37 +378,63 @@ export function getClusterNavGroups(
       ],
     },
     {
-      label: "More Resources",
-      icon: Puzzle,
+      label: "Cluster Management",
+      icon: Settings2,
       items: [
-        // GATE C: dynamic CR explorer (distinct from the static CRD-definition list).
+        { label: "Adoption", href: `${base}/adoption`, icon: Activity },
         {
-          label: "Custom Resources",
-          href: `${base}/custom-resources`,
-          icon: Puzzle,
-          permission: { resource: "custom_resources", verb: "read" },
+          label: "Service Mesh",
+          href: `${base}/service-mesh`,
+          icon: Waypoints,
         },
-        { label: "CRDs", href: `${base}/crds`, icon: Blocks, countKey: "crds" },
-        {
-          label: "Endpoints",
-          href: `${base}/endpoints`,
-          icon: Globe,
-          countKey: "endpoints",
-        },
-        {
-          label: "ReplicaSets",
-          href: `${base}/replicasets`,
-          icon: Copy,
-          countKey: "replicasets",
-        },
-        // Read-only CRD-mirror view (quotas, policies, and other resources the
-        // agent mirrors into the management plane).
-        {
-          label: "Mirrored Resources",
-          href: `${base}/resources`,
-          icon: Layers,
-        },
+        ...agentRequiredItems,
       ],
     },
-  ];
+    {
+      label: "More Resources",
+      icon: Puzzle,
+      items: [],
+      subgroups: [
+        {
+          label: "Built-in",
+          items: [
+            // GATE C: dynamic CR explorer (distinct from the static CRD-definition list).
+            {
+              label: "Custom Resources",
+              href: `${base}/custom-resources`,
+              icon: Puzzle,
+              permission: { resource: "custom_resources", verb: "read" },
+              exact: true,
+            },
+            {
+              label: "CRDs",
+              href: `${base}/crds`,
+              icon: Blocks,
+              countKey: "crds",
+            },
+            {
+              label: "Endpoints",
+              href: `${base}/endpoints`,
+              icon: Globe,
+              countKey: "endpoints",
+            },
+            {
+              label: "ReplicaSets",
+              href: `${base}/replicasets`,
+              icon: Copy,
+              countKey: "replicasets",
+            },
+            // Read-only CRD-mirror view (quotas, policies, and other resources the
+            // agent mirrors into the management plane).
+            {
+              label: "Mirrored Resources",
+              href: `${base}/resources`,
+              icon: Layers,
+            },
+          ],
+        },
+        { label: "Gateway API", items: gatewayNavItems(base).slice(2) },
+      ],
+    },
+  ]);
 }

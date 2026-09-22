@@ -44,7 +44,7 @@ import {
 } from "@/components/layout/cluster-scope-controls";
 import { ClusterShellLauncher } from "@/components/window-manager/cluster-shell-launcher";
 import { ClusterSwitcherMenu } from "@/components/layout/cluster-switcher-menu";
-import { HeaderClusterActions } from "@/components/layout/header-cluster-actions";
+import { LazyHeaderClusterActions as HeaderClusterActions } from "@/components/layout/lazy-header-cluster-actions";
 import { useClusterScopeStore } from "@/lib/cluster-scope";
 import { can } from "@/lib/permissions";
 import { useClustersUpdate } from "@/lib/permission-hooks";

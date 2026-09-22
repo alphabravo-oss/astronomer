@@ -1,4 +1,4 @@
-import { isNoisyCapabilityCondition } from "@/routes/dashboard/clusters/$id/index";
+import { isNoisyCapabilityCondition } from "@/routes/dashboard/clusters/$id/-page";
 import type { ClusterCondition } from "@/types";
 
 const cond = (type: string, status: string): ClusterCondition =>

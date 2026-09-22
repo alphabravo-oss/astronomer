@@ -41,10 +41,8 @@ import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { StatePanel } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  settingsKeys,
-  useNotificationTemplate,
-} from "@/components/settings/hooks";
+import { useNotificationTemplate } from "@/components/settings/hooks";
+import { settingsKeys } from "@/components/settings/query-keys";
 import {
   getNotificationTemplate,
   previewNotificationTemplate,
@@ -62,8 +60,29 @@ function NotificationTemplateEditorPage() {
   );
 }
 
+function templateFormValues(detail: NotificationTemplateDetailView) {
+  return {
+    subject: detail.subject,
+    body: detail.body,
+    enabled: detail.enabled,
+    samples: seedSamples(detail),
+  };
+}
+
+function previewMissingVariables(error: unknown) {
+  const response = (
+    error as {
+      response?: {
+        data?: { data?: { missing?: string[] }; missing?: string[] };
+      };
+    }
+  ).response?.data;
+  return response?.data?.missing ?? response?.missing ?? null;
+}
+
 function NotificationTemplateEditor() {
-  const params = Route.useParams(); const key = decodeURIComponent(String(params?.key ?? ""));
+  const params = Route.useParams();
+  const key = decodeURIComponent(String(params?.key ?? ""));
   const queryClient = useQueryClient();
   const templateQuery = useNotificationTemplate(key);
   const detail = templateQuery.data ?? null;
@@ -82,7 +101,8 @@ function NotificationTemplateEditor() {
     defaultValues: { subject: "", body: "", enabled: true, samples: "{}" },
     onSubmit: async ({ value }) => {
       if (!detail) return;
-      setSaving(true); setSaveError(null);
+      setSaving(true);
+      setSaveError(null);
       try {
         const updated = await updateNotificationTemplate(key, {
           subject: value.subject,
@@ -96,7 +116,8 @@ function NotificationTemplateEditor() {
         );
         toastSuccess("Template override saved");
       } catch (err) {
-        setSaveError(err); toastApiError("", err, "Save failed");
+        setSaveError(err);
+        toastApiError("", err, "Save failed");
       } finally {
         setSaving(false);
       }
@@ -106,12 +127,7 @@ function NotificationTemplateEditor() {
   useEffect(() => {
     const d = templateQuery.data;
     if (!d) return;
-    form.reset({
-      subject: d.subject,
-      body: d.body,
-      enabled: d.enabled,
-      samples: seedSamples(d),
-    });
+    form.reset(templateFormValues(d));
   }, [form, templateQuery.data]);
 
   const handleReset = async () => {
@@ -152,14 +168,7 @@ function NotificationTemplateEditor() {
       });
       setPreview(result);
     } catch (err: unknown) {
-      // Try to surface the backend's structured 400 (missing[]).
-      const e = err as {
-        response?: {
-          data?: { data?: { missing?: string[] }; missing?: string[] };
-        };
-      };
-      const missing =
-        e.response?.data?.data?.missing ?? e.response?.data?.missing ?? null;
+      const missing = previewMissingVariables(err);
       if (missing && missing.length > 0) {
         setPreviewMissing(missing);
         setPreviewErr("Sample variables are missing required entries.");
@@ -230,7 +239,12 @@ function NotificationTemplateEditor() {
             </span>
           </>
         }
-      /><form.AppForm><form.FormErrorSummary serverError={saveError ? extractApiErrorMessage(saveError) : null} /></form.AppForm>
+      />
+      <form.AppForm>
+        <form.FormErrorSummary
+          serverError={saveError ? extractApiErrorMessage(saveError) : null}
+        />
+      </form.AppForm>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-2">

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BarChart3, ExternalLink } from "lucide-react";
 
-import { useClusterStackStatus } from "@/components/monitoring/hooks";
+import { useClusterStackStatus } from "@/components/monitoring/use-cluster-stack-status";
 import { clusterGrafanaProxyPath } from "@/components/monitoring/stack-spec";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader, PageShell } from "@/components/ui/page";
