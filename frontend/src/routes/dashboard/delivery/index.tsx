@@ -31,6 +31,10 @@ import {
   projectClusterId,
   useDeliveryProjectScope,
 } from "@/components/delivery/shared";
+import {
+  DeliveryUnavailablePanel,
+  useDeliveryOverviewHealth,
+} from "@/components/delivery/overview-health";
 import { listClusterDeployments } from "@/lib/api/delivery-deployments";
 import { listComponentBundles } from "@/lib/api/delivery-bundles";
 import { listDeliveryRollouts } from "@/lib/api/delivery-rollouts";
@@ -61,7 +65,7 @@ function isForbiddenError(error: unknown): boolean {
   );
 }
 
-function DeliveryOverviewPage() {
+export function DeliveryOverviewPage() {
   const { projectId, projects, projectQuery, setProjectId } =
     useDeliveryProjectScope();
   const { data: user } = useCurrentUser();
@@ -667,22 +671,8 @@ function ProjectDeliveryOverview({
   const clusterId = projectClusterId(
     projects.find((project) => project.id === projectId) ?? {},
   );
-  const deploymentRows = deployments.data?.data ?? [];
-  const failures = deploymentRows.filter(
-    (item) =>
-      item.phase === "failed" ||
-      item.phase === "degraded" ||
-      item.phase === "unknown",
-  );
-  const drifted = deploymentRows.filter((item) =>
-    item.conditions.some(
-      (condition) =>
-        condition.type === "Drifted" && condition.status === "True",
-    ),
-  ).length;
-  const incompatibleClusters = (system.data?.observedInventory ?? [])
-    .filter((item) => item.compatibilityStatus !== "compatible")
-    .reduce((total, item) => total + item.clusterCount, 0);
+  const { failedQueries, failures, drifted, activeRollouts, incompatibleClusters } =
+    useDeliveryOverviewHealth({ sources, unhealthySources, bundles, targets, rollouts, deployments, system });
   return (
     <DeliveryProjectGate
       projectId={projectId}
@@ -699,6 +689,7 @@ function ProjectDeliveryOverview({
           title="Delivery overview"
           description="Astronomer-owned intent and rollout policy with local, pull-based convergence on managed clusters."
         />
+        <DeliveryUnavailablePanel failedQueries={failedQueries} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <MetricLink
             section="sources"
@@ -706,7 +697,8 @@ function ProjectDeliveryOverview({
             clusterId={clusterId}
             icon={GitBranch}
             label="Sources"
-            value={sources.data ? pageRowCount(sources.data) : "—"}
+            value={sources.isError ? "—" : sources.data ? pageRowCount(sources.data) : "—"}
+            unavailable={sources.isError}
           />
           <MetricLink
             section="bundles"
@@ -714,7 +706,8 @@ function ProjectDeliveryOverview({
             clusterId={clusterId}
             icon={Boxes}
             label="Bundles"
-            value={bundles.data ? pageRowCount(bundles.data) : "—"}
+            value={bundles.isError ? "—" : bundles.data ? pageRowCount(bundles.data) : "—"}
+            unavailable={bundles.isError}
           />
           <MetricLink
             section="targets"
@@ -722,7 +715,8 @@ function ProjectDeliveryOverview({
             clusterId={clusterId}
             icon={Crosshair}
             label="Targets"
-            value={targets.data ? pageRowCount(targets.data) : "—"}
+            value={targets.isError ? "—" : targets.data ? pageRowCount(targets.data) : "—"}
+            unavailable={targets.isError}
           />
           <MetricLink
             section="rollouts"
@@ -730,17 +724,8 @@ function ProjectDeliveryOverview({
             clusterId={clusterId}
             icon={Rocket}
             label="Active (latest 10)"
-            value={
-              (rollouts.data?.data ?? []).filter((row) =>
-                [
-                  "queued",
-                  "progressing",
-                  "paused",
-                  "awaiting_approval",
-                  "rolling_back",
-                ].includes(row.state),
-              ).length
-            }
+            value={activeRollouts ?? "—"}
+            unavailable={rollouts.isError}
           />
           <MetricLink
             section="deployments"
@@ -748,34 +733,40 @@ function ProjectDeliveryOverview({
             clusterId={clusterId}
             icon={Layers}
             label="Drifted (loaded page)"
-            value={drifted}
+            value={drifted ?? "—"}
+            unavailable={deployments.isError}
           />
           <RouterLink
             to="/dashboard/agents"
             className="block rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring"
+            aria-label={system.isError ? "Incompatible clusters unavailable" : undefined}
           >
             <MetricCard
               icon={<ServerCog className="h-4 w-4" />}
               title="Incompatible clusters"
-              value={system.isLoading ? "—" : incompatibleClusters}
+              value={
+                system.isLoading
+                  ? "—"
+                  : (incompatibleClusters ?? "—")
+              }
             />
           </RouterLink>
         </div>
-        {unhealthySources.data && pageRowCount(unhealthySources.data) > 0 && (
-          <RouterLink
-            to="/dashboard/delivery/sources"
-            search={{ project: projectId, status: "degraded" }}
-            className="flex items-center justify-between rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-sm"
-          >
-            <span className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-status-warning" />
-              {pageRowCount(unhealthySources.data)} degraded delivery source
-              {pageRowCount(unhealthySources.data) === 1 ? "" : "s"}
-            </span>
-            <DeliveryPhaseBadge value="degraded" />
-          </RouterLink>
-        )}
-        {system.isError && <ErrorMessage error={system.error} />}
+        {unhealthySources.isSuccess &&
+          pageRowCount(unhealthySources.data) > 0 && (
+            <RouterLink
+              to="/dashboard/delivery/sources"
+              search={{ project: projectId, status: "degraded" }}
+              className="flex items-center justify-between rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-status-warning" />
+                {pageRowCount(unhealthySources.data)} degraded delivery source
+                {pageRowCount(unhealthySources.data) === 1 ? "" : "s"}
+              </span>
+              <DeliveryPhaseBadge value="degraded" />
+            </RouterLink>
+          )}
         {system.data && (
           <PageSection
             title="Delivery system"
@@ -838,10 +829,18 @@ function ProjectDeliveryOverview({
           title="Recent operator attention"
           description="Failures, degraded convergence, stale state, and rollback failures from the latest server page."
         >
-          {failures.length === 0 &&
-          !(rollouts.data?.data ?? []).some(
-            (item) => item.state === "rollback_failed",
-          ) ? (
+          {deployments.isError || rollouts.isError ? (
+            <div
+              className="rounded-lg border border-dashed border-border bg-card p-6 text-sm text-muted-foreground"
+              aria-label="unavailable"
+            >
+              Recent operator attention is unavailable while some delivery
+              data failed to load — see the banner above.
+            </div>
+          ) : failures.length === 0 &&
+            !(rollouts.data?.data ?? []).some(
+              (item) => item.state === "rollback_failed",
+            ) ? (
             <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
               No recent delivery failures are visible in this page.
             </div>
@@ -900,6 +899,7 @@ function MetricLink({
   icon: Icon,
   label,
   value,
+  unavailable,
 }: {
   section: "sources" | "bundles" | "targets" | "rollouts" | "deployments";
   projectId: string;
@@ -907,6 +907,7 @@ function MetricLink({
   icon: typeof ServerCog;
   label: string;
   value: string | number;
+  unavailable?: boolean;
 }) {
   const card = (
     <MetricCard
@@ -917,119 +918,47 @@ function MetricLink({
   );
   const className =
     "block rounded-lg focus:outline-hidden focus:ring-2 focus:ring-ring";
+  const ariaLabel = unavailable ? `${label} unavailable` : undefined;
+
+  const clusterRoutes = {
+    sources: "/dashboard/clusters/$id/delivery/sources",
+    bundles: "/dashboard/clusters/$id/delivery/bundles",
+    targets: "/dashboard/clusters/$id/delivery/targets",
+    rollouts: "/dashboard/clusters/$id/delivery/rollouts",
+    deployments: "/dashboard/clusters/$id/delivery/deployments",
+  } as const;
+  const projectRoutes = {
+    sources: "/dashboard/delivery/sources",
+    bundles: "/dashboard/delivery/bundles",
+    targets: "/dashboard/delivery/targets",
+    rollouts: "/dashboard/delivery/rollouts",
+    deployments: "/dashboard/delivery/deployments",
+  } as const;
 
   if (clusterId) {
-    switch (section) {
-      case "sources":
-        return (
-          <RouterLink
-            to="/dashboard/clusters/$id/delivery/sources"
-            params={{ id: clusterId }}
-            search={{ project: projectId }}
-            className={className}
-          >
-            {card}
-          </RouterLink>
-        );
-      case "bundles":
-        return (
-          <RouterLink
-            to="/dashboard/clusters/$id/delivery/bundles"
-            params={{ id: clusterId }}
-            search={{ project: projectId }}
-            className={className}
-          >
-            {card}
-          </RouterLink>
-        );
-      case "targets":
-        return (
-          <RouterLink
-            to="/dashboard/clusters/$id/delivery/targets"
-            params={{ id: clusterId }}
-            search={{ project: projectId }}
-            className={className}
-          >
-            {card}
-          </RouterLink>
-        );
-      case "rollouts":
-        return (
-          <RouterLink
-            to="/dashboard/clusters/$id/delivery/rollouts"
-            params={{ id: clusterId }}
-            search={{ project: projectId }}
-            className={className}
-          >
-            {card}
-          </RouterLink>
-        );
-      case "deployments":
-        return (
-          <RouterLink
-            to="/dashboard/clusters/$id/delivery/deployments"
-            params={{ id: clusterId }}
-            search={{ project: projectId }}
-            className={className}
-          >
-            {card}
-          </RouterLink>
-        );
-    }
+    return (
+      <RouterLink
+        to={clusterRoutes[section]}
+        params={{ id: clusterId }}
+        search={{ project: projectId }}
+        className={className}
+        aria-label={ariaLabel}
+      >
+        {card}
+      </RouterLink>
+    );
   }
 
-  switch (section) {
-    case "sources":
-      return (
-        <RouterLink
-          to="/dashboard/delivery/sources"
-          search={{ project: projectId }}
-          className={className}
-        >
-          {card}
-        </RouterLink>
-      );
-    case "bundles":
-      return (
-        <RouterLink
-          to="/dashboard/delivery/bundles"
-          search={{ project: projectId }}
-          className={className}
-        >
-          {card}
-        </RouterLink>
-      );
-    case "targets":
-      return (
-        <RouterLink
-          to="/dashboard/delivery/targets"
-          search={{ project: projectId }}
-          className={className}
-        >
-          {card}
-        </RouterLink>
-      );
-    case "rollouts":
-      return (
-        <RouterLink
-          to="/dashboard/delivery/rollouts"
-          search={{ project: projectId }}
-          className={className}
-        >
-          {card}
-        </RouterLink>
-      );
-    case "deployments":
-      return (
-        <RouterLink
-          to="/dashboard/delivery/deployments"
-          search={{ project: projectId }}
-          className={className}
-        >
-          {card}
-        </RouterLink>
-      );
-  }
+  return (
+    <RouterLink
+      to={projectRoutes[section]}
+      search={{ project: projectId }}
+      className={className}
+      aria-label={ariaLabel}
+    >
+      {card}
+    </RouterLink>
+  );
 }
 function stringField(
   value: Record<string, unknown> | null,

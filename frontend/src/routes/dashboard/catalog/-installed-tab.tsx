@@ -2,10 +2,12 @@ import { useState } from "react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ActionMenu, type ActionMenuItem } from "@/components/ui/action-menu";
 import { useCluster } from "@/lib/hooks/clusters";
 import { formatRelativeTime } from "@/lib/utils";
 import type { InstalledChart } from "@/types";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { ArrowUpCircle, RotateCcw, Trash2 } from "lucide-react";
+import { UpgradeChartModal } from "./-upgrade-chart-modal";
 
 export function InstalledTab({
   installed,
@@ -23,6 +25,7 @@ export function InstalledTab({
   const [uninstallTarget, setUninstallTarget] = useState<InstalledChart | null>(
     null,
   );
+  const [upgradeTarget, setUpgradeTarget] = useState<InstalledChart | null>(null);
   const installedColumns: Column<InstalledChart>[] = [
     {
       key: "release",
@@ -96,30 +99,36 @@ export function InstalledTab({
     {
       key: "actions",
       header: "",
-      accessor: (row) => (
-        <div className="flex items-center gap-1">
-          {/* UX-06: hide Upgrade until an upgrade modal / version picker is wired. */}
-          <button
-            onClick={() => {
-              if (row.revision > 1) {
-                onRollback(row.id, row.revision - 1);
-              }
-            }}
-            className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-50"
-            title="Rollback"
-            disabled={row.revision <= 1}
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => setUninstallTarget(row)}
-            className="p-1.5 rounded-sm text-muted-foreground hover:text-status-error hover:bg-status-error/10 transition-colors"
-            title="Uninstall"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ),
+      accessor: (row) => {
+        const items: ActionMenuItem[] = [
+          {
+            label: "Upgrade",
+            icon: <ArrowUpCircle className="h-3.5 w-3.5" />,
+            onClick: () => setUpgradeTarget(row),
+          },
+          {
+            label: "Rollback",
+            icon: <RotateCcw className="h-3.5 w-3.5" />,
+            onClick: () => onRollback(row.id, row.revision - 1),
+            disabled: row.revision <= 1,
+            disabledReason:
+              row.revision <= 1 ? "No previous revision" : undefined,
+          },
+          {
+            label: "Uninstall",
+            icon: <Trash2 className="h-3.5 w-3.5" />,
+            onClick: () => setUninstallTarget(row),
+            variant: "destructive",
+            separator: true,
+          },
+        ];
+        return (
+          <ActionMenu
+            items={items}
+            ariaLabel={`Actions for ${row.releaseName}`}
+          />
+        );
+      },
       sortable: false,
     },
   ];
@@ -166,6 +175,12 @@ export function InstalledTab({
             : undefined
         }
       />
+      {upgradeTarget && (
+        <UpgradeChartModal
+          installation={upgradeTarget}
+          onClose={() => setUpgradeTarget(null)}
+        />
+      )}
     </>
   );
 }

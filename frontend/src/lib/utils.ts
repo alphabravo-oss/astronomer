@@ -288,6 +288,43 @@ export function capitalize(s: string): string {
 }
 
 /**
+ * Convert a `#rrggbb` hex color into the `H S% L%` triplet format the
+ * theme's CSS custom properties (`--primary`, `--status-*`, …) use — e.g.
+ * `#3b82f6` -> `"217 91% 60%"`. Returns `null` for anything that isn't a
+ * strict 6-digit hex color so callers can skip applying an operator-supplied
+ * value that doesn't parse instead of writing garbage into the stylesheet.
+ */
+export function hexToHslTriplet(hex: string): string | null {
+  const match = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!match) return null;
+  const value = match[1];
+  const r = parseInt(value.slice(0, 2), 16) / 255;
+  const g = parseInt(value.slice(2, 4), 16) / 255;
+  const b = parseInt(value.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (delta !== 0) {
+    s = delta / (1 - Math.abs(2 * l - 1));
+    switch (max) {
+      case r:
+        h = 60 * (((g - b) / delta) % 6);
+        break;
+      case g:
+        h = 60 * ((b - r) / delta + 2);
+        break;
+      default:
+        h = 60 * ((r - g) / delta + 4);
+    }
+  }
+  if (h < 0) h += 360;
+  return `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+}
+
+/**
  * Trigger a browser download of `content` as `filename`.
  *
  * `content` may be a ready `Blob` or any `BlobPart` (string, ArrayBuffer, …);

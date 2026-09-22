@@ -47,12 +47,17 @@ function ProjectOverviewPage() {
       {/* Custom dashboard widgets (migration 058). Per-project scope —
           empty by default so the project overview stays clean unless
           the operator explicitly pins something here. */}
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-          Widgets
-        </h3>
-        <WidgetGrid fetcher={() => renderForProject(project.id)} emptyHint="" />
-      </section>
+      {project?.id ? (
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            Widgets
+          </h3>
+          <WidgetGrid
+            fetcher={() => renderForProject(project.id)}
+            emptyHint=""
+          />
+        </section>
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <SummaryCard

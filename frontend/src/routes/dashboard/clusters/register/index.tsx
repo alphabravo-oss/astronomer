@@ -5,6 +5,7 @@ import { toastError } from "@/lib/toast";
 import { Server, Info, AlertTriangle } from "lucide-react";
 import { createCluster, updateCluster } from "@/lib/api/clusters";
 import { setRegistrationOptions } from "@/lib/api/cluster-registration";
+import { useCluster } from "@/lib/hooks/clusters";
 import { useClusterSearch } from "@/lib/hooks/cluster-search";
 import { useAppForm, useStore } from "@/lib/form";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormShell } from "@/components/ui/form-shell";
 import { ActionButton } from "@/components/ui/action-button";
+import { QueryStates } from "@/components/ui/query-states";
 import { RegistrationConnectStep } from "@/components/clusters/registration-connect-step";
 import {
   parseRegistrationSearch,
@@ -21,32 +23,112 @@ import {
   REGISTRATION_STEPS,
   WizardStepper,
 } from "@/components/ui/wizard-stepper";
-import type { ClusterEnvironment } from "@/types";
+import type { Cluster, ClusterEnvironment } from "@/types";
 
-function RegisterClusterWizardPage() {
+export function RegisterClusterWizardRoute() {
   const navigate = useNavigate();
   const { clusterId } = Route.useSearch();
-  const [draftClusterId, setDraftClusterId] = useState<string | null>(null);
+  const draftClusterId = clusterId ?? null;
+  // `?clusterId=` alone means "there is a draft"; it stays in the URL for
+  // both step 2 (just arrived) and step 1 (backed out) so the draft's
+  // identity — and therefore the name-uniqueness self-exclusion below —
+  // survives a refresh. Which of those two steps to show is a transient UI
+  // choice, not part of the draft's identity, so it lives in a plain
+  // boolean rather than reintroducing a string id in local state.
+  const [returnedToForm, setReturnedToForm] = useState(false);
+  const showForm = draftClusterId !== null && returnedToForm;
+  // Always called (Rules of Hooks) — `useCluster` no-ops when the id is
+  // empty, and only the `showForm` branch below actually uses the result.
+  const clusterQuery = useCluster(draftClusterId ?? "");
 
+  if (draftClusterId && !showForm) {
+    return (
+      <RegistrationConnectStep
+        clusterId={draftClusterId}
+        onBack={() => {
+          setReturnedToForm(true);
+          void navigate({
+            to: "/dashboard/clusters/register",
+            search: registrationSearch(draftClusterId),
+            replace: true,
+          });
+        }}
+      />
+    );
+  }
+
+  if (draftClusterId) {
+    return (
+      <QueryStates query={clusterQuery} loadingTitle="Loading draft cluster…">
+        {(cluster) => (
+          <RegisterClusterWizardPage
+            draftClusterId={draftClusterId}
+            initialCluster={cluster}
+            onRegistered={(id) => {
+              setReturnedToForm(false);
+              void navigate({
+                to: "/dashboard/clusters/register",
+                search: registrationSearch(id),
+                replace: true,
+              });
+            }}
+          />
+        )}
+      </QueryStates>
+    );
+  }
+
+  return (
+    <RegisterClusterWizardPage
+      draftClusterId={null}
+      initialCluster={null}
+      onRegistered={(id) => {
+        void navigate({
+          to: "/dashboard/clusters/register",
+          search: registrationSearch(id),
+          replace: true,
+        });
+      }}
+    />
+  );
+}
+
+function RegisterClusterWizardPage({
+  draftClusterId,
+  initialCluster,
+  onRegistered,
+}: {
+  draftClusterId: string | null;
+  initialCluster: Cluster | null;
+  onRegistered: (clusterId: string) => void;
+}) {
+  const navigate = useNavigate();
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
     defaultValues: {
-      name: "",
-      displayName: "",
-      description: "",
-      environment: "development" as ClusterEnvironment,
-      region: "",
-      installBaseline: false,
-      privilegeProfile: "viewer",
-      apiServerUrl: "",
-      caCertificate: "",
-      agentRequestCPU: "",
-      agentRequestMemory: "",
-      agentLimitCPU: "",
-      agentLimitMemory: "",
-      agentHTTPSProxy: "",
-      agentHTTPProxy: "",
-      agentNoProxy: "",
+      name: initialCluster?.name ?? "",
+      displayName: initialCluster?.displayName ?? "",
+      description: initialCluster?.description ?? "",
+      environment:
+        (initialCluster?.environment as ClusterEnvironment | undefined) ??
+        ("development" as ClusterEnvironment),
+      region: initialCluster?.region ?? "",
+      installBaseline: initialCluster?.installBaseline ?? false,
+      privilegeProfile:
+        initialCluster?.agentPrivilegeProfile === "admin" ? "admin" : "viewer",
+      apiServerUrl: initialCluster?.apiServerUrl ?? "",
+      caCertificate: initialCluster?.caCertificate ?? "",
+      agentRequestCPU:
+        initialCluster?.agentOverrides?.resources?.requests?.cpu ?? "",
+      agentRequestMemory:
+        initialCluster?.agentOverrides?.resources?.requests?.memory ?? "",
+      agentLimitCPU:
+        initialCluster?.agentOverrides?.resources?.limits?.cpu ?? "",
+      agentLimitMemory:
+        initialCluster?.agentOverrides?.resources?.limits?.memory ?? "",
+      agentHTTPSProxy: initialCluster?.agentOverrides?.proxy?.https_proxy ?? "",
+      agentHTTPProxy: initialCluster?.agentOverrides?.proxy?.http_proxy ?? "",
+      agentNoProxy: initialCluster?.agentOverrides?.proxy?.no_proxy ?? "",
     },
     onSubmit: async ({ value }) => {
       setSubmissionError(null);
@@ -98,7 +180,6 @@ function RegisterClusterWizardPage() {
               caCertificate: value.caCertificate || undefined,
               agentOverrides,
             });
-        setDraftClusterId(cluster.id);
         // Record the operator's choice. The backend keeps install_baseline
         // NULL until this call so it can distinguish "hasn't decided" from
         // "opted out". A viewer agent is read-only and physically can't deploy
@@ -107,11 +188,7 @@ function RegisterClusterWizardPage() {
         const installBaseline =
           value.privilegeProfile === "viewer" ? false : value.installBaseline;
         await setRegistrationOptions(cluster.id, installBaseline);
-        void navigate({
-          to: "/dashboard/clusters/register",
-          search: registrationSearch(cluster.id),
-          replace: true,
-        });
+        onRegistered(cluster.id);
       } catch (err) {
         setSubmissionError(
           err instanceof Error ? err.message : "The request failed. Try again.",
@@ -142,25 +219,6 @@ function RegisterClusterWizardPage() {
       ),
     );
   const isViewer = privilegeProfile === "viewer";
-
-  if (clusterId) {
-    return (
-      <RegistrationConnectStep
-        clusterId={clusterId}
-        onBack={() => {
-          if (draftClusterId === clusterId) {
-            void navigate({
-              to: "/dashboard/clusters/register",
-              search: registrationSearch(),
-              replace: true,
-            });
-          } else {
-            void navigate({ to: "/dashboard/clusters" });
-          }
-        }}
-      />
-    );
-  }
 
   return (
     <div>
@@ -547,5 +605,5 @@ function Field({
 
 export const Route = createFileRoute("/dashboard/clusters/register/")({
   validateSearch: parseRegistrationSearch,
-  component: RegisterClusterWizardPage,
+  component: RegisterClusterWizardRoute,
 });

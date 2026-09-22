@@ -7,7 +7,6 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { sanitizeReturnTo } from "@/lib/auth/session";
 import {
-  Orbit,
   GitFork,
   Globe,
   KeyRound,
@@ -20,6 +19,8 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/lib/store";
 import { useSSOProviders } from "@/lib/hooks/user-settings";
+import { useLoginBranding } from "@/lib/hooks/public-settings";
+import { BrandMark, LoginBanner } from "@/components/auth/login-branding";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   loginWithCredentialsChallengeAware,
@@ -39,24 +40,22 @@ export const Route = createFileRoute("/auth/login/")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  // returnTo round-trips the deep link the auth guard (or the api.ts 401
-  // handler) captured; sanitizeReturnTo guards against open redirects (D3).
+  // returnTo round-trips the deep link the auth guard (or the api.ts 401 handler) captured; sanitizeReturnTo guards against open redirects (D3).
   const { returnTo } = Route.useSearch();
   const { login } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [ssoLoading, setSsoLoading] = useState<string | null>(null);
-  // 423 challenge state: when present, render the TOTP screen instead of the
-  // credentials form. `enrollmentRequired` distinguishes the "you must enroll
-  // now" branch from the standard "enter your code" branch.
+  // 423 challenge state: present -> render the TOTP screen; `enrollmentRequired` distinguishes "must enroll now" from "enter your code".
   const [challenge, setChallenge] = useState<TotpChallenge | null>(null);
 
-  // SSO providers come from React Query (cached, retry-aware, devtools-visible).
-  // On error the query data is undefined → we fall back to an empty list, the
-  // same behavior the old imperative fetch had.
+  // SSO providers via React Query; on error data is undefined -> empty list (same as the old imperative fetch).
   const { data: ssoProvidersData } = useSSOProviders();
   const ssoProviders = (ssoProvidersData ?? []).filter(
     (provider) => provider.enabled,
   );
+
+  // Public settings — renders before a session exists; degrades to defaults on error.
+  const { productName, logoUrl, loginBannerText } = useLoginBranding();
 
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const form = useAppForm({
@@ -155,12 +154,10 @@ function LoginPage() {
 
         <div className="relative">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-              <Orbit className="h-5 w-5 text-white" />
-            </div>
+            <BrandMark logoUrl={logoUrl} productName={productName} />
             <div className="flex flex-col">
               <span className="text-xl font-semibold text-white tracking-tight leading-tight">
-                Astronomer
+                {productName}
               </span>
               <span className="text-[11px] text-zinc-500 leading-tight">
                 by AlphaBravo
@@ -215,12 +212,10 @@ function LoginPage() {
         <div className="w-full max-w-sm space-y-8">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 justify-center">
-            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center">
-              <Orbit className="h-5 w-5 text-white" />
-            </div>
+            <BrandMark logoUrl={logoUrl} productName={productName} />
             <div className="flex flex-col">
               <span className="text-xl font-semibold text-foreground tracking-tight leading-tight">
-                Astronomer
+                {productName}
               </span>
               <span className="text-[11px] text-muted-foreground leading-tight">
                 by AlphaBravo
@@ -228,9 +223,11 @@ function LoginPage() {
             </div>
           </div>
 
+          <LoginBanner text={loginBannerText} />
+
           <div className="space-y-2 text-center lg:text-left">
             <h2 className="text-2xl font-semibold text-foreground tracking-tight">
-              Sign in to Astronomer
+              Sign in to {productName}
             </h2>
             <p className="text-sm text-muted-foreground">
               Enter your credentials or use SSO to continue

@@ -76,10 +76,8 @@ function CatalogPage() {
   const [selectedChart, setSelectedChart] = useState<HelmChart | null>(null);
   const [showRepoModal, setShowRepoModal] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
-  const [installChart, setInstallChart] = useState<{
-    chart: HelmChart;
-    version: HelmChartVersion;
-  } | null>(null);
+  const [installChart, setInstallChart] =
+    useState<{ chart: HelmChart; version: HelmChartVersion } | null>(null);
   const [operationId, setOperationId] = useState<string | null>(null);
 
   const chartsQuery = useHelmCharts({
@@ -373,6 +371,7 @@ function CatalogPage() {
           }}
         />
       )}
+
       {operationId && (
         <div className="fixed bottom-4 right-4 z-40 w-full max-w-xl shadow-lg">
           <CatalogOperationTimeline operationId={operationId} />
