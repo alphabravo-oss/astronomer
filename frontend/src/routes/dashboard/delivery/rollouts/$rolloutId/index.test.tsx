@@ -29,6 +29,16 @@ vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   Link: (await import("@/test/router-link")).RouterLinkStub,
   useParams: () => ({ rolloutId: "rollout-1" }),
+  // FormShell's unsaved-changes guard calls useBlocker, which needs a
+  // mounted RouterProvider this test doesn't render; stub it to idle.
+  useBlocker: () => ({
+    status: "idle" as const,
+    current: undefined,
+    next: undefined,
+    action: undefined,
+    proceed: undefined,
+    reset: undefined,
+  }),
 }));
 vi.mock("@/components/delivery/shared", async (original) => ({
   ...(await original<typeof import("@/components/delivery/shared")>()),

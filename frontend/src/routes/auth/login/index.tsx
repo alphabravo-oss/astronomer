@@ -282,7 +282,7 @@ function LoginPage() {
 
           {/* Login Form */}
           {!challenge && (
-            <FormShell
+            <FormShell form={form}
               onSubmit={(e) => {
                 e.preventDefault();
                 void form.handleSubmit();
@@ -490,6 +490,7 @@ function TotpChallengeForm({
 
   return (
     <FormShell
+      form={form}
       onSubmit={(e) => {
         e.preventDefault();
         void form.handleSubmit();

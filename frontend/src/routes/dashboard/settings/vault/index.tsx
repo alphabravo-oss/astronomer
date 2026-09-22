@@ -226,7 +226,7 @@ function VaultConnectionsPage() {
       )}
 
       {creating && (
-        <FormShell
+        <FormShell form={form}
           className="space-y-3 max-w-xl border border-border rounded-sm p-4"
           onSubmit={(e) => {
             e.preventDefault();

@@ -175,6 +175,52 @@ describe("YamlPanel — edit-mode preservation", () => {
   });
 });
 
+describe("YamlPanel — discard guard", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("confirms before discarding an unsaved edit on View", () => {
+    loadedYaml();
+    const { getByText, getByTestId, getByRole, queryByText } = render(
+      <YamlPanel clusterId="c1" k8sPath="api/v1/namespaces/default/pods/p" />,
+    );
+
+    fireEvent.click(getByText("Edit"));
+    fireEvent.change(getByTestId("yaml-editor"), {
+      target: { value: "name: my-edits" },
+    });
+    fireEvent.click(getByText("View"));
+
+    // Edits aren't dropped until the user confirms.
+    expect(getByText("Discard changes?")).toBeTruthy();
+    expect((getByTestId("yaml-editor") as HTMLTextAreaElement).value).toBe(
+      "name: my-edits",
+    );
+
+    fireEvent.click(getByRole("button", { name: "Cancel" }));
+    expect(queryByText("Discard changes?")).toBeNull();
+    expect((getByTestId("yaml-editor") as HTMLTextAreaElement).value).toBe(
+      "name: my-edits",
+    );
+
+    fireEvent.click(getByText("View"));
+    fireEvent.click(getByRole("button", { name: "Discard" }));
+    expect((getByTestId("yaml-editor") as HTMLTextAreaElement).value).toBe(
+      "name: v1",
+    );
+  });
+
+  it("switches to View without a prompt when there is no unsaved edit", () => {
+    loadedYaml();
+    const { getByText, queryByText } = render(
+      <YamlPanel clusterId="c1" k8sPath="api/v1/namespaces/default/pods/p" />,
+    );
+
+    fireEvent.click(getByText("Edit"));
+    fireEvent.click(getByText("View"));
+    expect(queryByText("Discard changes?")).toBeNull();
+  });
+});
+
 describe("resourceTypeFromK8sPath", () => {
   it("maps namespaced, cluster-scoped, and extension API paths", () => {
     expect(

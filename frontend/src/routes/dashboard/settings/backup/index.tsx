@@ -374,7 +374,7 @@ function DestinationModal({
         </div>
       }
     >
-      <FormShell
+      <FormShell form={form}
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();

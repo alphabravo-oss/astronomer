@@ -14,6 +14,16 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     ...original,
     Link: RouterLinkStub,
     useNavigate: () => navigateSpy,
+    // FormShell's unsaved-changes guard calls useBlocker, which needs a
+    // mounted RouterProvider this test doesn't render; stub it to idle.
+    useBlocker: () => ({
+      status: "idle" as const,
+      current: undefined,
+      next: undefined,
+      action: undefined,
+      proceed: undefined,
+      reset: undefined,
+    }),
     // The real `createFileRoute(...)(...)` needs a mounted router to back
     // `Route.useSearch()`. This test drives the page component directly, so
     // stub it down to just the pieces the component actually reads —

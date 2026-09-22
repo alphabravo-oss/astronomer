@@ -202,7 +202,7 @@ function DetailInner({ id }: { id: string }) {
         </div>
       ) : null}
 
-      <FormShell
+      <FormShell form={form}
         onSubmit={(e) => {
           e.preventDefault();
           void form.handleSubmit();

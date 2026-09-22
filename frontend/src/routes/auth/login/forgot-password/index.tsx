@@ -73,6 +73,7 @@ function ForgotPasswordPage() {
           </div>
         ) : (
           <FormShell
+            form={form}
             onSubmit={(event) => {
               event.preventDefault();
               void form.handleSubmit();

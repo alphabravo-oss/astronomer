@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   useK8sGetYaml,
   useK8sApplyYaml,
@@ -7,6 +7,7 @@ import {
 } from "@/lib/hooks/kubernetes-proxy";
 import { YamlEditor } from "@/components/ui/yaml-editor";
 import { ModalShell } from "@/components/ui/modal-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   GuidedResourceForm,
   type KubernetesManifest,
@@ -32,6 +33,41 @@ type ForceConflictPermission = Pick<
   PermissionDecision,
   "allowed" | "permission" | "reason" | "disabledReason"
 >;
+
+/**
+ * In-page discard confirmation shared by the Edit->View toggle and the
+ * dialog's own close button: both would silently drop an unsaved draft.
+ */
+function useYamlDiscardGuard(
+  dirty: boolean,
+  onDirtyChange?: (dirty: boolean) => void,
+): { guardDiscard: (action: () => void) => void; discardDialog: ReactNode } {
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
+  const [pending, setPending] = useState<(() => void) | null>(null);
+
+  const guardDiscard = (action: () => void) => {
+    if (dirty) setPending(() => action);
+    else action();
+  };
+
+  const discardDialog = (
+    <ConfirmDialog
+      open={pending !== null}
+      onClose={() => setPending(null)}
+      onConfirm={() => {
+        const action = pending;
+        setPending(null);
+        action?.();
+      }}
+      title="Discard changes?"
+      description="Your edits haven't been saved. Discard them?"
+      confirmText="Discard"
+      variant="destructive"
+    />
+  );
+
+  return { guardDiscard, discardDialog };
+}
 
 interface YamlViewDialogProps {
   open: boolean;
@@ -59,26 +95,33 @@ export function YamlViewDialog({
   allowEdit = true,
   forceConflictPermission,
 }: YamlViewDialogProps) {
+  const [dirty, setDirty] = useState(false);
+  const { guardDiscard, discardDialog } = useYamlDiscardGuard(dirty);
+
   if (!open) return null;
 
   return (
-    <ModalShell
-      title={title}
-      onClose={onClose}
-      size="xl"
-      panelClassName="w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden"
-      bodyClassName="flex-1 min-h-0 p-0 space-y-0"
-    >
-      {/* ponytail: YamlPanel owns fetch/edit/dry-run and the View/Edit toggle; dialog is just chrome. */}
-      <YamlPanel
-        clusterId={clusterId}
-        k8sPath={k8sPath}
-        allowEdit={allowEdit}
-        forceConflictPermission={forceConflictPermission}
-        editMode={initialEditMode}
-        active={open}
-      />
-    </ModalShell>
+    <>
+      <ModalShell
+        title={title}
+        onClose={() => guardDiscard(onClose)}
+        size="xl"
+        panelClassName="w-[90vw] h-[80vh] max-w-4xl flex flex-col overflow-hidden"
+        bodyClassName="flex-1 min-h-0 p-0 space-y-0"
+      >
+        {/* ponytail: YamlPanel owns fetch/edit/dry-run and the View/Edit toggle; dialog is just chrome. */}
+        <YamlPanel
+          clusterId={clusterId}
+          k8sPath={k8sPath}
+          allowEdit={allowEdit}
+          forceConflictPermission={forceConflictPermission}
+          editMode={initialEditMode}
+          active={open}
+          onDirtyChange={setDirty}
+        />
+      </ModalShell>
+      {discardDialog}
+    </>
   );
 }
 
@@ -94,6 +137,8 @@ interface YamlPanelProps {
   forceConflictPermission?: ForceConflictPermission;
   /** When false, fetching is paused (used by the dialog when closed). Defaults true. */
   active?: boolean;
+  /** Reports whether there is an unsaved draft, so an owning dialog can guard its close button. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const K8S_PLURAL_RESOURCE_TYPE: Record<string, ResourceType> = {
@@ -144,6 +189,7 @@ function ActiveYamlPanel({
   editMode: initialEditMode = false,
   forceConflictPermission,
   active = true,
+  onDirtyChange,
 }: YamlPanelProps) {
   const [editMode, setEditMode] = useState(initialEditMode);
   const [editorMode, setEditorMode] = useState<"guided" | "yaml">("yaml");
@@ -169,6 +215,11 @@ function ActiveYamlPanel({
 
   // Only user edits are local state; query refreshes never overwrite a draft.
   const editedYaml = yamlDraft ?? yaml ?? "";
+  const isDirty = yamlDraft !== undefined && yamlDraft !== yaml;
+  const { guardDiscard, discardDialog } = useYamlDiscardGuard(
+    isDirty,
+    onDirtyChange,
+  );
   const changeEditMode = (editing: boolean) => {
     setEditedYaml(editing ? yaml : undefined); // Do not capture an empty draft before the initial fetch completes.
     setPreview(null);
@@ -289,30 +340,11 @@ function ActiveYamlPanel({
             Managed fields are omitted from YAML. Normal apply preserves other
             field managers and reports ownership conflicts.
           </p>
-          <div className="flex items-center bg-muted rounded-sm p-0.5">
-            <button
-              onClick={() => changeEditMode(false)}
-              className={cn(
-                "inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium transition-colors",
-                !editMode
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Eye className="h-3 w-3" /> View
-            </button>
-            <button
-              onClick={() => changeEditMode(true)}
-              className={cn(
-                "inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium transition-colors",
-                editMode
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Pencil className="h-3 w-3" /> Edit
-            </button>
-          </div>
+          <EditModeToggle
+            editMode={editMode}
+            onView={() => guardDiscard(() => changeEditMode(false))}
+            onEdit={() => changeEditMode(true)}
+          />
         </div>
       )}
       {editMode && resourceType && (
@@ -498,6 +530,44 @@ function ActiveYamlPanel({
           </div>
         )}
       </div>
+      {discardDialog}
+    </div>
+  );
+}
+
+function EditModeToggle({
+  editMode,
+  onView,
+  onEdit,
+}: {
+  editMode: boolean;
+  onView: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="flex items-center bg-muted rounded-sm p-0.5">
+      <button
+        onClick={onView}
+        className={cn(
+          "inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium transition-colors",
+          !editMode
+            ? "bg-background text-foreground shadow-xs"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <Eye className="h-3 w-3" /> View
+      </button>
+      <button
+        onClick={onEdit}
+        className={cn(
+          "inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs font-medium transition-colors",
+          editMode
+            ? "bg-background text-foreground shadow-xs"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <Pencil className="h-3 w-3" /> Edit
+      </button>
     </div>
   );
 }

@@ -28,6 +28,7 @@ export function AuditReasonForm({
   });
   return (
     <FormShell
+      form={form}
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();

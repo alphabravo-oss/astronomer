@@ -89,6 +89,7 @@ function ChangePasswordPage() {
         </div>
 
         <FormShell
+          form={form}
           onSubmit={(e) => {
             e.preventDefault();
             void form.handleSubmit();

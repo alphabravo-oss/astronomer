@@ -46,7 +46,7 @@ function GitOpsForm() {
   const pathPrefix = useStore(form.store, (s) => s.values.path_prefix);
 
   return (
-    <FormShell
+    <FormShell form={form}
       onSubmit={(e) => {
         e.preventDefault();
         void form.handleSubmit();
