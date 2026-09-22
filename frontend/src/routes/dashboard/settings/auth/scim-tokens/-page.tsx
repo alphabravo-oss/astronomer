@@ -6,40 +6,23 @@
  * immediately after creation; list rows only ever carry metadata.
  */
 import { useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
-import { useAppForm, useStore } from "@/lib/form";
-import {
-  ArrowLeft,
-  Plus,
-  Trash2,
-  KeyRound,
-  Copy,
-  Check,
-  ShieldAlert,
-} from "lucide-react";
+import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
+import { ArrowLeft, Plus, Trash2, KeyRound } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
-import { Input } from "@/components/ui/input";
-import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { formatRelativeTime } from "@/lib/utils";
-import { toastSuccess } from "@/lib/toast";
-import type { SCIMToken, SCIMTokenCreated } from "@/types";
-import {
-  useSCIMTokens,
-  useCreateSCIMToken,
-  useRevokeSCIMToken,
-} from "./-hooks";
+import type { SCIMToken } from "@/types";
+import { useSCIMTokens, useRevokeSCIMToken } from "./-hooks";
 
 function SCIMTokensList() {
+  const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useSCIMTokens();
   const revoke = useRevokeSCIMToken();
 
-  const [showCreate, setShowCreate] = useState(false);
   const [revokeTarget, setRevokeTarget] = useState<SCIMToken | null>(null);
-  const [created, setCreated] = useState<SCIMTokenCreated | null>(null);
 
   const columns: Column<SCIMToken>[] = [
     {
@@ -105,7 +88,9 @@ function SCIMTokensList() {
         <ActionButton
           intent="primary"
           icon={<Plus className="h-4 w-4" />}
-          onClick={() => setShowCreate(true)}
+          onClick={() =>
+            void navigate({ to: "/dashboard/settings/auth/scim-tokens/new" })
+          }
         >
           Mint Token
         </ActionButton>
@@ -125,20 +110,6 @@ function SCIMTokensList() {
         }}
       />
 
-      {showCreate && (
-        <CreateSCIMTokenModal
-          onClose={() => setShowCreate(false)}
-          onCreated={(t) => {
-            setShowCreate(false);
-            setCreated(t);
-          }}
-        />
-      )}
-
-      {created && (
-        <RevealTokenModal created={created} onClose={() => setCreated(null)} />
-      )}
-
       <ConfirmDialog
         open={!!revokeTarget}
         onClose={() => setRevokeTarget(null)}
@@ -155,142 +126,6 @@ function SCIMTokensList() {
         loading={revoke.isPending}
       />
     </>
-  );
-}
-
-function CreateSCIMTokenModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: (t: SCIMTokenCreated) => void;
-}) {
-  const create = useCreateSCIMToken();
-
-  const form = useAppForm({
-    defaultValues: { name: "" },
-    onSubmit: async ({ value }) => {
-      try {
-        const t = await create.mutateAsync(value.name.trim());
-        onCreated(t);
-      } catch {
-        /* mutation toasts on error */
-      }
-    },
-  });
-  // Old disabled gate (`!name.trim()`), recomputed from form state.
-  const name = useStore(form.store, (s) => s.values.name);
-
-  return (
-    <ModalShell
-      title="Mint SCIM Token"
-      onClose={onClose}
-      size="sm"
-      footerClassName="flex items-center justify-end gap-2"
-      footer={
-        <>
-          <ActionButton onClick={onClose}>Cancel</ActionButton>
-          <ActionButton
-            intent="primary"
-            onClick={() => void form.handleSubmit()}
-            disabled={create.isPending || !name.trim()}
-            loading={create.isPending}
-          >
-            Mint Token
-          </ActionButton>
-        </>
-      }
-    >
-      <div className="space-y-1.5">
-        <label
-          className="text-sm font-medium text-foreground"
-          htmlFor="field-aa359e33-186"
-        >
-          Name
-        </label>
-        <form.Field name="name">
-          {(field) => (
-            <Input
-              id="field-aa359e33-186"
-              type="text"
-              value={field.state.value}
-              onChange={(e) => field.handleChange(e.target.value)}
-              onBlur={field.handleBlur}
-              placeholder="okta-provisioning"
-              data-initial-focus
-            />
-          )}
-        </form.Field>
-        <p className="text-2xs text-muted-foreground">
-          A label to recognize this token. The secret is shown once on the next
-          screen.
-        </p>
-      </div>
-    </ModalShell>
-  );
-}
-
-function RevealTokenModal({
-  created,
-  onClose,
-}: {
-  created: SCIMTokenCreated;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(created.token);
-      setCopied(true);
-      toastSuccess("Token copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard blocked — operator can select the text manually */
-    }
-  };
-
-  return (
-    <ModalShell
-      title="Token Created"
-      onClose={onClose}
-      size="sm"
-      footerClassName="flex items-center justify-end gap-2"
-      footer={
-        <ActionButton intent="primary" onClick={onClose}>
-          Done
-        </ActionButton>
-      }
-    >
-      <div className="flex items-start gap-2 rounded-lg border border-status-warning/30 bg-status-warning/10 p-3">
-        <ShieldAlert className="h-4 w-4 text-status-warning shrink-0 mt-0.5" />
-        <p className="text-xs text-foreground">
-          Copy this token now — it is shown <b>only once</b>. Only its hash is
-          stored; it cannot be recovered later.
-        </p>
-      </div>
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium text-foreground">
-          {created.name}
-        </label>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 px-3 py-2 rounded-md border border-border bg-background text-xs font-mono text-foreground break-all">
-            {created.token}
-          </code>
-          <ActionButton
-            onClick={copy}
-            size="icon"
-            title="Copy token"
-            icon={
-              copied ? (
-                <Check className="h-4 w-4 text-status-success" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )
-            }
-          />
-        </div>
-      </div>
-    </ModalShell>
   );
 }
 

@@ -6,11 +6,13 @@ import { useAuthStore } from "@/lib/store";
 import SIEMForwardersPage from "./-page";
 import type { SIEMForwarder } from "@/types";
 
+const navigate = vi.fn();
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const { RouterLinkStub } = await import("@/test/router-link");
   return {
     ...(await importOriginal<typeof import("@tanstack/react-router")>()),
     Link: RouterLinkStub,
+    useNavigate: () => navigate,
   };
 });
 
@@ -89,7 +91,7 @@ describe("SIEMForwardersPage", () => {
     expect(screen.queryByText("SIEM Forwarders")).not.toBeInTheDocument();
   });
 
-  it("renders forwarders and opens the create modal for a superuser", () => {
+  it("renders forwarders and navigates to the create route for a superuser", () => {
     setSuperuser();
     mockedList.mockReturnValue({
       data: [forwarder],
@@ -103,6 +105,8 @@ describe("SIEMForwardersPage", () => {
     expect(screen.getByText("splunk.corp:8088")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Add Forwarder/i }));
-    expect(screen.getByText("Add SIEM Forwarder")).toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/dashboard/settings/siem/new",
+    });
   });
 });

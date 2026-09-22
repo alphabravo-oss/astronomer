@@ -6,11 +6,13 @@ import { useAuthStore } from "@/lib/store";
 import SCIMTokensPage from "./-page";
 import type { SCIMToken } from "@/types";
 
+const navigate = vi.fn();
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const { RouterLinkStub } = await import("@/test/router-link");
   return {
     ...(await importOriginal<typeof import("@tanstack/react-router")>()),
     Link: RouterLinkStub,
+    useNavigate: () => navigate,
   };
 });
 
@@ -70,7 +72,7 @@ describe("SCIMTokensPage", () => {
     act(() => useAuthStore.setState({ user: null, isAuthenticated: false }));
   });
 
-  it("renders token metadata and opens the mint modal for a superuser", () => {
+  it("renders token metadata and navigates to the mint route for a superuser", () => {
     setSuperuser();
     mockedList.mockReturnValue({
       data: [token],
@@ -84,6 +86,8 @@ describe("SCIMTokensPage", () => {
     expect(screen.getByText("Never")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Mint Token/i }));
-    expect(screen.getByText("Mint SCIM Token")).toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith({
+      to: "/dashboard/settings/auth/scim-tokens/new",
+    });
   });
 });

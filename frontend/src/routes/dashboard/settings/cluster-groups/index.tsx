@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Table,
   TableBody,
@@ -57,16 +57,16 @@ import {
   type ClusterGroupWriteRequest,
 } from "@/lib/api/cluster-groups";
 
-const MAX_DEPTH = 2;
+export const MAX_DEPTH = 2;
 
-function useClusterGroups() {
+export function useClusterGroups() {
   return useQuery({
     queryKey: queryKeys.clusterGroups.all,
     queryFn: ({ signal }) => listClusterGroups({ signal }),
   });
 }
 
-function useCreateClusterGroup() {
+export function useCreateClusterGroup() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: ClusterGroupWriteRequest) => createClusterGroup(body),
@@ -109,14 +109,13 @@ function useDeleteClusterGroup() {
 }
 
 function ClusterGroupsPage() {
+  const navigate = useNavigate();
   const clusterGroupsQuery = useClusterGroups();
   const { data, isLoading } = clusterGroupsQuery;
-  const createMut = useCreateClusterGroup();
   const updateMut = useUpdateClusterGroup();
   const deleteMut = useDeleteClusterGroup();
 
   const [editing, setEditing] = useState<ClusterGroupTreeNode | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ClusterGroupTreeNode | null>(
     null,
@@ -167,10 +166,9 @@ function ClusterGroupsPage() {
             type="button"
             intent="primary"
             icon={<Plus className="h-4 w-4" />}
-            onClick={() => {
-              setEditing(null);
-              setShowForm(true);
-            }}
+            onClick={() =>
+              void navigate({ to: "/dashboard/settings/cluster-groups/new" })
+            }
           >
             New group
           </ActionButton>
@@ -257,7 +255,6 @@ function ClusterGroupsPage() {
                         onClick={(event) => {
                           event.stopPropagation();
                           setEditing(g);
-                          setShowForm(true);
                         }}
                         className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                         title="Edit"
@@ -286,20 +283,13 @@ function ClusterGroupsPage() {
 
       {selectedGroup && <ClusterGroupMembership group={selectedGroup} />}
 
-      {showForm && (
+      {editing && (
         <ClusterGroupForm
           existing={editing}
           allGroups={tree}
-          onClose={() => {
-            setShowForm(false);
-            setEditing(null);
-          }}
+          onClose={() => setEditing(null)}
           onSubmit={(body) => {
-            const action = editing
-              ? updateMut.mutateAsync({ id: editing.id, body })
-              : createMut.mutateAsync(body);
-            action.then(() => {
-              setShowForm(false);
+            updateMut.mutateAsync({ id: editing.id, body }).then(() => {
               setEditing(null);
             });
           }}
@@ -343,7 +333,7 @@ function ClusterGroupsPage() {
 }
 
 interface FormProps {
-  existing: ClusterGroupTreeNode | null;
+  existing: ClusterGroupTreeNode;
   allGroups: ClusterGroupTreeNode[];
   onSubmit: (body: ClusterGroupWriteRequest) => void;
   onClose: () => void;
@@ -420,7 +410,7 @@ function ClusterGroupForm({
 
   return (
     <ModalShell
-      title={existing ? "Edit cluster group" : "New cluster group"}
+      title="Edit cluster group"
       onClose={onClose}
       size="md"
       footerClassName="flex items-center justify-end gap-2"
@@ -435,7 +425,7 @@ function ClusterGroupForm({
             onClick={() => void form.handleSubmit()}
             disabled={!name || !slug}
           >
-            {existing ? "Save" : "Create"}
+            Save
           </ActionButton>
         </>
       }
@@ -461,7 +451,7 @@ function ClusterGroupForm({
         <label className="block">
           <span className="text-xs font-medium text-muted-foreground">
             Slug{" "}
-            <span className="text-muted-foreground/60">
+            <span className="text-muted-foreground">
               (URL-safe identifier)
             </span>
           </span>

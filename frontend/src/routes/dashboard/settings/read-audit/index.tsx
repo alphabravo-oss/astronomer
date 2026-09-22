@@ -11,18 +11,14 @@ import { DataTable, type Column } from "@/components/ui/data-table";
  * Backend: /api/v1/admin/read-audit-policies/. Superuser-gated.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
+import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { ActionButton } from "@/components/ui/action-button";
-import { Input } from "@/components/ui/input";
-import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { Field } from "@/components/form/fields";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   listReadAuditPolicies,
-  createReadAuditPolicy,
   updateReadAuditPolicy,
   deleteReadAuditPolicy,
   type ReadAuditPolicyView,
@@ -37,10 +33,10 @@ function ReadAuditPoliciesPage() {
 }
 
 function ReadAuditPoliciesList() {
+  const navigate = useNavigate();
   const [items, setItems] = useState<ReadAuditPolicyView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ReadAuditPolicyView | null>(
     null,
   );
@@ -189,7 +185,9 @@ function ReadAuditPoliciesList() {
         actions={
           <ActionButton
             icon={<Plus className="h-4 w-4" />}
-            onClick={() => setShowCreate(true)}
+            onClick={() =>
+              void navigate({ to: "/dashboard/settings/read-audit/new" })
+            }
           >
             New policy
           </ActionButton>
@@ -215,15 +213,6 @@ function ReadAuditPoliciesList() {
         }}
       />
 
-      {showCreate && (
-        <CreatePolicyModal
-          onClose={() => setShowCreate(false)}
-          onCreated={async () => {
-            setShowCreate(false);
-            await refresh();
-          }}
-        />
-      )}
       <ConfirmDialog
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
@@ -247,112 +236,6 @@ function ReadAuditPoliciesList() {
         }
       />
     </PageShell>
-  );
-}
-
-function CreatePolicyModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [pathPattern, setPathPattern] = useState("");
-  const [verbs, setVerbs] = useState("GET");
-  const [sampleRate, setSampleRate] = useState(1);
-  const [enabled, setEnabled] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    try {
-      await createReadAuditPolicy({
-        name,
-        description,
-        path_pattern: pathPattern,
-        verbs,
-        sample_rate: sampleRate,
-        enabled,
-      });
-      onCreated();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Create failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <ModalShell
-      title="New read-audit policy"
-      onClose={onClose}
-      size="sm"
-      footerClassName="flex items-center justify-end gap-2"
-      footer={
-        <>
-          <ActionButton onClick={onClose} disabled={busy}>
-            Cancel
-          </ActionButton>
-          <ActionButton
-            intent="primary"
-            onClick={submit}
-            disabled={busy || !name || !pathPattern}
-            loading={busy}
-            loadingLabel="Creating…"
-          >
-            Create
-          </ActionButton>
-        </>
-      }
-    >
-      {error && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      <Field label="Name">
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
-      </Field>
-      <Field label="Description">
-        <Input
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </Field>
-      <Field label="Path pattern (e.g. /admin/sso or /projects/*/cloud-credentials)">
-        <Input
-          value={pathPattern}
-          onChange={(e) => setPathPattern(e.target.value)}
-          className="font-mono"
-        />
-      </Field>
-      <Field label="Verbs (comma-separated or *)">
-        <Input value={verbs} onChange={(e) => setVerbs(e.target.value)} />
-      </Field>
-      <Field label={`Sample rate: ${Math.round(sampleRate * 100)}%`}>
-        <Input
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={sampleRate}
-          onChange={(e) => setSampleRate(Number(e.target.value))}
-          className="w-full"
-        />
-      </Field>
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <Input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />
-        Enabled
-      </label>
-    </ModalShell>
   );
 }
 

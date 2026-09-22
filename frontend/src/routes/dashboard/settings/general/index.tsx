@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type ElementType } from "react";
 import { FileText, Key, LifeBuoy, Settings } from "lucide-react";
 import { useTabParam } from "@/lib/use-tab-param";
@@ -9,7 +9,6 @@ import { AuditTab } from "./-audit-tab";
 import { GeneralEditModal } from "./-general-edit-modal";
 import { GeneralTab } from "./-general-tab";
 import { SupportTab } from "./-support-tab";
-import { TokenModal } from "./-token-modal";
 import { TokensTab } from "./-tokens-tab";
 
 type TabKey = "general" | "tokens" | "audit" | "support";
@@ -24,8 +23,8 @@ const tabs: { key: TabKey; label: string; icon: ElementType }[] = [
 ];
 
 function SettingsPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useTabParam(TAB_KEYS, "general");
-  const [showCreateToken, setShowCreateToken] = useState(false);
   const [showEditGeneral, setShowEditGeneral] = useState(false);
 
   return (
@@ -59,7 +58,13 @@ function SettingsPage() {
           </div>
         )}
         {activeTab === "tokens" && (
-          <TokensTab onCreate={() => setShowCreateToken(true)} />
+          <TokensTab
+            onCreate={() =>
+              void navigate({
+                to: "/dashboard/settings/general/tokens/new",
+              })
+            }
+          />
         )}
         {activeTab === "audit" && <AuditTab />}
         {activeTab === "support" && <SupportTab />}
@@ -67,9 +72,6 @@ function SettingsPage() {
 
       {showEditGeneral && (
         <GeneralEditModal onClose={() => setShowEditGeneral(false)} />
-      )}
-      {showCreateToken && (
-        <TokenModal onClose={() => setShowCreateToken(false)} />
       )}
     </PageShell>
   );
