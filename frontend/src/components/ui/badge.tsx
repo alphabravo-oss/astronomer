@@ -26,6 +26,12 @@ const badgeVariants = cva(
 export interface BadgeProps
   extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
 
+/**
+ * For non-status labels only (kind, distribution, tags, counts). For any
+ * state word ("active", "failed", "OutOfSync", …) use `StatusBadge` from
+ * `@/components/ui/status-badge` instead, so status colors/dots stay
+ * consistent across the app.
+ */
 export function Badge({ className, variant, ...props }: BadgeProps) {
   return (
     <span className={cn(badgeVariants({ variant }), className)} {...props} />

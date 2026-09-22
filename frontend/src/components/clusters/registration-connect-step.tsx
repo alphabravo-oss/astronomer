@@ -204,7 +204,7 @@ export function RegistrationConnectStep({
             <Server className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">
+            {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold text-foreground">
               {showProgress ? "Adoption progress" : "Install the agent"}
             </h1>
             <p className="text-sm text-muted-foreground">

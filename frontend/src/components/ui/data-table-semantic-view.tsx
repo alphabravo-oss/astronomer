@@ -93,6 +93,27 @@ export function SemanticDataTable<T extends RowData>({
                 const column = table.getColumn(col.key);
                 const sorted = column?.getIsSorted();
                 const header = resizable ? headerByKey.get(col.key) : undefined;
+                const sortable = col.sortable !== false;
+                const headerContent = (
+                  <>
+                    {col.header}
+                    {sortable && (
+                      <span className="text-muted-foreground/50">
+                        {sorted === "asc" ? (
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        ) : sorted === "desc" ? (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronsUpDown className="h-3 w-3" />
+                        )}
+                      </span>
+                    )}
+                  </>
+                );
+                const alignClass = cn(
+                  col.align === "center" && "justify-center",
+                  col.align === "right" && "justify-end",
+                );
                 return (
                   <TableHead
                     key={col.key}
@@ -102,8 +123,6 @@ export function SemanticDataTable<T extends RowData>({
                       resizable && "relative",
                       col.align === "center" && "text-center",
                       col.align === "right" && "text-right",
-                      col.sortable !== false &&
-                        "cursor-pointer select-none hover:text-foreground",
                     )}
                     style={
                       resizable
@@ -113,7 +132,7 @@ export function SemanticDataTable<T extends RowData>({
                           : undefined
                     }
                     aria-sort={
-                      col.sortable !== false
+                      sortable
                         ? sorted === "asc"
                           ? "ascending"
                           : sorted === "desc"
@@ -121,40 +140,35 @@ export function SemanticDataTable<T extends RowData>({
                             : "none"
                         : undefined
                     }
-                    tabIndex={col.sortable !== false ? 0 : undefined}
-                    onClick={() =>
-                      col.sortable !== false && column?.toggleSorting()
-                    }
-                    onKeyDown={(event) => {
-                      if (
-                        col.sortable === false ||
-                        (event.key !== "Enter" && event.key !== " ")
-                      )
-                        return;
-                      event.preventDefault();
-                      column?.toggleSorting();
-                    }}
                   >
-                    <div
-                      className={cn(
-                        "flex items-center gap-1",
-                        col.align === "center" && "justify-center",
-                        col.align === "right" && "justify-end",
-                      )}
-                    >
-                      {col.header}
-                      {col.sortable !== false && (
-                        <span className="text-muted-foreground/50">
-                          {sorted === "asc" ? (
-                            <ChevronUp className="h-3.5 w-3.5" />
-                          ) : sorted === "desc" ? (
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          ) : (
-                            <ChevronsUpDown className="h-3 w-3" />
-                          )}
-                        </span>
-                      )}
-                    </div>
+                    {sortable ? (
+                      <button
+                        type="button"
+                        aria-label={`Sort by ${col.header}`}
+                        onClick={() => column?.toggleSorting()}
+                        className={cn(
+                          "flex items-center gap-1 p-0 cursor-pointer select-none hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                          // Narrower than the full header width when a resize
+                          // handle shares this header, so the two adjacent
+                          // touch targets have clear space between them
+                          // instead of touching bounding boxes (WCAG 2.5.8
+                          // target spacing) — a right-margin/padding trick
+                          // doesn't work here because the browser resolves an
+                          // over-constrained `width: 100%` + margin by
+                          // discarding the margin.
+                          resizable && header?.column.getCanResize()
+                            ? "w-[calc(100%-12px)]"
+                            : "w-full",
+                          alignClass,
+                        )}
+                      >
+                        {headerContent}
+                      </button>
+                    ) : (
+                      <div className={cn("flex items-center gap-1", alignClass)}>
+                        {headerContent}
+                      </div>
+                    )}
                     {resizable && header?.column.getCanResize() && (
                       <button
                         type="button"

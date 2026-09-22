@@ -1,13 +1,40 @@
 import type { HTMLAttributes } from "react";
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+const cardVariants = cva("border border-border bg-card text-card-foreground", {
+  variants: {
+    padding: {
+      none: "p-0",
+      sm: "p-4",
+      md: "p-5",
+      lg: "p-6",
+    },
+    radius: {
+      md: "rounded-md",
+      lg: "rounded-lg",
+      xl: "rounded-xl",
+    },
+  },
+  defaultVariants: {
+    padding: "none",
+    radius: "lg",
+  },
+});
+
+export interface CardProps
+  extends HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof cardVariants> {}
+
+/**
+ * `padding` defaults to `"none"` because `CardHeader`/`CardContent`/
+ * `CardFooter` already carry their own `p-5` padding — pass a non-`"none"`
+ * padding only for a bare `Card` with no sub-component children.
+ */
+export function Card({ className, padding, radius, ...props }: CardProps) {
   return (
     <div
-      className={cn(
-        "rounded-lg border border-border bg-card text-card-foreground",
-        className,
-      )}
+      className={cn(cardVariants({ padding, radius }), className)}
       {...props}
     />
   );

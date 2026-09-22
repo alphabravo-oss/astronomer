@@ -179,6 +179,8 @@ function SessionCommandsDrawer({
             icon={TerminalSquare}
             title="No commands recorded"
             description="This session has not executed any audited commands yet."
+            // terminal: a read-only audit trail for a session already in progress/closed.
+            terminal
           />
         }
       >

@@ -341,6 +341,8 @@ export function DeliveryProjectGate({
         icon={PackageOpen}
         title="No projects available"
         description="Create or request access to a project before configuring delivery."
+        actionLabel="Go to projects"
+        actionHref="/dashboard/projects"
       />
     );
   }
@@ -350,6 +352,8 @@ export function DeliveryProjectGate({
         icon={FolderKanban}
         title="Choose a project"
         description="Delivery resources are isolated by project. Select one above to continue."
+        // terminal: the action is the project selector rendered above this panel.
+        terminal
       />
     );
   }

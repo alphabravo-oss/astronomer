@@ -22,6 +22,7 @@ import {
   useNetworkPolicyTemplates,
 } from "@/lib/hooks/policy-queries";
 import { QueryStates } from "@/components/ui/query-states";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 import { Link as RouterLink } from "@tanstack/react-router";
 import { ArrowLeft, Plus, Trash2, RefreshCw, Loader2 } from "lucide-react";
@@ -34,28 +35,6 @@ import {
   reapplyNetworkPolicyApplication,
   type NetworkPolicyApplication,
 } from "@/lib/api/settings";
-
-function StatusPill({
-  status,
-}: {
-  status: NetworkPolicyApplication["status"];
-}) {
-  const palette: Record<string, string> = {
-    pending: "bg-muted text-muted-foreground border-border",
-    applied:
-      "bg-status-success/10 text-status-success border-status-success/30",
-    failed: "bg-status-error/10 text-status-error border-status-error/30",
-    drifting:
-      "bg-status-warning/10 text-status-warning border-status-warning/30",
-  };
-  return (
-    <span
-      className={`text-xs px-2 py-0.5 rounded-sm border font-medium capitalize ${palette[status]}`}
-    >
-      {status}
-    </span>
-  );
-}
 
 function ClusterNetworkPoliciesPage() {
   const params = Route.useParams();
@@ -158,7 +137,7 @@ function ClusterNetworkPoliciesPage() {
       </div>
 
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold tracking-tight">
           Network policies
         </h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
@@ -259,7 +238,7 @@ function ClusterNetworkPoliciesPage() {
                     {a.policy_name}
                   </TableCell>
                   <TableCell className="px-3 py-2">
-                    <StatusPill status={a.status} />
+                    <StatusBadge status={a.status} />
                     {a.last_error && (
                       <div className="text-xs text-status-error mt-0.5">
                         {a.last_error}

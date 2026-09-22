@@ -228,7 +228,7 @@ function RegisterClusterWizardPage({
             <Server className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">
+            {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold text-foreground">
               Register an existing cluster
             </h1>
           </div>

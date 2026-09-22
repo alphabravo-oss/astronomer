@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 // High-visibility page actions must use the shared primitive. Raw buttons on
@@ -16,4 +16,58 @@ describe("design-system adoption", () => {
       expect(source).not.toMatch(/<button\b/);
     });
   }
+});
+
+/**
+ * Counting ratchets (plan 021): raw `<button` and the hand-rolled
+ * `border border-border bg-card` card-frame literal must never grow across
+ * src/routes. These are drift indicators for ActionButton/Card adoption —
+ * migrating a page should lower the baseline (see docs/design-system.md);
+ * a raw new usage should not raise it.
+ */
+function walkRouteFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "__tests__") continue;
+    const path = resolve(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...walkRouteFiles(path));
+    } else if (
+      entry.name.endsWith(".tsx") &&
+      !entry.name.includes(".test.") &&
+      entry.name !== "routeTree.gen.ts"
+    ) {
+      out.push(path);
+    }
+  }
+  return out;
+}
+
+function countAcrossRoutes(pattern: RegExp): number {
+  const root = resolve(process.cwd(), "src/routes");
+  let count = 0;
+  for (const file of walkRouteFiles(root)) {
+    const source = readFileSync(file, "utf8");
+    const matches = source.match(pattern);
+    if (matches) count += matches.length;
+  }
+  return count;
+}
+
+// Measured 2026-09-21 when the ratchet was added (plan 021 step 8).
+const BASELINE_BUTTONS = 257;
+const BASELINE_CARD_FRAME_LITERALS = 121;
+
+describe("design-system adoption ratchets", () => {
+  it("does not add raw <button> elements under src/routes", () => {
+    expect(countAcrossRoutes(/<button\b/g)).toBeLessThanOrEqual(
+      BASELINE_BUTTONS,
+    );
+  });
+
+  it("does not add hand-rolled card-frame literals under src/routes", () => {
+    expect(
+      countAcrossRoutes(/border border-border bg-card/g),
+    ).toBeLessThanOrEqual(BASELINE_CARD_FRAME_LITERALS);
+  });
 });

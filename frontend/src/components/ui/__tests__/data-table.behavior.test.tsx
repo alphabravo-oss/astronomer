@@ -86,12 +86,12 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     render(
       <DataTable data={rows} columns={columns} keyExtractor={(r) => r.id} />,
     );
-    const sizeHeader = screen.getByRole("columnheader", { name: /size/i });
+    const sizeSortButton = screen.getByRole("button", { name: "Sort by Size" });
 
-    fireEvent.click(sizeHeader); // asc: 10, 20, 30
+    fireEvent.click(sizeSortButton); // asc: 10, 20, 30
     expect(bodyRowText()[0]).toContain("Apple");
 
-    fireEvent.click(sizeHeader); // desc: 30, 20, 10
+    fireEvent.click(sizeSortButton); // desc: 30, 20, 10
     expect(bodyRowText()[0]).toContain("Banana");
   });
 
@@ -264,7 +264,7 @@ describe("DataTable behavior (TanStack Table engine)", () => {
     );
 
     // Open the Status facet and select 'ready'.
-    fireEvent.click(screen.getByRole("button", { name: /status/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Status" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "ready" }));
 
     const body = bodyRowText();
@@ -349,7 +349,7 @@ describe("DataTable behavior (TanStack Table engine)", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("columnheader", { name: /size/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort by Size" }));
 
     expect(onSortingChange).toHaveBeenCalledWith([{ id: "size", desc: false }]);
     expect(bodyRowText()[0]).toContain("Banana");

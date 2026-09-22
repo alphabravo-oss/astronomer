@@ -46,7 +46,6 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page";
 import { registrationSearch } from "@/components/clusters/registration-flow";
 import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
-import { ClusterBadge } from "@/components/clusters/cluster-badge";
 import {
   formatBytes,
   formatCPU,
@@ -235,9 +234,9 @@ function ClusterDetailPage() {
               <span className="truncate">
                 {cluster.displayName || cluster.name || cluster.id}
               </span>
-              <ClusterBadge
-                text={cluster.badgeText}
-                color={cluster.badgeColor}
+              <StatusBadge
+                tone={cluster.badgeColor}
+                label={cluster.badgeText}
                 className="shrink-0"
               />
             </span>

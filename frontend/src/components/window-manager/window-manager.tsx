@@ -11,6 +11,7 @@ import {
   type WindowTab,
 } from "@/lib/window-manager-store";
 import { cn } from "@/lib/utils";
+import { StatusDot } from "@/components/ui/status-badge";
 import {
   ChevronUp,
   FileText,
@@ -154,7 +155,7 @@ export function WindowManager() {
                   : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
               )}
             >
-              <StatusDot status={tabStatuses[t.id] ?? "idle"} />
+              <TabStatusDot status={tabStatuses[t.id] ?? "idle"} />
               <TabIcon kind={t.kind} />
               <span
                 className="font-mono truncate max-w-[160px]"
@@ -221,7 +222,7 @@ export function WindowManager() {
                   aria-pressed={isActive}
                   className="inline-flex min-w-0 items-center gap-1.5 focus:outline-hidden focus:ring-2 focus:ring-ring"
                 >
-                  <StatusDot status={tabStatuses[t.id] ?? "idle"} />
+                  <TabStatusDot status={tabStatuses[t.id] ?? "idle"} />
                   <TabIcon kind={t.kind} />
                   <span className="font-mono">{tabLabel(t)}</span>
                 </button>
@@ -330,16 +331,17 @@ function TabIcon({ kind }: { kind: WindowTab["kind"] }) {
   );
 }
 
-function StatusDot({ status }: { status: ChipStatus }) {
-  const cls =
-    status === "streaming"
-      ? "bg-status-success animate-pulse"
-      : status === "connecting"
-        ? "bg-status-warning"
-        : status === "disconnected"
-          ? "bg-status-error"
-          : "bg-muted-foreground/40";
-  return <span className={cn("h-1.5 w-1.5 rounded-full", cls)} />;
+/**
+ * Decorative connection-state dot for a tab strip entry. `aria-hidden`
+ * because the enclosing button already carries the tab's accessible name;
+ * the dot only adds a supplementary visual cue.
+ */
+function TabStatusDot({ status }: { status: ChipStatus }) {
+  return (
+    <span aria-hidden="true">
+      <StatusDot status={status} pulse={status === "streaming"} />
+    </span>
+  );
 }
 
 function shortLabel(t: WindowTab): string {

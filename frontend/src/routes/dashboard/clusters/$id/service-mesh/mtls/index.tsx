@@ -161,6 +161,8 @@ function ClusterServiceMeshMTLSPage() {
               mtls?.notice ??
               "Install or configure service-mesh mTLS policies to see namespace posture here."
             }
+            // terminal: mesh install/config happens outside this UI (Helm/mesh CLI).
+            terminal
           />
         }
       >

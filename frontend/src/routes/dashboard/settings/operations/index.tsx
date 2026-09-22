@@ -156,7 +156,7 @@ function OperationsBody() {
       </RouterLink>
 
       <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
+        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
           <Activity className="h-5 w-5" /> Operations
         </h1>
         <p className="text-sm text-muted-foreground mt-1">

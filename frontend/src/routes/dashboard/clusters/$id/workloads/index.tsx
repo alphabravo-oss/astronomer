@@ -77,7 +77,7 @@ function WorkloadsPage() {
     <div className="space-y-4">
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-semibold">Workloads</h1>
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold">Workloads</h1>
         </div>
         <p className="text-sm text-muted-foreground">
           All Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs in this

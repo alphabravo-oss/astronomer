@@ -137,6 +137,7 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
         >
           <span
             className={cn(
+              // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
               "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
               row.enabled ? "translate-x-[18px]" : "translate-x-[3px]",
             )}

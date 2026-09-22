@@ -43,6 +43,10 @@
   --color-status-pending: hsl(var(--status-pending));
   --color-status-neutral: hsl(var(--status-neutral));
   --color-status-high: hsl(var(--status-high));
+  --color-brand-aws: hsl(var(--brand-aws));
+  --color-brand-gcp: hsl(var(--brand-gcp));
+  --color-brand-azure: hsl(var(--brand-azure));
+  --color-brand-do: hsl(var(--brand-do));
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -117,6 +121,13 @@
     --status-pending: 239 65% 45%;
     --status-neutral: 220 9% 40%;
     --status-high: 25 90% 36%;
+    /* Cloud-provider brand tints (provider-badge.tsx). Not semantic status
+     * colors — identify a vendor, not a state — so they live outside the
+     * --status-* scale. */
+    --brand-aws: 15 79% 34%;
+    --brand-gcp: 221 83% 53%;
+    --brand-azure: 200 98% 39%;
+    --brand-do: 224 76% 48%;
     --terminal-bg: 240 10% 4%;
     --terminal-fg: 240 5% 84%;
     --z-sticky: 10;
@@ -159,6 +170,10 @@
     --status-pending: 239 84% 72%;
     --status-neutral: 220 9% 64%;
     --status-high: 25 95% 58%;
+    --brand-aws: 27 96% 61%;
+    --brand-gcp: 213 94% 68%;
+    --brand-azure: 199 95% 74%;
+    --brand-do: 212 96% 78%;
     --terminal-bg: 240 10% 4%;
     --terminal-fg: 240 5% 84%;
   }

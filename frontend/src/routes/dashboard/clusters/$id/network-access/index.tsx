@@ -259,7 +259,7 @@ function ClusterNetworkAccessPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold flex items-center gap-2">
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold flex items-center gap-2">
             Network &amp; access
             <ModeBadge mode={data.mode} drift={data.drift} />
           </h1>

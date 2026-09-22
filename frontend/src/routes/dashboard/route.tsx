@@ -389,6 +389,8 @@ function CharlieDormantState() {
       icon={Lock}
       title="Charlie is not connected"
       description="Charlie ships dormant in Astronomer. An administrator can connect it under Settings → Charlie. The Charlie agent is pulled only after that connection is accepted."
+      actionLabel="Go to Charlie settings"
+      actionHref="/dashboard/settings/charlie"
     />
   );
 }
@@ -400,6 +402,8 @@ function FeatureDisabledState() {
       title="Section disabled"
       description="This section is disabled by platform settings."
       className="rounded-lg border border-border bg-card p-8"
+      // terminal: gated by a platform feature flag, not something this viewer can change.
+      terminal
     />
   );
 }

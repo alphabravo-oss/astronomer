@@ -76,6 +76,48 @@ function FieldShell({
   );
 }
 
+/**
+ * Standalone label + control + helper/error shell for hand-rolled forms that
+ * don't go through the `useAppForm` kit (so callers own their own id/value
+ * wiring) but still want the kit's visuals. Matches `FieldShell` above; the
+ * error line carries `role="alert"` since it isn't wired through a shared
+ * `aria-describedby` id here.
+ */
+export function Field({
+  label,
+  description,
+  error,
+  required,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  description?: string;
+  error?: string;
+  required?: boolean;
+  htmlFor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
+        {label}
+        {required && <span className="text-status-error ml-0.5">*</span>}
+      </label>
+      {children}
+      {error ? (
+        <p role="alert" className="text-2xs text-status-error">
+          {error}
+        </p>
+      ) : (
+        description && (
+          <p className="text-2xs text-muted-foreground">{description}</p>
+        )
+      )}
+    </div>
+  );
+}
+
 function ariaProps(id: string, error: string | undefined) {
   return {
     "aria-invalid": error ? true : undefined,

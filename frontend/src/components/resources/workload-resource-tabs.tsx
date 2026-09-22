@@ -125,6 +125,8 @@ function WorkloadPodsTab({
           icon={Box}
           title="No pods for this workload"
           description="This workload has not created any pods yet. Check its conditions and desired replica count."
+          // terminal: pod count follows the workload's spec, not a user action here.
+          terminal
         />
       }
     >
@@ -176,6 +178,8 @@ function WorkloadLogsTab(props: WorkloadTabProps) {
           icon={Box}
           title="No pods available for logs"
           description="Logs become available after this workload creates a pod."
+          // terminal: nothing to do until the workload schedules a pod.
+          terminal
         />
       }
     >

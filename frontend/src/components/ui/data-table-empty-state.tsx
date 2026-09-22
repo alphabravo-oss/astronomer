@@ -34,7 +34,7 @@ export function TableEmptyPanel({ state }: { state: TableEmptyState }) {
       actionLabel={state.action?.label}
       actionHref={state.action?.href}
       onAction={state.action?.onClick}
-      className="py-8"
+      variant="table"
     />
   );
 }

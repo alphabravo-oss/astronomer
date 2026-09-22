@@ -130,6 +130,7 @@ const statusToneByKey: Record<string, StatusTone> = {
   degraded: "warning",
   outofsync: "warning",
   drifted: "warning",
+  drifting: "warning",
   stale: "warning",
   readonly: "warning",
   migrationrequired: "warning",

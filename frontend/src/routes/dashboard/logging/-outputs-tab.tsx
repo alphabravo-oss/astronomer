@@ -184,7 +184,7 @@ export function OutputsTab() {
         >
           <span
             className={cn(
-              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
+              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" /* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */,
               row.enabled ? "translate-x-[18px]" : "translate-x-[3px]",
             )}
           />

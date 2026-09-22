@@ -204,9 +204,9 @@ export function TargetDetailPage() {
               permission="delivery_targets:read"
               notFound={
                 <EmptyState
-                  icon={AlertTriangle}
-                  title="Target not found"
+                  icon={AlertTriangle} title="Target not found"
                   description="This delivery target no longer exists or is outside the selected project."
+                  actionLabel="Back to targets" actionHref="/dashboard/delivery/targets"
                 />
               }
             >

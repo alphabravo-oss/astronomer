@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { formatBytes, formatCPU, cn } from "@/lib/utils";
+import { SERIES } from "@/lib/chart-colors";
 import type { MetricsSeries } from "@/types";
 
 interface MetricsChartProps {
@@ -20,14 +21,6 @@ interface MetricsChartProps {
   height?: number;
   className?: string;
 }
-
-const CHART_COLORS = [
-  { stroke: "hsl(var(--status-info))", fill: "hsl(var(--status-info))" },
-  { stroke: "hsl(var(--status-pending))", fill: "hsl(var(--status-pending))" },
-  { stroke: "hsl(var(--status-success))", fill: "hsl(var(--status-success))" },
-  { stroke: "hsl(var(--status-warning))", fill: "hsl(var(--status-warning))" },
-  { stroke: "hsl(var(--status-error))", fill: "hsl(var(--status-error))" },
-];
 
 export function MetricsChart({
   title,
@@ -114,12 +107,12 @@ export function MetricsChart({
               >
                 <stop
                   offset="0%"
-                  stopColor={CHART_COLORS[idx % CHART_COLORS.length].fill}
+                  stopColor={SERIES[idx % SERIES.length].fill}
                   stopOpacity={0.15}
                 />
                 <stop
                   offset="100%"
-                  stopColor={CHART_COLORS[idx % CHART_COLORS.length].fill}
+                  stopColor={SERIES[idx % SERIES.length].fill}
                   stopOpacity={0.01}
                 />
               </linearGradient>
@@ -211,14 +204,14 @@ export function MetricsChart({
               key={idx}
               type="monotone"
               dataKey={`series_${idx}`}
-              stroke={CHART_COLORS[idx % CHART_COLORS.length].stroke}
+              stroke={SERIES[idx % SERIES.length].stroke}
               strokeWidth={1.5}
               fill={`url(#gradient_${idx})`}
               dot={false}
               activeDot={{
                 r: 3,
                 strokeWidth: 0,
-                fill: CHART_COLORS[idx % CHART_COLORS.length].stroke,
+                fill: SERIES[idx % SERIES.length].stroke,
               }}
             />
           ))}

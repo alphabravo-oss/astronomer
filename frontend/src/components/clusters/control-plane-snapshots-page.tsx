@@ -327,6 +327,8 @@ export function ClusterControlPlaneSnapshotsPage() {
               still be protected with Velero snapshots.
             </>
           }
+          // terminal: the cloud provider owns control-plane backup/restore here.
+          terminal
         />
       </div>
     );

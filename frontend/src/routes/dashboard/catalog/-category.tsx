@@ -15,10 +15,14 @@ export const categories: { key: HelmChartCategory | "all"; label: string }[] = [
 ];
 
 const categoryColors: Record<string, string> = {
+  // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
   monitoring: "bg-blue-500/10 text-blue-500",
+  // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
   logging: "bg-green-500/10 text-green-500",
+  // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
   security: "bg-red-500/10 text-red-500",
   database: "bg-purple-500/10 text-purple-500",
+  // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
   networking: "bg-orange-500/10 text-orange-500",
   storage: "bg-cyan-500/10 text-cyan-500",
   messaging: "bg-yellow-500/10 text-yellow-500",

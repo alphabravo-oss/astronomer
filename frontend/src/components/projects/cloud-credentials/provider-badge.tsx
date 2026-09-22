@@ -14,22 +14,22 @@ const providerMeta: Record<
 > = {
   aws: {
     label: "AWS",
-    tint: "bg-orange-500/10 text-orange-800 dark:text-orange-400",
+    tint: "bg-brand-aws/10 text-brand-aws",
     icon: Cloud,
   },
   gcp: {
     label: "GCP",
-    tint: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    tint: "bg-brand-gcp/10 text-brand-gcp",
     icon: Cloud,
   },
   azure: {
     label: "Azure",
-    tint: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+    tint: "bg-brand-azure/10 text-brand-azure",
     icon: Cloud,
   },
   digitalocean: {
     label: "DigitalOcean",
-    tint: "bg-blue-600/10 text-blue-700 dark:text-blue-300",
+    tint: "bg-brand-do/10 text-brand-do",
     icon: Cloud,
   },
   generic: {

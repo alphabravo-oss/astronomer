@@ -113,7 +113,7 @@ export function CharlieAdminContent() {
           <ArrowLeft className="h-4 w-4" />
         </RouterLink>
         <div>
-          <h1 className="text-2xl font-semibold">Charlie</h1>
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold">Charlie</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Connect and govern the external Charlie service and its Astronomer
             product agent.

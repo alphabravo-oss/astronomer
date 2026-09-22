@@ -710,7 +710,7 @@ function NodeDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl font-semibold text-foreground tracking-tight font-mono truncate">
+            {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold text-foreground tracking-tight font-mono truncate">
               {node.name}
             </h1>
             <StatusBadge status={node.status} />

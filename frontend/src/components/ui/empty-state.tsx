@@ -16,17 +16,42 @@ import { ActionButton } from "@/components/ui/action-button";
 
 type StateTone = "neutral" | "danger" | "warning" | "info";
 
-interface EmptyStateProps {
+interface EmptyStateBaseProps {
   icon: ElementType;
   title: string;
   description: ReactNode;
+  className?: string;
+}
+
+export interface EmptyStateActionProps {
+  actionLabel: string;
+  actionHref?: string;
+  actionIcon?: ElementType;
+  onAction?: () => void;
+  disabled?: boolean;
+}
+
+interface EmptyStateOptionalActionProps {
   actionLabel?: string;
   actionHref?: string;
   actionIcon?: ElementType;
   onAction?: () => void;
   disabled?: boolean;
-  className?: string;
 }
+
+/**
+ * An empty state with nothing the operator can do next is a dead end. This
+ * type forbids omitting an action unless the caller explicitly opts into
+ * `terminal: true` (with a comment explaining why there's genuinely nothing
+ * to do) — see docs/design-system.md. `variant: "table"` is the one
+ * unchecked escape hatch: a DataTable's inline empty row (filtered-out vs.
+ * no rows yet) legitimately may or may not have a caller-supplied action.
+ */
+export type EmptyStateProps = EmptyStateBaseProps &
+  (
+    | ({ variant?: "page" } & (EmptyStateActionProps | { terminal: true }))
+    | ({ variant: "table" } & EmptyStateOptionalActionProps)
+  );
 
 interface StatePanelProps {
   title: string;
@@ -117,7 +142,26 @@ export function StatePanel({
 }
 
 export function EmptyState(props: EmptyStateProps) {
-  return <StatePanel {...props} />;
+  const { icon, title, description, className, variant } = props;
+  const isTerminal = "terminal" in props && props.terminal;
+  const action: EmptyStateOptionalActionProps = isTerminal
+    ? {}
+    : {
+        actionLabel: (props as EmptyStateActionProps).actionLabel,
+        actionHref: (props as EmptyStateActionProps).actionHref,
+        actionIcon: (props as EmptyStateActionProps).actionIcon,
+        onAction: (props as EmptyStateActionProps).onAction,
+        disabled: (props as EmptyStateActionProps).disabled,
+      };
+  return (
+    <StatePanel
+      icon={icon}
+      title={title}
+      description={description}
+      className={cn(variant === "table" && "py-8", className)}
+      {...action}
+    />
+  );
 }
 
 export function LoadingState({

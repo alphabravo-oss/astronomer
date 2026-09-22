@@ -42,6 +42,7 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 import { useCluster } from "@/lib/hooks/clusters";
 import { liveFallback } from "@/lib/live/status-store";
+import { SEVERITY } from "@/lib/chart-colors";
 import {
   getImageVulnReport,
   getImageVulnReportHistory,
@@ -298,7 +299,7 @@ function ClusterImageScansPage() {
             : ""}
         </p>
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
             <ShieldAlert className="h-6 w-6" /> Image Scans
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -833,7 +834,7 @@ function HistorySparkline({
       <path
         d={path("high")}
         fill="none"
-        stroke="#f97316"
+        stroke={SEVERITY.high}
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -842,7 +843,7 @@ function HistorySparkline({
       <path
         d={path("critical")}
         fill="none"
-        stroke="#dc2626"
+        stroke={SEVERITY.critical}
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -852,13 +853,13 @@ function HistorySparkline({
         cx={xs(points.length - 1)}
         cy={ys(points[points.length - 1].critical)}
         r={2.5}
-        fill="#dc2626"
+        fill={SEVERITY.critical}
       />
       <circle
         cx={xs(points.length - 1)}
         cy={ys(points[points.length - 1].high)}
         r={2.5}
-        fill="#f97316"
+        fill={SEVERITY.high}
       />
     </svg>
   );
