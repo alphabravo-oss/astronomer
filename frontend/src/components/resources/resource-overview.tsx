@@ -32,6 +32,7 @@ import {
 } from "@/components/resources/resource-overview-additional";
 import { PodResourceOverview } from "@/components/resources/pod-resource-overview";
 import { SecretDataOverview } from "@/components/resources/secret-data-overview";
+import { LabelsAnnotationsEditor } from "@/components/resources/labels-annotations-editor";
 
 export function ResourceOverview({
   obj,
@@ -122,6 +123,9 @@ export function ResourceOverview({
     }
   })();
 
+  const resolvedNamespace = namespace ?? meta.namespace;
+  const resolvedName = name ?? meta.name ?? "";
+
   if (kindSpecific) {
     return (
       <div className="space-y-6">
@@ -130,6 +134,9 @@ export function ResourceOverview({
         <GenericOverview
           obj={obj}
           resourceType={resourceType}
+          clusterId={clusterId}
+          namespace={resolvedNamespace}
+          name={resolvedName}
           showStatus={false}
           showData={resourceType !== "secrets"}
         />
@@ -137,16 +144,31 @@ export function ResourceOverview({
     );
   }
 
-  return <GenericOverview obj={obj} resourceType={resourceType} showStatus />;
+  return (
+    <GenericOverview
+      obj={obj}
+      resourceType={resourceType}
+      clusterId={clusterId}
+      namespace={resolvedNamespace}
+      name={resolvedName}
+      showStatus
+    />
+  );
 }
 function GenericOverview({
   obj,
   resourceType,
+  clusterId,
+  namespace,
+  name,
   showStatus,
   showData = true,
 }: {
   obj?: K8sObject;
   resourceType: string;
+  clusterId: string;
+  namespace?: string;
+  name: string;
   showStatus?: boolean;
   showData?: boolean;
 }) {
@@ -194,10 +216,6 @@ function GenericOverview({
     metadataEntries.push(["age", formatRelativeTime(meta.creationTimestamp)]);
   }
 
-  const labels = Object.entries(meta.labels ?? {}) as Array<[string, string]>;
-  const annotations = Object.entries(meta.annotations ?? {}) as Array<
-    [string, string]
-  >;
   const owners = meta.ownerReferences ?? [];
 
   // ponytail: mask secret 'data' values; only secrets carries this.
@@ -213,13 +231,14 @@ function GenericOverview({
         <KeyValueTable entries={metadataEntries} />
       </Section>
 
-      <Section title="Labels">
-        <KeyValueTable entries={labels} />
-      </Section>
-
-      <Section title="Annotations">
-        <KeyValueTable entries={annotations} />
-      </Section>
+      <LabelsAnnotationsEditor
+        clusterId={clusterId}
+        resourceType={resourceType}
+        namespace={namespace}
+        name={name}
+        labels={meta.labels ?? {}}
+        annotations={meta.annotations ?? {}}
+      />
 
       {owners.length > 0 && (
         <Section title="Owner References">
