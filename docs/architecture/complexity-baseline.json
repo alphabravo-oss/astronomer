@@ -125,7 +125,7 @@
     "frontend/src/routes/dashboard/settings/templates/$key/index.tsx:NotificationTemplateEditor": 414,
     "frontend/src/routes/dashboard/settings/vault/index.tsx:VaultConnectionsPage": 377,
     "frontend/src/routes/dashboard/settings/webhooks/new/index.tsx:NewWebhookWizard": 298,
-    "frontend/src/routes/dashboard/settings/widgets/index.tsx:WidgetsAdminPage": 605,
+    "frontend/src/routes/dashboard/settings/widgets/index.tsx:WidgetsAdminPage": 604,
     "internal/auth/group_sync.go:SyncUserGroups": 290,
     "internal/charlie/catalog.go:ReadCapabilityCatalog": 299,
     "internal/config/config.go:Load": 247,
