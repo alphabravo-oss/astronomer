@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/cluster-registration";
 import { getRegistrationTLS } from "@/lib/api/public-settings";
 import { useLiveEvents } from "@/lib/live/hooks";
+import { PageHeader } from "@/components/ui/page";
 import { ActionButton } from "@/components/ui/action-button";
 import { QueryStates } from "@/components/ui/query-states";
 import { RegistrationTimeline } from "@/components/clusters/registration-timeline";
@@ -199,21 +200,21 @@ export function RegistrationConnectStep({
   return (
     <div>
       <div className="mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-            <Server className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div>
-            {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold text-foreground">
+        <PageHeader
+          title={
+            <span className="inline-flex items-center gap-3">
+              <span className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                <Server className="h-5 w-5 text-muted-foreground" />
+              </span>
               {showProgress ? "Adoption progress" : "Install the agent"}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {showProgress
-                ? "Watch the existing cluster connect and apply its baseline"
-                : "Run the install command on your cluster"}
-            </p>
-          </div>
-        </div>
+            </span>
+          }
+          description={
+            showProgress
+              ? "Watch the existing cluster connect and apply its baseline"
+              : "Run the install command on your cluster"
+          }
+        />
         <WizardStepper
           steps={REGISTRATION_STEPS}
           currentStep={wizardStep}

@@ -6,7 +6,14 @@ import { resolve } from "node:path";
 // loading icons, and dark-mode colors while still looking acceptable in one
 // theme. Add newly scrubbed pages here so adoption is ratcheted forward and CI
 // prevents them from regressing.
-const actionSurfaces = ["src/routes/dashboard/clusters/$id/index.tsx"];
+const actionSurfaces = [
+  "src/routes/dashboard/clusters/$id/index.tsx",
+  "src/routes/dashboard/account/security/index.tsx",
+  "src/routes/dashboard/delivery/targets/$targetId/index.tsx",
+  "src/routes/dashboard/delivery/targets/index.tsx",
+  "src/routes/dashboard/settings/widgets/index.tsx",
+  "src/routes/dashboard/delivery/sources/index.tsx",
+];
 
 describe("design-system adoption", () => {
   for (const file of actionSurfaces) {
@@ -55,8 +62,11 @@ function countAcrossRoutes(pattern: RegExp): number {
 }
 
 // Measured 2026-09-21 when the ratchet was added (plan 021 step 8).
-const BASELINE_BUTTONS = 257;
-const BASELINE_CARD_FRAME_LITERALS = 121;
+// Lowered 2026-09-21 after plan 022 step 4's button/card migration of the
+// top-5 raw-<button> files (account/security, delivery targets ×2,
+// settings/widgets, delivery/sources).
+const BASELINE_BUTTONS = 196;
+const BASELINE_CARD_FRAME_LITERALS = 116;
 
 describe("design-system adoption ratchets", () => {
   it("does not add raw <button> elements under src/routes", () => {

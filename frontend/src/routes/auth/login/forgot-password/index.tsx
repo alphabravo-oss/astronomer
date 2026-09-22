@@ -45,7 +45,7 @@ function ForgotPasswordPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <Orbit className="h-8 w-8 text-foreground" />
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold tracking-tight">
+          {/* eslint-disable-line no-restricted-syntax -- standalone auth screen, not dashboard chrome */}<h1 className="text-xl font-semibold tracking-tight">
             {submitted ? "Check your inbox" : "Reset your password"}
           </h1>
           <p className="text-sm text-muted-foreground">

@@ -7,8 +7,9 @@ import {
   updateLoggingPipeline,
 } from "@/lib/api/logging";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/utils";
 import type { LoggingPipeline } from "@/types";
 import { Trash2 } from "lucide-react";
 import { toastError, toastSuccess } from "@/lib/toast";
@@ -125,24 +126,14 @@ export function PipelinesTab({ clusterId }: { clusterId?: string } = {}) {
       key: "enabled",
       header: "Enabled",
       accessor: (row) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleToggle(row);
-          }}
-          className={cn(
-            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-            row.enabled ? "bg-primary" : "bg-muted",
-          )}
-        >
-          <span
-            className={cn(
-              // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
-              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
-              row.enabled ? "translate-x-[18px]" : "translate-x-[3px]",
-            )}
+        <span onClickCapture={(e) => e.stopPropagation()}>
+          <Switch
+            size="sm"
+            checked={row.enabled}
+            onCheckedChange={() => handleToggle(row)}
+            className={row.enabled ? "bg-primary" : undefined}
           />
-        </button>
+        </span>
       ),
       sortable: false,
     },

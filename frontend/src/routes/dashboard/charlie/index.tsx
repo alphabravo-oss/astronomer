@@ -2,7 +2,7 @@ import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type KeyboardEvent } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
@@ -38,14 +38,13 @@ import {
   findingWorkflowLabel,
   findingWorkflowGuidance,
 } from "@/components/charlie/finding-workflow";
-import { cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query-keys";
 import { useAuthStore } from "@/lib/store";
 import { can } from "@/lib/permissions";
-import {
-  adjacentTab,
-  mergeCharlieSearch,
-} from "@/components/charlie/admin-utils";
+import { mergeCharlieSearch } from "@/components/charlie/admin-utils";
+import { TabStrip } from "@/components/ui/tabs";
+import { ResourceMasthead } from "@/components/ui/page";
 
 export const CHARLIE_HUB_TABS = [
   "conversations",
@@ -85,18 +84,11 @@ function CharlieHub() {
       to: `/dashboard/charlie?${mergeCharlieSearch(params, updates)}`,
     });
   };
-  const onTabKey = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const next = adjacentTab(CHARLIE_HUB_TABS, tab, event.key);
-    if (!next) return;
-    event.preventDefault();
-    set({ tab: next });
-    document.getElementById(`charlie-hub-tab-${next}`)?.focus();
-  };
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold">Charlie</h1>
+      <ResourceMasthead
+        title="Charlie"
+        status={
           <span
             className={cn(
               "rounded-full border px-2.5 py-0.5 text-xs font-semibold",
@@ -108,45 +100,26 @@ function CharlieHub() {
           >
             Mode: {mode.label}
           </span>
-        </div>
-        <p className="text-sm text-foreground/70">
-          Conversations, investigations, findings, and explicitly authorized
-          actions.
-        </p>
-        <p className="text-xs text-muted-foreground">{mode.ceiling}</p>
-      </div>
-      <div
-        role="tablist"
+        }
+        description={
+          <>
+            Conversations, investigations, findings, and explicitly
+            authorized actions.
+            <span className="mt-1 block text-xs">{mode.ceiling}</span>
+          </>
+        }
+      />
+      <TabStrip
+        tabs={CHARLIE_HUB_TABS.map((t) => ({ key: t, label: capitalize(t) }))}
+        value={tab}
+        onChange={(next) => set({ tab: next })}
         aria-label="Charlie sections"
-        className="flex gap-1 overflow-x-auto border-b"
-      >
-        {CHARLIE_HUB_TABS.map((t) => (
-          <button
-            key={t}
-            id={`charlie-hub-tab-${t}`}
-            type="button"
-            role="tab"
-            aria-selected={tab === t}
-            aria-controls={`charlie-hub-panel-${t}`}
-            tabIndex={tab === t ? 0 : -1}
-            onKeyDown={onTabKey}
-            onClick={() => set({ tab: t })}
-            className={cn(
-              "min-h-11 border-b-2 px-4 py-2 text-sm capitalize transition-colors motion-reduce:transition-none",
-              tab === t
-                ? "border-primary text-foreground"
-                : "border-transparent text-foreground/70",
-            )}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      />
       <div
         id={`charlie-hub-panel-${tab}`}
         role="tabpanel"
         tabIndex={0}
-        aria-labelledby={`charlie-hub-tab-${tab}`}
+        aria-labelledby={`tab-${tab}`}
       >
         {tab === "conversations" && (
           <Conversations

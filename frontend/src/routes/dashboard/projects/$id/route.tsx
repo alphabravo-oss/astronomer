@@ -25,7 +25,8 @@ import {
   Package,
 } from "lucide-react";
 import { useProject } from "@/lib/hooks/projects";
-import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/page";
+import { tabLinkClassName } from "@/components/ui/tabs";
 
 const tabs = [
   { key: "overview", label: "Overview", icon: LayoutDashboard, segment: "" },
@@ -75,32 +76,23 @@ function ProjectDetailLayout() {
         Back to Projects
       </RouterLink>
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Project
-          </p>
-          <div className="flex items-center gap-2 mt-1">
-            <FolderKanban className="h-5 w-5 text-muted-foreground" />
+      <PageHeader
+        eyebrow="Project"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <FolderKanban className="h-5 w-5 shrink-0 text-muted-foreground" />
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             ) : (
-              // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
-              <h1 className="text-2xl font-semibold text-foreground tracking-tight truncate">
-                {project?.displayName || project?.name || "Project"}
-              </h1>
+              project?.displayName || project?.name || "Project"
             )}
-          </div>
-          {project?.description && (
-            <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-              {project.description}
-            </p>
-          )}
-        </div>
-      </div>
+          </span>
+        }
+        description={project?.description}
+      />
 
       <div className="border-b border-border">
-        <nav className="flex gap-6">
+        <nav aria-label="Project sections" className="flex gap-6">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const href = `${base}${tab.segment}`;
@@ -109,12 +101,8 @@ function ProjectDetailLayout() {
               <RouterLink
                 key={tab.key}
                 to={href}
-                className={cn(
-                  "flex items-center gap-2 pb-3 text-sm font-medium border-b-2 transition-colors",
-                  active
-                    ? "border-foreground text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
+                aria-current={active ? "page" : undefined}
+                className={tabLinkClassName(active)}
               >
                 <Icon className="h-4 w-4" />
                 {tab.label}

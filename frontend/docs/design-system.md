@@ -121,6 +121,33 @@ placed as JSX children text is not a comment at all, it's a literal text
 node that will render on the page. `eslint-disable-next-line` is fine only
 in a plain JS/TS expression or attribute-list context (never JSX children).
 
+## Create and edit flows
+
+**Create and edit are routes; modals are for confirmations, single-field
+actions, and pickers.** A page that creates or edits a multi-field resource
+(a template, a target, a token, a forwarder, a destination) gets its own
+`*/new/index.tsx` (and, where it exists, `*/$id/edit/index.tsx`) route
+rendered with `PageHeader` + `FormShell`, reached from an `ActionButton`
+`RouterLink` on the list/detail page rather than a click-to-open dialog.
+Routes are linkable, back-navigable, and don't lose the operator's place in
+a long form on an accidental Escape/backdrop click.
+
+Keep using `ModalShell` for:
+- **Confirmations** — `ConfirmDialog` for destructive/impactful actions.
+- **Single-field actions** — a small one- or two-input action that isn't
+  really a persisted resource with its own lifecycle (e.g. picking a date
+  window to kick off a one-off export job).
+- **Pickers** — assigning existing resources to each other (e.g. adding
+  already-registered clusters to a cluster group) rather than creating a
+  new resource.
+
+Plan 022 migrated the multi-field **create** flows for backups (S3
+destinations) and several Settings resources (read-audit policies, API
+tokens, cluster groups, SIEM forwarders, SCIM tokens, group mappings) to
+routes. Editing an *existing* row on those same pages intentionally stays a
+modal for now (out of scope for plan 022) — converting edit-in-place to
+routes is tracked as follow-up work, not a design-system violation.
+
 ## Complexity budget (`node scripts/check-complexity-budget.mjs`, from the repo root)
 
 This is a CI gate, run separately from `npm run lint`. It requires an

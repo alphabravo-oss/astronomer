@@ -12,6 +12,9 @@ import {
 
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { TabStrip } from "@/components/ui/tabs";
+import { ResourceMasthead } from "@/components/ui/page";
+import { MetricCard } from "@/components/ui/metric-card";
 import {
   useClusterEvents,
   useClusterNamespaces,
@@ -330,26 +333,21 @@ export function NamespaceDetailPage({
     <div className="space-y-6">
       <section className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border bg-gradient-to-r from-primary/10 via-card to-card px-6 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <ResourceMasthead
+            eyebrow={
+              <span className="inline-flex items-center gap-2">
                 <Boxes className="h-4 w-4" /> Namespace
-              </div>
-              {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="font-mono text-2xl font-semibold text-foreground">
-                {namespace}
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {ns
-                  ? `Created ${formatRelativeTime(ns.createdAt)}`
-                  : "Namespace-scoped operations and resources"}
-              </p>
-            </div>
-            <StatusBadge
-              status={
-                ns?.status ?? (namespaces.isLoading ? "Loading" : "Unknown")
-              }
-            />
-          </div>
+              </span>
+            }
+            title={namespace}
+            mono
+            status={
+              <StatusBadge status={ns?.status ?? (namespaces.isLoading ? "Loading" : "Unknown")} />
+            }
+            description={
+              ns ? `Created ${formatRelativeTime(ns.createdAt)}` : "Namespace-scoped operations and resources"
+            }
+          />
         </div>
         <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
           <Stat
@@ -388,26 +386,12 @@ export function NamespaceDetailPage({
         </div>
       </section>
 
-      <nav
-        className="flex gap-1 overflow-x-auto border-b border-border"
+      <TabStrip
+        tabs={tabs.map((item) => ({ key: item.id, label: item.label }))}
+        value={tab}
+        onChange={setTab}
         aria-label="Namespace details"
-      >
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setTab(item.id)}
-            className={cn(
-              "shrink-0 border-b-2 px-3 py-2 text-sm font-medium",
-              tab === item.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+      />
 
       {tab === "overview" && (
         <div className="grid gap-4 lg:grid-cols-3">
@@ -538,18 +522,13 @@ function Stat({
 }) {
   return (
     <div className="p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <div
-        className={cn(
-          "mt-1 text-2xl font-semibold tabular-nums",
-          danger && "text-status-warning",
-        )}
-      >
-        {value}
-      </div>
+      <MetricCard
+        label={label}
+        value={value}
+        icon={<Icon className="h-3.5 w-3.5" />}
+        tone={danger ? "warning" : undefined}
+        className="border-0 bg-transparent p-0 hover:bg-transparent"
+      />
     </div>
   );
 }

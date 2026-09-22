@@ -14,7 +14,8 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ActionButton } from "@/components/ui/action-button";
 import { PageHeader, PageShell } from "@/components/ui/page";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+import { formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
   useDeleteWebhook,
@@ -26,27 +27,17 @@ import type { WebhookSubscriptionView } from "@/lib/api/settings";
 function EnabledToggle({ row }: { row: WebhookSubscriptionView }) {
   const update = useUpdateWebhook();
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        update.mutate({ id: row.id, body: { enabled: !row.enabled } });
-      }}
-      disabled={update.isPending}
-      className={cn(
-        "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-        row.enabled ? "bg-status-success" : "bg-muted",
-      )}
-      title={row.enabled ? "Disable" : "Enable"}
-    >
-      <span
-        className={cn(
-          // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
-          "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform",
-          row.enabled ? "translate-x-5" : "translate-x-1",
-        )}
+    <span onClickCapture={(e) => e.stopPropagation()}>
+      <Switch
+        size="sm"
+        checked={row.enabled}
+        onCheckedChange={(enabled) =>
+          update.mutate({ id: row.id, body: { enabled } })
+        }
+        disabled={update.isPending}
+        title={row.enabled ? "Disable" : "Enable"}
       />
-    </button>
+    </span>
   );
 }
 

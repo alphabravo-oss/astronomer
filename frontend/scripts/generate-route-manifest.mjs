@@ -33,7 +33,7 @@ const outputPath = path.join(
 // Reviewed 2026-08-23 after adding resource discovery/schema and enterprise
 // operations surfaces. Keep this exact: a route addition needs a smoke fixture
 // and a route removal needs an explicit product decision.
-const EXPECTED_ROUTE_COUNT = 136; // 2026-09-21: net +1 after P-018 — removed the dead /dashboard/settings/native-rbac/ redirect stub (step 8) and added /dashboard/monitoring/stacks/, the new home for shared observability stacks with a redirect stub left at the old /dashboard/settings/monitoring/ (step 9).
+const EXPECTED_ROUTE_COUNT = 143; // 2026-09-22: net +7 after plan 022 step 8 — converted seven create modals to */new routes (settings/backup/destinations/new, settings/read-audit/new, settings/general/tokens/new, settings/cluster-groups/new, settings/siem/new, settings/auth/scim-tokens/new, settings/group-mappings/new); editing an existing row on each of those pages stays a modal.
 
 // One fixture per `$param` name, shared across every route that uses it.
 // The route-smoke stubs answer any /api/v1 GET, so the values only need to

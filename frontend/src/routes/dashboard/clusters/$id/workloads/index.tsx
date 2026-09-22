@@ -10,6 +10,7 @@ import {
   ErrorState,
   LoadingState,
 } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page";
 import { useNavigate } from "@tanstack/react-router";
 import { useClusterNamespaces } from "@/lib/hooks/clusters";
 import { useWorkloads } from "@/lib/hooks/workloads";
@@ -75,15 +76,10 @@ function WorkloadsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="flex items-center gap-2">
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold">Workloads</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          All Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs in this
-          cluster.
-        </p>
-      </div>
+      <PageHeader
+        title="Workloads"
+        description="All Deployments, StatefulSets, DaemonSets, Jobs, and CronJobs in this cluster."
+      />
 
       {query.isError && workloads.length === 0 ? (
         <ErrorState

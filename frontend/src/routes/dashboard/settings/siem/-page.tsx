@@ -8,7 +8,7 @@
  * server-side; SettingsAuthGate mirrors that in the UI.
  */
 import { useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
+import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
 import { useAppForm, useStore } from "@/lib/form";
 import {
   ArrowLeft,
@@ -45,7 +45,7 @@ import {
   useSIEMForwarderStatus,
 } from "./-hooks";
 
-const TRANSPORTS: { value: string; label: string }[] = [
+export const TRANSPORTS: { value: string; label: string }[] = [
   { value: "syslog_udp", label: "Syslog (UDP)" },
   { value: "syslog_tcp", label: "Syslog (TCP)" },
   { value: "syslog_tls", label: "Syslog (TLS)" },
@@ -53,7 +53,7 @@ const TRANSPORTS: { value: string; label: string }[] = [
   { value: "ndjson_https", label: "NDJSON over HTTPS" },
 ];
 
-const FORMATS: { value: string; label: string }[] = [
+export const FORMATS: { value: string; label: string }[] = [
   { value: "", label: "Auto (derive from transport)" },
   { value: "rfc5424", label: "Syslog RFC 5424" },
   { value: "rfc3164", label: "Syslog RFC 3164" },
@@ -66,12 +66,12 @@ function transportLabel(t: string): string {
 }
 
 function SIEMForwardersList() {
+  const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useSIEMForwarders();
   const del = useDeleteSIEMForwarder();
   const test = useTestSIEMForwarder();
 
   const [editing, setEditing] = useState<SIEMForwarder | null>(null);
-  const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SIEMForwarder | null>(null);
   const [statusTarget, setStatusTarget] = useState<SIEMForwarder | null>(null);
 
@@ -166,10 +166,7 @@ function SIEMForwardersList() {
             <Send className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={() => {
-              setEditing(row);
-              setShowModal(true);
-            }}
+            onClick={() => setEditing(row)}
             className="p-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             title="Edit forwarder"
           >
@@ -193,10 +190,9 @@ function SIEMForwardersList() {
         <ActionButton
           intent="primary"
           icon={<Plus className="h-4 w-4" />}
-          onClick={() => {
-            setEditing(null);
-            setShowModal(true);
-          }}
+          onClick={() =>
+            void navigate({ to: "/dashboard/settings/siem/new" })
+          }
         >
           Add Forwarder
         </ActionButton>
@@ -216,14 +212,8 @@ function SIEMForwardersList() {
         }}
       />
 
-      {showModal && (
-        <SIEMForwarderModal
-          forwarder={editing}
-          onClose={() => {
-            setShowModal(false);
-            setEditing(null);
-          }}
-        />
+      {editing && (
+        <SIEMForwarderModal forwarder={editing} onClose={() => setEditing(null)} />
       )}
 
       {statusTarget && (

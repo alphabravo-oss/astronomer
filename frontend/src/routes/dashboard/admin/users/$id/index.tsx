@@ -20,6 +20,7 @@ import { Link as RouterLink } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toastApiError, toastSuccess } from "@/lib/toast";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { MetricCard } from "@/components/ui/metric-card";
 import {
   ShieldOff,
   Unlock,
@@ -229,27 +230,31 @@ function AdminUserDetailPage() {
 
       {/* Quick facts grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <FactCard
+        <MetricCard
+          dense
           icon={<ShieldCheck className="h-4 w-4" />}
           label="2FA"
           value={user.totpEnrolled ? "Enrolled" : "Off"}
-          tone={user.totpEnrolled ? "success" : "muted"}
+          tone={user.totpEnrolled ? "success" : undefined}
         />
-        <FactCard
+        <MetricCard
+          dense
           icon={<Users className="h-4 w-4" />}
           label="Groups"
           value={String(user.groups?.length ?? 0)}
         />
-        <FactCard
+        <MetricCard
+          dense
           icon={<Clock className="h-4 w-4" />}
           label="Last sign-in"
           value={user.lastLogin ? formatRelativeTime(user.lastLogin) : "Never"}
         />
-        <FactCard
+        <MetricCard
+          dense
           icon={<Users className="h-4 w-4" />}
           label="Enabled"
           value={user.enabled ? "Yes" : "No"}
-          tone={user.enabled ? "success" : "danger"}
+          tone={user.enabled ? "success" : "error"}
         />
       </div>
 
@@ -304,34 +309,6 @@ function AdminUserDetailPage() {
         loading={mut.isPending}
       />
     </PageShell>
-  );
-}
-
-function FactCard({
-  icon,
-  label,
-  value,
-  tone = "muted",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone?: "muted" | "success" | "danger";
-}) {
-  const toneColor =
-    tone === "success"
-      ? "text-status-success"
-      : tone === "danger"
-        ? "text-status-error"
-        : "text-foreground";
-  return (
-    <div className="rounded-lg border border-border bg-card p-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {icon}
-        {label}
-      </div>
-      <p className={`mt-1.5 text-base font-semibold ${toneColor}`}>{value}</p>
-    </div>
   );
 }
 

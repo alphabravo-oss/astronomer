@@ -17,6 +17,7 @@ import { ProjectNamespacesCard } from "@/components/projects/namespaces-card";
 import { formatRelativeTime } from "@/lib/utils";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
 import { QueryStates } from "@/components/ui/query-states";
+import { MetricCard } from "@/components/ui/metric-card";
 import { renderForProject } from "@/lib/api/dashboards";
 
 function ProjectOverviewPage() {
@@ -60,20 +61,23 @@ function ProjectOverviewPage() {
       ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <SummaryCard
-          icon={Server}
+        <MetricCard
+          dense
+          icon={<Server className="h-3.5 w-3.5" />}
           label="Clusters"
           value={
             (project.clusterIds?.length ?? (project.clusterId ? 1 : 0)) || 1
           }
         />
-        <SummaryCard
-          icon={Layers}
+        <MetricCard
+          dense
+          icon={<Layers className="h-3.5 w-3.5" />}
           label="Namespaces"
           value={project.namespaces?.length ?? 0}
         />
-        <SummaryCard
-          icon={Users}
+        <MetricCard
+          dense
+          icon={<Users className="h-3.5 w-3.5" />}
           label="Members"
           value={project.members?.length ?? 0}
         />
@@ -116,28 +120,6 @@ function ProjectOverviewPage() {
           </p>
         </div>
       </div>
-    </div>
-  );
-}
-
-function SummaryCard({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: number;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" />
-        {label}
-      </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
-        {value}
-      </p>
     </div>
   );
 }

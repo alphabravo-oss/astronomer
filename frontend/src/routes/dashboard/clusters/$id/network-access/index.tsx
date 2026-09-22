@@ -1,13 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/operator-table";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { PageHeader } from "@/components/ui/page";
 /**
  * Cluster "Network & access" tab (migration 070).
  *
@@ -51,6 +45,7 @@ import {
   reconcileApiserverAllowlist,
   updateApiserverAllowlist,
   type ApiserverAllowlistMode,
+  type ApiserverAllowlistSnapshot,
 } from "@/lib/api/cluster-apiserver-allowlist";
 import { queryKeys } from "@/lib/query-keys";
 import { liveFallback } from "@/lib/live/status-store";
@@ -118,6 +113,47 @@ function CIDRPill({
     </span>
   );
 }
+
+// ─── Snapshot history table ─────────────────────────────────────────────────
+const snapshotColumns: Column<ApiserverAllowlistSnapshot>[] = [
+  {
+    key: "capturedAt",
+    header: "Captured",
+    accessor: (s) => <span className="font-mono text-xs">{s.capturedAt}</span>,
+    sortAccessor: (s) => s.capturedAt,
+  },
+  {
+    key: "drift",
+    header: "Drift",
+    accessor: (s) => (
+      <span className="text-xs">{s.drift ? "⚠ yes" : "no"}</span>
+    ),
+    searchAccessor: (s) => (s.drift ? "yes" : "no"),
+    sortAccessor: (s) => (s.drift ? 1 : 0),
+    filter: { label: "Drift" },
+    width: "6rem",
+  },
+  {
+    key: "effective",
+    header: "Effective",
+    accessor: (s) => (
+      <span className="font-mono text-xs">{s.effectiveCidrs.length}</span>
+    ),
+    sortAccessor: (s) => s.effectiveCidrs.length,
+    align: "right",
+    width: "7rem",
+  },
+  {
+    key: "desired",
+    header: "Desired",
+    accessor: (s) => (
+      <span className="font-mono text-xs">{s.desiredCidrs.length}</span>
+    ),
+    sortAccessor: (s) => s.desiredCidrs.length,
+    align: "right",
+    width: "7rem",
+  },
+];
 
 // ─── Main page ──────────────────────────────────────────────────────────────
 function ClusterNetworkAccessPage() {
@@ -257,53 +293,50 @@ function ClusterNetworkAccessPage() {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold flex items-center gap-2">
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
             Network &amp; access
             <ModeBadge mode={data.mode} drift={data.drift} />
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage the operator-defined CIDR allow-list for this cluster&apos;s
-            apiserver. Astronomer&apos;s tunnel egress block is always stamped
-            on top — operators can&apos;t remove it without disabling Astronomer
-            management.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {data.drift && (
-            <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning">
-              <ShieldAlert className="h-3 w-3" /> Drift detected
-            </span>
-          )}
-          {data.syncStatus === "synced" && (
-            <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-success/10 text-status-success">
-              <ShieldCheck className="h-3 w-3" /> Synced
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => reconcileMut.mutate()}
-            disabled={!canReconcile || reconcileMut.isPending}
-            title={
-              !canWrite
-                ? reason
-                : canMonitor
-                  ? "Run reconcile now"
-                  : (data.capability.reason ??
-                    "This provider cannot be monitored")
-            }
-            className="inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50"
-          >
-            <RefreshCw
-              className={
-                reconcileMut.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"
+          </span>
+        }
+        description="Manage the operator-defined CIDR allow-list for this cluster's apiserver. Astronomer's tunnel egress block is always stamped on top — operators can't remove it without disabling Astronomer management."
+        actions={
+          <>
+            {data.drift && (
+              <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-warning/10 text-status-warning">
+                <ShieldAlert className="h-3 w-3" /> Drift detected
+              </span>
+            )}
+            {data.syncStatus === "synced" && (
+              <span className="inline-flex items-center gap-1 rounded-sm px-2 py-0.5 text-xs bg-status-success/10 text-status-success">
+                <ShieldCheck className="h-3 w-3" /> Synced
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => reconcileMut.mutate()}
+              disabled={!canReconcile || reconcileMut.isPending}
+              title={
+                !canWrite
+                  ? reason
+                  : canMonitor
+                    ? "Run reconcile now"
+                    : (data.capability.reason ??
+                      "This provider cannot be monitored")
               }
-            />
-            Reconcile now
-          </button>
-        </div>
-      </div>
+              className="inline-flex items-center gap-1 rounded-sm border px-3 py-1 text-sm hover:bg-muted/30 disabled:opacity-50"
+            >
+              <RefreshCw
+                className={
+                  reconcileMut.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"
+                }
+              />
+              Reconcile now
+            </button>
+          </>
+        }
+      />
 
       {!canEnforce && (
         <div className="flex items-start gap-2 rounded-sm border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
@@ -525,38 +558,17 @@ function ClusterNetworkAccessPage() {
         </button>
         {showSnapshots && (
           <div className="border-t p-3">
-            {snapshots.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No snapshots captured yet.
-              </p>
-            ) : (
-              <Table className="w-full text-sm">
-                <TableHeader>
-                  <TableRow className="text-left text-xs text-muted-foreground">
-                    <TableHead className="py-1">Captured</TableHead>
-                    <TableHead>Drift</TableHead>
-                    <TableHead>Effective</TableHead>
-                    <TableHead>Desired</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {snapshots.map((s) => (
-                    <TableRow key={s.id} className="border-t text-xs">
-                      <TableCell className="py-1 font-mono">
-                        {s.capturedAt}
-                      </TableCell>
-                      <TableCell>{s.drift ? "⚠ yes" : "no"}</TableCell>
-                      <TableCell className="font-mono">
-                        {s.effectiveCidrs.length}
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {s.desiredCidrs.length}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <DataTable
+              data={snapshots}
+              columns={snapshotColumns}
+              keyExtractor={(s) => String(s.id)}
+              density="compact"
+              searchable={false}
+              emptyState={{
+                title: "No snapshots captured yet",
+                description: "Snapshots appear here after the next reconcile.",
+              }}
+            />
           </div>
         )}
       </div>

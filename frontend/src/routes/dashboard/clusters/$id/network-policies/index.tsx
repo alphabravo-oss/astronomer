@@ -24,8 +24,8 @@ import {
 import { QueryStates } from "@/components/ui/query-states";
 import { StatusBadge } from "@/components/ui/status-badge";
 
-import { Link as RouterLink } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Trash2, RefreshCw, Loader2 } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Loader2 } from "lucide-react";
+import { ResourceMasthead } from "@/components/ui/page";
 import { toastApiError, toastError, toastSuccess } from "@/lib/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -120,32 +120,21 @@ function ClusterNetworkPoliciesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <RouterLink
-          to="/dashboard/clusters/$id" params={{ id: clusterID }}
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to cluster
-        </RouterLink>
-        <button
-          type="button"
-          onClick={() => setOpenApply((v) => !v)}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-card hover:bg-muted"
-        >
-          <Plus className="h-4 w-4" /> Apply template
-        </button>
-      </div>
-
-      <div>
-        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold tracking-tight">
-          Network policies
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-          NetworkPolicy templates applied to namespaces in this cluster. The
-          reconciler keeps each application server-side-applied; drifting rows
-          are re-stamped on the next 5m tick.
-        </p>
-      </div>
+      <ResourceMasthead
+        backTo={`/dashboard/clusters/${clusterID}`}
+        backLabel="Back to cluster"
+        title="Network policies"
+        description="NetworkPolicy templates applied to namespaces in this cluster. The reconciler keeps each application server-side-applied; drifting rows are re-stamped on the next 5m tick."
+        actions={
+          <button
+            type="button"
+            onClick={() => setOpenApply((v) => !v)}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-sm border border-border bg-card hover:bg-muted"
+          >
+            <Plus className="h-4 w-4" /> Apply template
+          </button>
+        }
+      />
 
       {openApply && (
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">

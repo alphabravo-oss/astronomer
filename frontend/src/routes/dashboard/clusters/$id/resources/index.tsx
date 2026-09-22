@@ -1,12 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/operator-table";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { PageHeader } from "@/components/ui/page";
 /**
  * Cluster Resources tab — sprint 069 CRD-mirror v2 read-only view.
  *
@@ -145,47 +139,63 @@ function Section({
 // Per-kind tables
 // ---------------------------------------------------------------------
 
+const ingressClassColumns: Column<MirroredIngressClass>[] = [
+  {
+    key: "name",
+    header: "Name",
+    accessor: (r) => <span className="font-mono">{r.name}</span>,
+    searchAccessor: (r) => r.name,
+    sortAccessor: (r) => r.name,
+  },
+  {
+    key: "controller",
+    header: "Controller",
+    accessor: (r) => (
+      <span className="font-mono text-xs">{r.controller || "—"}</span>
+    ),
+    searchAccessor: (r) => r.controller || "",
+    sortAccessor: (r) => r.controller || "",
+  },
+  {
+    key: "default",
+    header: "Default",
+    accessor: (r) =>
+      r.isDefault ? (
+        <span className="rounded-full bg-status-success/10 px-2 py-0.5 text-xs text-status-success">
+          default
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+    sortAccessor: (r) => (r.isDefault ? 1 : 0),
+    width: "8rem",
+  },
+  {
+    key: "lastSeen",
+    header: "Last seen",
+    accessor: (r) => (
+      <span className="text-muted-foreground">
+        {fmtRelative(r.lastSeenAt)}
+      </span>
+    ),
+    sortAccessor: (r) => r.lastSeenAt || "",
+    width: "10rem",
+  },
+];
+
 function IngressClassesTable({ rows }: { rows: MirroredIngressClass[] }) {
-  if (rows.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No IngressClasses installed.
-      </p>
-    );
-  }
   return (
-    <Table className="w-full text-sm">
-      <TableHeader>
-        <TableRow className="text-left text-xs uppercase text-muted-foreground">
-          <TableHead className="py-2">Name</TableHead>
-          <TableHead className="py-2">Controller</TableHead>
-          <TableHead className="py-2">Default</TableHead>
-          <TableHead className="py-2">Last seen</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((r) => (
-          <TableRow key={r.name} className="border-t">
-            <TableCell className="py-2 font-mono">{r.name}</TableCell>
-            <TableCell className="py-2 font-mono text-xs">
-              {r.controller || "—"}
-            </TableCell>
-            <TableCell className="py-2">
-              {r.isDefault ? (
-                <span className="rounded-full bg-status-success/10 px-2 py-0.5 text-xs text-status-success">
-                  default
-                </span>
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              )}
-            </TableCell>
-            <TableCell className="py-2 text-muted-foreground">
-              {fmtRelative(r.lastSeenAt)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <DataTable
+      data={rows}
+      columns={ingressClassColumns}
+      keyExtractor={(r) => r.name}
+      density="compact"
+      searchPlaceholder="Search ingress classes..."
+      emptyState={{
+        title: "No IngressClasses installed",
+        description: "IngressClasses will appear here once mirrored.",
+      }}
+    />
   );
 }
 
@@ -211,96 +221,138 @@ function AcceptedBadge({ status }: { status: string }) {
   );
 }
 
+const gatewayClassColumns: Column<MirroredGatewayClass>[] = [
+  {
+    key: "name",
+    header: "Name",
+    accessor: (r) => <span className="font-mono">{r.name}</span>,
+    searchAccessor: (r) => r.name,
+    sortAccessor: (r) => r.name,
+  },
+  {
+    key: "controller",
+    header: "Controller",
+    accessor: (r) => (
+      <span className="font-mono text-xs">{r.controllerName || "—"}</span>
+    ),
+    searchAccessor: (r) => r.controllerName || "",
+    sortAccessor: (r) => r.controllerName || "",
+  },
+  {
+    key: "accepted",
+    header: "Accepted",
+    accessor: (r) => <AcceptedBadge status={r.acceptedStatus} />,
+    searchAccessor: (r) => r.acceptedStatus,
+    sortAccessor: (r) => r.acceptedStatus,
+    filter: { label: "Accepted" },
+    width: "9rem",
+  },
+  {
+    key: "lastSeen",
+    header: "Last seen",
+    accessor: (r) => (
+      <span className="text-muted-foreground">
+        {fmtRelative(r.lastSeenAt)}
+      </span>
+    ),
+    sortAccessor: (r) => r.lastSeenAt || "",
+    width: "10rem",
+  },
+];
+
 function GatewayClassesTable({ rows }: { rows: MirroredGatewayClass[] }) {
-  if (rows.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No GatewayClasses installed.
-      </p>
-    );
-  }
   return (
-    <Table className="w-full text-sm">
-      <TableHeader>
-        <TableRow className="text-left text-xs uppercase text-muted-foreground">
-          <TableHead className="py-2">Name</TableHead>
-          <TableHead className="py-2">Controller</TableHead>
-          <TableHead className="py-2">Accepted</TableHead>
-          <TableHead className="py-2">Last seen</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((r) => (
-          <TableRow key={r.name} className="border-t">
-            <TableCell className="py-2 font-mono">{r.name}</TableCell>
-            <TableCell className="py-2 font-mono text-xs">
-              {r.controllerName || "—"}
-            </TableCell>
-            <TableCell className="py-2">
-              <AcceptedBadge status={r.acceptedStatus} />
-            </TableCell>
-            <TableCell className="py-2 text-muted-foreground">
-              {fmtRelative(r.lastSeenAt)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <DataTable
+      data={rows}
+      columns={gatewayClassColumns}
+      keyExtractor={(r) => r.name}
+      density="compact"
+      searchPlaceholder="Search gateway classes..."
+      emptyState={{
+        title: "No GatewayClasses installed",
+        description: "GatewayClasses will appear here once mirrored.",
+      }}
+    />
   );
 }
 
-function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
-  if (rows.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No NetworkPolicies in this cluster.
-      </p>
-    );
-  }
-  return (
-    <Table className="w-full text-sm">
-      <TableHeader>
-        <TableRow className="text-left text-xs uppercase text-muted-foreground">
-          <TableHead className="py-2">Namespace</TableHead>
-          <TableHead className="py-2">Name</TableHead>
-          <TableHead className="py-2">Types</TableHead>
-          <TableHead className="py-2">Owner</TableHead>
-          <TableHead className="py-2">Last seen</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((r) => (
-          <TableRow key={`${r.namespace}/${r.name}`} className="border-t">
-            <TableCell className="py-2 font-mono">{r.namespace}</TableCell>
-            <TableCell className="py-2 font-mono">{r.name}</TableCell>
-            <TableCell className="py-2">
-              {(r.policyTypes ?? []).map((t) => (
-                <span
-                  key={t}
-                  className="mr-1 rounded-full bg-muted px-2 py-0.5 text-xs"
-                >
-                  {t}
-                </span>
-              ))}
-            </TableCell>
-            <TableCell className="py-2">
-              {r.isManaged ? (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                  astronomer
-                </span>
-              ) : (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  operator
-                </span>
-              )}
-            </TableCell>
-            <TableCell className="py-2 text-muted-foreground">
-              {fmtRelative(r.lastSeenAt)}
-            </TableCell>
-          </TableRow>
+const networkPolicyColumns: Column<MirroredNetworkPolicy>[] = [
+  {
+    key: "namespace",
+    header: "Namespace",
+    accessor: (r) => <span className="font-mono">{r.namespace}</span>,
+    searchAccessor: (r) => r.namespace,
+    sortAccessor: (r) => r.namespace,
+    filter: { label: "Namespace" },
+  },
+  {
+    key: "name",
+    header: "Name",
+    accessor: (r) => <span className="font-mono">{r.name}</span>,
+    searchAccessor: (r) => r.name,
+    sortAccessor: (r) => r.name,
+  },
+  {
+    key: "types",
+    header: "Types",
+    accessor: (r) => (
+      <>
+        {(r.policyTypes ?? []).map((t) => (
+          <span
+            key={t}
+            className="mr-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+          >
+            {t}
+          </span>
         ))}
-      </TableBody>
-    </Table>
+      </>
+    ),
+    searchAccessor: (r) => (r.policyTypes ?? []).join(" "),
+  },
+  {
+    key: "owner",
+    header: "Owner",
+    accessor: (r) =>
+      r.isManaged ? (
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+          astronomer
+        </span>
+      ) : (
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+          operator
+        </span>
+      ),
+    searchAccessor: (r) => (r.isManaged ? "astronomer" : "operator"),
+    sortAccessor: (r) => (r.isManaged ? "astronomer" : "operator"),
+    filter: { label: "Owner" },
+    width: "8rem",
+  },
+  {
+    key: "lastSeen",
+    header: "Last seen",
+    accessor: (r) => (
+      <span className="text-muted-foreground">
+        {fmtRelative(r.lastSeenAt)}
+      </span>
+    ),
+    sortAccessor: (r) => r.lastSeenAt || "",
+    width: "10rem",
+  },
+];
+
+function NetworkPoliciesTable({ rows }: { rows: MirroredNetworkPolicy[] }) {
+  return (
+    <DataTable
+      data={rows}
+      columns={networkPolicyColumns}
+      keyExtractor={(r) => `${r.namespace}/${r.name}`}
+      density="compact"
+      searchPlaceholder="Search network policies..."
+      emptyState={{
+        title: "No NetworkPolicies in this cluster",
+        description: "NetworkPolicies will appear here once mirrored.",
+      }}
+    />
   );
 }
 
@@ -402,6 +454,37 @@ interface LimitRangeItem {
   min?: Record<string, string>;
 }
 
+const limitRangeItemColumns: Column<LimitRangeItem & { _key: number }>[] = [
+  {
+    key: "type",
+    header: "Type",
+    accessor: (l) => <span className="font-mono">{l.type ?? "—"}</span>,
+    sortAccessor: (l) => l.type ?? "",
+  },
+  {
+    key: "default",
+    header: "Default",
+    accessor: (l) => <span className="font-mono">{fmtMap(l.default)}</span>,
+  },
+  {
+    key: "defaultRequest",
+    header: "DefaultRequest",
+    accessor: (l) => (
+      <span className="font-mono">{fmtMap(l.defaultRequest)}</span>
+    ),
+  },
+  {
+    key: "min",
+    header: "Min",
+    accessor: (l) => <span className="font-mono">{fmtMap(l.min)}</span>,
+  },
+  {
+    key: "max",
+    header: "Max",
+    accessor: (l) => <span className="font-mono">{fmtMap(l.max)}</span>,
+  },
+];
+
 function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
   if (rows.length === 0) {
     return (
@@ -413,7 +496,9 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
   return (
     <div className="space-y-3">
       {rows.map((r) => {
-        const limits = (r.limits ?? []) as LimitRangeItem[];
+        const limits = ((r.limits ?? []) as LimitRangeItem[]).map(
+          (l, i) => ({ ...l, _key: i }),
+        );
         return (
           <div
             key={`${r.namespace}/${r.name}`}
@@ -427,38 +512,17 @@ function LimitRangesTable({ rows }: { rows: MirroredLimitRange[] }) {
                 {fmtRelative(r.lastSeenAt)}
               </span>
             </div>
-            <Table className="w-full text-xs">
-              <TableHeader>
-                <TableRow className="text-left text-muted-foreground">
-                  <TableHead className="py-1">Type</TableHead>
-                  <TableHead className="py-1">Default</TableHead>
-                  <TableHead className="py-1">DefaultRequest</TableHead>
-                  <TableHead className="py-1">Min</TableHead>
-                  <TableHead className="py-1">Max</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {limits.map((l, i) => (
-                  <TableRow key={i} className="border-t">
-                    <TableCell className="py-1 font-mono">
-                      {l.type ?? "—"}
-                    </TableCell>
-                    <TableCell className="py-1 font-mono">
-                      {fmtMap(l.default)}
-                    </TableCell>
-                    <TableCell className="py-1 font-mono">
-                      {fmtMap(l.defaultRequest)}
-                    </TableCell>
-                    <TableCell className="py-1 font-mono">
-                      {fmtMap(l.min)}
-                    </TableCell>
-                    <TableCell className="py-1 font-mono">
-                      {fmtMap(l.max)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable
+              data={limits}
+              columns={limitRangeItemColumns}
+              keyExtractor={(l) => String(l._key)}
+              density="compact"
+              searchable={false}
+              emptyState={{
+                title: "No limits defined",
+                description: "This LimitRange has no limit entries.",
+              }}
+            />
           </div>
         );
       })}
@@ -503,15 +567,11 @@ function ClusterResourcesPage() {
 
   return (
     <div className="p-6">
-      <header className="mb-4">
-        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-xl font-semibold">Cluster resources</h1>
-        <p className="text-sm text-muted-foreground">
-          A read-only view of the policy / routing / quota objects installed in
-          this cluster. Data is mirrored from the cluster agent every ~10
-          minutes; rows you delete in the cluster disappear here within roughly
-          an hour.
-        </p>
-      </header>
+      <PageHeader
+        title="Cluster resources"
+        description="A read-only view of the policy / routing / quota objects installed in this cluster. Data is mirrored from the cluster agent every ~10 minutes; rows you delete in the cluster disappear here within roughly an hour."
+        className="mb-4"
+      />
 
       {ingressClassesQ.isError && (
         <QueryStates query={ingressClassesQ} permission="clusters:read">

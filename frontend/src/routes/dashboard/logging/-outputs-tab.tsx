@@ -12,7 +12,8 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { formatRelativeTime, cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+import { formatRelativeTime } from "@/lib/utils";
 import type { LoggingOutput } from "@/types";
 import {
   FileText,
@@ -164,31 +165,23 @@ export function OutputsTab() {
       key: "enabled",
       header: "Enabled",
       accessor: (row) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (row.isSystem) return;
-            handleToggle(row);
-          }}
-          disabled={row.isSystem}
-          title={
-            row.isSystem
-              ? "System destinations are managed with Astronomer Loki"
-              : undefined
-          }
-          className={cn(
-            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-            row.enabled ? "bg-primary" : "bg-muted",
-            row.isSystem && "cursor-not-allowed opacity-60",
-          )}
-        >
-          <span
-            className={cn(
-              "inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform" /* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */,
-              row.enabled ? "translate-x-[18px]" : "translate-x-[3px]",
-            )}
+        <span onClickCapture={(e) => e.stopPropagation()}>
+          <Switch
+            size="sm"
+            checked={row.enabled}
+            onCheckedChange={() => {
+              if (row.isSystem) return;
+              handleToggle(row);
+            }}
+            disabled={row.isSystem}
+            title={
+              row.isSystem
+                ? "System destinations are managed with Astronomer Loki"
+                : undefined
+            }
+            className={row.enabled ? "bg-primary" : undefined}
           />
-        </button>
+        </span>
       ),
       sortable: false,
     },

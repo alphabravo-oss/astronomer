@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/operator-table";
+import { PageHeader } from "@/components/ui/page";
 /**
  * Cluster Image Scans tab — sprint 062.
  *
@@ -292,45 +293,44 @@ function ClusterImageScansPage() {
 
   return (
     <div className="space-y-6 p-4">
-      <header className="flex items-start justify-between gap-4">
-        <p className="sr-only" role="status" aria-live="polite">
-          {rescan.isPending
-            ? `Vulnerability rescan ${rescan.operationState.phase}`
-            : ""}
-        </p>
-        <div>
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
+      <p className="sr-only" role="status" aria-live="polite">
+        {rescan.isPending
+          ? `Vulnerability rescan ${rescan.operationState.phase}`
+          : ""}
+      </p>
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
             <ShieldAlert className="h-6 w-6" /> Image Scans
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Aggregated CVE counts from the in-cluster Trivy operator. Astronomer
-            ingests VulnerabilityReport CRDs continuously.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted"
-            href={exportImageVulnsCSVPath(clusterId)}
-            download
-            title="Download all current image-scan rows as CSV"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </a>
-          <button
-            className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
-            onClick={() => rescan.mutate()}
-            disabled={rescan.isPending}
-          >
-            {rescan.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            Trigger rescan
-          </button>
-        </div>
-      </header>
+          </span>
+        }
+        description="Aggregated CVE counts from the in-cluster Trivy operator. Astronomer ingests VulnerabilityReport CRDs continuously."
+        actions={
+          <>
+            <a
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted"
+              href={exportImageVulnsCSVPath(clusterId)}
+              download
+              title="Download all current image-scan rows as CSV"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </a>
+            <button
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50"
+              onClick={() => rescan.mutate()}
+              disabled={rescan.isPending}
+            >
+              {rescan.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Trigger rescan
+            </button>
+          </>
+        }
+      />
 
       {/* Scan-in-progress banner. Render states:
            • dispatched — operator clicked rescan in the last 60s; we

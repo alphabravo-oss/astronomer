@@ -40,7 +40,7 @@ import {
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ActionButton } from "@/components/ui/action-button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { PageHeader } from "@/components/ui/page";
+import { ResourceMasthead } from "@/components/ui/page";
 import { registrationSearch } from "@/components/clusters/registration-flow";
 import { EditClusterModal } from "@/components/clusters/edit-cluster-modal";
 import {
@@ -50,6 +50,7 @@ import {
   formatRelativeTime,
   distributionDisplayName,
   formatK8sVersion,
+  capitalize,
 } from "@/lib/utils";
 import {
   Cpu,
@@ -183,22 +184,29 @@ function ClusterDetailPage() {
     );
   }
 
+  const distribution = distributionDisplayName(cluster.distribution);
+  const clusterMeta = [
+    { label: "Distribution", value: distribution },
+    { label: "Version", value: formatK8sVersion(cluster.kubernetesVersion) },
+    { label: "Environment", value: capitalize(cluster.environment ?? "") },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <PageHeader
-          title={
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="truncate">
-                {cluster.displayName || cluster.name || cluster.id}
-              </span>
+        <ResourceMasthead
+          title={cluster.displayName || cluster.name || cluster.id}
+          status={
+            <>
               <StatusBadge
                 tone={cluster.badgeColor}
                 label={cluster.badgeText}
                 className="shrink-0"
               />
-            </span>
+              <AgentAccessChip cluster={cluster} />
+            </>
           }
+          meta={clusterMeta}
           actions={
             <>
               <ActionButton
@@ -256,17 +264,9 @@ function ClusterDetailPage() {
               mesh={meshDetection.detectedMesh}
             />
           )}
-          <span className="inline-flex items-center gap-3">
-            <span>{distributionDisplayName(cluster.distribution)}</span>
-            <span className="text-border">|</span>
-            <span>{formatK8sVersion(cluster.kubernetesVersion)}</span>
-            <span className="text-border">|</span>
-            <span className="capitalize">{cluster.environment}</span>
-          </span>
           {conditions && conditions.length > 0 && (
             <ClusterConditionsBar conditions={conditions} />
           )}
-          <AgentAccessChip cluster={cluster} />
         </div>
         <ClusterRemediationFooter clusterId={clusterId} />
       </div>

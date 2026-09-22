@@ -11,6 +11,7 @@ import { useLiveQueryInvalidation } from "@/lib/live/hooks";
 import { formatRelativeTime, cn } from "@/lib/utils";
 import { WidgetGrid } from "@/components/dashboards/widget-grid";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { MetricCard } from "@/components/ui/metric-card";
 import { ExtensionSlot } from "@/components/extensions/ExtensionSlot";
 import { renderGlobal } from "@/lib/api/dashboards";
 import {
@@ -432,32 +433,17 @@ function MetricTile({
       : tone === "warning"
         ? "ring-status-warning/20 hover:ring-status-warning/40"
         : "ring-transparent";
-  const toneValue =
-    tone === "error"
-      ? "text-status-error"
-      : tone === "warning"
-        ? "text-status-warning"
-        : "text-foreground";
   return (
-    <DashboardLink
-      destination={destination}
-      className={cn(
-        "block rounded-lg border border-border bg-card p-3 hover:bg-card/80 transition-all ring-2 ring-inset",
-        toneRing,
-      )}
-    >
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <div
-        className={cn("mt-1 text-2xl font-semibold tabular-nums", toneValue)}
-      >
-        {value}
-      </div>
-      {sublabel && (
-        <div className="text-xs text-muted-foreground mt-0.5">{sublabel}</div>
-      )}
+    <DashboardLink destination={destination} className="block">
+      <MetricCard
+        dense
+        label={label}
+        value={value}
+        subtitle={sublabel}
+        icon={icon}
+        tone={tone === "default" ? undefined : tone}
+        className={cn("ring-2 ring-inset", toneRing)}
+      />
     </DashboardLink>
   );
 }

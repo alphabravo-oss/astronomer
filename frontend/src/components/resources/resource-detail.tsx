@@ -1,5 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import {
   ResourceDetailTabPanel,
@@ -8,11 +7,13 @@ import {
 import type { K8sObject } from "@/components/resources/resource-detail-model";
 import { supportsRolloutHistory } from "@/components/resources/rollout-history";
 import { PermissionState } from "@/components/ui/empty-state";
+import { ResourceMasthead } from "@/components/ui/page";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { TabStrip } from "@/components/ui/tabs";
 import { ResourceActions } from "@/components/workloads/resource-actions";
 import { useK8sResource } from "@/lib/hooks/kubernetes-proxy";
 import { useClusterResourcePermission } from "@/lib/permission-hooks";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/utils";
 
 export { ResourceOverview } from "@/components/resources/resource-overview";
 
@@ -136,38 +137,6 @@ export function ResourceDetail({
     resourceType,
   ]);
 
-  const handleTabKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    index: number,
-  ) => {
-    let nextIndex: number | undefined;
-    switch (event.key) {
-      case "ArrowRight":
-      case "ArrowDown":
-        nextIndex = (index + 1) % tabs.length;
-        break;
-      case "ArrowLeft":
-      case "ArrowUp":
-        nextIndex = (index - 1 + tabs.length) % tabs.length;
-        break;
-      case "Home":
-        nextIndex = 0;
-        break;
-      case "End":
-        nextIndex = tabs.length - 1;
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-    setTab(tabs[nextIndex].id);
-    const buttons =
-      event.currentTarget.parentElement?.querySelectorAll<HTMLElement>(
-        '[role="tab"]',
-      );
-    buttons?.[nextIndex]?.focus();
-  };
-
   if (!read.allowed) {
     return (
       <PermissionState
@@ -184,81 +153,55 @@ export function ResourceDetail({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start gap-4">
-        <button
-          onClick={() => window.history.back()}
-          className="mt-1 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          aria-label="Back"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div className="min-w-[10rem] flex-1">
-          {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="truncate font-mono text-xl font-semibold tracking-tight text-foreground">
-            {name}
-          </h1>
-          <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
-            <span>Kind: {kind}</span>
-            {detailStatus && <StatusBadge status={detailStatus} />}
-            {namespace && <span>Namespace: {namespace}</span>}
-            {created && <span>Age: {formatRelativeTime(created)}</span>}
-          </div>
-        </div>
-        {obj?.kind && (
-          <ResourceActions
-            clusterId={clusterId}
-            kind={obj.kind}
-            namespace={namespace}
-            name={name}
-            replicas={obj.spec?.replicas}
-            paused={
-              obj.kind === "Deployment"
-                ? (obj.spec?.paused ?? false)
-                : undefined
-            }
-            suspended={
-              obj.kind === "CronJob" ? (obj.spec?.suspend ?? false) : undefined
-            }
-            jobTemplate={
-              obj.kind === "CronJob"
-                ? (asObject(obj.spec).jobTemplate as Record<string, unknown>)
-                : undefined
-            }
-            k8sPath={k8sPath}
-            permissionResource={permissionResource}
-            onDeleted={() => window.history.back()}
-          />
-        )}
-      </div>
+      <ResourceMasthead
+        onBack={() => window.history.back()}
+        title={name}
+        mono
+        status={detailStatus && <StatusBadge status={detailStatus} />}
+        meta={[
+          { label: "Kind", value: kind },
+          ...(namespace ? [{ label: "Namespace", value: namespace }] : []),
+          ...(created
+            ? [{ label: "Age", value: formatRelativeTime(created) }]
+            : []),
+        ]}
+        actions={
+          obj?.kind && (
+            <ResourceActions
+              clusterId={clusterId}
+              kind={obj.kind}
+              namespace={namespace}
+              name={name}
+              replicas={obj.spec?.replicas}
+              paused={
+                obj.kind === "Deployment"
+                  ? (obj.spec?.paused ?? false)
+                  : undefined
+              }
+              suspended={
+                obj.kind === "CronJob"
+                  ? (obj.spec?.suspend ?? false)
+                  : undefined
+              }
+              jobTemplate={
+                obj.kind === "CronJob"
+                  ? (asObject(obj.spec).jobTemplate as Record<string, unknown>)
+                  : undefined
+              }
+              k8sPath={k8sPath}
+              permissionResource={permissionResource}
+              onDeleted={() => window.history.back()}
+            />
+          )
+        }
+      />
 
-      <div className="border-b border-border">
-        <div
-          className="-mb-px flex gap-0 overflow-x-auto"
-          aria-label="Resource detail"
-          role="tablist"
-        >
-          {tabs.map((item, index) => (
-            <button
-              key={item.id}
-              id={`resource-tab-${item.id}`}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.id}
-              aria-controls={`resource-tabpanel-${item.id}`}
-              tabIndex={tab === item.id ? 0 : -1}
-              onClick={() => setTab(item.id)}
-              onKeyDown={(event) => handleTabKeyDown(event, index)}
-              className={cn(
-                "shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                tab === item.id
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground",
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <TabStrip
+        tabs={tabs.map((item) => ({ key: item.id, label: item.label }))}
+        value={tab}
+        onChange={setTab}
+        aria-label="Resource detail"
+      />
 
       <ResourceDetailTabPanel
         tab={tab}

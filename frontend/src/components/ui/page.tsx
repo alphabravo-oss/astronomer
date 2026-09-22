@@ -66,6 +66,7 @@ export function PageHeader({
  */
 export function ResourceMasthead({
   backTo,
+  onBack,
   backLabel = "Back",
   eyebrow,
   title,
@@ -77,6 +78,8 @@ export function ResourceMasthead({
   className,
 }: {
   backTo?: string;
+  /** Use instead of `backTo` when the back action isn't a route navigation (e.g. `window.history.back()`). */
+  onBack?: () => void;
   backLabel?: string;
   eyebrow?: ReactNode;
   title: ReactNode;
@@ -98,6 +101,15 @@ export function ResourceMasthead({
           >
             <ArrowLeft className="h-5 w-5" />
           </RouterLink>
+        ) : onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="mt-1 shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={backLabel}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
         ) : null}
         <div className="min-w-0 flex-1">
           {eyebrow ? (

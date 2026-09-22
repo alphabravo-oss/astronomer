@@ -27,8 +27,8 @@ import {
  * blank the stored secret.
  */
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, KeyRound, Plus, Trash2 } from "lucide-react";
+import { KeyRound, Plus, Trash2 } from "lucide-react";
+import { ResourceMasthead } from "@/components/ui/page";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
@@ -74,7 +74,6 @@ function blankBody(method: VaultAuthMethod): VaultConnectionWriteRequest {
 }
 
 function VaultConnectionsPage() {
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const vaultConnectionsQuery = useQuery({
     queryKey: queryKeys.vault.connections,
@@ -137,25 +136,23 @@ function VaultConnectionsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => void navigate({ to: "/dashboard/settings" })}
-          aria-label="Back to settings"
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
-          <KeyRound className="h-5 w-5" /> Vault connections
-        </h1>
-        <button
-          onClick={() => setCreating(true)}
-          className="ml-auto inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" /> New connection
-        </button>
-      </div>
+      <ResourceMasthead
+        backTo="/dashboard/settings"
+        backLabel="Back to settings"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <KeyRound className="h-5 w-5" /> Vault connections
+          </span>
+        }
+        actions={
+          <button
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" /> New connection
+          </button>
+        }
+      />
 
       <p className="text-sm text-muted-foreground max-w-3xl">
         Vault references in values blobs use the syntax{" "}

@@ -124,12 +124,16 @@ import { Route as DashboardSettingsAuthInstallIndexRouteImport } from './routes/
 import { Route as DashboardSettingsAuthRegisterSsoIndexRouteImport } from './routes/dashboard/settings/auth/register-sso/index'
 import { Route as DashboardSettingsAuthScimTokensIndexRouteImport } from './routes/dashboard/settings/auth/scim-tokens/index'
 import { Route as DashboardSettingsAuthSettingsIndexRouteImport } from './routes/dashboard/settings/auth/settings/index'
+import { Route as DashboardSettingsClusterGroupsNewIndexRouteImport } from './routes/dashboard/settings/cluster-groups/new/index'
 import { Route as DashboardSettingsComplianceBaselinesIndexRouteImport } from './routes/dashboard/settings/compliance/baselines/index'
 import { Route as DashboardSettingsGitopsIdIndexRouteImport } from './routes/dashboard/settings/gitops/$id/index'
 import { Route as DashboardSettingsGitopsNewIndexRouteImport } from './routes/dashboard/settings/gitops/new/index'
+import { Route as DashboardSettingsGroupMappingsNewIndexRouteImport } from './routes/dashboard/settings/group-mappings/new/index'
 import { Route as DashboardSettingsQuotasNameIndexRouteImport } from './routes/dashboard/settings/quotas/$name/index'
 import { Route as DashboardSettingsQuotasNewIndexRouteImport } from './routes/dashboard/settings/quotas/new/index'
 import { Route as DashboardSettingsQuotasUsageIndexRouteImport } from './routes/dashboard/settings/quotas/usage/index'
+import { Route as DashboardSettingsReadAuditNewIndexRouteImport } from './routes/dashboard/settings/read-audit/new/index'
+import { Route as DashboardSettingsSiemNewIndexRouteImport } from './routes/dashboard/settings/siem/new/index'
 import { Route as DashboardSettingsTemplatesKeyIndexRouteImport } from './routes/dashboard/settings/templates/$key/index'
 import { Route as DashboardSettingsWebhooksIdIndexRouteImport } from './routes/dashboard/settings/webhooks/$id/index'
 import { Route as DashboardSettingsWebhooksNewIndexRouteImport } from './routes/dashboard/settings/webhooks/new/index'
@@ -146,6 +150,9 @@ import { Route as DashboardClustersIdServiceMeshMtlsIndexRouteImport } from './r
 import { Route as DashboardProjectsIdCloudCredentialsNewIndexRouteImport } from './routes/dashboard/projects/$id/cloud-credentials/new/index'
 import { Route as DashboardSettingsAuthConnectorsIdIndexRouteImport } from './routes/dashboard/settings/auth/connectors/$id/index'
 import { Route as DashboardSettingsAuthConnectorsNewIndexRouteImport } from './routes/dashboard/settings/auth/connectors/new/index'
+import { Route as DashboardSettingsAuthScimTokensNewIndexRouteImport } from './routes/dashboard/settings/auth/scim-tokens/new/index'
+import { Route as DashboardSettingsBackupDestinationsNewIndexRouteImport } from './routes/dashboard/settings/backup/destinations/new/index'
+import { Route as DashboardSettingsGeneralTokensNewIndexRouteImport } from './routes/dashboard/settings/general/tokens/new/index'
 import { Route as DashboardClustersIdDeliveryBundlesBundleIdIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/bundles/$bundleId/index'
 import { Route as DashboardClustersIdDeliveryDeploymentsDeploymentIdIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/deployments/$deploymentId/index'
 import { Route as DashboardClustersIdDeliveryRolloutsRolloutIdIndexRouteImport } from './routes/dashboard/clusters/$id/delivery/rollouts/$rolloutId/index'
@@ -821,6 +828,12 @@ const DashboardSettingsAuthSettingsIndexRoute =
     path: '/auth/settings/',
     getParentRoute: () => DashboardSettingsRouteRoute,
   } as any)
+const DashboardSettingsClusterGroupsNewIndexRoute =
+  DashboardSettingsClusterGroupsNewIndexRouteImport.update({
+    id: '/cluster-groups/new/',
+    path: '/cluster-groups/new/',
+    getParentRoute: () => DashboardSettingsRouteRoute,
+  } as any)
 const DashboardSettingsComplianceBaselinesIndexRoute =
   DashboardSettingsComplianceBaselinesIndexRouteImport.update({
     id: '/compliance/baselines/',
@@ -839,6 +852,12 @@ const DashboardSettingsGitopsNewIndexRoute =
     path: '/gitops/new/',
     getParentRoute: () => DashboardSettingsRouteRoute,
   } as any)
+const DashboardSettingsGroupMappingsNewIndexRoute =
+  DashboardSettingsGroupMappingsNewIndexRouteImport.update({
+    id: '/group-mappings/new/',
+    path: '/group-mappings/new/',
+    getParentRoute: () => DashboardSettingsRouteRoute,
+  } as any)
 const DashboardSettingsQuotasNameIndexRoute =
   DashboardSettingsQuotasNameIndexRouteImport.update({
     id: '/quotas/$name/',
@@ -855,6 +874,18 @@ const DashboardSettingsQuotasUsageIndexRoute =
   DashboardSettingsQuotasUsageIndexRouteImport.update({
     id: '/quotas/usage/',
     path: '/quotas/usage/',
+    getParentRoute: () => DashboardSettingsRouteRoute,
+  } as any)
+const DashboardSettingsReadAuditNewIndexRoute =
+  DashboardSettingsReadAuditNewIndexRouteImport.update({
+    id: '/read-audit/new/',
+    path: '/read-audit/new/',
+    getParentRoute: () => DashboardSettingsRouteRoute,
+  } as any)
+const DashboardSettingsSiemNewIndexRoute =
+  DashboardSettingsSiemNewIndexRouteImport.update({
+    id: '/siem/new/',
+    path: '/siem/new/',
     getParentRoute: () => DashboardSettingsRouteRoute,
   } as any)
 const DashboardSettingsTemplatesKeyIndexRoute =
@@ -951,6 +982,24 @@ const DashboardSettingsAuthConnectorsNewIndexRoute =
   DashboardSettingsAuthConnectorsNewIndexRouteImport.update({
     id: '/auth/connectors/new/',
     path: '/auth/connectors/new/',
+    getParentRoute: () => DashboardSettingsRouteRoute,
+  } as any)
+const DashboardSettingsAuthScimTokensNewIndexRoute =
+  DashboardSettingsAuthScimTokensNewIndexRouteImport.update({
+    id: '/auth/scim-tokens/new/',
+    path: '/auth/scim-tokens/new/',
+    getParentRoute: () => DashboardSettingsRouteRoute,
+  } as any)
+const DashboardSettingsBackupDestinationsNewIndexRoute =
+  DashboardSettingsBackupDestinationsNewIndexRouteImport.update({
+    id: '/backup/destinations/new/',
+    path: '/backup/destinations/new/',
+    getParentRoute: () => DashboardSettingsRouteRoute,
+  } as any)
+const DashboardSettingsGeneralTokensNewIndexRoute =
+  DashboardSettingsGeneralTokensNewIndexRouteImport.update({
+    id: '/general/tokens/new/',
+    path: '/general/tokens/new/',
     getParentRoute: () => DashboardSettingsRouteRoute,
   } as any)
 const DashboardClustersIdDeliveryBundlesBundleIdIndexRoute =
@@ -1114,12 +1163,16 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings/auth/register-sso/': typeof DashboardSettingsAuthRegisterSsoIndexRoute
   '/dashboard/settings/auth/scim-tokens/': typeof DashboardSettingsAuthScimTokensIndexRoute
   '/dashboard/settings/auth/settings/': typeof DashboardSettingsAuthSettingsIndexRoute
+  '/dashboard/settings/cluster-groups/new/': typeof DashboardSettingsClusterGroupsNewIndexRoute
   '/dashboard/settings/compliance/baselines/': typeof DashboardSettingsComplianceBaselinesIndexRoute
   '/dashboard/settings/gitops/$id/': typeof DashboardSettingsGitopsIdIndexRoute
   '/dashboard/settings/gitops/new/': typeof DashboardSettingsGitopsNewIndexRoute
+  '/dashboard/settings/group-mappings/new/': typeof DashboardSettingsGroupMappingsNewIndexRoute
   '/dashboard/settings/quotas/$name/': typeof DashboardSettingsQuotasNameIndexRoute
   '/dashboard/settings/quotas/new/': typeof DashboardSettingsQuotasNewIndexRoute
   '/dashboard/settings/quotas/usage/': typeof DashboardSettingsQuotasUsageIndexRoute
+  '/dashboard/settings/read-audit/new/': typeof DashboardSettingsReadAuditNewIndexRoute
+  '/dashboard/settings/siem/new/': typeof DashboardSettingsSiemNewIndexRoute
   '/dashboard/settings/templates/$key/': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id/': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new/': typeof DashboardSettingsWebhooksNewIndexRoute
@@ -1136,6 +1189,9 @@ export interface FileRoutesByFullPath {
   '/dashboard/projects/$id/cloud-credentials/new/': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
   '/dashboard/settings/auth/connectors/$id/': typeof DashboardSettingsAuthConnectorsIdIndexRoute
   '/dashboard/settings/auth/connectors/new/': typeof DashboardSettingsAuthConnectorsNewIndexRoute
+  '/dashboard/settings/auth/scim-tokens/new/': typeof DashboardSettingsAuthScimTokensNewIndexRoute
+  '/dashboard/settings/backup/destinations/new/': typeof DashboardSettingsBackupDestinationsNewIndexRoute
+  '/dashboard/settings/general/tokens/new/': typeof DashboardSettingsGeneralTokensNewIndexRoute
   '/dashboard/clusters/$id/delivery/bundles/$bundleId/': typeof DashboardClustersIdDeliveryBundlesBundleIdIndexRoute
   '/dashboard/clusters/$id/delivery/deployments/$deploymentId/': typeof DashboardClustersIdDeliveryDeploymentsDeploymentIdIndexRoute
   '/dashboard/clusters/$id/delivery/rollouts/$rolloutId/': typeof DashboardClustersIdDeliveryRolloutsRolloutIdIndexRoute
@@ -1254,12 +1310,16 @@ export interface FileRoutesByTo {
   '/dashboard/settings/auth/register-sso': typeof DashboardSettingsAuthRegisterSsoIndexRoute
   '/dashboard/settings/auth/scim-tokens': typeof DashboardSettingsAuthScimTokensIndexRoute
   '/dashboard/settings/auth/settings': typeof DashboardSettingsAuthSettingsIndexRoute
+  '/dashboard/settings/cluster-groups/new': typeof DashboardSettingsClusterGroupsNewIndexRoute
   '/dashboard/settings/compliance/baselines': typeof DashboardSettingsComplianceBaselinesIndexRoute
   '/dashboard/settings/gitops/$id': typeof DashboardSettingsGitopsIdIndexRoute
   '/dashboard/settings/gitops/new': typeof DashboardSettingsGitopsNewIndexRoute
+  '/dashboard/settings/group-mappings/new': typeof DashboardSettingsGroupMappingsNewIndexRoute
   '/dashboard/settings/quotas/$name': typeof DashboardSettingsQuotasNameIndexRoute
   '/dashboard/settings/quotas/new': typeof DashboardSettingsQuotasNewIndexRoute
   '/dashboard/settings/quotas/usage': typeof DashboardSettingsQuotasUsageIndexRoute
+  '/dashboard/settings/read-audit/new': typeof DashboardSettingsReadAuditNewIndexRoute
+  '/dashboard/settings/siem/new': typeof DashboardSettingsSiemNewIndexRoute
   '/dashboard/settings/templates/$key': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new': typeof DashboardSettingsWebhooksNewIndexRoute
@@ -1276,6 +1336,9 @@ export interface FileRoutesByTo {
   '/dashboard/projects/$id/cloud-credentials/new': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
   '/dashboard/settings/auth/connectors/$id': typeof DashboardSettingsAuthConnectorsIdIndexRoute
   '/dashboard/settings/auth/connectors/new': typeof DashboardSettingsAuthConnectorsNewIndexRoute
+  '/dashboard/settings/auth/scim-tokens/new': typeof DashboardSettingsAuthScimTokensNewIndexRoute
+  '/dashboard/settings/backup/destinations/new': typeof DashboardSettingsBackupDestinationsNewIndexRoute
+  '/dashboard/settings/general/tokens/new': typeof DashboardSettingsGeneralTokensNewIndexRoute
   '/dashboard/clusters/$id/delivery/bundles/$bundleId': typeof DashboardClustersIdDeliveryBundlesBundleIdIndexRoute
   '/dashboard/clusters/$id/delivery/deployments/$deploymentId': typeof DashboardClustersIdDeliveryDeploymentsDeploymentIdIndexRoute
   '/dashboard/clusters/$id/delivery/rollouts/$rolloutId': typeof DashboardClustersIdDeliveryRolloutsRolloutIdIndexRoute
@@ -1401,12 +1464,16 @@ export interface FileRoutesById {
   '/dashboard/settings/auth/register-sso/': typeof DashboardSettingsAuthRegisterSsoIndexRoute
   '/dashboard/settings/auth/scim-tokens/': typeof DashboardSettingsAuthScimTokensIndexRoute
   '/dashboard/settings/auth/settings/': typeof DashboardSettingsAuthSettingsIndexRoute
+  '/dashboard/settings/cluster-groups/new/': typeof DashboardSettingsClusterGroupsNewIndexRoute
   '/dashboard/settings/compliance/baselines/': typeof DashboardSettingsComplianceBaselinesIndexRoute
   '/dashboard/settings/gitops/$id/': typeof DashboardSettingsGitopsIdIndexRoute
   '/dashboard/settings/gitops/new/': typeof DashboardSettingsGitopsNewIndexRoute
+  '/dashboard/settings/group-mappings/new/': typeof DashboardSettingsGroupMappingsNewIndexRoute
   '/dashboard/settings/quotas/$name/': typeof DashboardSettingsQuotasNameIndexRoute
   '/dashboard/settings/quotas/new/': typeof DashboardSettingsQuotasNewIndexRoute
   '/dashboard/settings/quotas/usage/': typeof DashboardSettingsQuotasUsageIndexRoute
+  '/dashboard/settings/read-audit/new/': typeof DashboardSettingsReadAuditNewIndexRoute
+  '/dashboard/settings/siem/new/': typeof DashboardSettingsSiemNewIndexRoute
   '/dashboard/settings/templates/$key/': typeof DashboardSettingsTemplatesKeyIndexRoute
   '/dashboard/settings/webhooks/$id/': typeof DashboardSettingsWebhooksIdIndexRoute
   '/dashboard/settings/webhooks/new/': typeof DashboardSettingsWebhooksNewIndexRoute
@@ -1423,6 +1490,9 @@ export interface FileRoutesById {
   '/dashboard/projects/$id/cloud-credentials/new/': typeof DashboardProjectsIdCloudCredentialsNewIndexRoute
   '/dashboard/settings/auth/connectors/$id/': typeof DashboardSettingsAuthConnectorsIdIndexRoute
   '/dashboard/settings/auth/connectors/new/': typeof DashboardSettingsAuthConnectorsNewIndexRoute
+  '/dashboard/settings/auth/scim-tokens/new/': typeof DashboardSettingsAuthScimTokensNewIndexRoute
+  '/dashboard/settings/backup/destinations/new/': typeof DashboardSettingsBackupDestinationsNewIndexRoute
+  '/dashboard/settings/general/tokens/new/': typeof DashboardSettingsGeneralTokensNewIndexRoute
   '/dashboard/clusters/$id/delivery/bundles/$bundleId/': typeof DashboardClustersIdDeliveryBundlesBundleIdIndexRoute
   '/dashboard/clusters/$id/delivery/deployments/$deploymentId/': typeof DashboardClustersIdDeliveryDeploymentsDeploymentIdIndexRoute
   '/dashboard/clusters/$id/delivery/rollouts/$rolloutId/': typeof DashboardClustersIdDeliveryRolloutsRolloutIdIndexRoute
@@ -1549,12 +1619,16 @@ export interface FileRouteTypes {
     | '/dashboard/settings/auth/register-sso/'
     | '/dashboard/settings/auth/scim-tokens/'
     | '/dashboard/settings/auth/settings/'
+    | '/dashboard/settings/cluster-groups/new/'
     | '/dashboard/settings/compliance/baselines/'
     | '/dashboard/settings/gitops/$id/'
     | '/dashboard/settings/gitops/new/'
+    | '/dashboard/settings/group-mappings/new/'
     | '/dashboard/settings/quotas/$name/'
     | '/dashboard/settings/quotas/new/'
     | '/dashboard/settings/quotas/usage/'
+    | '/dashboard/settings/read-audit/new/'
+    | '/dashboard/settings/siem/new/'
     | '/dashboard/settings/templates/$key/'
     | '/dashboard/settings/webhooks/$id/'
     | '/dashboard/settings/webhooks/new/'
@@ -1571,6 +1645,9 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id/cloud-credentials/new/'
     | '/dashboard/settings/auth/connectors/$id/'
     | '/dashboard/settings/auth/connectors/new/'
+    | '/dashboard/settings/auth/scim-tokens/new/'
+    | '/dashboard/settings/backup/destinations/new/'
+    | '/dashboard/settings/general/tokens/new/'
     | '/dashboard/clusters/$id/delivery/bundles/$bundleId/'
     | '/dashboard/clusters/$id/delivery/deployments/$deploymentId/'
     | '/dashboard/clusters/$id/delivery/rollouts/$rolloutId/'
@@ -1689,12 +1766,16 @@ export interface FileRouteTypes {
     | '/dashboard/settings/auth/register-sso'
     | '/dashboard/settings/auth/scim-tokens'
     | '/dashboard/settings/auth/settings'
+    | '/dashboard/settings/cluster-groups/new'
     | '/dashboard/settings/compliance/baselines'
     | '/dashboard/settings/gitops/$id'
     | '/dashboard/settings/gitops/new'
+    | '/dashboard/settings/group-mappings/new'
     | '/dashboard/settings/quotas/$name'
     | '/dashboard/settings/quotas/new'
     | '/dashboard/settings/quotas/usage'
+    | '/dashboard/settings/read-audit/new'
+    | '/dashboard/settings/siem/new'
     | '/dashboard/settings/templates/$key'
     | '/dashboard/settings/webhooks/$id'
     | '/dashboard/settings/webhooks/new'
@@ -1711,6 +1792,9 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id/cloud-credentials/new'
     | '/dashboard/settings/auth/connectors/$id'
     | '/dashboard/settings/auth/connectors/new'
+    | '/dashboard/settings/auth/scim-tokens/new'
+    | '/dashboard/settings/backup/destinations/new'
+    | '/dashboard/settings/general/tokens/new'
     | '/dashboard/clusters/$id/delivery/bundles/$bundleId'
     | '/dashboard/clusters/$id/delivery/deployments/$deploymentId'
     | '/dashboard/clusters/$id/delivery/rollouts/$rolloutId'
@@ -1835,12 +1919,16 @@ export interface FileRouteTypes {
     | '/dashboard/settings/auth/register-sso/'
     | '/dashboard/settings/auth/scim-tokens/'
     | '/dashboard/settings/auth/settings/'
+    | '/dashboard/settings/cluster-groups/new/'
     | '/dashboard/settings/compliance/baselines/'
     | '/dashboard/settings/gitops/$id/'
     | '/dashboard/settings/gitops/new/'
+    | '/dashboard/settings/group-mappings/new/'
     | '/dashboard/settings/quotas/$name/'
     | '/dashboard/settings/quotas/new/'
     | '/dashboard/settings/quotas/usage/'
+    | '/dashboard/settings/read-audit/new/'
+    | '/dashboard/settings/siem/new/'
     | '/dashboard/settings/templates/$key/'
     | '/dashboard/settings/webhooks/$id/'
     | '/dashboard/settings/webhooks/new/'
@@ -1857,6 +1945,9 @@ export interface FileRouteTypes {
     | '/dashboard/projects/$id/cloud-credentials/new/'
     | '/dashboard/settings/auth/connectors/$id/'
     | '/dashboard/settings/auth/connectors/new/'
+    | '/dashboard/settings/auth/scim-tokens/new/'
+    | '/dashboard/settings/backup/destinations/new/'
+    | '/dashboard/settings/general/tokens/new/'
     | '/dashboard/clusters/$id/delivery/bundles/$bundleId/'
     | '/dashboard/clusters/$id/delivery/deployments/$deploymentId/'
     | '/dashboard/clusters/$id/delivery/rollouts/$rolloutId/'
@@ -2682,6 +2773,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsAuthSettingsIndexRouteImport
       parentRoute: typeof DashboardSettingsRouteRoute
     }
+    '/dashboard/settings/cluster-groups/new/': {
+      id: '/dashboard/settings/cluster-groups/new/'
+      path: '/cluster-groups/new'
+      fullPath: '/dashboard/settings/cluster-groups/new/'
+      preLoaderRoute: typeof DashboardSettingsClusterGroupsNewIndexRouteImport
+      parentRoute: typeof DashboardSettingsRouteRoute
+    }
     '/dashboard/settings/compliance/baselines/': {
       id: '/dashboard/settings/compliance/baselines/'
       path: '/compliance/baselines'
@@ -2703,6 +2801,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsGitopsNewIndexRouteImport
       parentRoute: typeof DashboardSettingsRouteRoute
     }
+    '/dashboard/settings/group-mappings/new/': {
+      id: '/dashboard/settings/group-mappings/new/'
+      path: '/group-mappings/new'
+      fullPath: '/dashboard/settings/group-mappings/new/'
+      preLoaderRoute: typeof DashboardSettingsGroupMappingsNewIndexRouteImport
+      parentRoute: typeof DashboardSettingsRouteRoute
+    }
     '/dashboard/settings/quotas/$name/': {
       id: '/dashboard/settings/quotas/$name/'
       path: '/quotas/$name'
@@ -2722,6 +2827,20 @@ declare module '@tanstack/react-router' {
       path: '/quotas/usage'
       fullPath: '/dashboard/settings/quotas/usage/'
       preLoaderRoute: typeof DashboardSettingsQuotasUsageIndexRouteImport
+      parentRoute: typeof DashboardSettingsRouteRoute
+    }
+    '/dashboard/settings/read-audit/new/': {
+      id: '/dashboard/settings/read-audit/new/'
+      path: '/read-audit/new'
+      fullPath: '/dashboard/settings/read-audit/new/'
+      preLoaderRoute: typeof DashboardSettingsReadAuditNewIndexRouteImport
+      parentRoute: typeof DashboardSettingsRouteRoute
+    }
+    '/dashboard/settings/siem/new/': {
+      id: '/dashboard/settings/siem/new/'
+      path: '/siem/new'
+      fullPath: '/dashboard/settings/siem/new/'
+      preLoaderRoute: typeof DashboardSettingsSiemNewIndexRouteImport
       parentRoute: typeof DashboardSettingsRouteRoute
     }
     '/dashboard/settings/templates/$key/': {
@@ -2834,6 +2953,27 @@ declare module '@tanstack/react-router' {
       path: '/auth/connectors/new'
       fullPath: '/dashboard/settings/auth/connectors/new/'
       preLoaderRoute: typeof DashboardSettingsAuthConnectorsNewIndexRouteImport
+      parentRoute: typeof DashboardSettingsRouteRoute
+    }
+    '/dashboard/settings/auth/scim-tokens/new/': {
+      id: '/dashboard/settings/auth/scim-tokens/new/'
+      path: '/auth/scim-tokens/new'
+      fullPath: '/dashboard/settings/auth/scim-tokens/new/'
+      preLoaderRoute: typeof DashboardSettingsAuthScimTokensNewIndexRouteImport
+      parentRoute: typeof DashboardSettingsRouteRoute
+    }
+    '/dashboard/settings/backup/destinations/new/': {
+      id: '/dashboard/settings/backup/destinations/new/'
+      path: '/backup/destinations/new'
+      fullPath: '/dashboard/settings/backup/destinations/new/'
+      preLoaderRoute: typeof DashboardSettingsBackupDestinationsNewIndexRouteImport
+      parentRoute: typeof DashboardSettingsRouteRoute
+    }
+    '/dashboard/settings/general/tokens/new/': {
+      id: '/dashboard/settings/general/tokens/new/'
+      path: '/general/tokens/new'
+      fullPath: '/dashboard/settings/general/tokens/new/'
+      preLoaderRoute: typeof DashboardSettingsGeneralTokensNewIndexRouteImport
       parentRoute: typeof DashboardSettingsRouteRoute
     }
     '/dashboard/clusters/$id/delivery/bundles/$bundleId/': {
@@ -2961,17 +3101,24 @@ interface DashboardSettingsRouteRouteChildren {
   DashboardSettingsAuthRegisterSsoIndexRoute: typeof DashboardSettingsAuthRegisterSsoIndexRoute
   DashboardSettingsAuthScimTokensIndexRoute: typeof DashboardSettingsAuthScimTokensIndexRoute
   DashboardSettingsAuthSettingsIndexRoute: typeof DashboardSettingsAuthSettingsIndexRoute
+  DashboardSettingsClusterGroupsNewIndexRoute: typeof DashboardSettingsClusterGroupsNewIndexRoute
   DashboardSettingsComplianceBaselinesIndexRoute: typeof DashboardSettingsComplianceBaselinesIndexRoute
   DashboardSettingsGitopsIdIndexRoute: typeof DashboardSettingsGitopsIdIndexRoute
   DashboardSettingsGitopsNewIndexRoute: typeof DashboardSettingsGitopsNewIndexRoute
+  DashboardSettingsGroupMappingsNewIndexRoute: typeof DashboardSettingsGroupMappingsNewIndexRoute
   DashboardSettingsQuotasNameIndexRoute: typeof DashboardSettingsQuotasNameIndexRoute
   DashboardSettingsQuotasNewIndexRoute: typeof DashboardSettingsQuotasNewIndexRoute
   DashboardSettingsQuotasUsageIndexRoute: typeof DashboardSettingsQuotasUsageIndexRoute
+  DashboardSettingsReadAuditNewIndexRoute: typeof DashboardSettingsReadAuditNewIndexRoute
+  DashboardSettingsSiemNewIndexRoute: typeof DashboardSettingsSiemNewIndexRoute
   DashboardSettingsTemplatesKeyIndexRoute: typeof DashboardSettingsTemplatesKeyIndexRoute
   DashboardSettingsWebhooksIdIndexRoute: typeof DashboardSettingsWebhooksIdIndexRoute
   DashboardSettingsWebhooksNewIndexRoute: typeof DashboardSettingsWebhooksNewIndexRoute
   DashboardSettingsAuthConnectorsIdIndexRoute: typeof DashboardSettingsAuthConnectorsIdIndexRoute
   DashboardSettingsAuthConnectorsNewIndexRoute: typeof DashboardSettingsAuthConnectorsNewIndexRoute
+  DashboardSettingsAuthScimTokensNewIndexRoute: typeof DashboardSettingsAuthScimTokensNewIndexRoute
+  DashboardSettingsBackupDestinationsNewIndexRoute: typeof DashboardSettingsBackupDestinationsNewIndexRoute
+  DashboardSettingsGeneralTokensNewIndexRoute: typeof DashboardSettingsGeneralTokensNewIndexRoute
 }
 
 const DashboardSettingsRouteRouteChildren: DashboardSettingsRouteRouteChildren =
@@ -3013,15 +3160,22 @@ const DashboardSettingsRouteRouteChildren: DashboardSettingsRouteRouteChildren =
       DashboardSettingsAuthScimTokensIndexRoute,
     DashboardSettingsAuthSettingsIndexRoute:
       DashboardSettingsAuthSettingsIndexRoute,
+    DashboardSettingsClusterGroupsNewIndexRoute:
+      DashboardSettingsClusterGroupsNewIndexRoute,
     DashboardSettingsComplianceBaselinesIndexRoute:
       DashboardSettingsComplianceBaselinesIndexRoute,
     DashboardSettingsGitopsIdIndexRoute: DashboardSettingsGitopsIdIndexRoute,
     DashboardSettingsGitopsNewIndexRoute: DashboardSettingsGitopsNewIndexRoute,
+    DashboardSettingsGroupMappingsNewIndexRoute:
+      DashboardSettingsGroupMappingsNewIndexRoute,
     DashboardSettingsQuotasNameIndexRoute:
       DashboardSettingsQuotasNameIndexRoute,
     DashboardSettingsQuotasNewIndexRoute: DashboardSettingsQuotasNewIndexRoute,
     DashboardSettingsQuotasUsageIndexRoute:
       DashboardSettingsQuotasUsageIndexRoute,
+    DashboardSettingsReadAuditNewIndexRoute:
+      DashboardSettingsReadAuditNewIndexRoute,
+    DashboardSettingsSiemNewIndexRoute: DashboardSettingsSiemNewIndexRoute,
     DashboardSettingsTemplatesKeyIndexRoute:
       DashboardSettingsTemplatesKeyIndexRoute,
     DashboardSettingsWebhooksIdIndexRoute:
@@ -3032,6 +3186,12 @@ const DashboardSettingsRouteRouteChildren: DashboardSettingsRouteRouteChildren =
       DashboardSettingsAuthConnectorsIdIndexRoute,
     DashboardSettingsAuthConnectorsNewIndexRoute:
       DashboardSettingsAuthConnectorsNewIndexRoute,
+    DashboardSettingsAuthScimTokensNewIndexRoute:
+      DashboardSettingsAuthScimTokensNewIndexRoute,
+    DashboardSettingsBackupDestinationsNewIndexRoute:
+      DashboardSettingsBackupDestinationsNewIndexRoute,
+    DashboardSettingsGeneralTokensNewIndexRoute:
+      DashboardSettingsGeneralTokensNewIndexRoute,
   }
 
 const DashboardSettingsRouteRouteWithChildren =

@@ -19,7 +19,8 @@ import { ArrowLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { ActionButton } from "@/components/ui/action-button";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { PageHeader, PageShell } from "@/components/ui/page";
+import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
+import { Card } from "@/components/ui/card";
 import { RemoteClusterPicker } from "@/components/clusters/remote-cluster-picker";
 import { useCluster } from "@/lib/hooks/clusters";
 import {
@@ -28,7 +29,7 @@ import {
   useApplyDexConfig,
 } from "@/components/auth/hooks";
 import type { DexPublicClient } from "@/types";
-import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 function DexSettingsPage() {
   const { data: settings, isLoading } = useDexSettings();
@@ -190,7 +191,7 @@ function DexSettingsPage() {
           }
         >
           {/* Section: Identity */}
-          <Section
+          <Card padding="lg"><PageSection
             title="Identity"
             description="Where Dex lives and what it calls itself."
           >
@@ -238,10 +239,10 @@ function DexSettingsPage() {
                 {(field) => <field.TextField label="Runtime Secret name" />}
               </form.AppField>
             </div>
-          </Section>
+          </PageSection></Card>
 
           {/* Section: Public clients */}
-          <Section
+          <Card padding="lg"><PageSection
             title="Static / public clients"
             description="OIDC clients Dex will accept. The `astronomer` row is added automatically when you register Dex as SSO."
           >
@@ -290,10 +291,10 @@ function DexSettingsPage() {
                 </div>
               )}
             </form.Field>
-          </Section>
+          </PageSection></Card>
 
           {/* Section: Token expiry */}
-          <Section
+          <Card padding="lg"><PageSection
             title="Token expiry"
             description="Forwarded into Dex's `expiry` block as-is."
           >
@@ -326,7 +327,7 @@ function DexSettingsPage() {
                 )}
               </form.AppField>
             </div>
-          </Section>
+          </PageSection></Card>
         </ModalShell>
       )}
     </PageShell>
@@ -413,28 +414,6 @@ function DexRow({ label, value }: { label: string; value: string }) {
 // ============================================================
 // Helpers
 // ============================================================
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
-        )}
-      </div>
-      <div className="space-y-4">{children}</div>
-    </div>
-  );
-}
 
 function FieldRow({
   label,
@@ -542,22 +521,12 @@ function PublicClientEditor({
         </FieldRow>
         <FieldRow label="Public client?">
           <label className="inline-flex items-center gap-2 mt-1.5 cursor-pointer">
-            <button
-              type="button"
-              onClick={() => onChange({ ...value, public: !value.public })}
-              className={cn(
-                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                value.public ? "bg-status-success" : "bg-muted",
-              )}
-            >
-              <span
-                className={cn(
-                  // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
-                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                  value.public ? "translate-x-6" : "translate-x-1",
-                )}
-              />
-            </button>
+            <Switch
+              checked={value.public}
+              onCheckedChange={(isPublic) =>
+                onChange({ ...value, public: isPublic })
+              }
+            />
             <span className="text-xs text-muted-foreground">
               {value.public ? "Yes — no client secret" : "No — confidential"}
             </span>

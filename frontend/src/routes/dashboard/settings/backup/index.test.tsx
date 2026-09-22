@@ -1,6 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const { RouterLinkStub } = await import("@/test/router-link");
+  return {
+    ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+    Link: RouterLinkStub,
+    useNavigate: () => vi.fn(),
+  };
+});
+
 const run = { mutate: vi.fn(), isPending: false, operationState: { phase: "idle" as const } };
 
 vi.mock("@/components/settings/hooks", () => ({

@@ -1,29 +1,13 @@
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { FormShell } from "@/components/ui/form-shell";
-import { Select } from "@/components/ui/select";
 import { createFileRoute, useParams } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
-  Pause,
-  Pencil,
-  Play,
-  Rocket,
-  Trash2,
-} from "lucide-react";
+import { AlertTriangle, ArrowLeft, Eye, Pause, Pencil, Play, Trash2 } from "lucide-react";
 import { Link as RouterLink } from "@tanstack/react-router";
-import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageSection, PageShell } from "@/components/ui/page";
-import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
+import { ActionButton } from "@/components/ui/action-button";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -31,11 +15,6 @@ import {
   Detail,
   DetailGrid,
   ErrorMessage,
-  dangerButton,
-  inputClass,
-  primaryButton,
-  secondaryButton,
-  textareaClass,
   RedirectDeliveryDetail,
   useDeliveryWorkspace,
   withProjectQuery,
@@ -46,32 +25,16 @@ import {
   orphanDeliveryTarget,
   previewDeliveryTarget,
   updateDeliveryTarget,
-  type DeliveryTarget,
-  type PlacementDecision,
   type PlacementPreview,
 } from "@/lib/api/delivery-targets";
-import type { DriftPolicy } from "@/lib/api/delivery-bundles";
-import {
-  startDeliveryRollout,
-  type AmountType,
-  type RolloutFailureAction,
-  type RolloutStrategyRequest,
-  type RolloutStrategyType,
-} from "@/lib/api/delivery-rollouts";
-import {
-  placementFormDefaults,
-  placementFromForm,
-  placementHasSelector,
-} from "@/components/delivery/target-form";
-import {
-  TargetOverridesEditor,
-  targetOverridesFromForm,
-} from "@/components/delivery/target-overrides-editor";
 import { queryKeys } from "@/lib/query-keys";
 import { useCurrentUser } from "@/lib/hooks/auth";
 import { can, isSuperuser } from "@/lib/permissions";
 import { useNavigate } from "@tanstack/react-router";
 import { toastSuccess } from "@/lib/toast";
+import { PreviewPanel } from "./-preview-panel";
+import { TargetEditDialog } from "./-target-edit-dialog";
+import { LaunchDialog } from "./-launch-dialog";
 
 export function TargetDetailPage() {
   const { targetId } = useParams({ strict: false }) as { targetId: string };
@@ -246,31 +209,30 @@ export function TargetDetailPage() {
             actions={
               target ? (
                 <>
-                  <button
-                    type="button"
-                    className={secondaryButton}
+                  <ActionButton
                     disabled={!canUpdate}
                     onClick={() => setEditing(true)}
+                    icon={<Pencil className="h-4 w-4" />}
                   >
-                    <Pencil className="h-4 w-4" /> Edit configuration
-                  </button>
-                  <button
-                    type="button"
-                    className={secondaryButton}
+                    Edit configuration
+                  </ActionButton>
+                  <ActionButton
                     disabled={!canUpdate || suspendMutation.isPending}
                     onClick={() => suspendMutation.mutate()}
+                    icon={
+                      target.suspended ? (
+                        <Play className="h-4 w-4" />
+                      ) : (
+                        <Pause className="h-4 w-4" />
+                      )
+                    }
                   >
-                    {target.suspended ? (
-                      <Play className="h-4 w-4" />
-                    ) : (
-                      <Pause className="h-4 w-4" />
-                    )}
                     {target.suspended ? "Resume target" : "Suspend target"}
-                  </button>
-                  <button
-                    type="button"
-                    className={primaryButton}
+                  </ActionButton>
+                  <ActionButton
                     disabled={previewMutation.isPending}
+                    loading={previewMutation.isPending}
+                    loadingLabel="Evaluating…"
                     onClick={() =>
                       previewMutation.mutate({
                         cursor: "",
@@ -278,20 +240,19 @@ export function TargetDetailPage() {
                         reset: true,
                       })
                     }
+                    intent="primary"
+                    icon={<Eye className="h-4 w-4" />}
                   >
-                    <Eye className="h-4 w-4" />{" "}
-                    {previewMutation.isPending
-                      ? "Evaluating…"
-                      : "Preview placement"}
-                  </button>
+                    Preview placement
+                  </ActionButton>
                   {canDelete && (
-                    <button
-                      type="button"
-                      className={dangerButton}
+                    <ActionButton
                       onClick={() => setDeleting(true)}
+                      intent="destructive"
+                      icon={<Trash2 className="h-4 w-4" />}
                     >
-                      <Trash2 className="h-4 w-4" /> Delete
-                    </button>
+                      Delete
+                    </ActionButton>
                   )}
                 </>
               ) : undefined
@@ -401,16 +362,14 @@ export function TargetDetailPage() {
         loading={deleteMutation.isPending}
       >
         {canOrphan && (
-          <button
-            type="button"
-            className={secondaryButton}
+          <ActionButton
             onClick={() => {
               setDeleting(false);
               setOrphaning(true);
             }}
           >
             Orphan workloads instead
-          </button>
+          </ActionButton>
         )}
       </ConfirmDialog>
       <ConfirmDialog
@@ -428,746 +387,6 @@ export function TargetDetailPage() {
   );
 }
 
-function PreviewPanel({
-  preview,
-  canLaunch,
-  onLaunch,
-  pageIndex,
-  loadingPage,
-  canGoBack,
-  onPrevious,
-  onNext,
-}: {
-  preview: PlacementPreview;
-  canLaunch: boolean;
-  onLaunch: () => void;
-  pageIndex: number;
-  loadingPage: boolean;
-  canGoBack: boolean;
-  onPrevious: () => void;
-  onNext: () => void;
-}) {
-  const columns: Column<PlacementDecision>[] = [
-    {
-      key: "cluster",
-      header: "Cluster",
-      accessor: (row) => (
-        <div>
-          <p className="font-medium">{row.clusterName || row.clusterId}</p>
-          <p className="font-mono text-xs text-muted-foreground">
-            {row.clusterId}
-          </p>
-        </div>
-      ),
-    },
-    {
-      key: "decision",
-      header: "Decision",
-      accessor: (row) => <DeliveryPhaseBadge value={row.reason} />,
-    },
-    {
-      key: "reason",
-      header: "Details",
-      accessor: (row) =>
-        row.missingCapabilities?.join(", ") ||
-        row.compatibilityReason ||
-        row.matchReasons?.join(", ") ||
-        "Eligible",
-    },
-  ];
-  return (
-    <PageSection
-      title="Authoritative placement preview"
-      description="This is the server-evaluated, project-scoped membership snapshot. Launch is bound to its digest."
-      actions={
-        <button
-          type="button"
-          className={primaryButton}
-          disabled={!canLaunch || preview.selectedCount === 0}
-          onClick={onLaunch}
-        >
-          <Rocket className="h-4 w-4" /> Launch rollout
-        </button>
-      }
-    >
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Metric label="Selected" value={preview.selectedCount} />
-        <Metric label="Excluded / blocked" value={preview.excludedCount} />
-        <Metric label="Target generation" value={preview.targetGeneration} />
-        <Metric
-          label="All-cluster confirmation"
-          value={preview.requiresAllConfirmation ? "Required" : "No"}
-        />
-      </div>
-      {preview.risks.length > 0 && (
-        <div
-          role="alert"
-          className="rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning"
-        >
-          <p className="flex items-center gap-2 font-medium">
-            <AlertTriangle className="h-4 w-4" /> Review before launch
-          </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            {preview.risks.map((risk) => (
-              <li key={risk}>{risk.replaceAll("_", " ")}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <p className="font-mono text-xs text-muted-foreground">
-        Preview digest: {preview.previewDigest}
-      </p>
-      <DataTable
-        data={preview.decisions}
-        columns={columns}
-        keyExtractor={(row) => row.clusterId}
-        searchable={false}
-        pageSize={Math.max(preview.decisions.length, 1)}
-        emptyState={{
-          title: "No clusters were evaluated",
-          description:
-            "Resources will appear here when they are available in this scope.",
-        }}
-      />
-      <div
-        className="flex flex-col gap-3 border-t border-border pt-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-        aria-live="polite"
-      >
-        <p className="text-muted-foreground">
-          {preview.decisionCount === 0
-            ? "No placement decisions"
-            : `Showing ${preview.decisionOffset + 1}–${preview.decisionOffset + preview.decisions.length} of ${preview.decisionCount} decisions`}
-        </p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className={secondaryButton}
-            disabled={!canGoBack || loadingPage}
-            onClick={onPrevious}
-            aria-label="Previous placement decision page"
-          >
-            <ChevronLeft className="h-4 w-4" /> Previous
-          </button>
-          <span className="min-w-16 text-center text-xs text-muted-foreground">
-            Page {pageIndex + 1}
-          </span>
-          <button
-            type="button"
-            className={secondaryButton}
-            disabled={
-              !preview.hasMoreDecisions || !preview.nextCursor || loadingPage
-            }
-            onClick={onNext}
-            aria-label="Next placement decision page"
-          >
-            Next <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </PageSection>
-  );
-}
-
-function TargetEditDialog({
-  projectId,
-  target,
-  etag,
-  onUpdated,
-  onClose,
-}: {
-  projectId: string;
-  target: DeliveryTarget;
-  etag: string | number;
-  onUpdated: () => void;
-  onClose: () => void;
-}) {
-  const client = useQueryClient();
-  const defaults = placementFormDefaults(target.placement);
-  const [allClusters, setAllClusters] = useState(defaults.allClusters);
-  const [drift, setDrift] = useState<DriftPolicy>(
-    target.reconciliationPolicy.drift,
-  );
-  const [formError, setFormError] = useState<Error | null>(null);
-  const mutation = useMutation({
-    mutationFn: (body: Parameters<typeof updateDeliveryTarget>[1]) =>
-      updateDeliveryTarget(target.id, body, etag, crypto.randomUUID()),
-    onSuccess: () => {
-      client.invalidateQueries({
-        queryKey: queryKeys.delivery.target(projectId, target.id),
-      });
-      client.invalidateQueries({
-        queryKey: queryKeys.delivery.targetsAll(projectId),
-      });
-      onUpdated();
-      toastSuccess("Target configuration updated");
-      onClose();
-    },
-  });
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setFormError(null);
-    try {
-      const form = new FormData(event.currentTarget);
-      const placement = placementFromForm(form, allClusters);
-      if (!placementHasSelector(placement)) {
-        throw new Error(
-          "Select at least one explicit cluster, group, label, or expression. Empty placement selects nothing.",
-        );
-      }
-      const maintenanceText = String(form.get("maintenance") ?? "").trim();
-      const maintenanceWindowPolicy = maintenanceText
-        ? (JSON.parse(maintenanceText) as Record<string, unknown>)
-        : {};
-      if (
-        maintenanceWindowPolicy === null ||
-        Array.isArray(maintenanceWindowPolicy) ||
-        typeof maintenanceWindowPolicy !== "object"
-      ) {
-        throw new Error("Maintenance policy must be a JSON object.");
-      }
-      mutation.mutate({
-        project_id: projectId,
-        description: String(form.get("description") ?? "").trim() || undefined,
-        bundle_version_id: String(form.get("bundle_version_id") ?? "").trim(),
-        placement,
-        rollout_policy: {
-          approval_required: form.get("approval_required") === "on",
-        },
-        reconciliation_policy: {
-          interval: String(form.get("interval")),
-          retry_interval: String(form.get("retry_interval")),
-          timeout: String(form.get("timeout")),
-          prune: form.get("prune") === "on",
-          wait: form.get("wait") === "on",
-          drift,
-        },
-        maintenance_window_policy: maintenanceWindowPolicy,
-        overrides: targetOverridesFromForm(form),
-      });
-    } catch (error) {
-      setFormError(
-        error instanceof Error
-          ? error
-          : new Error("Target configuration is invalid."),
-      );
-    }
-  };
-  return (
-    <ModalShell
-      title={`Edit ${target.name}`}
-      size="xl"
-      onClose={onClose}
-      subtitle="Saving changes increments the target generation. Run a new authoritative preview before launching."
-    >
-      <FormShell className="space-y-5" onSubmit={submit}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Description">
-            <Input
-              name="description"
-              maxLength={4096}
-              defaultValue={target.description ?? ""}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Immutable bundle version ID">
-            <Input
-              name="bundle_version_id"
-              required
-              defaultValue={target.bundleVersionId}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-        <fieldset className="space-y-4 rounded-md border border-border p-4">
-          <legend className="px-1 text-sm font-medium">
-            Placement selector
-          </legend>
-          <label className="flex items-center gap-2 text-sm font-medium text-status-warning">
-            <Input
-              type="checkbox"
-              checked={allClusters}
-              onChange={(event) => setAllClusters(event.target.checked)}
-            />
-            Select every eligible cluster in this project
-          </label>
-          {!allClusters && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Explicit cluster IDs (comma-separated)">
-                <Textarea
-                  name="cluster_ids"
-                  defaultValue={defaults.clusterIds}
-                  className={textareaClass}
-                />
-              </Field>
-              <Field label="Cluster group IDs (comma-separated)">
-                <Textarea
-                  name="group_ids"
-                  defaultValue={defaults.groupIds}
-                  className={textareaClass}
-                />
-              </Field>
-              <Field label="Match labels (one key=value per line)">
-                <Textarea
-                  name="labels"
-                  defaultValue={defaults.labels}
-                  className={textareaClass}
-                />
-              </Field>
-              <Field label="Expressions (one per line)">
-                <Textarea
-                  name="expressions"
-                  defaultValue={defaults.expressions}
-                  className={textareaClass}
-                />
-              </Field>
-            </div>
-          )}
-          <Field label="Exclude cluster IDs (comma-separated)">
-            <Textarea
-              name="exclude_ids"
-              defaultValue={defaults.excludeIds}
-              className={textareaClass}
-            />
-          </Field>
-        </fieldset>
-        <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-3">
-          <legend className="px-1 text-sm font-medium">Reconciliation</legend>
-          <Field label="Interval">
-            <Input
-              name="interval"
-              required
-              defaultValue={target.reconciliationPolicy.interval}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Retry interval">
-            <Input
-              name="retry_interval"
-              required
-              defaultValue={target.reconciliationPolicy.retryInterval}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Timeout">
-            <Input
-              name="timeout"
-              required
-              defaultValue={target.reconciliationPolicy.timeout}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Drift">
-            <Select
-              value={drift}
-              onChange={(event) => setDrift(event.target.value as DriftPolicy)}
-              className={inputClass}
-            >
-              <option value="repair">Detect and repair</option>
-              <option value="detect">Detect only</option>
-              <option value="ignore">Ignore</option>
-            </Select>
-          </Field>
-          <label className="flex items-center gap-2 text-sm">
-            <Input
-              name="prune"
-              type="checkbox"
-              defaultChecked={target.reconciliationPolicy.prune}
-            />
-            Prune removed objects
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <Input
-              name="wait"
-              type="checkbox"
-              defaultChecked={target.reconciliationPolicy.wait}
-            />
-            Wait for health
-          </label>
-        </fieldset>
-        <TargetOverridesEditor
-          value={{
-            helm_values: target.overrides.helmValues,
-            patches: target.overrides.patches,
-          }}
-          digest={target.overrideDigest}
-        />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Maintenance policy (JSON object)">
-            <Textarea
-              name="maintenance"
-              defaultValue={JSON.stringify(
-                target.maintenanceWindowPolicy,
-                null,
-                2,
-              )}
-              className={textareaClass}
-              spellCheck={false}
-            />
-          </Field>
-          <label className="flex items-center gap-2 pt-8 text-sm">
-            <Input
-              name="approval_required"
-              type="checkbox"
-              defaultChecked={target.rolloutPolicy.approvalRequired}
-            />
-            Require human rollout approval
-          </label>
-        </div>
-        {(formError || mutation.isError) && (
-          <ErrorMessage error={formError ?? mutation.error} />
-        )}
-        <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className={primaryButton}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? "Saving…" : "Save and require new preview"}
-          </button>
-        </div>
-      </FormShell>
-    </ModalShell>
-  );
-}
-
-function LaunchDialog({
-  projectId,
-  target,
-  preview,
-  onClose,
-}: {
-  projectId: string;
-  target: DeliveryTarget;
-  preview: PlacementPreview;
-  onClose: () => void;
-}) {
-  const client = useQueryClient();
-  const navigate = useNavigate();
-  const { entityHref } = useDeliveryWorkspace();
-  const [strategyType, setStrategyType] =
-    useState<RolloutStrategyType>("rolling");
-  const [maxUnavailableType, setMaxUnavailableType] =
-    useState<AmountType>("count");
-  const [failureType, setFailureType] = useState<AmountType>("count");
-  const [onFailure, setOnFailure] = useState<RolloutFailureAction>("pause");
-  const [formError, setFormError] = useState<Error | null>(null);
-  const mutation = useMutation({
-    mutationFn: (strategy: RolloutStrategyRequest) =>
-      startDeliveryRollout(
-        target.id,
-        {
-          project_id: projectId,
-          preview_digest: preview.previewDigest,
-          confirm_all_clusters: preview.requiresAllConfirmation,
-          strategy,
-        },
-        preview.targetGeneration,
-        crypto.randomUUID(),
-      ),
-    onSuccess: (rollout) => {
-      client.invalidateQueries({
-        queryKey: queryKeys.delivery.rolloutsAll(projectId),
-      });
-      toastSuccess("Rollout launched");
-      onClose();
-      void navigate({ to: entityHref("rollouts", rollout.id) });
-    },
-  });
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setFormError(null);
-    try {
-      const form = new FormData(event.currentTarget);
-      if (preview.requiresAllConfirmation && form.get("confirm_all") !== "on")
-        throw new Error("Explicit all-cluster confirmation is required.");
-      const partitionsText = String(form.get("partitions") ?? "").trim();
-      const partitions = partitionsText
-        ? (JSON.parse(partitionsText) as RolloutStrategyRequest["partitions"])
-        : undefined;
-      const explicitCanaries = String(form.get("canary_ids") ?? "")
-        .split(",")
-        .map((id) => id.trim())
-        .filter(Boolean);
-      const strategy: RolloutStrategyRequest = {
-        type: strategyType,
-        max_concurrent: Number(form.get("max_concurrent")),
-        max_unavailable: {
-          type: maxUnavailableType,
-          value: Number(form.get("max_unavailable")),
-        },
-        min_ready: String(form.get("min_ready")),
-        progress_deadline: String(form.get("deadline")),
-        failure_threshold: {
-          type: failureType,
-          value: Number(form.get("failure_threshold")),
-        },
-        on_failure: onFailure,
-        respect_maintenance_windows: form.get("respect_windows") === "on",
-        shuffle_seed:
-          String(form.get("shuffle_seed") ?? "").trim() || undefined,
-        ...(strategyType === "canary"
-          ? {
-              canary: explicitCanaries.length
-                ? {
-                    size: { type: "count", value: 0 },
-                    cluster_ids: explicitCanaries,
-                    approval_after_canary:
-                      form.get("approval_after_canary") === "on",
-                    soak: String(form.get("canary_soak")),
-                  }
-                : {
-                    size: {
-                      type: String(form.get("canary_size_type")) as AmountType,
-                      value: Number(form.get("canary_size")),
-                    },
-                    approval_after_canary:
-                      form.get("approval_after_canary") === "on",
-                    soak: String(form.get("canary_soak")),
-                  },
-            }
-          : {}),
-        ...(strategyType === "partitioned" ? { partitions } : {}),
-      };
-      mutation.mutate(strategy);
-    } catch (error) {
-      setFormError(
-        error instanceof Error
-          ? error
-          : new Error("Rollout strategy is invalid."),
-      );
-    }
-  };
-  return (
-    <ModalShell
-      title="Launch rollout"
-      size="xl"
-      onClose={onClose}
-      subtitle="This action freezes placement, immutable bundle revision, strategy, budgets, and the previous known-good version."
-    >
-      <FormShell className="space-y-5" onSubmit={submit}>
-        <div className="grid gap-3 rounded-md border border-border bg-muted/20 p-4 sm:grid-cols-3">
-          <Detail label="Bundle version" value={preview.bundleVersionId} mono />
-          <Detail label="Selected clusters" value={preview.selectedCount} />
-          <Detail label="Preview digest" value={preview.previewDigest} mono />
-        </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Strategy">
-            <Select
-              value={strategyType}
-              onChange={(e) =>
-                setStrategyType(e.target.value as RolloutStrategyType)
-              }
-              className={inputClass}
-            >
-              <option value="all_at_once">All at once</option>
-              <option value="rolling">Rolling</option>
-              <option value="canary">Canary</option>
-              <option value="partitioned">Partitioned cohorts</option>
-            </Select>
-          </Field>
-          <Field label="Maximum concurrent">
-            <Input
-              name="max_concurrent"
-              required
-              type="number"
-              min={1}
-              defaultValue={10}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Stable shuffle seed (optional)">
-            <Input name="shuffle_seed" maxLength={128} className={inputClass} />
-          </Field>
-        </div>
-        <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-3">
-          <legend className="px-1 text-sm font-medium">Safety budgets</legend>
-          <Field label="Maximum unavailable">
-            <div className="flex gap-2">
-              <Select
-                value={maxUnavailableType}
-                onChange={(e) =>
-                  setMaxUnavailableType(e.target.value as AmountType)
-                }
-                className={inputClass}
-              >
-                <option value="count">Count</option>
-                <option value="percent">Percent</option>
-              </Select>
-              <Input
-                name="max_unavailable"
-                required
-                type="number"
-                min={0}
-                defaultValue={1}
-                className={inputClass}
-              />
-            </div>
-          </Field>
-          <Field label="Failure threshold">
-            <div className="flex gap-2">
-              <Select
-                value={failureType}
-                onChange={(e) => setFailureType(e.target.value as AmountType)}
-                className={inputClass}
-              >
-                <option value="count">Count</option>
-                <option value="percent">Percent</option>
-              </Select>
-              <Input
-                name="failure_threshold"
-                required
-                type="number"
-                min={1}
-                defaultValue={1}
-                className={inputClass}
-              />
-            </div>
-          </Field>
-          <Field label="On failure">
-            <Select
-              value={onFailure}
-              onChange={(e) =>
-                setOnFailure(e.target.value as RolloutFailureAction)
-              }
-              className={inputClass}
-            >
-              <option value="pause">Pause</option>
-              <option value="abort">Abort</option>
-              <option value="rollback">Roll back known-good version</option>
-            </Select>
-          </Field>
-          <Field label="Minimum ready">
-            <Input
-              name="min_ready"
-              required
-              defaultValue="30s"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Progress deadline">
-            <Input
-              name="deadline"
-              required
-              defaultValue="30m"
-              className={inputClass}
-            />
-          </Field>
-          <label className="flex items-center gap-2 pt-7 text-sm">
-            <Input name="respect_windows" type="checkbox" defaultChecked />{" "}
-            Respect maintenance windows
-          </label>
-        </fieldset>
-        {strategyType === "canary" && (
-          <fieldset className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-3">
-            <legend className="px-1 text-sm font-medium">Canary cohort</legend>
-            <Field label="Explicit canary cluster IDs (optional)">
-              <Input name="canary_ids" className={inputClass} />
-            </Field>
-            <Field label="Canary size if not explicit">
-              <div className="flex gap-2">
-                <Select name="canary_size_type" className={inputClass}>
-                  <option value="count">Count</option>
-                  <option value="percent">Percent</option>
-                </Select>
-                <Input
-                  name="canary_size"
-                  type="number"
-                  min={1}
-                  defaultValue={1}
-                  className={inputClass}
-                />
-              </div>
-            </Field>
-            <Field label="Soak">
-              <Input
-                name="canary_soak"
-                required
-                defaultValue="5m"
-                className={inputClass}
-              />
-            </Field>
-            <label className="flex items-center gap-2 text-sm">
-              <Input
-                name="approval_after_canary"
-                type="checkbox"
-                defaultChecked
-              />{" "}
-              Require approval after canary
-            </label>
-          </fieldset>
-        )}
-        {strategyType === "partitioned" && (
-          <Field label="Ordered partition definitions (JSON array)">
-            <Textarea
-              name="partitions"
-              required
-              className={textareaClass}
-              placeholder='[{"name":"staging","selector":{"all_clusters":false,"match_labels":{"environment":"staging"}},"approval_required":true,"soak":"10m"}]'
-            />
-          </Field>
-        )}
-        {target.rolloutPolicy.approvalRequired && (
-          <p className="rounded-md border border-status-warning/30 bg-status-warning/10 p-3 text-sm text-status-warning">
-            This target requires human approval. The rollout will stop at an
-            approval gate bound to its exact digest and expiry.
-          </p>
-        )}
-        {preview.requiresAllConfirmation && (
-          <label className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error/10 p-3 text-sm">
-            <Input name="confirm_all" type="checkbox" className="mt-1" />
-            <span>
-              <strong>Confirm all eligible project clusters.</strong> This broad
-              placement is intentionally protected by enhanced confirmation.
-            </span>
-          </label>
-        )}
-        {(formError || mutation.isError) && (
-          <ErrorMessage error={formError ?? mutation.error} />
-        )}
-        <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className={primaryButton}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? "Launching…" : "Launch frozen rollout"}
-          </button>
-        </div>
-      </FormShell>
-    </ModalShell>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-semibold">{value}</p>
-    </div>
-  );
-}
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      {children}
-    </label>
-  );
-}
 function DeliveryTargetDetailRedirect() {
   const { targetId } = useParams({ strict: false }) as { targetId: string };
   return (

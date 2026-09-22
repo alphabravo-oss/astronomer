@@ -20,6 +20,7 @@ import {
   Section,
 } from "@/components/resources/resource-overview-primitives";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { MetricCard } from "@/components/ui/metric-card";
 import { detailHref } from "@/lib/k8s-paths";
 import {
   permissionDeniedReason,
@@ -786,30 +787,15 @@ function SummaryCard({
   mono?: boolean;
   href?: string;
 }) {
-  const valueNode = (
-    <span
-      className={cn(
-        "mt-1 block truncate text-sm font-semibold text-foreground",
-        mono && "font-mono text-xs",
-        warning && "text-status-warning",
-      )}
-      title={value}
-    >
-      {value}
-    </span>
-  );
   return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
-      <span className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        <CircleDot className="h-3 w-3" /> {label}
-      </span>
-      {href ? (
-        <RouterLink to={href} className="hover:underline">
-          {valueNode}
-        </RouterLink>
-      ) : (
-        valueNode
-      )}
-    </div>
+    <MetricCard
+      dense
+      label={label}
+      icon={<CircleDot className="h-3 w-3" />}
+      value={mono ? <span className="font-mono text-xs">{value}</span> : value}
+      tone={warning ? "warning" : undefined}
+      href={href}
+    />
   );
 }
+

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { Switch } from "@/components/ui/switch";
 import type {
   Snapshot,
   SnapshotPhase,
@@ -130,27 +131,14 @@ export function SnapshotSchedulesTable({
       key: "enabled",
       header: "Enabled",
       accessor: (schedule) => (
-        <button
-          type="button"
-          role="switch"
-          aria-checked={schedule.enabled}
+        <Switch
+          size="sm"
+          checked={schedule.enabled}
           disabled={!canWrite}
           title={canWrite ? undefined : disabledReason}
-          onClick={() => onToggle(schedule)}
-          className={cn(
-            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-            schedule.enabled ? "bg-primary" : "bg-muted",
-            !canWrite && "opacity-50 cursor-not-allowed",
-          )}
-        >
-          <span
-            className={cn(
-              // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
-              "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-              schedule.enabled ? "translate-x-4" : "translate-x-0.5",
-            )}
-          />
-        </button>
+          onCheckedChange={() => onToggle(schedule)}
+          className={schedule.enabled ? "bg-primary" : undefined}
+        />
       ),
       sortAccessor: (schedule) => String(schedule.enabled),
     },

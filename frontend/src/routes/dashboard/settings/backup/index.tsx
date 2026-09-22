@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
  * there. Restore of this dump is an operator procedure (not a one-click UI).
  */
 import { useState } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
+import { Link as RouterLink, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   KeyRound,
@@ -30,13 +30,13 @@ import { OperationMutationTimeline } from "@/components/ui/operation-mutation-ti
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { MetricCard } from "@/components/ui/metric-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
 import { pageCount, pageNumber } from "@/lib/api/pagination";
 import { cronToHuman } from "@/components/backups/cron";
 import {
   useBackupDrillHistory,
-  useCreateManagementBackupDestination,
   useDeleteManagementBackupDestination,
   useLatestBackupDrill,
   useManagementBackupStatus,
@@ -80,12 +80,11 @@ function durationLabel(
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border bg-background p-3">
-      <p className="text-muted-foreground">{label}</p>
-      <p className="text-sm font-mono text-foreground truncate mt-0.5">
-        {value || "—"}
-      </p>
-    </div>
+    <MetricCard
+      dense
+      label={label}
+      value={<span className="font-mono">{value || "—"}</span>}
+    />
   );
 }
 
@@ -103,21 +102,6 @@ type DestForm = {
   keep_weekly: number;
   keep_monthly: number;
 };
-
-const emptyForm = (): DestForm => ({
-  name: "",
-  bucket: "",
-  prefix: "astronomer-pg",
-  region: "us-east-1",
-  endpoint_url: "",
-  access_key: "",
-  secret_key: "",
-  schedule: "0 3 * * *",
-  enabled: true,
-  keep_daily: 30,
-  keep_weekly: 12,
-  keep_monthly: 6,
-});
 
 function formFromDest(row: ManagementBackupDestinationView): DestForm {
   return {
@@ -141,9 +125,9 @@ export function DestinationsSection({
 }: {
   data: ManagementBackupStatusView;
 }) {
-  const [editor, setEditor] = useState<
-    ManagementBackupDestinationView | "new" | null
-  >(null);
+  const navigate = useNavigate();
+  const [editor, setEditor] =
+    useState<ManagementBackupDestinationView | null>(null);
   const [remove, setRemove] = useState<ManagementBackupDestinationView | null>(
     null,
   );
@@ -166,7 +150,11 @@ export function DestinationsSection({
         <ActionButton
           intent="primary"
           icon={<Plus className="h-3.5 w-3.5" />}
-          onClick={() => setEditor("new")}
+          onClick={() =>
+            void navigate({
+              to: "/dashboard/settings/backup/destinations/new",
+            })
+          }
         >
           Add destination
         </ActionButton>
@@ -181,7 +169,7 @@ export function DestinationsSection({
           }
           actionLabel="Add destination"
           actionIcon={Plus}
-          onAction={() => setEditor("new")}
+          actionHref="/dashboard/settings/backup/destinations/new"
           className="rounded-xl border border-dashed border-border bg-card p-6"
         />
       ) : (
@@ -304,10 +292,7 @@ export function DestinationsSection({
         />
       )}
       {editor && (
-        <DestinationModal
-          existing={editor === "new" ? null : editor}
-          onClose={() => setEditor(null)}
-        />
+        <DestinationModal existing={editor} onClose={() => setEditor(null)} />
       )}
       <p className="sr-only" role="status" aria-live="polite">
         {run.isPending
@@ -343,15 +328,14 @@ function DestinationModal({
   existing,
   onClose,
 }: {
-  existing: ManagementBackupDestinationView | null;
+  existing: ManagementBackupDestinationView;
   onClose: () => void;
 }) {
-  const create = useCreateManagementBackupDestination();
   const update = useUpdateManagementBackupDestination();
   const test = useTestManagementBackupDestination();
 
   const form = useAppForm({
-    defaultValues: existing ? formFromDest(existing) : emptyForm(),
+    defaultValues: formFromDest(existing),
     onSubmit: async ({ value }) => {
       const body = {
         name: value.name,
@@ -367,18 +351,14 @@ function DestinationModal({
         keep_weekly: value.keep_weekly,
         keep_monthly: value.keep_monthly,
       };
-      if (existing) {
-        await update.mutateAsync({ id: existing.id, body });
-      } else {
-        await create.mutateAsync(body);
-      }
+      await update.mutateAsync({ id: existing.id, body });
       onClose();
     },
   });
 
   return (
     <ModalShell
-      title={existing ? "Edit destination" : "Add S3 destination"}
+      title="Edit destination"
       subtitle="Credentials are stored encrypted. The dump CronJob starts as soon as you save."
       onClose={onClose}
       size="lg"

@@ -24,7 +24,6 @@ import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { Select } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { cn } from "@/lib/utils";
 
 // SEARCHABLE_TYPES is the user-facing list shown in the type dropdown.
 // Keeping it in declaration order rather than alphabetical means the most
@@ -307,7 +306,7 @@ export function SearchPage({
             value={labelSelector}
             onChange={(e) => setLabelSelector(e.target.value)}
             placeholder="label selector e.g. app=coredns"
-            className="md:col-span-4 font-mono"
+            className="md:col-span-4"
           />
 
           {/* Name filter */}
@@ -426,15 +425,6 @@ export function SearchPage({
           />
         )}
       </div>
-
-      <p
-        className={cn(
-          "text-2xs text-muted-foreground text-center pt-2",
-          !data && "invisible",
-        )}
-      >
-        Tip: hit Cmd+K from anywhere to focus the global search input.
-      </p>
     </PageShell>
   );
 }

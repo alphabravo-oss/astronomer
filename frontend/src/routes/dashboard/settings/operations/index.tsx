@@ -1,13 +1,6 @@
 import { Select } from "@/components/ui/select";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/operator-table";
+import { DataTable, type Column } from "@/components/ui/data-table";
 /**
  * Operations admin tab (T28b) — surface the asynq queue state + DLQ so on-call
  * can answer "why isn't anything reconciling?" from the UI instead of curl /
@@ -22,10 +15,8 @@ import {
  */
 
 import { useState, useMemo } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
+import { ResourceMasthead } from "@/components/ui/page";
 import {
-  ArrowLeft,
-  Loader2,
   RefreshCw,
   RotateCw,
   Trash2,
@@ -147,22 +138,16 @@ function OperationsBody() {
             ? `DLQ discard ${discard.operationState.phase}`
             : ""}
       </p>
-      <RouterLink
-        to="/dashboard/settings"
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Back to Settings
-      </RouterLink>
-
-      <div>
-        {/* eslint-disable-line no-restricted-syntax -- migrated in plan 022 */}<h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Activity className="h-5 w-5" /> Operations
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Live view of the asynq worker queues + DLQ. Audited; superuser-only.
-        </p>
-      </div>
+      <ResourceMasthead
+        backTo="/dashboard/settings"
+        backLabel="Back to Settings"
+        title={
+          <span className="inline-flex items-center gap-2">
+            <Activity className="h-5 w-5" /> Operations
+          </span>
+        }
+        description="Live view of the asynq worker queues + DLQ. Audited; superuser-only."
+      />
 
       {queues.isError && (
         <QueryStates query={queues} permission="admin_operations:read">
@@ -290,6 +275,107 @@ function OperationsBody() {
   );
 }
 
+function queueColumns(activeQueue: string): Column<QueueSummary>[] {
+  return [
+    {
+      key: "name",
+      header: "Name",
+      accessor: (r) => (
+        <span
+          className={
+            "font-mono " +
+            (r.name === activeQueue ? "font-semibold text-foreground" : "")
+          }
+        >
+          {r.name === activeQueue ? "▸ " : ""}
+          {r.name}
+        </span>
+      ),
+      searchAccessor: (r) => r.name,
+      sortAccessor: (r) => r.name,
+    },
+    {
+      key: "pending",
+      header: "Pending",
+      accessor: (r) => <span className="tabular-nums">{r.pending}</span>,
+      sortAccessor: (r) => r.pending,
+      align: "right",
+      width: "6rem",
+    },
+    {
+      key: "active",
+      header: "Active",
+      accessor: (r) => <span className="tabular-nums">{r.active}</span>,
+      sortAccessor: (r) => r.active,
+      align: "right",
+      width: "6rem",
+    },
+    {
+      key: "scheduled",
+      header: "Scheduled",
+      accessor: (r) => <span className="tabular-nums">{r.scheduled}</span>,
+      sortAccessor: (r) => r.scheduled,
+      align: "right",
+      width: "7rem",
+    },
+    {
+      key: "retry",
+      header: "Retry",
+      accessor: (r) => <span className="tabular-nums">{r.retry}</span>,
+      sortAccessor: (r) => r.retry,
+      align: "right",
+      width: "6rem",
+    },
+    {
+      key: "dlq",
+      header: "DLQ",
+      accessor: (r) => (
+        <span
+          className={
+            "tabular-nums " +
+            (r.archived > 0 ? "text-status-error font-medium" : "")
+          }
+        >
+          {r.archived}
+        </span>
+      ),
+      sortAccessor: (r) => r.archived,
+      align: "right",
+      width: "6rem",
+    },
+    {
+      key: "completed",
+      header: "Completed",
+      accessor: (r) => (
+        <span className="tabular-nums text-muted-foreground">
+          {r.completed}
+        </span>
+      ),
+      sortAccessor: (r) => r.completed,
+      align: "right",
+      width: "7rem",
+    },
+    {
+      key: "state",
+      header: "State",
+      accessor: (r) =>
+        r.paused ? (
+          <span className="inline-flex items-center gap-1 text-xs text-status-warning">
+            <AlertTriangle className="h-3 w-3" /> paused
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs text-status-success">
+            <CheckCircle2 className="h-3 w-3" /> running
+          </span>
+        ),
+      searchAccessor: (r) => (r.paused ? "paused" : "running"),
+      sortAccessor: (r) => (r.paused ? "paused" : "running"),
+      filter: { label: "State" },
+      width: "8rem",
+    },
+  ];
+}
+
 function QueueTable({
   loading,
   rows,
@@ -301,90 +387,111 @@ function QueueTable({
   activeQueue: string;
   onSelect: (queue: string) => void;
 }) {
-  if (loading && rows.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-24 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading queues…
-      </div>
-    );
-  }
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        No queues registered. The worker may not be running.
-      </div>
-    );
-  }
+  const columns = useMemo(() => queueColumns(activeQueue), [activeQueue]);
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <Table className="w-full text-sm">
-        <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-          <TableRow>
-            <TableHead className="px-3 py-2">Name</TableHead>
-            <TableHead className="px-3 py-2 text-right">Pending</TableHead>
-            <TableHead className="px-3 py-2 text-right">Active</TableHead>
-            <TableHead className="px-3 py-2 text-right">Scheduled</TableHead>
-            <TableHead className="px-3 py-2 text-right">Retry</TableHead>
-            <TableHead className="px-3 py-2 text-right">DLQ</TableHead>
-            <TableHead className="px-3 py-2 text-right">Completed</TableHead>
-            <TableHead className="px-3 py-2">State</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => {
-            const isActive = r.name === activeQueue;
-            const isStuck = r.archived > 0;
-            return (
-              <TableRow
-                key={r.name}
-                onClick={() => onSelect(r.name)}
-                className={
-                  "border-t border-border cursor-pointer transition-colors " +
-                  (isActive ? "bg-primary/5" : "hover:bg-muted/40")
-                }
-              >
-                <TableCell className="px-3 py-2 font-mono">{r.name}</TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums">
-                  {r.pending}
-                </TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums">
-                  {r.active}
-                </TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums">
-                  {r.scheduled}
-                </TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums">
-                  {r.retry}
-                </TableCell>
-                <TableCell
-                  className={
-                    "px-3 py-2 text-right tabular-nums " +
-                    (isStuck ? "text-status-error font-medium" : "")
-                  }
-                >
-                  {r.archived}
-                </TableCell>
-                <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                  {r.completed}
-                </TableCell>
-                <TableCell className="px-3 py-2">
-                  {r.paused ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-status-warning">
-                      <AlertTriangle className="h-3 w-3" /> paused
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs text-status-success">
-                      <CheckCircle2 className="h-3 w-3" /> running
-                    </span>
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+    <DataTable
+      data={rows}
+      columns={columns}
+      keyExtractor={(r) => r.name}
+      density="compact"
+      loading={loading}
+      onRowClick={(r) => onSelect(r.name)}
+      searchPlaceholder="Search queues..."
+      emptyState={{
+        title: "No queues registered",
+        description: "The worker may not be running.",
+      }}
+    />
   );
+}
+
+function dlqColumns(
+  onRetry: (id: string) => void,
+  onDiscard: (id: string) => void,
+  pendingRetry: boolean,
+  pendingDiscard: boolean,
+): Column<DLQEntry>[] {
+  return [
+    {
+      key: "type",
+      header: "Task type",
+      accessor: (row) => <span className="font-mono text-xs">{row.type}</span>,
+      searchAccessor: (row) => row.type,
+      sortAccessor: (row) => row.type,
+    },
+    {
+      key: "id",
+      header: "ID",
+      accessor: (row) => (
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {row.id.length > 16 ? row.id.slice(0, 16) + "…" : row.id}
+        </span>
+      ),
+      searchAccessor: (row) => row.id,
+      sortAccessor: (row) => row.id,
+    },
+    {
+      key: "retried",
+      header: "Retries",
+      accessor: (row) => <span className="tabular-nums">{row.retried}</span>,
+      sortAccessor: (row) => row.retried,
+      align: "right",
+      width: "6rem",
+    },
+    {
+      key: "last_err",
+      header: "Last error",
+      accessor: (row) => (
+        <span
+          className="text-xs text-status-error block max-w-md truncate"
+          title={row.last_err}
+        >
+          {row.last_err || "—"}
+        </span>
+      ),
+      searchAccessor: (row) => row.last_err,
+    },
+    {
+      key: "last_failed_at",
+      header: "Failed at",
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {row.last_failed_at
+            ? new Date(row.last_failed_at).toLocaleString()
+            : "—"}
+        </span>
+      ),
+      sortAccessor: (row) => row.last_failed_at || "",
+      width: "12rem",
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      hideable: false,
+      accessor: (row) => (
+        <div className="inline-flex items-center gap-1">
+          <button
+            onClick={() => onRetry(row.id)}
+            disabled={pendingRetry}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border hover:bg-muted disabled:opacity-50"
+            title="Move this task back to pending"
+          >
+            <RotateCw className="h-3 w-3" /> Retry
+          </button>
+          <button
+            onClick={() => onDiscard(row.id)}
+            disabled={pendingDiscard}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border text-status-error hover:bg-status-error/10 disabled:opacity-50"
+            title="Permanently delete this task"
+          >
+            <Trash2 className="h-3 w-3" /> Discard
+          </button>
+        </div>
+      ),
+      align: "right",
+      width: "12rem",
+    },
+  ];
 }
 
 function DLQTable({
@@ -404,6 +511,10 @@ function DLQTable({
   pendingRetry: boolean;
   pendingDiscard: boolean;
 }) {
+  const columns = useMemo(
+    () => dlqColumns(onRetry, onDiscard, pendingRetry, pendingDiscard),
+    [onRetry, onDiscard, pendingRetry, pendingDiscard],
+  );
   if (!queue) {
     return (
       <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -411,85 +522,124 @@ function DLQTable({
       </div>
     );
   }
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-24 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading DLQ…
-      </div>
-    );
-  }
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        No archived tasks in <code className="font-mono">{queue}</code>.
-      </div>
-    );
-  }
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <Table className="w-full text-sm">
-        <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-          <TableRow>
-            <TableHead className="px-3 py-2">Task type</TableHead>
-            <TableHead className="px-3 py-2">ID</TableHead>
-            <TableHead className="px-3 py-2 text-right">Retries</TableHead>
-            <TableHead className="px-3 py-2">Last error</TableHead>
-            <TableHead className="px-3 py-2">Failed at</TableHead>
-            <TableHead className="px-3 py-2 text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow
-              key={row.id}
-              className="border-t border-border hover:bg-muted/40 align-top"
-            >
-              <TableCell className="px-3 py-2 font-mono text-xs">
-                {row.type}
-              </TableCell>
-              <TableCell className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
-                {row.id.length > 16 ? row.id.slice(0, 16) + "…" : row.id}
-              </TableCell>
-              <TableCell className="px-3 py-2 text-right tabular-nums">
-                {row.retried}
-              </TableCell>
-              <TableCell
-                className="px-3 py-2 text-xs text-status-error max-w-md truncate"
-                title={row.last_err}
-              >
-                {row.last_err || "—"}
-              </TableCell>
-              <TableCell className="px-3 py-2 text-xs text-muted-foreground">
-                {row.last_failed_at
-                  ? new Date(row.last_failed_at).toLocaleString()
-                  : "—"}
-              </TableCell>
-              <TableCell className="px-3 py-2 text-right">
-                <div className="inline-flex items-center gap-1">
-                  <button
-                    onClick={() => onRetry(row.id)}
-                    disabled={pendingRetry}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border hover:bg-muted disabled:opacity-50"
-                    title="Move this task back to pending"
-                  >
-                    <RotateCw className="h-3 w-3" /> Retry
-                  </button>
-                  <button
-                    onClick={() => onDiscard(row.id)}
-                    disabled={pendingDiscard}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border text-status-error hover:bg-status-error/10 disabled:opacity-50"
-                    title="Permanently delete this task"
-                  >
-                    <Trash2 className="h-3 w-3" /> Discard
-                  </button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <DataTable
+      data={rows}
+      columns={columns}
+      keyExtractor={(row) => row.id}
+      density="compact"
+      loading={loading}
+      searchPlaceholder="Search dead-letter tasks..."
+      emptyState={{
+        title: "No archived tasks",
+        description: `Queue ${queue} has no dead-letter entries.`,
+      }}
+    />
   );
+}
+
+function taskOutboxColumns(
+  onRetry: (id: string) => void,
+  pendingRetry: boolean,
+): Column<TaskOutboxEntry>[] {
+  return [
+    {
+      key: "task_type",
+      header: "Task type",
+      accessor: (row) => (
+        <div>
+          <div className="font-mono text-xs">{row.task_type}</div>
+          {row.dedupe_key && (
+            <div
+              className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground"
+              title={row.dedupe_key}
+            >
+              {row.dedupe_key}
+            </div>
+          )}
+        </div>
+      ),
+      searchAccessor: (row) => `${row.task_type} ${row.dedupe_key ?? ""}`,
+      sortAccessor: (row) => row.task_type,
+    },
+    {
+      key: "status",
+      header: "Status",
+      accessor: (row) => (
+        <span className={taskOutboxStatusClass(row.status)}>
+          {row.status}
+        </span>
+      ),
+      searchAccessor: (row) => row.status,
+      sortAccessor: (row) => row.status,
+      filter: { label: "Status" },
+      width: "9rem",
+    },
+    {
+      key: "queue_name",
+      header: "Queue",
+      accessor: (row) => (
+        <span className="font-mono text-xs">{row.queue_name}</span>
+      ),
+      searchAccessor: (row) => row.queue_name,
+      sortAccessor: (row) => row.queue_name,
+    },
+    {
+      key: "attempts",
+      header: "Attempts",
+      accessor: (row) => (
+        <span className="tabular-nums">
+          {row.attempt_count}/{row.max_delivery_attempts}
+        </span>
+      ),
+      sortAccessor: (row) => row.attempt_count,
+      align: "right",
+      width: "7rem",
+    },
+    {
+      key: "next_attempt_at",
+      header: "Next attempt",
+      accessor: (row) => (
+        <span className="text-xs text-muted-foreground">
+          {row.next_attempt_at
+            ? new Date(row.next_attempt_at).toLocaleString()
+            : "—"}
+        </span>
+      ),
+      sortAccessor: (row) => row.next_attempt_at || "",
+      width: "12rem",
+    },
+    {
+      key: "last_error",
+      header: "Last error",
+      accessor: (row) => (
+        <span
+          className="block max-w-md truncate text-xs text-status-error"
+          title={row.last_error || ""}
+        >
+          {row.last_error || "—"}
+        </span>
+      ),
+      searchAccessor: (row) => row.last_error || "",
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      hideable: false,
+      accessor: (row) => (
+        <button
+          onClick={() => onRetry(row.id)}
+          disabled={pendingRetry || row.status === "delivered"}
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border hover:bg-muted disabled:opacity-50"
+          title="Move this task outbox row back to pending"
+        >
+          <RotateCw className="h-3 w-3" /> Retry
+        </button>
+      ),
+      align: "right",
+      width: "8rem",
+    },
+  ];
 }
 
 function TaskOutboxTable({
@@ -505,88 +655,23 @@ function TaskOutboxTable({
   onRetry: (id: string) => void;
   pendingRetry: boolean;
 }) {
-  if (loading && rows.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-24 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading task outbox…
-      </div>
-    );
-  }
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        No {status || "matching"} task outbox rows.
-      </div>
-    );
-  }
+  const columns = useMemo(
+    () => taskOutboxColumns(onRetry, pendingRetry),
+    [onRetry, pendingRetry],
+  );
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <Table className="w-full text-sm">
-        <TableHeader className="bg-muted/50 text-left text-xs uppercase tracking-wide">
-          <TableRow>
-            <TableHead className="px-3 py-2">Task type</TableHead>
-            <TableHead className="px-3 py-2">Status</TableHead>
-            <TableHead className="px-3 py-2">Queue</TableHead>
-            <TableHead className="px-3 py-2 text-right">Attempts</TableHead>
-            <TableHead className="px-3 py-2">Next attempt</TableHead>
-            <TableHead className="px-3 py-2">Last error</TableHead>
-            <TableHead className="px-3 py-2 text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow
-              key={row.id}
-              className="border-t border-border hover:bg-muted/40 align-top"
-            >
-              <TableCell className="px-3 py-2">
-                <div className="font-mono text-xs">{row.task_type}</div>
-                {row.dedupe_key && (
-                  <div
-                    className="mt-1 max-w-xs truncate font-mono text-[11px] text-muted-foreground"
-                    title={row.dedupe_key}
-                  >
-                    {row.dedupe_key}
-                  </div>
-                )}
-              </TableCell>
-              <TableCell className="px-3 py-2">
-                <span className={taskOutboxStatusClass(row.status)}>
-                  {row.status}
-                </span>
-              </TableCell>
-              <TableCell className="px-3 py-2 font-mono text-xs">
-                {row.queue_name}
-              </TableCell>
-              <TableCell className="px-3 py-2 text-right tabular-nums">
-                {row.attempt_count}/{row.max_delivery_attempts}
-              </TableCell>
-              <TableCell className="px-3 py-2 text-xs text-muted-foreground">
-                {row.next_attempt_at
-                  ? new Date(row.next_attempt_at).toLocaleString()
-                  : "—"}
-              </TableCell>
-              <TableCell
-                className="px-3 py-2 max-w-md truncate text-xs text-status-error"
-                title={row.last_error || ""}
-              >
-                {row.last_error || "—"}
-              </TableCell>
-              <TableCell className="px-3 py-2 text-right">
-                <button
-                  onClick={() => onRetry(row.id)}
-                  disabled={pendingRetry || row.status === "delivered"}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs border border-border hover:bg-muted disabled:opacity-50"
-                  title="Move this task outbox row back to pending"
-                >
-                  <RotateCw className="h-3 w-3" /> Retry
-                </button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <DataTable
+      data={rows}
+      columns={columns}
+      keyExtractor={(row) => row.id}
+      density="compact"
+      loading={loading}
+      searchPlaceholder="Search task outbox..."
+      emptyState={{
+        title: "No matching task outbox rows",
+        description: `No ${status || "matching"} task outbox rows.`,
+      }}
+    />
   );
 }
 

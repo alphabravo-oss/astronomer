@@ -3,7 +3,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
   Download,
@@ -23,6 +22,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState, PermissionState } from "@/components/ui/empty-state";
 import { QueryStates } from "@/components/ui/query-states";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { MetricCard } from "@/components/ui/metric-card";
 import {
   createAgentUpgradeOperation,
   createAgentUpgradePlan,
@@ -297,29 +297,22 @@ function ClusterAgentsPage() {
       >
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryTile
-              icon={Server}
-              label="Clusters"
-              value={summary?.totalClusters ?? 0}
-            />
-            <SummaryTile
-              icon={CheckCircle2}
+            <MetricCard dense icon={<Server className="h-4 w-4" />} label="Clusters" value={summary?.totalClusters ?? 0} />
+            <MetricCard
+              dense
+              icon={<CheckCircle2 className="h-4 w-4" />}
               label="Connected"
               value={summary?.connected ?? 0}
               tone="success"
             />
-            <SummaryTile
-              icon={AlertTriangle}
+            <MetricCard
+              dense
+              icon={<AlertTriangle className="h-4 w-4" />}
               label="Degraded"
               value={summary?.degraded ?? 0}
               tone="warning"
             />
-            <SummaryTile
-              icon={Unplug}
-              label="Disconnected"
-              value={summary?.disconnected ?? 0}
-              tone="neutral"
-            />
+            <MetricCard dense icon={<Unplug className="h-4 w-4" />} label="Disconnected" value={summary?.disconnected ?? 0} />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
@@ -393,38 +386,6 @@ function ClusterAgentsPage() {
         />
       )}
     </PageShell>
-  );
-}
-
-function SummaryTile({
-  icon: Icon,
-  label,
-  value,
-  tone = "default",
-}: {
-  icon: typeof Activity;
-  label: string;
-  value: number;
-  tone?: "default" | "success" | "warning" | "neutral";
-}) {
-  return (
-    <div className="rounded-md border border-border bg-card px-4 py-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <Icon
-          className={cn(
-            "h-4 w-4",
-            tone === "success" && "text-status-success",
-            tone === "warning" && "text-status-warning",
-            tone === "neutral" && "text-status-neutral",
-            tone === "default" && "text-muted-foreground",
-          )}
-        />
-      </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
-        {value}
-      </p>
-    </div>
   );
 }
 

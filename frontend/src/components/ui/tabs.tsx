@@ -163,3 +163,20 @@ export function TabStrip<T extends string>({
     </TabsList>
   );
 }
+
+/**
+ * Class string for a route-layout tab strip built from real navigation
+ * links (RouterLink) rather than TabStrip's buttons. TabsList renders
+ * `role="tablist"`, which axe's `aria-required-children` rule requires to
+ * contain only `role="tab"` elements — an `<a>` fails that, so route-driven
+ * tab strips render a plain `<nav>` of styled links instead and use this
+ * helper to match TabsTrigger's visual without duplicating the class list.
+ */
+export function tabLinkClassName(active: boolean): string {
+  return cn(
+    "flex items-center gap-2 border-b-2 pb-3 text-sm font-medium transition-colors",
+    active
+      ? "border-foreground text-foreground"
+      : "border-transparent text-muted-foreground hover:text-foreground",
+  );
+}

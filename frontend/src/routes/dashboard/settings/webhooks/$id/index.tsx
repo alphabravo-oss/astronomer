@@ -28,6 +28,7 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { PageHeader, PageShell } from "@/components/ui/page";
+import { Switch } from "@/components/ui/switch";
 import { TabStrip, TabsContent } from "@/components/ui/tabs";
 import { SettingsAuthGate } from "@/components/settings/auth-gate";
 import {
@@ -217,26 +218,12 @@ function ConfigTab({ webhook }: { webhook: WebhookSubscriptionView }) {
         </div>
         <form.Field name="enabled">
           {(field) => (
-            <button
-              type="button"
-              role="switch"
+            <Switch
               aria-label="Webhook enabled"
-              aria-checked={field.state.value}
-              onClick={() => field.handleChange(!field.state.value)}
+              checked={field.state.value}
+              onCheckedChange={field.handleChange}
               onBlur={field.handleBlur}
-              className={cn(
-                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                field.state.value ? "bg-status-success" : "bg-muted",
-              )}
-            >
-              <span
-                className={cn(
-                  // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
-                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                  field.state.value ? "translate-x-6" : "translate-x-1",
-                )}
-              />
-            </button>
+            />
           )}
         </form.Field>
       </div>

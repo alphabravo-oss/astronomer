@@ -10,6 +10,8 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActionButton } from "@/components/ui/action-button";
+import { Field } from "@/components/form/fields";
 import {
   DeliveryPhaseBadge,
   DeliveryProjectGate,
@@ -17,8 +19,6 @@ import {
   RedirectDeliveryList,
   deliveryPageRowCount,
   inputClass,
-  primaryButton,
-  secondaryButton,
   textareaClass,
   useDeliveryPageIndex,
   useDeliveryWorkspace,
@@ -162,36 +162,31 @@ export function SourcesPage() {
       accessor: (row) => (
         <div className="flex justify-end gap-1">
           {canUpdate && (
-            <button
-              type="button"
-              className={secondaryButton}
+            <ActionButton
               onClick={() => setVerifySource(row)}
               aria-label={`Verify ${row.name}`}
+              icon={<RefreshCw className="h-4 w-4" />}
             >
-              <RefreshCw className="h-4 w-4" /> Verify
-            </button>
+              Verify
+            </ActionButton>
           )}
           {canUpdate &&
             row.authMode !== "none" &&
             row.authMode !== "workload_identity" && (
-              <button
-                type="button"
-                className={secondaryButton}
+              <ActionButton
                 onClick={() => setRotateSource(row)}
                 aria-label={`Rotate credentials for ${row.name}`}
-              >
-                <KeyRound className="h-4 w-4" />
-              </button>
+                size="icon"
+                icon={<KeyRound className="h-4 w-4" />}
+              />
             )}
           {canDelete && (
-            <button
-              type="button"
-              className={secondaryButton}
+            <ActionButton
               onClick={() => setDeleteSource(row)}
               aria-label={`Delete ${row.name}`}
-            >
-              <Trash2 className="h-4 w-4 text-status-error" />
-            </button>
+              size="icon"
+              icon={<Trash2 className="h-4 w-4 text-status-error" />}
+            />
           )}
         </div>
       ),
@@ -215,13 +210,13 @@ export function SourcesPage() {
             description="Reusable authenticated and verified Git, OCI, and Helm locations. Credentials are write-only."
             actions={
               canCreate ? (
-                <button
-                  type="button"
-                  className={primaryButton}
+                <ActionButton
                   onClick={() => setCreateOpen(true)}
+                  intent="primary"
+                  icon={<Plus className="h-4 w-4" />}
                 >
-                  <Plus className="h-4 w-4" /> Add source
-                </button>
+                  Add source
+                </ActionButton>
               ) : undefined
             }
           />
@@ -487,16 +482,16 @@ function SourceCreateDialog({
         </fieldset>
         {mutation.isError && <ErrorMessage error={mutation.error} />}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
             type="submit"
-            className={primaryButton}
+            intent="primary"
             disabled={mutation.isPending}
+            loading={mutation.isPending}
+            loadingLabel="Creating…"
           >
-            {mutation.isPending ? "Creating…" : "Create source"}
-          </button>
+            Create source
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>
@@ -560,16 +555,16 @@ function SourceVerifyDialog({
         )}
         {mutation.isError && <ErrorMessage error={mutation.error} />}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
             type="submit"
-            className={primaryButton}
+            intent="primary"
             disabled={mutation.isPending}
+            loading={mutation.isPending}
+            loadingLabel="Queuing…"
           >
-            {mutation.isPending ? "Queuing…" : "Verify immutable revision"}
-          </button>
+            Verify immutable revision
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>
@@ -622,16 +617,15 @@ function CredentialDialog({
         <CredentialFields mode={source.authMode} />
         {mutation.isError && <ErrorMessage error={mutation.error} />}
         <div className="flex justify-end gap-2">
-          <button type="button" className={secondaryButton} onClick={onClose}>
-            Cancel
-          </button>
-          <button
+          <ActionButton onClick={onClose}>Cancel</ActionButton>
+          <ActionButton
             type="submit"
-            className={primaryButton}
+            intent="primary"
             disabled={mutation.isPending}
+            loading={mutation.isPending}
           >
             Rotate credential
-          </button>
+          </ActionButton>
         </div>
       </FormShell>
     </ModalShell>
@@ -753,21 +747,6 @@ function credentialFromForm(
       passphrase: value("passphrase") || undefined,
     };
   return {};
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block space-y-1.5 text-sm">
-      <span className="font-medium text-foreground">{label}</span>
-      {children}
-    </label>
-  );
 }
 
 const sourceKinds: Array<[DeliverySourceType, string]> = [

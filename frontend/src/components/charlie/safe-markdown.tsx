@@ -15,7 +15,9 @@ export function safeLink(href: string): string | null {
 
 const markdownComponents: Components = {
   h1: ({ children }) => (
-    // eslint-disable-next-line no-restricted-syntax -- migrated in plan 022
+    // Renders a `#` heading inside arbitrary markdown content, not a page
+    // title — PageHeader/ResourceMasthead don't apply here.
+    // eslint-disable-next-line no-restricted-syntax -- markdown content heading, not a page title
     <h1 className="mt-4 text-base font-semibold first:mt-0">{children}</h1>
   ),
   h2: ({ children }) => (

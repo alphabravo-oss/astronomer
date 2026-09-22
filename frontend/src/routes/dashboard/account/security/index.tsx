@@ -37,6 +37,8 @@ import { useAppForm, useStore } from "@/lib/form";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { PageHeader, PageShell } from "@/components/ui/page";
 import { QueryStates } from "@/components/ui/query-states";
+import { ActionButton } from "@/components/ui/action-button";
+import { Card } from "@/components/ui/card";
 import {
   getTotpStatus,
   startTotpEnrollment,
@@ -121,7 +123,7 @@ function AccountSecurityPage() {
 
 function NotEnrolledCard({ onEnable }: { onEnable: () => void }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
+    <Card padding="lg">
       <div className="flex items-start gap-4">
         <div className="shrink-0 h-10 w-10 rounded-full bg-status-warning/10 flex items-center justify-center">
           <Shield className="h-5 w-5 text-status-warning" />
@@ -134,16 +136,17 @@ function NotEnrolledCard({ onEnable }: { onEnable: () => void }) {
             Add a one-time-code authenticator app to protect your account from
             password leaks.
           </p>
-          <button
+          <ActionButton
             onClick={onEnable}
-            className="mt-4 inline-flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            intent="primary"
+            icon={<ShieldCheck className="h-4 w-4" />}
+            className="mt-4"
           >
-            <ShieldCheck className="h-4 w-4" />
             Enable 2FA
-          </button>
+          </ActionButton>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -158,7 +161,7 @@ function EnrolledCard({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-card p-6">
+      <Card padding="lg">
         <div className="flex items-start gap-4">
           <div className="shrink-0 h-10 w-10 rounded-full bg-status-success/10 flex items-center justify-center">
             <ShieldCheck className="h-5 w-5 text-status-success" />
@@ -172,18 +175,18 @@ function EnrolledCard({
                 ? `Last used ${formatRelativeTime(status.lastUsedAt)}.`
                 : "Not used yet."}
             </p>
-            <button
+            <ActionButton
               onClick={onDisable}
-              className="mt-4 inline-flex items-center gap-2 h-9 px-4 rounded-md border border-border text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              icon={<ShieldOff className="h-4 w-4" />}
+              className="mt-4"
             >
-              <ShieldOff className="h-4 w-4" />
               Disable 2FA
-            </button>
+            </ActionButton>
           </div>
         </div>
-      </div>
+      </Card>
 
-      <div className="rounded-lg border border-border bg-card p-6">
+      <Card padding="lg">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h3 className="text-base font-semibold text-foreground">
@@ -194,15 +197,15 @@ function EnrolledCard({
               lose access to your authenticator.
             </p>
           </div>
-          <button
+          <ActionButton
             onClick={onRegenerate}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-border text-sm font-medium text-foreground hover:bg-accent transition-colors shrink-0"
+            icon={<RefreshCw className="h-4 w-4" />}
+            className="shrink-0"
           >
-            <RefreshCw className="h-4 w-4" />
             Regenerate
-          </button>
+          </ActionButton>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -295,34 +298,31 @@ function EnrollmentWizard({
                   <code className="flex-1 min-w-0 px-2 py-1.5 rounded-sm bg-muted text-xs font-mono text-foreground overflow-x-auto whitespace-nowrap">
                     {enrollment.otpauthUrl}
                   </code>
-                  <button
+                  <ActionButton
                     onClick={() => {
                       navigator.clipboard.writeText(enrollment.otpauthUrl);
                       toastSuccess("Copied");
                     }}
-                    className="inline-flex items-center justify-center h-8 w-8 rounded-sm border border-border text-muted-foreground hover:text-foreground hover:bg-accent"
+                    size="icon"
+                    icon={<Copy className="h-3.5 w-3.5" />}
                     title="Copy"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
+                    aria-label="Copy"
+                  />
                 </div>
               </details>
             </div>
           )}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-            <button
-              onClick={onClose}
-              className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
-            >
+            <ActionButton onClick={onClose} intent="ghost">
               Cancel
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
               onClick={() => setStep("verify")}
               disabled={!enrollment}
-              className="inline-flex items-center h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+              intent="primary"
             >
               I&apos;ve added it
-            </button>
+            </ActionButton>
           </div>
         </div>
       )}
@@ -408,29 +408,21 @@ function VerifyStepForm({
         )}
       </form.Field>
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
-        <button
-          onClick={onBack}
-          className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
-        >
+        <ActionButton onClick={onBack} intent="ghost">
           Back
-        </button>
+        </ActionButton>
         <div className="flex items-center gap-2">
-          <button
-            onClick={onCancel}
-            className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
-          >
+          <ActionButton onClick={onCancel} intent="ghost">
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
             onClick={() => void form.handleSubmit()}
             disabled={code.length !== 6 || confirmMut.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+            loading={confirmMut.isPending}
+            intent="primary"
           >
-            {confirmMut.isPending && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            )}
             Verify and continue
-          </button>
+          </ActionButton>
         </div>
       </div>
     </div>
@@ -514,19 +506,21 @@ function DisableDialog({
                   className="w-full h-10 px-3 pr-10 rounded-md border border-border bg-background text-sm focus:outline-hidden focus:ring-2 focus:ring-ring"
                   autoComplete="current-password"
                 />
-                <button
-                  type="button"
+                <ActionButton
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  intent="ghost"
+                  size="icon"
+                  className="absolute right-2 top-1/2 h-auto w-auto -translate-y-1/2 p-1"
                   tabIndex={-1}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
+                  icon={
+                    showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )
+                  }
+                />
               </div>
             )}
           </form.Field>
@@ -549,20 +543,17 @@ function DisableDialog({
           </form.Field>
         </div>
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-          <button
-            onClick={onClose}
-            className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
-          >
+          <ActionButton onClick={onClose} intent="ghost">
             Cancel
-          </button>
-          <button
+          </ActionButton>
+          <ActionButton
             onClick={() => void form.handleSubmit()}
             disabled={!password || code.length !== 6 || mut.isPending}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-sm bg-status-error text-background text-sm font-medium hover:bg-status-error/90 disabled:opacity-50"
+            loading={mut.isPending}
+            intent="destructive"
           >
-            {mut.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Disable 2FA
-          </button>
+          </ActionButton>
         </div>
       </div>
     </ModalShell>
@@ -631,22 +622,17 @@ function RegenerateDialog({
             )}
           </form.Field>
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-            <button
-              onClick={onClose}
-              className="inline-flex items-center h-9 px-3 rounded-sm text-sm text-muted-foreground hover:text-foreground hover:bg-accent"
-            >
+            <ActionButton onClick={onClose} intent="ghost">
               Cancel
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
               onClick={() => void form.handleSubmit()}
               disabled={code.length !== 6 || mut.isPending}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+              loading={mut.isPending}
+              intent="primary"
             >
-              {mut.isPending && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              )}
               Generate new codes
-            </button>
+            </ActionButton>
           </div>
         </div>
       )}
@@ -700,20 +686,12 @@ function RecoveryCodesBlock({
         ))}
       </pre>
       <div className="flex items-center gap-2">
-        <button
-          onClick={copy}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-sm border border-border text-sm font-medium text-foreground hover:bg-accent"
-        >
-          <Copy className="h-4 w-4" />
+        <ActionButton onClick={copy} icon={<Copy className="h-4 w-4" />}>
           Copy
-        </button>
-        <button
-          onClick={download}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-sm border border-border text-sm font-medium text-foreground hover:bg-accent"
-        >
-          <Download className="h-4 w-4" />
+        </ActionButton>
+        <ActionButton onClick={download} icon={<Download className="h-4 w-4" />}>
           Download as text
-        </button>
+        </ActionButton>
       </div>
       <label className="flex items-center gap-2 text-sm text-foreground">
         <Input
@@ -725,13 +703,9 @@ function RecoveryCodesBlock({
         I&apos;ve saved my recovery codes somewhere safe
       </label>
       <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-        <button
-          onClick={onFinish}
-          disabled={!acknowledged}
-          className="inline-flex items-center h-9 px-4 rounded-sm bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        <ActionButton onClick={onFinish} disabled={!acknowledged} intent="primary">
           Done
-        </button>
+        </ActionButton>
       </div>
     </div>
   );
