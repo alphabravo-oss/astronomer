@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 
 import {
   ResourceDetailTabPanel,
@@ -53,6 +54,7 @@ export function ResourceDetail({
   permissionResource,
 }: ResourceDetailProps) {
   const [tab, setTab] = useState<ResourceDetailTabId>("overview");
+  const navigate = useNavigate();
 
   // These decisions intentionally use the same canonical/override resource as
   // list rows. The backend remains the final authorization boundary.
@@ -151,10 +153,12 @@ export function ResourceDetail({
   const created = obj?.metadata?.creationTimestamp;
   const detailStatus = isPod ? podStatus(obj) : obj?.status?.phase;
 
+  const backTo = `/dashboard/clusters/${clusterId}/${resourceType}`;
+
   return (
     <div className="space-y-6">
       <ResourceMasthead
-        onBack={() => window.history.back()}
+        backTo={backTo}
         title={name}
         mono
         status={detailStatus && <StatusBadge status={detailStatus} />}
@@ -190,7 +194,7 @@ export function ResourceDetail({
               }
               k8sPath={k8sPath}
               permissionResource={permissionResource}
-              onDeleted={() => window.history.back()}
+              onDeleted={() => void navigate({ to: backTo })}
             />
           )
         }
