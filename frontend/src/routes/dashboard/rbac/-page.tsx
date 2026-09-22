@@ -38,13 +38,13 @@ import {
   EditUserModal,
   ResetPasswordResultModal,
 } from "./-user-modal";
-import { CreateClusterBindingModal } from "./-binding-modal";
+import { CreateClusterBindingModal } from "@/components/rbac/create-binding-modal";
 import {
   bindingTarget,
   roleTitle,
   toAccessBinding,
   type RoleLike,
-} from "./-utils";
+} from "@/components/rbac/binding-utils";
 
 type RoleEditorState = {
   mode: RoleEditorMode;
@@ -70,7 +70,11 @@ function editableRole(scope: RoleScope, role: ConcreteRole): EditableRole {
   };
 }
 
-export { adminUserHref, isUserLocked, isValidNamespace } from "./-utils";
+export {
+  adminUserHref,
+  isUserLocked,
+  isValidNamespace,
+} from "@/components/rbac/binding-utils";
 
 type TabKey =
   | "global-roles"
@@ -244,7 +248,11 @@ export default function RBACPage() {
 
   const roleActions = (scope: RoleScope) => ({
     onEdit: (role: ConcreteRole) =>
-      setRoleEditorState({ mode: "edit", scope, role: editableRole(scope, role) }),
+      setRoleEditorState({
+        mode: "edit",
+        scope,
+        role: editableRole(scope, role),
+      }),
     onDuplicate: (role: ConcreteRole) =>
       setRoleEditorState({
         mode: "duplicate",

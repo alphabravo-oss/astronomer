@@ -24,8 +24,8 @@ import {
   permissionDeniedReason,
   usePermissionDecision,
 } from "@/lib/permission-hooks";
-import { bindingSubject, roleTitle } from "@/routes/dashboard/rbac/-utils";
-import { CreateClusterBindingModal } from "@/routes/dashboard/rbac/-binding-modal";
+import { bindingSubject, roleTitle } from "@/components/rbac/binding-utils";
+import { CreateClusterBindingModal } from "@/components/rbac/create-binding-modal";
 import type { AccessBinding, ProjectRole } from "@/types";
 
 /** DOM id the overview page's Members MetricCard links to (`href="#..."`). */

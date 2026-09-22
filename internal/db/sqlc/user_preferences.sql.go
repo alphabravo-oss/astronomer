@@ -13,7 +13,7 @@ import (
 )
 
 const getUserPreferences = `-- name: GetUserPreferences :one
-SELECT user_id, theme, table_density, landing_route, time_format, favorites, created_at, updated_at, pinned_clusters, rows_per_page, date_format FROM user_preferences WHERE user_id = $1
+SELECT user_id, theme, table_density, landing_route, time_format, favorites, created_at, updated_at, pinned_clusters, rows_per_page, date_format, starred_types FROM user_preferences WHERE user_id = $1
 `
 
 func (q *Queries) GetUserPreferences(ctx context.Context, userID uuid.UUID) (UserPreference, error) {
@@ -31,6 +31,7 @@ func (q *Queries) GetUserPreferences(ctx context.Context, userID uuid.UUID) (Use
 		&i.PinnedClusters,
 		&i.RowsPerPage,
 		&i.DateFormat,
+		&i.StarredTypes,
 	)
 	return i, err
 }
@@ -38,11 +39,11 @@ func (q *Queries) GetUserPreferences(ctx context.Context, userID uuid.UUID) (Use
 const upsertUserPreferences = `-- name: UpsertUserPreferences :one
 INSERT INTO user_preferences (
     user_id, theme, table_density, landing_route, time_format, favorites, pinned_clusters,
-    rows_per_page, date_format
+    rows_per_page, date_format, starred_types
 ) VALUES (
     $1, $2, $3,
     $4, $5, $6, $7,
-    $8, $9
+    $8, $9, $10
 )
 ON CONFLICT (user_id) DO UPDATE SET
     theme = EXCLUDED.theme,
@@ -53,8 +54,9 @@ ON CONFLICT (user_id) DO UPDATE SET
     pinned_clusters = EXCLUDED.pinned_clusters,
     rows_per_page = EXCLUDED.rows_per_page,
     date_format = EXCLUDED.date_format,
+    starred_types = EXCLUDED.starred_types,
     updated_at = now()
-RETURNING user_id, theme, table_density, landing_route, time_format, favorites, created_at, updated_at, pinned_clusters, rows_per_page, date_format
+RETURNING user_id, theme, table_density, landing_route, time_format, favorites, created_at, updated_at, pinned_clusters, rows_per_page, date_format, starred_types
 `
 
 type UpsertUserPreferencesParams struct {
@@ -67,6 +69,7 @@ type UpsertUserPreferencesParams struct {
 	PinnedClusters json.RawMessage `json:"pinned_clusters"`
 	RowsPerPage    int32           `json:"rows_per_page"`
 	DateFormat     string          `json:"date_format"`
+	StarredTypes   json.RawMessage `json:"starred_types"`
 }
 
 func (q *Queries) UpsertUserPreferences(ctx context.Context, arg UpsertUserPreferencesParams) (UserPreference, error) {
@@ -80,6 +83,7 @@ func (q *Queries) UpsertUserPreferences(ctx context.Context, arg UpsertUserPrefe
 		arg.PinnedClusters,
 		arg.RowsPerPage,
 		arg.DateFormat,
+		arg.StarredTypes,
 	)
 	var i UserPreference
 	err := row.Scan(
@@ -94,6 +98,7 @@ func (q *Queries) UpsertUserPreferences(ctx context.Context, arg UpsertUserPrefe
 		&i.PinnedClusters,
 		&i.RowsPerPage,
 		&i.DateFormat,
+		&i.StarredTypes,
 	)
 	return i, err
 }

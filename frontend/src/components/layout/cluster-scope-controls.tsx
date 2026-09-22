@@ -9,15 +9,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useClusterSearch } from "@/lib/hooks/cluster-search";
 import {
   type ClusterNamespaceScope,
   useClusterNamespaceScope,
-  useClusterScopeStore,
-  withClusterScopeSelection,
 } from "@/lib/cluster-scope";
 import { useProject, useProjectSearch } from "@/lib/hooks/projects";
-import { useNavigate, useLocation } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import type { Cluster, ClusterStatus } from "@/types";
 
@@ -82,144 +78,6 @@ export function ClusterOption({ cluster }: { cluster: Cluster }) {
         </span>
       </span>
     </>
-  );
-}
-
-/**
- * Searchable, status-aware cluster switcher that keeps the current sub-route.
- *
- * @deprecated Superseded by the always-mounted `ClusterSwitcherMenu`
- * (components/layout/cluster-switcher-menu.tsx), which adds pinned/recent
- * shelves and is rendered in the topbar regardless of route. Slated for
- * removal in plan 020.
- */
-export function SearchableClusterSwitcher({
-  clusterId,
-  fallbackName,
-}: {
-  clusterId: string;
-  fallbackName: string;
-}) {
-  const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const search = new URLSearchParams(
-    useLocation({ select: (location) => location.searchStr }),
-  );
-  const scopes = useClusterScopeStore((state) => state.namespacesByCluster);
-  const projectScopes = useClusterScopeStore((state) => state.projectByCluster);
-  const [open, setOpen] = useState(false);
-  const [term, setTerm] = useState("");
-  const [debouncedTerm] = useDebouncedValue(term, { wait: 250 });
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const query = useClusterSearch(debouncedTerm, open);
-  const close = () => setOpen(false);
-  const restoreFocus = () => triggerRef.current?.focus();
-  const ref = useDismissable(open, close, restoreFocus);
-  const clusters = query.data?.pages.flatMap((page) => page.data) ?? [];
-  const current = clusters.find((cluster) => cluster.id === clusterId);
-  const subRoute = pathname.slice(`/dashboard/clusters/${clusterId}`.length);
-
-  useEffect(() => {
-    if (open) searchRef.current?.focus();
-  }, [open]);
-
-  const select = (next: Cluster) => {
-    const nextPath = `/dashboard/clusters/${next.id}${subRoute}`;
-    void navigate({
-      to: withClusterScopeSelection(
-        nextPath,
-        search,
-        scopes[next.id] ?? null,
-        projectScopes[next.id] ?? null,
-      ),
-    });
-    close();
-    requestAnimationFrame(restoreFocus);
-  };
-
-  return (
-    <div ref={ref} className="relative min-w-0">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-md border border-sidebar-border bg-transparent px-2 text-left hover:bg-accent/50"
-      >
-        {current ? (
-          <ClusterOption cluster={current} />
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">
-            {fallbackName}
-          </span>
-        )}
-        <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      </button>
-      {open ? (
-        <Command
-          shouldFilter={false}
-          className="absolute left-0 top-full z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
-        >
-          <div className="flex items-center border-b border-border px-3">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Command.Input
-              ref={searchRef}
-              value={term}
-              onValueChange={setTerm}
-              placeholder="Find a cluster..."
-              className="h-10 min-w-0 flex-1 bg-transparent px-2 text-sm outline-hidden placeholder:text-muted-foreground"
-            />
-          </div>
-          <Command.List className="max-h-72 overflow-y-auto p-1" role="listbox">
-            {query.isLoading || term.trim() !== debouncedTerm.trim() ? (
-              <Command.Loading className="px-3 py-4 text-sm text-muted-foreground">
-                Searching clusters...
-              </Command.Loading>
-            ) : query.isError ? (
-              <div role="alert" className="px-3 py-4 text-sm">
-                Could not load clusters.
-                <button
-                  type="button"
-                  onClick={() => void query.refetch()}
-                  className="ml-2 underline"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              <Command.Empty className="px-3 py-6 text-center text-sm text-muted-foreground">
-                No clusters found.
-              </Command.Empty>
-            )}
-            {clusters.map((cluster) => (
-              <Command.Item
-                key={cluster.id}
-                value={`${cluster.displayName} ${cluster.name} ${cluster.environment} ${cluster.region}`}
-                onSelect={() => select(cluster)}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 data-[selected=true]:bg-accent"
-              >
-                <ClusterOption cluster={cluster} />
-                {cluster.id === clusterId ? (
-                  <Check className="h-4 w-4 shrink-0 text-primary" />
-                ) : null}
-              </Command.Item>
-            ))}
-            {query.hasNextPage ? (
-              <Command.Item
-                value="load-more-clusters"
-                disabled={query.isFetchingNextPage}
-                onSelect={() => void query.fetchNextPage()}
-                className="cursor-pointer rounded-md px-3 py-2 text-center text-sm text-primary data-[selected=true]:bg-accent"
-              >
-                {query.isFetchingNextPage ? "Loading..." : "Load more clusters"}
-              </Command.Item>
-            ) : null}
-          </Command.List>
-        </Command>
-      ) : null}
-    </div>
   );
 }
 

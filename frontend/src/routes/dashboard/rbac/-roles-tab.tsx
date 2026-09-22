@@ -9,7 +9,7 @@ import {
   isBuiltinRole,
   roleTitle,
   type RoleLike,
-} from "./-utils";
+} from "@/components/rbac/binding-utils";
 
 function TypeBadge({ builtin }: { builtin: boolean }) {
   return (

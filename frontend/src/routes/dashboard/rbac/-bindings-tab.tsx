@@ -12,7 +12,11 @@ import type {
   ProjectRole,
   User,
 } from "@/types";
-import { bindingSubject, bindingTarget, roleTitle } from "./-utils";
+import {
+  bindingSubject,
+  bindingTarget,
+  roleTitle,
+} from "@/components/rbac/binding-utils";
 
 interface BindingsTabProps {
   bindings: AccessBinding[];

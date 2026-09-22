@@ -10868,6 +10868,7 @@ type UserPreferences struct {
 	LandingRoute   UserPreferencesLandingRoute `json:"landing_route"`
 	PinnedClusters *[]openapi_types.UUID       `json:"pinned_clusters,omitempty"`
 	RowsPerPage    *UserPreferencesRowsPerPage `json:"rows_per_page,omitempty"`
+	StarredTypes   *[]string                   `json:"starred_types,omitempty"`
 	TableDensity   UserPreferencesTableDensity `json:"table_density"`
 	Theme          UserPreferencesTheme        `json:"theme"`
 	TimeFormat     UserPreferencesTimeFormat   `json:"time_format"`

@@ -20,10 +20,8 @@ import {
   type StackOption,
 } from "@/components/monitoring/stack-lifecycle-panel";
 import { CLUSTER_STACK_FAMILY } from "@/components/monitoring/stack-spec";
-import {
-  useClusterStackStatus,
-  useSharedThanosStatus,
-} from "@/components/monitoring/hooks";
+import { useSharedThanosStatus } from "@/components/monitoring/hooks";
+import { useClusterStackStatus } from "./use-cluster-stack-status";
 import type { SharedThanosStatus } from "@/lib/api/monitoring-stack";
 
 export function ClusterMonitoringStackPage({

@@ -23,6 +23,43 @@
 
 ## Why this matters
 
+### Execution reconciliation (2026-09-22)
+
+Implementation is based on integrated revision `642ab6c5`, containing the seven
+completed UI branches. The original excerpts below describe `59619920` and are
+historical context. Expected dependency drift was reconciled before implementation:
+
+- Cluster groups now live in `cluster-nav-groups.ts`; both expanded navigation
+  and the collapsed rail consume subgroup-aware shared rows. The command palette
+  consumes the same filtered groups, including discovery and cluster permissions.
+- Discovery uses the existing CRD-list Kubernetes proxy and query-key factory,
+  selecting a served storage version (or another served version). Failed or denied
+  discovery does not imply that a CRD is absent. Gateway links require their
+  specific served kind, not merely the presence of another Gateway API CRD.
+- Image Scans and Service Mesh use Astronomer APIs, including mesh detection for
+  multiple implementations. They remain ungated by CRD presence.
+- The built-in count endpoint rejects arbitrary CRD identifiers. CRD counts use
+  metadata-only requests through the existing authorized proxy. The 15-request
+  limit includes namespace fan-out; incomplete or failed totals are omitted.
+- The original total-nav target of 40 is incompatible with preserving existing
+  supported destinations. The standard empty-discovery fixture retains 47 items
+  (49 with optional Grafana and Snapshots), with seven in the Cluster group.
+  Dynamic CRD navigation has a separate 40-kind cap and preserves starred types
+  within that cap. No route is removed to meet an arbitrary count.
+- Starred preferences use explicit `group/plural` identities, avoiding collisions
+  between built-in and custom types. Migration 065, schema version 65, sqlc queries,
+  handler mapping/audit, OpenAPI, generated frontend types and the Go SDK are in scope.
+- The obsolete cluster switcher and its dedicated test were removed; the current
+  global switcher's tests remain. `questions.yaml` and Plan 025 remain separate work.
+
+Additional implementation files under `components/layout/` (discovery model,
+navigation composition, shared rows, count and preference hooks), their focused
+tests, `lib/api/crd-counts.ts`, `lib/crd-group-labels.ts`, and the browser navigation
+test are included in scope. These are extractions and consumers of existing
+contracts, not alternative navigation or HTTP stacks.
+
+## Original rationale
+
 The cluster side nav lists 57 static items in 9 groups (Rancher: 31 in 5). "Gateway API" is a permanent 8-row group even on clusters without those CRDs; Gatekeeper, Service Mesh, Image Scans and others render regardless of whether anything backs them. Meanwhile the thing operators most often need from a Rancher-style explorer — cert-manager Certificates, Istio VirtualServices, Argo Applications, Crossplane claims — is only reachable by going Custom Resources → find the group in a table → drill. Rancher builds one nav subgroup per in-use CRD API group under "More Resources" and lets users star types. The discovery data already exists in Astronomer; this plan turns it into navigation.
 
 ## Current state
@@ -167,7 +204,7 @@ node scripts/check-complexity-budget.mjs
 - [ ] `grep -n 'label: "Gateway API"' frontend/src/components/layout/sidebar-navigation.ts` → 0 (as a top-level group)
 - [ ] `grep -n "ifHaveGroup" frontend/src/components/layout/sidebar-navigation.ts` → ≥ 8 hits
 - [ ] `grep -n "starred_types" docs/openapi.yaml internal/userpreferences/preferences.go` → hits
-- [ ] Cluster nav with empty discovery has ≤ 40 items (test asserts a count)
+- [ ] Cluster nav preserves the 47 standard supported destinations with empty discovery; dynamic CRD rows are capped at 40 and the Cluster group at 8
 - [ ] `git status` limited to in-scope + generated files
 
 ## STOP conditions

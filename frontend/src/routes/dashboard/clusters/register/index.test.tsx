@@ -13,6 +13,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   return {
     ...original,
     Link: RouterLinkStub,
+    getRouteApi: () => ({ useSearch: () => searchState.value }),
     useNavigate: () => navigateSpy,
     // FormShell's unsaved-changes guard calls useBlocker, which needs a
     // mounted RouterProvider this test doesn't render; stub it to idle.
@@ -29,12 +30,10 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     // stub it down to just the pieces the component actually reads —
     // `useSearch` off the shared `searchState`, `options.component` kept for
     // completeness even though the test imports the component by name.
-    createFileRoute:
-      () =>
-      (routeOptions: Record<string, unknown>) => ({
-        useSearch: () => searchState.value,
-        options: routeOptions,
-      }),
+    createFileRoute: () => (routeOptions: Record<string, unknown>) => ({
+      useSearch: () => searchState.value,
+      options: routeOptions,
+    }),
   };
 });
 
@@ -63,7 +62,7 @@ vi.mock("@/components/clusters/registration-connect-step", () => ({
   ),
 }));
 
-import { RegisterClusterWizardRoute } from "./index";
+import { RegisterClusterWizardRoute } from "./-page";
 
 function draftCluster(overrides: Record<string, unknown> = {}) {
   return {
@@ -148,8 +147,6 @@ describe("register wizard draft identity", () => {
 
     render(<RegisterClusterWizardRoute />);
 
-    expect(
-      screen.queryByPlaceholderText("my-cluster"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("my-cluster")).not.toBeInTheDocument();
   });
 });

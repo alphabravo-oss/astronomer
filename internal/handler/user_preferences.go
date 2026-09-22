@@ -48,6 +48,7 @@ func preferencesFromRow(row sqlc.UserPreference) (userpreferences.Preferences, e
 		TimeFormat:     userpreferences.TimeFormat(row.TimeFormat),
 		Favorites:      []string{},
 		PinnedClusters: []string{},
+		StarredTypes:   []string{},
 		RowsPerPage:    int(row.RowsPerPage),
 		DateFormat:     row.DateFormat,
 	}
@@ -56,6 +57,14 @@ func preferencesFromRow(row sqlc.UserPreference) (userpreferences.Preferences, e
 	}
 	if err := json.Unmarshal(row.PinnedClusters, &prefs.PinnedClusters); err != nil {
 		return userpreferences.Preferences{}, err
+	}
+	if len(row.StarredTypes) > 0 {
+		if err := json.Unmarshal(row.StarredTypes, &prefs.StarredTypes); err != nil {
+			return userpreferences.Preferences{}, err
+		}
+	}
+	if prefs.StarredTypes == nil {
+		prefs.StarredTypes = []string{}
 	}
 	if err := prefs.Validate(); err != nil {
 		return userpreferences.Preferences{}, err
@@ -126,6 +135,9 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		// jsonb_typeof(...) = 'array' check.
 		prefs.PinnedClusters = []string{}
 	}
+	if prefs.StarredTypes == nil {
+		prefs.StarredTypes = []string{}
+	}
 	if prefs.RowsPerPage == 0 {
 		// rows_per_page is optional in the request (older clients omit it,
 		// and Go's zero value for an absent int field is 0, not one of the
@@ -149,11 +161,17 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode user preferences")
 		return
 	}
+	starredTypes, err := json.Marshal(prefs.StarredTypes)
+	if err != nil {
+		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to encode user preferences")
+		return
+	}
 	params := sqlc.UpsertUserPreferencesParams{
 		UserID: userID, Theme: string(prefs.Theme),
 		TableDensity: string(prefs.TableDensity), LandingRoute: prefs.LandingRoute,
 		TimeFormat: string(prefs.TimeFormat), Favorites: favorites,
 		PinnedClusters: pinnedClusters,
+		StarredTypes:   starredTypes,
 		RowsPerPage:    int32(prefs.RowsPerPage),
 		DateFormat:     prefs.DateFormat,
 	}
@@ -168,7 +186,8 @@ func (h *AuthHandler) PutUserPreferences(w http.ResponseWriter, r *http.Request)
 			"theme": prefs.Theme, "table_density": prefs.TableDensity,
 			"landing_route": prefs.LandingRoute, "time_format": prefs.TimeFormat,
 			"favorite_count": len(prefs.Favorites), "pinned_cluster_count": len(prefs.PinnedClusters),
-			"rows_per_page": prefs.RowsPerPage, "date_format": prefs.DateFormat,
+			"starred_type_count": len(prefs.StarredTypes),
+			"rows_per_page":      prefs.RowsPerPage, "date_format": prefs.DateFormat,
 		})
 	})
 	if err != nil {

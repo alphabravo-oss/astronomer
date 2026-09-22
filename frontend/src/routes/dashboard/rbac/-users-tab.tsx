@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/utils";
 import type { User } from "@/types";
-import { adminUserHref, isUserLocked } from "./-utils";
+import { adminUserHref, isUserLocked } from "@/components/rbac/binding-utils";
 
 interface UsersTabProps {
   users: User[];

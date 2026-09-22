@@ -87,13 +87,15 @@ describe("ExtensionSlot", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders a Tier-1 declarative mount with the DeclarativeWidget renderer", () => {
+  it("renders a Tier-1 declarative mount with the DeclarativeWidget renderer", async () => {
     setup([mount()]);
     render(withClient(<ExtensionSlot point={POINT} />));
-    expect(screen.getByTestId("declarative-widget")).toHaveTextContent("cost");
+    expect(await screen.findByTestId("declarative-widget")).toHaveTextContent(
+      "cost",
+    );
   });
 
-  it("renders a Tier-2 bundle with the SandboxedExtension (iframe) renderer", () => {
+  it("renders a Tier-2 bundle with the SandboxedExtension (iframe) renderer", async () => {
     setup([
       mount({
         tier: 2,
@@ -110,7 +112,9 @@ describe("ExtensionSlot", () => {
       }),
     ]);
     render(withClient(<ExtensionSlot point={POINT} />));
-    expect(screen.getByTestId("sandboxed-extension")).toHaveTextContent("cost");
+    expect(await screen.findByTestId("sandboxed-extension")).toHaveTextContent(
+      "cost",
+    );
     expect(screen.queryByTestId("declarative-widget")).not.toBeInTheDocument();
   });
 

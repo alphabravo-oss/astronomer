@@ -16,12 +16,26 @@ import {
   useRoleTemplates,
 } from "@/lib/hooks/rbac";
 import { useProjects } from "@/lib/hooks/projects";
-import { isValidNamespace, projectLabel, roleTitle } from "./-utils";
+import { isValidNamespace, projectLabel, roleTitle } from "./binding-utils";
+
+function bindingDefaults(fixedScope?: { kind: "project"; projectId: string }) {
+  return {
+    scope: (fixedScope ? "project" : "cluster") as
+      "global" | "cluster" | "project",
+    userId: "",
+    roleId: "",
+    clusterId: "",
+    projectId: fixedScope?.projectId ?? "",
+    namespace: "",
+  };
+}
 
 export function CreateClusterBindingModal({
-  onClose, fixedScope,
+  onClose,
+  fixedScope,
 }: {
-  onClose: () => void; fixedScope?: { kind: "project"; projectId: string };
+  onClose: () => void;
+  fixedScope?: { kind: "project"; projectId: string };
 }) {
   const { data: globalRoles } = useGlobalRoles();
   const { data: clusterRoles } = useClusterRoles();
@@ -34,14 +48,7 @@ export function CreateClusterBindingModal({
   const projects = projectsData?.data || [];
 
   const form = useAppForm({
-    defaultValues: {
-      scope: (fixedScope ? "project" : "cluster") as "global" | "cluster" | "project",
-      userId: "",
-      roleId: "",
-      clusterId: "",
-      projectId: fixedScope?.projectId ?? "",
-      namespace: "",
-    },
+    defaultValues: bindingDefaults(fixedScope),
     validators: {
       onSubmit: ({ value }) => {
         if (!value.userId || !value.roleId) {
@@ -141,34 +148,36 @@ export function CreateClusterBindingModal({
           }
         />
       </form.AppForm>
-      {!fixedScope && <div className="space-y-1.5">
-        <label
-          className="text-sm font-medium text-foreground"
-          htmlFor="field-b53e75b3-111"
-        >
-          Scope
-        </label>
-        <form.Field name="scope">
-          {(field) => (
-            <Select
-              id="field-b53e75b3-111"
-              name={field.name}
-              value={field.state.value}
-              onChange={(e) => {
-                field.handleChange(
-                  e.target.value as "global" | "cluster" | "project",
-                );
-                form.setFieldValue("roleId", "");
-              }}
-              onBlur={field.handleBlur}
-            >
-              <option value="global">Global</option>
-              <option value="cluster">Cluster</option>
-              <option value="project">Project</option>
-            </Select>
-          )}
-        </form.Field>
-      </div>}
+      {!fixedScope && (
+        <div className="space-y-1.5">
+          <label
+            className="text-sm font-medium text-foreground"
+            htmlFor="field-b53e75b3-111"
+          >
+            Scope
+          </label>
+          <form.Field name="scope">
+            {(field) => (
+              <Select
+                id="field-b53e75b3-111"
+                name={field.name}
+                value={field.state.value}
+                onChange={(e) => {
+                  field.handleChange(
+                    e.target.value as "global" | "cluster" | "project",
+                  );
+                  form.setFieldValue("roleId", "");
+                }}
+                onBlur={field.handleBlur}
+              >
+                <option value="global">Global</option>
+                <option value="cluster">Cluster</option>
+                <option value="project">Project</option>
+              </Select>
+            )}
+          </form.Field>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <label

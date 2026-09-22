@@ -20,20 +20,55 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   };
 });
 
-const run = { mutate: vi.fn(), isPending: false, operationState: { phase: "idle" as const } };
+const run = {
+  mutate: vi.fn(),
+  isPending: false,
+  operationState: { phase: "idle" as const },
+};
 
 vi.mock("@/components/settings/hooks", () => ({
-  useDeleteManagementBackupDestination: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteManagementBackupDestination: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
   useRunManagementBackupDestination: () => run,
-  useTestManagementBackupDestination: () => ({ mutate: vi.fn(), isPending: false, operationState: { phase: "idle" } }),
-  useCreateManagementBackupDestination: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateManagementBackupDestination: () => ({ mutate: vi.fn(), isPending: false }),
-  useBackupDrillHistory: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
-  useLatestBackupDrill: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
-  useManagementBackupStatus: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
+  useTestManagementBackupDestination: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    operationState: { phase: "idle" },
+  }),
+  useCreateManagementBackupDestination: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useUpdateManagementBackupDestination: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useBackupDrillHistory: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useManagementBackupStatus: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 
-import { DestinationsSection, DestinationModal } from "./index";
+vi.mock("@/components/settings/backup-drill-hooks", () => ({
+  useLatestBackupDrill: () => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+
+import { DestinationsSection, DestinationModal } from "./-page";
 
 const existingDestination = {
   id: "destination-1",
@@ -71,9 +106,21 @@ describe("management backup destinations", () => {
     run.mutate.mockClear();
     render(
       <DestinationsSection
-        data={{
-          destinations: [{ id: "destination-1", name: "DR bucket", bucket: "dr", enabled: true, prefix: "pg", region: "us-east-1", hasCredentials: true }],
-        } as never}
+        data={
+          {
+            destinations: [
+              {
+                id: "destination-1",
+                name: "DR bucket",
+                bucket: "dr",
+                enabled: true,
+                prefix: "pg",
+                region: "us-east-1",
+                hasCredentials: true,
+              },
+            ],
+          } as never
+        }
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Run" }));

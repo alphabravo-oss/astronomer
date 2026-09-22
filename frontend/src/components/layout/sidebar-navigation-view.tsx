@@ -1,5 +1,4 @@
 import { useId } from "react";
-import { Link as RouterLink } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 
 import { useClusterToolsStatus, useTools } from "@/lib/hooks/tools";
@@ -7,8 +6,8 @@ import {
   CollapsedNavItems,
   SidebarRailGroup,
 } from "@/components/layout/sidebar-rail";
-import { cn } from "@/lib/utils";
 import type { NavGroup } from "@/components/layout/sidebar-navigation";
+import { SidebarNavItems, type StarredNavControls } from "./sidebar-nav-items";
 
 export function InstalledToolLinks({
   clusterId,
@@ -117,6 +116,7 @@ export function SidebarGroup({
   counts,
   isOpen,
   onToggle,
+  stars,
 }: {
   group: NavGroup;
   pathname: string;
@@ -124,13 +124,19 @@ export function SidebarGroup({
   counts?: Record<string, number>;
   isOpen: boolean;
   onToggle: () => void;
+  stars?: StarredNavControls;
 }) {
   const contentId = useId();
   if (collapsed) {
     return group.hideLabel ? (
       <CollapsedNavItems items={group.items} pathname={pathname} />
     ) : (
-      <SidebarRailGroup group={group} pathname={pathname} counts={counts} />
+      <SidebarRailGroup
+        group={group}
+        pathname={pathname}
+        counts={counts}
+        stars={stars}
+      />
     );
   }
 
@@ -156,46 +162,12 @@ export function SidebarGroup({
       )}
       {expanded && (
         <div id={contentId} className="space-y-px">
-          {group.items.map((item) => {
-            const Icon = item.icon;
-            const active = item.exact
-              ? pathname === item.href
-              : pathname.startsWith(item.href);
-            const count =
-              item.countKey && counts ? counts[item.countKey] : undefined;
-            return (
-              <RouterLink
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-1.5 mx-1 rounded-md text-sm transition-colors",
-                  active
-                    ? "bg-accent text-foreground font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "h-4 w-4 shrink-0",
-                    active ? "text-foreground" : "text-muted-foreground",
-                  )}
-                />
-                <span className="truncate flex-1">{item.label}</span>
-                {count !== undefined && (
-                  <span
-                    className={cn(
-                      "text-xs tabular-nums ml-auto",
-                      active
-                        ? "text-foreground/70"
-                        : "text-muted-foreground/60",
-                    )}
-                  >
-                    {count}
-                  </span>
-                )}
-              </RouterLink>
-            );
-          })}
+          <SidebarNavItems
+            group={group}
+            pathname={pathname}
+            counts={counts}
+            stars={stars}
+          />
         </div>
       )}
     </div>

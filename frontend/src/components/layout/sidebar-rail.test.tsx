@@ -44,16 +44,20 @@ describe("collapsed cluster rail", () => {
       <SidebarRailGroup group={cluster} pathname="/dashboard/clusters/c-1" />,
     );
 
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cluster" }));
 
-    const menu = screen.getByRole("menu");
+    const menu = screen.getByRole("navigation");
     for (const item of cluster.items) {
       expect(
-        screen.getByRole("menuitem", { name: new RegExp(item.label) }),
+        screen.getByRole("link", { name: new RegExp(item.label) }),
       ).toBeInTheDocument();
     }
     expect(menu).toBeInTheDocument();
+    expect(menu.parentElement).toBe(document.body);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cluster" })).toHaveFocus();
   });
 });
 

@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link as RouterLink } from "@tanstack/react-router";
 
-import { useDismissable } from "@/components/layout/cluster-scope-controls";
 import type { NavGroup, NavItem } from "@/components/layout/sidebar-navigation";
 import { cn } from "@/lib/utils";
+import { navGroupItems } from "./nav-group-items";
+import { SidebarNavItems, type StarredNavControls } from "./sidebar-nav-items";
 
 function isItemActive(item: NavItem, pathname: string): boolean {
   return item.exact ? pathname === item.href : pathname.startsWith(item.href);
@@ -61,29 +63,71 @@ export function SidebarRailGroup({
   group,
   pathname,
   counts,
+  stars,
 }: {
   group: NavGroup;
   pathname: string;
   counts?: Record<string, number>;
+  stars?: StarredNavControls;
 }) {
   const [open, setOpen] = useState(false);
+  const contentId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const flyoutRef = useRef<HTMLElement>(null);
+  const [position, setPosition] = useState({ top: 8, left: 64 });
   const close = () => setOpen(false);
-  const ref = useDismissable(open, close);
-  const GroupIcon = group.icon ?? group.items[0]?.icon;
-  const isActiveGroup = group.items.some((item) =>
-    isItemActive(item, pathname),
-  );
+  useEffect(() => {
+    if (!open) return;
+    flyoutRef.current?.querySelector<HTMLAnchorElement>("a")?.focus();
+    const dismiss = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !flyoutRef.current?.contains(target)
+      )
+        setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    const reposition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (rect)
+        setPosition({
+          left: rect.right + 4,
+          top: Math.max(8, Math.min(rect.top, window.innerHeight * 0.3 - 8)),
+        });
+    };
+    reposition();
+    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      document.removeEventListener("mousedown", dismiss);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open]);
+  const items = navGroupItems(group);
+  const GroupIcon = group.icon ?? items[0]?.icon;
+  const isActiveGroup = items.some((item) => isItemActive(item, pathname));
 
   if (!GroupIcon) return null;
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((value) => !value)}
         title={group.label}
         aria-label={group.label}
-        aria-haspopup="menu"
+        aria-controls={open ? contentId : undefined}
         aria-expanded={open}
         className={cn(
           "nav-item group w-full justify-center px-0",
@@ -99,45 +143,28 @@ export function SidebarRailGroup({
           )}
         />
       </button>
-      {open && (
-        <div
-          role="menu"
-          aria-label={group.label}
-          className="absolute left-full top-0 z-50 ml-1 w-56 rounded-lg border border-border bg-popover p-1 shadow-xl"
-        >
-          <p className="px-2 py-1.5 text-2xs font-semibold uppercase text-muted-foreground">
-            {group.label}
-          </p>
-          {group.items.map((item) => {
-            const Icon = item.icon;
-            const active = isItemActive(item, pathname);
-            const count =
-              item.countKey && counts ? counts[item.countKey] : undefined;
-            return (
-              <RouterLink
-                key={item.href}
-                to={item.href}
-                role="menuitem"
-                onClick={close}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-                  active
-                    ? "bg-accent font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {count !== undefined && (
-                  <span className="text-xs tabular-nums text-muted-foreground/60">
-                    {count}
-                  </span>
-                )}
-              </RouterLink>
-            );
-          })}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <nav
+            ref={flyoutRef}
+            id={contentId}
+            aria-label={group.label}
+            style={position}
+            className="fixed z-50 max-h-[70vh] w-64 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-xl"
+          >
+            <p className="px-2 py-1.5 text-2xs font-semibold uppercase text-muted-foreground">
+              {group.label}
+            </p>
+            <SidebarNavItems
+              group={group}
+              pathname={pathname}
+              counts={counts}
+              stars={stars}
+              onNavigate={close}
+            />
+          </nav>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 // theme. Add newly scrubbed pages here so adoption is ratcheted forward and CI
 // prevents them from regressing.
 const actionSurfaces = [
-  "src/routes/dashboard/clusters/$id/index.tsx",
+  "src/routes/dashboard/clusters/$id/-page.tsx",
   "src/routes/dashboard/account/security/index.tsx",
   "src/routes/dashboard/delivery/targets/$targetId/index.tsx",
   "src/routes/dashboard/delivery/targets/index.tsx",

@@ -91,6 +91,25 @@ const smokeCluster = {
 };
 
 export const overrides: StubOverride[] = [
+  {
+    method: "GET",
+    path: `/api/v1/clusters/${SMOKE_CLUSTER_ID}/k8s/apis/apiextensions.k8s.io/v1/customresourcedefinitions`,
+    body: {
+      apiVersion: "apiextensions.k8s.io/v1",
+      kind: "CustomResourceDefinitionList",
+      items: [
+        {
+          metadata: { name: "certificates.cert-manager.io" },
+          spec: {
+            group: "cert-manager.io",
+            scope: "Namespaced",
+            names: { plural: "certificates", kind: "Certificate" },
+            versions: [{ name: "v1", served: true, storage: true }],
+          },
+        },
+      ],
+    },
+  },
   { method: "GET", path: "/api/v1/auth/me", body: { data: adminUserWire } },
   { method: "GET", path: "/api/v1/auth/sso/providers", body: { data: [] } },
   // Every gated section renders instead of the "feature disabled" panel.

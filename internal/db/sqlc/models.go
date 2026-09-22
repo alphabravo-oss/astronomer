@@ -3078,6 +3078,7 @@ type UserPreference struct {
 	PinnedClusters json.RawMessage `json:"pinned_clusters"`
 	RowsPerPage    int32           `json:"rows_per_page"`
 	DateFormat     string          `json:"date_format"`
+	StarredTypes   json.RawMessage `json:"starred_types"`
 }
 
 type UserTotpEnrollment struct {

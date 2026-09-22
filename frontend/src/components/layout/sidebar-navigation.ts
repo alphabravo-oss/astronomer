@@ -22,7 +22,13 @@ import {
   Wrench,
 } from "lucide-react";
 
-import { can, isSuperuser, type PermissionVerb } from "@/lib/permissions";
+import {
+  can,
+  isSuperuser,
+  type PermissionVerb,
+  type PermissionScope,
+} from "@/lib/permissions";
+import { navGroupItems, filterNavigationItems } from "./nav-group-items";
 import type { FeatureFlags, FeatureFlagKey } from "@/lib/api/feature-flags";
 import type { User } from "@/types";
 import { SETTINGS_NAVIGATION } from "@/components/settings/settings-navigation";
@@ -33,6 +39,9 @@ export type NavItem = {
   icon: typeof Box;
   exact?: boolean;
   countKey?: string;
+  resourceType?: string;
+  ifHaveGroup?: string;
+  ifHaveKind?: string;
   permission?: {
     resource: string;
     verb: PermissionVerb | "*";
@@ -49,6 +58,7 @@ export type NavItem = {
 export type NavGroup = {
   label: string;
   items: NavItem[];
+  subgroups?: Array<{ label: string; items: NavItem[] }>;
   defaultOpen?: boolean;
   // Rendered without a group header/toggle and always expanded — for the
   // small set of top-level destinations that don't belong under a labeled
@@ -69,7 +79,7 @@ export function activeNavGroupLabel(
 ): string | null {
   return (
     groups.find((group) =>
-      group.items.some((item) =>
+      navGroupItems(group).some((item) =>
         item.exact ? pathname === item.href : pathname.startsWith(item.href),
       ),
     )?.label ?? null
@@ -305,23 +315,19 @@ export function filterNavGroups(
   user: User | null,
   featureFlags?: FeatureFlags,
   charlieActivated = false,
+  scope: PermissionScope = { type: "global" },
 ): NavGroup[] {
-  return groups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => {
-        if (item.featureFlag) {
-          if (item.optIn) {
-            if (featureFlags?.[item.featureFlag] !== true) return false;
-          } else if (featureFlags?.[item.featureFlag] === false) {
-            return false;
-          }
-        }
-        if (item.requiresCharlieActivated && !charlieActivated) return false;
-        if (item.superuserOnly) return isSuperuser(user);
-        if (!item.permission) return true;
-        return can(user, item.permission.resource, item.permission.verb);
-      }),
-    }))
-    .filter((group) => group.items.length > 0);
+  return filterNavigationItems(groups, (item) => {
+    if (item.featureFlag) {
+      if (item.optIn) {
+        if (featureFlags?.[item.featureFlag] !== true) return false;
+      } else if (featureFlags?.[item.featureFlag] === false) {
+        return false;
+      }
+    }
+    if (item.requiresCharlieActivated && !charlieActivated) return false;
+    if (item.superuserOnly) return isSuperuser(user);
+    if (!item.permission) return true;
+    return can(user, item.permission.resource, item.permission.verb, scope);
+  });
 }

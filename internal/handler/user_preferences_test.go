@@ -41,7 +41,8 @@ func (f *preferenceTxFake) UpsertUserPreferences(_ context.Context, arg sqlc.Ups
 		UserID: arg.UserID, Theme: arg.Theme, TableDensity: arg.TableDensity,
 		LandingRoute: arg.LandingRoute, TimeFormat: arg.TimeFormat,
 		Favorites: arg.Favorites, PinnedClusters: arg.PinnedClusters,
-		RowsPerPage: arg.RowsPerPage, DateFormat: arg.DateFormat,
+		StarredTypes: arg.StarredTypes,
+		RowsPerPage:  arg.RowsPerPage, DateFormat: arg.DateFormat,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	return f.row, nil

@@ -7,7 +7,7 @@ import * as bundlesApi from "@/lib/api/delivery-bundles";
 import * as targetsApi from "@/lib/api/delivery-targets";
 import * as rolloutsApi from "@/lib/api/delivery-rollouts";
 import * as deploymentsApi from "@/lib/api/delivery-deployments";
-import { DeliveryOverviewPage } from "./index";
+import { DeliveryOverviewPage } from "./-page";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const { RouterLinkStub } = await import("@/test/router-link");
@@ -38,9 +38,7 @@ vi.mock("@/components/delivery/shared", async (importOriginal) => ({
   DeliveryShell: ({ children }: { children: ReactNode }) => children,
   useDeliveryProjectScope: () => ({
     projectId: "project-1",
-    projects: [
-      { id: "project-1", name: "Team A", displayName: "Team A" },
-    ],
+    projects: [{ id: "project-1", name: "Team A", displayName: "Team A" }],
     projectQuery: { isLoading: false, isError: false, refetch: vi.fn() },
     setProjectId: vi.fn(),
   }),
@@ -119,10 +117,12 @@ describe("delivery overview error roll-up", () => {
       "Delivery status unavailable",
     );
 
-    const activeTile = (await screen.findByText("Active (latest 10)"))
-      .closest("a");
-    const driftedTile = (await screen.findByText("Drifted (loaded page)"))
-      .closest("a");
+    const activeTile = (await screen.findByText("Active (latest 10)")).closest(
+      "a",
+    );
+    const driftedTile = (
+      await screen.findByText("Drifted (loaded page)")
+    ).closest("a");
     expect(activeTile).not.toBeNull();
     expect(driftedTile).not.toBeNull();
     expect(
@@ -142,9 +142,7 @@ describe("delivery overview error roll-up", () => {
   it("shows zero counts and no danger panel when every query succeeds", async () => {
     mount();
 
-    expect(
-      await screen.findByText("Active (latest 10)"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Active (latest 10)")).toBeInTheDocument();
     expect(
       screen.queryByText("Delivery status unavailable"),
     ).not.toBeInTheDocument();

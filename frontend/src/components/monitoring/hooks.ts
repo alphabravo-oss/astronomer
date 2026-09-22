@@ -274,14 +274,6 @@ export function stackFamilyKey(target: MonitoringStackTarget): string {
 // Status
 // ============================================================
 
-export function useClusterStackStatus(clusterId: string | undefined) {
-  return useQuery({
-    queryKey: queryKeys.monitoringStack.status(`cluster:${clusterId ?? ""}`),
-    queryFn: () => api.getClusterStackStatus(clusterId as string),
-    enabled: !!clusterId,
-  });
-}
-
 export function useSharedThanosStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.monitoringStack.status("thanos"),
@@ -531,13 +523,16 @@ export function useMonitoringOperationTracker(
   useEffect(() => {
     const delay = nextTrackerTickMs(operation, nowMs);
     if (delay <= 0) return;
-    const timer = setInterval(() => {
-      const tickedAt = Date.now();
-      if (nextTrackerTickMs(operation, tickedAt) <= 0) {
-        clearInterval(timer);
-      }
-      setNowMs(tickedAt);
-    }, Math.min(delay, MONITORING_OP_ELAPSED_TICK_MS));
+    const timer = setInterval(
+      () => {
+        const tickedAt = Date.now();
+        if (nextTrackerTickMs(operation, tickedAt) <= 0) {
+          clearInterval(timer);
+        }
+        setNowMs(tickedAt);
+      },
+      Math.min(delay, MONITORING_OP_ELAPSED_TICK_MS),
+    );
     return () => clearInterval(timer);
   }, [operation, nowMs]);
 

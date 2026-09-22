@@ -1,5 +1,4 @@
-import { useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Link as RouterLink, useLocation } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -14,29 +13,17 @@ import {
   InstalledToolLinks,
   SidebarGroup,
 } from "@/components/layout/sidebar-navigation-view";
-import {
-  filterNavGroups,
-  getClusterNavGroups,
-  globalNavGroups,
-  INSTALLED_TOOLS_NAV_GROUP,
-  withFavoriteNavigation,
-} from "@/components/layout/sidebar-navigation";
+import { INSTALLED_TOOLS_NAV_GROUP } from "@/components/layout/sidebar-navigation";
 import { useOpenNavGroups } from "@/components/layout/nav-open-groups";
 import { OverlayBackdrop } from "@/components/ui/overlay-shell";
-import { getVeleroStatus } from "@/lib/api/cluster-velero";
 import { APP_VERSION } from "@/lib/env";
-import {
-  useCharlieActivated,
-  useCluster,
-  useFeatureFlags,
-} from "@/lib/hooks/clusters";
-import { queryKeys } from "@/lib/query-keys";
-import { useAuthStore, useUIStore } from "@/lib/store";
-import { useUserPreferences } from "@/lib/user-preferences";
+import { useUIStore } from "@/lib/store";
 import { cn, formatK8sVersion } from "@/lib/utils";
 import { useSidebarResourceCounts } from "@/components/layout/use-sidebar-resource-counts";
-import { useClusterStackStatus } from "@/components/monitoring/hooks";
 import { useProductName } from "@/lib/hooks/public-settings";
+import { useSidebarNavigation } from "./use-sidebar-navigation";
+import { useStarredNavControls } from "./use-starred-nav-controls";
+import { useCRDNavCounts } from "./use-crd-nav-counts";
 
 // Vite stamps APP_VERSION from the release tag; local builds use the current
 // package fallback in lib/env.ts.
@@ -49,10 +36,6 @@ export function Sidebar() {
     toggleSidebarCollapsed,
     setMobileSidebarOpen,
   } = useUIStore();
-  const user = useAuthStore((s) => s.user);
-  const { data: featureFlags } = useFeatureFlags();
-  const { activated: charlieActivated } = useCharlieActivated();
-  const { preferences } = useUserPreferences();
   const productName = useProductName();
 
   // Detect cluster context from URL. Static sub-routes (new, register) are NOT
@@ -65,6 +48,8 @@ export function Sidebar() {
       ? clusterSegment
       : undefined;
   const isClusterContext = !!clusterId;
+  const { cluster, discovery, navGroups } = useSidebarNavigation(clusterId);
+  const stars = useStarredNavControls();
 
   useEffect(() => {
     setMobileSidebarOpen(false);
@@ -81,39 +66,6 @@ export function Sidebar() {
 
   const collapsed = sidebarCollapsed && !mobileSidebarOpen;
 
-  const { data: cluster } = useCluster(clusterId || ""); // cluster name for header
-  const { data: veleroStatus } = useQuery({
-    queryKey: queryKeys.clusterPages.veleroStatus(clusterId || ""),
-    queryFn: ({ signal }) => getVeleroStatus(clusterId!, signal),
-    enabled: isClusterContext && !!clusterId && !cluster?.isLocal,
-    staleTime: 30_000,
-  });
-  const { data: monitoringStatus } = useClusterStackStatus(clusterId);
-
-  const navGroups = useMemo(() => {
-    const baseGroups = isClusterContext
-      ? getClusterNavGroups(clusterId!, {
-          isLocal: cluster?.isLocal,
-          veleroInstalled: !!veleroStatus?.installed,
-          grafanaAvailable: monitoringStatus?.grafanaAvailable === true,
-        })
-      : globalNavGroups;
-    const groups = isClusterContext
-      ? baseGroups
-      : withFavoriteNavigation(baseGroups, preferences.favorites);
-    return filterNavGroups(groups, user, featureFlags, charlieActivated);
-  }, [
-    charlieActivated,
-    cluster?.isLocal,
-    clusterId,
-    featureFlags,
-    isClusterContext,
-    preferences.favorites,
-    monitoringStatus?.grafanaAvailable,
-    user,
-    veleroStatus?.installed,
-  ]);
-
   // Sidebar sections stay open across navigation (multi-open, not an
   // accordion); open state is remembered per scope in localStorage.
   const { openGroups, toggleGroup } = useOpenNavGroups(
@@ -127,6 +79,12 @@ export function Sidebar() {
   const counts = useSidebarResourceCounts(
     isClusterContext ? clusterId! : "",
     openGroups,
+  );
+  const crdCounts = useCRDNavCounts(
+    clusterId ?? "",
+    navGroups,
+    discovery,
+    openGroups.has("More Resources"),
   );
 
   return (
@@ -221,7 +179,10 @@ export function Sidebar() {
               group={group}
               pathname={pathname}
               collapsed={collapsed}
-              counts={isClusterContext ? counts : undefined}
+              counts={
+                isClusterContext ? { ...counts, ...crdCounts } : undefined
+              }
+              stars={isClusterContext ? stars : undefined}
               isOpen={openGroups.has(group.label)}
               onToggle={() => toggleGroup(group.label)}
             />

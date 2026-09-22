@@ -13,22 +13,22 @@ the old patterns and that is expected until they're migrated.
 
 ## Primitive table
 
-| Need | Primitive | Notes |
-|---|---|---|
-| Page header (title + actions) | `PageHeader` (`components/ui/page.tsx`) | `eyebrow` / `title` / `description` / `actions`. |
-| Detail-page masthead (resource/cluster detail) | `ResourceMasthead` (`components/ui/page.tsx`) | Back link, eyebrow, title (+ optional `mono`, inline `status`), `actions`, a `meta` `<dl>` row, `description`. |
-| Page section wrapper | `PageSection` (`components/ui/page.tsx`) | Optional heading/description/actions over `children`; no border. |
-| Sortable/filterable list | `DataTable` (`components/ui/data-table.tsx`) | Search, sort, pagination, column visibility, virtualization above ~1k rows. Route modules must not import `@/components/ui/table` directly (lint-enforced). |
-| Compact detail matrix (rich cells, no sort/filter) | `components/ui/operator-table.tsx` re-exports of `Table`/`TableHead`/etc. | Reserved for cases `DataTable`'s row model can't represent (nested controls, rowspans). Not a general table primitive — reach for `DataTable` first. |
-| Tabs | `TabStrip` + `TabsContent` (`components/ui/tabs.tsx`) | Full ARIA (`role="tablist"/"tab"/"tabpanel"`, roving tabindex, Arrow/Home/End). Pass `value`, `onChange`, `tabs` (each with an optional `count`). |
-| Status word (active/failed/OutOfSync/…) | `StatusBadge` (`components/ui/status-badge.tsx`) | Never hand-roll a status pill/dot. `shape="square"` for a denser table-cell badge (no dot by default); `dotOnly` (or the `StatusDot` export) for a bare connection-light; `tone` for an arbitrary user-chosen tag color (e.g. a cluster badge) instead of a status word. |
-| Non-status label (kind, distribution, tag, count) | `Badge` (`components/ui/badge.tsx`) | For labels that are *not* a state word. If it can flip from "active" to "failed", it's a status — use `StatusBadge`. |
-| Card surface | `Card`/`CardHeader`/`CardTitle`/`CardContent`/`CardFooter` (`components/ui/card.tsx`) | `padding` (`none`/`sm`/`md`/`lg`, default `none`) and `radius` (`md`/`lg`/`xl`, default `lg`). Pair `padding="none"` with the sub-components (they carry their own `p-5`) — only give `Card` itself a non-`"none"` padding when it has no `CardHeader`/`CardContent`/`CardFooter` children, or you'll double-pad. |
-| Toggle | `Switch` (`components/ui/switch.tsx`) | `size` (`sm`/`md`). Never hand-roll the `rounded-full bg-white transition-transform` thumb (lint-enforced). |
-| Metric tile | `MetricCard` (`components/ui/metric-card.tsx`) | `label` (preferred) or `title`; `value` is any `ReactNode`; `tone` to force a color instead of deriving one from `percentage`; `href` to make the whole tile a link; `dense` for compact grids. |
-| Form field (outside the `useAppForm` kit) | `Field` (`components/form/fields.tsx`) | Label + control + helper/error, matching `TextField`'s visuals, for hand-rolled forms that own their own id/value wiring. Inside the kit, use `field.TextField`/`SelectField`/etc. |
-| Empty state | `EmptyState` (`components/ui/empty-state.tsx`) | **Requires an action** (`actionLabel` + `actionHref` or `onAction`) or an explicit `terminal: true` with a one-line comment explaining why there's nothing to do (type-enforced). `variant="table"` is the one exception, for a `DataTable`'s inline empty row, which may or may not have a caller-supplied action. |
-| Loading state | `LoadingState` (`components/ui/empty-state.tsx`) | Also see `ErrorState`, `PermissionState`, `PartialState`, `OfflineState`, `StaleState`, `RetryingState`, `TerminalFailureState` in the same file for the other query-lifecycle states — `QueryStates` wires most of these up automatically. |
+| Need                                               | Primitive                                                                             | Notes                                                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Page header (title + actions)                      | `PageHeader` (`components/ui/page.tsx`)                                               | `eyebrow` / `title` / `description` / `actions`.                                                                                                                                                                                                                                                                    |
+| Detail-page masthead (resource/cluster detail)     | `ResourceMasthead` (`components/ui/page.tsx`)                                         | Back link, eyebrow, title (+ optional `mono`, inline `status`), `actions`, a `meta` `<dl>` row, `description`.                                                                                                                                                                                                      |
+| Page section wrapper                               | `PageSection` (`components/ui/page.tsx`)                                              | Optional heading/description/actions over `children`; no border.                                                                                                                                                                                                                                                    |
+| Sortable/filterable list                           | `DataTable` (`components/ui/data-table.tsx`)                                          | Search, sort, pagination, column visibility, virtualization above ~1k rows. Route modules must not import `@/components/ui/table` directly (lint-enforced).                                                                                                                                                         |
+| Compact detail matrix (rich cells, no sort/filter) | `components/ui/operator-table.tsx` re-exports of `Table`/`TableHead`/etc.             | Reserved for cases `DataTable`'s row model can't represent (nested controls, rowspans). Not a general table primitive — reach for `DataTable` first.                                                                                                                                                                |
+| Tabs                                               | `TabStrip` + `TabsContent` (`components/ui/tabs.tsx`)                                 | Full ARIA (`role="tablist"/"tab"/"tabpanel"`, roving tabindex, Arrow/Home/End). Pass `value`, `onChange`, `tabs` (each with an optional `count`).                                                                                                                                                                   |
+| Status word (active/failed/OutOfSync/…)            | `StatusBadge` (`components/ui/status-badge.tsx`)                                      | Never hand-roll a status pill/dot. `shape="square"` for a denser table-cell badge (no dot by default); `dotOnly` (or the `StatusDot` export) for a bare connection-light; `tone` for an arbitrary user-chosen tag color (e.g. a cluster badge) instead of a status word.                                            |
+| Non-status label (kind, distribution, tag, count)  | `Badge` (`components/ui/badge.tsx`)                                                   | For labels that are _not_ a state word. If it can flip from "active" to "failed", it's a status — use `StatusBadge`.                                                                                                                                                                                                |
+| Card surface                                       | `Card`/`CardHeader`/`CardTitle`/`CardContent`/`CardFooter` (`components/ui/card.tsx`) | `padding` (`none`/`sm`/`md`/`lg`, default `none`) and `radius` (`md`/`lg`/`xl`, default `lg`). Pair `padding="none"` with the sub-components (they carry their own `p-5`) — only give `Card` itself a non-`"none"` padding when it has no `CardHeader`/`CardContent`/`CardFooter` children, or you'll double-pad.   |
+| Toggle                                             | `Switch` (`components/ui/switch.tsx`)                                                 | `size` (`sm`/`md`). Never hand-roll the `rounded-full bg-white transition-transform` thumb (lint-enforced).                                                                                                                                                                                                         |
+| Metric tile                                        | `MetricCard` (`components/ui/metric-card.tsx`)                                        | `label` (preferred) or `title`; `value` is any `ReactNode`; `tone` to force a color instead of deriving one from `percentage`; `href` to make the whole tile a link; `dense` for compact grids.                                                                                                                     |
+| Form field (outside the `useAppForm` kit)          | `Field` (`components/form/fields.tsx`)                                                | Label + control + helper/error, matching `TextField`'s visuals, for hand-rolled forms that own their own id/value wiring. Inside the kit, use `field.TextField`/`SelectField`/etc.                                                                                                                                  |
+| Empty state                                        | `EmptyState` (`components/ui/empty-state.tsx`)                                        | **Requires an action** (`actionLabel` + `actionHref` or `onAction`) or an explicit `terminal: true` with a one-line comment explaining why there's nothing to do (type-enforced). `variant="table"` is the one exception, for a `DataTable`'s inline empty row, which may or may not have a caller-supplied action. |
+| Loading state                                      | `LoadingState` (`components/ui/empty-state.tsx`)                                      | Also see `ErrorState`, `PermissionState`, `PartialState`, `OfflineState`, `StaleState`, `RetryingState`, `TerminalFailureState` in the same file for the other query-lifecycle states — `QueryStates` wires most of these up automatically.                                                                         |
 
 ### Modal vs. route
 
@@ -115,7 +115,7 @@ migrated as part of this change — migration is plan 022's job. Don't add a
 new disable comment for new code; fix it to use the primitive instead. When
 a disable comment would land inside JSX children (between `>` and the next
 element), it must be a JSX comment expression (`{/* eslint-disable-line
-no-restricted-syntax -- reason */}`) placed on the *same* line as the
+no-restricted-syntax -- reason */}`) placed on the _same_ line as the
 element it covers (`eslint-disable-line`, not `-next-line`) — a bare `//`
 placed as JSX children text is not a comment at all, it's a literal text
 node that will render on the page. `eslint-disable-next-line` is fine only
@@ -133,6 +133,7 @@ Routes are linkable, back-navigable, and don't lose the operator's place in
 a long form on an accidental Escape/backdrop click.
 
 Keep using `ModalShell` for:
+
 - **Confirmations** — `ConfirmDialog` for destructive/impactful actions.
 - **Single-field actions** — a small one- or two-input action that isn't
   really a persisted resource with its own lifecycle (e.g. picking a date
@@ -144,9 +145,23 @@ Keep using `ModalShell` for:
 Plan 022 migrated the multi-field **create** flows for backups (S3
 destinations) and several Settings resources (read-audit policies, API
 tokens, cluster groups, SIEM forwarders, SCIM tokens, group mappings) to
-routes. Editing an *existing* row on those same pages intentionally stays a
+routes. Editing an _existing_ row on those same pages intentionally stays a
 modal for now (out of scope for plan 022) — converting edit-in-place to
 routes is tracked as follow-up work, not a design-system violation.
+
+## Route modules and lazy features
+
+Keep file-route entrypoints limited to `Route` and their route configuration.
+For components needed by unit tests or another route, put the implementation in
+an adjacent `-page.tsx` module and import it from both callers. Exporting page
+components from route entrypoints prevents TanStack's automatic component
+splitting; importing `Route.options.component` also hangs in the test harness.
+
+Load optional dialogs and extension renderers when opened or mounted, and
+feature-gated capabilities only when enabled. Shared shell queries should use
+small read-only hook modules instead of importing an entire feature's mutation
+hooks. Check all eager-closure budgets with `npm run bundle:check` after a build;
+do not raise a limit to absorb a route-splitting regression.
 
 ## Complexity budget (`node scripts/check-complexity-budget.mjs`, from the repo root)
 
@@ -154,17 +169,17 @@ This is a CI gate, run separately from `npm run lint`. It requires an
 **exact** line-count match for every file/function baselined in
 `docs/architecture/complexity-baseline.json`:
 
-- A baselined unit that *grew* past its ceiling fails with "exceeds
+- A baselined unit that _grew_ past its ceiling fails with "exceeds
   no-growth ceiling" — never let a baselined unit grow. If you must touch
   one, extract logic into a new small file/function instead of inlining
   more lines into it (this includes single-line additions like a comment —
   merge it onto an existing line, e.g. an inline block comment before a
   token, rather than inserting a new line, if the unit is at its ceiling).
-- A baselined unit that *shrank* below its ceiling also fails, with "below
+- A baselined unit that _shrank_ below its ceiling also fails, with "below
   stale ceiling" — the baseline must track the real count. Run
   `node scripts/check-complexity-budget.mjs --write-baseline`, confirm with
   `git diff docs/architecture/complexity-baseline.json` that every changed
   number went **down** (never up — a `--write-baseline` run after code that
   grew a unit would silently launder a real regression into the baseline),
   and commit the baseline change as its own `chore(frontend): lower
-  complexity baseline …` commit, separate from the functional change.
+complexity baseline …` commit, separate from the functional change.

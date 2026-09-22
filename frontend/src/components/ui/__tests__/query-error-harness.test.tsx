@@ -33,19 +33,21 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof import("@tanstack/react-router")>()),
     Link: RouterLinkStub,
+    getRouteApi: () => ({
+      useParams: () => ({ id: "c1", name: "cost" }),
+      useSearch: () => ({}),
+    }),
     useNavigate: () => vi.fn(),
     useLocation: <T,>({
       select,
     }: {
       select: (location: { pathname: string; searchStr: string }) => T;
     }) => select({ pathname: "/dashboard", searchStr: "" }),
-    createFileRoute:
-      () =>
-      (routeOptions: Record<string, unknown>) => ({
-        useParams: () => ({ id: "c1", name: "cost" }),
-        useSearch: () => ({}),
-        options: routeOptions,
-      }),
+    createFileRoute: () => (routeOptions: Record<string, unknown>) => ({
+      useParams: () => ({ id: "c1", name: "cost" }),
+      useSearch: () => ({}),
+      options: routeOptions,
+    }),
   };
 });
 
@@ -126,7 +128,6 @@ vi.mock("@/lib/api/rbac", async (importOriginal) => ({
 vi.mock("@/components/settings/hooks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/components/settings/hooks")>()),
   useIsSuperuser: () => ({ isSuperuser: true, ready: true }),
-  useLatestBackupDrill: () => ({ data: undefined, isLoading: false }),
   useBackupDrillHistory: () => ({
     data: undefined,
     isLoading: false,
@@ -136,16 +137,20 @@ vi.mock("@/components/settings/hooks", async (importOriginal) => ({
   useManagementBackupStatus: fns.useManagementBackupStatus,
 }));
 
-import { DashboardPage } from "@/routes/dashboard/index";
-import { ClustersPage } from "@/routes/dashboard/clusters/index";
-import { ClusterDetailPage } from "@/routes/dashboard/clusters/$id/index";
-import { ClusterAppsPage } from "@/routes/dashboard/clusters/$id/apps/index";
-import { DeliveryOverviewPage } from "@/routes/dashboard/delivery/index";
-import { ClusterAgentsPage } from "@/routes/dashboard/agents/index";
-import { SecurityPage } from "@/routes/dashboard/security/index";
-import { AlertingPage } from "@/routes/dashboard/alerting/index";
+vi.mock("@/components/settings/backup-drill-hooks", () => ({
+  useLatestBackupDrill: () => ({ data: undefined, isLoading: false }),
+}));
+
+import { DashboardPage } from "@/routes/dashboard/-page";
+import { ClustersPage } from "@/routes/dashboard/clusters/-page";
+import { ClusterDetailPage } from "@/routes/dashboard/clusters/$id/-page";
+import { ClusterAppsPage } from "@/routes/dashboard/clusters/$id/apps/-page";
+import { DeliveryOverviewPage } from "@/routes/dashboard/delivery/-page";
+import { ClusterAgentsPage } from "@/routes/dashboard/agents/-page";
+import { SecurityPage } from "@/routes/dashboard/security/-page";
+import { AlertingPage } from "@/routes/dashboard/alerting/-page";
 import RBACPage from "@/routes/dashboard/rbac/-page";
-import { AstronomerBackupPage } from "@/routes/dashboard/settings/backup/index";
+import { AstronomerBackupPage } from "@/routes/dashboard/settings/backup/-page";
 
 function mount(ui: ReactNode) {
   const client = new QueryClient({
@@ -156,7 +161,13 @@ function mount(ui: ReactNode) {
 
 const emptyPage = {
   data: [],
-  pagination: { total: 0, limit: 50, offset: 0, has_more: false, next_offset: null },
+  pagination: {
+    total: 0,
+    limit: 50,
+    offset: 0,
+    has_more: false,
+    next_offset: null,
+  },
 };
 
 beforeEach(() => {

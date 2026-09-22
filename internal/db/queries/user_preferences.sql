@@ -4,11 +4,11 @@ SELECT * FROM user_preferences WHERE user_id = $1;
 -- name: UpsertUserPreferences :one
 INSERT INTO user_preferences (
     user_id, theme, table_density, landing_route, time_format, favorites, pinned_clusters,
-    rows_per_page, date_format
+    rows_per_page, date_format, starred_types
 ) VALUES (
     sqlc.arg(user_id), sqlc.arg(theme), sqlc.arg(table_density),
     sqlc.arg(landing_route), sqlc.arg(time_format), sqlc.arg(favorites), sqlc.arg(pinned_clusters),
-    sqlc.arg(rows_per_page), sqlc.arg(date_format)
+    sqlc.arg(rows_per_page), sqlc.arg(date_format), sqlc.arg(starred_types)
 )
 ON CONFLICT (user_id) DO UPDATE SET
     theme = EXCLUDED.theme,
@@ -19,5 +19,6 @@ ON CONFLICT (user_id) DO UPDATE SET
     pinned_clusters = EXCLUDED.pinned_clusters,
     rows_per_page = EXCLUDED.rows_per_page,
     date_format = EXCLUDED.date_format,
+    starred_types = EXCLUDED.starred_types,
     updated_at = now()
 RETURNING *;
