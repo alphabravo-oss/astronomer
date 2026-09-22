@@ -82,7 +82,7 @@
     "frontend/src/routes/dashboard/agents/index.tsx:ClusterAgentsPage": 339,
     "frontend/src/routes/dashboard/agents/index.tsx:AgentDiagnosticsDrawer": 302,
     "frontend/src/routes/dashboard/alerting/-rule-modal.tsx:AlertRuleModal": 440,
-    "frontend/src/routes/dashboard/audit/index.tsx:AuditLogPage": 464,
+    "frontend/src/routes/dashboard/audit/index.tsx:AuditLogPage": 462,
     "frontend/src/routes/dashboard/catalog/-install-chart-modal.tsx:InstallChartForm": 291,
     "frontend/src/routes/dashboard/catalog/index.tsx:CatalogPage": 351,
     "frontend/src/routes/dashboard/charlie/index.tsx:Findings": 325,
