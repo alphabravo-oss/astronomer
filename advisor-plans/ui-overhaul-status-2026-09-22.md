@@ -6,9 +6,24 @@ the index with per-plan status rows is [README.md](./README.md).
 
 ## 1. Where things stand
 
-Seven branches, every one reviewed and approved. **Nothing is merged; `main` is
-untouched at `59619920`.** The plan files themselves (017–025, this file, the
-README changes) are still uncommitted in the main checkout.
+The seven reviewed branches are integrated on **`advisor/ui-overhaul-integration`**
+at `642ab6c5`. Planning documents were committed as `e20f98db`. `main` remains
+untouched at `59619920`; nothing has been pushed or deployed.
+
+Plan 020 is implemented on `advisor/020-explorer-nav` on top of that integration:
+discovery-gated navigation, CRD subgroups, persisted starred resource types,
+bounded metadata counts, and migration 065. Final combined validation is running.
+Plan 025 is the next feature phase, not part of this implementation.
+
+The integration also exposed two issues that individual branch checks missed:
+exported route components defeated automatic code splitting, and the Helm
+preflight/release compatibility contract still targeted schema 62. Page modules
+are now separate from route entrypoints, optional UI loads lazily, and the chart,
+binary, and generated compatibility contract agree on schema 65. Bundle ceilings
+were not increased. Collapsed navigation now portals its flyout outside the
+sidebar's scroll clipping boundary.
+
+Integrated branch ledger:
 
 | Merge order | Branch | Base | Plan | Contents |
 |---|---|---|---|---|
@@ -26,35 +41,29 @@ and (where backend changed) `check-migrations.sh`, `make sqlc-check`, `go build`
 `go vet`, `go test`. Executors ran the serial route-smoke + axe crawl on a
 dedicated port; final counts 292–294 routes green.
 
-## 2. How to merge
+## 2. Integration and promotion
 
 ```bash
-git checkout main
-git merge --no-ff advisor/p0-ui-slice
-git merge --no-ff advisor/021-design-system
-git merge --no-ff advisor/018-navigation-model
-git merge --no-ff advisor/019-global-shell
-git merge --no-ff advisor/022-page-migration      # already contains 019
-git merge --no-ff advisor/024-parity-quick-wins
-git merge --no-ff advisor/023-forms-and-url-state  # conflicts only on the generated code-health doc
-node scripts/code-health-inventory.mjs --write     # then re-run --check --verify-doc
-node scripts/check-complexity-budget.mjs           # must pass; if it reports "below stale ceiling", --write-baseline and commit
-cd frontend && npm run type-check && npm run lint && npm test
-PLAYWRIGHT_PORT=3999 npx playwright test --project=route-smoke --project=route-smoke-mobile --workers=1
+git checkout advisor/ui-overhaul-integration
+# After Plan 020's final validation and commit:
+git merge --no-ff advisor/020-explorer-nav
+# Before opening/pushing the integration PR:
+make local-ci-pr-representative
+make local-ci-pr
 ```
 
-Dry-run merges done during review: 018 onto 021 clean; 024 onto 023 conflicts
-only on `docs/rancher-quality-phase0-code-health-inventory.md` (generated).
-Two migrations land (063, 064); `internal/db/schema_version.go` ends at 64.
-
-Also commit the plan files: `git add advisor-plans && git commit -m "docs(advisor): UI overhaul review, plans 018–025, status"`.
+The completed merges conflicted only on the generated code-health inventory,
+which was regenerated. Migrations 063, 064, and 065 are additive preference
+changes. Integration promotion to `main`, deployment, and protected/external
+release qualifications remain separate; local static/browser checks do not
+replace them.
 
 ## 3. What is still open
 
 | Plan | Status | Needs |
 |---|---|---|
-| [020 — Explorer nav: discovery + CRD groups](./020-cluster-explorer-nav-discovery-and-crd-groups.md) | TODO — READY | `ifHaveGroup` gating, Gateway API folded into Service Discovery, dynamic "More Resources" CRD subgroups, starred types. Needs a `starred_types` migration (same recipe as 063/064 — noted in the plan). |
-| [025 — Guided form depth + table parity](./025-guided-form-depth-and-table-parity.md) | TODO (after 024) | `ArrayField` for containers/rules/volumes/env/ports/paths/tolerations/affinity; group-by-namespace; bulk restart/scale; generic related resources; `questions.yaml` ADR spike. |
+| [020 — Explorer nav: discovery + CRD groups](./020-cluster-explorer-nav-discovery-and-crd-groups.md) | IMPLEMENTED — FINAL VALIDATION | Discovery, Gateway regrouping, CRD subgroups, stars, counts, and schema 65 implemented; finish combined gates and integrate. |
+| [025 — Guided form depth + table parity](./025-guided-form-depth-and-table-parity.md) | TODO — NEXT | `ArrayField` for containers/rules/volumes/env/ports/paths/tolerations/affinity; group-by-namespace; bulk restart/scale; generic related resources; `questions.yaml` ADR spike. Reconcile its original excerpts against the integrated tree before implementation. |
 
 Follow-ups discovered during execution (all recorded in 017 §7):
 
@@ -71,8 +80,8 @@ Follow-ups discovered during execution (all recorded in 017 §7):
 - `scripts/check-complexity-budget.mjs` requires an **exact** line match per baselined unit. Never let a unit grow (extract to a new file); when it shrinks, `--write-baseline`, confirm every number went down, commit separately. Never run blanket `prettier --write` on ceilinged files.
 - `user_preferences` is an explicit-column table: a new preference needs a one-line `ADD COLUMN … NOT NULL DEFAULT … CHECK (…)` migration (down file carries the three contract headers), the query updated, `make sqlc-generate && make sqlc-check`, the schema-version bump, and handler mapping with a nil→default guard.
 - `TabsList` is `role="tablist"`; navigation strips of links must be `<nav>` with `tabLinkClassName(active)`, never tabs.
-- Importing a route's `Route.options.component` hangs under vitest; export page components and import by name.
+- Importing a route's `Route.options.component` hangs under vitest; export testable page components from adjacent `-page.tsx` files. Do not export them from route entrypoints: this defeats automatic component splitting and breaks eager-bundle budgets.
 - Adding a TanStack file route needs a vite build to regenerate `routeTree.gen.ts` and an `EXPECTED_ROUTE_COUNT` bump in `frontend/scripts/generate-route-manifest.mjs`.
-- Playwright: use a dedicated `PLAYWRIGHT_PORT` per worktree and `--workers=1`; the default reuses another worktree's preview server and parallel runs are flaky on this host.
+- Playwright: use a dedicated `PLAYWRIGHT_PORT` per worktree and `--workers=1`; the default reuses another worktree's preview server and parallel runs are flaky on this host. Serve an immutable build snapshot if other verification jobs may rebuild `dist/` during the crawl.
 - `go build` in a worktree: `GOTMPDIR=<outside /tmp> go build -buildvcs=false ./...`.
 - Fresh screenshots without a live server: `cd frontend && SMOKE_GALLERY=1 npx playwright test --project=route-smoke` → `frontend/gallery/*.png` (git-ignored; run the desktop project alone or mobile overwrites it).
