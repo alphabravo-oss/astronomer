@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { QueryStates } from "@/components/ui/query-states";
+import { toastApiError, toastSuccess } from "@/lib/toast";
 import { useAppForm } from "@/lib/form";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -107,6 +108,15 @@ const DEFAULT_SPEC_BY_TYPE: Record<WidgetType, string> = {
   ),
 };
 
+// Shared success/failure reporting so every widgets-admin mutation surfaces
+// a toast (P023.6) instead of failing silently.
+const onMutationOk = (invalidate: () => void, message: string) => () => {
+  invalidate();
+  toastSuccess(message);
+};
+const onMutationFail = (action: string) => (err: unknown) =>
+  toastApiError(action, err);
+
 function WidgetsAdminPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -136,36 +146,35 @@ function WidgetsAdminPage() {
   const loading = widgetsQuery.isLoading;
 
 
-  const invalidateWidgets = () =>
-    queryClient.invalidateQueries({ queryKey: WIDGETS_KEY });
+  const invalidateWidgets = () => queryClient.invalidateQueries({ queryKey: WIDGETS_KEY });
   const invalidateDatasources = () =>
     queryClient.invalidateQueries({ queryKey: DATASOURCES_KEY });
 
   const createWidgetMutation = useMutation({
     mutationFn: (body: WidgetWriteBody) => createWidget(body),
-    onSuccess: invalidateWidgets,
+    onSuccess: onMutationOk(invalidateWidgets, "Widget created"),
+    onError: onMutationFail("Create widget failed"),
   });
   const updateWidgetMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: WidgetWriteBody }) =>
-      updateWidget(id, body),
-    onSuccess: invalidateWidgets,
+    mutationFn: ({ id, body }: { id: string; body: WidgetWriteBody }) => updateWidget(id, body),
+    onSuccess: onMutationOk(invalidateWidgets, "Widget updated"),
+    onError: onMutationFail("Update widget failed"),
   });
   const deleteWidgetMutation = useMutation({
     mutationFn: (id: string) => deleteWidget(id),
-    onSuccess: invalidateWidgets,
+    onSuccess: onMutationOk(invalidateWidgets, "Widget deleted"),
+    onError: onMutationFail("Delete widget failed"),
   });
   const createDatasourceMutation = useMutation({
-    mutationFn: (body: {
-      name: string;
-      url: string;
-      bearer_token: string;
-      enabled: boolean;
-    }) => createDatasource(body),
-    onSuccess: invalidateDatasources,
+    mutationFn: (body: { name: string; url: string; bearer_token: string; enabled: boolean }) =>
+      createDatasource(body),
+    onSuccess: onMutationOk(invalidateDatasources, "Data source created"),
+    onError: onMutationFail("Create data source failed"),
   });
   const deleteDatasourceMutation = useMutation({
     mutationFn: (id: string) => deleteDatasource(id),
-    onSuccess: invalidateDatasources,
+    onSuccess: onMutationOk(invalidateDatasources, "Data source deleted"),
+    onError: onMutationFail("Delete data source failed"),
   });
 
   const saving =
