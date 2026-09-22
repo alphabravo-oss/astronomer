@@ -3,6 +3,7 @@ import {
   Field,
   type GuidedSectionProps,
 } from "@/components/resources/guided-resource-fields";
+import { ProbeFields } from "@/components/resources/probe-fields";
 import {
   booleanValue,
   envText,
@@ -134,38 +135,9 @@ function WorkloadRuntimeFields({ form }: GuidedSectionProps) {
           }
         />
       </Field>
-      <Field label="Readiness path">
-        <Input
-          value={stringValue(value, [
-            ...containerPath,
-            "readinessProbe",
-            "httpGet",
-            "path",
-          ])}
-          onChange={(event) =>
-            set(
-              [...containerPath, "readinessProbe", "httpGet", "path"],
-              event.target.value,
-            )
-          }
-        />
-      </Field>
-      <Field label="Liveness path">
-        <Input
-          value={stringValue(value, [
-            ...containerPath,
-            "livenessProbe",
-            "httpGet",
-            "path",
-          ])}
-          onChange={(event) =>
-            set(
-              [...containerPath, "livenessProbe", "httpGet", "path"],
-              event.target.value,
-            )
-          }
-        />
-      </Field>
+      <ProbeFields form={form} kind="readiness" />
+      <ProbeFields form={form} kind="liveness" />
+      <ProbeFields form={form} kind="startup" />
       <Field label="ConfigMap environment source">
         <Input
           value={stringValue(value, [

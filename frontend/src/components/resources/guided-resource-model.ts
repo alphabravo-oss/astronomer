@@ -162,6 +162,42 @@ export function parseEnvText(
   }));
 }
 
+/** The three probe kinds a container spec accepts, keyed by their manifest field. */
+export const PROBE_KEYS = [
+  "readinessProbe",
+  "livenessProbe",
+  "startupProbe",
+] as const;
+
+/**
+ * A configured httpGet/tcpSocket probe with no port (or a non-1-65535 one)
+ * is rejected by the apiserver; an exec probe with no command args is
+ * meaningless. Returns an error message, or null when the probe is absent
+ * or valid. Absent probes are never flagged — probes are optional.
+ */
+function probeError(
+  manifest: KubernetesManifest,
+  probePath: ManifestPath,
+): string | null {
+  const probe = asRecord(manifestValue(manifest, probePath));
+  if (Object.keys(probe).length === 0) return null;
+  if ("httpGet" in probe || "tcpSocket" in probe) {
+    const target = asRecord("httpGet" in probe ? probe.httpGet : probe.tcpSocket);
+    const port = Number(target.port);
+    if (!target.port || !Number.isInteger(port) || port < 1 || port > 65535) {
+      return "Port must be an integer from 1 to 65535.";
+    }
+    return null;
+  }
+  if ("exec" in probe) {
+    const command = asRecord(probe.exec).command;
+    if (!Array.isArray(command) || command.length === 0) {
+      return "Exec probes need at least one command argument.";
+    }
+  }
+  return null;
+}
+
 export function validateGuidedResource(
   manifest: KubernetesManifest,
 ): Record<string, string> {
@@ -184,6 +220,10 @@ export function validateGuidedResource(
     );
     if (port && (!Number.isInteger(port) || port < 1 || port > 65535))
       errors.containerPort = "Port must be an integer from 1 to 65535.";
+    for (const probeKey of PROBE_KEYS) {
+      const message = probeError(manifest, [...container, probeKey]);
+      if (message) errors[probeKey] = message;
+    }
   }
   if (kind === "Service") {
     const port = Number(stringValue(manifest, ["spec", "ports", 0, "port"]));
