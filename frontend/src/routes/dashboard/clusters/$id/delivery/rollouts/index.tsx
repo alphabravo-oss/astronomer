@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RolloutsPage } from "@/routes/dashboard/delivery/rollouts/index";
+import { RolloutsPage } from "@/routes/dashboard/delivery/rollouts/-page";
 
 export const Route = createFileRoute(
   "/dashboard/clusters/$id/delivery/rollouts/",
