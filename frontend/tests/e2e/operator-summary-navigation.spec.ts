@@ -98,14 +98,36 @@ test("overview summary links open node, pod and metrics inventories by keyboard"
 test("metrics node and namespace links reach exact node and scoped pods", async ({
   page,
 }, info) => {
-  await jsonRoute(page, `/api/v1/clusters/${clusterId}/monitoring/stack/status`, { data: { status: "ready", grafanaAvailable: true, grafanaProxyPath: `/api/v1/clusters/${clusterId}/observability/grafana/` } });
-  await page.route(`**/api/v1/clusters/${clusterId}/observability/grafana/dashboards`, route => route.fulfill({ contentType: "text/html", body: "<!doctype html><html><body>Fixture Grafana dashboard</body></html>" }));
+  await jsonRoute(
+    page,
+    `/api/v1/clusters/${clusterId}/monitoring/stack/status`,
+    {
+      data: {
+        status: "ready",
+        grafanaAvailable: true,
+        grafanaProxyPath: `/api/v1/clusters/${clusterId}/observability/grafana/`,
+      },
+    },
+  );
+  await page.route(
+    `**/api/v1/clusters/${clusterId}/observability/grafana/dashboards`,
+    (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<!doctype html><html><body>Fixture Grafana dashboard</body></html>",
+      }),
+  );
   await page.goto(`${base}/metrics`);
   await page.getByRole("tab", { name: "Grafana", exact: true }).click();
   await expect(page).toHaveURL(/view=grafana/);
-  await expect(page.locator('iframe[title="Cluster Grafana"]')).toHaveAttribute("src", `/api/v1/clusters/${clusterId}/observability/grafana/dashboards`);
+  await expect(page.locator('iframe[title="Cluster Grafana"]')).toHaveAttribute(
+    "src",
+    `/api/v1/clusters/${clusterId}/observability/grafana/dashboards`,
+  );
   await page.reload();
-  await expect(page.getByRole("tab", { name: "Grafana", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("tab", { name: "Grafana", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await page.getByRole("tab", { name: "Overview", exact: true }).click();
   const nodeLink = page
     .getByRole("main")
