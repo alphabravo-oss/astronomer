@@ -139,3 +139,15 @@ Root backend enterprise verification on `d6b32f6a` passed formatting, shell chec
 - Formatting review covered all **122 changed handwritten frontend files** against preserved main. Three test files required formatting; no production formatting or complexity baseline inflation was needed.
 
 The Metrics Overview route is now reachable, so its previously dormant error behavior also needs acceptance: denied/offline metrics reads must not become installation advice. The final bounded correction and permission regression are in progress. Final full enterprise gates, accessibility acceptance and complete evidence handoff remain required before marking Plan 027 DONE.
+
+
+## Complete-suite integration review
+
+The final browser edge additions are integrated through `7a9fb3a8`: deployment403/404 and scoped CR deletion, Shared stacks active state and installed-tools template reachability, keyboard selection of both Overview commands, multi-container log URL state, invalid/Exec URL non-execution, inaccessible parent recovery, and missing/denied/history alert cases. These additions remain pending the combined browser invocation at this checkpoint.
+
+- Backend enterprise at `1a7adbf2`: **111 Go packages passed ordinary tests and the same 111 passed race detection**. Formatting, shell, migrations, sqlc, build, vet, vulnerability scan, lint and Charlie contracts also passed. The subsequent documentation check failed because the comparison marker still counted845 operations/819 mounted routes. Correct totals are849/823. This is not a complete passing enterprise invocation. Log: `/root/astronomer-all/.tmp-plan027-root/backend-final2.log`.
+- Exact comparison correction and canonical source inventory refresh are integrated as `2783cb86` and `6581c49c`. All18 lightweight contract checks and the remaining main-baseline OpenAPI compatibility, Go SDK, CLI documentation, release and qualification-producer checks passed independently. Logs and commands: `/root/astronomer-all/.tmp-plan027-api/contracts-final/` and `contracts-closeout/`.
+- Frontend enterprise first completed unit run: **1788 passed/1 failed**. The failed catalog assertion expected the old query without server-side search; `9c096dd5` now verifies search and project isolation. The five-test file passed independently.
+- Frontend enterprise at `6581c49c`: code-health, lint, types, formatter and **all289 files/1789 unit tests passed** (279.92s, two workers). Production build/CSP passed. Bundle verification then failed on the bootstrap chunk:743313 raw/209021 gzip bytes versus the unchanged650000/220000 per-chunk limits. Eager closure budgets themselves passed. This is not a passing enterprise invocation; a real loading-boundary correction is required. Log: `/root/astronomer-all/.tmp-plan027-root/frontend-final3.log`.
+
+The88 retained implementation PNGs, nine historical logs and phase0–12 mapping are now tracked under `027-ux-audit/artifacts/implementation/c698663a/`. Historical failures and queued tests are explicitly distinguished from passing evidence. No live extension is qualified by these fixture or static checks.
