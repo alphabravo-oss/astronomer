@@ -52,6 +52,7 @@ export INACTIVE_USER_RETENTION_TEST_DATABASE_URL="$database_url"
 export REFRESH_SESSION_TEST_DATABASE_URL="$database_url"
 
 expected=(
+  TestCatalogSearchFiltersScopeBeforePaginationAndCounts
   TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders
   TestClusterRestoreHistoryFiltersSourceBeforePagination
   TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted

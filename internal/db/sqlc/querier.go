@@ -256,6 +256,7 @@ type Querier interface {
 	CountDeliverySources(ctx context.Context, arg CountDeliverySourcesParams) (int64, error)
 	CountDeliveryTargets(ctx context.Context, projectID uuid.UUID) (int64, error)
 	CountEmailMessages(ctx context.Context) (int64, error)
+	CountFilteredHelmCharts(ctx context.Context, arg CountFilteredHelmChartsParams) (int64, error)
 	CountGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
 	CountGitOpsSources(ctx context.Context) (int64, error)
 	CountGitOpsTombstonedBySource(ctx context.Context, sourceID uuid.UUID) (int64, error)
@@ -1567,6 +1568,7 @@ type Querier interface {
 	// can shrink it). The partial index idx_gitops_tombstoned_clusters
 	// keeps this scan cheap as the table grows.
 	ListExpiredTombstones(ctx context.Context, tombstonedAt pgtype.Timestamptz) ([]GitopsRegisteredCluster, error)
+	ListFilteredHelmCharts(ctx context.Context, arg ListFilteredHelmChartsParams) ([]HelmChart, error)
 	// Registered clusters --------------------------------------------------
 	ListGitOpsRegisteredClustersBySource(ctx context.Context, sourceID uuid.UUID) ([]GitopsRegisteredCluster, error)
 	// Admin list projection joins display metadata in the same bounded query,
