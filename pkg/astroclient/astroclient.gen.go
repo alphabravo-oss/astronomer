@@ -7616,6 +7616,7 @@ type InstalledAppEnriched struct {
 	DisplayName      *string                         `json:"display_name,omitempty"`
 	Id               *openapi_types.UUID             `json:"id,omitempty"`
 	Namespace        *string                         `json:"namespace,omitempty"`
+	Notes            *string                         `json:"notes,omitempty"`
 	PresetUsed       *string                         `json:"preset_used,omitempty"`
 	ReleaseName      *string                         `json:"release_name,omitempty"`
 	RepoName         *string                         `json:"repo_name,omitempty"`
@@ -9766,11 +9767,14 @@ type ResourceDiscoveryEnvelope struct {
 
 // ResourceDiscoveryResponse defines model for ResourceDiscoveryResponse.
 type ResourceDiscoveryResponse struct {
-	ClusterId openapi_types.UUID       `json:"cluster_id"`
-	Crds      []map[string]interface{} `json:"crds"`
-	Errors    map[string]string        `json:"errors"`
-	Partial   bool                     `json:"partial"`
-	Resources []ResourceDiscoveryEntry `json:"resources"`
+	ClusterId openapi_types.UUID `json:"cluster_id"`
+
+	// CrdContinue Opaque Kubernetes CRD continuation; empty when complete.
+	CrdContinue string                   `json:"crd_continue"`
+	Crds        []map[string]interface{} `json:"crds"`
+	Errors      map[string]string        `json:"errors"`
+	Partial     bool                     `json:"partial"`
+	Resources   []ResourceDiscoveryEntry `json:"resources"`
 }
 
 // ResourceOperation defines model for ResourceOperation.
@@ -12369,6 +12373,13 @@ type GetClustersByClusterIdIngressClassesParams struct {
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetClustersByClusterIdK8sProxyParams defines parameters for GetClustersByClusterIdK8sProxy.
+type GetClustersByClusterIdK8sProxyParams struct {
+	AstronomerNamespace *[]string `form:"astronomerNamespace,omitempty" json:"astronomerNamespace,omitempty"`
+	Limit               *int      `form:"limit,omitempty" json:"limit,omitempty"`
+	Continue            *string   `form:"continue,omitempty" json:"continue,omitempty"`
+}
+
 // PatchClustersByClusterIdK8sProxyJSONBody defines parameters for PatchClustersByClusterIdK8sProxy.
 type PatchClustersByClusterIdK8sProxyJSONBody = interface{}
 
@@ -12383,6 +12394,13 @@ type K8sProxyDeleteJSONBody = interface{}
 
 // K8sProxyGetJSONBody defines parameters for K8sProxyGet.
 type K8sProxyGetJSONBody = interface{}
+
+// K8sProxyGetParams defines parameters for K8sProxyGet.
+type K8sProxyGetParams struct {
+	AstronomerNamespace *[]string `form:"astronomerNamespace,omitempty" json:"astronomerNamespace,omitempty"`
+	Limit               *int      `form:"limit,omitempty" json:"limit,omitempty"`
+	Continue            *string   `form:"continue,omitempty" json:"continue,omitempty"`
+}
 
 // K8sProxyHeadJSONBody defines parameters for K8sProxyHead.
 type K8sProxyHeadJSONBody = interface{}
@@ -12562,6 +12580,12 @@ type GetClustersByClusterIdResourceQuotasParams struct {
 	Namespace *string `form:"namespace,omitempty" json:"namespace,omitempty"`
 	Limit     *int    `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset    *int    `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetClustersByClusterIdResourcesDiscoveryParams defines parameters for GetClustersByClusterIdResourcesDiscovery.
+type GetClustersByClusterIdResourcesDiscoveryParams struct {
+	CrdLimit    *int    `form:"crd_limit,omitempty" json:"crd_limit,omitempty"`
+	CrdContinue *string `form:"crd_continue,omitempty" json:"crd_continue,omitempty"`
 }
 
 // ListGenericClusterResourcesParams defines parameters for ListGenericClusterResources.
@@ -21433,7 +21457,7 @@ type ClientInterface interface {
 	DeleteClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdK8sProxy request
-	GetClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, params *GetClustersByClusterIdK8sProxyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// HeadClustersByClusterIdK8sProxy request
 	HeadClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21465,9 +21489,9 @@ type ClientInterface interface {
 	K8sProxyDelete(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// K8sProxyGetWithBody request with any body
-	K8sProxyGetWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	K8sProxyGetWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	K8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	K8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// K8sProxyHeadWithBody request with any body
 	K8sProxyHeadWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -21676,7 +21700,7 @@ type ClientInterface interface {
 	GetClustersByClusterIdResourceQuotas(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourceQuotasParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClustersByClusterIdResourcesDiscovery request
-	GetClustersByClusterIdResourcesDiscovery(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetClustersByClusterIdResourcesDiscovery(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListGenericClusterResources request
 	ListGenericClusterResources(ctx context.Context, clusterId string, resourceType string, params *ListGenericClusterResourcesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -28716,8 +28740,8 @@ func (c *Client) DeleteClustersByClusterIdK8sProxy(ctx context.Context, clusterI
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetClustersByClusterIdK8sProxyRequest(c.Server, clusterId)
+func (c *Client) GetClustersByClusterIdK8sProxy(ctx context.Context, clusterId string, params *GetClustersByClusterIdK8sProxyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdK8sProxyRequest(c.Server, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -28860,8 +28884,8 @@ func (c *Client) K8sProxyDelete(ctx context.Context, clusterId openapi_types.UUI
 	return c.Client.Do(req)
 }
 
-func (c *Client) K8sProxyGetWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewK8sProxyGetRequestWithBody(c.Server, clusterId, path, contentType, body)
+func (c *Client) K8sProxyGetWithBody(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewK8sProxyGetRequestWithBody(c.Server, clusterId, path, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -28872,8 +28896,8 @@ func (c *Client) K8sProxyGetWithBody(ctx context.Context, clusterId openapi_type
 	return c.Client.Do(req)
 }
 
-func (c *Client) K8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewK8sProxyGetRequest(c.Server, clusterId, path, body)
+func (c *Client) K8sProxyGet(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewK8sProxyGetRequest(c.Server, clusterId, path, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -29820,8 +29844,8 @@ func (c *Client) GetClustersByClusterIdResourceQuotas(ctx context.Context, clust
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetClustersByClusterIdResourcesDiscovery(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetClustersByClusterIdResourcesDiscoveryRequest(c.Server, clusterId)
+func (c *Client) GetClustersByClusterIdResourcesDiscovery(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClustersByClusterIdResourcesDiscoveryRequest(c.Server, clusterId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -52925,7 +52949,7 @@ func NewDeleteClustersByClusterIdK8sProxyRequest(server string, clusterId string
 }
 
 // NewGetClustersByClusterIdK8sProxyRequest generates requests for GetClustersByClusterIdK8sProxy
-func NewGetClustersByClusterIdK8sProxyRequest(server string, clusterId string) (*http.Request, error) {
+func NewGetClustersByClusterIdK8sProxyRequest(server string, clusterId string, params *GetClustersByClusterIdK8sProxyParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -52948,6 +52972,60 @@ func NewGetClustersByClusterIdK8sProxyRequest(server string, clusterId string) (
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AstronomerNamespace != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "astronomerNamespace", runtime.ParamLocationQuery, *params.AstronomerNamespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Continue != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "continue", runtime.ParamLocationQuery, *params.Continue); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -53256,18 +53334,18 @@ func NewK8sProxyDeleteRequestWithBody(server string, clusterId openapi_types.UUI
 }
 
 // NewK8sProxyGetRequest calls the generic K8sProxyGet builder with application/json body
-func NewK8sProxyGetRequest(server string, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody) (*http.Request, error) {
+func NewK8sProxyGetRequest(server string, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewK8sProxyGetRequestWithBody(server, clusterId, path, "application/json", bodyReader)
+	return NewK8sProxyGetRequestWithBody(server, clusterId, path, params, "application/json", bodyReader)
 }
 
 // NewK8sProxyGetRequestWithBody generates requests for K8sProxyGet with any type of body
-func NewK8sProxyGetRequestWithBody(server string, clusterId openapi_types.UUID, path string, contentType string, body io.Reader) (*http.Request, error) {
+func NewK8sProxyGetRequestWithBody(server string, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -53297,6 +53375,60 @@ func NewK8sProxyGetRequestWithBody(server string, clusterId openapi_types.UUID, 
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AstronomerNamespace != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "astronomerNamespace", runtime.ParamLocationQuery, *params.AstronomerNamespace); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Continue != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "continue", runtime.ParamLocationQuery, *params.Continue); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), body)
@@ -56365,7 +56497,7 @@ func NewGetClustersByClusterIdResourceQuotasRequest(server string, clusterId str
 }
 
 // NewGetClustersByClusterIdResourcesDiscoveryRequest generates requests for GetClustersByClusterIdResourcesDiscovery
-func NewGetClustersByClusterIdResourcesDiscoveryRequest(server string, clusterId string) (*http.Request, error) {
+func NewGetClustersByClusterIdResourcesDiscoveryRequest(server string, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -56388,6 +56520,44 @@ func NewGetClustersByClusterIdResourcesDiscoveryRequest(server string, clusterId
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.CrdLimit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "crd_limit", runtime.ParamLocationQuery, *params.CrdLimit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.CrdContinue != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "crd_continue", runtime.ParamLocationQuery, *params.CrdContinue); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -80168,7 +80338,7 @@ type ClientWithResponsesInterface interface {
 	DeleteClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*DeleteClustersByClusterIdK8sProxyResponse, error)
 
 	// GetClustersByClusterIdK8sProxyWithResponse request
-	GetClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdK8sProxyResponse, error)
+	GetClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdK8sProxyParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdK8sProxyResponse, error)
 
 	// HeadClustersByClusterIdK8sProxyWithResponse request
 	HeadClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*HeadClustersByClusterIdK8sProxyResponse, error)
@@ -80200,9 +80370,9 @@ type ClientWithResponsesInterface interface {
 	K8sProxyDeleteWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyDeleteJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyDeleteResponse, error)
 
 	// K8sProxyGetWithBodyWithResponse request with any body
-	K8sProxyGetWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error)
+	K8sProxyGetWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error)
 
-	K8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error)
+	K8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error)
 
 	// K8sProxyHeadWithBodyWithResponse request with any body
 	K8sProxyHeadWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyHeadResponse, error)
@@ -80411,7 +80581,7 @@ type ClientWithResponsesInterface interface {
 	GetClustersByClusterIdResourceQuotasWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourceQuotasParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourceQuotasResponse, error)
 
 	// GetClustersByClusterIdResourcesDiscoveryWithResponse request
-	GetClustersByClusterIdResourcesDiscoveryWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourcesDiscoveryResponse, error)
+	GetClustersByClusterIdResourcesDiscoveryWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourcesDiscoveryResponse, error)
 
 	// ListGenericClusterResourcesWithResponse request
 	ListGenericClusterResourcesWithResponse(ctx context.Context, clusterId string, resourceType string, params *ListGenericClusterResourcesParams, reqEditors ...RequestEditorFn) (*ListGenericClusterResourcesResponse, error)
@@ -88870,6 +89040,7 @@ type GetCatalogInstalledByIdResponse struct {
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
 	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -89000,9 +89171,11 @@ type GetCatalogInstalledByIdValuesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *struct {
-		Namespace      *string `json:"namespace,omitempty"`
-		ReleaseName    *string `json:"release_name,omitempty"`
-		ValuesOverride *string `json:"values_override,omitempty"`
+		Data struct {
+			Namespace      string `json:"namespace"`
+			ReleaseName    string `json:"release_name"`
+			ValuesOverride string `json:"values_override"`
+		} `json:"data"`
 	}
 	JSON400 *ErrorEnvelope
 	JSON404 *ErrorEnvelope
@@ -93398,6 +93571,7 @@ type GetClustersByClusterIdSnapshotRestoresResponse struct {
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
 	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -93426,6 +93600,7 @@ type GetClustersByClusterIdSnapshotRestoresByIdResponse struct {
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
 	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -98106,6 +98281,7 @@ type GetLoggingPipelinesByIdResponse struct {
 	JSON401 *Unauthorized
 	JSON403 *Forbidden
 	JSON404 *NotFound
+	JSON503 *ServiceUnavailable
 }
 
 // Status returns HTTPResponse.Status
@@ -108539,8 +108715,8 @@ func (c *ClientWithResponses) DeleteClustersByClusterIdK8sProxyWithResponse(ctx 
 }
 
 // GetClustersByClusterIdK8sProxyWithResponse request returning *GetClustersByClusterIdK8sProxyResponse
-func (c *ClientWithResponses) GetClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdK8sProxyResponse, error) {
-	rsp, err := c.GetClustersByClusterIdK8sProxy(ctx, clusterId, reqEditors...)
+func (c *ClientWithResponses) GetClustersByClusterIdK8sProxyWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdK8sProxyParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdK8sProxyResponse, error) {
+	rsp, err := c.GetClustersByClusterIdK8sProxy(ctx, clusterId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -108643,16 +108819,16 @@ func (c *ClientWithResponses) K8sProxyDeleteWithResponse(ctx context.Context, cl
 }
 
 // K8sProxyGetWithBodyWithResponse request with arbitrary body returning *K8sProxyGetResponse
-func (c *ClientWithResponses) K8sProxyGetWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error) {
-	rsp, err := c.K8sProxyGetWithBody(ctx, clusterId, path, contentType, body, reqEditors...)
+func (c *ClientWithResponses) K8sProxyGetWithBodyWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error) {
+	rsp, err := c.K8sProxyGetWithBody(ctx, clusterId, path, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseK8sProxyGetResponse(rsp)
 }
 
-func (c *ClientWithResponses) K8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error) {
-	rsp, err := c.K8sProxyGet(ctx, clusterId, path, body, reqEditors...)
+func (c *ClientWithResponses) K8sProxyGetWithResponse(ctx context.Context, clusterId openapi_types.UUID, path string, params *K8sProxyGetParams, body K8sProxyGetJSONRequestBody, reqEditors ...RequestEditorFn) (*K8sProxyGetResponse, error) {
+	rsp, err := c.K8sProxyGet(ctx, clusterId, path, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -109334,8 +109510,8 @@ func (c *ClientWithResponses) GetClustersByClusterIdResourceQuotasWithResponse(c
 }
 
 // GetClustersByClusterIdResourcesDiscoveryWithResponse request returning *GetClustersByClusterIdResourcesDiscoveryResponse
-func (c *ClientWithResponses) GetClustersByClusterIdResourcesDiscoveryWithResponse(ctx context.Context, clusterId string, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourcesDiscoveryResponse, error) {
-	rsp, err := c.GetClustersByClusterIdResourcesDiscovery(ctx, clusterId, reqEditors...)
+func (c *ClientWithResponses) GetClustersByClusterIdResourcesDiscoveryWithResponse(ctx context.Context, clusterId string, params *GetClustersByClusterIdResourcesDiscoveryParams, reqEditors ...RequestEditorFn) (*GetClustersByClusterIdResourcesDiscoveryResponse, error) {
+	rsp, err := c.GetClustersByClusterIdResourcesDiscovery(ctx, clusterId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -127709,6 +127885,13 @@ func ParseGetCatalogInstalledByIdResponse(rsp *http.Response) (*GetCatalogInstal
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	return response, nil
@@ -127956,9 +128139,11 @@ func ParseGetCatalogInstalledByIdValuesResponse(rsp *http.Response) (*GetCatalog
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest struct {
-			Namespace      *string `json:"namespace,omitempty"`
-			ReleaseName    *string `json:"release_name,omitempty"`
-			ValuesOverride *string `json:"values_override,omitempty"`
+			Data struct {
+				Namespace      string `json:"namespace"`
+				ReleaseName    string `json:"release_name"`
+				ValuesOverride string `json:"values_override"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
@@ -136112,6 +136297,13 @@ func ParseGetClustersByClusterIdSnapshotRestoresResponse(rsp *http.Response) (*G
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
+
 	}
 
 	return response, nil
@@ -136167,6 +136359,13 @@ func ParseGetClustersByClusterIdSnapshotRestoresByIdResponse(rsp *http.Response)
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 
@@ -144278,6 +144477,13 @@ func ParseGetLoggingPipelinesByIdResponse(rsp *http.Response) (*GetLoggingPipeli
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ServiceUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

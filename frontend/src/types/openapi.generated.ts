@@ -3468,6 +3468,7 @@ export interface OpenAPIComponents {
           "updated_at": string;
         };
     InstalledAppEnriched: {
+          "notes"?: string;
           "id"?: string;
           "cluster_id"?: string;
           "chart_id"?: string;
@@ -4953,6 +4954,7 @@ export interface OpenAPIComponents {
           "cluster_id": string;
           "resources": OpenAPIComponents['schemas']['ResourceDiscoveryEntry'][];
           "crds": Record<string, unknown>[];
+          "crd_continue": string;
           "partial": boolean;
           "errors": Record<string, string>;
         };
@@ -6820,6 +6822,10 @@ export interface OpenAPIOperations {
         "path": {
           "cluster_id": string;
         };
+        "query"?: {
+          "crd_limit"?: number;
+          "crd_continue"?: string;
+        };
       };
     response: OpenAPIComponents['schemas']['ResourceDiscoveryEnvelope'];
   };
@@ -7486,6 +7492,11 @@ export interface OpenAPIOperations {
     arguments: {
         "path": {
           "cluster_id": string;
+        };
+        "query"?: {
+          "astronomerNamespace"?: string[];
+          "limit"?: number;
+          "continue"?: string;
         };
       };
     response: OpenAPIComponents['schemas']['KubernetesProxyResponse'];
@@ -12708,9 +12719,11 @@ export interface OpenAPIOperations {
         };
       };
     response: {
-        "release_name"?: string;
-        "namespace"?: string;
-        "values_override"?: string;
+        "data": {
+          "release_name": string;
+          "namespace": string;
+          "values_override": string;
+        };
       };
   };
   "getCatalogOperations": {
@@ -16037,6 +16050,11 @@ export interface OpenAPIOperations {
         "path": {
           "cluster_id": string;
           "path": string;
+        };
+        "query"?: {
+          "astronomerNamespace"?: string[];
+          "limit"?: number;
+          "continue"?: string;
         };
         "body"?: unknown;
       };
