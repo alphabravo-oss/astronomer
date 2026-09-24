@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { installStubs } from "../e2e-smoke/stubs";
-import { seedAuth } from "./helpers/auth";
+import { seedAuth, authMeWire } from "./helpers/auth";
+import type { OpenAPIComponents } from "../../src/types/openapi.generated";
 import { adminStoreUser, SMOKE_CLUSTER_ID } from "../e2e-smoke/stub-overrides";
 const base = `/dashboard/clusters/${SMOKE_CLUSTER_ID}`;
 
@@ -321,3 +322,159 @@ for (const status of [403, 404]) {
     ).toBeVisible();
   });
 }
+
+test("revoking pod logs and exec access recovers the same investigation URL", async ({
+  page,
+}) => {
+  let revoked = false;
+  let settled = false;
+  let initialLogReads = 0;
+  const deniedRequests: string[] = [];
+  const rules = [
+    { resource: "clusters", verbs: ["read", "list"] },
+    { resource: "namespaces", verbs: ["read", "list"] },
+    { resource: "pods", verbs: ["read"] },
+  ];
+  const restrictedUser = {
+    ...adminStoreUser,
+    isSuperuser: false,
+    globalRoles: [],
+    roles: {
+      global: [{ roleName: "Pod reader after revocation", roleRules: rules }],
+      cluster: [],
+      project: [],
+    },
+  };
+  const authPath = "/api/v1/auth/me";
+  const permissionsPath = "/api/v1/rbac/my-permissions";
+  const logsPath = `/api/v1/workloads/pods/${SMOKE_CLUSTER_ID}/default/review-pod/logs`;
+  await page.route(
+    (url) => url.pathname.replace(/\/$/, "") === authPath,
+    (route) =>
+      route.fulfill({
+        json: { data: authMeWire(revoked ? restrictedUser : adminStoreUser) },
+      }),
+  );
+  await page.route(
+    (url) => url.pathname.replace(/\/$/, "") === permissionsPath,
+    (route) => {
+      const data: OpenAPIComponents["schemas"]["RBACEffectivePermissions"] = {
+        subject: { user_id: adminStoreUser.id, self: true },
+        superuser: !revoked,
+        context: {
+          cluster_id: SMOKE_CLUSTER_ID,
+          namespace_scoped_bindings_supported: true,
+          warnings: [],
+        },
+        bindings: revoked ? [{ scope: "global", rules }] : [],
+        permissions: revoked
+          ? rules.flatMap(({ resource, verbs }) =>
+              verbs.map((verb) => ({
+                resource,
+                verb,
+                applies_to_context: true,
+                sources: [{ scope: "global" }],
+              })),
+            )
+          : [],
+      };
+      return route.fulfill({ json: { data } });
+    },
+  );
+  await page.route(
+    (url) => url.pathname.replace(/\/$/, "") === logsPath,
+    (route) => {
+      if (revoked)
+        return route.fulfill({
+          status: 403,
+          json: {
+            error: { code: "FORBIDDEN", message: "Pod log access revoked" },
+          },
+        });
+      initialLogReads++;
+      return route.fulfill({
+        json: {
+          data: [
+            {
+              timestamp: "2026-09-01T00:00:00Z",
+              message: "Investigation before access change",
+              container: "app",
+            },
+          ],
+        },
+      });
+    },
+  );
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname.replace(/\/$/, "");
+    if (settled && (path === logsPath || /\/(exec|shell)(\/|$)/.test(path)))
+      deniedRequests.push(`${request.method()} ${path}`);
+  });
+  page.on("websocket", (socket) => {
+    if (settled && /\/(exec|shell)(\/|$)/.test(new URL(socket.url()).pathname))
+      deniedRequests.push(`WebSocket ${socket.url()}`);
+  });
+  const investigation = `${base}/pods/default/review-pod?tab=logs&container=app&tail=100`;
+  await page.goto(investigation);
+  await expect(
+    page.getByRole("tab", { name: "Logs", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("log", { name: "Logs for default/review-pod", exact: true }),
+  ).toContainText("Investigation before access change");
+  await expect(
+    page.getByRole("tab", { name: "Exec", exact: true }),
+  ).toBeVisible();
+  expect(initialLogReads).toBeGreaterThan(0);
+
+  revoked = true;
+  const authChanged = page.waitForResponse(
+    async (response) =>
+      new URL(response.url()).pathname.replace(/\/$/, "") === authPath &&
+      (await response.json()).data.is_superuser === false,
+  );
+  const permissionsChanged = page.waitForResponse(
+    async (response) =>
+      new URL(response.url()).pathname.replace(/\/$/, "") === permissionsPath &&
+      (await response.json()).data.superuser === false,
+  );
+  await page.reload();
+  const [auth, permissions] = await Promise.all([
+    authChanged,
+    permissionsChanged,
+  ]);
+  await Promise.all([auth.finished(), permissions.finished()]);
+  expect((await auth.json()).data.is_superuser).toBe(false);
+  expect((await permissions.json()).data.superuser).toBe(false);
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname.replace(/\/$/, "") === `${base}/pods/default/review-pod` &&
+      url.searchParams.get("tab") === "logs",
+  );
+  await expect(
+    page.getByRole("tab", { name: "Overview", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("tab", { name: "Logs", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("tab", { name: "Exec", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "review-pod", exact: true }),
+  ).toBeVisible();
+
+  // Ignore requests already in flight while the refreshed identity was being applied.
+  // Observe only new requests once both authoritative reads and the tab fallback settle.
+  settled = true;
+  await page.getByRole("tab", { name: "Events", exact: true }).click();
+  await expect(
+    page.getByRole("tab", { name: "Events", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  await expect(
+    page.getByRole("tab", { name: "Overview", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("log")).toHaveCount(0);
+  expect(deniedRequests).toEqual([]);
+});
