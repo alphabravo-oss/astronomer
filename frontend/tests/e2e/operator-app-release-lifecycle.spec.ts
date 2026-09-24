@@ -102,6 +102,12 @@ test("release metadata, values and history survive direct-link reload", async ({
   await expect(
     page.getByText(`Operation ${operationId}`, { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.locator("header").getByRole("button", { name: "Import", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("heading", { name: "Installed release", exact: true })
+    .scrollIntoViewIfNeeded();
   await page.screenshot({
     path: info.outputPath("release-detail-operation.png"),
     fullPage: true,
@@ -175,6 +181,14 @@ test("uninstall retains accepted operation and failed observation stays visible"
       .getByText(/catalog:read/)
       .first(),
   ).toBeVisible();
+  await expect(
+    page.locator("header").getByRole("button", { name: "Import", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("main")
+    .getByText(/catalog:read/)
+    .first()
+    .scrollIntoViewIfNeeded();
   await page.screenshot({
     path: info.outputPath("release-denied-values.png"),
     fullPage: true,
@@ -207,6 +221,12 @@ test("tool-owned release pivots to Tools without loading catalog mutation diagno
   await expect(
     page.getByText("Saved release values", { exact: true }),
   ).toHaveCount(0);
+  await expect(
+    page.locator("header").getByRole("button", { name: "Import", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "Manage in Tools", exact: true })
+    .scrollIntoViewIfNeeded();
   await page.screenshot({
     path: info.outputPath("tool-release-owner.png"),
     fullPage: true,
@@ -217,6 +237,9 @@ test("tool-owned release pivots to Tools without loading catalog mutation diagno
 test("upgrade keeps saved values and follows the wrapped operation receipt", async ({
   page,
 }, info) => {
+  await jsonRoute(page, `/api/v1/catalog/operations/${operationId}`, {
+    data: { ...operation, operationType: "upgrade" },
+  });
   const projectId = await catalogCheckout(page);
   const writes: { method: string; body: unknown; key: string | undefined }[] =
     [];
