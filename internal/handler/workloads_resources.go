@@ -184,7 +184,6 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	clusterID := clusterUUID.String()
-	namespace := r.URL.Query().Get("namespace")
 	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
 	health := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("health")))
 	if health == "" {
@@ -207,6 +206,11 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 		RespondRequestError(w, r, http.StatusInternalServerError, apierror.InternalError, "Failed to retrieve user permissions")
 		return
 	}
+	all, names, err = selectedNamespaces(r.URL.Query(), all, names)
+	if err != nil {
+		RespondRequestError(w, r, 400, apierror.ValidationError, err.Error())
+		return
+	}
 	limit, offset := queryLimitOffset(r, 20)
 	// Kubernetes' native list order is namespace/name ascending. Keep that path
 	// fast and page directly at the apiserver. Search, health filters, and other
@@ -214,26 +218,16 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 	// apply the operation over the complete authorized set.
 	if search != "" || health != "all" || sortOrder != "namespace_asc" {
 		var authorized []map[string]any
-		if all {
-			authorized, err = h.listPods(r.Context(), clusterID, namespace, "")
-		} else if namespace != "" {
-			if _, allowed := names[namespace]; allowed {
-				authorized, err = h.listPods(r.Context(), clusterID, namespace, "")
+		for _, namespace := range namespaceNames(all, names) {
+			rows, readErr := h.listPods(r.Context(), clusterID, namespace, "")
+			if readErr != nil {
+				err = readErr
+				break
 			}
-		} else {
-			namespaceNames := make([]string, 0, len(names))
-			for allowedNamespace := range names {
-				namespaceNames = append(namespaceNames, allowedNamespace)
+			if !all {
+				rows = filterItemsByNamespaceKey(rows, "namespace", names)
 			}
-			sort.Strings(namespaceNames)
-			for _, allowedNamespace := range namespaceNames {
-				var namespacePods []map[string]any
-				namespacePods, err = h.listPods(r.Context(), clusterID, allowedNamespace, "")
-				if err != nil {
-					break
-				}
-				authorized = append(authorized, namespacePods...)
-			}
+			authorized = append(authorized, rows...)
 		}
 		if err != nil {
 			RespondRequestError(w, r, http.StatusServiceUnavailable, apierror.ProxyError, err.Error())
@@ -256,14 +250,8 @@ func (h *WorkloadHandler) ListPods(w http.ResponseWriter, r *http.Request) {
 	var total *int64
 	var hasMore bool
 	if all {
-		pods, total, hasMore, err = h.listPodsPage(r.Context(), clusterID, namespace, limit, offset)
-	} else if namespace != "" {
-		if _, allowed := names[namespace]; !allowed {
-			emptyTotal := int64(0)
-			total = &emptyTotal
-		} else {
-			pods, total, hasMore, err = h.listPodsPage(r.Context(), clusterID, namespace, limit, offset)
-		}
+		pods, total, hasMore, err = h.listPodsPage(r.Context(), clusterID, "", limit, offset)
+
 	} else {
 		var exactTotal int64
 		pods, exactTotal, hasMore, err = h.listPodsAcrossNamespacesPage(r.Context(), clusterID, names, limit, offset)

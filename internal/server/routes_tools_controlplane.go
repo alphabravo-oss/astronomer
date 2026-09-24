@@ -154,6 +154,7 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(catalogBrowse).Get("/charts/{id}/readme/", deps.AdminPlatform.Catalog.GetChartReadme)
 			r.With(catalogBrowse).Get("/charts/{id}/values/", deps.AdminPlatform.Catalog.GetChartValues)
 			r.Get("/installed/", deps.AdminPlatform.Catalog.ListInstalledCharts)
+			r.Get("/installed/{id}/", deps.AdminPlatform.Catalog.GetInstalledChart)
 			// NEW-1: helm install/upgrade/uninstall are cluster-mutating (they
 			// run helm against a managed cluster), but this Catalog subtree was
 			// never wired through the GATE-0 write-scope backstop. A read-scoped
@@ -230,6 +231,7 @@ func registerToolsControlPlaneRoutes(r chi.Router, deps RouterDependencies) {
 			r.With(mutationWriteScope).Put("/saved-searches/{id}/", deps.ClusterResources.Logging.UpdateSavedSearch)
 			r.With(mutationWriteScope).Delete("/saved-searches/{id}/", deps.ClusterResources.Logging.DeleteSavedSearch)
 			r.Get("/pipelines/", deps.ClusterResources.Logging.ListPipelines)
+			r.Get("/pipelines/{id}/", deps.ClusterResources.Logging.GetPipeline)
 			r.With(mutationWriteScope).Post("/pipelines/", deps.ClusterResources.Logging.CreatePipeline)
 			r.With(mutationWriteScope).Put("/pipelines/{id}/", deps.ClusterResources.Logging.UpdatePipeline)
 			r.With(mutationWriteScope).Delete("/pipelines/{id}/", deps.ClusterResources.Logging.DeletePipeline)

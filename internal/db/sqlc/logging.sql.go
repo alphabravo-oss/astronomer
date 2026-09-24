@@ -646,29 +646,27 @@ func (q *Queries) ListSystemLoggingOutputs(ctx context.Context) ([]LoggingOutput
 }
 
 const replaceLoggingPipelineOutputs = `-- name: ReplaceLoggingPipelineOutputs :one
-WITH removed AS (
+WITH desired AS (
+    SELECT DISTINCT o.id AS output_id
+    FROM unnest($1::uuid[]) AS requested(id)
+    JOIN logging_pipelines p ON p.id = $2
+    JOIN logging_outputs o ON o.id = requested.id AND o.cluster_id = p.cluster_id
+), removed AS (
     DELETE FROM logging_pipeline_outputs
-    WHERE logging_pipeline_outputs.logging_pipeline_id = $1
-),
-desired AS (
-    SELECT DISTINCT unnest($2::uuid[]) AS output_id
-),
-inserted AS (
+    WHERE logging_pipeline_id = $2
+      AND logging_output_id NOT IN (SELECT output_id FROM desired)
+), inserted AS (
     INSERT INTO logging_pipeline_outputs (logging_pipeline_id, logging_output_id)
-    SELECT p.id, o.id
-    FROM desired d
-    JOIN logging_pipelines p ON p.id = $1
-    JOIN logging_outputs o
-      ON o.id = d.output_id
-     AND o.cluster_id = p.cluster_id
+    SELECT $2, output_id FROM desired
+    ON CONFLICT (logging_pipeline_id, logging_output_id) DO NOTHING
     RETURNING logging_output_id
 )
-SELECT count(*) FROM inserted
+SELECT count(*) FROM desired
 `
 
 type ReplaceLoggingPipelineOutputsParams struct {
-	LoggingPipelineID uuid.UUID   `json:"logging_pipeline_id"`
 	OutputIds         []uuid.UUID `json:"output_ids"`
+	LoggingPipelineID uuid.UUID   `json:"logging_pipeline_id"`
 }
 
 // Full-replacement semantics are intentional: the pipeline write API is PUT,
@@ -677,7 +675,7 @@ type ReplaceLoggingPipelineOutputsParams struct {
 // prevents a pipeline from routing one cluster's logs into another cluster's
 // output, even if a caller supplies a valid foreign output UUID.
 func (q *Queries) ReplaceLoggingPipelineOutputs(ctx context.Context, arg ReplaceLoggingPipelineOutputsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, replaceLoggingPipelineOutputs, arg.LoggingPipelineID, arg.OutputIds)
+	row := q.db.QueryRow(ctx, replaceLoggingPipelineOutputs, arg.OutputIds, arg.LoggingPipelineID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

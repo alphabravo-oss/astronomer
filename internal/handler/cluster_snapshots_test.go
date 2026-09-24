@@ -572,7 +572,7 @@ func TestRestore_CrossClusterTarget(t *testing.T) {
 				"items": []map[string]any{
 					{
 						"metadata": map[string]any{"name": "default"},
-						"spec":     map[string]any{"provider": "aws", "default": true},
+						"spec":     map[string]any{"provider": "aws", "default": true, "objectStorage": map[string]any{"bucket": "snapshots"}},
 						"status":   map[string]any{"phase": "Available"},
 					},
 				},

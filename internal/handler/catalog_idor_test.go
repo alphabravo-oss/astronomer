@@ -138,6 +138,18 @@ func TestCatalogHandler_GetInstalledChartValuesDeniesCrossCluster(t *testing.T) 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("authorized values read: want 200, got %d body=%s", rec.Code, rec.Body.String())
 	}
+	var values struct {
+		Data struct {
+			ReleaseName    string `json:"release_name"`
+			ValuesOverride string `json:"values_override"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &values); err != nil {
+		t.Fatal(err)
+	}
+	if values.Data.ReleaseName != "postgres" || values.Data.ValuesOverride != chartOnB.ValuesOverride {
+		t.Fatalf("wrong values envelope: %s", rec.Body.String())
+	}
 	if !bodyContains(rec, "s3cr3t") {
 		t.Fatalf("authorized caller should receive the values: %s", rec.Body.String())
 	}

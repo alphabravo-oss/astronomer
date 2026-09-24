@@ -53,6 +53,7 @@ export REFRESH_SESSION_TEST_DATABASE_URL="$database_url"
 
 expected=(
   TestAuditOutboxDeliveryDurablyFansOutToMatchingSIEMForwarders
+  TestClusterRestoreHistoryFiltersSourceBeforePagination
   TestLoggingPipelineOutputsAreClusterScopedTransactionalAndDeleteRestricted
   TestUpsertCharlieAlertPolicyRevisionSemantics
   TestCharlieAlertReconcileCandidatesRequireFindingScope

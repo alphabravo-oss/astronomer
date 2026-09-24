@@ -205,6 +205,7 @@ GET /api/v1/catalog/charts/{id}/versions
 GET /api/v1/catalog/controller/status
 GET /api/v1/catalog/discovery
 GET /api/v1/catalog/installed
+GET /api/v1/catalog/installed/{id}
 GET /api/v1/catalog/installed/{id}/revisions
 GET /api/v1/catalog/installed/{id}/upgrade-versions
 GET /api/v1/catalog/installed/{id}/values
@@ -285,6 +286,8 @@ GET /api/v1/clusters/{cluster_id}/service-mesh/mtls
 GET /api/v1/clusters/{cluster_id}/shell/sessions
 GET /api/v1/clusters/{cluster_id}/shell/sessions/{id}
 GET /api/v1/clusters/{cluster_id}/shell/sessions/{id}/commands
+GET /api/v1/clusters/{cluster_id}/snapshot-restores
+GET /api/v1/clusters/{cluster_id}/snapshot-restores/{id}
 GET /api/v1/clusters/{cluster_id}/snapshot-schedules
 GET /api/v1/clusters/{cluster_id}/snapshot-schedules/{id}
 GET /api/v1/clusters/{cluster_id}/snapshots
@@ -361,6 +364,7 @@ GET /api/v1/logging/operations
 GET /api/v1/logging/operations/{id}
 GET /api/v1/logging/outputs
 GET /api/v1/logging/pipelines
+GET /api/v1/logging/pipelines/{id}
 GET /api/v1/logging/pipelines/{id}/fluentbit-config
 GET /api/v1/logging/saved-searches
 GET /api/v1/monitoring/endpoints

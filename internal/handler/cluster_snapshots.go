@@ -92,6 +92,7 @@ type ClusterSnapshotsHandler struct {
 	requester K8sRequester
 	bus       *events.Bus
 	runTx     clusterSnapshotRunTxFunc
+	authz     authorizationSupport
 }
 
 func (h *ClusterSnapshotsHandler) SetRunTx(runTx clusterSnapshotRunTxFunc) {
@@ -212,6 +213,7 @@ type SnapshotResponse struct {
 
 // RestoreResponse is the wire-format DTO for restore operations.
 type RestoreResponse struct {
+	SourceClusterID uuid.UUID   `json:"source_cluster_id"`
 	ID              uuid.UUID   `json:"id"`
 	SnapshotID      uuid.UUID   `json:"snapshot_id"`
 	TargetClusterID uuid.UUID   `json:"target_cluster_id"`

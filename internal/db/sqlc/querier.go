@@ -220,6 +220,7 @@ type Querier interface {
 	CountClusterConditionRemediationSinceForType(ctx context.Context, arg CountClusterConditionRemediationSinceForTypeParams) (int64, error)
 	CountClusterDeploymentEvents(ctx context.Context, arg CountClusterDeploymentEventsParams) (int64, error)
 	CountClusterDeployments(ctx context.Context, arg CountClusterDeploymentsParams) (int64, error)
+	CountClusterRestores(ctx context.Context, arg CountClusterRestoresParams) (int64, error)
 	// Whether the service user already holds the reserved role on this cluster, so
 	// the connect path doesn't pile up duplicate bindings on every reconnect.
 	CountClusterRoleBindingForUserCluster(ctx context.Context, arg CountClusterRoleBindingForUserClusterParams) (int64, error)
@@ -1415,6 +1416,7 @@ type Querier interface {
 	ListClusterRegistryConfigs(ctx context.Context, clusterID uuid.UUID) ([]ClusterRegistryConfig, error)
 	// ====== cluster_restores =================================================
 	ListClusterRestores(ctx context.Context, targetClusterID uuid.UUID) ([]ClusterRestore, error)
+	ListClusterRestoresPage(ctx context.Context, arg ListClusterRestoresPageParams) ([]ListClusterRestoresPageRow, error)
 	ListClusterRoleBindings(ctx context.Context, arg ListClusterRoleBindingsParams) ([]ClusterRoleBinding, error)
 	ListClusterRoleBindingsByCluster(ctx context.Context, arg ListClusterRoleBindingsByClusterParams) ([]ClusterRoleBinding, error)
 	ListClusterRoles(ctx context.Context, arg ListClusterRolesParams) ([]ClusterRole, error)
